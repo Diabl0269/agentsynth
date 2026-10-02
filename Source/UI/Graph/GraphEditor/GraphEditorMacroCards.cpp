@@ -56,11 +56,11 @@ void GraphEditor::syncMacroCards() {
             card = cards.add(new MacroCardComponent(*this, macro.id));
             content.addAndMakeVisible(card);
         }
-        // The card's height is derived from its port count (one 16px row per port on the busier
-        // side), never persisted: macro.bounds keeps whatever height it was saved with.
+        // The card's height is derived from its port rows (one 16px row each on the busier side; a
+        // two-jack Stereo port takes two), never persisted: macro.bounds keeps whatever height it was saved with.
         int inputs = 0, outputs = 0;
-        for (const auto& p : macro.ports)
-            (p.isInput ? inputs : outputs)++;
+        for (const auto& p : macroController_.macroCardPortLayout(macro.id))
+            (p.isInput ? inputs : outputs) = juce::jmax(p.isInput ? inputs : outputs, p.row + 1);
         card->setBounds(macro.bounds.withHeight(detail::macroCardHeightFor(juce::jmax(inputs, outputs))));
         // A nested macro inside a collapsed ancestor shows no card: the ancestor's card stands in for
         // it. Its own collapsed flag is kept, so it comes back as a card when the ancestor expands.

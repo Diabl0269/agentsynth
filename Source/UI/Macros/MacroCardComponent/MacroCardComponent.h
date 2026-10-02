@@ -166,6 +166,7 @@ private:
 
     // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;
+    int hoveredPortJack_ = -1; // the hovered row's MacroCardPort::visibleJack (-1 = whole port)
 
     // Click position an 'x' delete just suppressed hover at — see mouseMove()'s definition.
     std::optional<juce::Point<int>> suppressHoverAtPosition_;

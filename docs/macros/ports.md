@@ -232,7 +232,9 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   exists. A press on the merged dot picks the boundary jack. The hull, the widget bounds and the strip
   widths above never change: only what is painted and where the interior jack answers moves.
 - **Collapsed card.** `MacroGroupController::macroCardPortLayout` puts jack `i` of a side at
-  `y = 30 + 16 i + 8`, x = 10 (inputs) / width - 10 (outputs). The card grows to
+  `y = 30 + 16 i + 8`, x = 10 (inputs) / width - 10 (outputs). A two-jack `Stereo` port takes two rows,
+  named "name L" and "name R" (`MacroCardPort::visibleJack` 0 and 1); every other shape, including a
+  one-jack `StereoCollapsed` port, is one row. The card grows to
   `30 + rows * 16 + 22` px when that exceeds its 90 px floor (`macroCardHeightFor`); the height is
   derived when the card is synced, never written into `Macro::bounds`, so an old save shows at the new
   height. `MacroCardComponent::paintPortStrips` fills each strip `surfaceHi` at 55 percent following
@@ -361,13 +363,15 @@ on the card's boundary (`cardBounds.getX()`/`getRight()`), not inset the way a r
 side.
 
 **The collapsed card's jacks are one definition read by three places.**
-`MacroGroupController::macroCardPortLayout` draws one jack per configured `MacroPort` — inputs on
-16 px rows down the left edge, outputs down the right, in `order` — and that layout is what
+`MacroGroupController::macroCardPortLayout` draws one jack per configured `MacroPort` (two rows, L and R,
+for a two-jack `Stereo` port) — inputs on 16 px rows down the left edge, outputs down the right, in `order` — and that layout is what
 `MacroCardComponent::paint` draws, what `GraphEditor::endConnectionDrag` hit-tests a drop against
 (`macroCardPortForPoint`), and what `rebuildVisibleCables()` anchors a boundary cable through a port
 at. Every jack position is zoom-independent. A cable straight to an interior member instead gets the directional edge anchor above; the two
 treatments coexist and are told apart by which endpoint node the cable resolves to, a port's fronting
 node or an ordinary member.
+
+A cable anchors on the row of the jack it uses (raw 0 for Left, `kRightBase` for Right); a drop on the R row wires the Right leg.
 
 Dropping a cable exactly on an existing port's jack wires straight into that port's node instead of
 minting a fresh one; a jack whose direction or kind does not match the drag is refused, the same as a

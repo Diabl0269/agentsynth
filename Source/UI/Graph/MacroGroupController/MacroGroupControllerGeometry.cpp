@@ -414,15 +414,16 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
     // so N ports on one side never outgrow it. The label area spans the strip past the jack.
     const auto widths = macroCardStripWidths(macroId);
     auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x, bool isInputSide) {
-        const int n = (int)side.size();
-        for (int i = 0; i < n; ++i) {
-            const int rowTop = kMacroPortRowsTop + i * kMacroPortRowHeight;
+        int row = 0;
+        auto emit = [&](const synth::MacroPort& p, const juce::String& name, int visibleJack) {
+            const int rowTop = kMacroPortRowsTop + row * kMacroPortRowHeight;
             MacroCardPort port;
-            port.nodeUuid = side[i]->nodeUuid;
-            port.isInput = side[i]->isInput;
-            port.kind = side[i]->kind;
-            port.name = side[i]->name;
-            port.row = i;
+            port.nodeUuid = p.nodeUuid;
+            port.isInput = p.isInput;
+            port.kind = p.kind;
+            port.name = name;
+            port.row = row++;
+            port.visibleJack = visibleJack;
             port.jackPos = {x, rowTop + kMacroPortRowHeight / 2};
             if (isInputSide)
                 port.labelArea = {kMacroPortStripInset, rowTop, widths.first - kMacroPortStripInset,
@@ -430,8 +431,18 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
             else
                 port.labelArea = {synth::LayoutUtil::kSingleWidth - widths.second, rowTop,
                                   widths.second - kMacroPortStripInset, kMacroPortRowHeight};
-            port.colour = side[i]->colour; // MacroCardComponent falls back to the kind tint
+            port.colour = p.colour; // MacroCardComponent falls back to the kind tint
             result.push_back(port);
+        };
+        for (const auto* p : side) {
+            // A two-jack Stereo port (Left/Right jacks) gets one row per jack; every other shape is one row.
+            const auto shape = p->kind == synth::MacroPortKind::AudioCV ? stereoPortShape(p->nodeUuid) : std::nullopt;
+            if (shape == MacroPortShape::Stereo) {
+                emit(*p, p->name + " L", 0);
+                emit(*p, p->name + " R", 1);
+            } else {
+                emit(*p, p->name, -1);
+            }
         }
     };
     placeSide(inputs, kMacroCardJackInsetX, true);

@@ -9,6 +9,7 @@
 #include "GraphEditorInternal.h"
 
 #include "Modules/MacroMidiInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -390,13 +391,12 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
             // module-jack drop is refused a few lines above
             // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted). DEFERRED
-            // (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable below. For a Mono port that
-            // IS the port's one visible jack; for an existing Stereo port this wires the Left leg only and leaves Right
-            // unconnected — a card jack summarises the whole port as one dot
-            // (docs/macros/ports.md#how-a-port-is-drawn), so there is no separate "Right" drop target to land on yet.
-            // Widening this to resolvePolyLink-style fan-out for an existing Stereo/Poly-N port is future work, not a
-            // regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable
-            // way to wire a non-Mono port completely.
+            // (not this stage): a Mono port is wired on its one jack; a two-row Stereo port (Left/Right
+            // jacks, docs/macros/ports.md#how-a-port-is-drawn) wires the leg of the ROW dropped on (raw 0 for Left,
+            // kRightBase for Right). A StereoCollapsed / Poly-N port is one row and wires raw channel 0 only, same as
+            // createMacroPortFromDroppedCable below; widening that to resolvePolyLink-style fan-out is future work,
+            // and the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable way to
+            // wire those completely.
             if (auto hitPort = macroController_.macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
@@ -404,8 +404,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     if (graph.getNodeForId(portNodeId) != nullptr) {
                         const auto connSrcId = newPortIsInput ? srcNode->nodeID : portNodeId;
                         const auto connDstId = newPortIsInput ? portNodeId : srcNode->nodeID;
-                        const int connSrcJack = newPortIsInput ? dragSourceChannel : 0;
-                        const int connDstJack = newPortIsInput ? 0 : dragSourceChannel;
+                        const int portChannel = hitPort->visibleJack == 1 ? MacroOutletModule::kRightBase : 0;
+                        const int connSrcJack = newPortIsInput ? dragSourceChannel : portChannel;
+                        const int connDstJack = newPortIsInput ? portChannel : dragSourceChannel;
 
                         // The same auto-channel trigger as the direct-jack branch above,
                         // for a Track In dropped straight onto an EXISTING port jack on a

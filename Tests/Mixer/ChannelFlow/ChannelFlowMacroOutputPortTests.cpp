@@ -20,6 +20,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/MasterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 
@@ -461,4 +462,82 @@ TEST_F(ChannelFlowTest, CollapsedTrackCardRightClickSplitsAndJoinsItsOutputPort)
     chooseFromCardMenu("Join Output into One Stereo Jack");
     expectCollapsedOutletIntoMix(graph, strip, onlyOutlet(graph, strip), master);
     EXPECT_EQ(outletCount(graph), 1);
+}
+
+// A two-jack Stereo port is TWO rows on the collapsed card ("Output L" / "Output R"), and each of its cables anchors on
+// its own row's jack; a one-jack port stays one row.
+TEST_F(ChannelFlowTest, SplitOutputPortShowsTwoRowsOnTheCollapsedCardAndEachCableAnchorsOnItsOwnRow) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    addAudioTrack(mc);
+    auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    ASSERT_NE(strip, nullptr);
+    auto& editor = mc.getGraphEditor();
+    const auto* macro = editor.getMacros().findByMember(strip->properties["uuid"].toString());
+    ASSERT_NE(macro, nullptr);
+    const auto macroId = macro->id;
+
+    auto outputRows = [&] {
+        std::vector<GraphEditor::MacroCardPort> rows;
+        for (const auto& p : editor.getMacroController().macroCardPortLayout(macroId))
+            if (!p.isInput)
+                rows.push_back(p);
+        return rows;
+    };
+    auto chooseFromCardMenu = [&](const juce::String& text) {
+        auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+        ASSERT_NE(card, nullptr);
+        juce::PopupMenu captured;
+        card->setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+        const juce::Point<int> centre(card->getWidth() / 2, card->getHeight() / 2);
+        card->mouseDown(
+            realMouseEventCFT(*card, centre, centre, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+        card->setShowContextMenuHookForTest(nullptr);
+        const auto* item = findMenuItemByTextCFT(captured, text);
+        ASSERT_NE(item, nullptr);
+        item->action();
+    };
+
+    auto rows = outputRows();
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(rows[0].name, juce::String("Output"));
+    EXPECT_EQ(rows[0].visibleJack, -1);
+    const int heightOneJack = editor.getMacroController().getMacroCardForTest(macroId)->getHeight();
+
+    chooseFromCardMenu("Split Output into Left/Right Jacks");
+    rows = outputRows();
+    ASSERT_EQ(rows.size(), 2u);
+    EXPECT_EQ(rows[0].name, juce::String("Output L"));
+    EXPECT_EQ(rows[1].name, juce::String("Output R"));
+    EXPECT_EQ(rows[0].visibleJack, 0);
+    EXPECT_EQ(rows[1].visibleJack, 1);
+    EXPECT_EQ(rows[1].row, rows[0].row + 1);
+    EXPECT_EQ(rows[1].jackPos.y - rows[0].jackPos.y, detail::kMacroPortRowHeight);
+    // The card is sized from its rows (it never shrinks below its fixed footprint, so one extra row may fit inside it).
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->getHeight(), detail::macroCardHeightFor(2));
+
+    // Each cable out of the split port starts at its own row's jack.
+    const auto cardPos = card->getBounds().getPosition();
+    int leftSeen = 0, rightSeen = 0;
+    for (const auto& c : editor.buildVisibleCables()) {
+        if (c.id.srcUid == 0 || c.id.srcUid != onlyOutlet(graph, strip)->nodeID.uid)
+            continue;
+        const auto expected = (cardPos + rows[c.id.srcPort == kPortRight ? 1 : 0].jackPos).toFloat();
+        EXPECT_EQ(c.p1, expected) << "source port " << c.id.srcPort;
+        (c.id.srcPort == kPortRight ? rightSeen : leftSeen)++;
+    }
+    EXPECT_EQ(leftSeen, 1);
+    EXPECT_EQ(rightSeen, 1);
+
+    chooseFromCardMenu("Join Output into One Stereo Jack");
+    rows = outputRows();
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(rows[0].name, juce::String("Output"));
+    EXPECT_EQ(rows[0].visibleJack, -1);
+    EXPECT_EQ(editor.getMacroController().getMacroCardForTest(macroId)->getHeight(), heightOneJack);
 }
