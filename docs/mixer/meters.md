@@ -35,7 +35,9 @@ A NaN or non-positive input is dropped rather than latched, and silence reads ba
 **-60 to +3 dBFS** (`Source/UI/Mixer/MixerMeterScale.h`). Tick marks at +3, 0, -6, -12, -18, -24,
 -30, -40, -50 and -60 dBFS (Cubase's own channel-meter marks plus our own +3 dB headroom cap), with
 the 0 dB tick drawn visibly stronger. Tick NUMBERS appear only where the column has room
-(`MixerMeter::paint`'s own width check); the dashes themselves always draw.
+(`MixerMeter::paint`'s own width check); the dashes themselves always draw. The headroom tick prints
+with its sign ("+3", `meterTickLabel`), and every label box is kept inside the meter
+(`meterTickLabelTop`), so the top and bottom numbers are never half cut off by the meter's edge.
 
 **The mapping is Cubase's own taper, NOT linear in dB.** `meterDbToFraction` and its inverse
 `meterFractionToDb` are a monotonic **piecewise-linear interpolation through ten breakpoints**

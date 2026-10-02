@@ -102,4 +102,18 @@ inline float meterFractionToDb(float fraction) noexcept {
     return kMeterMaxDb; // unreachable -- clamped can never exceed bp.back().fraction (== 1.0f)
 }
 
+/** A tick's printed number: a headroom tick above 0 dB carries its sign ("+3"), so it can't be
+ *  mistaken for a quiet level; 0 and the negative ticks print as-is ("0", "-6"). */
+inline juce::String meterTickLabel(float db) {
+    const int rounded = juce::roundToInt(db);
+    return rounded > 0 ? "+" + juce::String(rounded) : juce::String(rounded);
+}
+
+/** Top edge of a tick's label box (labelHeight tall, centred on tickY), kept inside
+ *  [areaTop, areaBottom] so the outermost ticks (+3 at the very top, -60 at the bottom) draw whole
+ *  instead of having half their glyphs cut off by the component's edge. */
+inline int meterTickLabelTop(int tickY, int labelHeight, int areaTop, int areaBottom) noexcept {
+    return juce::jlimit(areaTop, juce::jmax(areaTop, areaBottom - labelHeight), tickY - labelHeight / 2);
+}
+
 } // namespace synth::ui
