@@ -1,5 +1,6 @@
 // Concern: the "Remove LFO?" confirm window and its words.
 #include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -35,6 +36,7 @@ void confirmRemoveLfo(const RemoveLfoConfirmText& text, std::function<void(bool,
     window->addCustomComponent(dontAsk);
     window->addButton("Remove LFO", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(
         true, juce::ModalCallbackFunction::create([window, dontAsk, done = std::move(done)](int result) {
             const bool tick = dontAsk->getToggleState(); // read before the window (and the box) goes

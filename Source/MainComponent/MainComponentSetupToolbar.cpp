@@ -6,6 +6,7 @@
 #include "Branding.h"
 #include "MainComponent.h"
 #include "MainComponentShortcutHints.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history -- see the root CMakeLists.txt's
@@ -291,7 +292,7 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    if (auto* window = options.launchAsync())
+    if (auto* window = synth::ui::PopupMotion::launchDialog(options))
         window->setResizeLimits(SettingsWindow::kMinWidth, SettingsWindow::kMinHeight, 4096, 4096);
 }
 

@@ -557,6 +557,7 @@ add_library(Core STATIC
 include(cmake/JuceModules.cmake)
 target_link_libraries(Core PUBLIC JuceModules)
 synth_enable_pch(Core)
+include(cmake/PopupMotionSources.cmake)
 
 # TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
@@ -677,9 +678,6 @@ add_library(AppUI STATIC ${APPUI_SOURCES})
 # Tests all link AppUI and share the one HostedPluginEditorWindow it patches.
 if(APPLE)
     target_sources(AppUI PRIVATE Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm)
-    # The macOS Reduce Motion read (Source/UI/Layout/ReducedMotion.h); manual retain/release is not needed, it only
-    # asks NSWorkspace for a BOOL.
-    target_sources(AppUI PRIVATE Source/UI/Layout/ReducedMotionMac.mm)
     # ARC explicitly, matching SparkleUpdateManager.mm below — this file's NSEvent monitor block
     # and NSWindow/NSText lookups are all Cocoa objects it never wants to retain/release by hand.
     set_source_files_properties(Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)

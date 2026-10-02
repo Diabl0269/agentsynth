@@ -1,5 +1,6 @@
 #include "AccountRow.h"
 #include "SignInDialog.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth {
 
@@ -106,7 +107,7 @@ void AccountRow::launchSignInDialog() {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    options.launchAsync();
+    synth::ui::PopupMotion::launchDialog(options);
 }
 
 void AccountRow::paint(juce::Graphics&) {

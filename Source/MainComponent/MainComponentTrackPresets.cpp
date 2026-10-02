@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/ChannelMacroLookup.h"
@@ -105,6 +106,7 @@ void MainComponent::saveTrackAsPreset(synth::TrackId trackId) {
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(
         true, juce::ModalCallbackFunction::create([safeThis, window, bindingUuid, kind](int result) {
             std::unique_ptr<juce::AlertWindow> owned(window);
@@ -199,6 +201,7 @@ void MainComponent::saveBusAsPreset(const juce::String& macroId) {
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(
         true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
             std::unique_ptr<juce::AlertWindow> owned(window);

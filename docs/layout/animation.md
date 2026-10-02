@@ -246,12 +246,75 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 - **Out of scope:** cable drags between ports, value drags (knobs, faders, sliders, curve points),
   resize handles, marquee selection, pan/scroll, and OS file drops.
 
+## Popup windows
+
+Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, alert boxes and
+dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. The
+mechanism is `synth::ui::PopupMotion` (`Source/UI/Layout/PopupMotion.{h,cpp}`); the numbers and the
+frame math are pure functions in `synth::ui::popup_motion`, unit-tested in
+`Tests/UI/Layout/PopupMotionTests.cpp`. It reuses `AnimationDriver` and the easing helpers above.
+
+| | In | Out |
+|---|---|---|
+| Opacity | 0 to 1, `easeOutCubic`, 160 ms | 1 to 0, `easeInCubic`, 110 ms |
+| Slide | starts 4 px toward the anchor, ends at rest | 2 px back toward the anchor |
+| Reduce motion | plain fade, 80 ms, no slide | plain fade, 80 ms, no slide |
+
+"Anchor" is the pointer: the window slides away from `Desktop::getMousePosition()` along the axis
+it sits furthest off it (`popup_motion::slideDirection`). A menu opened with its corner at the
+pointer, a dropdown under its combo box and a popover under its button slide down; a menu flipped
+above its anchor slides up; a submenu beside its parent row slides sideways; a window with the
+pointer inside it, or a dialog opened from the keyboard, slides down. Reduce motion is
+`synth::ui::prefersReducedMotion()` (`ReducedMotion.h`): macOS Reduce motion; other platforms do not read a setting yet and answer false. It is read each time a popup shows or hides.
+
+**How windows are caught.** JUCE has no "window created" event, so each kind is caught at the
+earliest look-and-feel call that receives it, before it is first shown
+(`AppLookAndFeelWindowMotion.cpp`):
+
+- menus, submenus and ComboBox dropdowns: `preparePopupMenuWindow`;
+- alert boxes made by `AlertWindow::showAsync`/`showMessageBoxAsync`/`ThreadWithProgressWindow`:
+  `createAlertWindow`;
+- call-out boxes: `getCallOutBoxBorderSize`, which the call-out asks for in its constructor;
+- dialogs (`DialogWindow::LaunchOptions`) and hand-built `AlertWindow`s have no such call: launch a
+  dialog with `PopupMotion::launchDialog(options)` instead of `options.launchAsync()`, and call
+  `PopupMotion::attach(*window)` before `enterModalState` on a `new juce::AlertWindow`. Every
+  existing site already does.
+
+`attach` installs one self-deleting listener per window. It starts the slide the moment the window
+becomes visible (frame 0 is applied before the first VBlank, a watchdog timer finishes the move if
+no VBlank ever comes, so a window can never stay invisible) and never delays input: the window is
+fully clickable from its first frame, only its opacity and a few pixels move. It does nothing for a
+window without a native peer (every headless test, a call-out given a parent component) or while
+`PopupMotion::setEnabled(false)`.
+
+**Leaving.** JUCE hides, or deletes, a popup the instant it is dismissed, so the leaving motion
+runs on a picture of it: a click-through, shadowed window at the same place that fades and slides
+back, then deletes itself. A plain window (menus, alerts, call-outs) is pictured with
+`createComponentSnapshot`; a window with a native title bar (the app's dialogs) is pictured, title
+bar included, from its `NSView` on macOS. A window deleted while still flagged visible (a menu
+after a choice, an alert after a button) leaves with the picture taken while it was open.
+
+**Not covered.**
+- Leaving, for a native-title window on Windows or Linux: nothing is drawn, it vanishes at once
+  (the opening still animates).
+- The leaving picture is a snapshot, not the live window: a menu row's hover highlight or text typed
+  into an alert after it opened is not in it, and a dialog closed within 160 ms of opening has none
+  and just disappears.
+- A tooltip (`TooltipWindow` is parented to the main component, so it has no window of its own to
+  fade), a call-out given a parent component, the main window, hosted-plugin editor windows and
+  detached panel windows are not animated.
+- Fading uses the window's own opacity: Windows and macOS honour it, a Linux X11 session without a
+  compositor shows the slide only.
+- The choose-a-row accent flash is not done (the menu's item components belong to JUCE and are gone
+  as the menu closes).
+
 ## Motion rules
 
 Every animation in the app follows these; a new one that cannot is a design question, not a
 shortcut.
 
-- **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Reorder
+- **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,
+  call-outs and dialogs: see [Popup windows](#popup-windows). Reorder
   make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).
 - **Easing.** `easeOutCubic` for anything arriving or moving into place; `easeInCubic` for anything
   leaving or being sent back. `easeInOutCubic` stays for the panel slides, where a thing both starts
@@ -266,6 +329,9 @@ shortcut.
   item or a ghost of it follows the pointer, and a reorderable list makes room with
   `ReorderDragAnimator` — see [Drag-and-drop cursor](#drag-and-drop-cursor) and
   [Reorder drag](#reorder-drag).
+- **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its
+  anchor and leaves the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. One shared
+  mechanism, never per call site: [Popup windows](#popup-windows).
 - **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
   re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
 - **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and

@@ -450,10 +450,12 @@ uses these to assert the animation armed on finalize, that a re-anchored cable's
 strictly between its old and new anchor mid-tween, and that finishing lands it exactly on the new one
 with the tween state cleared.
 
-There is no reduced-motion / "disable animations" setting anywhere in this codebase today, so this
-animation — like every other `AnimationDriver` use — is unconditional; a future reduced-motion
-preference would gate `armMacroCrossingAnimation`'s call into `macroCrossingDriverAnim_.start()`
-alongside every other animator, not add a special case here.
+The only reduced-motion check in the codebase is `synth::ui::prefersReducedMotion()` (the operating
+system's Reduce motion setting), which today only the popup windows obey
+([Popup windows](../layout/animation.md#popup-windows)). This animation, like every other
+`AnimationDriver` use outside them, is unconditional; honouring the setting here would gate
+`armMacroCrossingAnimation`'s call into `macroCrossingDriverAnim_.start()` alongside every other
+animator, not add a special case.
 
 ## Dragging without Cmd (the preference)
 

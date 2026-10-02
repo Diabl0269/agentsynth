@@ -21,6 +21,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -118,7 +119,7 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     // override sits on) would otherwise race it and just hide the window with `onChoice` never
     // firing, which is the exact "no macro, no status message" bug this fixes.
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
 
     dialog->onChoice = [window, respond](bool createPorts, bool remember) {
         if (window != nullptr)
@@ -161,6 +162,7 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     // AlertWindow idiom exactly (see its comment for why the dialog must outlive this call, and
     // why the AlertWindow is owned inside the callback rather than by a member).
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)
@@ -512,7 +514,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     // juce::DialogWindow's default (which would just hide the window on a different dispatch
     // path, bypassing onRequestClose and every commit-on-close side effect it triggers).
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
 
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::Component::SafePointer<synth::ui::MacroPortConfigDialog> safeDialog(dialog);
@@ -642,6 +644,7 @@ void GraphEditor::promptRenameMacroPort(const juce::String& macroId, const juce:
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true,
                             juce::ModalCallbackFunction::create([safeThis, window, macroId, nodeUuid](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);

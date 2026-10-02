@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace eqCard {
 constexpr int kMargin = 12;
@@ -175,5 +176,5 @@ void ModuleComponent::openEqWindow() {
     options.componentToCentreAround = getTopLevelComponent();
     options.useNativeTitleBar = true;
     options.resizable = true;
-    eqWindow = options.launchAsync();
+    eqWindow = synth::ui::PopupMotion::launchDialog(options);
 }

@@ -2,6 +2,7 @@
 // combo's onChange is wired in buildScopeAndPresetControls(): switching it re-applies the working layout
 // to the newly chosen scope at once. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutEditorComponent.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -31,6 +32,7 @@ void CardLayoutEditorComponent::promptSaveAsPreset() {
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<CardLayoutEditorComponent> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)

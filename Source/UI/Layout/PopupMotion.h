@@ -1,0 +1,103 @@
+#pragma once
+
+// PopupMotion.h -- the ONE soft appear/disappear every popup window in the app shares: right-click
+// menus and submenus, ComboBox dropdowns, call-out popovers, alert boxes and dialogs.
+//
+// Section 1 is pure math (headless-testable). Section 2 is the engine: PopupMotion::attach() hangs
+// a self-deleting listener on a top-level window. How it is reached for each kind of window is in
+// docs/layout/animation.md ("Popup windows").
+//
+// In: the window fades from 0 to 1 while sliding 4 px AWAY from its anchor (the pointer),
+// 160 ms ease-out. Out: it fades to 0 while sliding 2 px back toward the anchor, 110 ms ease-in.
+// With Reduce motion on, both are a plain 80 ms fade and nothing moves.
+
+#include "UI/Layout/UIAnimation.h"
+#include <juce_gui_basics/juce_gui_basics.h>
+
+namespace synth::ui::popup_motion {
+
+// ============================================================================
+// Section 1 -- pure math
+// ============================================================================
+
+constexpr double kInMs = 160.0;
+constexpr double kOutMs = 110.0;
+constexpr double kReducedMs = 80.0;
+constexpr float kInSlidePx = 4.0f;
+constexpr float kOutSlidePx = 2.0f;
+
+enum class Phase { In, Out };
+
+/** How long a phase runs. Reduce motion is 80 ms both ways. */
+inline double durationMs(Phase phase, bool reduceMotion) noexcept {
+    if (reduceMotion)
+        return kReducedMs;
+    return phase == Phase::In ? kInMs : kOutMs;
+}
+
+/** The easing a phase uses: arriving decelerates, leaving accelerates away. */
+inline float ease(Phase phase, float t) noexcept { return phase == Phase::In ? easeOutCubic(t) : easeInCubic(t); }
+
+/** Unit step (one of (0,1), (0,-1), (1,0), (-1,0)) pointing from `anchor` to the window along the
+ *  axis the window sits furthest off the anchor. A pointer inside the window's span on an axis has
+ *  no distance on it, so a menu opened with its corner at the pointer slides down (the pointer is
+ *  above it) and a submenu to the right of its parent's row slides right. Ties and a pointer inside
+ *  the window resolve to down. */
+inline juce::Point<int> slideDirection(juce::Rectangle<int> windowBounds, juce::Point<int> anchor) noexcept {
+    const int outsideX = juce::jmax(windowBounds.getX() - anchor.x, anchor.x - windowBounds.getRight(), 0);
+    const int outsideY = juce::jmax(windowBounds.getY() - anchor.y, anchor.y - windowBounds.getBottom(), 0);
+    if (outsideX > outsideY)
+        return {anchor.x < windowBounds.getX() ? 1 : -1, 0};
+    if (outsideY > 0 && anchor.y > windowBounds.getBottom())
+        return {0, -1};
+    return {0, 1};
+}
+
+struct Frame {
+    float alpha = 1.0f;              // window opacity
+    juce::Point<float> offset{0, 0}; // displacement from the window's resting position
+};
+
+/** The window's state when the phase's eased progress is `eased` (0 at the start of the phase, 1 at
+ *  its end). In: alpha 0 -> 1, offset -dir * 4 px -> 0. Out: alpha 1 -> 0, offset 0 -> -dir * 2 px.
+ *  `dir` is slideDirection(); Reduce motion keeps the alpha and drops the offset. */
+inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion) noexcept {
+    Frame f;
+    f.alpha = phase == Phase::In ? eased : 1.0f - eased;
+    if (!reduceMotion) {
+        const float distance = phase == Phase::In ? -kInSlidePx * (1.0f - eased) : -kOutSlidePx * eased;
+        f.offset = {(float)dir.x * distance, (float)dir.y * distance};
+    }
+    return f;
+}
+
+} // namespace synth::ui::popup_motion
+
+namespace synth::ui {
+
+// ============================================================================
+// Section 2 -- the engine
+// ============================================================================
+
+class PopupMotion {
+public:
+    /** Make `window` (a top-level window, not a child component) animate every time it is shown and
+     *  hidden. Safe to call many times: only the first does anything. The listener it installs
+     *  deletes itself with the window. A window with no native peer, or any window while the
+     *  engine is disabled, is left exactly as JUCE would show it. */
+    static void attach(juce::Component& window);
+
+    /** Master switch (default on). Off: attached windows show and hide instantly. */
+    static void setEnabled(bool enabled);
+    static bool isEnabled();
+
+    /** Open a DialogWindow from `options` and attach. Use instead of options.launchAsync(). */
+    static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options) {
+        auto* dialog = options.launchAsync();
+        if (dialog != nullptr)
+            attach(*dialog);
+        return dialog;
+    }
+};
+
+} // namespace synth::ui

@@ -428,6 +428,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Layout/ScrollTweenTests.cpp
+    UI/Layout/PopupMotionTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
