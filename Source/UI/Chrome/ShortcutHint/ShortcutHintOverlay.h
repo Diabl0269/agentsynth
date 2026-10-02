@@ -28,8 +28,8 @@ struct DockHintInfo {
 };
 
 // ShortcutHintOverlay: hold Cmd (or, on macOS, Ctrl; or Option/Alt) on its own for ~500 ms and a key-cap
-// bubble appears on every visible registered button; Ctrl and Option show only the buttons whose live
-// binding uses that key. Release and they fade out. Any other key, a mouse click or a loss of
+// bubble appears on every visible registered button (Ctrl too); Option shows only the buttons whose live
+// binding uses Option. Release and they fade out. Any other key, a mouse click or a loss of
 // window focus cancels at once. A full-window child of the host that paints only while showing and
 // never takes a click (docs/control/shortcuts.md#shortcut-hints).
 //

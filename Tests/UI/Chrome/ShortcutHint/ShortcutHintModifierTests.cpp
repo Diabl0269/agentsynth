@@ -91,10 +91,10 @@ TEST_F(ShortcutHintModifierTest, CmdAloneStillShowsEveryBoundTarget) {
 }
 
 #if JUCE_MAC
-TEST_F(ShortcutHintModifierTest, CtrlAloneShowsOnlyCtrlBoundTargets) {
+TEST_F(ShortcutHintModifierTest, CtrlAloneShowsEveryBoundTargetLikeCmd) {
     hold(kCtrlOnly);
     ASSERT_TRUE(overlay_->areHintsShowing());
-    ASSERT_EQ(overlay_->getEntries().size(), 2u) << "the Ctrl+J button and the Ctrl+V painted chip";
+    EXPECT_EQ(overlay_->getEntries().size(), 4u) << "bare-key and chord targets alike, the same set Cmd shows";
     EXPECT_EQ(textAt(inOverlay(ctrlButton_)), keyText(juce::KeyPress('j', kCtrl, 0)));
 }
 
@@ -127,14 +127,12 @@ TEST_F(ShortcutHintModifierTest, CtrlPlusAnotherModifierNeverStartsTheDelay) {
     EXPECT_FALSE(overlay_->isPending());
 }
 
-TEST_F(ShortcutHintModifierTest, RebindingMovesATargetIntoTheCtrlSetAndTheBubbleFollowsTheNewKey) {
+TEST_F(ShortcutHintModifierTest, RebindingWhileCtrlHintsShowMovesTheBubbleToTheNewKey) {
     hold(kCtrlOnly);
-    ASSERT_EQ(overlay_->getEntries().size(), 2u);
+    ASSERT_EQ(overlay_->getEntries().size(), 4u);
     shortcuts_.setBinding("undo", juce::KeyPress('u', kCtrl, 0)); // while showing: rebuilds
-    ASSERT_EQ(overlay_->getEntries().size(), 3u);
+    ASSERT_EQ(overlay_->getEntries().size(), 4u);
     EXPECT_EQ(textAt(inOverlay(altButton_)), keyText(juce::KeyPress('u', kCtrl, 0)));
-    shortcuts_.setBinding("newPatch", juce::KeyPress('j', kCmd, 0));
-    EXPECT_EQ(overlay_->getEntries().size(), 2u);
 }
 #endif
 

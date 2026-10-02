@@ -876,11 +876,11 @@ button it labels; release and they shrink back and fade out. The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
 `MainComponent` that paints only while the hints are up.
 
-- **Three hold keys.** **Cmd** alone shows every target that has any binding. **Ctrl** alone (macOS
-  only; off the Mac Ctrl is Cmd) and **Option/Alt** alone show only the targets whose *current*
-  binding uses that key -- the Mac Ctrl+letter and Option+letter shortcuts (`⌃V` on the piano roll's
-  Velocity chip, `⌥S` on its Scale filter chip, the mixer's `⌃I`/`⌃S`/`⌃E` toggles, `⌃A` on the AI
-  Panel button). The filter reads the binding fresh each time, so a rebind moves a target in or out
+- **Three hold keys.** **Cmd** alone and **Ctrl** alone (macOS; off the Mac Ctrl is Cmd) both show
+  every target that has any binding, bare keys included (the timeline's edit tools, Follow playhead,
+  Space on Play), so whichever modifier you reach for reveals everything. **Option/Alt** alone shows
+  only the targets whose *current* binding uses Option -- the Mac Option+letter shortcuts (`⌥S` on the
+  piano roll's Scale filter chip). The filter reads the binding fresh each time, so a rebind moves a target in or out
   of the set and its bubble follows the new key. Switching from one hold key to another, or adding a
   second modifier, cancels like any chord; the latch, fade-out resume and delay all work per key. A
   different key pressed while the hints are fading out starts over from the 500 ms delay.

@@ -166,9 +166,9 @@ TEST_F(ShortcutHintMainWindowTest, HoldingCtrlLabelsRecordAndMetronomeOnTheTrans
     auto& bar = mc.getTimelinePanel().getTransportBar();
     EXPECT_TRUE(bubbleOver(*overlay, bar.getRecordButton(), keyText(mc, "transportRecord")));
     EXPECT_TRUE(bubbleOver(*overlay, bar.getMetronomeButton(), keyText(mc, "transportToggleMetronome")));
-    // Bare-key buttons (the tools) are not Ctrl shortcuts, so Ctrl does not label them.
-    EXPECT_FALSE(bubbleOver(*overlay, *mc.getTimelinePanel().getToolButton(synth::ui::EditTool::Draw),
-                            keyText(mc, "timelineToolDraw")));
+    // Ctrl shows every target, like Cmd: the bare-key tools are labelled too.
+    EXPECT_TRUE(bubbleOver(*overlay, *mc.getTimelinePanel().getToolButton(synth::ui::EditTool::Draw),
+                           keyText(mc, "timelineToolDraw")));
     overlay->modifierKeysChanged(juce::ModifierKeys());
 }
 #endif
