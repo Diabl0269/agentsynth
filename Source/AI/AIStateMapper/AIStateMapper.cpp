@@ -941,7 +941,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
-    synth::publishSamplerMidiWiring(graph); // under the callback lock: before the first block can render
+    synth::publishSamplerMidiWiring(graph); // the nodes were already audible while cables landed
     if (outIdMap != nullptr)
         *outIdMap = idMap;
     return true;

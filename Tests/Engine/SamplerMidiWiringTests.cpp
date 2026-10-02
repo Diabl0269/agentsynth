@@ -51,9 +51,8 @@ TEST(SamplerMidiWiringTest, AnAudioCableIntoTheSamplerDoesNotCountAsMidi) {
     EXPECT_FALSE(sampler->isMidiInputWired());
 }
 
-// Regression test for FRO480: opening a project applied the saved connections but only told the Sampler about its
-// MIDI cable on a later message-thread pass, so the first block after the open still free-ran and fired the sample.
-TEST(SamplerMidiWiringTest, ApplyingAPatchPublishesTheWiringBeforeAnyBlockCanRender) {
+// Applying a patch publishes the wiring itself rather than waiting for a later message-thread pass.
+TEST(SamplerMidiWiringTest, ApplyingAPatchPublishesTheWiring) {
     AudioEngine source(AudioEngine::HostMode::Standalone);
     auto& sourceGraph = source.getGraph();
     auto midiSource = sourceGraph.addNode(std::make_unique<SequencerModule>());

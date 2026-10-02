@@ -581,6 +581,35 @@ TEST_F(SamplerModuleTest, MidiWiredSamplerStaysSilentUntilTheFirstNote) {
     file.deleteFile();
 }
 
+// Regression test for FRO480: a project is rebuilt cable by cable while the audio thread renders, so a Sampler
+// restored from a saved project looks unpatched for a moment and used to fire its sample as the project opened.
+TEST_F(SamplerModuleTest, ASampleRestoredFromAProjectDoesNotFreeRun) {
+    auto file = writeTestWav("sampler-restored-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    juce::DynamicObject::Ptr state = new juce::DynamicObject();
+    state->setProperty(synth::module_file_keys::kSampleFile, file.getFullPathName());
+    module->setExtraState(juce::var(state.get()));
+
+    auto out = render(*module, 4, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(out, 0, 4 * 512, 0), 0.0f, 1e-6f);
+    EXPECT_FALSE(module->isPlaying());
+
+    auto note = render(*module, 1, 512, -1, 0.0f, TestAudioHelpers::createNoteOnMidi(60));
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(note, 128, 512, 0), 0.01f) << "a note still plays it";
+    file.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, PickingAFileAfterARestoreFreeRunsAgain) {
+    auto restored = writeTestWav("sampler-restored-a-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    auto picked = writeTestWav("sampler-picked-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(restored, /*fromProjectState=*/true));
+    ASSERT_TRUE(module->loadSampleFile(picked));
+
+    auto out = render(*module, 1, 512);
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(out, 128, 512, 0), 0.1f);
+    restored.deleteFile();
+    picked.deleteFile();
+}
+
 TEST_F(SamplerModuleTest, MidiWiredSamplerPlaysOnNoteOnAndStaysSilentAfterNoteOff) {
     auto file = writeTestWav("sampler-midiwired-note-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
     ASSERT_TRUE(module->loadSampleFile(file));
