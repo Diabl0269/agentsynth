@@ -384,7 +384,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
     // Resolve each target to ITS knob (bound parameter first, jack label as the fallback) rather
     // than scanning knobs for a label match: only the bound lookup finds "Rate (Hz)" for "Rate".
     // Only knobs and card faders are modulation targets (showsModulation); other sliders are not addressed this way
-    // and neither is anything without a matching CV jack. A knob on an inactive tab page keeps its
+    // and neither is anything without a matching CV jack. A knob on an unselected tab keeps its
     // last bounds, so a hidden one (sliderIndexForModTarget says -1) must not swallow a drop.
     for (const auto& t : targets) {
         const int si = sliderIndexForModTarget(t);
@@ -458,7 +458,10 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         if (target.channelIndex != destChannel)
             continue;
         const int si = sliderIndexForModTarget(target);
-        if (si < 0)
+        // A knob in a tab section never takes its jack's cable: its tab can be switched away, and
+        // a jack that moved between the gutter and the knob on every tab click would move the
+        // card's jack layout with it. Its jack stays in the gutter; a drop on the knob still lands.
+        if (si < 0 || (cardBody_ != nullptr && cardBody_->isTabbed(*sliders[si])))
             return std::nullopt;
         // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
         // this method's own CARD-local contract (see the declaration's comment).
@@ -474,9 +477,9 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
 
 // True when visible input jack `index` is a ModulationTarget whose knob resolves on this
 // card RIGHT NOW -- recomputed live off getModulationTargets()/mapInputChannel()/
-// sliderIndexForModTarget() every call (poly toggle, Dual I/O and tab pages all change what
-// resolves), never cached across a layout. A module with no ModulationTarget mapping to `index`
-// (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g. Oscillator's Pitch CV) is
+// sliderIndexForModTarget() every call (poly toggle and Dual I/O change what resolves; a knob in
+// a tab section never binds, getModTargetKnobAnchor), never cached across a layout. A module with no ModulationTarget
+// mapping to `index` (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g. Oscillator's Pitch CV) is
 // never knob-bound, matching the plain gutter behaviour exactly.
 bool ModuleComponent::isInputJackKnobBound(int index) const { return knobAnchorForVisibleInputJack(index).has_value(); }
 
@@ -498,7 +501,7 @@ std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack
 // paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
 // THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never
 // disagree about what's actually on screen. Never cached across a call -- isInputJackKnobBound
-// recomputes live off current slider visibility every time (poly toggle, Dual I/O, tab pages).
+// recomputes live off current slider visibility every time (poly toggle, Dual I/O, the More row).
 std::vector<int> ModuleComponent::drawnInputJackIndices() const {
     std::vector<int> drawn;
     if (module == nullptr)
@@ -530,7 +533,7 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
     return -1;
 }
 
-// A knob hidden on an inactive tab page (or in a folded More row) keeps the bounds it had when last
+// A knob hidden on an unselected tab (or in a folded More row) keeps the bounds it had when last
 // laid out, so drawing from them paints a ring over empty card -- UNLESS a layout's swap group shows a
 // sibling in its cell (CardBody::isSwappedOut, the ADSR's stage time swapped for its tempo division
 // included): that keeps the SAME cell a jack still legitimately lands on, so the jack never falls back to

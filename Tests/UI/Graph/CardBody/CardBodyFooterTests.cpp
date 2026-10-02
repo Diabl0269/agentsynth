@@ -174,6 +174,6 @@ TEST(CardBodyFooter, TheEstimateMatchesTheRealCardWithConditionsAFooterAndMore) 
         auto* card = canvas.card(id);
         EXPECT_EQ(*estimate, juce::Point<int>(card->getWidth(), card->getHeight()));
         const auto g = synth::cardbody::BodyGeometry::forCardWidth(card->getWidth());
-        EXPECT_EQ(card->getCardBody()->layout(100, g, false, false), card->getCardBody()->layout(100, g, true, false));
+        EXPECT_EQ(card->getCardBody()->layout(100, g, false), card->getCardBody()->layout(100, g, true));
     }
 }

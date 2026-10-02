@@ -10,11 +10,12 @@ namespace synth {
 
 /** `indices` (into plan.items) in card order, `columns` knobs per row; returns the y below them. */
 int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<int>& indices,
-                        int columns, int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed);
+                        int columns, int y, const cardbody::BodyGeometry& g, bool apply);
 
-/** Every shown section of `plan` but the footer, top to bottom; returns the y below them. */
+/** Every shown section of `plan` but the footer, top to bottom (a tab group as its strip and its
+ *  tallest tab); returns the y below them. */
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
-                           const cardbody::BodyGeometry& g, bool apply, bool tabbed);
+                           const cardbody::BodyGeometry& g, bool apply);
 
 /** A card chrome toggle that joins the footer row: its button (null when measuring) and its text. */
 struct CardFooterExtra {

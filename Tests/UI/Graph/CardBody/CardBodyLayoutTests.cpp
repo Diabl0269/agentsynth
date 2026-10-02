@@ -130,8 +130,8 @@ TEST(CardBodyLayout, MeasureAndApplyReturnTheSameHeight) {
         for (bool unfolded : {false, true}) {
             if (body->hasMoreRow())
                 body->setMoreUnfolded(unfolded);
-            const int measuredBody = body->layout(100, g, /*apply*/ false, false);
-            EXPECT_EQ(measuredBody, body->layout(100, g, /*apply*/ true, false));
+            const int measuredBody = body->layout(100, g, /*apply*/ false);
+            EXPECT_EQ(measuredBody, body->layout(100, g, /*apply*/ true));
             EXPECT_EQ(body->layoutMoreRow(500, g, false), body->layoutMoreRow(500, g, true));
         }
     }

@@ -34,10 +34,10 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // A/B are signal inputs, not parameter-CV mod targets -- MathModule.h's own comment on
     // getModulationTargets documents the convention this test would otherwise contradict.
     "Math",
-    // Paged tab card: a knob on an inactive Wavetable tab page is legitimately invisible
+    // Tab card: a knob on an unselected Wavetable tab is legitimately invisible
     // (getModRingSliderIndex() == -1 by design -- docs/modules/modulation.md#modulation-rings-on-knobs),
     // so a single-page sweep here would false-positive on every tab but whichever is default.
-    // Covered instead by the dedicated per-tab suites (Tests/UI/.../ModuleComponentWavetableTests.cpp,
+    // Covered instead by the per-tab suites (ModuleComponentWavetableTests.cpp, WavetableDefaultLayoutTests.cpp,
     // Tests/Modules/WavetableOscillatorModule/*).
     "Wavetable",
     // Port widgets / graph plumbing with no ModuleComponent knobs at all.

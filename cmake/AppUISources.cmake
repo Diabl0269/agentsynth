@@ -340,8 +340,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
-    Source/UI/Graph/ModuleComponent/WavetableTabStrip.cpp
-    Source/UI/Graph/ModuleComponent/WavetableTabStrip.h
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
@@ -514,6 +512,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyMoreRow.cpp
     Source/UI/Graph/CardBody/CardBodyPlan.cpp
     Source/UI/Graph/CardBody/CardBodyPlan.h
+    Source/UI/Graph/CardBody/CardBodyTabs.cpp
     Source/UI/Graph/CardBody/CardBodyViews.cpp
     Source/UI/Graph/CardBody/CardBodyViews.h
     Source/UI/Graph/CardBody/CardLayoutQuickEdit.cpp

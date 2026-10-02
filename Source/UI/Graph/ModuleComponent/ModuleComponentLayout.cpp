@@ -59,9 +59,9 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // The Wavetable card carries 15 knobs, 7 combos and 16 input jacks, so it
-    // goes double-width and uses the default body layout's wide-card branches (6 knob columns,
-    // paired combos). At single width the same content would run past 1150px tall.
+    // The Wavetable card carries 15 knobs, 8 combos and 16 input jacks, so it goes double-width: its
+    // chrome sits beside a two-column jack gutter and its body's runs take their wide-card branches
+    // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
     const int cardWidth =
         (getType(module) == ModuleType::Wavetable) ? synth::LayoutUtil::kDoubleWidth : synth::LayoutUtil::kSingleWidth;
 
@@ -164,77 +164,11 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kRowHeight + 8;
     }
 
-    // --- Wavetable chrome: the scanned frame view, the load row, then the folder browser ---
-    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr) {
-        // The port labels only occupy a narrow gutter down each edge, so on a double-width card
-        // this chrome sits BESIDE the 16-jack stack, starting just under the header, instead of
-        // below all of it — the same reclaim the Parametric EQ card makes for its response
-        // curve. It takes ~130px off a card that would otherwise clear 1000px tall.
-        constexpr int kPortGutterWidth = 88;
-        constexpr int kChromeTopY = 60;
+    // --- Wavetable chrome: the scanned frame view, the Table selector, the load row, the file caption ---
+    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr)
+        y = layoutWavetableChrome(y, contentX, contentW, apply);
 
-        const bool besidePorts = width >= synth::LayoutUtil::kDoubleWidth;
-        // Every input column is on the left, so the chrome has to clear all of them.
-        const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
-        const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
-        const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
-        const int chromeNarrowW = std::min(chromeW, kNarrowContentWidth);
-        const int chromeNarrowX = chromeX + (chromeW - chromeNarrowW) / 2;
-
-        int chromeY = besidePorts ? kChromeTopY : y;
-
-        if (apply)
-            wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
-        chromeY += kWaveformHeight + 8;
-
-        // The Table selector belongs with the display it drives, not buried on a tab page.
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            if (wavetableTabs == nullptr || !wavetableTabs->isChromeCombo(*comboBoxes[i]))
-                continue;
-            if (apply) {
-                comboLabels[i]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
-                comboBoxes[i]->setBounds(chromeX, chromeY + kLabelHeight, chromeW, kRowHeight);
-            }
-            chromeY += kLabelHeight + kRowHeight + 6;
-        }
-
-        // One button row, not two: [Load...] [Folder...] [<] [>], with the file caption on its
-        // own line under them so a long wavetable name is readable instead of ellipsised.
-        if (apply && wavetableFolderButton != nullptr) {
-            constexpr int kStepButtonW = 28;
-            constexpr int kGap = 4;
-            const int stepped = (kStepButtonW + kGap) * 2;
-            const int remaining = std::max(80, chromeW - stepped);
-            const int loadW = remaining / 2 - kGap;
-            const int folderW = remaining - loadW - kGap;
-
-            int x = chromeX;
-            loadWavetableButton->setBounds(x, chromeY, loadW, kRowHeight);
-            x += loadW + kGap;
-            wavetableFolderButton->setBounds(x, chromeY, folderW, kRowHeight);
-            x += folderW + kGap;
-            wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
-            x += kStepButtonW + kGap;
-            wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
-        }
-        chromeY += kRowHeight + 4;
-
-        if (apply)
-            wavetableNameLabel->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
-        chromeY += kLabelHeight + 8;
-
-        // Beside the ports the body still cannot start above the last jack; below them the
-        // chrome simply pushes it down as before.
-        y = besidePorts ? std::max(y, chromeY) : chromeY;
-    }
-
-    // A tabbed card (the Wavetable) replaces the combos and knobs with a pinned row, a tab strip and
-    // one page of controls. Everything else in the body — toggles, the Threshold view — is shared.
-    const bool tabbed = wavetableTabs != nullptr;
-    if (tabbed)
-        y = wavetableTabs->layoutBody(y, contentX, contentW, apply);
-
-    y = layoutBodyControls(y, width, apply, tabbed);
+    y = layoutBodyControls(y, width, apply);
 
     // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
@@ -311,11 +245,11 @@ bool ModuleComponent::unfoldMoreRowForCableDrag(juce::Point<int> localPoint) {
 
 // A card body lays out its own sections. A card without one (External MIDI's combos, a hosted plugin's
 // slots) stacks its widget arrays in the generic order -- combos, toggles, knobs -- with the same runs.
-int ModuleComponent::layoutBodyControls(int y, int width, bool apply, bool tabbed) {
+int ModuleComponent::layoutBodyControls(int y, int width, bool apply) {
     using namespace synth::cardbody;
     const auto g = BodyGeometry::forCardWidth(width);
     if (cardBody_ != nullptr)
-        return cardBody_->layout(y, g, apply, tabbed);
+        return cardBody_->layout(y, g, apply);
 
     std::vector<CaptionedWidget> combos, knobs;
     for (int i = 0; i < comboBoxes.size(); ++i)
@@ -323,8 +257,75 @@ int ModuleComponent::layoutBodyControls(int y, int width, bool apply, bool tabbe
     for (int i = 0; i < sliders.size(); ++i)
         knobs.emplace_back(sliders[i], sliderLabels[i]);
     std::vector<juce::Component*> toggleRow(toggles.begin(), toggles.end());
-    if (!tabbed)
-        y = layoutChoiceRun(combos, y, g, apply);
+    y = layoutChoiceRun(combos, y, g, apply);
     y = layoutToggleRun(toggleRow, y, g, apply);
-    return tabbed ? y : layoutKnobRun(knobs, kKnobColumns, y, g, apply);
+    return layoutKnobRun(knobs, kKnobColumns, y, g, apply);
+}
+
+namespace {
+
+// The Wavetable chrome's rows, top to bottom; its stack starts kWavetableChromeTopY down a double-width
+// card (just under the header, beside the jack gutter).
+constexpr int kWavetableChromeTopY = 60;
+constexpr int kWavetableDisplayStep = kWaveformHeight + 8;
+constexpr int kWavetableTableStep = kLabelHeight + kRowHeight + 6;
+constexpr int kWavetableLoadRowStep = kRowHeight + 4;
+constexpr int kWavetableCaptionStep = kLabelHeight + 8;
+
+} // namespace
+
+int ModuleComponent::wavetableChromeBottomY() {
+    return kWavetableChromeTopY + kWavetableDisplayStep + kWavetableTableStep + kWavetableLoadRowStep +
+           kWavetableCaptionStep;
+}
+
+// The port labels only occupy a narrow gutter down each edge, so on a double-width card this chrome sits
+// BESIDE the jack stack, starting just under the header, instead of below all of it -- the same reclaim
+// the Parametric EQ card makes for its response curve. The Table selector belongs with the display it
+// drives. One button row, not two: [Load...] [Folder...] [<] [>], with the file caption on its own line
+// under them so a long wavetable name is readable instead of ellipsised. Beside the ports the body still
+// cannot start above the last jack; below them the chrome simply pushes it down.
+int ModuleComponent::layoutWavetableChrome(int y, int contentX, int contentW, bool apply) {
+    constexpr int kPortGutterWidth = 88;
+    const bool besidePorts = getWidth() >= synth::LayoutUtil::kDoubleWidth;
+    // Every input column is on the left, so the chrome has to clear all of them.
+    const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
+    const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
+    const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
+    int chromeY = besidePorts ? kWavetableChromeTopY : y;
+
+    if (apply)
+        wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
+    chromeY += kWavetableDisplayStep;
+
+    // The Table selector, built before the body's combos (createWavetableTableSelector).
+    if (apply && !comboParams.isEmpty() && comboParams[0] != nullptr && comboParams[0]->paramID == "table") {
+        comboLabels[0]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+        comboBoxes[0]->setBounds(chromeX, chromeY + kLabelHeight, chromeW, kRowHeight);
+    }
+    chromeY += kWavetableTableStep;
+
+    if (apply && wavetableFolderButton != nullptr) {
+        constexpr int kStepButtonW = 28;
+        constexpr int kGap = 4;
+        const int stepped = (kStepButtonW + kGap) * 2;
+        const int remaining = std::max(80, chromeW - stepped);
+        const int loadW = remaining / 2 - kGap;
+        const int folderW = remaining - loadW - kGap;
+        int x = chromeX;
+        loadWavetableButton->setBounds(x, chromeY, loadW, kRowHeight);
+        x += loadW + kGap;
+        wavetableFolderButton->setBounds(x, chromeY, folderW, kRowHeight);
+        x += folderW + kGap;
+        wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+        x += kStepButtonW + kGap;
+        wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+    }
+    chromeY += kWavetableLoadRowStep;
+
+    if (apply)
+        wavetableNameLabel->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+    chromeY += kWavetableCaptionStep;
+
+    return besidePorts ? std::max(y, chromeY) : chromeY;
 }

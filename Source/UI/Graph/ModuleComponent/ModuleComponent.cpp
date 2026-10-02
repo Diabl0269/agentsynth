@@ -175,7 +175,6 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         createEnvelopeCardControls();
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
-    createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout
     applyControlAccessibility(); // last: names every control the steps above built
@@ -279,6 +278,7 @@ void ModuleComponent::detachFromProcessor() {
         muteAttachment.reset();
         dualIOAttachment.reset();
         octaveAttachment_.reset();
+        wavetableTableAttachment.reset();
         for (auto* param : module->getParameters())
             param->removeListener(this);
     } else {
@@ -289,6 +289,7 @@ void ModuleComponent::detachFromProcessor() {
         (void)muteAttachment.release();
         (void)dualIOAttachment.release();
         (void)octaveAttachment_.release();
+        (void)wavetableTableAttachment.release();
     }
 
     module = nullptr;

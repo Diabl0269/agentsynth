@@ -306,7 +306,7 @@ TEST(SourcesDefaultLayout, TheEstimateEqualsTheRealCardSize) {
         ASSERT_TRUE(estimate.has_value());
         EXPECT_EQ(*estimate, juce::Point<int>(card.card->getWidth(), card.card->getHeight()));
         const auto g = synth::cardbody::BodyGeometry::forCardWidth(card.card->getWidth());
-        EXPECT_EQ(card.body->layout(100, g, false, false), card.body->layout(100, g, true, false));
+        EXPECT_EQ(card.body->layout(100, g, false), card.body->layout(100, g, true));
     }
 }
 
@@ -337,8 +337,7 @@ TEST(SourcesDefaultLayout, EveryControlIsReachableNamedAndHasATooltip) {
 
 TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
-    EXPECT_EQ(defaults.find("Wavetable"), nullptr) << "the Wavetable is not part of this family";
-    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "LFO"}) {
+    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "LFO", "Wavetable"}) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);

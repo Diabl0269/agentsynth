@@ -58,11 +58,6 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
-    if (typeName == "Wavetable")
-        // Double-width. The 16 CV jacks run in two left-hand columns and the 23
-        // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
-        // the gutter nor the control count sets the height on its own.
-        return {synth::LayoutUtil::kDoubleWidth, 565};
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().

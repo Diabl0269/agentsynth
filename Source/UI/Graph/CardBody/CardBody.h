@@ -42,8 +42,8 @@ public:
     void createParameterWidgets();
 
     // ---- Layout ----------------------------------------------------------------------------------
-    /** Lays the sections out from `y`; returns the y below them. `tabbed` skips combos and knobs. */
-    int layout(int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed) const;
+    /** Lays the sections out from `y`; returns the y below them. */
+    int layout(int y, const cardbody::BodyGeometry& g, bool apply) const;
     /** Lays out the More row (a no-op without hidden parameters); returns the y below it. */
     int layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) const;
     /** True when the layout has a footer section; the card's chrome toggles then join that row. */
@@ -84,6 +84,16 @@ public:
     /** True when `node`'s override or its type's stored default changed since this body was built. */
     bool isStaleFor(const juce::AudioProcessorGraph::Node& node) const;
 
+    // ---- Tabs (CardBodyTabs.cpp) -------------------------------------------------------------------
+    /** The tab group's strip, or null; `group` indexes getPlan().tabGroups. */
+    juce::Component* getTabStrip(int group) const;
+    int getSelectedTab(int group) const;
+    /** Shows tab `tab` of `group` and re-lays the card out (its size never changes). Out-of-range
+     *  indices and the tab already shown are ignored. */
+    void selectTab(int group, int tab);
+    /** True for a widget in a tab section, selected or not: its CV jack stays in the card's gutter. */
+    bool isTabbed(const juce::Component& widget) const;
+
     // ---- The More row ----------------------------------------------------------------------------
     bool hasMoreRow() const { return !plan_.more.empty(); }
     bool isMoreUnfolded() const { return moreUnfolded_; }
@@ -109,6 +119,7 @@ private:
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();
+    void createTabStrips();
     void createMoreButton();
     void applyVisibility();
     void styleFooterItems();
@@ -117,8 +128,8 @@ private:
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     void handleAsyncUpdate() override;
-    int layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g, bool apply,
-                    bool tabbed) const;
+    int layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g,
+                    bool apply) const;
 
     ModuleComponent& card_;
     juce::AudioProcessor& module_;

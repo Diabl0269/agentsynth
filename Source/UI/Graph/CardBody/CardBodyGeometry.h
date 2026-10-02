@@ -22,6 +22,7 @@ inline constexpr int kFaderVHeight = 96;    // a vertical fader's travel + its t
 inline constexpr int kFaderHHeight = 28;    // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
+inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre +/- 10; clear it by a bit more before placing any content.
 inline constexpr int kPortLabelClearance = 15;

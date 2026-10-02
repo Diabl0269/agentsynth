@@ -52,6 +52,14 @@ inline CardSection section(const juce::String& id, std::optional<juce::String> t
     return result;
 }
 
+/** One tab of a tab strip: consecutive tab sections render as one strip, `title` on the tab. */
+inline CardSection tab(const juce::String& id, const juce::String& title, std::vector<CardItem> items,
+                       int columns = CardSection::kDefaultColumns) {
+    auto result = section(id, title, std::move(items), columns);
+    result.presentation = CardPresentation::Tab;
+    return result;
+}
+
 /** The footer row (CardSection::kFooterId): toggles as pills, a level as a horizontal fader. */
 inline CardSection footer(std::vector<CardItem> items) {
     return section(CardSection::kFooterId, std::nullopt, std::move(items));

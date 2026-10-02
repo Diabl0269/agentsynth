@@ -2,7 +2,7 @@
 // created exactly as the generic card always created it (same widget class, componentID, style,
 // attachment, MIDI Learn registration and modulation-amount gesture), the faders, segmented switches
 // and steppers a layout may ask for, plus the views and teardown.
-// Layout is CardBodyLayout.cpp; the More row is CardBodyMoreRow.cpp.
+// Layout is CardBodyLayout.cpp; the More row is CardBodyMoreRow.cpp; tab strips are CardBodyTabs.cpp.
 #include "CardBody.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyMoreButton.h"
@@ -149,6 +149,7 @@ void CardBody::createParameterWidgets() {
     }
     styleFooterItems();
     createSectionHeaders();
+    createTabStrips();
     if (hasMoreRow())
         createMoreButton();
     applyVisibility();

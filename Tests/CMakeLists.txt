@@ -246,7 +246,6 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
-    UI/Graph/ModuleComponent/WavetableTabStripTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
@@ -729,6 +728,7 @@ add_executable(Tests
     UI/Graph/CardBody/CardLayoutQuickEditTests.cpp
     UI/Graph/CardBody/DefaultLayouts/EnvelopesDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp
+    UI/Graph/CardBody/DefaultLayouts/WavetableDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/FilterDynamicsDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/EffectsDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/CaptionFitDefaultLayoutTests.cpp

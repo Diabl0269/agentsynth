@@ -39,6 +39,7 @@ struct CardBodyItem {
  */
 struct CardBodyPlan {
     struct Section {
+        juce::String id; ///< The layout section's id; empty in the automatic layout.
         int columns = CardSection::kDefaultColumns;
         std::vector<int> items;            ///< Indices into `items`, in card order.
         std::optional<juce::String> title; ///< Drawn as a header row above the items; nullopt = none.
@@ -46,9 +47,20 @@ struct CardBodyPlan {
         std::optional<CardCondition> visibleWhen;
         bool visible = true; ///< visibleWhen's current result.
         bool footer = false; ///< The footer row (CardSection::kFooterId), always laid out last.
+        int tabGroup = -1;   ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
 
-        /** True when the section draws a header row: a non-empty title over at least one item. */
-        bool hasHeader() const { return title.has_value() && title->trim().isNotEmpty() && !items.empty(); }
+        /** True when the section draws a header row: a non-empty title over at least one item. A tab's
+         *  title is its tab, never a header row. */
+        bool hasHeader() const {
+            return tabGroup < 0 && title.has_value() && title->trim().isNotEmpty() && !items.empty();
+        }
+    };
+
+    /** Consecutive `presentation: tab` sections: one tab strip, one section's items shown at a time. */
+    struct TabGroup {
+        std::vector<int> sections;        ///< Indices into `sections`, in tab order.
+        int selected = 0;                 ///< Index into `sections`: the tab shown now (per card, not saved).
+        juce::Component* strip = nullptr; ///< The tab strip; null until built.
     };
 
     /** Consecutive `show` items testing one parameter: they share one cell, so a swap never resizes. */
@@ -75,6 +87,7 @@ struct CardBodyPlan {
     std::vector<Section> sections;   ///< Placement, top to bottom; footer sections last.
     std::vector<int> more;           ///< Hidden or unplaced parameter items, in declaration order.
     std::vector<SwapGroup> swapGroups;
+    std::vector<TabGroup> tabGroups;
     std::vector<DimRule> dimRules;
 
     /** `layout` nullopt = the automatic layout; `dimRules` apply only with a layout. Conditions are
@@ -89,8 +102,13 @@ struct CardBodyPlan {
 
     /** The parameter item for `paramId`, or -1. */
     int findParam(const juce::String& paramId) const;
-    /** True when the item sits in a section shown now (a swapped-out member keeps its cell). */
+    /** True when the item sits in a section shown now (a swapped-out member keeps its cell); a tab
+     *  section is shown only while its tab is selected. */
     bool isOnCard(int item) const;
+    /** True when the item sits in a tab section, selected or not. */
+    bool isTabbed(int item) const;
+    /** The text on a tab section's tab: its title, else its id. */
+    juce::String tabTitle(int section) const;
     bool hasFooter() const;
 };
 

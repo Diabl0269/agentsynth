@@ -1,11 +1,9 @@
-// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler and LFO.
-// Each type registers with defaults.add(type, layout, revision, dimRules), built with the cardlayout::
-// helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
-// The Wavetable card is bespoke (cardBodyLayoutIsDataDriven is false for it) and has no entry here: its
-// tab strip is drawn from `tab` sections in a later change.
-// No view is placed in any of these: the Sampler's waveform and load row and the LFO's custom-wave editor
-// are card chrome (ModuleComponent) that already draws where the design puts them, so a registered copy
-// would be a second, unbound panel.
+// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, LFO and
+// Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
+// cardlayout:: helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
+// No view is placed in any of these: the Sampler's waveform and load row, the Wavetable's display, Table
+// selector and load row, and the LFO's custom-wave editor are card chrome (ModuleComponent) that already
+// draws where the design puts them, so a registered copy would be a second, unbound panel.
 // docs/layout/module-card-layout.md#default-layouts.
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
@@ -91,6 +89,24 @@ CardLayout lfoLayout() {
     return layout;
 }
 
+// Position and Warp are what you perform with, so they stay above the tabs; every other control is on
+// one of five tabs. A tab's controls stack as every card's do (combos above knobs), and the strip is as
+// tall as its tallest tab (Unison, Phase and Sub: a combo row over a knob row), so a tab switch never
+// resizes the card. Knob cells are as wide as a tab's knob count allows.
+CardLayout wavetableLayout() {
+    CardLayout layout;
+    layout.sections = {
+        section("perform", std::nullopt, {param("warp"), param("position"), param("warpAmount")}, 1),
+        tab("tune", "Tune", {param("octave"), param("coarse"), param("fine"), param("level"), param("pan")}),
+        tab("unison", "Unison", {param("stack"), param("unison"), param("detune"), param("width"), param("blend")}, 2),
+        tab("phase", "Phase", {param("syncMode"), param("phase"), param("randomPhase"), param("spread")}, 2),
+        tab("sub", "Sub", {param("subOctave"), param("subShape"), param("subLevel")}, 2),
+        tab("file", "File", {param("importMode"), param("interpolation")}),
+        footer({}),
+    };
+    return layout;
+}
+
 } // namespace
 
 void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
@@ -98,6 +114,7 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kRevision);
     defaults.add("LFO", lfoLayout(), kRevision);
+    defaults.add("Wavetable", wavetableLayout(), kRevision);
 }
 
 } // namespace synth

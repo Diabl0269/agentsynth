@@ -91,7 +91,7 @@ int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) 
         moreButton_->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
     y += cardbody::kRowHeight + 2;
     if (moreUnfolded_)
-        y = layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, apply, false);
+        y = layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, apply);
     return y;
 }
 

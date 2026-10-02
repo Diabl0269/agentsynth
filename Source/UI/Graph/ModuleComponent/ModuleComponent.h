@@ -4,7 +4,6 @@
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
-#include "UI/Graph/ModuleComponent/WavetableTabStrip.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -158,6 +157,11 @@ public:
      *  connection preview cable terminated 8px above the jack dot it claimed to land on. One
      *  constant so they cannot drift again. */
     static constexpr int kPortGutterHeaderHeight = 38;
+
+    /** The y below the Wavetable's chrome (display, Table selector, load row, file caption) on a
+     *  double-width card, where it sits beside the jack gutter; the body starts no higher. The size
+     *  estimate (CardBodyMeasure) reads the same number. */
+    static int wavetableChromeBottomY();
 
     /** Docked-widget row geometry for the four macro-port types (Macro In/Out, Macro MIDI In/Out —
      *  docs/macros/ports.md#how-a-port-is-drawn). A widget is one 16px row per jack row inside its
@@ -558,11 +562,9 @@ private:
     std::unique_ptr<juce::Label> wavetableNameLabel;
     std::unique_ptr<juce::FileChooser> wavetableFolderChooser;
 
-    // Wavetable card tab strip: the module's 23 controls grouped into pages behind tab buttons, with
-    // Position/Warp pinned above. Borrows sliders/comboBoxes (declared above, so it is destroyed
-    // first). Null for every other module. Jacks are NEVER tabbed — every CV input stays on the
-    // card so a cable can never point at a hidden port.
-    std::unique_ptr<WavetableTabStrip> wavetableTabs;
+    // The Table selector: card chrome beside the display it drives, not a card-body control (the body's
+    // plan skips the parameter). Its combo and label are bespoke widgets; the attachment goes first.
+    std::unique_ptr<juce::ComboBoxParameterAttachment> wavetableTableAttachment;
 
     // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
     std::unique_ptr<SampleWaveformComponent> sampleWaveform;
@@ -786,7 +788,8 @@ private:
     int layoutDefaultContent(bool apply);
 
     // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.
-    int layoutBodyControls(int y, int width, bool apply, bool tabbed);
+    int layoutBodyControls(int y, int width, bool apply);
+    int layoutWavetableChrome(int y, int contentX, int contentW, bool apply);
     int layoutChromeRows(int y, int contentX, int contentW, bool apply);
 
     // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
@@ -795,8 +798,9 @@ private:
     // Repoints the file-name label at whatever the module currently holds.
     void refreshSampleLabel(const juce::String& fallbackMessage = {});
 
-    // Builds the Wavetable module's frame display and load button. No-op for other modules.
+    // Builds the Wavetable module's frame display, Table selector and load row. No-op for other modules.
     void createWavetableControls();
+    void createWavetableTableSelector(juce::AudioParameterChoice& table);
 
     // Opens an async file chooser and, on success, loads the chosen file into the
     // Wavetable module and switches its Table parameter to "Loaded File".
@@ -814,10 +818,6 @@ private:
 
     // Repoints the wavetable caption at whatever the module currently holds.
     void refreshWavetableLabel(const juce::String& fallbackMessage = {});
-
-    // Builds the tab strip and hands it every slider / combo. Must run AFTER createControls(),
-    // which is what populates sliders and comboBoxes. No-op for other modules.
-    void createWavetableTabs();
 
     // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
     int getInputPortColumns() const;

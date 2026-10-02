@@ -58,12 +58,12 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
 void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
 
 // The drop-in-a-live-component check ModuleComponent::isInputJackKnobBound makes (a
-// ModulationTarget resolving to a VISIBLE slider) isn't available for a ghost preview, which has
-// no live component -- there is no tab-page/poly-visibility state to ask. "Has a bound parameter
-// at all" (parameterForModTarget != nullptr) is the same proxy GraphEditor::estimateModuleSize
-// uses for the same reason: it agrees with the live check for every module in practice (the only
-// divergence is a knob on a currently-hidden tab page, where the ghost estimate is very slightly
-// optimistic about how much the column has packed) and needs nothing but the processor itself.
+// ModulationTarget resolving to a VISIBLE slider outside a tab section) isn't available for a ghost
+// preview, which has no live component -- there is no poly-visibility state to ask. "Has a bound
+// parameter at all" (parameterForModTarget != nullptr) is the proxy: it agrees with the live check for
+// most modules (the divergence is a knob in a tab section or the More row, whose jack stays in the
+// gutter, so the ghost is optimistic about how much the column has packed) and needs nothing but the
+// processor itself.
 static bool jackIsKnobBoundForEstimate(ModuleBase* mb, int visibleIndex) {
     for (const auto& t : mb->getModulationTargets())
         if (mb->mapInputChannel(t.channelIndex).visibleJackIndex == visibleIndex &&
