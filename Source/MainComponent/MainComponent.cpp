@@ -6,6 +6,7 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Layout/TextFieldKeys.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
@@ -208,6 +209,7 @@ void MainComponent::setControllerProfileTestDirectory(const juce::File& dir) {
 // ---- Shared post-construction body ----
 // Shared initialisation body called from both constructors after appProperties is set up.
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
+    synth::ui::TextFieldKeys::install(); // Cmd+Backspace clears to line start in every text field
     // Overlay the meter-colours override (if any) onto the AppLookAndFeel's already- theme-derived
     // cache — every ctor above already ran lookAndFeel->applyTheme() before calling this, so the
     // theme-default stops are in place; this only pins a user override on top, before the first

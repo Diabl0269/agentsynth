@@ -332,6 +332,15 @@ actions are gone; a saved shortcut or MIDI mapping that still names them is igno
 - **Settings window**: Cmd+1..9 opens the Nth tab, a fixed key, not an action (a text field passes it up). Holding
   Cmd over the window shows each tab's `Cmd+N` as a hint badge ([hints](#shortcut-hints)).
 
+### Editing keys in text fields
+
+In every text field, Cmd+Backspace deletes everything left of the caret back to the start of the line (just the selection when
+one is highlighted; on macOS only), and Option+Backspace (Ctrl+Backspace on Windows and Linux) deletes the word before the caret,
+which `juce::TextEditor` already does. Read-only fields ignore both. `synth::ui::TextFieldKeys` (`Source/UI/Layout/`) provides the
+first: `MainComponent` starts one app-wide instance that listens on any `juce::TextEditor` as it takes focus, so no field needs a
+subclass and a field added later is covered without a call. The listener runs before the app's shortcut map, so a shortcut on
+Cmd+Backspace never fires while typing.
+
 ## Graph
 
 | Shortcut | Action |
