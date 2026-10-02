@@ -78,7 +78,8 @@ TEST(MacroAutoPortDelete, LastCableRemovedAutoDeletesThePortAndDissolvesTheMacro
     EXPECT_TRUE(editor.getMacros().empty()) << "the port was the macro's last member";
 }
 
-TEST(MacroAutoPortDelete, DisconnectingOneOfTwoLegsLeavesThePortAlone) {
+// Regression test for FRO564: an inlet left with nothing feeding it kept its inside leg.
+TEST(MacroAutoPortDelete, DisconnectingTheOuterLegClearsThePortAndItsInsideLeg) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -98,11 +99,39 @@ TEST(MacroAutoPortDelete, DisconnectingOneOfTwoLegsLeavesThePortAlone) {
 
     auto* portComp = compForNode(editor, portId);
     ASSERT_NE(portComp, nullptr);
-    // Disconnect only the EXTERIOR leg (the port's own INPUT jack) — the interior leg must survive.
+    // Disconnect the EXTERIOR leg (the port's own INPUT jack): nothing feeds the port any more.
     editor.disconnectPort(portComp, 0, /*isInput=*/true, /*isMidi=*/false);
 
-    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr) << "one leg still wired -> the port survives";
-    EXPECT_TRUE(hasConnection(engine, portId, 0, a, 0)) << "the interior leg is untouched";
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "an inlet nothing feeds is removed";
+    EXPECT_FALSE(hasConnection(engine, portId, 0, a, 0)) << "its inside leg goes with it";
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_FALSE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
+}
+
+TEST(MacroAutoPortDelete, DisconnectingTheInnerLegLeavesThePortAlone) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
+    engine.getGraph().addConnection({{ext, 0}, {portId, 0}}); // exterior leg
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}});   // interior leg
+
+    for (const auto& cable : editor.buildVisibleCables())
+        if (cable.id.srcUid == portId.uid && cable.id.dstUid == a.uid)
+            editor.disconnectCable(cable);
+
+    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr) << "still fed from outside -> waiting to be patched";
+    EXPECT_TRUE(hasConnection(engine, ext, 0, portId, 0)) << "the exterior leg is untouched";
     ASSERT_NE(editor.getMacros().find(macroId), nullptr);
     EXPECT_TRUE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
 }

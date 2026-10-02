@@ -512,6 +512,10 @@ public:
     void removeModulationChain(juce::AudioProcessorGraph::NodeID attenId);
     /** The macro ports the chain through `attenId` crosses, read before a cut; empty when it crosses none. */
     std::vector<juce::AudioProcessorGraph::NodeID> modulationChainPorts(juce::AudioProcessorGraph::NodeID attenId);
+    /** After a cable cut inside the caller's undo step: drops `touched` ports left cableless or one-sided (with the
+     *  modulation hanging off one), then sweeps `chainPorts` (read before the cut). */
+    void pruneMacroPortsAfterCut(const std::vector<juce::AudioProcessorGraph::NodeID>& touched,
+                                 std::vector<juce::AudioProcessorGraph::NodeID> chainPorts);
     /** The resolved colour of a modulation wire from `sourceId`. */
     juce::Colour modulationWireColour(juce::AudioProcessorGraph::NodeID sourceId) const;
     /** Test seam: runs just the drag tick's modifier re-sample (no real 30 Hz timer needed). */

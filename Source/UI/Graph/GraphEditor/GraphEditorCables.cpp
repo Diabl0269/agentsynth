@@ -444,15 +444,12 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     // Both cable kinds populate id.srcUid/dstUid with the REAL logical endpoints — for an
     // AttenuverterChain that's the true mod source/destination the chain proxies, never the hidden
     // attenuverter itself (buildVisibleCables() constructs it that way, and the attenuverter splice
-    // logic already treats them as such). Decide BEFORE mutating whether removing this cable can leave a
-    // macro port with no connections left, so the right undo transaction is chosen up front. Gated
-    // on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false and both
-    // branches below fall through to the plain graph-only recordStructuralChange path
-    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
+    // logic already treats them as such). Decide BEFORE mutating whether removing this cable touches a
+    // macro port, so the right undo transaction is chosen up front: pruneMacroPortsAfterCut may then drop a
+    // port left cableless or one-sided (see docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
     const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
     const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
-    const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
-                                  (macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId));
+    const bool touchesMacroPort = macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId);
 
     // An attenuverter chain is a hidden node plus its two edges, and the macro ports it crossed go with it --
     // whatever the auto-delete preference says, since the removal is the request. Double-clicking the knob
@@ -500,8 +497,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     if (touchesMacroPort) {
         auto doMutation = [this, removeEdges, srcId, dstId] {
             removeEdges();
-            macroController_.autoDeleteOrphanedMacroPort(srcId);
-            macroController_.autoDeleteOrphanedMacroPort(dstId);
+            pruneMacroPortsAfterCut({srcId, dstId}, {});
             updateComponents();
         };
         if (undoManager)

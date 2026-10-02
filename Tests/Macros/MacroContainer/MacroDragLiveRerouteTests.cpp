@@ -116,3 +116,56 @@ TEST(MacroDragLiveReroute, OutsideLfoModulatingAKnobReroutesEveryCrossing) {
         EXPECT_TRUE(routesIntoMember()) << "modulation survives the leave";
     }
 }
+
+// A plain cable from outside into a member runs outside -> inlet -> member. Cutting the outside leg
+// leaves an inlet nothing feeds: it goes, and its inside leg with it.
+TEST(MacroDragLiveReroute, CuttingTheOutsideLegOfAPortedCableClearsThePortAndTheInsideLeg) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(2400, 1400);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 600);
+    auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1000, 150);
+    editor.connectPorts(src, 0, b, 0, /*isMidi=*/false);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+    const auto connectionsWithPort = engine.getGraph().getConnections().size();
+
+    std::optional<GraphEditor::VisibleCable> outsideLeg;
+    for (const auto& c : editor.buildVisibleCables())
+        if (c.id.srcUid == src.uid)
+            outsideLeg = c;
+    ASSERT_TRUE(outsideLeg.has_value());
+    editor.disconnectCable(*outsideLeg);
+
+    EXPECT_TRUE(editor.getMacros().find(macroId)->ports.empty()) << "the inlet nothing feeds is gone";
+    EXPECT_EQ(engine.getGraph().getConnections().size(), connectionsWithPort - 2) << "both legs are gone";
+    ASSERT_TRUE(undo.undo());
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "one Cmd+Z brings the port back";
+    EXPECT_EQ(engine.getGraph().getConnections().size(), connectionsWithPort);
+}
+
+TEST(MacroDragLiveReroute, WithAutoDeleteOffCuttingTheOutsideLegKeepsThePort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2400, 1400);
+    editor.setAutoDeleteMacroPortsOnLastCableEnabled(false);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 600);
+    auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1000, 150);
+    editor.connectPorts(src, 0, b, 0, /*isMidi=*/false);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+
+    for (const auto& c : editor.buildVisibleCables())
+        if (c.id.srcUid == src.uid)
+            editor.disconnectCable(c);
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "the preference keeps hand-made ports";
+}

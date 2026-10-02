@@ -658,8 +658,8 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     // Decide BEFORE mutating whether this disconnect can leave a macro port cableless — nodeId's own jack, or the far
     // end of any plain (non-attenuverter) connection about to be removed. Only then does the transaction upgrade to
     // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only recordStructuralChange path.
-    // Gated on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false
-    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
+    // A far-end port counts whatever the preference says: the cut can strand a modulation behind it
+    // (see docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
     bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
     if (!touchesMacroPort) { // a modulation cable counts whatever the preference says
         auto isTargetChannelPrescan = [&targetChannels](int channel) {
@@ -673,8 +673,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 farNode = c.destination.nodeID;
             else
                 continue;
-            if ((autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(farNode)) ||
-                !modulationChainPorts(farNode).empty()) {
+            if (macroController_.nodeIsMacroPort(farNode) || !modulationChainPorts(farNode).empty()) {
                 touchesMacroPort = true;
                 break;
             }
@@ -728,9 +727,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes, &chainPorts] {
             doDisconnect();
             touchedNodes.push_back(nodeId);
-            for (auto touched : touchedNodes)
-                macroController_.autoDeleteOrphanedMacroPort(touched);
-            macroController_.sweepOneSidedMacroPorts(chainPorts, /*ignorePreference=*/true);
+            pruneMacroPortsAfterCut(touchedNodes, chainPorts);
             updateComponents();
         };
         if (undoManager)

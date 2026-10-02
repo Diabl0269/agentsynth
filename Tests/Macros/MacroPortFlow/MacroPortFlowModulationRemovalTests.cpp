@@ -182,3 +182,35 @@ TEST(MacroPortFlowModulationRemoval, AnotherChainFromTheSameLfoSurvives) {
     EXPECT_EQ(r.edgesFromLfo(), 1u) << "LFO -> its remaining attenuverter";
     EXPECT_EQ(r.nodes(), r.baseNodes + 1) << "just the other chain's attenuverter";
 }
+
+// Regression test for FRO564: cutting the LFO's own cable into the inlet left the inlet and its
+// inside half (inlet -> attenuverter -> knob) behind.
+TEST(MacroPortFlowModulationRemoval, DisconnectingTheLfoSideCableClearsTheInletAndTheInsideHalf) {
+    OutsideLfoRig r;
+    r.dragLfoOntoPositionKnobOf(r.member);
+    r.expectChainThroughAnInlet();
+    std::optional<GraphEditor::VisibleCable> lfoCable;
+    for (const auto& c : r.editor.buildVisibleCables())
+        if (c.id.srcUid == r.lfo.uid)
+            lfoCable = c;
+    ASSERT_TRUE(lfoCable.has_value());
+
+    r.editor.disconnectCable(*lfoCable);
+
+    r.expectNothingLeftBehind();
+    EXPECT_FALSE(r.routesInto(r.member));
+    r.expectUndoRestoresTheChain();
+}
+
+// Regression test for FRO564: Disconnect on the LFO's output jack kept the inlet and its inside half.
+TEST(MacroPortFlowModulationRemoval, DisconnectingTheLfoOutputJackClearsTheInletAndTheInsideHalf) {
+    OutsideLfoRig r;
+    r.dragLfoOntoPositionKnobOf(r.member);
+    r.expectChainThroughAnInlet();
+
+    r.editor.disconnectPort(compFor(r.editor, r.lfo), 0, /*isInput=*/false, /*isMidi=*/false);
+
+    r.expectNothingLeftBehind();
+    EXPECT_FALSE(r.routesInto(r.member));
+    r.expectUndoRestoresTheChain();
+}
