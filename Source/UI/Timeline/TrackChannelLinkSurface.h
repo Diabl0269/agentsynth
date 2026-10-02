@@ -58,15 +58,15 @@ struct TrackChannelLinkSurface {
      * ordinary track-only rename, byte-for-byte as before. */
     virtual bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) = 0;
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks (b): a colour picker whose live preview writes the track
-     * colour AND the channel macro's colour on every drag frame with no undo step, whose cancel restores both, and
-     * whose commit is ONE undo step covering both. Null when the track is not linked or its strip is not boxed in a
-     *  macro -- the caller falls back to its ordinary single-target picker. `favourites` is the
-     *  picker's favourites shelf store (the header already resolves it through
-     *  TrackHeaderHost::getAppProperties), passed in rather than re-derived so both pickers persist
-     *  to the same place; null for an in-memory-only picker. */
-    virtual std::unique_ptr<ColourPickerPopup> buildLinkedChannelColourPicker(synth::TrackId track,
-                                                                              juce::PropertiesFile* favourites) = 0;
+    /** docs/mixer/mixer.md#a-track-and-its-macro-share-a-colour: a colour picker whose live preview writes the track
+     * colour AND the colour of the channel macro the track's instrument sits in on every drag frame with no undo
+     * step, whose cancel restores both, and whose commit is ONE undo step covering both. Null when the track has no
+     * macro, or is not that macro's owning track (the first track in timeline order that plays it) -- the caller
+     * falls back to its ordinary single-target picker. `favourites` is the picker's favourites shelf store (the
+     * header already resolves it through TrackHeaderHost::getAppProperties), passed in rather than re-derived so both
+     * pickers persist to the same place; null for an in-memory-only picker. */
+    virtual std::unique_ptr<ColourPickerPopup> buildOwnedMacroColourPicker(synth::TrackId track,
+                                                                           juce::PropertiesFile* favourites) = 0;
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks (c): for a LINKED track, toggles the channel strip's own
      * mute parameter / solo flag as ONE undo step and returns true; the track's doc mute/solo stay false, so there is

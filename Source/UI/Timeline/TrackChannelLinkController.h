@@ -22,7 +22,8 @@
 //   - name  : ONE compound graph+timeline+macro step, both directions (see renameLinkedTrackAndChannel
 //             and installMacroRenameHook).
 //   - colour: preview writes with NO undo step on every frame; commit is ONE compound step; a
-//             no-net-change close restores both targets and pushes nothing.
+//             no-net-change close restores both targets and pushes nothing. Both directions (track picker,
+//             macro card picker) share this contract; see installMacroColourHooks.
 //   - M/S   : ONE graph snapshot step each (captureBeforeState/pushSnapshotFromCapture, the
 //             ModuleComponent idiom). The strip's mute is a real parameter and its solo is trusted
 //             extra state, so both round-trip through the snapshot; the restore hook's publish is
@@ -53,8 +54,8 @@ public:
     ChannelInfo getChannelInfo(synth::TrackId track) const override;
     float getChannelMeterPeak(synth::TrackId track) const override;
     bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) override;
-    std::unique_ptr<ColourPickerPopup> buildLinkedChannelColourPicker(synth::TrackId track,
-                                                                      juce::PropertiesFile* favourites) override;
+    std::unique_ptr<ColourPickerPopup> buildOwnedMacroColourPicker(synth::TrackId track,
+                                                                   juce::PropertiesFile* favourites) override;
     bool toggleLinkedChannelMuted(synth::TrackId track) override;
     bool toggleLinkedChannelSoloed(synth::TrackId track) override;
     void revealChannelForTrack(synth::TrackId track) override;
@@ -70,6 +71,11 @@ public:
      *  mute/solo is now the shared channel's own, and the tracks' doc flags are already false, so
      *  note gating simply resumes for them. */
     void reconcileLinkedTracks();
+
+    /** Makes every owned channel macro wear its owning track's colour. Runs from reconcileLinkedTracks, so it covers
+     *  project open, new tracks and undo/redo restores. Writes the macro directly with no undo step, so a project
+     *  that opens with a stale macro colour is not marked changed. A macro no track plays is left alone. */
+    void syncMacroColoursToTracks();
 
     /** The mixer panel's own reveal, installed once the panel exists (wired in
      *  MainComponent::wireTimelinePanelServicesAndShortcuts, the same late-setter pattern
@@ -92,7 +98,12 @@ private:
     const synth::Macro* macroForStrip(const juce::String& stripUuid) const;
     /** The single track linked to the channel `macroId` boxes, invalid when it boxes none. */
     synth::TrackId linkedTrackForMacro(const juce::String& macroId) const;
+    /** The channel macro the track's instrument sits in (synth::nearestChannelMacro on its binding), or null. */
+    const synth::Macro* macroForTrack(const synth::Track& track) const;
+    /** The first track in timeline order whose macro is `macroId`; invalid when no track plays it. */
+    synth::TrackId owningTrackForMacro(const juce::String& macroId) const;
     void installMacroRenameHook();
+    void installMacroColourHooks();
 
     /** TrackId -> the strip that track plays into, as last resolved by getChannelInfo() or
      *  reconcileLinkedTracks(). ONLY the 15 Hz meter read uses it, and only as a hint -- see

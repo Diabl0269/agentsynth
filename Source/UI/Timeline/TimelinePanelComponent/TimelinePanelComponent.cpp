@@ -364,6 +364,7 @@ void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transpo
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
+    lastOutputLatencySeconds_ = outputLatencySeconds;
     playhead_.updateFromTransport(snapshot, outputLatencySeconds);
     transportBar_.updateFromTransport(snapshot);
     // The lane headers' value readouts ride this same poll (nothing runs while the beat stands still).
@@ -380,16 +381,7 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     // poll every other transport-driven repaint in this class does.
     if (followPlayhead_ && snapshot.playing && !pianoRoll_.isOpen() && !clipLaneArea_.isDragInProgress() &&
         viewState_.pixelsPerBeat > 0.0) {
-        const double playheadBeat = playhead_.getDrawnBeat();
-        const double visibleBeats = (double)gridLanesBounds_.getWidth() / viewState_.pixelsPerBeat;
-        const double lastVisibleBeat = viewState_.firstVisibleBeat + visibleBeats;
-        if (playheadBeat < viewState_.firstVisibleBeat || playheadBeat > lastVisibleBeat) {
-            // The playhead lands ~10% into the new page rather than flush against its left edge,
-            // so the music that follows it is immediately visible instead of starting at the seam.
-            viewState_.firstVisibleBeat = std::max(0.0, playheadBeat - 0.1 * visibleBeats);
-            ruler_.repaint();
-            repaint();
-        }
+        pageViewToShowBeat(playhead_.getDrawnBeat());
     }
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from

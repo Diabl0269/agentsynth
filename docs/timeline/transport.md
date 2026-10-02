@@ -202,6 +202,43 @@ the loop and metronome buttons' own `triggerClick()` the same way `transportReco
 Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
 of them ship unbound by default; only `togglePlayback` keeps a default key (Space).
 
+## Gliding the cursor
+
+With the timeline focused, **holding Cmd+Left / Cmd+Right** glides the cursor (the transport position, the
+thing the cursor nudge actions move) back or forward. Two rebindable Timeline actions, `timelineGlideBack`
+and `timelineGlideForward`, resolved by `TimelinePanelComponent::keyPressed` like the panel's other keys.
+
+- **Motion.** A hold starts at about one beat per second and eases in (cubic) to a cap of eight bars per
+  second, reached two seconds after the glide starts. The position is the exact integral of that speed
+  (`synth::CursorGlide`, `Source/Transport/CursorGlide.h`, clock-free), so it does not depend on the frame
+  rate.
+- **Tap versus hold.** Nothing moves for the first 150 ms. A key released inside that window is a tap: one grid
+  step (the next grid line in the direction pressed) with snap on, one beat with snap off. A tap settles to
+  its target.
+- **Release.** Acceleration resets on key-up. With snap on the cursor settles to the nearest grid line over
+  140 ms (`easeOutCubic`); snap applies to this final landing only, never to the motion before it. With snap
+  off it stops where it is.
+- **Key repeat** from the OS is swallowed: only the first key-down starts the ramp.
+- **Key up** is seen through `keyStateChanged` and `modifierKeysChanged` on the panel, and every frame also
+  checks whether the key and its modifiers are still down, so a release that never reaches the panel (focus
+  moved mid-hold) still ends the glide. Releasing Cmd first ends it too. On macOS an arrow key's state comes
+  from the window server (`physicalArrowKeyDown`, `Source/UI/Timeline/CursorGlide/PhysicalKeyState.cpp`), not
+  `KeyPress::isKeyCurrentlyDown`: Cocoa drops the key-up of a Command chord, so JUCE fakes one straight after
+  the key-down and would end every Cmd+arrow hold as a tap. Other keys, and every key off the Mac, use JUCE's
+  state.
+- **Frames.** `TimelineCursorGlide` (`Source/UI/Timeline/CursorGlide/`) runs a `ReorderFramePump` (the shared
+  VBlank `AnimationDriver`) while a key is held, and another for the settle. No free-running timer; nothing
+  runs when idle. The settle lands at once when the panel is not on screen.
+- **Moving the position** goes through `locateTransportTracked` on the same `TransportNudgeState` the nudge
+  actions use (`MainComponent` hands the panel its own via `setTransportNudgeState`), so a nudge fired during
+  or just after a glide builds on the glide's target. While playing, the glide scrubs: each frame relocates
+  the transport, and playback continues from wherever the key is released.
+- **In view.** Every move calls the follow-playhead page flip (`pageViewToShowBeat`), regardless of the Follow
+  Playhead toggle: that toggle governs playback, and a cursor you are steering must stay visible. It is skipped
+  while the piano roll is open (the roll has its own view).
+
+There is no button, so there is no hint bubble; the actions appear in Settings > Shortcuts under Timeline.
+
 ## Right-click MIDI Learn (FRO133)
 
 Each of the four glyph buttons (`TimelineTransportBar::GlyphButton`) carries its own MIDI Learn

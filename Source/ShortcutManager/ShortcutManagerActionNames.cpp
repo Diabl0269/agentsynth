@@ -45,6 +45,11 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Jump to Next Marker";
     if (actionId == "transportJumpToPreviousMarker")
         return "Jump to Previous Marker";
+    // Hold-to-glide cursor moves (Timeline category).
+    if (actionId == "timelineGlideBack")
+        return "Glide Cursor Back (Hold)";
+    if (actionId == "timelineGlideForward")
+        return "Glide Cursor Forward (Hold)";
     // Selection stepping.
     if (actionId == "selectNextModule")
         return "Select Next Module";

@@ -281,12 +281,12 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
     const juce::uint32 originalColour = t->colourArgb;
 
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
-    // docs/mixer/mixer.md#channels-follow-audio-not-tracks (b): a LINKED track's picker fans every preview
-    // write out to the channel macro as well, and commits both as ONE undo step. Null for anything else -- the
+    // docs/mixer/mixer.md#a-track-and-its-macro-share-a-colour: the picker of a track that owns its channel macro fans
+    // every preview write out to that macro as well, and commits both as ONE undo step. Null for anything else -- the
     // single-target body below is then reached byte-for-byte as before.
     if (auto* link = linkSurface(); link != nullptr) {
         if (auto popup =
-                link->buildLinkedChannelColourPicker(trackId_, props != nullptr ? props->getUserSettings() : nullptr))
+                link->buildOwnedMacroColourPicker(trackId_, props != nullptr ? props->getUserSettings() : nullptr))
             return popup;
     }
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);

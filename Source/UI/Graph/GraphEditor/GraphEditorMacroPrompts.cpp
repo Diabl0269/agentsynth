@@ -195,10 +195,13 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
     // restores TO — the exact shape TimelineRulerComponent::buildMarkerColourPicker uses.
     const juce::Colour originalColour = macro->colour;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    // Resolved once per picker: the track that mirrors this macro's colour, if any.
+    const std::function<void(juce::Colour)> mirror =
+        macroController_.makeMacroColourMirror ? macroController_.makeMacroColourMirror(macroId) : nullptr;
 
     return std::make_unique<synth::ui::ColourPickerPopup>(
         originalColour, propertiesFile_,
-        [safeThis, macroId](juce::Colour c) {
+        [safeThis, macroId, mirror](juce::Colour c) {
             // Live preview: writes the macro directly, no undo — every drag repaints live. Goes
             // straight at the macro rather than through setMacroColour, which records an undo
             // step per call.
@@ -207,10 +210,12 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
                 return;
             if (auto* m = self->macros.find(macroId))
                 m->colour = c;
+            if (mirror)
+                mirror(c);
             self->syncMacroCards();
             self->repaint();
         },
-        [safeThis, macroId, originalColour](juce::Colour finalColour) {
+        [safeThis, macroId, originalColour, mirror](juce::Colour finalColour) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return; // the editor (or its window) is gone — nothing left to restore or undo
@@ -221,6 +226,8 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
                 // No net change: put back exactly what was there (a preview may have nudged it)
                 // and record no undo step.
                 m->colour = originalColour;
+                if (mirror)
+                    mirror(originalColour);
                 self->syncMacroCards();
                 self->repaint();
                 return;
@@ -229,6 +236,8 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
             // back first (outside the recorded mutation, so it does not itself become undoable),
             // then perform the real edit as the one recorded step.
             m->colour = originalColour;
+            if (mirror)
+                mirror(originalColour);
             self->getMacroController().setMacroColour(macroId, finalColour);
         });
 }

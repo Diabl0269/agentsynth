@@ -496,6 +496,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelAuthoringGestureTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
+    UI/Timeline/CursorGlide/TimelineCursorGlideTests.cpp
     UI/Timeline/TimelinePlayheadTests.cpp
     UI/Timeline/TimelineRoutingPaneTests.cpp
     UI/Timeline/TimelineMidiDestinationMacroRoutingTests.cpp

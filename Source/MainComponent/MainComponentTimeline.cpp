@@ -137,6 +137,9 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 // there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
+    // A channel can form or change owner on any canvas edit (a cable drag that auto-builds a channel, a member moved
+    // between macros); its macro takes the owning track's colour as soon as it does. Not an undo step.
+    trackChannelLink_.syncMacroColoursToTracks();
     // The 2b/2c catch-all
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) — MIDI
     // Remote's own assignments need the same re-resolve the timeline bindings just got, for the same reasons (a canvas

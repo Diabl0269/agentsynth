@@ -2,6 +2,7 @@
 
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Transport/TransportNudge.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -12,6 +13,7 @@
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
+#include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
@@ -265,6 +267,19 @@ public:
 
     // The panel's own keys (tools, snap, loop, follow) -- see TimelinePanelShortcuts.cpp.
     bool keyPressed(const juce::KeyPress& key) override;
+
+    // The cursor-glide keys are held, so their release has to be seen -- see TimelinePanelCursorGlide.cpp.
+    // Both return false: they only observe, so the event keeps bubbling.
+    bool keyStateChanged(bool isKeyDown) override;
+    void modifierKeysChanged(const juce::ModifierKeys& modifiers) override;
+
+    /** The cursor glide moves the transport through this state, so it accumulates with the cursor
+     *  nudge actions instead of fighting them. Non-owning; null reverts to the panel's own. */
+    void setTransportNudgeState(synth::TransportNudgeState* state) noexcept {
+        nudge_ = state != nullptr ? state : &ownNudge_;
+    }
+    synth::ui::TimelineCursorGlide& getCursorGlide() noexcept { return cursorGlide_; }
+    void setGlideClockForTest(std::function<double()> nowMs) { glideClockForTest_ = std::move(nowMs); }
 
     // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
@@ -727,6 +742,17 @@ private:
     // panel itself performs directly against it — reading the CURRENT position/time-signature at
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
+
+    // ---- Cursor glide (TimelinePanelCursorGlide.cpp) ----
+    bool handleCursorGlideKey(const juce::KeyPress& key);
+    /** Pages the view to show `beat` when it is off screen: the follow-playhead behaviour. */
+    void pageViewToShowBeat(double beat);
+    synth::ui::TimelineCursorGlide::Host makeCursorGlideHost();
+    synth::TransportNudgeState ownNudge_;
+    synth::TransportNudgeState* nudge_ = &ownNudge_;
+    double lastOutputLatencySeconds_ = 0.0;     // as last handed to updateFromTransport
+    std::function<double()> glideClockForTest_; // declared before cursorGlide_, whose host reads it
+    synth::ui::TimelineCursorGlide cursorGlide_{*this, makeCursorGlideHost()};
 
     // NOTE AUDITION — the track the currently-sounding preview note was sent TO. Invalid means
     // nothing is sounding. See the onAuditionNote wiring in the constructor (TimelinePanelComponent.cpp)

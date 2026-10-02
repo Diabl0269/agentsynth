@@ -109,6 +109,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineToggleLoop", ShortcutCategory::Timeline},
         {"timelineLoopSelection", ShortcutCategory::Timeline},
         {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
+        {"timelineGlideBack", ShortcutCategory::Timeline},
+        {"timelineGlideForward", ShortcutCategory::Timeline},
         {"timelineToolSelect", ShortcutCategory::Timeline},
         {"timelineToolRange", ShortcutCategory::Timeline},
         {"timelineToolSplit", ShortcutCategory::Timeline},

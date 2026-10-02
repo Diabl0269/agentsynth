@@ -173,6 +173,16 @@ public:
     std::function<bool(const juce::String& macroId, const juce::String& newName,
                        const std::function<void()>& renameMutation)>
         recordMacroRenameHook;
+    /** Called once when the macro card's colour picker opens. Returns a function that writes a colour onto the
+     *  track that owns the macro, with no undo step (the picker calls it on every preview frame and to put the
+     *  original back), or an empty function when no track plays the macro. Unset by default. */
+    std::function<std::function<void(juce::Colour)>(const juce::String& macroId)> makeMacroColourMirror;
+    /** Fired by setMacroColour INSTEAD of its own recordGraphAndMacroChange when set, so the owning track's colour
+     *  lands in the SAME undo transaction. Takes the macro id, the colour and the recolour mutation to run inside the
+     *  transaction the hook opens; returning false (no track plays the macro) leaves setMacroColour to record as it
+     *  always has. Unset by default. */
+    std::function<bool(const juce::String& macroId, juce::Colour colour, const std::function<void()>& recolourMutation)>
+        recordMacroColourHook;
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
     void deleteMacroAndMembers(const juce::String& macroId);
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;

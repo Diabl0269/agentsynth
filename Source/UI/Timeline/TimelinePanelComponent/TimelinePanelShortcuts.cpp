@@ -64,6 +64,10 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     if (juce::Component::getCurrentlyFocusedComponent() == this && handleRootFocusKey(key))
         return true;
 
+    // Cmd+Left / Cmd+Right glide the cursor while held (TimelinePanelCursorGlide.cpp).
+    if (handleCursorGlideKey(key))
+        return true;
+
     // Number keys pick a tool, BEFORE the letter keys below.
     //
     // With a ShortcutManager installed each digit is one rebindable action ("timelineToolSplit" and

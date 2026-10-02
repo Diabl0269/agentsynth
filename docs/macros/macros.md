@@ -26,6 +26,8 @@ processing of its own and no graph edges beyond the ones its ports carry.
   only valid for the lifetime of one loaded graph.
 - `synth::MacroSet` is the live set for the current patch, owned by `GraphEditor` and serialised by
   `ProjectBundle` under the `"macros"` key alongside the graph, timeline and `PatchDocument`.
+- A channel macro a track plays shares that track's colour in both directions
+  ([`docs/mixer/mixer.md`](../mixer/mixer.md#a-track-and-its-macro-share-a-colour)); any other macro keeps its own.
 - Collapsed, a macro draws as a `MacroCardComponent` and its member `ModuleComponent`s are hidden.
   Expanded, it draws as a dashed hull around the union of its members' bounds.
 - Selection, drag and delete are **not** a parallel mechanism: selecting a macro selects its members
