@@ -444,6 +444,9 @@ public:
 
     // Default jack layout for new Dual I/O modules: false = one collapsed "Audio" jack, true = split L/R.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
+    void applyDualIODefaultTo(juce::AudioProcessor& processor, const juce::String& moduleType) const {
+        applyDefaultDualIOForNewModule(processor, moduleType);
+    }
 
     /** Re-lays every stereo-capable module already on the canvas to `dual`. */
     void applyDualIOToExistingModules(bool dual);

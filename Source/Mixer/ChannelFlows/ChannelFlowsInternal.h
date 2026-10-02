@@ -26,12 +26,17 @@ namespace {
 // Creates one node through the factory (so it round-trips through graphToJSON/applyJSONToGraph,
 // exactly like every other node-creation call site), assigns it a fresh uuid mirrored into the
 // processor (ModuleBase::setNodeUuid), and records its canvas position. Returns nullptr on any
-// factory/addNode failure, leaving `uuidOut` untouched.
+// factory/addNode failure, leaving `uuidOut` untouched. `onNewModule` (DefaultChannelLayout's hook) runs
+// on the fresh processor before it enters the graph.
 juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, const juce::String& moduleType,
-                                              juce::Point<int> position, juce::String& uuidOut) {
+                                              juce::Point<int> position, juce::String& uuidOut,
+                                              const DefaultChannelLayout::NewModuleHook& onNewModule = {}) {
     auto processor = AIStateMapper::createModule(moduleType);
     if (processor == nullptr)
         return nullptr;
+    // Before addNode, like the library drop path: a live graph can prepareToPlay on add.
+    if (onNewModule)
+        onNewModule(*processor, moduleType);
     auto node = graph.addNode(std::move(processor));
     if (node == nullptr)
         return nullptr;
@@ -78,7 +83,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     DefaultChannel result;
 
     juce::String gateUuid;
-    auto* gate = addChainNode(graph, "Gate", layout.gate, gateUuid);
+    auto* gate = addChainNode(graph, "Gate", layout.gate, gateUuid, layout.onNewModule);
     if (gate == nullptr)
         return result;
     // Factory default: present but bypassed until the user opts in (docs/mixer/mixer.md#the-factory-default-chain).
@@ -86,7 +91,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
         module->setBypassed(true);
 
     juce::String eqUuid;
-    auto* eq = addChainNode(graph, "Parametric EQ", layout.eq, eqUuid);
+    auto* eq = addChainNode(graph, "Parametric EQ", layout.eq, eqUuid, layout.onNewModule);
     if (eq == nullptr) {
         result.gateUuid = gateUuid;
         return result;
@@ -96,7 +101,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
         module->setBypassed(true);
 
     juce::String compressorUuid;
-    auto* compressor = addChainNode(graph, "Compressor", layout.compressor, compressorUuid);
+    auto* compressor = addChainNode(graph, "Compressor", layout.compressor, compressorUuid, layout.onNewModule);
     if (compressor == nullptr) {
         result.gateUuid = gateUuid;
         result.eqUuid = eqUuid;

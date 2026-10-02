@@ -371,6 +371,12 @@ private:
     bool wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level);
     void migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId);
 
+    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a
+     *  module a track-creation flow builds. Handed to the Core chain builders through
+     *  DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). NOT used by track presets,
+     *  which keep their saved jacks. */
+    std::function<void(juce::AudioProcessor&, const juce::String&)> newModuleHook();
+
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
 

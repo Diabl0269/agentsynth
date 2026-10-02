@@ -30,11 +30,16 @@ struct DefaultChannel {
  *  ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for the splice-vs-reuse
  *  ordering). */
 struct DefaultChannelLayout {
+    using NewModuleHook = std::function<void(juce::AudioProcessor&, const juce::String& moduleType)>;
+
     juce::Point<int> gate;
     juce::Point<int> eq;
     juce::Point<int> compressor;
     juce::Point<int> strip;
     juce::Point<int> master;
+    /** Applied to each insert FX (Gate/EQ/Compressor; never Strip/Master) before it enters the graph,
+     *  so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
+    NewModuleHook onNewModule;
 };
 
 /**

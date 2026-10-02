@@ -218,7 +218,8 @@ assuming ch1 — on a voice module ch1 is CV, and wiring it as audio corrupts th
 **Preferences → "Split Left/Right jacks"** applies in both directions to modules already on the
 canvas *and* to anything created afterwards, overriding each module's own default. Scoping it to new
 modules only made it look broken — the obvious way to check a setting is to flip it and watch the
-patch in front of you, which never changed.
+patch in front of you, which never changed. "New" includes the instrument and insert FX that
+"+ Track" builds (docs/timeline/add-track.md#leftright-jacks-preference); track presets keep their saved jacks.
 
 **Preferences → "Per-module I/O defaults..."** sits next to the toggle above (same row) and opens a
 popup listing every module type from the table above (FX plus Oscillator, Wavetable, Filter, VCA,
