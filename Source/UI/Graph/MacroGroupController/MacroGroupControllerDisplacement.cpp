@@ -142,6 +142,14 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
     const auto growerMacroId =
         growerKey.startsWith("m:") ? growerKey.fromFirstOccurrenceOf("m:", false, false) : juce::String();
     bool movedAny = false;
+    // A hull that grew past the canvas's top-left (a new port, a member dropped in) is clipped and unclickable, so the
+    // grower and then each enclosing macro slide in first; the slide is part of the same glide and undo record.
+    if (!growerMacroId.isEmpty()) {
+        auto holders = macros.ancestorChain(growerMacroId);
+        holders.insert(holders.begin(), growerMacroId);
+        for (const auto& holder : holders)
+            movedAny = (nudgeHullIntoCanvas(holder) != juce::Point<int>()) || movedAny;
+    }
     juce::String key = growerKey;
     for (int depth = 0; depth < 64; ++depth) {
         const auto container = containerOfKey(*this, macros, key);

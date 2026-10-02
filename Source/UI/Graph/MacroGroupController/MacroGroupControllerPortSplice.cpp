@@ -675,11 +675,21 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
                            /*recordUndo=*/false);
     };
 
+    // Every macro that gained a port may now reach past the canvas's top-left (the new input widget overhangs the
+    // hull), so each slides into view, and pushes its neighbours clear, inside the same undo record.
+    auto growHulls = [this, srcCrossings, dstCrossings] {
+        for (const auto& macroId : dstCrossings)
+            makeRoomFor("m:" + macroId);
+        for (const auto& macroId : srcCrossings)
+            makeRoomFor("m:" + macroId);
+    };
+
     if (!recordUndo) {
         // The auto-channel hook: the caller already owns an outer recordGraphAndMacroChange
         // transaction and will call updateComponents() itself once, after its own further
         // mutations.
         doMutation();
+        growHulls();
         return true;
     }
 
@@ -687,10 +697,12 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
         host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), [&] {
             doMutation();
             host_.updateComponents();
+            growHulls();
         });
     else {
         doMutation();
         host_.updateComponents();
+        growHulls();
     }
 
     return true;

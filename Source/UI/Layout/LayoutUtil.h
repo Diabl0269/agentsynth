@@ -22,6 +22,9 @@ inline constexpr int kOutputDockCardGapX = 40; // gap between neighbouring outpu
 // fixed port strip (96). Anything that must sit clear of an open hull (a track head's x floor, Master right of a
 // channel's Strip) budgets this. MacroGroupControllerGeometry.cpp static_asserts it equals margin + strip width.
 inline constexpr int kMacroHullSideOutset = 110;
+// How far an input port's widget overhangs the open hull's left border, so its boundary jack sits on the border.
+// The hull's left edge must stay this far inside the canvas for the widget to be painted and clickable.
+inline constexpr int kMacroPortOverhang = 5;
 // ---- Module width buckets ----
 inline constexpr int kNarrowWidth = 40;  // Attenuverter
 inline constexpr int kSingleWidth = 280; // standard module
