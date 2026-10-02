@@ -582,7 +582,7 @@ TEST_F(SamplerModuleTest, MidiWiredSamplerStaysSilentUntilTheFirstNote) {
 }
 
 // Regression test for FRO480: a project is rebuilt cable by cable while the audio thread renders, so a Sampler
-// restored from a saved project looks unpatched for a moment and used to fire its sample as the project opened.
+// restored from saved state looks unpatched for a moment and used to fire its sample as the project opened.
 TEST_F(SamplerModuleTest, ASampleRestoredFromAProjectDoesNotFreeRun) {
     auto file = writeTestWav("sampler-restored-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
     juce::DynamicObject::Ptr state = new juce::DynamicObject();
@@ -601,7 +601,7 @@ TEST_F(SamplerModuleTest, ASampleRestoredFromAProjectDoesNotFreeRun) {
 TEST_F(SamplerModuleTest, PickingAFileAfterARestoreFreeRunsAgain) {
     auto restored = writeTestWav("sampler-restored-a-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
     auto picked = writeTestWav("sampler-picked-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
-    ASSERT_TRUE(module->loadSampleFile(restored, /*fromProjectState=*/true));
+    ASSERT_TRUE(module->loadSampleFile(restored, /*fromRestoredState=*/true));
     ASSERT_TRUE(module->loadSampleFile(picked));
 
     auto out = render(*module, 1, 512);

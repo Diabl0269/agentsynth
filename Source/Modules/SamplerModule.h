@@ -143,8 +143,9 @@ public:
 
     /** Reads `file` into memory and publishes it to the audio thread.
      *  Returns false (leaving any previously loaded sample in place) when the file is missing or
-     *  no registered format can read it. `fromProjectState` marks a restore from a saved project (see gateAt). */
-    bool loadSampleFile(const juce::File& file, bool fromProjectState = false) {
+     *  no registered format can read it. `fromRestoredState` marks a restore from saved state: a project open,
+     * undo/redo, paste or a snippet (see gateAt). */
+    bool loadSampleFile(const juce::File& file, bool fromRestoredState = false) {
         if (!file.existsAsFile())
             return false;
 
@@ -176,9 +177,9 @@ public:
                                      juce::String(kMaxSampleSeconds, 0) + "s.");
         }
 
-        // A file the user just picked free-runs until something is patched in; one restored from a saved project
+        // A file the user just picked free-runs until something is patched in; one restored from saved state
         // waits for a trigger or a note, so opening a project never makes a sound by itself.
-        restoredFromState.store(fromProjectState, std::memory_order_relaxed);
+        restoredFromState.store(fromRestoredState, std::memory_order_relaxed);
         publishSample(loaded);
         return true;
     }
@@ -231,7 +232,7 @@ public:
         if (auto* obj = state.getDynamicObject()) {
             const juce::String path = obj->getProperty(synth::module_file_keys::kSampleFile).toString();
             if (path.isNotEmpty())
-                loadSampleFile(juce::File(path), /*fromProjectState=*/true);
+                loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
         }
     }
 
@@ -557,7 +558,7 @@ private:
     /** Gate state for sample `idx`.
      *
      *  Precedence: a trigger cable wins; failing that, MIDI (a MIDI cable is wired, or a Note-On has
-     *  been received, or the sample was restored from a saved project); failing all of those, the module
+     *  been received, or the sample was restored from saved state); failing all of those, the module
      *  free-runs so that dropping it on the canvas and loading a file makes sound without any wiring.
      *  A restored Sampler waits for a note or trigger because the graph is rebuilt cable by cable while
      *  the audio thread keeps rendering, so a Sampler seen mid-load looks unpatched for a moment.
@@ -778,8 +779,9 @@ private:
     bool lastGate = false;
     bool triggerEverConnected = false;
     bool midiEverReceived = false;
-    std::atomic<bool> midiInputWired{false};    // message-thread write, audio-thread read
-    std::atomic<bool> restoredFromState{false}; // sample came from a saved project: never free-run
+    std::atomic<bool> midiInputWired{false}; // message-thread write, audio-thread read
+    std::atomic<bool> restoredFromState{
+        false};             // sample came from saved state (project open, undo/redo, paste): never free-run
     bool midiWired = false; // audio-thread copy for the current block: a MIDI cable is wired or the sample was restored
     float midiNote = 60.0f;
     std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic (mirrors ADSRModule)
