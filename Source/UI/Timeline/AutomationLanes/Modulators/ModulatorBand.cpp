@@ -2,6 +2,7 @@
 // accessible value, its picture, and the knob gestures (drag, Up/Down, double-click) while no amount lane
 // exists. The proxy doc behind the curve editor lives in ModulatorBandEdits.cpp.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
+#include "UI/Layout/TooltipHelpHandler.h"
 
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
@@ -163,7 +164,8 @@ juce::String ModulatorBand::getTooltip() {
 std::unique_ptr<juce::AccessibilityHandler> ModulatorBand::createAccessibilityHandler() {
     if (!isEditable())
         return juce::Component::createAccessibilityHandler();
-    return std::make_unique<juce::AccessibilityHandler>(
+    // TooltipHelpHandler, so VoiceOver reads the tooltip as the band's help text.
+    return std::make_unique<TooltipHelpHandler>(
         *this, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
         juce::AccessibilityHandler::Interfaces{std::make_unique<AmountValueInterface>(*this)});
 }
