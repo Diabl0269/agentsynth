@@ -206,6 +206,7 @@ add_executable(Tests
     App/MainComponent/MainComponentTransportPersistTests.cpp
     App/MainComponent/MainComponentViewPersistTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
+    App/MainComponent/MainComponentFreshUndoTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp
     App/MainComponent/MainComponentMidiRemoteStartupTests.cpp

@@ -37,7 +37,8 @@ bool GraphEditor::loadFactoryPreset(int index) {
 
 // Clears the canvas to the empty state (New Patch). Detaches module components (stopping scope timers)
 // BEFORE clearing the graph — same safe ordering as loadFactoryPreset. The clear is recorded as an
-// undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
+// undoable structural change when undoManager is present; MainComponent::newPatch() then drops that
+// history, so Cmd+Z after File > New does nothing.
 void GraphEditor::newPatch() {
     auto& graph = audioEngine.getGraph();
 

@@ -123,6 +123,9 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     // currentBundleDir_ = file, so only this plain-preset tail needs the reset.)
     currentBundleDir_ = juce::File();
     refreshAssetRoots();
+    // Opening replaces the document; adding a patch on top (append) keeps the history so it stays undoable.
+    if (!append)
+        startFreshUndoHistory();
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
@@ -200,6 +203,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory();
     markDocumentClean();
     recentProjects.addProject(bundleDir);
     saveRecentProjects();
@@ -252,6 +256,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     moveLanesToOwningTracks();      // same load-time lane move as loadBundleFromFile
     migrateSectionsToAmountLanes(); // same load-time migration as loadBundleFromFile
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory(); // after the load mutations; the dirty flag below is set directly, not from the serial
     // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
     // still holds the older, last-explicitly-saved content), so the document must read as dirty —
     // see the header comment on loadAutosaveFromFile for why isDirty_ is written directly here

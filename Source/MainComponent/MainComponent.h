@@ -575,6 +575,9 @@ private:
 
     void setCurrentPatchName(const juce::String& name);
     void markDocumentClean();
+    // New/Open begin a document with an empty undo stack, so Cmd+Z can never half-restore the previous
+    // one. Call after the last recorded mutation and before markDocumentClean(); never mid-undo.
+    void startFreshUndoHistory();
     bool isRecordingActive() const;
     void maybeAutosave();
     void performAutosave();
