@@ -563,3 +563,63 @@ TEST(TimelinePanelInteractionTest, ScrollAndZoomInversionForwardToThePianoRoll) 
     EXPECT_FALSE(panel.getPianoRoll().isScrollInverted());
     EXPECT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
 }
+
+// A trackpad's vertical zoom: macOS pinch reports one scale factor and no axis, so Option says
+// "vertical" -- Option+pinch, and Option + a two-finger vertical scroll. Plain pinch stays horizontal,
+// and an Option + sideways scroll stays a horizontal scroll.
+TEST(TimelinePanelInteractionTest, OptionPinchAndOptionVerticalScrollZoomTheRowsAroundThePointer) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+    for (int i = 0; i < 12; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    const juce::ModifierKeys option(juce::ModifierKeys::altModifier);
+    auto& clips = panel.getClipLaneArea();
+    const juce::Point<float> anchor((float)clips.getX() + 200.0f, (float)clips.getY() + 90.0f);
+
+    // Plain pinch: horizontal only.
+    panel.mouseMagnify(makeClickEvent(panel, anchor), 1.5f);
+    EXPECT_GT(state.pixelsPerBeat, 24.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, 1.0);
+
+    // Option+pinch: rows, not beats; the row under the pointer stays put.
+    const double ppb = state.pixelsPerBeat;
+    const auto before = clips.getRowLayout();
+    const double contentY = 90.0 + state.trackScrollY;
+    const int rowUnder = before.trackIndexAtY((int)contentY);
+    panel.mouseMagnify(makeClickEvent(panel, anchor, option), 1.5f);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, ppb);
+    EXPECT_EQ(clips.getRowLayout().trackIndexAtY((int)std::llround(90.0 + state.trackScrollY)), rowUnder)
+        << "zoomed around the pointer";
+    panel.mouseMagnify(makeClickEvent(panel, anchor, option), 1.0f / 1.5f);
+    EXPECT_NEAR(state.rowHeightScale, 1.0, 1e-6) << "pinching back undoes it";
+
+    // Option + two-finger vertical scroll: rows zoom, nothing scrolls.
+    juce::MouseWheelDetails up{};
+    up.deltaY = 0.3f;
+    up.isSmooth = true;
+    const double scroll = state.trackScrollY;
+    const double first = state.firstVisibleBeat;
+    panel.mouseWheelMove(makeClickEvent(panel, anchor, option), up);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, ppb);
+    EXPECT_DOUBLE_EQ(state.firstVisibleBeat, first);
+    juce::MouseWheelDetails down = up;
+    down.deltaY = -0.3f;
+    panel.mouseWheelMove(makeClickEvent(panel, anchor, option), down);
+    EXPECT_NEAR(state.rowHeightScale, 1.0, 1e-6) << "the opposite gesture cancels exactly";
+    EXPECT_NEAR(state.trackScrollY, scroll, 1.0);
+
+    // Option + a sideways scroll is still a horizontal scroll.
+    juce::MouseWheelDetails sideways{};
+    sideways.deltaX = 0.4f;
+    sideways.isSmooth = true;
+    panel.mouseWheelMove(makeClickEvent(panel, anchor, option), sideways);
+    EXPECT_NEAR(state.rowHeightScale, 1.0, 1e-6);
+    EXPECT_NE(state.firstVisibleBeat, first);
+}

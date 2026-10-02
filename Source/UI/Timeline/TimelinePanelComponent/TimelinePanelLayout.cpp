@@ -249,7 +249,8 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
 
     // Cubase-style bindings: Cmd = horizontal zoom, Cmd+Shift = vertical zoom (row height),
     // Shift or a trackpad's own deltaX = horizontal scroll, plain vertical wheel = vertical
-    // track scroll (headers + lanes together).
+    // track scroll (headers + lanes together). Option + a vertical scroll is vertical zoom too,
+    // the trackpad's one-hand way (macOS pinch has no axis, so it cannot say "vertical" itself).
     //
     // The two ZOOM branches are decided by their MODIFIERS, so they must not read a single axis:
     // macOS folds Shift+wheel into deltaX, which would leave Cmd+Shift+wheel reading deltaY == 0
@@ -266,9 +267,11 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomMagnitude = std::abs((double)dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
-    if (e.mods.isCommandDown())
+    const bool optionVertical =
+        e.mods.isAltDown() && !e.mods.isCommandDown() && std::abs(wheel.deltaY) >= std::abs(wheel.deltaX);
+    if (e.mods.isCommandDown() || optionVertical)
         wheelTween_.stop();
-    if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
+    if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
     }
@@ -325,8 +328,9 @@ void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
     // Trackpad pinch: deliberate enough that it needs no modifier. Plain pinch = horizontal zoom
-    // around the pinch point; Shift+pinch = vertical (row height) zoom.
-    if (e.mods.isShiftDown()) {
+    // around the pinch point; Option+pinch (or Shift+pinch) = vertical (row height) zoom. A pinch
+    // reports one scale factor and no axis, so the modifier is the only way to say "vertical".
+    if (e.mods.isAltDown() || e.mods.isShiftDown()) {
         if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
             return;
         zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
