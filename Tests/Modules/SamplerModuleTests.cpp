@@ -567,6 +567,42 @@ TEST_F(SamplerModuleTest, FreeRunsWhenNothingIsPatchedIn) {
     file.deleteFile();
 }
 
+// Regression test for FRO480: a Sampler fed only by a MIDI cable fired its sample on the first block,
+// before any note, because neither latch (trigger cable, MIDI received) had set yet.
+TEST_F(SamplerModuleTest, MidiWiredSamplerStaysSilentUntilTheFirstNote) {
+    auto file = writeTestWav("sampler-midiwired-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(file));
+    module->setMidiInputWired(true);
+
+    auto out = render(*module, 4, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(out, 0, 4 * 512, 0), 0.0f, 1e-6f)
+        << "a MIDI-wired Sampler with no note must stay silent";
+    EXPECT_FALSE(module->isPlaying());
+    file.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, MidiWiredSamplerPlaysOnNoteOnAndStaysSilentAfterNoteOff) {
+    auto file = writeTestWav("sampler-midiwired-note-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+    module->setMidiInputWired(true);
+
+    auto on = render(*module, 1, 512, -1, 0.0f, TestAudioHelpers::createNoteOnMidi(60));
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(on, 128, 512, 0), 0.1f);
+    EXPECT_TRUE(module->isPlaying());
+
+    juce::MidiBuffer noteOff;
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 60, 0.0f), 0);
+    juce::AudioBuffer<float> offBlock(SamplerModule::kNumChannels, 512);
+    offBlock.clear();
+    module->processBlock(offBlock, noteOff);
+
+    auto after = render(*module, 1, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(after, 0, 512, 0), 0.0f, 1e-6f)
+        << "after the Note-Off the gate must stay low, not fall back to free-running";
+    file.deleteFile();
+}
+
 TEST_F(SamplerModuleTest, TriggerCVGatesPlaybackOnceConnected) {
     auto file = writeTestWav("sampler-gate-146.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
     ASSERT_TRUE(module->loadSampleFile(file));

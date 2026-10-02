@@ -172,6 +172,9 @@ public:
     // MESSAGE THREAD. Re-publishes which modules have a cable on a Sidechain (Key) input.
     void refreshSidechainKeys();
 
+    // MESSAGE THREAD. Tells each Sampler whether a cable feeds its MIDI input; see AudioEngineTimelinePublish.cpp.
+    void refreshMidiWiring();
+
     // ---- Right-borrows-Left normalling (docs/architecture/audio-engine.md#normalling-fro324) ------------
     // MESSAGE THREAD. See AudioEngineTimelinePublish.cpp for every call site.
     void refreshNormalling();

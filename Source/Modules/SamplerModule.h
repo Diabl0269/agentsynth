@@ -203,6 +203,12 @@ public:
      *  block so the UI can draw a position line without touching the audio path. */
     float getPlayheadPosition() const noexcept { return playheadNorm.load(); }
 
+    /** MESSAGE THREAD. Tells the module whether any cable feeds its MIDI input. While true the gate
+     *  stays low until a Note-On arrives instead of free-running (see gateAt). Published by
+     *  AudioEngine::refreshMidiWiring, not a parameter and not saved. */
+    void setMidiInputWired(bool wired) noexcept { midiInputWired.store(wired, std::memory_order_relaxed); }
+    bool isMidiInputWired() const noexcept { return midiInputWired.load(std::memory_order_relaxed); }
+
     /** True while playback is running (a sample is loaded and the gate is open). */
     bool isPlaying() const noexcept { return playingFlag.load(); }
 
@@ -256,6 +262,7 @@ public:
 
         const int ns = juce::jmin(numSamples, kMaxBlock);
 
+        midiWired = midiInputWired.load(std::memory_order_relaxed); // once per block; gateAt() reads the copy
         // ---- 1. Cache CV inputs before the buffer is cleared --------------------------------
         // The trigger channel is probed over the WHOLE block, not just the first 64 samples like the
         // CV channels: a gate that rises at sample 100 would otherwise read as an unpatched jack and
@@ -546,8 +553,10 @@ private:
 
     /** Gate state for sample `idx`.
      *
-     *  Precedence: a trigger cable wins; failing that, MIDI; failing both, the module free-runs so
-     *  that dropping it on the canvas and loading a file makes sound without any wiring.
+     *  Precedence: a trigger cable wins; failing that, MIDI (a MIDI cable is wired, or a Note-On has
+     *  been received); failing all of those, the module free-runs so that dropping it on the canvas
+     *  and loading a file makes sound without any wiring. A MIDI-only Sampler therefore stays silent
+     *  until its first note instead of firing the sample on the first block.
      *
      *  "A cable is connected" is latched (`triggerEverConnected`) rather than re-derived per block:
      *  a gate that is legitimately low reads as an all-zero channel, which is indistinguishable
@@ -556,7 +565,7 @@ private:
     bool gateAt(int idx) const {
         if (triggerEverConnected)
             return triggerCache[(size_t)idx] >= 0.5f;
-        if (midiEverReceived)
+        if (midiEverReceived || midiWired)
             return heldNotes.any();
         return true;
     }
@@ -765,6 +774,8 @@ private:
     bool lastGate = false;
     bool triggerEverConnected = false;
     bool midiEverReceived = false;
+    std::atomic<bool> midiInputWired{false}; // message-thread write, audio-thread read
+    bool midiWired = false;                  // audio-thread copy of midiInputWired for the current block
     float midiNote = 60.0f;
     std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic (mirrors ADSRModule)
 

@@ -169,6 +169,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source == &mainProcessorGraph) {
         refreshSidechainKeys();
         refreshNormalling();
+        refreshMidiWiring();
         return;
     }
 

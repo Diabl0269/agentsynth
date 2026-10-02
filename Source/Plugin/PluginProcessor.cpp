@@ -191,6 +191,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     engine.refreshSoloGate();
     engine.refreshSidechainKeys();
     engine.refreshNormalling();
+    engine.refreshMidiWiring();
 
     // Reconcile the view against whatever the graph now holds — including after a rejected
     // patch, where the graph is left untouched and the editor must rebuild what it just detached.
