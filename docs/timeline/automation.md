@@ -346,6 +346,30 @@ breakpoints and calling `AutomationKernel::evaluate` with a fresh `AutomationCur
 SAME evaluator the audio thread uses, so the canvas can never show a shape real playback would not
 produce.
 
+### Point value bubble, grab cursor and the flat-line drag
+
+The point under the pointer, or being dragged, shows a value bubble above it (below it when the point is at
+the top of the lane): `AutomationLanes/PointReadout/PointValueBubble.{h,cpp}`, owned by the editor and painted
+last in its `paint()`, so it is not a child and never takes focus. It fades in 160 ms and out 110 ms through
+an `AnimationDriver` (resumed from the current opacity when a fade is interrupted), lands at once under
+Reduce Motion (`prefersReducedMotion()`) or off screen, and repaints nothing once settled. While a point is
+dragged the bubble follows its previewed value; an exit mid-drag does not drop it. The text is the
+parameter's own text for the value (`AutomationLaneEditor::valueToText`, which `TimelineAutomationLanes`
+sets to `laneValueText`, the lane header's path through `TrackHeaderHost::getParameterValueText`), falling
+back to the plain number. Later per-point features (selection, typed value, header readout, stretch) extend
+`PointValueBubble` and the editor's `updateHover()`.
+
+Under the Pointer tool a point shows the grab hand on hover and while it is dragged (`dragGrabCursor()`, see
+[the drag cursor rule](../layout/animation.md#drag-and-drop-cursor)); the Draw tool keeps its pen.
+
+A lane with NO points plays its constant value (the range default). Pressing within a handle's reach of that
+flat line and dragging vertically moves the value by the pointer's travel, clamped to the range, with the
+bubble showing it live; nothing is written until mouse-up, which commits through
+`TimelineDoc::setLaneConstantValue` as one undo step. Once the lane has a point the line is a curve and this
+drag does not apply.
+
+The editor has a screen-reader name, description and tooltip as a whole; points are mouse-only for now.
+
 ## Tools
 
 `AutomationLaneEditor::Tool` stays the editor's internal enum; the lanes have no tool row of their
@@ -543,6 +567,8 @@ applier driving an attenuverter's `amount` from a lane is in `AutomationApplierT
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
 partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from
 rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
+`AutomationLanesPointBubbleTests.cpp` (the value bubble on hover and drag with its text and fallback, the grab
+cursor, the flat-line drag as one undo step, its clamp, and the editor's accessible name),
 `AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
 cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key

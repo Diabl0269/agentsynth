@@ -572,6 +572,7 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesAddRowTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesPointBubbleTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapePaintTests.cpp
     UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp

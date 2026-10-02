@@ -4,6 +4,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
@@ -22,6 +23,10 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     setComponentID("automationLaneEditor");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
+    setTitle("Automation curve");
+    setDescription("Drag a point to move it; double-click to add a point; drag the flat line of an empty lane to "
+                   "set its value");
+    setTooltip("Automation curve: drag a point to move it, double-click to add one");
 }
 
 void AutomationLaneEditor::setTool(Tool tool) noexcept {
@@ -67,6 +72,8 @@ juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
 // line only at mouse-down) or picked directly as Pencil/Line. Built lazily from the themed Draw icon,
 // the same cursor the clip lanes and the piano roll show under that tool.
 juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
+    if (tool_ == Tool::Pointer && (hoveredBeat_.has_value() || dragMode_ == DragMode::MoveHandle))
+        return dragGrabCursor();
     const bool drawing =
         editTool_.has_value() ? *editTool_ == EditTool::Draw : (tool_ == Tool::Pencil || tool_ == Tool::Line);
     if (!drawing)
@@ -209,6 +216,7 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     paintToolPreview(g);
     paintHandles(g, *lane);
     shapeGesture_.paintOverCurve(g);
+    bubble_.paint(g);
 }
 
 void AutomationLaneEditor::paintGridBackdrop(juce::Graphics& g) {
@@ -240,7 +248,8 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
     // playback uses, so the curve shown while dragging is exactly what will play — Pencil/Line/
     // Eraser previews are drawn as separate overlays instead (paintToolPreview), since they don't
     // yet describe a committed breakpoint run.
-    const bool previewing = dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::TensionScrub;
+    const bool previewing =
+        dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::TensionScrub || dragMode_ == DragMode::LaneConstant;
     if (previewing && !pts.empty()) {
         if (dragMode_ == DragMode::MoveHandle) {
             for (auto& p : pts)
@@ -267,7 +276,8 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
     bool started = false;
     for (int x = 0; x < width; x += 2) {
         const double beat = viewState_.xToBeat((double)x);
-        const double value = pts.empty() ? (double)lane.range.defaultValue
+        const double flat = dragMode_ == DragMode::LaneConstant ? previewValue_ : (double)lane.range.defaultValue;
+        const double value = pts.empty() ? flat
                                          : AutomationKernel::evaluate(pts.data(), (int)pts.size(), beat,
                                                                       (double)lane.range.defaultValue, cursor);
         const float y = (float)valueToY(value);
@@ -370,19 +380,49 @@ int AutomationLaneEditor::visibleHandleCountForTest() const {
 }
 
 // A hidden handle under the pointer is drawn, so the point about to be grabbed is always visible.
-void AutomationLaneEditor::mouseMove(const juce::MouseEvent& e) {
+void AutomationLaneEditor::updateHover(juce::Point<int> pos) {
     std::optional<double> hovered;
-    if (auto hit = hitTestHandle(e.getPosition()))
+    std::optional<HandleHit> hit = hitTestHandle(pos);
+    if (hit)
         hovered = hit->beat;
+    if (hit)
+        showBubbleAt(hit->beat, hit->value);
+    else
+        bubble_.hide();
     if (hovered != hoveredBeat_) {
         hoveredBeat_ = hovered;
+        updateMouseCursor();
         repaint();
     }
 }
 
+void AutomationLaneEditor::showBubbleAt(double beat, double value) {
+    bubble_.show({(float)viewState_.beatToX(beat), (float)valueToY(value)}, valueText(value));
+}
+
+juce::String AutomationLaneEditor::valueText(double value) const {
+    if (valueToText)
+        if (auto text = valueToText(value); text.isNotEmpty())
+            return text;
+    return juce::String(value, 2);
+}
+
+bool AutomationLaneEditor::onFlatLine(juce::Point<int> pos) const {
+    const auto* lane = doc_ != nullptr && laneId_.isValid() ? doc_->getLane(laneId_) : nullptr;
+    return lane != nullptr && lane->points.empty() &&
+           std::abs((double)pos.y - valueToY((double)lane->range.defaultValue)) <= (double)kHandleHitRadiusPx;
+}
+
+void AutomationLaneEditor::mouseMove(const juce::MouseEvent& e) { updateHover(e.getPosition()); }
+
+// A drag in progress keeps the bubble: JUCE delivers the exit only after the release.
 void AutomationLaneEditor::mouseExit(const juce::MouseEvent&) {
+    if (dragMode_ != DragMode::None)
+        return;
+    bubble_.hide();
     if (hoveredBeat_.has_value()) {
         hoveredBeat_.reset();
+        updateMouseCursor();
         repaint();
     }
 }
@@ -430,6 +470,14 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
             dragOriginalCurve_ = hit->curve;
             previewBeat_ = dragOriginalBeat_;
             previewValue_ = dragOriginalValue_;
+            hoveredBeat_ = hit->beat;
+            showBubbleAt(previewBeat_, previewValue_);
+            updateMouseCursor();
+        } else if (onFlatLine(pos)) {
+            dragMode_ = DragMode::LaneConstant;
+            dragOriginalValue_ = (double)doc_->getLane(laneId_)->range.defaultValue;
+            previewValue_ = dragOriginalValue_;
+            showBubbleAt(viewState_.xToBeat((double)pos.x), previewValue_);
         } else if (auto segIdx = hitTestSegmentLeftIndex(pos.x)) {
             const auto* lane = doc_->getLane(laneId_);
             dragMode_ = DragMode::TensionScrub;
@@ -471,6 +519,11 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     case DragMode::MoveHandle:
         previewBeat_ = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
         previewValue_ = clampValue(yToValue(pos.y));
+        showBubbleAt(previewBeat_, previewValue_);
+        break;
+    case DragMode::LaneConstant:
+        previewValue_ = clampValue(dragOriginalValue_ + yToValue(pos.y) - yToValue(mouseDownPos_.y));
+        showBubbleAt(viewState_.xToBeat((double)pos.x), previewValue_);
         break;
     case DragMode::TensionScrub: {
         const double delta = ((double)mouseDownPos_.y - (double)pos.y) * 0.01;
@@ -516,6 +569,17 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
             auto mutate = [this, laneId, removeBeats, addPoints] {
                 doc_->editBreakpoints(laneId, removeBeats, addPoints);
             };
+            if (undoManager_)
+                undoManager_->recordTimelineChange(*doc_, mutate);
+            else
+                mutate();
+        }
+        break;
+    }
+    case DragMode::LaneConstant: {
+        const double value = previewValue_;
+        if (std::abs(value - dragOriginalValue_) > 1e-9) {
+            auto mutate = [this, laneId, value] { doc_->setLaneConstantValue(laneId, value); };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
@@ -620,6 +684,7 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
     }
 
     dragMode_ = DragMode::None;
+    updateHover(e.getPosition());
     repaint();
 }
 
@@ -650,6 +715,9 @@ bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
             dragMode_ = DragMode::None;
             pencilSamples_.clear();
             erasedBeats_.clear();
+            bubble_.hide();
+            hoveredBeat_.reset();
+            updateMouseCursor();
             repaint();
             return true;
         }

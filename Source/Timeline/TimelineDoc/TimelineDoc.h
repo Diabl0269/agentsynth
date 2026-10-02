@@ -573,6 +573,9 @@ public:
     // not silently re-arm the lane.
     bool setLaneRecordMode(LaneId id, int mode);
 
+    // The value an automation lane holds while it has no breakpoints; a user edit (see the .cpp).
+    bool setLaneConstantValue(LaneId id, double value);
+
     const AutomationLane* getLane(LaneId id) const;
     const Track* getTrackForLane(LaneId id) const;
     // The lane bound to (nodeUuid, paramId), or nullptr — the doc-wide identity lookup addLane

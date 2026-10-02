@@ -174,6 +174,11 @@ void TimelineAutomationLanes::syncPools() {
             editor->setDrawShape(drawShape_);
             editor->setLaneRange(&laneRange_);
             editor->setActiveLane(id);
+            // host_ is read at call time: the host can be set after the editor exists.
+            editor->valueToText = [this, id](double value) {
+                const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
+                return lane != nullptr ? laneValueText(*lane, value, host_) : juce::String();
+            };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)
                     onLaneFocused(id);
