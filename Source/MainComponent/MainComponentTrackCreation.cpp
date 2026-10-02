@@ -84,6 +84,12 @@ void MainComponent::addMidiTrack() {
     statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
 }
 
+std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::newModuleHook() {
+    return [this](juce::AudioProcessor& processor, const juce::String& moduleType) {
+        graphEditor.applyDualIODefaultTo(processor, moduleType);
+    };
+}
+
 void MainComponent::addAudioTrack() {
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
@@ -164,6 +170,7 @@ void MainComponent::addAudioTrack() {
                 /*compressor=*/{compressorX, trackAudioPosition.y},
                 /*strip=*/{stripX, trackAudioPosition.y},
                 /*master=*/{masterX, trackAudioPosition.y},
+                /*onNewModule=*/newModuleHook(),
             };
 
             const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
@@ -317,6 +324,10 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
         return false; // moved exactly once above; defensive, mirrors addModuleAtCanvasPosition's own guard
     auto& graph = audioEngine.getGraph();
     const int instrumentX = build.trackInPosition.x + build.trackInSize.x + kChannelCardGapX;
+    // The instrument is user-facing, so it follows the left/right jacks preference like a library
+    // drop does (a hosted plugin has no dualIO parameter, making this a no-op there). Before addNode
+    // and before any wiring below reads the module's right-leg channel.
+    newModuleHook()(**stagedInstrument, (*stagedInstrument)->getName());
     auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
     if (instrumentNodePtr == nullptr)
         return false;
@@ -459,6 +470,7 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         /*compressor=*/{compressorX, build.chainSourcePosition.y},
         /*strip=*/{stripX, build.chainSourcePosition.y},
         /*master=*/{masterX, build.chainSourcePosition.y},
+        /*onNewModule=*/newModuleHook(),
     };
 
     const auto channel =

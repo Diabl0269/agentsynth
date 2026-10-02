@@ -125,6 +125,7 @@ add_executable(Tests
     Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
+    Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowAutoChannelTests.cpp
     Mixer/ChannelFlow/ChannelFlowCreateChannelsTests.cpp

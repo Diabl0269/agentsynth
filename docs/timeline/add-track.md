@@ -52,6 +52,16 @@ The track-preset lists follow the same build-time-snapshot rule
 (`audioTrackPresetMenuSnapshot_` / `instrumentTrackPresetMenuSnapshot_`), since a preset can be
 saved or deleted between the menu opening and the click landing.
 
+## Left/right jacks preference
+
+Modules a new track builds follow **Preferences -> "Split Left/Right jacks on new modules"** and its
+per-module overrides, the same as a library drop: the instrument node and the channel's insert FX
+(Gate, Parametric EQ, Compressor). Core's chain builders cannot see `GraphEditor`, so
+`MainComponent::newModuleHook()` is handed in as `DefaultChannelLayout::onNewModule` and runs on each
+insert right after creation, before it enters the graph. The infrastructure the chain forces a shape on
+(Channel Strip, Master, Track In/Track Audio, Voice Mixer, ADSR/VCA/Poly MIDI) ignores the preference.
+Track presets are different: they keep the jacks they were saved with.
+
 ## Track presets
 
 Below the Instrument submenu, `"+ Track"` lists every saved preset for each track kind — own
