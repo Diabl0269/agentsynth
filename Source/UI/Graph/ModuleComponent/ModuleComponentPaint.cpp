@@ -706,7 +706,7 @@ juce::String ModuleComponent::getTooltip() {
         const bool nameShown =
             macroPortNameAlpha() >= 1.0f && !macroPortNameIsTruncated(ownership.port->name, ownership.port->isInput);
         // A stereo port can switch between one stereo jack and two (Left/Right) jacks from its right-click menu.
-        const juce::String hint = macroPortStereoShape(module).has_value()
+        const juce::String hint = owner.getMacroController().stereoPortShape(ownership.port->nodeUuid).has_value()
                                       ? juce::String("Right-click to split or join the left/right jacks")
                                       : juce::String();
         if (nameShown)

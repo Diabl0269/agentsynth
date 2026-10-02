@@ -26,6 +26,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Graph/MacroGroupController/MacroSelectionUnits.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include <algorithm>
 
 // True when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
 // const-callable query since getMacros() itself is non-const.
@@ -262,6 +263,27 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
     return buildMacroColourPicker(macroId);
 }
 
+namespace {
+// A stereo port (a track's Output) switches between one stereo jack and Left/Right jacks from the macro menu too, so
+// the collapsed card -- where a right-click lands on this menu, not the port's own -- reaches it in one click.
+void addStereoPortSwitchItems(juce::PopupMenu& m, const synth::Macro& macro,
+                              juce::Component::SafePointer<GraphEditor> safeThis) {
+    auto ports = macro.ports;
+    std::sort(ports.begin(), ports.end(), [](const auto& a, const auto& b) { return a.order < b.order; });
+    for (const auto& port : ports) {
+        const auto shape = safeThis->getMacroController().stereoPortShape(port.nodeUuid);
+        if (!shape.has_value())
+            continue;
+        const juce::String label = *shape == MacroPortShape::Stereo ? "Join " + port.name + " into One Stereo Jack"
+                                                                    : "Split " + port.name + " into Left/Right Jacks";
+        m.addItem(label, [safeThis, macroId = macro.id, uuid = port.nodeUuid] {
+            if (safeThis != nullptr)
+                safeThis->getMacroController().toggleStereoPortSplit(macroId, uuid);
+        });
+    }
+}
+} // namespace
+
 // `renameAction`, when supplied, replaces the default "Rename..." item's handler — the collapsed
 // card passes its own inline-editor opener (MacroCardComponent::beginRename) here; every other
 // caller (the hull menu) leaves it empty and gets promptRenameMacro's dialog, since there is no
@@ -376,6 +398,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (safeThis != nullptr)
             safeThis->promptConfigureMacroIO(macroId);
     });
+    addStereoPortSwitchItems(m, *macro, safeThis);
     m.addSeparator();
     // Bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute): each item names the action a click is about to
     // perform, so a Mixed or fully-off state reads as targeting ON ("Bypass"/"Mute") and a fully-on state reads as

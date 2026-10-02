@@ -82,6 +82,7 @@ public:
         juce::String name;
         juce::Point<int> jackPos;           // card-local
         int row = 0;                        // index within its side, 0 = topmost
+        int visibleJack = -1;               // -1 = the whole port; 0/1 = the Left/Right row of a Stereo port
         juce::Rectangle<int> labelArea;     // card-local; where the name is painted when names are visible
         std::optional<juce::Colour> colour; // unset -> kind tint fallback
     };
@@ -327,6 +328,11 @@ public:
                                       MacroPortShape newShape, int newVoiceCount);
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
+    /** The port node's shape when it is a stereo pair (Stereo = two jacks, StereoCollapsed = one stereo jack), else
+     *  nullopt (a Mono/Poly/MIDI port, or no such node). */
+    std::optional<MacroPortShape> stereoPortShape(const juce::String& nodeUuid) const;
+    /** Splits a one-jack stereo port into Left/Right jacks, or joins them back: one undo step, both legs kept. */
+    void toggleStereoPortSplit(const juce::String& macroId, const juce::String& nodeUuid);
 
     /** Reused by GraphEditor::promptConfigureMacroIO (stays on GraphEditor — SafePointer-based
      *  async dialog), which calls this directly. */

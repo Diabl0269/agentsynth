@@ -9,6 +9,8 @@
 #include "MacroGroupController.h"
 
 #include "MacroNesting.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include <algorithm>
@@ -282,4 +284,28 @@ void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidate
         }
         candidates.insert(candidates.end(), neighbours.begin(), neighbours.end());
     }
+}
+
+std::optional<MacroPortShape> MacroGroupController::stereoPortShape(const juce::String& nodeUuid) const {
+    auto* node = host_.graph().getNodeForId(resolveMemberNodeId(nodeUuid));
+    auto* processor = node != nullptr ? node->getProcessor() : nullptr;
+    std::optional<MacroPortShape> shape;
+    if (auto* inlet = dynamic_cast<MacroInletModule*>(processor))
+        shape = inlet->getPortShape();
+    else if (auto* outlet = dynamic_cast<MacroOutletModule*>(processor))
+        shape = outlet->getPortShape();
+    if (shape == MacroPortShape::Stereo || shape == MacroPortShape::StereoCollapsed)
+        return shape;
+    return std::nullopt;
+}
+
+// The single/split switch a track's output port offers (its own right-click and the macro card's): Stereo and
+// StereoCollapsed carry the same two legs, and changeMacroPortShape remaps the right leg so neither side loses it.
+void MacroGroupController::toggleStereoPortSplit(const juce::String& macroId, const juce::String& nodeUuid) {
+    const auto shape = stereoPortShape(nodeUuid);
+    if (!shape.has_value())
+        return;
+    changeMacroPortShape(macroId, nodeUuid,
+                         *shape == MacroPortShape::Stereo ? MacroPortShape::StereoCollapsed : MacroPortShape::Stereo,
+                         1);
 }

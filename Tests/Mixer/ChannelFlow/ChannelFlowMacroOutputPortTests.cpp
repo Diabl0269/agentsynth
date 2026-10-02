@@ -20,6 +20,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/MasterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -419,4 +420,45 @@ TEST_F(ChannelFlowTest, TheStereoPortTooltipExplainsSplitAndJoin) {
     auto* comp = compForCFT(mc.getGraphEditor(), outlet->nodeID);
     ASSERT_NE(comp, nullptr);
     EXPECT_TRUE(comp->getTooltip().contains("Right-click to split or join the left/right jacks"));
+}
+
+// The collapsed track card is what a user sees: a right-click there opens the CARD's menu (the port widget sits
+// inside the card), so the switch must be offered on that menu too, named after the port.
+TEST_F(ChannelFlowTest, CollapsedTrackCardRightClickSplitsAndJoinsItsOutputPort) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    addAudioTrack(mc);
+    auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(strip, nullptr);
+    ASSERT_NE(master, nullptr);
+    auto& editor = mc.getGraphEditor();
+    const auto* macro = editor.getMacros().findByMember(strip->properties["uuid"].toString());
+    ASSERT_NE(macro, nullptr);
+    ASSERT_TRUE(macro->collapsed);
+    const auto macroId = macro->id;
+
+    auto chooseFromCardMenu = [&](const juce::String& text) {
+        auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+        ASSERT_NE(card, nullptr) << "a collapsed track shows a macro card";
+        juce::PopupMenu captured;
+        card->setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+        const juce::Point<int> centre(card->getWidth() / 2, card->getHeight() / 2);
+        card->mouseDown(
+            realMouseEventCFT(*card, centre, centre, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+        card->setShowContextMenuHookForTest(nullptr);
+        const auto* item = findMenuItemByTextCFT(captured, text);
+        ASSERT_NE(item, nullptr) << "the card menu offers " << text.toStdString();
+        ASSERT_TRUE(static_cast<bool>(item->action));
+        item->action();
+    };
+
+    chooseFromCardMenu("Split Output into Left/Right Jacks");
+    expectSplitOutletIntoMix(graph, strip, onlyOutlet(graph, strip), master);
+    chooseFromCardMenu("Join Output into One Stereo Jack");
+    expectCollapsedOutletIntoMix(graph, strip, onlyOutlet(graph, strip), master);
+    EXPECT_EQ(outletCount(graph), 1);
 }

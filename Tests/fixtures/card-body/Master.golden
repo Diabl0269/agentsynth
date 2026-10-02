@@ -2,7 +2,7 @@ type Master size 280x221
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks for Mix and Direct" focusOrder=0 wantsFocus=1
   child 4 knob id="Gain" at 12,151 85x58 visible=1 title="Gain" tip="Gain" focusOrder=0 wantsFocus=1
   child 5 label id="" at 12,133 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 6 component id="" at 4,52 12x12 visible=1 title="Mix L input" tip="" focusOrder=0 wantsFocus=0
