@@ -535,6 +535,7 @@ private:
 
     // ---- Draw shapes (TimelinePanelShapes.cpp) ----
     void initDrawShapes();
+    void updateShapeStripShowing();
     void refreshShapeTooltips();
     bool handleDrawShapeKey(const juce::KeyPress& key);
     // Lays out the transport row (snap, follow, shape strip, tool strip, transport bar).

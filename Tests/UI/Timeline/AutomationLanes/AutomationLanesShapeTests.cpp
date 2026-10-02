@@ -281,6 +281,23 @@ TEST(AutomationLanesShapeTest, ARangeThenAShapeButtonStampsAtTheLanesFullHeight)
     EXPECT_EQ(f.theLane().points.size(), 1u) << "one undo step";
 }
 
+TEST(AutomationLanesShapeTest, ALaneRangeBringsTheStripOutUnderTheRangeToolSoOneClickStamps) {
+    ShapeLane f;
+    auto& strip = f.panel.getDrawShapeStrip();
+    f.selectRange(1.0, 3.0);
+    ASSERT_EQ(f.panel.getActiveTool(), EditTool::Range);
+    EXPECT_TRUE(strip.isVisible()) << "a lane range shows the shapes whatever the tool";
+
+    clickButton(*strip.getButton(DrawShape::Square));
+    EXPECT_EQ(f.theLane().points.size(), 2u * 2u + 1u) << "two one-beat squares and the close";
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw) << "a shape pick is a Draw pick";
+
+    f.panel.setActiveTool(EditTool::Range);
+    EXPECT_TRUE(strip.isVisible()) << "the range is still there";
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(strip.isVisible()) << "no range and not Draw: the strip goes back";
+}
+
 TEST(AutomationLanesShapeTest, AShapeKeyWithALaneRangeStampsIt) {
     ShapeLane f;
     f.selectRange(0.0, 2.0);

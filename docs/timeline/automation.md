@@ -373,7 +373,8 @@ periodic shapes, **Sine**, **Triangle**, **Saw** and **Square**. The panel owns 
 tool and pushes it to every lane editor the same way (`TimelinePanelComponent::setDrawShape`).
 
 **The shape strip.** Six small icon buttons (`DrawShapeStrip`) slide out of the right side of the Draw button
-while Draw is the active tool and slide back when another tool is picked: one `PanelSlide` on one
+while Draw is the active tool or a lane range is selected (whatever the tool, so Range-drag then one click on a
+shape stamps it), and slide back when neither holds (`updateShapeStripShowing`): one `PanelSlide` on one
 `AnimationDriver`, 160 ms `easeOutCubic` in and 110 ms `easeInCubic` out, retargeted from where it is on an
 interruption, landing at once when the panel is not on screen. The transport row gives the strip a width
 proportional to the slide (`layoutTransportRow`, re-run on every frame instead of the whole panel layout), and

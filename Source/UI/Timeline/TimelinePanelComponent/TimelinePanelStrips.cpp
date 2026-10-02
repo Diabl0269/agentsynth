@@ -58,8 +58,7 @@ void TimelinePanelComponent::setActiveTool(EditTool tool) {
     pianoRoll_.setActiveTool(tool);
     // The automation lanes have no tool row of their own either (see automationToolFor).
     automationLanes_.setEditTool(tool);
-    // The shape strip slides out of the Draw button while Draw is the tool.
-    shapeStrip_.setShowing(tool == EditTool::Draw);
+    updateShapeStripShowing();
     // Every button is set explicitly rather than leaning on the radio group to untoggle its
     // siblings: this method is also reached from the number keys and from MainComponent, where no
     // button was clicked at all. dontSendNotification, or setting the state would re-enter here

@@ -29,9 +29,16 @@ void TimelinePanelComponent::initDrawShapes() {
     automationLanes_.onLaneRangeChanged = [this] {
         if (automationLanes_.getLaneRange().isActive())
             clipLaneArea_.clearRange();
+        updateShapeStripShowing();
     };
     // A press anywhere in the clip lanes is a "click elsewhere" for the lane range, a clip range included.
     clipLaneArea_.onPressed = [this] { automationLanes_.getLaneRange().clear(); };
+}
+
+// The strip slides out of the Draw button while Draw is the tool, and also while a lane range is selected
+// (whatever the tool), so Range-drag then a click on a shape stamps it without visiting Draw first.
+void TimelinePanelComponent::updateShapeStripShowing() {
+    shapeStrip_.setShowing(activeTool_ == EditTool::Draw || automationLanes_.hasLaneRange());
 }
 
 void TimelinePanelComponent::setDrawShape(DrawShape shape) {
