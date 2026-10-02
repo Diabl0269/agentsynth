@@ -295,13 +295,13 @@ added.
 
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
-| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, (new Glide); Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan; footer | Detune dims at 1 voice; Pulse Width dims unless Square |
+| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, Glide (one row of four); Unison: Voices, Detune, Pulse Width; Output: Level, Pan; footer (Poly, Show Scope) | Detune dims at 1 voice (a code dim rule); Pulse Width dims unless Square. As built: every parameter is placed, so no More row |
 | Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged |
 | VCA | Gain `faderH`; footer | — |
 | ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place. As built: Velocity is a `faderH` row; the Time/Tempo caption is "Stage times"; captions Atk, Hold, Dec, Sus, Rel; the footer holds Poly, Show Envelope Graph and Show Scope; the same entry is registered for Amp Env and Filter Env; the card is 597 px tall |
-| LFO | `lfoShape` view; Shape `segmented` (incl. Draw → `lfoCurve` view); Free/Sync `segmented`; Rate `knobLarge`, (new Phase, new Fade in); Level, Glide; footer: Bipolar, Restart on note | Rate swaps Hz ↔ division; Glide dims unless S&H |
-| Noise | Type `segmented`; Color, Level; footer | — |
-| Sampler | `waveform` view + load row; Mode `segmented`; Start, (new End), Level; Pitch, Root (note name), (new Fine); footer: Loop, (new Reverse) | Granular swaps in Grain Size, Density, Spray |
+| LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch) and Sync a toggle (`mode` is a bool, and `segmented` suits a choice); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
+| Noise | Type `segmented`; Color, Level; footer (Poly, Show Scope) | As built: as designed |
+| Sampler | waveform and load row (card chrome, above the body); Mode `segmented`; Start, End, Level; Pitch: Pitch, Root, Fine; Grains: Grain Size, Density, Spray; footer: Loop, Reverse | The grain controls dim unless Mode is Granular (as built: a dim, not a swap or a hidden section, so their CV jacks keep a knob to land on and the mode switch never resizes the card; they stay on the card in Sample mode, as before). As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already) |
 | Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
 | Delay | (new ms/Sync `segmented`); Time `knobLarge`, Feedback, Mix; footer: (new Ping-pong), Level | Sync swaps Time for a division |
 | Reverb | Room: Size, Damping, (new Pre-delay); Mix: Dry, Wet `faderV`, Width; footer: Level | — |

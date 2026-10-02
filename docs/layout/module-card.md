@@ -93,10 +93,10 @@ own table:
 
 | Sources | Height (px) |
 |---|---|
-| Oscillator | 433 |
-| Noise | 261 |
-| Sampler | 571 |
-| LFO | 437 |
+| Oscillator | 471 |
+| Noise | 245 |
+| Sampler | 565 |
+| LFO | 369 |
 
 | Envelopes and utilities | Height (px) |
 |---|---|
@@ -269,7 +269,7 @@ its Custom-waveform section open — the section adds `24 + 2` px (the Grid/Shap
 row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
 of 184 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
-437 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
+369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.
 
 The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component layout,

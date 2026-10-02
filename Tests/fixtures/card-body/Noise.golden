@@ -1,17 +1,17 @@
-type Noise size 280x261
+type Noise size 280x245
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,223 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 59,205 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 5 combo id="" at 40,91 200x24 visible=1 title="Type" tip="Type" focusOrder=0 wantsFocus=1
-  child 6 label id="" at 40,73 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 knob id="Color" at 12,165 85x58 visible=1 title="Color" tip="Color" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 12,147 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 knob id="Level" at 97,165 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 97,147 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 toggle id="Poly" at 12,121 256x24 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 5 component id="Type" at 12,91 256x24 visible=1 title="Type" tip="Type" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="Color" at 12,139 85x58 visible=1 title="Color" tip="Color" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 12,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Level" at 97,139 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 97,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 toggle id="Poly" at 12,205 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
   child 12 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
-  in 0 37, 202
-  in 1 122, 202
+  in 0 37, 176
+  in 1 122, 176
   out 0 270, 58

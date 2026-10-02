@@ -7,6 +7,7 @@
 #include "MacroContainer/MacroDragTestHelpers.h"
 
 #include "AppUndoManager.h"
+#include "Modules/SamplerModule.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <set>
@@ -25,6 +26,7 @@ struct DropCanvas {
 
     MacroGroupController& ctl() { return editor.getMacroController(); }
     NodeID osc(int x, int y) { return addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), x, y); }
+    NodeID sampler(int x, int y) { return addModuleAt(editor, engine, std::make_unique<SamplerModule>(), x, y); }
     NodeID filter(int x, int y) { return addModuleAt(editor, engine, std::make_unique<FilterModule>(), x, y); }
     ModuleComponent& comp(NodeID id) { return *findComponent(editor, id); }
     juce::Rectangle<int> rect(NodeID id) { return comp(id).getBounds(); }
@@ -237,17 +239,18 @@ TEST(MacroDropPlacement, OneUndoOfTheCollapseRestoresTheExpandedState) {
 }
 
 // Joining an open macro by a plain drag grows its hull and pushes a neighbour; dragging the module back out shrinks
-// the hull and the neighbour goes home.
+// the hull and the neighbour goes home. The members sit far enough apart for the joiner to land between them, and
+// the joiner is taller than the hull, so the hull grows downward into the card just under it.
 TEST(MacroDropPlacement, PlainDragJoinPushesANeighbourAndPlainDragOutReturnsIt) {
     DropCanvas c;
     const auto m1 = c.osc(400, 300);
-    const auto m2 = c.osc(700, 300);
+    const auto m2 = c.osc(1000, 300);
     const auto macroId = c.group({m1, m2});
     c.ctl().setMacroCollapsed(macroId, false);
     const auto hull = c.ctl().macroHullBounds(macroId);
-    const auto neighbour = c.osc(hull.getRight() + 20, 300);
+    const auto neighbour = c.osc(hull.getX() + 100, hull.getBottom() + 14);
     const auto home = c.rect(neighbour);
-    const auto joiner = c.filter(700, 1300);
+    const auto joiner = c.sampler(700, 1900);
     ASSERT_FALSE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner)));
 
     c.editor.setSelectedNodes({joiner});

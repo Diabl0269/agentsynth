@@ -95,7 +95,8 @@ TEST(CardBodyFooter, TheFooterRowHoldsAPillAFaderAndTheChromeToggles) {
 
 TEST(CardBodyFooter, ACardWithoutAFooterKeepsItsChromeRows) {
     CardCanvas canvas;
-    const auto plain = canvas.add(std::make_unique<OscillatorModule>(), 0, 0);
+    const auto plain = canvas.add(std::make_unique<OscillatorModule>(), 0, 0,
+                                  layoutOf({section("main", std::nullopt, {param("waveform"), param("octave")})}));
     const auto withFooter = canvas.add(std::make_unique<OscillatorModule>(), 400, 0, oscillatorWithFooter());
     canvas.editor.updateComponents();
     auto* scope = chromeToggle(*canvas.card(plain), synth::cardbody::kShowScopeText);

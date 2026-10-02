@@ -17,6 +17,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 
 TEST_F(ModuleComponentTest, InitializationAndResizing) {
     AudioEngine engine;
@@ -72,29 +73,29 @@ TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
     EXPECT_EQ(estimate.y, comp.getHeight());
 }
 
-// Three knobs per row (the body sits below the ports, so it can use nearly the full card width).
+// Three knobs per row (the body sits below the ports, so it can use nearly the full card width): the
+// Sampler's default layout puts Start, End and Level on one row and Pitch, Root and Fine on the next.
 TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    SamplerModule processor; // 9 float/int params -> 3 rows of 3
+    SamplerModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    std::vector<juce::Slider*> knobs;
+    std::map<juce::String, juce::Slider*> knobs;
     for (auto* child : moduleComponent.getChildren())
         if (auto* slider = dynamic_cast<juce::Slider*>(child))
-            knobs.push_back(slider);
+            knobs[slider->getTitle()] = slider;
 
     ASSERT_EQ(knobs.size(), 9u);
 
-    // Children are added in parameter order, so the first three share a row.
-    EXPECT_EQ(knobs[0]->getY(), knobs[1]->getY());
-    EXPECT_EQ(knobs[1]->getY(), knobs[2]->getY());
-    EXPECT_LT(knobs[0]->getX(), knobs[1]->getX());
-    EXPECT_LT(knobs[1]->getX(), knobs[2]->getX());
+    EXPECT_EQ(knobs["Start"]->getY(), knobs["End"]->getY());
+    EXPECT_EQ(knobs["End"]->getY(), knobs["Level"]->getY());
+    EXPECT_LT(knobs["Start"]->getX(), knobs["End"]->getX());
+    EXPECT_LT(knobs["End"]->getX(), knobs["Level"]->getX());
 
-    // The fourth wraps to a new row, back at the first column.
-    EXPECT_GT(knobs[3]->getY(), knobs[2]->getY());
-    EXPECT_EQ(knobs[3]->getX(), knobs[0]->getX());
+    // The next row starts back at the first column.
+    EXPECT_GT(knobs["Pitch"]->getY(), knobs["Level"]->getY());
+    EXPECT_EQ(knobs["Pitch"]->getX(), knobs["Start"]->getX());
 }
 
 // The ADSR has its own layout branch that used to position only its four sliders and return,
