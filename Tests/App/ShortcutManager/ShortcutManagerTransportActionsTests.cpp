@@ -78,11 +78,16 @@ void resetMetronomeKeys() {
 // ============================================================================
 
 TEST_F(ShortcutManagerTest, TransportActionIdsExistAndHaveNoDefaultBinding) {
+#if JUCE_MAC
+    constexpr bool isMac = true;
+#else
+    constexpr bool isMac = false;
+#endif
     for (const auto& actionId : transportActionIds()) {
         EXPECT_TRUE(manager.getActionIds().contains(actionId)) << actionId << " is not a registered action";
         // Record and Metronome are the exception on macOS (real Ctrl+R / Ctrl+M, tested below).
         const bool hasMacChord = actionId == "transportRecord" || actionId == "transportToggleMetronome";
-        if (JUCE_MAC && hasMacChord)
+        if (isMac && hasMacChord)
             continue;
         EXPECT_FALSE(manager.getBinding(actionId).isValid()) << actionId << " should ship unbound by default";
     }
@@ -245,6 +250,8 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleMetronomeFlipsM
     EXPECT_EQ(mc.getTimelinePanel().getTransportBar().getMetronomeButton().getToggleState(), !enabledBefore);
 }
 
+// Mac only: off the Mac Ctrl IS the command modifier, so these chords are Cmd+M / Cmd+R there.
+#if JUCE_MAC
 // The real key path: MainComponent::keyPressed resolves the chord through the live ShortcutManager and
 // dispatches the command, exactly what a physical Ctrl+M does when nothing else claims the key.
 TEST_F(ShortcutManagerTransportActionsInvokeTest, CtrlMTogglesTheMetronomeThroughTheKeyHandler) {
@@ -280,6 +287,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, CtrlRTogglesTransportRecordThr
     EXPECT_FALSE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
     shortcuts.setBinding("transportRecord", original);
 }
+#endif
 
 // The buttons name their keys in their tooltips and follow a rebind.
 TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportBarTooltipsNameTheirShortcutsAndFollowARebind) {
