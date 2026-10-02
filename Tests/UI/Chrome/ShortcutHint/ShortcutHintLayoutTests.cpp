@@ -65,10 +65,24 @@ TEST(ShortcutHintLayout, LaterBubbleSlidesLeftWhenItSitsLeftOfTheEarlierOne) {
     EXPECT_EQ(placed[1]->getRight(), placed[0]->getX());
 }
 
-TEST(ShortcutHintLayout, LaterBubbleIsDroppedWhenSlidingHalfItsWidthIsNotEnough) {
-    // Identical anchors: the overlap is the whole width, but a slide is capped at half.
+TEST(ShortcutHintLayout, LaterBubbleStaggersIntoASecondRowWhenSlidingHalfItsWidthIsNotEnough) {
+    // Identical anchors: the overlap is the whole width and a slide is capped at half, so the later bubble
+    // drops one row (a row of narrow icon buttons with wide "Shift+2" key text off the Mac).
     const std::vector<hint::BubbleRequest> requests{{{100, 10, 20, 20}, {30, 16}, {}},
                                                     {{100, 10, 20, 20}, {30, 16}, {}}};
+    const auto placed = hint::placeBubbles(requests, kWindow);
+    ASSERT_TRUE(placed[0].has_value());
+    ASSERT_TRUE(placed[1].has_value());
+    EXPECT_EQ(placed[1]->getX(), placed[0]->getX());
+    EXPECT_EQ(placed[1]->getY(), placed[0]->getBottom() + hint::kStaggerGap);
+    EXPECT_FALSE(placed[0]->intersects(*placed[1]));
+}
+
+TEST(ShortcutHintLayout, LaterBubbleIsDroppedWhenNoSecondRowFits) {
+    // The container ends right under the first row, so there is nowhere to stagger to.
+    const Rectangle<int> strip{0, 0, 800, 50};
+    const std::vector<hint::BubbleRequest> requests{{{100, 10, 20, 20}, {30, 16}, strip},
+                                                    {{100, 10, 20, 20}, {30, 16}, strip}};
     const auto placed = hint::placeBubbles(requests, kWindow);
     EXPECT_TRUE(placed[0].has_value());
     EXPECT_FALSE(placed[1].has_value());

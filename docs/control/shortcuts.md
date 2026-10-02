@@ -916,7 +916,8 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
 - **Placement** (`ShortcutHintLayout.h`, pure geometry): centred under the button, overlapping its
   bottom edge by 4 px; flipped above if that leaves the window (or the bottom panel, for buttons inside
   it); an overlapping later bubble slides sideways by the overlap, up to half its width, else it is
-  left out. A dock tab carries its bubble inside the tab, 6 px after the name.
+  staggered one row further from its button (2 px gap; a row of narrow icon buttons with wide "Shift+2"
+  key text off the Mac, like the Draw shapes), and left out only when that row does not fit either. A dock tab carries its bubble inside the tab, 6 px after the name.
 - **Motion.** One tween value `t` (0 hidden, 1 settled) drives every bubble's scale, position and
   opacity: `hint::animatedBubbleBounds(target, origin, t)` is `target` at t = 1 and, at t = 0, 0.6 of
   its size centred on `origin`. The origin is the labelled button's centre for a bubble below or

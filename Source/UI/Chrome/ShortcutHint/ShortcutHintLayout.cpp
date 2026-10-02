@@ -32,6 +32,7 @@ std::vector<std::optional<juce::Rectangle<int>>> placeBubbles(const std::vector<
         auto bubble = placeBubble(requests[i], window);
         if (!bubble)
             continue;
+        const auto first = *bubble;
 
         for (const auto& other : placed) {
             if (!bubble->intersects(other))
@@ -41,10 +42,21 @@ std::vector<std::optional<juce::Rectangle<int>>> placeBubbles(const std::vector<
             bubble->translate(bubble->getCentreX() >= other.getCentreX() ? shift : -shift, 0);
         }
 
-        const bool stillOverlaps = std::any_of(
-            placed.begin(), placed.end(), [&](const juce::Rectangle<int>& other) { return bubble->intersects(other); });
-        if (stillOverlaps || !window.contains(*bubble))
-            continue;
+        const auto overlapsPlaced = [&](const juce::Rectangle<int>& r) {
+            return std::any_of(placed.begin(), placed.end(),
+                               [&](const juce::Rectangle<int>& other) { return r.intersects(other); });
+        };
+        if (overlapsPlaced(*bubble) || !window.contains(*bubble)) {
+            // Narrow neighbours (a row of small icon buttons) with wide key text ("Shift+2" off the Mac):
+            // stagger this bubble into a second row, away from its button, rather than dropping it.
+            const auto limit = requests[i].container.isEmpty() ? window : requests[i].container.getIntersection(window);
+            const bool below = first.getY() >= requests[i].anchor.getCentreY();
+            const auto staggered =
+                first.translated(0, below ? first.getHeight() + kStaggerGap : -(first.getHeight() + kStaggerGap));
+            if (overlapsPlaced(staggered) || !limit.contains(staggered))
+                continue;
+            bubble = staggered;
+        }
         placed.push_back(*bubble);
         result[i] = bubble;
     }
