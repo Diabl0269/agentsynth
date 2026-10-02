@@ -137,7 +137,7 @@ group drag the chip starts (one shared lambda in `mouseDown`, so `beginSelection
 `dragSelectionBy` / `finalizeSelectionDrag` and one undo step are the only implementation). The chip
 and an attenuverter under the cursor still win, Shift still starts a marquee, and a macro with fewer
 than two members keeps panning (a group drag cannot arm on one member). A press that never moves
-still just selects the macro. Off, the hull pans as described above.
+still just selects the macro (a click on the hull of an already-selected macro clears the selection instead, since the hull reads as empty canvas; a double-click keeps it selected). Off, the hull pans as described above.
 
 ## The macro menu
 

@@ -15,12 +15,12 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | Drag on empty canvas | Pan — unchanged |
 | **Shift** + drag on empty canvas | Marquee-select, *replacing* the selection |
 | **Cmd/Ctrl + Shift** + drag | Marquee-select, *adding* to the selection |
-| Click a module body | Select just that module |
+| Click a module body | Select just that module — also when it was one of several selected: the group is kept while the button is down so a drag moves it, and a click with no movement collapses the selection onto the clicked module on release |
 | **Shift** + click a module | Toggle that module's membership (does **not** start a drag) |
 | **Cmd** + click a module (no movement) | Toggle that module's membership, same as Shift |
 | **Cmd** + drag a module across an expanded macro's hull (or a plain drag, with the on-by-default "drag without Cmd" preference) | Joins, leaves, or moves the module between macros in one gesture — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract; a group drag never changes membership |
 | Drag any selected module | Move the entire selection together |
-| Click empty canvas (no drag) | Clear the selection |
+| Click empty canvas (no drag) | Clear the selection. Inside an expanded macro's hull the first click selects the macro; a click on the hull of an already-selected macro clears (a double-click on the hull keeps it selected) |
 | Right-click a module | Select it if it was not, then open the menu |
 | Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Go to Output — [shortcuts](../control/shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
 
