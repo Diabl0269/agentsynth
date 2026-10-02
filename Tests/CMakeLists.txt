@@ -559,6 +559,7 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesColourCursorTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesAddModulatorTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorEditTests.cpp

@@ -13,6 +13,8 @@ constexpr int kOuterPadding = 6;
 constexpr int kSearchHeight = 26;
 constexpr int kRowHeight = 24;
 constexpr int kHeaderHeight = 20;
+constexpr int kDetailRowHeight = 40; // a row with a second line
+constexpr float kDetailFontSize = 11.0f;
 constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
 
@@ -75,7 +77,25 @@ public:
     const juce::String& text() const noexcept { return text_; }
     const juce::String& searchText() const noexcept { return searchText_; }
     void setSearchText(juce::String text) { searchText_ = std::move(text); }
-    int preferredHeight() const noexcept { return kind_ == Kind::Header ? kHeaderHeight : kRowHeight; }
+    const juce::String& detail() const noexcept { return detail_; }
+    // A muted second line under the text (what an LFO row says it already moves). A disabled row is
+    // announced as unavailable and takes no pick; its detail says why.
+    void setDetail(juce::String detail) {
+        detail_ = std::move(detail);
+        if (detail_.isNotEmpty()) {
+            setTitle(text_ + ", " + detail_);
+            setTooltip(text_ + ", " + detail_);
+        }
+    }
+    void setPickable(bool pickable) {
+        setEnabled(pickable);
+        setMouseCursor(pickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+    int preferredHeight() const noexcept {
+        if (kind_ == Kind::Header)
+            return kHeaderHeight;
+        return detail_.isNotEmpty() ? kDetailRowHeight : kRowHeight;
+    }
 
     void setHighlighted(bool on) {
         if (highlighted_ != on) {
@@ -101,9 +121,17 @@ public:
             g.fillRoundedRectangle(bounds.toFloat().reduced(2.0f, 1.0f), 3.0f);
         }
         // The row a combo currently holds is set apart by colour and weight, not by a glyph.
-        g.setColour(isCurrent_ ? palette_.accent : palette_.text);
+        g.setColour(!isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text);
         g.setFont(juce::Font(juce::FontOptions(kRowFontSize, isCurrent_ ? juce::Font::bold : juce::Font::plain)));
-        g.drawText(text_, bounds.reduced(12, 0), juce::Justification::centredLeft, true);
+        if (detail_.isEmpty()) {
+            g.drawText(text_, bounds.reduced(12, 0), juce::Justification::centredLeft, true);
+            return;
+        }
+        auto lines = bounds.reduced(12, 3);
+        g.drawText(text_, lines.removeFromTop(lines.getHeight() / 2), juce::Justification::centredLeft, true);
+        g.setColour(palette_.muted);
+        g.setFont(juce::Font(juce::FontOptions(kDetailFontSize)));
+        g.drawText(detail_, lines, juce::Justification::centredLeft, true);
     }
 
     void mouseEnter(const juce::MouseEvent&) override {
@@ -115,7 +143,7 @@ public:
             onHover_(*this);
     }
     void mouseUp(const juce::MouseEvent& e) override {
-        if (kind_ == Kind::Item && onClick_ && getLocalBounds().contains(e.getPosition()))
+        if (kind_ == Kind::Item && isEnabled() && onClick_ && getLocalBounds().contains(e.getPosition()))
             onClick_(*this);
     }
 
@@ -124,6 +152,7 @@ private:
     int id_;
     juce::String text_;
     juce::String searchText_;
+    juce::String detail_;
     bool isCurrent_;
     std::function<void(Row&)> onClick_;
     std::function<void(Row&)> onHover_;
@@ -216,12 +245,16 @@ void ModMatrixPicker::rebuildRows() {
         rows_.push_back(std::make_unique<Row>(
             Row::Kind::Item, item.id, item.text, item.id == selectedId_, [this](Row& r) { chooseRow(r); },
             [this](Row& r) {
+                if (!r.isEnabled())
+                    return;
                 const auto visible = visibleItemRows();
                 const auto it = std::find(visible.begin(), visible.end(), &r);
                 if (it != visible.end())
                     setHighlight((int)(it - visible.begin()));
             }));
         rows_.back()->setSearchText(item.searchText);
+        rows_.back()->setDetail(item.detail);
+        rows_.back()->setPickable(item.enabled);
         rowColumn_.addAndMakeVisible(*rows_.back());
     }
     applyFilter();
@@ -261,7 +294,7 @@ void ModMatrixPicker::applyFilter() {
             headerHasMatch = false;
             continue;
         }
-        const bool matches = textMatchesQuery(row->text() + " " + row->searchText(), query);
+        const bool matches = textMatchesQuery(row->text() + " " + row->detail() + " " + row->searchText(), query);
         row->setVisible(matches);
         headerHasMatch = headerHasMatch || matches;
     }
@@ -269,7 +302,7 @@ void ModMatrixPicker::applyFilter() {
         pendingHeader->setVisible(headerHasMatch);
 
     layoutRowColumn();
-    setHighlight(0);
+    setHighlight(nextPickable(-1, 1));
     viewport_.setViewPosition(0, 0);
 }
 
@@ -356,7 +389,17 @@ void ModMatrixPicker::setHighlight(int visibleItemIndex) {
         viewport_.setViewPosition(0, rowBounds.getBottom() - view.getHeight());
 }
 
-void ModMatrixPicker::moveHighlight(int delta) { setHighlight(highlighted_ + delta); }
+// The next pickable visible item after `from` in direction `step`; `from` itself when there is none that way
+// (a list of disabled rows leaves the highlight where it is, and a pick on it does nothing).
+int ModMatrixPicker::nextPickable(int from, int step) const {
+    const auto visible = visibleItemRows();
+    for (int i = from + step; i >= 0 && i < (int)visible.size(); i += step)
+        if (visible[(size_t)i]->isEnabled())
+            return i;
+    return juce::jmax(from, 0);
+}
+
+void ModMatrixPicker::moveHighlight(int delta) { setHighlight(nextPickable(highlighted_, delta < 0 ? -1 : 1)); }
 
 void ModMatrixPicker::chooseHighlighted() {
     const auto visible = visibleItemRows();
@@ -367,6 +410,8 @@ void ModMatrixPicker::chooseHighlighted() {
 // Reports the pick, then closes. The callback is copied first: closing is asynchronous, but nothing
 // here may depend on that.
 void ModMatrixPicker::chooseRow(const Row& row) {
+    if (!row.isEnabled())
+        return;
     const int id = row.id();
     auto callback = onChoose_;
     dismiss();
@@ -406,6 +451,18 @@ std::vector<juce::String> ModMatrixPicker::getVisibleItemTextsForTest() const {
     for (auto* row : visibleItemRows())
         names.push_back(row->text());
     return names;
+}
+
+std::vector<juce::String> ModMatrixPicker::getVisibleItemDetailsForTest() const {
+    std::vector<juce::String> details;
+    for (auto* row : visibleItemRows())
+        details.push_back(row->detail());
+    return details;
+}
+
+bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
+    const auto visible = visibleItemRows();
+    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isEnabled();
 }
 
 void ModMatrixPicker::chooseVisibleItemForTest(int index) {

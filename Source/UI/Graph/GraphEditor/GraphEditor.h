@@ -490,6 +490,11 @@ public:
     /** An LFO beside `targetId`, cabled into `paramId`'s CV jack, as ONE undo step; invalid id when it can't. */
     juce::AudioProcessorGraph::NodeID addLfoModulator(juce::AudioProcessorGraph::NodeID targetId,
                                                       const juce::String& paramId);
+    /** Cables the EXISTING LFO `lfoId` into `paramId`'s CV jack on `targetId`, as ONE undo step: no new card, a
+     *  routing at the default depth, and macro ports minted or reused when the two sit in different macros.
+     *  False (nothing changed) when either node, the jack or the LFO is missing, or the LFO already drives it. */
+    bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
+                                     juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
     /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step,
      *  or, with `recordUndo` false, as a plain edit for a caller whose own undo step already surrounds it. */
     void removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo = true);

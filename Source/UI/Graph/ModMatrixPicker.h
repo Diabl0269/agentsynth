@@ -29,6 +29,11 @@ public:
         // Extra words the search also matches but the row does not show (the add-automation picker puts the
         // module title here, since its rows read as just the parameter name under a module header).
         juce::String searchText;
+        // A muted second line under the text, also searched (the add-modulator picker says where an LFO lives
+        // and what it moves). Empty = a one-line row.
+        juce::String detail;
+        // False = shown greyed, never highlighted or picked; `detail` should say why.
+        bool enabled = true;
     };
 
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);
@@ -60,6 +65,10 @@ public:
     std::vector<juce::String> getVisibleRowNamesForTest() const;
     /** Just the visible item texts, the rows a pick can land on. */
     std::vector<juce::String> getVisibleItemTextsForTest() const;
+    /** The second lines of the visible item rows, in order (empty for a one-line row). */
+    std::vector<juce::String> getVisibleItemDetailsForTest() const;
+    /** False for a visible item row shown disabled. */
+    bool isVisibleItemPickableForTest(int index) const;
     /** Picks the nth visible ITEM row, as a click on it would. */
     void chooseVisibleItemForTest(int index);
     /** Sends a key to the search field, as typing would. */
@@ -76,6 +85,7 @@ private:
     void applyFilter();
     void layoutRowColumn();
     void moveHighlight(int delta);
+    int nextPickable(int from, int step) const;
     void setHighlight(int visibleItemIndex);
     void chooseRow(const Row& row);
     void chooseHighlighted();

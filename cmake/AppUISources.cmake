@@ -99,6 +99,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.cpp
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.cpp
+    Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h
+    Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
@@ -120,6 +122,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h
+    Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h

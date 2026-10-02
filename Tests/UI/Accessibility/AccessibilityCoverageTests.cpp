@@ -49,6 +49,8 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <algorithm>
@@ -522,6 +524,19 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
 namespace {
 // Offers one parameter so the "+ Add automation..." picker has a row to audit, and two modulators on every lane.
 struct OneParameterHost : synth::ui::TrackHeaderHost {
+    bool canModulate(const juce::String&, const juce::String&) override { return true; }
+    std::vector<LfoChoice> getLfoChoices(const juce::String&, const juce::String&) override {
+        LfoChoice moving;
+        moving.uuid = "lfo";
+        moving.name = "LFO 1";
+        moving.macroName = "Pads";
+        moving.targets = {"Filter 1 Cutoff"};
+        moving.movesThisParameter = true;
+        LfoChoice free;
+        free.uuid = "lfo2";
+        free.name = "LFO 2";
+        return {moving, free};
+    }
     std::vector<synth::ui::ModulatorInfo> getModulators(const juce::String&, const juce::String&) override {
         synth::ui::ModulatorInfo lfo;
         lfo.sourceUuid = "lfo";
@@ -598,6 +613,23 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
         }
     }
     panel.setAddAutomationPickerHookForTest(nullptr);
+
+    // The lane menu's "Add modulator..." picker: a disabled row (already moves this parameter) and a free one.
+    std::unique_ptr<synth::ui::ModMatrixPicker> modulatorPicker;
+    synth::ui::test_hooks::addModulatorPickerHookForTest() = [&modulatorPicker](auto p) {
+        modulatorPicker = std::move(p);
+    };
+    laneHeader->applyMenuChoice(synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId);
+    synth::ui::test_hooks::addModulatorPickerHookForTest() = nullptr;
+    EXPECT_NE(modulatorPicker, nullptr);
+    if (modulatorPicker != nullptr) {
+        modulatorPicker->setSize(300, 200);
+        EXPECT_FALSE(modulatorPicker->isVisibleItemPickableForTest(1)) << "the LFO that already moves Cutoff";
+        for (auto gap : auditAccessibility(*modulatorPicker)) {
+            gap.path = "[add modulator picker] " + gap.path;
+            gaps.push_back(gap);
+        }
+    }
     for (int i = 0; i < 2; ++i) {
         auto* modulator = panel.modulatorRowForTest(lane, i);
         EXPECT_NE(modulator, nullptr) << "modulator row " << i;

@@ -238,6 +238,24 @@ struct TrackHeaderHost {
     virtual juce::String addLfoModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
         return {};
     }
+    /** One LFO the "Add modulator..." picker can offer for a parameter: where it lives and what it moves. */
+    struct LfoChoice {
+        juce::String uuid;
+        juce::String name;                 // its card title ("LFO 2")
+        juce::String macroName;            // the innermost macro it sits in; empty on the top level
+        std::vector<juce::String> targets; // what it already moves, "<module> <parameter>" each, graph order
+        bool movesThisParameter = false;   // already cabled into the parameter being asked about
+    };
+    /** Every LFO in the project, in graph order, described for the picker of (`nodeUuid`, `paramId`). */
+    virtual std::vector<LfoChoice> getLfoChoices(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** Cables the existing LFO `lfoUuid` into the parameter as ONE undo step (no new card; through macro ports
+     *  when they sit in different macros). False when nothing changed. */
+    virtual bool connectModulator(const juce::String& /*lfoUuid*/, const juce::String& /*nodeUuid*/,
+                                  const juce::String& /*paramId*/) {
+        return false;
+    }
     /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */
     virtual void removeModulator(const ModulatorInfo& /*modulator*/) {}
     /** A live parameter's value in its own units (a choice's index, a bool's 0/1); 0 when it doesn't resolve. */

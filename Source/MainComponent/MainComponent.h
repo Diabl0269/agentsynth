@@ -451,7 +451,13 @@ private:
                                                         const juce::String& paramId) override;
     bool canModulate(const juce::String& nodeUuid, const juce::String& paramId) override;
     juce::String addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) override;
+    std::vector<synth::ui::TrackHeaderHost::LfoChoice> getLfoChoices(const juce::String& nodeUuid,
+                                                                     const juce::String& paramId) override;
+    bool connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
+                          const juce::String& paramId) override;
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
+    void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
+    bool lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID lfoId);
     float getNodeParameter(const juce::String& uuid, const juce::String& paramId) override;
     void setNodeParameter(const juce::String& uuid, const juce::String& paramId, float value,
                           synth::ui::ParameterEditPhase phase) override;

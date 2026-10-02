@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
@@ -125,6 +126,43 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
         mutation();
     repaintCanvas();
     return lfoId;
+}
+
+// The cable an existing LFO gets is the same CV path addLfoModulator uses, but through the programmatic-
+// connection seam, so a macro boundary between the LFO and the knob is crossed with ports (the mixer sends and
+// the Mod Matrix do the same). Port creation, the cable and its depth are one undo step.
+bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, const juce::String& paramId) {
+    auto& graph = audioEngine.getGraph();
+    auto* lfo = moduleOf(graph, lfoId);
+    auto* dst = moduleOf(graph, targetId);
+    const int raw = modulationChannelFor(targetId, paramId);
+    if (lfo == nullptr || dst == nullptr || raw < 0 || dynamic_cast<LFOModule*>(lfo) == nullptr || lfoId == targetId)
+        return false;
+    const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (!r.hasSource || !r.hasDest)
+            continue;
+        const auto real = synth::ui::resolveRouting(graph, r, isPort);
+        if (real.source.node == lfoId && real.dest.node == targetId && real.dest.channel == raw)
+            return false;
+    }
+
+    auto mutation = [this, &graph, lfo, dst, lfoId, targetId, raw] {
+        connectPorts(lfoId, lfo->mapOutputChannel(0).visibleJackIndex, targetId,
+                     dst->mapInputChannel(raw).visibleJackIndex, /*isMidi=*/false, /*recordUndo=*/false);
+        settleNewRouting(audioEngine, lfoId, targetId, raw);
+        return true;
+    };
+    auto step = [this, &mutation] {
+        macroController_.applyProgrammaticConnectionChange(autoCreateMacroPortsOnDragEnabled, mutation);
+        updateComponents();
+    };
+    if (undoManager != nullptr)
+        undoManager->recordGraphAndMacroChange(graph, macros, step);
+    else
+        step();
+    repaintCanvas();
+    return true;
 }
 
 // Two passes, like a library drop: an estimated size places the node before its card exists, then the

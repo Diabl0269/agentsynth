@@ -219,18 +219,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 
-    contentHost.addAndMakeVisible(doubleClickSpansLocatorsToggle);
-    // DEFAULT TRUE, same idiom as the rows above.
-    doubleClickSpansLocatorsToggle.setToggleState(
-        appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
-        juce::dontSendNotification);
-    doubleClickSpansLocatorsToggle.setTooltip(
-        "When on (the default), double-clicking empty lane space inside the loop locators creates a clip spanning "
-        "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
-        "get one bar.");
-    doubleClickSpansLocatorsToggle.onClick = [this] {
-        persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
-    };
+    initTimelineEditingToggles();
 
     contentHost.addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app

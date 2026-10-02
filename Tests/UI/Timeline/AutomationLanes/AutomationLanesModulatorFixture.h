@@ -12,7 +12,9 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
 
 namespace modulator_test {
 
@@ -50,19 +52,50 @@ struct Scene {
         lane = doc().addLane(track, targetUuid, paramId, {0.0f, 1.0f, 0.5f});
         panel().setTrackAutomationExpanded(track, true);
         baseAttenuverters = nodesOf<AttenuverterModule>().size();
+        synth::ui::test_hooks::removeLfoConfirmHookForTest() = [this](const auto& text, auto done) {
+            ++confirmAsked;
+            lastConfirm = text;
+            done(confirmAnswer, confirmDontAsk);
+        };
     }
 
     size_t baseAttenuverters = 0; // the track's own chain may already hold some
+
+    // The "Remove LFO?" dialog, answered without a window: every question is counted and recorded, and
+    // answered with `confirmAnswer` / `confirmDontAsk`. The hook lives as long as the scene.
+    int confirmAsked = 0;
+    synth::ui::RemoveLfoConfirmText lastConfirm;
+    bool confirmAnswer = true;
+    bool confirmDontAsk = false;
+
+    ~Scene() {
+        synth::ui::test_hooks::removeLfoConfirmHookForTest() = nullptr;
+        mc.getAppPropertiesForTest().getUserSettings()->removeValue(synth::ui::kAskBeforeRemovingLfoKey);
+    }
 
     synth::TimelineDoc& doc() { return mc.getTimelineDoc(); }
     synth::ui::TimelinePanelComponent& panel() { return mc.getTimelinePanel(); }
     juce::AudioProcessorGraph& graph() { return mc.getAudioEngine().getGraph(); }
     AppUndoManager& undo() { return mc.getUndoManager(); }
 
-    void addLfoFromLaneMenu() {
+    // The lane menu's "Add modulator..." as a person reaches it: the picker the header opens (nullptr when it
+    // opens none, as for a parameter with no CV jack).
+    std::unique_ptr<synth::ui::ModMatrixPicker> openAddModulatorPicker() {
         auto* header = panel().laneHeaderForTest(lane);
-        ASSERT_NE(header, nullptr);
-        header->applyMenuChoice(synth::ui::AutomationLaneHeaderComponent::kAddLfoModulatorMenuId);
+        std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+        if (header == nullptr)
+            return picker;
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+        header->applyMenuChoice(synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId);
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = nullptr;
+        return picker;
+    }
+
+    // Menu, then Return on the first row, which is "New LFO".
+    void addLfoFromLaneMenu() {
+        auto picker = openAddModulatorPicker();
+        if (picker != nullptr)
+            picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
     }
 
     synth::ui::ModulatorRow* row(int index = 0) { return panel().modulatorRowForTest(lane, index); }

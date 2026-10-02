@@ -180,3 +180,39 @@ TEST_F(PreferencesSettingsTabTest, ZoomScrollStringsUseThePlatformModifierNameNo
     EXPECT_TRUE(hint->getText().contains(platformCommandKeyName()));
     EXPECT_TRUE(hint->getText().containsIgnoreCase("when off")) << "the one-line hint must spell out the OFF state";
 }
+
+// The "ask before removing an LFO's last destination" preference: DEFAULT ON, persisted under its own key,
+// read at use time by MainComponent::removeModulator.
+TEST_F(PreferencesSettingsTabTest, AskBeforeRemovingLfoDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isAskBeforeRemovingLfoEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineAskBeforeRemovingLfo"));
+        tab.setAskBeforeRemovingLfoEnabled(false);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeRemovingLfo"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isAskBeforeRemovingLfoEnabled());
+        tab.setAskBeforeRemovingLfoEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeRemovingLfo"), "1");
+    }
+}
+
+// The real button, found by its words, writes the key; and a search for those words keeps it.
+TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeRemovingLfoToggleWritesTheSetting) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 900);
+    juce::ToggleButton* toggle = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("removing an LFO"))
+                toggle = tb;
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->getToggleState());
+    EXPECT_FALSE(toggle->getTooltip().isEmpty());
+    toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
+    EXPECT_FALSE(toggle->getToggleState());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeRemovingLfo"), "0");
+    EXPECT_FALSE(tab.isAskBeforeRemovingLfoEnabled());
+}

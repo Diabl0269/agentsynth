@@ -246,7 +246,7 @@ TEST(AutomationLanesModulatorRowTest, TheLaneMenuOffersAnLfoModulatorOnlyWhenThe
     const auto findAdd = [](const juce::PopupMenu& menu) -> const juce::PopupMenu::Item* {
         juce::PopupMenu::MenuItemIterator it(menu, true);
         while (it.next())
-            if (it.getItem().itemID == synth::ui::AutomationLaneHeaderComponent::kAddLfoModulatorMenuId)
+            if (it.getItem().itemID == synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId)
                 return &it.getItem();
         return nullptr;
     };
@@ -254,14 +254,14 @@ TEST(AutomationLanesModulatorRowTest, TheLaneMenuOffersAnLfoModulatorOnlyWhenThe
     const auto* item = findAdd(menu);
     ASSERT_NE(item, nullptr);
     EXPECT_TRUE(item->isEnabled);
-    EXPECT_EQ(item->text, "Add LFO modulator");
+    EXPECT_EQ(item->text, "Add modulator...");
 
     h.host.modulatable = false;
     menu = header->buildMenu();
     item = findAdd(menu);
     ASSERT_NE(item, nullptr);
     EXPECT_FALSE(item->isEnabled);
-    EXPECT_EQ(item->text, "Add LFO modulator (no CV input)") << "the reason is in the item itself";
+    EXPECT_EQ(item->text, "Add modulator... (no CV input)") << "the reason is in the item itself";
 }
 
 // In the app's default ~190 px header column the first layout clipped the shape and rate combos to
