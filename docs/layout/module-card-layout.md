@@ -299,11 +299,11 @@ added.
 | Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: Key Track, Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged. As built: the response panel stays card chrome, closed until opened; Show Response and Show Spectrum are footer pills, so there is no `response` item in the layout |
 | VCA | Gain `faderH`; footer | — |
 | ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place. As built: Velocity is a `faderH` row; the Time/Tempo caption is "Stage times"; captions Atk, Hold, Dec, Sus, Rel; the footer holds Poly, Show Envelope Graph and Show Scope; the same entry is registered for Amp Env and Filter Env; the card is 597 px tall |
-| LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch) and Sync a toggle (`mode` is a bool, and `segmented` suits a choice); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
+| LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch); the Sync control is a Free/Sync `segmented` switch on the `mode` bool (its own off and on texts); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
 | Noise | Type `segmented`; Color, Level; footer (Poly, Show Scope) | As built: as designed |
 | Sampler | waveform and load row (card chrome, above the body); Mode `segmented`; Start, End, Level; Pitch: Pitch, Root, Fine; Grains: Grain Size, Density, Spray; footer: Loop, Reverse | The grain controls dim unless Mode is Granular (as built: a dim, not a swap or a hidden section, so their CV jacks keep a knob to land on and the mode switch never resizes the card; they stay on the card in Sample mode, as before). As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already) |
 | Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
-| Delay | Tempo Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Tempo Sync is a boolean, so it draws as the toggle (a `segmented` switch only suits a choice); the division stays a choice in Time's cell |
+| Delay | Tempo Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Tempo Sync is a Time/Sync `segmented` switch on the boolean (its own off and on texts); the division stays a choice in Time's cell |
 | Reverb | Room: Size, Damping, Pre-delay; Mix: Dry, Wet, Width; footer: Level | As built: Dry and Wet are both `faderV` (side by side, as the widget table says), Width a knob |
 | Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | — |
 | Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | As built: Quality is the Oversampling choice, drawn as a combo with its caption in the footer |
@@ -326,7 +326,7 @@ patch node's `params` is an open record there, and per-module ranges come from t
 
 As built: `DefaultCardLayouts::builtIn()` calls one registration function per module family, each in
 its own unit under `Source/UI/Graph/CardBody/DefaultLayouts/` (`DefaultCardLayoutsSources.cpp`:
-Oscillator, Noise, Sampler, LFO, Wavetable; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
+Oscillator, Noise, Sampler, LFO; Wavetable stays bespoke for now; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
 Env, VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer, Poly MIDI, MIDI Keyboard;
 `DefaultCardLayoutsFilterDynamics.cpp`: Filter, Compressor, Limiter, Gate; `DefaultCardLayoutsEffects.cpp`:
 Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), all

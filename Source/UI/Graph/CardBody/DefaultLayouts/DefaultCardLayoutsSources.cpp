@@ -79,7 +79,8 @@ CardLayout lfoLayout() {
         section("shape", std::nullopt, {param("shape")}),
         // One column, so the large Rate dial (or the division combo that replaces it) sits alone on its row.
         section("rate", std::nullopt,
-                {param("mode"), showWhen(param("rateHz", CardWidget::KnobLarge), "mode", {"false"}),
+                {param("mode", CardWidget::Segmented),
+                 showWhen(param("rateHz", CardWidget::KnobLarge), "mode", {"false"}),
                  showWhen(param("rateSync"), "mode", {"true"})},
                 1),
         section("shaping", std::nullopt,

@@ -18,14 +18,14 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
     return layout;
 }
 
-// The Delay's Tempo Sync switch (a boolean, so drawn as the toggle rather than a segmented control) swaps
-// the Time knob for its note division in one cell.
+// The Delay's Time/Sync switch (the boolean's own off and on texts, so a segmented control) swaps the Time
+// knob for its note division in one cell.
 CardLayout delayLayout() {
-    return layoutOf(
-        {section("main", std::nullopt,
-                 {param("tempoSync"), showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
-                  showWhen(param("timeDiv"), "tempoSync", {"true"}), param("feedback"), param("mix")}),
-         footer({param("pingPong"), param("outputLevel")})});
+    return layoutOf({section("main", std::nullopt,
+                             {param("tempoSync", CardWidget::Segmented),
+                              showWhen(param("time", CardWidget::KnobLarge), "tempoSync", {"false"}),
+                              showWhen(param("timeDiv"), "tempoSync", {"true"}), param("feedback"), param("mix")}),
+                     footer({param("pingPong"), param("outputLevel")})});
 }
 
 CardLayout reverbLayout() {

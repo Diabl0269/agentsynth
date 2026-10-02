@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -28,6 +29,14 @@ public:
     static constexpr float kModBarThickness = 3.0f;
     /** Shift-drag rate. */
     static constexpr double kFineRate = 1.0 / 8.0;
+
+    /** The parameter's own text with its spaces dropped ("1.00 s" reads "1.00s", "50 %" reads "50%"), so a
+        value fits the box of a narrow fader without truncating. */
+    static juce::String compactValueText(const juce::String& parameterText);
+    /** Shows the parameter's text, compacted, in the value box, at the theme's label size and with no side
+        padding. Call after the parameter attachment: it installs its own text function, which this replaces
+        (typing a value back still parses the full text). */
+    void useCompactValueText(const juce::RangedAudioParameter& param);
 
     bool isVerticalFader() const noexcept { return orientation_ == Orientation::Vertical; }
 
@@ -59,10 +68,13 @@ public:
     void focusLost(FocusChangeType cause) override;
 
 private:
+    void lookAndFeelChanged() override;
+    void styleCompactValueBox();
     void reanchor(juce::Point<float> mouse);
 
     Orientation orientation_;
     std::optional<juce::Slider::ScopedDragNotification> drag_; ///< Engaged for a whole value drag.
+    bool compactValueText_ = false;
     bool shiftWasDown_ = false;
     juce::Point<float> anchorMouse_;
     double anchorProportion_ = 0.0;

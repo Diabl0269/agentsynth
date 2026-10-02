@@ -46,8 +46,11 @@ public:
         customTablePending_ = false;
         audioCustomTable_ = pendingCustomTable_;
 
-        // Mode: Hz (false) / Sync (true)
-        addParameter(modeParam = new juce::AudioParameterBool("mode", "Sync", true));
+        // Mode: Hz (false) / Sync (true). The text is what the card's Free/Sync switch shows.
+        addParameter(modeParam = new juce::AudioParameterBool(
+                         "mode", "Sync", true,
+                         juce::AudioParameterBoolAttributes().withStringFromValueFunction(
+                             [](bool on, int) { return on ? juce::String("Sync") : juce::String("Free"); })));
 
         // Bipolar: Unipolar (false) / Bipolar (true)
         addParameter(bipolarParam = new juce::AudioParameterBool("bipolar", "Bipolar", true));

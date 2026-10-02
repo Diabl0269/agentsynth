@@ -27,7 +27,7 @@ std::vector<Expected> expectations() {
     return {
         {"Delay",
          {{"tempoSync", "time", "timeDiv", "feedback", "mix"}, {"pingPong", "outputLevel"}},
-         {{"tempoSync", Kind::Toggle},
+         {{"tempoSync", Kind::Segmented},
           {"time", Kind::KnobLarge},
           {"timeDiv", Kind::Choice},
           {"pingPong", Kind::Toggle},

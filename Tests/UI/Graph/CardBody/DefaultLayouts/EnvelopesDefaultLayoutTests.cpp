@@ -137,6 +137,31 @@ TEST(EnvelopesDefaultLayout, TheAdsrEnvelopeViewIsOpenAndTheThresholdViewOwnsIts
     EXPECT_LT(envelope->getBottom(), body->findWidget("tempoSync")->getY()) << "the graph is the top section";
 }
 
+// A fader is 40 px wide: its value box must hold the longest reading ("1.00s", "120ms", "100%") whole,
+// not cut it to "1.00...".
+TEST(EnvelopesDefaultLayout, TheStageFadersValueBoxesHoldEveryReadingWithoutTruncating) {
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
+    canvas.editor.updateComponents();
+    auto* body = canvas.card(id)->getCardBody();
+    for (const char* paramId : {"attack", "hold", "decay", "sustain", "release"}) {
+        SCOPED_TRACE(paramId);
+        auto* fader = dynamic_cast<synth::ui::CardFader*>(body->findWidget(paramId));
+        ASSERT_NE(fader, nullptr);
+        juce::Label* box = nullptr;
+        for (auto* child : fader->getChildren())
+            if (auto* label = dynamic_cast<juce::Label*>(child))
+                box = label;
+        ASSERT_NE(box, nullptr);
+        for (const double value : {fader->getMinimum(), fader->getMaximum(), fader->getValue(), 9.5, 99.5}) {
+            const auto text = fader->getTextFromValue(juce::jlimit(fader->getMinimum(), fader->getMaximum(), value));
+            EXPECT_FALSE(text.contains(" ")) << text;
+            const auto available = box->getBorderSize().subtractedFrom(box->getLocalBounds()).getWidth();
+            EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(box->getFont(), text), available) << text;
+        }
+    }
+}
+
 TEST(EnvelopesDefaultLayout, AStageSwapKeepsItsBoundsAndTheCardsHeight) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<ADSRModule>(), 0, 0);

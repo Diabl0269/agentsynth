@@ -202,6 +202,7 @@ TEST(SourcesDefaultLayout, LfoHasItsDesignedWidgetsInOrder) {
     CardCanvas canvas;
     const auto lfo = build(canvas, "LFO");
     EXPECT_EQ(kindOf(lfo, "shape"), synth::CardBodyItem::Kind::Choice) << "six values do not fit one switch";
+    EXPECT_EQ(kindOf(lfo, "mode"), synth::CardBodyItem::Kind::Segmented);
     EXPECT_EQ(kindOf(lfo, "rateHz"), synth::CardBodyItem::Kind::KnobLarge);
     expectTopToBottom(lfo, {"shape", "mode", "rateHz", "phase"});
     expectOnOneRow(lfo, {"phase", "fadeIn", "level", "glide"});

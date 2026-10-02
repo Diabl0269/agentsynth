@@ -12,6 +12,8 @@ namespace {
 constexpr float kModBarGap = 1.0f;
 // Extra px around the bar's strip that still counts as a press on it.
 constexpr float kModBarHitPad = 3.0f;
+// A narrow fader's value text, the theme's `type.label` size (the same as a knob's name).
+constexpr float kValueFontPx = 10.5f;
 
 } // namespace
 
@@ -25,6 +27,34 @@ CardFader::CardFader(Orientation orientation)
         setSliderStyle(juce::Slider::LinearHorizontal);
         setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 20);
     }
+}
+
+juce::String CardFader::compactValueText(const juce::String& parameterText) {
+    return parameterText.removeCharacters(" ");
+}
+
+void CardFader::useCompactValueText(const juce::RangedAudioParameter& param) {
+    textFromValueFunction = [&param](double value) {
+        return compactValueText(param.getText(param.convertTo0to1((float)value), 0));
+    };
+    compactValueText_ = true;
+    styleCompactValueBox();
+    updateText();
+}
+
+// The slider's value box is a child label the slider rebuilds on a look change, so the style is reapplied.
+void CardFader::lookAndFeelChanged() {
+    juce::Slider::lookAndFeelChanged();
+    if (compactValueText_)
+        styleCompactValueBox();
+}
+
+void CardFader::styleCompactValueBox() {
+    for (auto* child : getChildren())
+        if (auto* box = dynamic_cast<juce::Label*>(child)) {
+            box->setBorderSize({0, 0, 0, 0});
+            box->setFont(juce::Font(juce::FontOptions(kValueFontPx)));
+        }
 }
 
 juce::Rectangle<float> CardFader::travelBounds() const {

@@ -298,6 +298,8 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
     sliderAttachments_.add(new juce::SliderParameterAttachment(param, *fader));
     if (dynamic_cast<juce::AudioParameterFloat*>(&param) != nullptr)
         applyAdsrTimeSkew(*fader, param);
+    if (vertical) // 40 px wide: "1.00 s" would truncate, "1.00s" fits
+        fader->useCompactValueText(param);
     fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));
     card_.sliderParams.add(&param);
     card_.sliderLabels.add(
