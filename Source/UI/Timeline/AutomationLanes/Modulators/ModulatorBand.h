@@ -1,12 +1,12 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
-#include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <optional>
+#include <memory>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 
@@ -16,64 +16,60 @@ class TransportService;
 
 namespace synth::ui {
 
-// What a drag on a band does. The band follows the timeline's edit tool like the lane editors do:
-// Draw turns the dragged span on, Erase turns it off, and every other tool is the pointer (move a
-// block, drag an edge to resize it, click to select).
-enum class SectionTool { Select, Draw, Erase };
+struct TrackHeaderHost;
 
-constexpr SectionTool sectionToolFor(EditTool tool) noexcept {
-    switch (tool) {
-    case EditTool::Draw:
-        return SectionTool::Draw;
-    case EditTool::Erase:
-        return SectionTool::Erase;
-    default:
-        return SectionTool::Select;
-    }
-}
-
-// The lanes-region half of a modulator row: where along the song the modulator is on. An LFO's band
-// shows its sections as blocks in the mod-wire colour and edits them (ModulatorSections.h: the blocks
-// live in an ordinary lane on the LFO's level parameter); with no sections lane the whole band is the
-// faint "on everywhere" fill. Any other source's band is a decoration that takes no clicks, so the clip
-// lanes underneath still decide.
+// The lanes-region half of a modulator row: the routing's AMOUNT over the song (ModulatorAmountLane.h).
+// A routing through a hidden Attenuverter gets an editable band; a direct cable has no amount and its band
+// is a plain decoration that takes no clicks, so the clip lanes underneath still decide.
 //
-// Reads its blocks from the doc on every paint and keeps none of its own, apart from a drag's preview:
-// like AutomationLaneEditor, a gesture is previewed locally and written ONCE on mouse-up, as one doc
-// mutation inside one undo step. The x mapping is the shared TimelineViewState, so blocks line up with
-// the clip lanes and the playhead pixel for pixel. Message thread only.
+// The band draws and edits through an ordinary AutomationLaneEditor pointed at a private one-lane proxy doc,
+// never at the real one: the proxy mirrors the real amount lane (or, with none, is an empty lane whose
+// default is the Attenuverter's current amount, so the editor paints that flat line), and every edit the
+// editor makes to the proxy is written into the real doc as ONE undo step that also creates the lane on
+// the first stroke and removes it with the last point. While no amount lane exists, the Select tool's
+// vertical drag and Up/Down set the Attenuverter's knob value instead (one graph undo step per gesture).
+// Message thread only.
 class ModulatorBand
     : public juce::Component
-    , public juce::TooltipClient {
+    , public juce::TooltipClient
+    , private synth::TimelineDoc::Listener
+    , private juce::AsyncUpdater {
 public:
     static constexpr float kBandAlpha = 0.28f;
-    static constexpr int kEdgeHitPx = 6; // either side of a block's edge, where a Select drag resizes
+    static constexpr double kNudgeStep = 0.01;      // Up/Down
+    static constexpr double kLargeNudgeStep = 0.10; // Shift+Up/Down
 
     explicit ModulatorBand(TimelineViewState& viewState);
+    ~ModulatorBand() override;
 
     // Non-owning, null-safe, like every other timeline sub-component's.
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
     void setUndoManager(AppUndoManager* undo) noexcept { undo_ = undo; }
-    void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
-    void setEditTool(EditTool tool) noexcept { tool_ = sectionToolFor(tool); }
+    void setTransport(synth::TransportService* transport);
+    void setHost(TrackHeaderHost* host) noexcept { host_ = host; }
+    void setEditTool(EditTool tool);
 
-    /** The routing this band stands for, under `ownerLane` (whose track a new sections lane goes on). */
+    /** The routing this band stands for, under `ownerLane` (whose track a new amount lane goes on). */
     void setModulator(const ModulatorInfo& info, synth::LaneId ownerLane, const juce::String& parameterName);
-    /** Re-reads the doc: the accessible description, the selection, the picture. Call on every doc change. */
+    /** Re-reads the doc: the proxy lane, the names, the picture. Call on every doc change. */
     void refreshFromDoc();
+    /** The owning track's colour; the curve is drawn in it, pushed to a readable contrast. */
+    void setTrackColour(juce::Colour colour);
+    /** The amount the row shows (the lane at the playhead, else the knob); re-syncs the flat line. */
+    void setAmountReadout(double amount);
 
-    juce::Colour getBandColour() const noexcept { return info_.colour; }
-    /** True for an LFO's band; any other source's band is a plain decoration. */
-    bool isEditable() const noexcept { return info_.isLfo; }
-    /** The blocks as they are in the doc now (empty with no sections lane). */
-    SectionBlocks currentBlocks() const;
-    bool hasSectionsLane() const;
-    /** The start beat of the selected block, if any. */
-    std::optional<double> getSelectedStart() const noexcept { return selectedStart_; }
-    bool isDragActive() const noexcept { return drag_ != Drag::None; }
+    /** True for a routing with an Attenuverter; a direct cable's band is a plain decoration. */
+    bool isEditable() const noexcept { return info_.attenuverterUuid.isNotEmpty(); }
+    const synth::AutomationLane* amountLane() const;
+    /** The curve editor over the proxy doc; nullptr for a decoration band. */
+    AutomationLaneEditor* getEditor() noexcept { return editor_.get(); }
+    /** The proxy doc the editor edits (test seam). */
+    const synth::TimelineDoc& getProxyDoc() const noexcept { return proxy_; }
 
     juce::String getTooltip() override;
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
+    void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
@@ -81,59 +77,50 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(FocusChangeType) override { repaint(); }
     void focusLost(FocusChangeType) override { repaint(); }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    /** The amount the screen reader and the readout use now. */
+    double currentAmount() const noexcept { return readout_; }
+    /** Sets the Attenuverter's knob value as one complete edit (keys, a screen reader). No-op with a lane. */
+    void setKnobAmount(double amount);
 
 private:
-    enum class Drag { None, Paint, Erase, ResizeStart, ResizeEnd, Move };
-
-    struct EdgeHit {
-        int index = -1;
-        bool startEdge = true;
-    };
-
-    double beatsPerBar() const;
-    double snappedBeat(double rawBeat) const;
-    double snappedBeatAt(int x) const;
-    double minBlockLength() const;
-    std::optional<EdgeHit> hitEdge(const SectionBlocks& blocks, int x) const;
-    synth::TrackId ownerTrack() const;
     void applyNames();
+    void updateClickRouting();
+    synth::TrackId ownerTrack() const;
+    double knobAmount() const;
 
-    // Gestures (ModulatorBandGestures.cpp)
-    void beginSelectDrag(int x);
-    void updatePreview(int x);
-    void finishDrag();
-    void cancelDrag();
-    /** Writes `blocks` as one undo step and selects the block containing `selectBeat`, if any. */
-    void commit(SectionBlocks blocks, std::optional<double> selectBeat);
-    void addBarAt(double start);
-
-    // Keyboard (ModulatorBandKeys.cpp)
-    bool moveSelection(int direction);
-    bool removeSelected();
-    bool addBarAtPlayhead();
-
-    // Painting
-    void paintBlock(juce::Graphics& g, const SectionBlock& block, bool selected);
+    // The proxy doc (ModulatorBandEdits.cpp)
+    void timelineChanged(const synth::TimelineDoc& doc) override;
+    void handleAsyncUpdate() override;
+    void syncProxy();
+    void rebuildProxyLane(float defaultValue);
+    void commitProxy();
+    void createLaneWithPoint(double beat, double value);
+    void writeToRealDoc(const std::vector<synth::AutomationLane::Breakpoint>& points);
 
     TimelineViewState& viewState_;
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undo_ = nullptr;
     synth::TransportService* transport_ = nullptr;
-    SectionTool tool_ = SectionTool::Select;
+    TrackHeaderHost* host_ = nullptr;
+    EditTool tool_ = EditTool::Select;
 
     ModulatorInfo info_;
     synth::LaneId ownerLane_;
     juce::String parameterName_;
+    double readout_ = 0.0;
 
-    std::optional<double> selectedStart_;
-    bool committing_ = false; // a write is in flight: the doc is briefly between its two halves (lane, then points)
-    Drag drag_ = Drag::None;
-    SectionBlocks original_;               // what the drag edits: the blocks when it began
-    std::optional<SectionBlocks> preview_; // what the drag would write; painted instead of the doc's
-    double downBeat_ = 0.0;                // Draw/Erase: the snapped beat the press landed on
-    int dragIndex_ = -1;                   // Resize/Move: the block being dragged
-    double grabOffset_ = 0.0;              // Move: raw beats from the block's start to the press
-    double selectBeat_ = 0.0;              // a beat inside the dragged block, to reselect it on release
+    synth::TimelineDoc proxy_;
+    synth::TrackId proxyTrack_;
+    synth::LaneId proxyLane_;
+    std::unique_ptr<AutomationLaneEditor> editor_; // after proxy_: destroyed first, it points into it
+    bool syncingProxy_ = false;                    // the band itself is writing the proxy: not an edit to commit
+    bool committing_ = false; // a write into the real doc is in flight: the doc is between its mutations
+
+    // The knob drag (Select tool, no amount lane)
+    bool knobDragging_ = false;
+    double knobDragStart_ = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorBand)
 };

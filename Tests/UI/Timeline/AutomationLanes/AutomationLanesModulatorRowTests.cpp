@@ -1,6 +1,7 @@
 // AutomationLanesModulatorRowTests.cpp -- a lane's modulator rows against a stub host: where they land in the
 // shared row layout (under their lane, counted in the track's extra height), what a click at each y hits, the
-// row's controls (names, Tab stops, the edit phases a drag sends) and the read-only row of a non-LFO source.
+// row's controls (names, Tab stops, the edit phases a drag sends), its amount readout and the band's knob drag,
+// and the read-only row of a non-LFO source.
 // The MainComponent side -- adding, removing and undoing real modulators -- is in
 // AutomationLanesModulatorMainTests.cpp.
 
@@ -8,6 +9,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <map>
 
@@ -29,14 +31,17 @@ ModulatorInfo lfoInfo(const juce::String& n) {
     return info;
 }
 
-// Answers every lane with the same routings, and records what the rows write.
+// Answers every lane with the same routings (an Attenuverter's own amount lane with none), and records what the
+// rows write.
 struct ModulatorHost : synth::ui::TrackHeaderHost {
     std::vector<ModulatorInfo> modulators;
     std::map<juce::String, float> values;
     std::vector<ParameterEditPhase> phases;
     bool modulatable = true;
 
-    std::vector<ModulatorInfo> getModulators(const juce::String&, const juce::String&) override { return modulators; }
+    std::vector<ModulatorInfo> getModulators(const juce::String& uuid, const juce::String&) override {
+        return uuid.startsWith("atten-") ? std::vector<ModulatorInfo>{} : modulators;
+    }
     bool canModulate(const juce::String&, const juce::String&) override { return modulatable; }
     float getNodeParameter(const juce::String& uuid, const juce::String& id) override {
         return values[uuid + "." + id];
@@ -108,8 +113,8 @@ TEST(AutomationLanesModulatorRowTest, ModulatorRowsSitUnderTheirLaneAndCountInTh
 
     // A click at Lead's y still hits Lead's row, below the modulator rows.
     const int x = f.panel.getClipLaneArea().getX() + 200;
-    // An LFO's band takes the click (it draws sections), and only inside its own row: the clip lanes refuse the
-    // extra area, and a y just outside the band falls through to the panel as before.
+    // An LFO's band takes the click (it edits the routing's amount), and only inside its own row: the clip lanes refuse
+    // the extra area, and a y just outside the band falls through to the panel as before.
     EXPECT_EQ(f.componentAt({x, firstMod.getCentreY()}), band);
     EXPECT_NE(f.componentAt({x, secondMod.getBottom() + 1}), band);
     const int leadY = lanesTop + layout.trackTop(1) + layout.trackRowHeight(1) / 2;
@@ -167,28 +172,29 @@ TEST(AutomationLanesModulatorRowTest, EveryControlIsANamedTabStopAndADragIsOneGe
 
     EXPECT_EQ(row->getShapeCombo().getTitle(), "Cutoff LFO shape");
     EXPECT_EQ(row->getShapeCombo().getTooltip(), "Cutoff LFO shape");
-    EXPECT_EQ(row->getDepthSlider().getTitle(), "Cutoff LFO depth");
     EXPECT_EQ(row->getSyncToggle().getTitle(), "Cutoff LFO sync");
     EXPECT_EQ(row->getMenuButton().getTooltip(), "Modulator menu for Cutoff LFO");
-    for (juce::Component* c :
-         std::initializer_list<juce::Component*>{&row->getShapeCombo(), &row->getSyncRateCombo(), &row->getSyncToggle(),
-                                                 &row->getDepthSlider(), &row->getMenuButton()})
+    for (juce::Component* c : std::initializer_list<juce::Component*>{&row->getShapeCombo(), &row->getSyncRateCombo(),
+                                                                      &row->getSyncToggle(), &row->getMenuButton()})
         EXPECT_TRUE(c->getWantsKeyboardFocus()) << c->getTitle();
     EXPECT_TRUE(row->getSyncRateCombo().isVisible()) << "synced: the 1/4-style rate";
     EXPECT_FALSE(row->getRateSlider().isVisible());
-    EXPECT_DOUBLE_EQ(row->getDepthSlider().getValue(), 50.0) << "depth reads as a percentage";
-    EXPECT_EQ(row->getDepthSlider().getTextFromValue(50.0), "50%");
+    EXPECT_EQ(row->getAmountText(), "+50%") << "the amount reads as a signed percentage";
 
-    // A real drag across the depth bar: Begin, then Change per move, then End.
-    auto& depth = row->getDepthSlider();
-    const auto mid = depth.getLocalBounds().getCentre().toFloat();
-    dragAcross(depth, mid, mid.translated(-(float)depth.getWidth() / 4.0f, 0.0f), 4);
+    // The amount is the band's: a real downward drag on its flat line is Begin, then Change per move, then End.
+    auto* band = f.panel.modulatorBandForTest(cutoff, 0);
+    ASSERT_NE(band, nullptr);
+    EXPECT_EQ(band->getTitle(), "Cutoff LFO 1 amount");
+    EXPECT_TRUE(band->getWantsKeyboardFocus());
+    EXPECT_TRUE(band->getTooltip().startsWith("Drag to set how much LFO 1 moves Cutoff; draw to change it over time"));
+    const auto mid = band->getLocalBounds().getCentre().toFloat();
+    dragAcross(*band, mid, mid.translated(0.0f, (float)band->getHeight() / 4.0f), 4);
     ASSERT_GE(h.host.phases.size(), 3u);
     EXPECT_EQ(h.host.phases.front(), ParameterEditPhase::Begin);
     EXPECT_EQ(h.host.phases.back(), ParameterEditPhase::End);
     for (size_t i = 1; i + 1 < h.host.phases.size(); ++i)
         EXPECT_EQ(h.host.phases[i], ParameterEditPhase::Change);
-    EXPECT_LT(h.host.values["atten-1.amount"], 0.5f);
+    EXPECT_NEAR(h.host.values["atten-1.amount"], 0.0f, 0.03f) << "a quarter of the band's height is 50% down";
 
     // A toggle click is one complete edit, and swaps the rate control.
     h.host.phases.clear();
@@ -205,7 +211,7 @@ TEST(AutomationLanesModulatorRowTest, EveryControlIsANamedTabStopAndADragIsOneGe
     EXPECT_EQ(row->getShapeCombo().getSelectedId(), 4);
 }
 
-TEST(AutomationLanesModulatorRowTest, ANonLfoSourceGetsAReadOnlyRowWithItsTitleAndDepthOnly) {
+TEST(AutomationLanesModulatorRowTest, ANonLfoSourceGetsAReadOnlyRowWithItsTitleAndAmountOnly) {
     HostedLanes h;
     ModulatorInfo env;
     env.sourceUuid = "env";
@@ -218,8 +224,11 @@ TEST(AutomationLanesModulatorRowTest, ANonLfoSourceGetsAReadOnlyRowWithItsTitleA
     f.panel.setTrackAutomationExpanded(bass, true);
     auto* row = f.panel.modulatorRowForTest(cutoff, 0);
     ASSERT_NE(row, nullptr);
-    EXPECT_TRUE(row->getDepthSlider().isVisible());
-    EXPECT_EQ(row->getDepthSlider().getTitle(), "Cutoff Filter Env depth");
+    EXPECT_EQ(row->getAmountText(), "0%");
+    auto* band = f.panel.modulatorBandForTest(cutoff, 0);
+    ASSERT_NE(band, nullptr);
+    EXPECT_TRUE(band->isEditable()) << "its amount is edited on the band, like an LFO's";
+    EXPECT_EQ(band->getTitle(), "Cutoff Filter Env amount");
     EXPECT_FALSE(row->getShapeCombo().isVisible());
     EXPECT_FALSE(row->getSyncToggle().isVisible());
     EXPECT_FALSE(row->getMenuButton().isVisible()) << "nothing to remove or retune from here";
@@ -256,7 +265,7 @@ TEST(AutomationLanesModulatorRowTest, TheLaneMenuOffersAnLfoModulatorOnlyWhenThe
 }
 
 // In the app's default ~190 px header column the first layout clipped the shape and rate combos to
-// "..." and drew the depth percentage under the fader's cap. Every control must sit inside the row,
+// "..." and drew a value under a fader's cap. Every control must sit inside the row,
 // the combos must be as wide as their longest choice, and no bar may cover its value text.
 TEST(AutomationLanesModulatorRowTest, EveryControlFitsTheDefaultHeaderColumnWithoutClipping) {
     synth::theme::AppLookAndFeel lookAndFeel;
@@ -274,7 +283,64 @@ TEST(AutomationLanesModulatorRowTest, EveryControlFitsTheDefaultHeaderColumnWith
     EXPECT_GE(row.getSyncRateCombo().getWidth(),
               synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(row.getSyncRateCombo()) - 2);
     EXPECT_FALSE(row.getShapeCombo().getBounds().intersects(row.getSyncRateCombo().getBounds()));
-    EXPECT_GT(row.getDepthSlider().getWidth(), 30) << "a depth bar you can still drag";
-    EXPECT_LT(row.getDepthSlider().getRight(), inside.getRight() - 30) << "room beside it for the percentage";
+    EXPECT_LT(row.getSyncToggle().getRight(), inside.getRight() - 60) << "room beside Sync for the amount";
     row.setLookAndFeel(nullptr);
+}
+
+// The readout is the amount the routing plays: a signed percentage, a real minus sign below zero, and the
+// lane's value at the playhead once an amount lane exists. Tag, stripe and readout take the track's colour.
+TEST(AutomationLanesModulatorRowTest, TheRowReadsTheAmountSignedAndFromTheLaneAtThePlayhead) {
+    HostedLanes h;
+    h.host.modulators = {lfoInfo("1")};
+    h.host.values["atten-1.amount"] = -0.3f;
+    auto& f = h.f;
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto cutoff = f.addLane(bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(bass, true);
+    auto* row = f.panel.modulatorRowForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->getAmountText(), juce::String::fromUTF8("\xE2\x88\x92") + "30%");
+
+    h.host.values["atten-1.amount"] = 0.0f;
+    f.panel.updateFromTransport(synth::TransportService::PositionSnapshot{}, 0.0);
+    EXPECT_EQ(row->getAmountText(), "0%");
+
+    // An amount lane wins over the knob: 72% from beat 4.
+    constexpr int kHold = static_cast<int>(synth::BreakpointCurve::Hold);
+    f.undo.recordTimelineChange(f.doc, [&] {
+        synth::ui::writeAmountLane(f.doc, bass, "atten-1", {{0.0, 0.0, 0.0f, kHold}, {4.0, 0.72, 0.0f, kHold}});
+    });
+    synth::TransportService::PositionSnapshot at;
+    at.ppq = 6.0;
+    f.panel.updateFromTransport(at, 0.0);
+    row = f.panel.modulatorRowForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->getAmountText(), "+72%");
+    EXPECT_EQ(f.panel.laneHeaderForTest(f.doc.getLaneForParam("atten-1", "amount")->id), nullptr)
+        << "the amount lane is the band, not a lane row";
+}
+
+// A direct cable has no Attenuverter and so no amount: no readout, and its band is a plain decoration that takes
+// no clicks and is not a Tab stop.
+TEST(AutomationLanesModulatorRowTest, ADirectCableHasNoAmountAndADecorationBand) {
+    HostedLanes h;
+    auto direct = lfoInfo("1");
+    direct.attenuverterUuid = {};
+    h.host.modulators = {direct};
+    auto& f = h.f;
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto cutoff = f.addLane(bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(bass, true);
+    auto* row = f.panel.modulatorRowForTest(cutoff, 0);
+    auto* band = f.panel.modulatorBandForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    ASSERT_NE(band, nullptr);
+    EXPECT_TRUE(row->getAmountText().isEmpty());
+    EXPECT_FALSE(band->isEditable());
+    EXPECT_EQ(band->getEditor(), nullptr);
+    EXPECT_FALSE(band->getWantsKeyboardFocus());
+    bool clicks = true, childClicks = true;
+    band->getInterceptsMouseClicks(clicks, childClicks);
+    EXPECT_FALSE(clicks);
+    EXPECT_FALSE(band->isAccessible());
 }

@@ -61,7 +61,7 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
     if (index < 0 || index >= (int)moveTargets_.size())
         return;
     const auto dest = moveTargets_[(size_t)index];
-    moveLaneUndoable(doc, undo, lane, dest, sectionsLanesTravellingWith(doc, host_, lane));
+    moveLaneUndoable(doc, undo, lane, dest, amountLanesTravellingWith(doc, host_, lane));
 }
 
 void AutomationLaneHeaderComponent::showMenu() {

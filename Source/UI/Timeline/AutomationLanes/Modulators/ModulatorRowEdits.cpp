@@ -56,8 +56,6 @@ void ModulatorRow::refreshValues() {
         if (dragging_ != &rateHz_)
             set(rateHz_, host_->getNodeParameter(lfo, "rateHz"));
     }
-    if (info_.attenuverterUuid.isNotEmpty() && dragging_ != &depth_)
-        set(depth_, std::round(host_->getNodeParameter(info_.attenuverterUuid, "amount") * 100.0));
 }
 
 juce::PopupMenu ModulatorRow::buildMenu() const {

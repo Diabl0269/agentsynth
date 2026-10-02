@@ -18,18 +18,18 @@ struct TrackHeaderHost;
 /** Sets the lane's record mode (a LaneRecordMode value). False when nothing changed. */
 bool setLaneRecordModeUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, int mode);
 
-/** Moves the lane, and `companions` (its modulators' sections lanes), to `dest`, removing an Automation track
+/** Moves the lane, and `companions` (its modulators' amount lanes), to `dest`, removing an Automation track
  *  the move leaves empty in the same step. */
 bool moveLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, synth::TrackId dest,
                       const std::vector<synth::LaneId>& companions = {});
 
 /**
- * The sections lanes that travel with `lane` when it moves to another track: those of its LFO modulators
- * that sit on its track and modulate no other lane there (a shared LFO's sections stay where its other
- * lane keeps drawing them). `host` may be null, when there are none.
+ * The amount lanes that travel with `lane` when it moves to another track: one per routing into it that has
+ * one (a routing drives exactly one parameter, so an amount lane is never shared). `host` may be null, when
+ * there are none.
  */
-std::vector<synth::LaneId> sectionsLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
-                                                       synth::LaneId lane);
+std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
+                                                     synth::LaneId lane);
 
 /** Deletes the lane, removing an Automation track it leaves empty in the same step. */
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane);

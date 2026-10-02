@@ -3,7 +3,7 @@
 
 #include "AppUndoManager.h"
 #include "Timeline/AutomationKernel.h"
-#include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <cmath>
@@ -50,27 +50,15 @@ bool moveLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::Lane
     });
 }
 
-std::vector<synth::LaneId> sectionsLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
-                                                       synth::LaneId lane) {
+std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
+                                                     synth::LaneId lane) {
     std::vector<synth::LaneId> travelling;
     const auto* moving = doc.getLane(lane);
-    const auto* owner = doc.getTrackForLane(lane);
-    if (host == nullptr || moving == nullptr || owner == nullptr)
+    if (host == nullptr || moving == nullptr)
         return travelling;
-    for (const auto& info : host->getModulators(moving->nodeUuid, moving->paramId)) {
-        const auto* level = info.isLfo ? sectionsLaneFor(doc, info.sourceUuid) : nullptr;
-        if (level == nullptr || doc.getTrackForLane(level->id) != owner)
-            continue;
-        bool sharedWithOtherLane = false;
-        for (const auto& other : owner->lanes) {
-            if (other.id == lane)
-                continue;
-            for (const auto& modulator : host->getModulators(other.nodeUuid, other.paramId))
-                sharedWithOtherLane = sharedWithOtherLane || modulator.sourceUuid == info.sourceUuid;
-        }
-        if (!sharedWithOtherLane)
-            travelling.push_back(level->id);
-    }
+    for (const auto& info : host->getModulators(moving->nodeUuid, moving->paramId))
+        if (const auto* amount = amountLaneFor(doc, info.attenuverterUuid); amount != nullptr && amount->id != lane)
+            travelling.push_back(amount->id);
     return travelling;
 }
 

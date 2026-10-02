@@ -99,13 +99,11 @@ public:
     juce::Rectangle<int> modulatorRowContentBounds(synth::LaneId lane, int index,
                                                    const TimelineRowLayout& layout) const;
     /**
-     * True when `lane` is only the backing store of an LFO modulator's sections (ModulatorSections.h): the
-     * lane drives the `level` of an LFO that modulates another lane on the same track, so it is drawn as
-     * that modulator row's band instead of as a lane row. It is a lane again the moment the LFO stops
-     * being a modulator there.
+     * True when `lane` is a modulator's amount lane (ModulatorAmountLane.h), drawn as that modulator row's
+     * band instead of as a lane row. It is a lane row again the moment its routing is gone.
      */
-    bool isSectionsLane(synth::LaneId lane) const;
-    /** How many of `track`'s lanes are shown as sections rather than as lane rows. */
+    bool isAmountLane(synth::LaneId lane) const;
+    /** How many of `track`'s lanes are shown as amount bands rather than as lane rows. */
     int hiddenLaneCount(synth::TrackId track) const;
 
     /** Fired after a fold toggle or a change in which lanes are visible, so the panel relayouts. */
@@ -134,6 +132,7 @@ private:
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
                            const juce::String& parameterName);
     void wireBand(ModulatorBand& band) const;
+    void refreshModulatorAmounts(int visibleTop, int visibleBottom);
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();
     void syncAddRows();
@@ -156,7 +155,7 @@ private:
     std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
     std::map<synth::LaneId, LaneModulators> modulators_;                  // one per visible lane
     std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_;        // what the graph routes into each open lane
-    std::set<synth::LaneId> sectionsLanes_;                               // lanes drawn as a modulator's sections
+    std::set<synth::LaneId> amountLanes_;                                 // lanes drawn as a modulator's amount band
     double lastReadoutBeat_ = -1.0;
 };
 

@@ -1,10 +1,11 @@
 // AutomationLanesModulatorEditTests.cpp -- a modulator row's controls against a real MainComponent: shape,
-// rate, sync and depth edits change the live LFO / attenuverter parameters, each is one undo step, and an edit
-// on the canvas card reaches the row. Also: with the LFO modulating a parameter, the CV reaching that
+// rate and sync edits and the band's amount drag change the live LFO / attenuverter parameters, each is one undo step,
+// and an edit on the canvas card reaches the row. Also: with the LFO modulating a parameter, the CV reaching that
 // parameter moves across a rendered span, and at depth 0 it does not; and a saved project with a modulator
 // inside a macro reopens with its row.
 
 #include "AutomationLanesModulatorFixture.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 
 using namespace modulator_test;
 using namespace automation_lanes_test;
@@ -37,15 +38,23 @@ TEST_F(TimelinePanelIntegrationTest, RowEditsChangeTheLiveParametersAndEachIsOne
     ASSERT_TRUE(s.undo().undo());
     EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), 2.0f);
 
-    // Depth: a real drag across the bar is one step, however many moves it took.
-    auto& depth = s.row()->getDepthSlider();
-    const auto mid = depth.getLocalBounds().getCentre().toFloat();
-    dragAcross(depth, mid, mid.translated((float)depth.getWidth() / 4.0f, 0.0f), 6);
-    const auto moved = s.parameter(attenUuid, "amount");
-    EXPECT_GT(moved, 0.5f);
+    // Amount: a real upward drag on the band's flat line is one graph step, however many moves it took, and
+    // creates no amount lane.
+    auto* band = s.panel().modulatorBandForTest(s.lane, 0);
+    ASSERT_NE(band, nullptr);
+    const auto mid = band->getLocalBounds().getCentre().toFloat();
+    // The band's full height is the whole 200% span, so a whole-pixel eighth of it is about +25%.
+    const int up = juce::roundToInt((float)band->getHeight() / 8.0f);
+    const double expected = 0.5 + 2.0 * up / band->getHeight();
+    dragAcross(*band, mid, mid.translated(0.0f, -(float)up), 6);
+    EXPECT_NEAR(s.parameter(attenUuid, "amount"), expected, 1.0e-3);
+    EXPECT_EQ(s.doc().getLaneForParam(attenUuid, "amount"), nullptr);
+    s.panel().updateFromTransport(synth::TransportService::PositionSnapshot{}, 0.0);
+    EXPECT_EQ(s.row()->getAmountText(), synth::ui::amountText(expected));
     ASSERT_TRUE(s.undo().undo());
     EXPECT_FLOAT_EQ(s.parameter(attenUuid, "amount"), 0.5f);
-    EXPECT_DOUBLE_EQ(s.row()->getDepthSlider().getValue(), 50.0);
+    s.panel().updateFromTransport(synth::TransportService::PositionSnapshot{}, 0.0);
+    EXPECT_EQ(s.row()->getAmountText(), "+50%");
 
     // Sync off: the Hz bar replaces the sync-rate combo, and a drag on it moves the free rate.
     clickButton(s.row()->getSyncToggle());

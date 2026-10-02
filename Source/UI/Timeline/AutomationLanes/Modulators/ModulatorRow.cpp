@@ -4,7 +4,9 @@
 
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TrackColour.h"
 
 namespace synth::ui {
 
@@ -14,8 +16,8 @@ constexpr int kTagWidth = 22;
 constexpr int kMenuButtonWidth = 16;
 constexpr int kSyncWidth = 48;
 constexpr int kGap = 2;
-constexpr int kDepthTextWidth = 34; // "-100%"
-constexpr int kRateTextWidth = 42;  // "20.0 Hz"
+constexpr int kAmountTextWidth = 34; // "-100%"
+constexpr int kRateTextWidth = 42;   // "20.0 Hz"
 constexpr float kTagFontSize = 8.5f;
 constexpr float kTitleFontSize = 10.0f;
 constexpr float kValueFontSize = 9.0f;
@@ -55,7 +57,6 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     setComponentID("modulatorRow");
     if (info_.isLfo)
         initLfoControls();
-    initDepthControl();
     applyNames();
     refreshValues();
 }
@@ -101,22 +102,6 @@ void ModulatorRow::initLfoControls() {
     menuButton_.onClick = [this] { showMenu(); };
 }
 
-// The routing's depth is the hidden attenuverter's "amount" (-1..1), shown as a percentage. A direct
-// cable has no attenuverter and so no depth control.
-void ModulatorRow::initDepthControl() {
-    if (info_.attenuverterUuid.isEmpty())
-        return;
-    depth_.setSliderStyle(juce::Slider::LinearBar);
-    depth_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    depth_.setRange(-100.0, 100.0, 1.0);
-    depth_.setDoubleClickReturnValue(true, 50.0);
-    depth_.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + "%"; };
-    depth_.setMouseClickGrabsKeyboardFocus(false);
-    depth_.setWantsKeyboardFocus(true);
-    addAndMakeVisible(depth_);
-    wireDragEdits(depth_, info_.attenuverterUuid, "amount", [](double v) { return (float)(v / 100.0); });
-}
-
 void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parameterName) {
     jassert(info.key() == info_.key());
     info_ = info;
@@ -126,7 +111,8 @@ void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parame
 }
 
 // Every name says which parameter and which source it controls, so a screen reader moving through a
-// stack of rows ("Cutoff LFO shape", "Cutoff LFO depth") never has to guess.
+// stack of rows ("Cutoff LFO shape", "Cutoff LFO rate") never has to guess. The amount is not a control
+// here: it is the band's ("Cutoff LFO 1 amount").
 void ModulatorRow::applyNames() {
     const auto who = parameterName_ + " " + (info_.isLfo ? juce::String("LFO") : info_.sourceTitle);
     const auto name = [](juce::Component& c, const juce::String& text) {
@@ -139,7 +125,6 @@ void ModulatorRow::applyNames() {
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
     name(sync_, who + " sync");
-    name(depth_, who + " depth");
     name(menuButton_, "Modulator menu for " + who);
 }
 
@@ -153,14 +138,14 @@ void ModulatorRow::resized() {
         menuButton_.setBounds(title.removeFromRight(kMenuButtonWidth).reduced(0, 1));
         layoutLfoControls(middle, bounds);
     } else {
-        layoutDepth(middle);
+        layoutAmount(middle);
     }
     titleArea_ = title.withTrimmedLeft(kPadding);
 }
 
 // Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
-// rate in what is left. Line 3: Sync, then depth. Nothing is clipped at the default column width.
-void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> depthLine) {
+// rate in what is left. Line 3: Sync, then the amount. Nothing is clipped at the default column width.
+void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine) {
     const int shapeWidth =
         juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(shape_), shapeLine.getWidth() * 3 / 5);
     shape_.setBounds(shapeLine.removeFromLeft(shapeWidth).reduced(0, 1));
@@ -171,14 +156,33 @@ void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Recta
     rateTextArea_ = shapeLine.removeFromRight(kRateTextWidth);
     rateHz_.setBounds(shapeLine.reduced(0, 3));
 
-    sync_.setBounds(depthLine.removeFromLeft(kSyncWidth).reduced(0, 1));
-    depthLine.removeFromLeft(kGap);
-    layoutDepth(depthLine);
+    sync_.setBounds(amountLine.removeFromLeft(kSyncWidth).reduced(0, 1));
+    amountLine.removeFromLeft(kGap);
+    layoutAmount(amountLine);
 }
 
-void ModulatorRow::layoutDepth(juce::Rectangle<int> line) {
-    depthTextArea_ = line.removeFromRight(kDepthTextWidth);
-    depth_.setBounds(line.reduced(0, 3));
+void ModulatorRow::layoutAmount(juce::Rectangle<int> line) { amountArea_ = line; }
+
+void ModulatorRow::setTrackColour(juce::Colour colour) {
+    if (trackColour_ == colour)
+        return;
+    trackColour_ = colour;
+    repaint();
+}
+
+void ModulatorRow::setAmount(std::optional<double> amount) {
+    const auto before = getAmountText();
+    amount_ = amount;
+    if (getAmountText() != before)
+        repaint(amountArea_);
+}
+
+juce::String ModulatorRow::getAmountText() const { return amount_.has_value() ? amountText(*amount_) : juce::String(); }
+
+// The track's colour, pushed to a readable contrast on the row's surface; the mod-wire colour until the
+// owner has said which track the row is on.
+juce::Colour ModulatorRow::readableTrackColour() const {
+    return readableOn(trackColour_.value_or(info_.colour), coloursFor(*this).surface);
 }
 
 void ModulatorRow::paint(juce::Graphics& g) {
@@ -186,15 +190,24 @@ void ModulatorRow::paint(juce::Graphics& g) {
     g.fillAll(colours.surface);
     g.setColour(colours.border);
     g.drawHorizontalLine(getHeight() - 1, (float)kIndent, (float)getWidth());
-    g.setColour(info_.colour.withAlpha(0.6f));
+    const auto accent = readableTrackColour();
+    g.setColour(accent.withAlpha(0.6f));
     g.fillRect(kIndent, 0, 2, getHeight());
 
-    g.setColour(info_.colour);
+    g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(kTagFontSize, juce::Font::bold)));
     g.drawText(info_.isLfo ? "LFO" : "CV", tagArea_, juce::Justification::centredLeft, false);
     g.setColour(colours.text);
     g.setFont(juce::Font(juce::FontOptions(kTitleFontSize)));
     g.drawText(info_.sourceTitle, titleArea_, juce::Justification::centredLeft, true);
+    if (amount_.has_value() && !amountArea_.isEmpty()) {
+        g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
+        g.setColour(colours.textMuted);
+        g.drawText("Amount", amountArea_, juce::Justification::centredLeft, false);
+        g.setColour(accent);
+        g.drawText(getAmountText(), amountArea_.withTrimmedLeft(amountArea_.getWidth() - kAmountTextWidth),
+                   juce::Justification::centredRight, false);
+    }
 }
 
 // The value text sits on the bars, and every Tab stop shows the shared accent ring over whatever its
@@ -202,7 +215,6 @@ void ModulatorRow::paint(juce::Graphics& g) {
 void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
-    paintSliderValue(g, depth_, depthTextArea_, text);
     for (auto* child : getChildren())
         if (child->isVisible())
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);

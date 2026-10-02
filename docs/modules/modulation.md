@@ -616,8 +616,11 @@ what was added, not retroactively.
 
 ## Smart cables, poly-bus wires and the mod matrix
 
-The three surfaces that expose a routing's depth, and what each one does:
+The surfaces that expose a routing's depth, and what each one does:
 
+- **The timeline's amount lane.** Under an automation lane, a modulator row's band sets the same
+  attenuverter `amount` (a vertical drag or Up/Down while it has no lane) or draws how it changes over the
+  song as an ordinary automation lane on that `amount` ([amount lane](../timeline/automation.md#amount-lane)).
 - **Smart cables.** Every mono CV cable (an `AttenuverterChain` routing) renders a circular knob at
   the midpoint of its bezier curve. Drag up/down to sweep depth from -100% to +100%; double-click to
   delete the connection.

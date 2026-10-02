@@ -4,6 +4,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/ToolCursors.h"
@@ -194,6 +195,7 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     if (lane == nullptr)
         return;
 
+    paintBipolarGuide(g, *this, lane->range.minValue, lane->range.maxValue, (float)valueToY(0.0));
     paintCommittedCurve(g, *lane);
     paintToolPreview(g);
     paintHandles(g, *lane);

@@ -34,7 +34,7 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     modulators_.clear();
     routings_.clear();
-    sectionsLanes_.clear();
+    amountLanes_.clear();
     addRows_.clear();
     headers_.clear();
     editors_.clear();
@@ -125,7 +125,7 @@ void TimelineAutomationLanes::sync() {
     if (doc_ == nullptr) {
         modulators_.clear();
         routings_.clear();
-        sectionsLanes_.clear();
+        amountLanes_.clear();
         addRows_.clear();
         headers_.clear();
         editors_.clear();
@@ -146,13 +146,13 @@ void TimelineAutomationLanes::sync() {
 // Keyed by LaneId so an edit that keeps a lane (a point drag, a record-mode change, a rename) keeps
 // its editor and header: an in-flight gesture or keyboard focus survives the doc notification.
 // Only a lane that leaves the screen (folded, moved under a folded track, deleted, or turned into a
-// modulator's sections) loses them.
+// modulator's amount lane) loses them.
 void TimelineAutomationLanes::syncPools() {
     std::set<synth::LaneId> wanted;
     for (const auto& track : doc_->getTracks())
         if (isVisibleLane(track))
             for (const auto& lane : track.lanes)
-                if (!isSectionsLane(lane.id))
+                if (!isAmountLane(lane.id))
                     wanted.insert(lane.id);
 
     for (auto it = editors_.begin(); it != editors_.end();)

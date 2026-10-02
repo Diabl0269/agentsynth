@@ -113,8 +113,9 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.cpp
-    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandGestures.cpp
-    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandKeys.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
@@ -263,6 +264,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineBeatsPerBar.h
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp

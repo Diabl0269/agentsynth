@@ -366,7 +366,10 @@ private:
     // addLaneUndoable() for a parameter resolved on the live graph (own module or hosted plugin).
     synth::LaneId addLaneForOption(const synth::ui::TrackHeaderHost::PluginLaneOption& option,
                                    std::optional<synth::TrackId> target);
-    void moveLanesToOwningTracks(); // load-time: lanes saved on the Automation track follow their module
+    void moveLanesToOwningTracks();      // load-time: lanes saved on the Automation track follow their module
+    void migrateSectionsToAmountLanes(); // load-time, once: retired LFO sections lanes become amount lanes
+    bool wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level);
+    void migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId);
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);

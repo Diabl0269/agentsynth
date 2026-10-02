@@ -1,25 +1,39 @@
-// Concern: the modulator band's identity and picture -- what routing it stands for, its names and
-// tooltip, and painting the sections. The gestures live in ModulatorBandGestures.cpp, the keys in
-// ModulatorBandKeys.cpp.
+// Concern: the modulator band's identity and controls -- what routing it stands for, its names, tooltip and
+// accessible value, its picture, and the knob gestures (drag, Up/Down, double-click) while no amount lane
+// exists. The proxy doc behind the curve editor lives in ModulatorBandEdits.cpp.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
+#include "UI/Layout/TooltipHelpHandler.h"
 
 #include "UI/Layout/FocusRing.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <cmath>
 
 namespace synth::ui {
 
 namespace {
-constexpr float kBlockRadius = 3.0f;
-constexpr float kSelectedOutline = 2.0f;
-constexpr float kBlockInset = 1.0f;
+constexpr float kFocusRadius = 3.0f;
 
-// The tooltip's tail, naming what each tool does; the head says what the band is showing.
-const char* const kToolHelp = "Draw tool: drag to turn the modulator on. Erase tool: drag to turn it off. Select "
-                              "tool: drag a block's edge to resize it, its middle to move it, Delete removes it. "
-                              "Double-click adds a bar. With no sections it plays everywhere, and erasing the "
-                              "last one goes back to that.";
+// What a screen reader reads and sets: the amount in -1..1, spoken as "+50%". Read-only while an amount
+// lane exists, because the lane, not the knob, decides the amount then.
+class AmountValueInterface : public juce::AccessibilityValueInterface {
+public:
+    explicit AmountValueInterface(ModulatorBand& band)
+        : band_(band) {}
+    bool isReadOnly() const override { return band_.amountLane() != nullptr; }
+    double getCurrentValue() const override { return band_.currentAmount(); }
+    juce::String getCurrentValueAsString() const override { return amountText(band_.currentAmount()); }
+    void setValue(double value) override { band_.setKnobAmount(value); }
+    void setValueAsString(const juce::String& text) override {
+        setValue(text.retainCharacters("0123456789.-").getDoubleValue() / 100.0);
+    }
+    AccessibleValueRange getRange() const override { return {{-1.0, 1.0}, ModulatorBand::kNudgeStep}; }
+
+private:
+    ModulatorBand& band_;
+};
 } // namespace
 
 ModulatorBand::ModulatorBand(TimelineViewState& viewState)
@@ -27,59 +41,92 @@ ModulatorBand::ModulatorBand(TimelineViewState& viewState)
     setComponentID("modulatorBand");
     setInterceptsMouseClicks(false, false);
     setAccessible(false);
+    proxy_.addListener(this);
 }
 
-// An LFO's band is a real control; any other source's is decoration the row in the header column
-// already names, and it takes no clicks so the clip lanes underneath still decide.
+ModulatorBand::~ModulatorBand() {
+    cancelPendingUpdate();
+    editor_.reset();
+    proxy_.removeListener(this);
+}
+
+void ModulatorBand::setTransport(synth::TransportService* transport) {
+    transport_ = transport;
+    if (editor_ != nullptr)
+        editor_->setTransport(transport);
+}
+
+void ModulatorBand::setEditTool(EditTool tool) {
+    tool_ = tool;
+    if (editor_ != nullptr)
+        editor_->setEditTool(tool);
+    updateClickRouting();
+}
+
+// A routing with an Attenuverter gets the curve editor over its proxy lane and becomes a Tab stop; a direct
+// cable has no amount to edit, so its band is decoration the row in the header column already names, and
+// takes no clicks so the clip lanes underneath still decide.
 void ModulatorBand::setModulator(const ModulatorInfo& info, synth::LaneId ownerLane,
                                  const juce::String& parameterName) {
     info_ = info;
     ownerLane_ = ownerLane;
     parameterName_ = parameterName;
-    if (isAccessible() != info_.isLfo) {
-        setInterceptsMouseClicks(info_.isLfo, false);
-        setWantsKeyboardFocus(info_.isLfo);
-        setAccessible(info_.isLfo);
+    if (isEditable() && editor_ == nullptr) {
+        editor_ = std::make_unique<AutomationLaneEditor>(viewState_);
+        editor_->setTimelineDoc(&proxy_);
+        editor_->setTransport(transport_);
+        editor_->setEditTool(tool_);
+        // The band is the one Tab stop and the one accessible node: the editor's press hands focus up to it.
+        editor_->setWantsKeyboardFocus(false);
+        editor_->setAccessible(false);
+        addAndMakeVisible(*editor_);
+        editor_->setBounds(getLocalBounds());
+    } else if (!isEditable()) {
+        editor_.reset();
     }
+    if (isAccessible() != isEditable()) {
+        setWantsKeyboardFocus(isEditable());
+        setAccessible(isEditable());
+    }
+    if (const auto* lane = amountLane())
+        readout_ = laneValueAt(*lane, 0.0);
+    else
+        readout_ = knobAmount();
     refreshFromDoc();
 }
 
-// A selection that an undo (or another edit) took away is dropped here rather than left pointing at
-// nothing -- except in the middle of this band's own write, which creates the lane before it fills it.
 void ModulatorBand::refreshFromDoc() {
-    if (!committing_ && selectedStart_.has_value() && blockIndexStartingAt(currentBlocks(), *selectedStart_) < 0)
-        selectedStart_.reset();
+    if (!committing_)
+        syncProxy();
+    updateClickRouting();
     applyNames();
     repaint();
 }
 
-SectionBlocks ModulatorBand::currentBlocks() const {
-    if (doc_ == nullptr)
-        return {};
-    const auto* lane = sectionsLaneFor(*doc_, info_.sourceUuid);
-    return lane != nullptr ? sectionsFromPoints(lane->points) : SectionBlocks{};
+void ModulatorBand::setTrackColour(juce::Colour colour) {
+    if (editor_ != nullptr)
+        editor_->setCurveColour(colour);
 }
 
-bool ModulatorBand::hasSectionsLane() const {
-    return doc_ != nullptr && sectionsLaneFor(*doc_, info_.sourceUuid) != nullptr;
+void ModulatorBand::setAmountReadout(double amount) {
+    const bool changed = std::abs(amount - readout_) > 1.0e-6;
+    readout_ = amount;
+    if (!committing_)
+        syncProxy(); // the flat line follows the knob when it is moved on the canvas card
+    if (changed) {
+        applyNames();
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+    }
 }
 
-double ModulatorBand::beatsPerBar() const { return beatsPerBarFor(transport_); }
-
-// The screen reader hears "<Parameter> LFO sections" and the blocks as the description, in bars.
-void ModulatorBand::applyNames() {
-    if (!info_.isLfo)
-        return;
-    setTitle(parameterName_ + " LFO sections");
-    setDescription(describeSections(currentBlocks(), hasSectionsLane(), beatsPerBar()));
+const synth::AutomationLane* ModulatorBand::amountLane() const {
+    return doc_ != nullptr ? amountLaneFor(*doc_, info_.attenuverterUuid) : nullptr;
 }
 
-juce::String ModulatorBand::getTooltip() {
-    if (!info_.isLfo)
-        return {};
-    const auto head = hasSectionsLane() ? juce::String("Sections: ") + getDescription() + ". "
-                                        : juce::String("Draw sections to play this modulator only there. ");
-    return head + kToolHelp;
+double ModulatorBand::knobAmount() const {
+    return host_ != nullptr && isEditable() ? (double)host_->getNodeParameter(info_.attenuverterUuid, kAmountParamId)
+                                            : 0.0;
 }
 
 synth::TrackId ModulatorBand::ownerTrack() const {
@@ -87,40 +134,118 @@ synth::TrackId ModulatorBand::ownerTrack() const {
     return track != nullptr ? track->id : synth::TrackId();
 }
 
-//==============================================================================
-void ModulatorBand::paintBlock(juce::Graphics& g, const SectionBlock& block, bool selected) {
-    const float x0 = (float)viewState_.beatToX(block.start);
-    const float x1 = std::isfinite(block.end) ? (float)viewState_.beatToX(block.end) : (float)getWidth() + 8.0f;
-    if (x1 < 0.0f || x0 > (float)getWidth())
-        return;
-    const auto area = juce::Rectangle<float>(x0, kBlockInset, x1 - x0, (float)getHeight() - 2.0f * kBlockInset);
-    g.setColour(info_.colour.withAlpha(kBandAlpha));
-    g.fillRoundedRectangle(area, kBlockRadius);
-    g.setColour(info_.colour);
-    g.drawRoundedRectangle(area.reduced(0.5f), kBlockRadius, 1.0f);
-    if (!selected)
-        return;
-    juce::Colour accent = juce::Colours::orange;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
-    g.setColour(accent);
-    g.drawRoundedRectangle(area.reduced(kSelectedOutline * 0.5f), kBlockRadius, kSelectedOutline);
+// The editor takes the press whenever it has something to do: a lane to edit, or a stroke that will create
+// one. With no lane and a pointer tool the band itself takes it, as the knob drag.
+void ModulatorBand::updateClickRouting() {
+    setInterceptsMouseClicks(isEditable(), isEditable());
+    if (editor_ != nullptr)
+        editor_->setInterceptsMouseClicks(amountLane() != nullptr || tool_ == EditTool::Draw, false);
 }
 
-// No sections lane (or a band that is only a decoration): the whole band is the faint "on everywhere"
-// fill, as it always was. With one, only its blocks are drawn; what a drag would write is drawn instead
-// of the doc's blocks while the drag runs.
+// "<Parameter> <modulator> amount", e.g. "Cutoff LFO 1 amount", valued "+50%".
+void ModulatorBand::applyNames() {
+    if (!isEditable())
+        return;
+    setTitle(parameterName_ + " " + info_.sourceTitle + " amount");
+    setDescription(amountText(readout_));
+}
+
+juce::String ModulatorBand::getTooltip() {
+    if (!isEditable())
+        return {};
+    const auto who = info_.sourceTitle;
+    if (amountLane() != nullptr)
+        return "Draw to change how much " + who + " moves " + parameterName_ +
+               " over time; erase every point to go back to one amount";
+    return "Drag to set how much " + who + " moves " + parameterName_ +
+           "; draw to change it over time. Up/Down nudges it (Shift: by 10%)";
+}
+
+std::unique_ptr<juce::AccessibilityHandler> ModulatorBand::createAccessibilityHandler() {
+    if (!isEditable())
+        return juce::Component::createAccessibilityHandler();
+    // TooltipHelpHandler, so VoiceOver reads the tooltip as the band's help text.
+    return std::make_unique<TooltipHelpHandler>(
+        *this, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{std::make_unique<AmountValueInterface>(*this)});
+}
+
+void ModulatorBand::resized() {
+    if (editor_ != nullptr)
+        editor_->setBounds(getLocalBounds());
+}
+
+// A direct cable: the faint "it modulates here" fill. An editable band is painted by its editor.
 void ModulatorBand::paint(juce::Graphics& g) {
-    if (!info_.isLfo || (!hasSectionsLane() && !preview_.has_value())) {
+    if (!isEditable())
         g.fillAll(info_.colour.withAlpha(kBandAlpha));
-    } else {
-        const auto blocks = preview_.has_value() ? *preview_ : currentBlocks();
-        const int selected = selectedStart_.has_value() ? blockIndexStartingAt(blocks, *selectedStart_) : -1;
-        for (int i = 0; i < (int)blocks.size(); ++i)
-            paintBlock(g, blocks[(size_t)i], i == selected);
-    }
-    if (info_.isLfo)
-        paintFocusRing(g, getLocalBounds().toFloat(), *this, kBlockRadius);
+}
+
+void ModulatorBand::paintOverChildren(juce::Graphics& g) {
+    if (isEditable())
+        paintFocusRing(g, getLocalBounds().toFloat(), *this, kFocusRadius);
+}
+
+//==============================================================================
+// The knob: while no amount lane exists, the flat line IS the Attenuverter's knob value.
+
+void ModulatorBand::setKnobAmount(double amount) {
+    if (host_ == nullptr || !isEditable() || amountLane() != nullptr)
+        return;
+    host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)juce::jlimit(-1.0, 1.0, amount),
+                            ParameterEditPhase::Once);
+    setAmountReadout(knobAmount());
+}
+
+void ModulatorBand::mouseDown(const juce::MouseEvent& e) {
+    grabKeyboardFocus();
+    knobDragging_ = false;
+    knobDragStart_ = knobAmount();
+    juce::ignoreUnused(e);
+}
+
+// Relative, like a knob: the band's full height is the whole -100%..+100% span. The undo step opens on the
+// first real move, so a plain click records nothing.
+void ModulatorBand::mouseDrag(const juce::MouseEvent& e) {
+    if (host_ == nullptr || !isEditable() || amountLane() != nullptr || tool_ == EditTool::Erase ||
+        tool_ == EditTool::Draw || !e.mods.isLeftButtonDown() || getHeight() <= 0)
+        return;
+    const double value =
+        juce::jlimit(-1.0, 1.0, knobDragStart_ - (double)e.getDistanceFromDragStartY() * 2.0 / (double)getHeight());
+    const auto phase = knobDragging_ ? ParameterEditPhase::Change : ParameterEditPhase::Begin;
+    knobDragging_ = true;
+    host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)value, phase);
+    setAmountReadout(value);
+}
+
+void ModulatorBand::mouseUp(const juce::MouseEvent&) {
+    if (!knobDragging_)
+        return;
+    knobDragging_ = false;
+    if (host_ != nullptr)
+        host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)knobAmount(), ParameterEditPhase::End);
+}
+
+// A double-click with a pointer tool starts the lane with one point where it landed, as a double-click on any
+// lane adds a point.
+void ModulatorBand::mouseDoubleClick(const juce::MouseEvent& e) {
+    if (!isEditable() || amountLane() != nullptr || tool_ == EditTool::Erase || editor_ == nullptr)
+        return;
+    const double beat = std::max(0.0, viewState_.snapBeat(viewState_.xToBeat((double)e.x), beatsPerBarFor(transport_)));
+    createLaneWithPoint(beat, juce::jlimit(-1.0, 1.0, editor_->yToValue((double)e.y)));
+}
+
+bool ModulatorBand::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey && editor_ != nullptr)
+        return editor_->keyPressed(key); // the editor has no focus of its own: an Escape mid-stroke is its
+    if (!isEditable() || amountLane() != nullptr)
+        return false;
+    const int code = key.getKeyCode();
+    if (code != juce::KeyPress::upKey && code != juce::KeyPress::downKey)
+        return false;
+    const double step = key.getModifiers().isShiftDown() ? kLargeNudgeStep : kNudgeStep;
+    setKnobAmount(knobAmount() + (code == juce::KeyPress::upKey ? step : -step));
+    return true;
 }
 
 } // namespace synth::ui

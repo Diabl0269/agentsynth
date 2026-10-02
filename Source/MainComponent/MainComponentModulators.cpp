@@ -1,7 +1,8 @@
 // MainComponentModulators.cpp -- the TrackHeaderHost side of a timeline lane's modulators: the timeline
 // has no graph, so this is where a lane's (node, parameter) is turned into the routings into its CV jack,
 // where "Add LFO modulator" / "Remove modulator" reach the GraphEditor, and where a modulator row's
-// controls read and write live parameters through the canvas knobs' own undo path.
+// controls read and write live parameters through the canvas knobs' own undo path; and the load-time migration
+// of a project's retired LFO sections lanes to amount lanes.
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ModuleTitle.h"
@@ -11,6 +12,7 @@
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 
 namespace {
@@ -87,22 +89,19 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
     if (target == nullptr)
         return;
     auto& graph = audioEngine.getGraph();
-    // An LFO that goes with its last cable takes its sections lane too, in the same undo step: one Cmd+Z
-    // brings back the LFO, the cable and the sections together. An LFO that still drives another jack stays,
-    // and so do its sections. A modulator with no sections lane keeps the plain graph-only step.
-    const bool hasSections =
-        modulator.isLfo && synth::ui::sectionsLaneFor(timelineDoc, modulator.sourceUuid) != nullptr;
-    const auto remove = [this, hasSections, &modulator](const AudioEngine::ModulationRouting& routing) {
-        if (!hasSections) {
+    // The routing's amount lane goes with it, in the same undo step: one Cmd+Z brings back the LFO, the cable
+    // and the amount lane together. It belongs to the routing alone, so it goes even when the LFO stays to
+    // drive another jack. A routing with no amount lane keeps the plain graph-only step.
+    const bool hasAmountLane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid) != nullptr;
+    const auto remove = [this, hasAmountLane, &modulator](const AudioEngine::ModulationRouting& routing) {
+        if (!hasAmountLane) {
             graphEditor.removeModulator(routing, modulator.isLfo);
             return;
         }
         undoManager.recordGraphTimelineAndMacroChange(
             audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &routing, &modulator] {
-                graphEditor.removeModulator(routing, true, /*recordUndo=*/false);
-                if (findNodeByUuid(modulator.sourceUuid) != nullptr)
-                    return;
-                if (const auto* lane = synth::ui::sectionsLaneFor(timelineDoc, modulator.sourceUuid))
+                graphEditor.removeModulator(routing, modulator.isLfo, /*recordUndo=*/false);
+                if (const auto* lane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid))
                     timelineDoc.removeLane(lane->id);
             });
     };
@@ -158,4 +157,72 @@ void MainComponent::showNodeOnCanvas(const juce::String& uuid) {
     for (auto* comp : graphEditor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == node->nodeID)
             graphEditor.centreViewOn(comp->getBounds().toFloat().getCentre());
+}
+
+//==============================================================================
+// Sections -> amount lanes (docs/timeline/automation.md#migration-from-sections)
+
+// A `level` lane the sections UI drew as an LFO's band rather than as a lane row: the LFO modulates another
+// lane on the same track, and nothing modulates the level lane itself.
+bool MainComponent::wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level) {
+    if (level.paramId != synth::ui::kSectionsParamId || !getModulators(level.nodeUuid, level.paramId).empty())
+        return false;
+    for (const auto& lane : track.lanes)
+        if (lane.id != level.id)
+            for (const auto& info : getModulators(lane.nodeUuid, lane.paramId))
+                if (info.isLfo && info.sourceUuid == level.nodeUuid)
+                    return true;
+    return false;
+}
+
+// Once per project load, with the graph already built, and never an undo step (the loaded document IS the
+// migrated one; it is marked clean right after). For every sections lane of an LFO whose every routing runs
+// through an Attenuverter: each routing gets an amount lane that holds its current amount inside the old
+// blocks and 0 outside, on the same Hold edges; then the level lane goes and the LFO's level is set to 1, so
+// the LFO is no longer silenced on its own. An LFO with any direct cable keeps its level lane (as an ordinary
+// lane row now): a direct cable has no amount to carry the blocks.
+void MainComponent::migrateSectionsToAmountLanes() {
+    std::vector<std::pair<synth::LaneId, synth::TrackId>> candidates;
+    for (const auto& track : timelineDoc.getTracks())
+        for (const auto& lane : track.lanes)
+            if (auto* node = findNodeByUuid(lane.nodeUuid); node != nullptr &&
+                                                            dynamic_cast<LFOModule*>(node->getProcessor()) != nullptr &&
+                                                            wasSectionsLane(track, lane))
+                candidates.push_back({lane.id, track.id});
+    for (const auto& [levelId, trackId] : candidates)
+        migrateSectionsLane(levelId, trackId);
+}
+
+void MainComponent::migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId) {
+    const auto* level = timelineDoc.getLane(levelId);
+    auto* lfo = level != nullptr ? findNodeByUuid(level->nodeUuid) : nullptr;
+    if (lfo == nullptr)
+        return;
+    auto& graph = audioEngine.getGraph();
+    std::vector<juce::AudioProcessorGraph::Node*> attenuverters;
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (resolveThroughPorts(audioEngine, graphEditor, r).source.node != lfo->nodeID)
+            continue;
+        auto* atten =
+            r.kind == AudioEngine::RoutingKind::AttenuverterChain ? graph.getNodeForId(r.attenuverterNodeID) : nullptr;
+        if (atten == nullptr)
+            return; // a direct cable: the level lane stays
+        attenuverters.push_back(atten);
+    }
+    if (attenuverters.empty())
+        return;
+
+    const auto blocks = synth::ui::sectionsFromPoints(level->points);
+    for (auto* atten : attenuverters) {
+        const auto uuid = uuidOf(atten);
+        auto* amount = findParameterByID(atten->getProcessor(), synth::ui::kAmountParamId);
+        if (amount == nullptr || synth::ui::amountLaneFor(timelineDoc, uuid) != nullptr)
+            continue;
+        synth::ui::writeAmountLane(
+            timelineDoc, trackId, uuid,
+            synth::ui::amountPointsFromSections(blocks, amount->convertFrom0to1(amount->getValue())));
+    }
+    timelineDoc.removeLane(levelId);
+    if (auto* levelParam = findParameterByID(lfo->getProcessor(), synth::ui::kSectionsParamId))
+        levelParam->setValueNotifyingHost(levelParam->convertTo0to1(1.0f));
 }

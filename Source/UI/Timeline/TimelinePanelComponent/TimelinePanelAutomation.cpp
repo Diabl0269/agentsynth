@@ -70,8 +70,8 @@ void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
     selectedAutomationLane_ = id;
     automationLanes_.setExpanded(track->id, true);
     syncAutomationLanes();
-    if (automationLanes_.isSectionsLane(id))
-        return; // shown as its modulator's sections: the track is open, and there is no lane row to scroll to
+    if (automationLanes_.isAmountLane(id))
+        return; // shown as its modulator's amount band: the track is open, and there is no lane row to scroll to
 
     const auto row = automationLanes_.laneRowContentBounds(id, rowLayout());
     const int viewTop = (int)std::llround(viewState_.trackScrollY);
@@ -95,8 +95,8 @@ std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent
 
     for (const auto& track : doc_->getTracks()) {
         for (const auto& lane : track.lanes) {
-            if (automationLanes_.isSectionsLane(lane.id))
-                continue; // a modulator's sections are not a lane row to pick
+            if (automationLanes_.isAmountLane(lane.id))
+                continue; // a modulator's amount lane is not a lane row to pick
             const auto labels = laneLabelsFor(lane, trackHeaderHost_);
             options.push_back(
                 {lane.id, labels.module + juce::String::fromUTF8(" \xC2\xB7 ") + labels.parameter, false, {}});
