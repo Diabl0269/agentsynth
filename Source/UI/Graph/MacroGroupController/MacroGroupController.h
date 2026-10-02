@@ -82,6 +82,7 @@ public:
         juce::String name;
         juce::Point<int> jackPos;           // card-local
         int row = 0;                        // index within its side, 0 = topmost
+        int visibleJack = -1;               // -1 = the whole port; 0/1 = the Left/Right row of a Stereo port
         juce::Rectangle<int> labelArea;     // card-local; where the name is painted when names are visible
         std::optional<juce::Colour> colour; // unset -> kind tint fallback
     };
@@ -327,6 +328,11 @@ public:
                                       MacroPortShape newShape, int newVoiceCount);
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
+    /** The port node's shape when it is a stereo pair (Stereo = two jacks, StereoCollapsed = one stereo jack), else
+     *  nullopt (a Mono/Poly/MIDI port, or no such node). */
+    std::optional<MacroPortShape> stereoPortShape(const juce::String& nodeUuid) const;
+    /** Splits a one-jack stereo port into Left/Right jacks, or joins them back: one undo step, both legs kept. */
+    void toggleStereoPortSplit(const juce::String& macroId, const juce::String& nodeUuid);
 
     /** Reused by GraphEditor::promptConfigureMacroIO (stays on GraphEditor — SafePointer-based
      *  async dialog), which calls this directly. */
@@ -411,6 +417,14 @@ public:
     /** Runs `mutation` with auto-ports applied; no undo of its own, call updateComponents() after. */
     bool applyProgrammaticConnectionChange(bool autoCreatePorts, const std::function<bool()>& mutation);
 
+    /** Moves the Channel Strip `stripUuid`'s Master-bound edges (both legs) behind ONE outlet of the strip's macro,
+     *  so a track's sound visibly leaves through the card's output port: a single stereo jack, or two jacks when
+     *  `splitJacks` (the "Split Left/Right jacks" preference). Sweeps a preset's captured one-sided outlet of the
+     *  strip first; sends and strip -> bus edges stay plain. No-op when the strip is in no macro. No undo of its
+     *  own: call inside the caller's undo transaction, before updateComponents()
+     *  (docs/macros/auto-ports.md#track-outputs). */
+    void routeStripOutputThroughMacroPort(const juce::String& stripUuid, bool splitJacks);
+
     // ---- General-purpose node-uuid plumbing --------------------------------------------------
     //
     // These two are general graph-uuid lookups, not macro-specific state — they happen to have
@@ -435,7 +449,8 @@ public:
     bool macroHasMuteEligibleMember(const juce::String& macroId) const;
 
 private:
-    void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh);
+    void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh,
+                                          MacroPortShape stereoShape = MacroPortShape::Stereo);
     GraphCanvasHost& host_;
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 

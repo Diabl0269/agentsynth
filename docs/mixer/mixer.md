@@ -75,6 +75,11 @@ Delete item is disabled, with the reason in its label; the AI patch "remove" lis
 the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap, one level
 upstream of it.
 
+**Master's jacks follow Dual I/O.** With Dual I/O off Master shows one **Mix** jack and one **Direct**
+jack (each a stereo pair on the same raw channels); with it on, four: Mix L, Mix R, Direct L, Direct R.
+A Master created by a track, a preset or "Make channel" follows the **Split Left/Right jacks** preference
+like every other new module; a project saved before this opens with the shape it was saved in (split).
+
 **Layouts.** A strip carries 5 raw channels a side: Left ch0, Right `kRightBase` = 4, ch1 to ch3
 reserved, with `gain` (dB), `pan` and `muted` as parameters and its shape plus solo flag in trusted
 extra state. It declares `kMaxSends` send slots on top of that — see
@@ -485,11 +490,21 @@ Strip, Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacro
 `{Track Audio, Gate, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
 (`GraphEditor::addMacroForMembers`).
 
-**Master stays OUTSIDE the macro, and the Strip to Master cable is left a plain graph edge,
-deliberately never a macro port.** `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as
-Mix or Direct by checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
-`MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet` and
-defeat that check, which the whole-project sweep below depends on.
+**Master stays OUTSIDE the macro, and the track's sound leaves the macro through ONE output port.**
+Core cannot create macro ports (they are UI-level), so `buildDefaultAudioChannel` builds Strip to
+Master Mix as two plain graph edges. The app then moves them behind the macro: after the macro exists,
+`GraphEditor::routeChannelOutputThroughMacroPort` (`MacroGroupController::routeStripOutputThroughMacroPort`)
+splices ONE outlet between the strip and Master, in the same undo step. By default it is a single
+stereo jack (`StereoCollapsed`: strip L and R in, Mix L and R out); with the **Split Left/Right jacks**
+preference on it is two jacks (`Stereo`). Only Master-bound edges move: a send, or a strip into a bus,
+stays a plain edge. `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as Mix or Direct by
+looking BACKWARD through macro ports to the real source (`synth::resolveSourceThroughPorts`), so a strip
+behind an outlet still lands on Mix, which the whole-project sweep below depends on. The same step runs
+for instrument and plugin-instrument tracks, for "Make channel" (the track's channel and each bus), for
+track and bus presets (a preset's own captured one-sided outlet is swept first, so there is exactly one),
+and for "Add bus" in the mixer. The port's right-click menu switches it between one jack and two
+("Split into Left/Right Jacks" / "Join into One Stereo Jack"); see
+[`docs/macros/ports.md`](../macros/ports.md#switching-a-stereo-port-between-one-jack-and-two).
 
 `buildDefaultAudioChannel` takes a trailing `sourceRightChannel` parameter (default 1, Track Audio's
 contiguous pair unchanged) so a split-block source passes its own

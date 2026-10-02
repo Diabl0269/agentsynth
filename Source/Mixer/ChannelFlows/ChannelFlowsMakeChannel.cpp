@@ -66,6 +66,22 @@ resolveThroughPorts(juce::AudioProcessorGraph& graph,
     return pin;
 }
 
+juce::AudioProcessorGraph::NodeAndChannel
+resolveSourceThroughPorts(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                          juce::AudioProcessorGraph::NodeAndChannel pin) {
+    using Connection = juce::AudioProcessorGraph::Connection;
+    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
+        const auto prev = std::find_if(connections.begin(), connections.end(), [&](const Connection& c) {
+            return c.destination.nodeID == pin.nodeID && c.destination.channelIndex == pin.channelIndex;
+        });
+        if (prev == connections.end())
+            break;
+        pin = prev->source;
+    }
+    return pin;
+}
+
 bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c) {

@@ -258,7 +258,7 @@ juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, sy
     // Master singleton, the same reason a snippet never captures Audio Output (SnippetManager's own
     // "self-contained" rule). Wire it now, exactly like buildChannelChain's own Strip->Master edges.
     if (stripNode != nullptr) {
-        auto* master = synth::spliceMasterNode(graph, dropPos);
+        auto* master = synth::spliceMasterNode(graph, dropPos, newModuleHook());
         if (master != nullptr) {
             graph.addConnection({{stripNode->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
             graph.addConnection(
@@ -284,6 +284,10 @@ juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, sy
     // (SnippetManager::insertSnippet's existing outMacros contract).
     for (auto& macro : outMacros)
         graphEditor.getMacros().add(macro);
+
+    // The strip's Master edges above are plain; move them behind the track macro's output port.
+    if (stripNode != nullptr)
+        graphEditor.routeChannelOutputThroughMacroPort(stripNode->properties["uuid"].toString());
 
     graphEditor.updateComponents();
     return trackName;
@@ -343,7 +347,7 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     if (auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor()))
         strip->setIsBus(true);
 
-    if (auto* master = synth::spliceMasterNode(graph, dropPos)) {
+    if (auto* master = synth::spliceMasterNode(graph, dropPos, newModuleHook())) {
         graph.addConnection({{stripNode->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
         graph.addConnection(
             {{stripNode->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}});
@@ -360,6 +364,7 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     // user-renamed before saving arrives with that name already on its captured macro; only a
     // preset whose macro came back nameless falls back to the numbered default.
     const juce::String stripUuid = stripNode->properties["uuid"].toString();
+    graphEditor.routeChannelOutputThroughMacroPort(stripUuid);
     const auto* nearestMacro = synth::nearestChannelMacro(graph, graphEditor.getMacros(), stripUuid);
     auto* insertedMacro = nearestMacro != nullptr ? graphEditor.getMacros().find(nearestMacro->id) : nullptr;
     juce::String busName = insertedMacro != nullptr ? insertedMacro->name : juce::String();

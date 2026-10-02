@@ -6,8 +6,9 @@
 //                 -> Channel Strip (Stereo) -> Master (Mix)
 //
 // with {Track Audio, Gate, EQ, Compressor, Strip} boxed into ONE collapsed macro named after the track.
-// Master stays OUTSIDE the macro and the Strip -> Master cable is a plain graph edge, never a macro
-// port — see MainComponent::addAudioTrack's own comment and Source/Mixer/ChannelFlows/ChannelFlows.h for why.
+// Master stays OUTSIDE the macro; Core builds the Strip -> Master cable as a plain graph edge and the app moves it
+// behind the macro's output port (ChannelFlowMacroOutputPortTests.cpp pins that) — see
+// MainComponent::addAudioTrack's own comment and Source/Mixer/ChannelFlows/ChannelFlows.h.
 //
 // Drives the flow through a real MainComponent via the same headless seam
 // AudioClipPlaybackTests.cpp's AddAudioTrackFlowTest uses (TimelinePanelComponent's
@@ -83,9 +84,7 @@ TEST_F(ChannelFlowTest, AudioTrackBuildsDefaultChannel) {
         << "the right leg must land on kRightBase (4)";
     EXPECT_FALSE(graph.isConnected({{comp->nodeID, 1}, {strip->nodeID, 1}})) << "never ch1 for the right leg";
 
-    EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
-    EXPECT_TRUE(graph.isConnected(
-        {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, strip, master));
 
     auto* output = findNodeNamedCFT(graph, "Audio Output");
     ASSERT_NE(output, nullptr);
@@ -154,6 +153,9 @@ TEST_F(ChannelFlowTest, ChannelIsOneCollapsedMacroNamedAfterTrack) {
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expected.push_back(
+        nodeUuid(outletsFedByStripCFT(graph, findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)).front()));
     auto actual = macro.members;
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());
@@ -217,9 +219,7 @@ TEST_F(ChannelFlowTest, SecondAudioTrackReusesMaster) {
         auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
         if (module == nullptr || module->getModuleType() != ModuleType::ChannelStrip)
             continue;
-        if (graph.isConnected({{node->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}) &&
-            graph.isConnected(
-                {{node->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}))
+        if (stripFeedsMasterMixCFT(graph, node, master))
             ++stripsIntoMix;
     }
     EXPECT_EQ(stripsIntoMix, 2) << "both strips must land on Mix";
@@ -252,9 +252,7 @@ TEST_F(ChannelFlowTest, AudioTrackOnFreshNewPatchGetsMaster) {
     ASSERT_NE(strip, nullptr);
     ASSERT_NE(master, nullptr) << "the first channel must splice Master immediately, not need a manual Audio Output";
 
-    EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
-    EXPECT_TRUE(graph.isConnected(
-        {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, strip, master));
 
     auto* output = findNodeNamedCFT(graph, "Audio Output");
     ASSERT_NE(output, nullptr);

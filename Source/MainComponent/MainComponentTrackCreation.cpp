@@ -100,12 +100,11 @@ void MainComponent::addAudioTrack() {
     // collapsed macro named after the track, plus the track/binding/colour exactly like
     // addMidiTrack()'s single compound step. A single Cmd+Z removes every bit of it.
     //
-    // Master stays OUTSIDE the macro, and the Strip -> Master cable is left a PLAIN graph edge, never
-    // a macro port: synth::spliceMasterNode/synth::ensureMasterNode (Source/Mixer/MasterSplice.h)
-    // classify a re-routed feed as Mix vs Direct by checking whether the connection's SOURCE NODE is
-    // itself a ChannelStripModule. A MacroOutlet sitting between the strip and Master would make the
-    // source node a MacroOutlet instead, defeating that check — which the later "Create channels"
-    // subtask depends on.
+    // Master stays OUTSIDE the macro. Core (buildDefaultAudioChannel) builds the Strip -> Master Mix cables as two
+    // PLAIN edges, because it cannot create macro ports; routeChannelOutputThroughMacroPort then moves them behind
+    // the macro's output port (one stereo jack, or two with the Split Left/Right jacks preference), so the track's
+    // sound visibly leaves through its own card. Master's Mix/Direct classification looks backward through macro
+    // ports (synth::resolveSourceThroughPorts), which is what keeps a strip behind an outlet on Mix.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
             // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
@@ -181,10 +180,12 @@ void MainComponent::addAudioTrack() {
             // GraphEditor::reflowOutputDock -- run by the updateComponents() / addMacroForMembers below.
 
             // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
-            // the track. Master is deliberately NOT a member — see this method's own comment above.
+            // the track. Master is deliberately NOT a member — see this method's own comment above — and the
+            // strip's Master-bound edges move behind the macro's output port right after.
             graphEditor.getMacroController().addMacroForMembers(
                 {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
                 trackName, trackAudioPosition);
+            graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
 
             // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
             // must see every node above still alive to keep the macro's membership.
@@ -200,10 +201,10 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     // -> instrument -> default chain (Gate bypassed -> Parametric EQ bypassed -> Compressor bypassed
     // -> Channel Strip Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of
     // addAudioTrack()'s step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
-    // into one collapsed macro named after the track; Master stays outside it for the same
-    // spliceMasterNode reason addAudioTrack's own
-    // comment explains. A single Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's
-    // own comment for the shared tail this delegates to (also used by addInstrumentPluginTrack).
+    // into one collapsed macro named after the track; Master stays outside it (a shared
+    // singleton) and the strip's Master edges move behind the macro's output port, as in addAudioTrack(). A single
+    // Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's own comment for the shared tail this delegates
+    // to (also used by addInstrumentPluginTrack).
     //
     // This is a TrackKind::Midi track — a Track In feeding exactly one instrument is already what
     // addMidiTrack() produces once a cable is drawn by hand; this flow just draws that cable and
@@ -450,9 +451,9 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
 
 // buildInstrumentTrackAndChain step 4/4: the default Gate/EQ/Compressor/Strip channel off
 // `chainSource`, boxed with everything built above into one collapsed macro named after the
-// track. Master is deliberately NOT a macro member — same spliceMasterNode reason addAudioTrack's
-// own comment explains. Returns false exactly where the original inline body would have returned
-// (a factory/addNode failure partway through the channel build).
+// track. Master is deliberately NOT a macro member (a shared singleton); the
+// strip's Master-bound edges move behind the macro's output port, as in addAudioTrack(). Returns false exactly where
+// the original inline body would have returned (a factory/addNode failure partway through the channel build).
 bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build) {
     // Lay every card of the expanded chain out left-to-right from the real card widths, the
     // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
@@ -480,8 +481,8 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
 
     // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
     // Wavetable], [ADSR+VCA if Oscillator/Wavetable], Gate, EQ, Compressor, Strip} into ONE
-    // collapsed macro named after the track. Master is deliberately NOT a member — same
-    // spliceMasterNode reason addAudioTrack's own comment explains.
+    // collapsed macro named after the track. Master is deliberately NOT a member (a shared
+    // singleton); the strip's Master edges then move behind the macro's output port, as in addAudioTrack().
     std::vector<juce::String> macroMembers{build.trackInUuid, build.instrumentUuid};
     if (!build.voiceMixerUuid.isEmpty())
         macroMembers.push_back(build.voiceMixerUuid);
@@ -496,6 +497,7 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     macroMembers.push_back(channel.compressorUuid);
     macroMembers.push_back(channel.stripUuid);
     graphEditor.getMacroController().addMacroForMembers(macroMembers, trackName, build.trackInPosition);
+    graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
     return true;
 }
 

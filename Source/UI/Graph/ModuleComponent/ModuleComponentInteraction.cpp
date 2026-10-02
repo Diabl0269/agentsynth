@@ -8,6 +8,7 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
+#include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -274,6 +275,12 @@ void ModuleComponent::updateDualIOTooltip() {
     if (dualIOButton == nullptr)
         return;
     const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
+    // Master's two stereo blocks (Mix and Direct) each fold into one jack, so its wording names them.
+    if (dynamic_cast<MasterModule*>(module) != nullptr) {
+        dualIOButton->setTooltip(dual ? "Dual I/O on - separate Left and Right jacks for Mix and Direct"
+                                      : "Dual I/O off - one Mix jack and one Direct jack (Left + Right)");
+        return;
+    }
     dualIOButton->setTooltip(dual ? "Dual I/O on - separate Left and Right jacks"
                                   : "Dual I/O off - one Audio jack (Left + Right)");
 }
@@ -318,6 +325,12 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         const juce::String uuid = ownership.port->nodeUuid;
         m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
         m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
+        // A stereo port switches between one stereo jack and two (Left/Right) jacks in one undo step; both legs stay
+        // wired on both sides of the port (MacroGroupController::changeMacroPortShape).
+        if (const auto shape = owner.getMacroController().stereoPortShape(uuid); shape.has_value()) {
+            m.addItem(*shape == MacroPortShape::Stereo ? "Join into One Stereo Jack" : "Split into Left/Right Jacks",
+                      [this, macroId, uuid] { owner.getMacroController().toggleStereoPortSplit(macroId, uuid); });
+        }
         m.addSeparator();
         // Drops the cable by default, splicing it back together only when the "splice the
         // cable back" preference is on — MacroGroupController::deleteMacroPortManually, the SAME

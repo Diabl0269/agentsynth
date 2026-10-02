@@ -112,7 +112,7 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
     // before deleting.
     if (hoveredPortUuid_.has_value()) {
         for (const auto& port : layout) {
-            if (port.nodeUuid != *hoveredPortUuid_)
+            if (port.nodeUuid != *hoveredPortUuid_ || port.visibleJack != hoveredPortJack_)
                 continue;
             const juce::Rectangle<float> dot((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
             g.setColour(themeColors.surface.withAlpha(0.9f));

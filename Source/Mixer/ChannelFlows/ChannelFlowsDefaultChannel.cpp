@@ -75,13 +75,12 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
 // Strip->Master edges are added: spliceMasterNode() re-routes whatever already feeds the audio
 // output, and nothing of this channel's own should be among that yet.
 //
-// The Strip->Master edge is a PLAIN graph edge, never boxed behind a macro port, on purpose:
-// spliceMasterNode()/ensureMasterNode() (Source/Mixer/MasterSplice.h) classify a re-routed feed as
-// Mix vs Direct by checking whether the connection's SOURCE NODE is itself a ChannelStripModule. A
-// MacroOutlet sitting between the strip and Master would make the source node a MacroOutlet instead,
-// defeating that check — which the later "Create channels" subtask depends on. (MainComponent::
-// addAudioTrack keeps Master OUTSIDE the macro it boxes this channel's other nodes into, for exactly
-// this reason.)
+// Core builds the Strip->Master edge as a PLAIN graph edge because it cannot create macro ports (ports are UI
+// level). The app then moves it behind the track macro's output port (MacroGroupController::
+// routeStripOutputThroughMacroPort), and spliceMasterNode()/ensureMasterNode() (Source/Mixer/MasterSplice.h)
+// classify a re-routed feed as Mix vs Direct by looking backward THROUGH macro ports
+// (resolveSourceThroughPorts), so a strip behind an outlet still lands on Mix. Master itself stays OUTSIDE the
+// macro MainComponent::addAudioTrack boxes this channel's other nodes into.
 //
 // NO UNDO's own reasoning: today's only caller is MainComponent::addAudioTrack, via
 // AppUndoManager::recordGraphTimelineAndMacroChange. Core cannot depend on AppUndoManager or

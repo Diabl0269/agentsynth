@@ -9,6 +9,9 @@
 #include "MacroGroupController.h"
 
 #include "MacroNesting.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
+#include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include <algorithm>
 #include <map>
@@ -57,8 +60,9 @@ bool isHiddenRawChannel(juce::AudioProcessorGraph& graph, const Group& group, in
  *  Channel Strip's L and R inputs, or a send's L and R outputs) into one two-jack Stereo group, so
  *  the pair enters through ONE port rather than two. The grouping-time merge pass only does this for
  *  Dual-I/O modules; a strip has no Dual-I/O switch but the same split-jack layout. Pairs only when
- *  both legs come from the same outside node, one edge each, lower raw channel as the left leg. */
-void mergeSplitStereoPairs(std::vector<Group>& groups) {
+ *  both legs come from the same outside node, one edge each, lower raw channel as the left leg.
+ *  `stereoShape` is the merged port's shape: Stereo (two jacks) or StereoCollapsed (one stereo jack). */
+void mergeSplitStereoPairs(std::vector<Group>& groups, MacroPortShape stereoShape) {
     for (size_t i = 0; i < groups.size(); ++i) {
         for (size_t j = i + 1; j < groups.size(); ++j) {
             const auto& a = groups[i];
@@ -73,13 +77,13 @@ void mergeSplitStereoPairs(std::vector<Group>& groups) {
             const size_t rightIndex = leftIndex == i ? j : i;
             auto rightEdge = groups[rightIndex].edges[0];
             auto& left = groups[leftIndex];
-            left.shape = MacroPortShape::Stereo;
+            left.shape = stereoShape;
             left.voiceCount = 1;
             left.edges[0].legIndex = 0;
             rightEdge.legIndex = 1;
             left.edges.push_back(rightEdge);
             groups.erase(groups.begin() + (long)rightIndex);
-            mergeSplitStereoPairs(groups); // indices shifted -- start over; each call removes one group
+            mergeSplitStereoPairs(groups, stereoShape); // indices shifted -- start over; each call removes one group
             return;
         }
     }
@@ -130,7 +134,7 @@ bool MacroGroupController::applyProgrammaticConnectionChange(bool autoCreatePort
 // existing port already enters properly (the drag path's "never mint a second port" rule). After
 // each splice the fresh set is re-read from the graph, so a send between two macros gets an outlet
 // on the source's macro and then an inlet on the target's, wired port to port, in either order.
-void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection> fresh) {
+void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection> fresh, MacroPortShape stereoShape) {
     auto& graph = host_.graph();
     // Innermost boundaries first: a cable into a child macro from outside its parent gets the child's port, then
     // the parent sees that port as the crossing and mints its own (a chain, external -> parent -> child -> member).
@@ -168,7 +172,7 @@ void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection>
             if (!group.edges.empty())
                 plan.push_back(std::move(group));
         }
-        mergeSplitStereoPairs(plan);
+        mergeSplitStereoPairs(plan, stereoShape);
         if (plan.empty() && dropped.empty())
             continue;
 
@@ -181,6 +185,49 @@ void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection>
             fresh.erase(gone);
         for (const auto& born : minus(afterSplice, beforeSplice))
             fresh.insert(born);
+    }
+}
+
+// A track's channel strip leaves its macro by ONE outlet. Core builds Strip -> Master Mix as two plain
+// edges (it cannot create ports); this is the app-level step that moves them behind the macro's output
+// port so the sound visibly exits the track card. A track preset can arrive with its own captured outlet
+// fed by the strip but nothing outside (a preset never captures Master), so those are swept first, or the
+// strip would end up feeding two ports. Only Master-bound edges move: a send or a strip -> bus edge stays
+// a plain edge, as does everything in a channel Core built before the macro existed.
+void MacroGroupController::routeStripOutputThroughMacroPort(const juce::String& stripUuid, bool splitJacks) {
+    auto& graph = host_.graph();
+    const auto stripId = resolveMemberNodeId(stripUuid);
+    if (stripId.uid == 0 || host_.getMacros().findByMember(stripUuid) == nullptr)
+        return;
+
+    std::vector<NodeID> capturedPorts;
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == stripId && nodeIsMacroPort(c.destination.nodeID))
+            capturedPorts.push_back(c.destination.nodeID);
+    sweepOneSidedMacroPorts(capturedPorts, /*ignorePreference=*/true);
+
+    std::set<Connection> toMaster;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != stripId || c.source.isMIDI() || c.destination.isMIDI())
+            continue;
+        auto* dest = graph.getNodeForId(c.destination.nodeID);
+        if (dest != nullptr && dynamic_cast<MasterModule*>(dest->getProcessor()) != nullptr)
+            toMaster.insert(c);
+    }
+    if (toMaster.empty())
+        return;
+
+    const auto* macroBefore = host_.getMacros().findByMember(stripUuid);
+    const auto macroId = macroBefore->id;
+    const auto portCount = macroBefore->ports.size();
+    routeFreshEdgesThroughMacroPorts(toMaster, splitJacks ? MacroPortShape::Stereo : MacroPortShape::StereoCollapsed);
+    // The crossing plan names a port after the jack it fronts ("Channel Strip Left"), which reads badly on a
+    // stereo output that carries both legs: use the plain default name instead.
+    if (auto* macro = host_.getMacros().find(macroId); macro != nullptr && macro->ports.size() > portCount) {
+        for (size_t i = portCount; i < macro->ports.size(); ++i)
+            if (!macro->ports[i].isInput && macro->ports[i].kind == synth::MacroPortKind::AudioCV)
+                macro->ports[i].name = defaultMacroPortName(false, synth::MacroPortKind::AudioCV);
+        makeRoomFor("m:" + macroId);
     }
 }
 
@@ -237,4 +284,28 @@ void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidate
         }
         candidates.insert(candidates.end(), neighbours.begin(), neighbours.end());
     }
+}
+
+std::optional<MacroPortShape> MacroGroupController::stereoPortShape(const juce::String& nodeUuid) const {
+    auto* node = host_.graph().getNodeForId(resolveMemberNodeId(nodeUuid));
+    auto* processor = node != nullptr ? node->getProcessor() : nullptr;
+    std::optional<MacroPortShape> shape;
+    if (auto* inlet = dynamic_cast<MacroInletModule*>(processor))
+        shape = inlet->getPortShape();
+    else if (auto* outlet = dynamic_cast<MacroOutletModule*>(processor))
+        shape = outlet->getPortShape();
+    if (shape == MacroPortShape::Stereo || shape == MacroPortShape::StereoCollapsed)
+        return shape;
+    return std::nullopt;
+}
+
+// The single/split switch a track's output port offers (its own right-click and the macro card's): Stereo and
+// StereoCollapsed carry the same two legs, and changeMacroPortShape remaps the right leg so neither side loses it.
+void MacroGroupController::toggleStereoPortSplit(const juce::String& macroId, const juce::String& nodeUuid) {
+    const auto shape = stereoPortShape(nodeUuid);
+    if (!shape.has_value())
+        return;
+    changeMacroPortShape(macroId, nodeUuid,
+                         *shape == MacroPortShape::Stereo ? MacroPortShape::StereoCollapsed : MacroPortShape::Stereo,
+                         1);
 }

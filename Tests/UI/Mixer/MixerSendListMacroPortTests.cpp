@@ -103,6 +103,10 @@ struct MacroSendRig {
         return counts;
     }
 
+    /** Outlets on `member`'s macro that carry a send: every track also has the one output port its sound leaves
+     *  through into Master, which is not counted here. */
+    int sendOutletsOn(NodeID member) { return portsOn(member).outlets - 1; }
+
     /** Clicks "+ Send" through the real mouse path and picks the item naming strip `target`. */
     bool addSendThroughMenu(NodeID target) {
         const auto label = synth::sendTargetName(graph(), &editor().getMacros(), target);
@@ -156,7 +160,7 @@ TEST(MixerSendListMacroPortTests, ASendIntoAChannelMacroEntersThroughAPortAndUnd
     ASSERT_TRUE(rig.addSendThroughMenu(bass));
     EXPECT_EQ(rig.mc->getUndoManager().getEditSerial(), serialBefore + 1) << "send + ports are one undo step";
 
-    EXPECT_EQ(rig.portsOn(kick).outlets, 1) << "the send leaves the kick's macro through an outlet";
+    EXPECT_EQ(rig.sendOutletsOn(kick), 1) << "the send leaves the kick's macro through an outlet";
     EXPECT_EQ(rig.portsOn(bass).inlets, 1) << "and enters the bass's macro through ONE inlet for both legs";
 
     // Left leg: kick send L -> Macro Out -> Macro In -> bass In L. Right leg lands on bass kRightBase.
@@ -182,7 +186,7 @@ TEST(MixerSendListMacroPortTests, ASendIntoAChannelMacroEntersThroughAPortAndUnd
     ASSERT_TRUE(rig.mc->getUndoManager().undo());
     rig.refresh();
     EXPECT_EQ(rig.sends().getRowCountForTest(), 0) << "undo removes the send";
-    EXPECT_EQ(rig.portsOn(rig.strip(0)).outlets, 0) << "and the outlet it created";
+    EXPECT_EQ(rig.sendOutletsOn(rig.strip(0)), 0) << "and the outlet it created";
     EXPECT_EQ(rig.portsOn(rig.strip(1)).inlets, 0) << "and the inlet it created";
 }
 
@@ -196,7 +200,7 @@ TEST(MixerSendListMacroPortTests, WithThePreferenceOffASendWiresStraightIntoTheS
     EXPECT_TRUE(rig.graph().isConnected({{kick, ChannelStripModule::sendLeftChannel(0)}, {bass, 0}}));
     EXPECT_TRUE(rig.graph().isConnected(
         {{kick, ChannelStripModule::sendRightChannel(0)}, {bass, ChannelStripModule::kRightBase}}));
-    EXPECT_EQ(rig.portsOn(kick).outlets, 0);
+    EXPECT_EQ(rig.sendOutletsOn(kick), 0);
     EXPECT_EQ(rig.portsOn(bass).inlets, 0);
 }
 
@@ -210,13 +214,13 @@ TEST(MixerSendListMacroPortTests, RemovingASendRemovesThePortsItMadeAndUndoResto
     rig.refresh();
     EXPECT_EQ(rig.mc->getUndoManager().getEditSerial(), serialBefore + 1);
     EXPECT_EQ(rig.sends().getRowCountForTest(), 0);
-    EXPECT_EQ(rig.portsOn(rig.strip(0)).outlets, 0) << "nothing else used the outlet";
+    EXPECT_EQ(rig.sendOutletsOn(rig.strip(0)), 0) << "nothing else used the outlet";
     EXPECT_EQ(rig.portsOn(rig.strip(1)).inlets, 0) << "nothing else used the inlet";
 
     ASSERT_TRUE(rig.mc->getUndoManager().undo());
     rig.refresh();
     EXPECT_EQ(rig.sends().getRowCountForTest(), 1);
-    EXPECT_EQ(rig.portsOn(rig.strip(0)).outlets, 1);
+    EXPECT_EQ(rig.sendOutletsOn(rig.strip(0)), 1);
     EXPECT_EQ(rig.portsOn(rig.strip(1)).inlets, 1);
     EXPECT_EQ(synth::findSendTarget(rig.graph(), rig.strip(0), 0), rig.strip(1));
 }
@@ -230,20 +234,20 @@ TEST(MixerSendListMacroPortTests, RetargetingASendMovesItsInletToTheNewTarget) {
     EXPECT_EQ(synth::findSendTarget(rig.graph(), rig.strip(0), 0), rig.strip(2));
     EXPECT_EQ(rig.portsOn(rig.strip(1)).inlets, 0) << "the old target's inlet carried only this send";
     EXPECT_EQ(rig.portsOn(rig.strip(2)).inlets, 1) << "the new target gets its own inlet";
-    EXPECT_EQ(rig.portsOn(rig.strip(0)).outlets, 1) << "the source keeps exactly one outlet for the send";
+    EXPECT_EQ(rig.sendOutletsOn(rig.strip(0)), 1) << "the source keeps exactly one outlet for the send";
 }
 
 TEST(MixerSendListMacroPortTests, ReorderingSendsNeverMintsAPort) {
     MacroSendRig rig(3);
     ASSERT_TRUE(rig.addSendThroughMenu(rig.strip(1)));
     ASSERT_TRUE(rig.addSendThroughMenu(rig.strip(2)));
-    ASSERT_EQ(rig.portsOn(rig.strip(0)).outlets, 2);
+    ASSERT_EQ(rig.sendOutletsOn(rig.strip(0)), 2);
 
     rig.sends().moveRow(0, 1);
     rig.refresh();
     EXPECT_EQ(synth::findSendTarget(rig.graph(), rig.strip(0), 0), rig.strip(2));
     EXPECT_EQ(synth::findSendTarget(rig.graph(), rig.strip(0), 1), rig.strip(1));
-    EXPECT_EQ(rig.portsOn(rig.strip(0)).outlets, 2);
+    EXPECT_EQ(rig.sendOutletsOn(rig.strip(0)), 2);
     EXPECT_EQ(rig.portsOn(rig.strip(1)).inlets, 1);
     EXPECT_EQ(rig.portsOn(rig.strip(2)).inlets, 1);
 }

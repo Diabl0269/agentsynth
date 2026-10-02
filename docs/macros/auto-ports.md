@@ -128,10 +128,24 @@ retroactively distort.
 the same group-time pass (`buildMacroPortCrossingPlan` before `macros.add`, then
 `spliceMacroPorts`), always creating ports regardless of the preference above — a shared module
 reaching into the channel is exactly what a port is for — with ONE filter: **a group whose internal
-node is the new Channel Strip and whose direction is outward is dropped**, so Strip to Master (and
-Strip to a merge point's bus) stays a plain edge that `spliceMasterNode`'s Mix-versus-Direct
-classification can see. The plan builders themselves are unchanged. See
+node is the new Channel Strip and whose direction is outward is dropped** from the group-time plan, so Strip
+to a merge point's bus stays a plain edge. Strip to Master is routed separately, right after the splice
+(see [Track outputs](#track-outputs)). The plan builders themselves are unchanged. See
 [`docs/mixer/mixer.md`](../mixer/mixer.md#make-channel-and-shared-modules).
+
+## Track outputs
+
+A channel strip's output leaves its track macro through ONE auto-created outlet instead of two plain edges
+across the collapsed card. `MacroGroupController::routeStripOutputThroughMacroPort(stripUuid, splitJacks)`
+runs inside the caller's undo transaction after the macro exists and before `updateComponents()`: it
+sweeps a preset's captured one-sided outlet of that strip (`sweepOneSidedMacroPorts`, ignoring the
+auto-delete preference), collects the strip's connections into a Master (both legs: ch0 and
+`ChannelStripModule::kRightBase`), and hands them to `routeFreshEdgesThroughMacroPorts` with a stereo shape.
+The shape is **`StereoCollapsed` by default** (one stereo jack: a single cable carries both legs, raw
+channels 0 and 1) and **`Stereo` when the Split Left/Right jacks preference is on** (two jacks, raw 0 and
+`kRightBase`). The outlet is named "Output" (the default port name). A send or a strip-to-bus edge is never moved. The jack count can be changed afterwards from the
+port's right-click menu
+([`docs/macros/ports.md`](ports.md#switching-a-stereo-port-between-one-jack-and-two)).
 
 ## A modulation cable through an attenuverter
 
@@ -519,8 +533,9 @@ Compressor. Solo, stems and bus detection walk the same edges.
 | Mixer send add / retarget / remove (`MixerSendList`) | Yes | A user action in the mixer that draws a cable across a boundary. |
 | Timeline MIDI destinations picker / routing pane (`MainComponent::setMidiDestinationConnected`) | Yes | A user action that draws (or removes) a Track In cable to a destination that may sit in a macro; removal takes the last leg onto the target. |
 | Mixer send reorder (`swapSends` / `moveSendRow`) | No-op | Only the source channel moves; the destination port is kept. |
-| Master splice, Make channel's strip-to-Master | No | Deliberately a plain edge: `spliceMasterNode`'s Mix-versus-Direct classification reads it (see above). |
-| Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after. |
+| Master splice | No | Core re-routes feeds into Master; it never makes ports. |
+| A channel strip's Master-bound edges (`routeStripOutputThroughMacroPort`: track, instrument, Make channel, presets, Add bus) | Yes | Moved behind ONE outlet of the strip's macro, `StereoCollapsed` by default, `Stereo` with the Split Left/Right jacks preference. |
+| Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after, then the strip's Master edges are routed through its port (row above). |
 | Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
 | `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
 | `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |

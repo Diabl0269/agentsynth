@@ -125,6 +125,7 @@ add_executable(Tests
     Mixer/SidechainKeyGraphTests.cpp
     Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
+    Mixer/MasterDualIOTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
@@ -132,6 +133,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowCreateChannelsTests.cpp
     Mixer/ChannelFlow/ChannelFlowMakeChannelCoreTests.cpp
     Mixer/ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
+    Mixer/ChannelFlow/ChannelFlowMacroOutputPortTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp
     Mixer/TrackPreset/TrackPresetTests.cpp

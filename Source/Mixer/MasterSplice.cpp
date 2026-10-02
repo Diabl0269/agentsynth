@@ -5,6 +5,7 @@
 #include "../Modules/ChannelStripModule.h"
 #include "../Modules/MasterModule.h"
 #include "../Modules/RecordTapModule.h"
+#include "ChannelFlows/ChannelFlows.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <vector>
 
@@ -64,7 +65,9 @@ juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph& graph, juce::Aud
     return {};
 }
 
-juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position) {
+juce::AudioProcessorGraph::Node*
+spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule) {
     if (auto* existing = findMasterNode(graph))
         return existing;
 
@@ -86,6 +89,8 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
     auto processor = AIStateMapper::createModule("Master");
     if (processor == nullptr)
         return nullptr;
+    if (onNewModule)
+        onNewModule(*processor, "Master"); // before addNode, like ChannelFlowsInternal.h's addChainNode
     auto node = graph.addNode(std::move(processor));
     if (node == nullptr)
         return nullptr;
@@ -111,8 +116,13 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
             continue;
         intoTarget.push_back(connection);
     }
+    // The connection list is snapshotted BEFORE the loop mutates the graph: Mix vs Direct looks
+    // backward through macro ports (a track's strip leaves its macro by an outlet), and that walk
+    // must see the cables as they were.
+    const auto snapshot = graph.getConnections();
     for (const auto& connection : intoTarget) {
-        auto* source = graph.getNodeForId(connection.source.nodeID);
+        const auto sourcePin = resolveSourceThroughPorts(graph, snapshot, connection.source);
+        auto* source = graph.getNodeForId(sourcePin.nodeID);
         const bool fromStrip =
             source != nullptr && dynamic_cast<ChannelStripModule*>(source->getProcessor()) != nullptr;
         const int channel = connection.destination.channelIndex;
@@ -126,13 +136,15 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
     return created;
 }
 
-juce::AudioProcessorGraph::Node* ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                                  TimelineDoc& doc, juce::Point<int> position) {
+juce::AudioProcessorGraph::Node*
+ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, TimelineDoc& doc,
+                 juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule) {
     if (auto* existing = findMasterNode(graph))
         return existing;
 
     juce::AudioProcessorGraph::Node* created = nullptr;
-    undoManager.recordCombinedChange(graph, doc, [&] { created = spliceMasterNode(graph, position); });
+    undoManager.recordCombinedChange(graph, doc, [&] { created = spliceMasterNode(graph, position, onNewModule); });
     return created;
 }
 

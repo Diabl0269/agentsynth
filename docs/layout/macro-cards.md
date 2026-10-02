@@ -193,7 +193,8 @@ elsewhere), so the preview echoes what expanding would show.
 
 **The card carries a port strip on each side.** Ports lay out on 16 px rows from y = 30, one row per
 port, so names never overlap; the card is 280 px wide and grows taller than its 90 px floor when a side
-has more than three ports (`30 + rows * 16 + 22`). The height is derived from the port count every time
+has more than three rows (`30 + rows * 16 + 22`); a two-jack Stereo port shows two rows ("name L" and
+"name R"), a one-jack stereo port one. The height is derived from the port count every time
 the cards sync (`GraphEditor::syncMacroCards`) and never persisted — `Macro::bounds` keeps whatever
 height it was saved with. Each strip has a FIXED width, equal on both sides and reserved even with no ports
 (`kMacroCardStripWidth` = 18 px jack inset + 62 px name column + 8 px padding = 88 px, so two strips leave

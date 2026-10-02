@@ -158,9 +158,7 @@ TEST_F(ChannelFlowTest, CreateChannelsLeavesAlreadyChanneledTracksUntouched) {
     // Master exactly as before.
     EXPECT_EQ(graph.getNodeForId(existingStrip->nodeID), existingStrip);
     EXPECT_EQ(nodeUuid(existingStrip), existingStripUuid);
-    EXPECT_TRUE(graph.isConnected({{existingStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
-    EXPECT_TRUE(graph.isConnected(
-        {{existingStrip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, existingStrip, master));
 
     // The legacy track's own feed must have been re-routed through its NEW strip.
     EXPECT_FALSE(graph.isConnected({{legacyNode->nodeID, 0}, {output->nodeID, 0}}));

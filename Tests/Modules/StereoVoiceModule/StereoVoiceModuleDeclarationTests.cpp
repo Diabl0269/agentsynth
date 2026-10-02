@@ -30,13 +30,15 @@ const std::vector<std::pair<juce::String, const char*>> kDualIOOptOuts = {
                    "two unrelated CV jacks per side, and no audio output at all"},
     {"Rec Tap", "a hidden recording tap: its two channels are the take's capture pair, wired by the "
                 "record flow rather than patched, and it has no card to put a jack toggle on"},
-    {"Master", "the mix bus: its four inputs are two stereo BLOCKS (Mix L/R and Direct L/R), not an FX "
-               "pair plus CV, so a collapsed 'Audio' jack over ch0/ch1 would misdescribe it"},
 };
 
 // Modules that declare a second audio leg the shape rule cannot see (their own kRightBase block, or
 // a ch0/ch1 pair alongside further outputs). Each passes StereoAudio::Declared and ships SPLIT.
-const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable", "Filter", "VCA", "Sampler"};
+//
+// Master is Declared too (inputs only): its four inputs are two stereo BLOCKS (Mix L/R, Direct L/R),
+// so the inherited Auto rule (collapsed by default, one "Audio" jack) would misdescribe it. Declared
+// ships SPLIT, which is its long-standing four-jack look; collapsed shows "Mix" and "Direct".
+const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable", "Filter", "VCA", "Sampler", "Master"};
 
 bool containsName(const std::vector<juce::String>& v, const juce::String& s) {
     return std::find(v.begin(), v.end(), s) != v.end();

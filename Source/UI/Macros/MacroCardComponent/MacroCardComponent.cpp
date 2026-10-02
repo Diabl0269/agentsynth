@@ -313,8 +313,10 @@ void MacroCardComponent::mouseMove(const juce::MouseEvent& e) {
     const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
     const std::optional<juce::String> newHover =
         hit.has_value() ? std::optional<juce::String>(hit->nodeUuid) : std::nullopt;
-    if (newHover != hoveredPortUuid_) {
+    const int newJack = hit.has_value() ? hit->visibleJack : -1;
+    if (newHover != hoveredPortUuid_ || newJack != hoveredPortJack_) {
         hoveredPortUuid_ = newHover;
+        hoveredPortJack_ = newJack;
         repaint();
     }
 }
@@ -409,7 +411,7 @@ juce::String MacroCardComponent::getTooltip() {
     // While names are faded by zoom, or ellipsised, the tooltip carries the hovered port's full name.
     if (hoveredPortUuid_.has_value())
         for (const auto& port : owner.getMacroController().macroCardPortLayout(macroId))
-            if (port.nodeUuid == *hoveredPortUuid_) {
+            if (port.nodeUuid == *hoveredPortUuid_ && port.visibleJack == hoveredPortJack_) {
                 if (portNameAlpha() < 1.0f || portNameIsTruncated(port.name))
                     return port.name;
                 break;

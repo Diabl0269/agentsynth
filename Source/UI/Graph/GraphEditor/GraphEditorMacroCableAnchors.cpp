@@ -8,6 +8,7 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "Modules/MacroOutletModule.h"
 
 #include <cmath>
 #include <limits>
@@ -92,7 +93,9 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
     // nodeID.uid -> that node's own jack position, CARD-LOCAL, only for nodes that are a port of
     // the card's own macro (macroCardPortLayout already excludes an interior member with no
     // MacroPort entry, so absence from this map IS the "ordinary member" case above).
-    std::unordered_map<uint32_t, juce::Point<int>> portJackLocalForNode;
+    // A two-row Stereo port also records each row under (uid, visible jack): key = uid * 4 + 1 + visibleJack.
+    std::unordered_map<uint64_t, juce::Point<int>> portJackLocalForNode;
+    auto jackKey = [](uint32_t uid, int visibleJack) { return (uint64_t)uid * 4u + (uint64_t)(visibleJack + 1); };
     for (const auto& macro : macros.getAll()) {
         if (!macro.collapsed || !macros.isVisible(macro.id))
             continue; // expanded, or hidden under a collapsed ancestor whose card stands in for it
@@ -104,11 +107,19 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
         for (const auto& port : macroController_.macroCardPortLayout(macro.id)) {
             auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
             if (nodeId.uid != 0)
-                portJackLocalForNode[nodeId.uid] = port.jackPos;
+                portJackLocalForNode[jackKey(nodeId.uid, port.visibleJack)] = port.jackPos;
         }
     }
     if (collapsedMacroForNode.empty())
         return;
+
+    // CableId ports are RAW channels: a Stereo port's Right jack is raw kRightBase, its Left raw 0. Prefer the
+    // row for that jack, falling back to the whole-port entry (every non-Stereo port).
+    auto findPortJack = [&](uint32_t uid, int rawChannel) {
+        const int jack = rawChannel == MacroOutletModule::kRightBase ? 1 : 0;
+        auto it = portJackLocalForNode.find(jackKey(uid, jack));
+        return it != portJackLocalForNode.end() ? it : portJackLocalForNode.find(jackKey(uid, -1));
+    };
 
     std::vector<VisibleCable> filtered;
     filtered.reserve(cables.size());
@@ -125,7 +136,7 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
         const auto originalP2 = cable.p2;
         if (srcHidden) {
             const auto cardBounds = macroController_.macroCableAnchorBounds(*srcIt->second);
-            auto jackIt = portJackLocalForNode.find(cable.id.srcUid);
+            auto jackIt = findPortJack(cable.id.srcUid, cable.id.srcPort);
             // Macro is the SOURCE -> signal LEAVES it -> anchor on the RIGHT edge.
             cable.p1 = jackIt != portJackLocalForNode.end()
                            ? (cardBounds.getPosition() + jackIt->second).toFloat()
@@ -133,7 +144,7 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
         }
         if (dstHidden) {
             const auto cardBounds = macroController_.macroCableAnchorBounds(*dstIt->second);
-            auto jackIt = portJackLocalForNode.find(cable.id.dstUid);
+            auto jackIt = findPortJack(cable.id.dstUid, cable.id.dstPort);
             // Macro is the DESTINATION -> signal ENTERS it -> anchor on the LEFT edge.
             cable.p2 = jackIt != portJackLocalForNode.end()
                            ? (cardBounds.getPosition() + jackIt->second).toFloat()

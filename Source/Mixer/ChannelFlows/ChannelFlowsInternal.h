@@ -155,10 +155,10 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     // re-routes whatever already feeds the audio output, and nothing of this channel's own should be
     // among that yet (see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment on the
     // ordering).
-    auto* master = sink.toMaster ? spliceMasterNode(graph, layout.master) : findMasterNode(graph);
+    auto* master = sink.toMaster ? spliceMasterNode(graph, layout.master, layout.onNewModule) : findMasterNode(graph);
     if (master != nullptr && sink.toMaster) {
-        // A PLAIN graph edge, never a macro port — see ChannelFlowsDefaultChannel.cpp's
-        // buildDefaultAudioChannel comment for why.
+        // A PLAIN graph edge here; a macro port in front of it is fine too, since spliceMasterNode
+        // looks through ports (resolveSourceThroughPorts). See ChannelFlowsDefaultChannel.cpp.
         graph.addConnection({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
         graph.addConnection(
             {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}});

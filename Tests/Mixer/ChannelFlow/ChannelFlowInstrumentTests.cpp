@@ -320,6 +320,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expected.push_back(
+        nodeUuid(outletsFedByStripCFT(graph, findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)).front()));
     auto actual = macro.members;
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());
@@ -354,6 +357,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expected.push_back(
+        nodeUuid(outletsFedByStripCFT(graph, findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)).front()));
     auto actual = macro.members;
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());
