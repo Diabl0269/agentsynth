@@ -236,6 +236,13 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
     // F mirrors the transport strip's follow-playhead button, panel-scoped like J/L/P.
     bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
+    // Holding Cmd+Left / Cmd+Right glides the cursor (TimelinePanelComponent). Nothing else binds an arrow with
+    // Cmd: the timeline's own arrows are bare (clips) or Alt (move clip), the grid cycle is Ctrl+Shift, and the
+    // category-scoped conflict check sees no other Timeline binding on these chords.
+    bindings["timelineGlideBack"] =
+        juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
+    bindings["timelineGlideForward"] =
+        juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
     // Cubase's tool row (see synth::ui::EditTool for why 6 and 9 stay unclaimed). Bare
     // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
     // below — and modifier equality is exact, so Ctrl+Shift+1 can never match a bare 1.

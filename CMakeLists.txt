@@ -343,6 +343,7 @@ add_library(Core STATIC
     Source/Transport/TransportService.cpp
     Source/Transport/MarkerJump.h
     Source/Transport/TransportNudge.h
+    Source/Transport/CursorGlide.h
     Source/Transport/TransportDoc.h
     Source/Transport/TransportService.h
     # Timeline

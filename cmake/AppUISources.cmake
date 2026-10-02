@@ -58,6 +58,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelCursorGlide.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
@@ -81,6 +82,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
+    Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h
+    Source/UI/Timeline/CursorGlide/TimelineCursorGlide.cpp
     Source/UI/Timeline/TrackChannelLinkController.h
     Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h

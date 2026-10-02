@@ -435,6 +435,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
 | 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)) |
+| Cmd+Left / Cmd+Right (hold) | Glide the cursor back / forward, accelerating while held, settling to the grid on release when snap is on (`timelineGlideBack` / `timelineGlideForward`) — [`timeline/transport.md`](../timeline/transport.md#gliding-the-cursor). A tap moves one grid step (one beat with snap off). Neither chord was bound before: the other Timeline arrows are bare or Alt, the grid cycle is Ctrl+Shift |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 

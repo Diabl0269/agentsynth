@@ -59,6 +59,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineToggleLoop",
         "timelineLoopSelection",
         "timelineFollowPlayheadToggle",
+        "timelineGlideBack",
+        "timelineGlideForward",
         "timelineToolSelect",
         "timelineToolRange",
         "timelineToolSplit",

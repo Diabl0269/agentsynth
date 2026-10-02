@@ -35,6 +35,8 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    // The cursor glide accumulates with the cursor nudge actions through one shared state.
+    timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
