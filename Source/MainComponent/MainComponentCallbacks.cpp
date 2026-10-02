@@ -11,6 +11,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <cmath>
@@ -712,7 +713,7 @@ void MainComponent::promptExportAudio() {
     // own comment) — not juce::DialogWindow's default, which cannot tell the two pages apart and
     // would silently orphan a running render.
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
     exportDialog_ = dialog;
 
     dialog->onRequestClose = [window] {
@@ -792,7 +793,7 @@ void MainComponent::promptExportStems() {
     options.useNativeTitleBar = true;
     options.resizable = false;
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
     exportDialog_ = dialog;
 
     dialog->onRequestClose = [window] {

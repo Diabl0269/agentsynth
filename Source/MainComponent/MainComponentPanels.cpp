@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "WhatsNewData.h"
@@ -172,6 +173,7 @@ void MainComponent::promptSaveSnippet() {
     // the desktop in its constructor, so it is visible without any extra call).
     juce::Component::SafePointer<MainComponent> safeThis(this);
 
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)
@@ -268,6 +270,7 @@ void MainComponent::promptRepeatSelection() {
     // exactly; see its comment for why the dialog can outlive this component.
     juce::Component::SafePointer<MainComponent> safeThis(this);
 
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)

@@ -16,6 +16,7 @@
 // the process.
 #include "ControllersListComponent.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/PopupMotion.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -174,6 +175,7 @@ void beginRename(ControllersListComponent& self, const juce::String& profileId, 
     window->addTextEditor("name", currentName, "Controller name:");
     window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([window, onChoice](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result == 1)

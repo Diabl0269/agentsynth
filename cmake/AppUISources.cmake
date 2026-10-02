@@ -208,8 +208,6 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
-    Source/UI/Layout/ReducedMotion.h
-    Source/UI/Layout/ReducedMotion.cpp
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/SidePane/SidePane.h

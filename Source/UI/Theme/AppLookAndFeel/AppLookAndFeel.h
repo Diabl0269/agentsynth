@@ -74,6 +74,15 @@ public:
     juce::Font getComboBoxFont(juce::ComboBox&) override;
     // Narrowest width at which every item's text shows unclipped, for any look-and-feel.
     static int comboBoxWidthToFitItems(juce::ComboBox&);
+    // Popup motion (AppLookAndFeelWindowMotion.cpp): every popup menu / dropdown window,
+    // alert box and call-out is handed to synth::ui::PopupMotion as JUCE builds it, so each fades
+    // and slides in and out. See docs/layout/animation.md, "Popup windows".
+    void preparePopupMenuWindow(juce::Component&) override;
+    juce::AlertWindow* createAlertWindow(const juce::String& title, const juce::String& message,
+                                         const juce::String& button1, const juce::String& button2,
+                                         const juce::String& button3, juce::MessageBoxIconType iconType, int numButtons,
+                                         juce::Component* associatedComponent) override;
+    int getCallOutBoxBorderSize(const juce::CallOutBox&) override;
     void drawPopupMenuBackground(juce::Graphics&, int width, int height) override;
     void drawPopupMenuItem(juce::Graphics&, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
                            bool isHighlighted, bool isTicked, bool hasSubMenu, const juce::String& text,
