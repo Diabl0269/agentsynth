@@ -246,22 +246,27 @@ member out of a group drag is ambiguous, in both which macro and which dragged m
 of scope — but an ordinary single-module drag can have the modifier pressed or released mid-gesture
 and see the candidate highlight arm or clear immediately.
 
-**The painted hull for the macro a drag is pulling a member OUT of shrinks away from that member
-immediately, not only once LEAVE actually arms.** `macroHullBounds()` is a live union, so painting it
-directly for the module's own about-to-be-left macro made the outline chase the module as it was
-dragged out — pulling a member toward the edge of a two-member macro looked like it was growing the
-hull to stay around it, making "remove from macro" look impossible. `GraphEditor` tracks
-`macroDragDraggedNodeId_`, set and cleared by the exact same
-`updateMacroDragCandidate`/`clearMacroDragCandidate` calls as the two candidate ids (one lifetime,
-not three) and set FIRST, unconditionally, before the candidate itself is computed — so the shrink
-starts on the very first tick, before any LEAVE candidate has armed.
-`GraphEditor::paintedMacroHullBounds(macroId)` is what `paintExpandedMacroHulls` calls instead of
-`macroHullBounds` directly: it returns `macroHullBoundsExcluding` for the macro the dragged module
-currently belongs to, and the ordinary live `macroHullBounds` for every other macro, including one
-the drag might JOIN (a transfer's target is by construction a DIFFERENT macro from the one being
-left, so the dragged module contributes nothing to its hull). **Hit-testing
-(`macroHullAt`, used by click-to-select and the hull's right-click menu) is unaffected and keeps
-using `macroHullBounds` — this substitution is paint-only.**
+**A macro keeps the border it had at press, and still counts the dragged member as inside, until
+that member's centre leaves that border.** `macroHullBounds()` is a live union of member cards, so a
+member on the macro's edge defines that edge: tested or painted live, the border would collapse on the
+first tick and the member would count as outside at once, and a member pulled toward the edge would
+make the hull chase it. At press (`ModuleComponent::mouseDown`, armed or not, since Cmd can arm the
+drag mid-gesture) `GraphEditor::beginMacroDragFreeze`
+snapshots the live hull, dragged card included, of the member's own macro and every ancestor into
+`MacroGroupController` (`freezeHullsForDrag`); `clearMacroDragCandidate` drops it. While it is held,
+`macroDragJoinOrLeaveTarget` tests the LEAVE against the frozen border (falling back to
+`macroHullBoundsExcluding` when no drag holds one, e.g. a plain query). Membership still changes only
+on drop.
+
+`GraphEditor::paintedMacroHullBounds(macroId)` is the one painted border: the frozen rect for the
+member's own macro and ancestors while `macroDragLeaveId_` is empty (staying), `macroHullBoundsExcluding`
+once a LEAVE is armed (the hull lets go of the member), and the ordinary live hull for every other macro,
+including one the drag might JOIN (its hull holds none of the dragged module). The dashed outline, the
+input/output strips and their '+'/'-' footers (`paintMacroPortStrips`) and, through
+`MacroGroupController::setPaintedHullProvider`, the name chip, the collapse button and the hull hit tests
+(`macroHullAt`, `macroHullPortButtonAt`) all read it, so none of them stretches to the dragged card. Port
+widgets are laid out from the live hull and are not re-docked per tick, so while a LEAVE is armed they stay
+where they were on the old border.
 
 **The Windows and Linux arbitration happens at `mouseUp`, and only decides WHICH of the two gestures
 a reparent-armed drag ends up as, never WHETHER one can fire** — that is `reparentArmed`'s job,
@@ -390,9 +395,9 @@ editing commands below handle nesting. A patch with no nesting behaves exactly a
   leaves entirely, as before. A macro left with no direct members and no children dissolves.
 - **Cmd drag** (see [the hull border section](#cmd-drag-across-a-hull-border)): the join candidate is the
   deepest expanded hull under the dragged module's centre, skipping the macro being left; each ancestor
-  of that macro is tested through `macroHullBoundsExcluding`, so a parent's hull no longer follows the
-  module (its live union would otherwise contain it forever) and the painted hull of every ancestor
-  shrinks away from it. Dragging a child's member into the parent's own space is a transfer (leave the
+  of that macro is tested against its border frozen at press (`macroHullBoundsExcluding` without one), so
+  a parent's hull no longer follows the module (its live union would otherwise contain it forever) and
+  the painted hull of every ancestor lets go of it once a leave is armed. Dragging a child's member into the parent's own space is a transfer (leave the
   child, join the parent); dragging it out of the parent as well leaves every level in one gesture;
   dragging a parent's member into a child's hull joins the child. The finalize walks the module up one
   level at a time, each step planning its own port splices, all in one undo step.

@@ -201,6 +201,16 @@ public:
     // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
+    /** Reparent-drag border freeze: snapshots the live hull of `draggedNodeId`'s macro and ancestors. */
+    void freezeHullsForDrag(juce::AudioProcessorGraph::NodeID draggedNodeId);
+    void clearFrozenDragHulls();
+    bool hasFrozenDragHulls() const;
+    /** The frozen hull of `macroId`, empty when none is held. */
+    juce::Rectangle<int> frozenDragHull(const juce::String& macroId) const;
+    /** Rect source for the chip, collapse button, '+'/'-' and hull hit tests; unset means the live hull. */
+    void setPaintedHullProvider(std::function<juce::Rectangle<int>(const juce::String&)> provider) {
+        paintedHullProvider_ = std::move(provider);
+    }
 
     // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
 
@@ -428,6 +438,11 @@ private:
     void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh);
     GraphCanvasHost& host_;
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
+
+    juce::Rectangle<int> paintedHullBounds(const juce::String& macroId) const;
+    std::function<juce::Rectangle<int>(const juce::String&)> paintedHullProvider_;
+    std::map<juce::String, juce::Rectangle<int>> frozenDragHulls_;
+    juce::AudioProcessorGraph::NodeID frozenDragNode_;
 
     // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
     // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push

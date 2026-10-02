@@ -104,41 +104,107 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2b. Bug fix (in-app report): the PAINTED hull for the macro a member is being dragged OUT OF
-//    must shrink away from it immediately, using macroHullBoundsExcluding — not the live union
-//    macroHullBounds(), which keeps inflating around the dragged member and visually chases it,
-//    making "remove from macro" look impossible. Only the macro being LEFT is affected; a macro
-//    the drag might JOIN instead keeps its ordinary live hull (nothing to exclude — the dragged
-//    module isn't yet a member of it).
+// 2b. While a member is dragged, its macro keeps the border it had at press and still counts the
+//    member as inside until the member's centre leaves that border; only then does the painted
+//    hull let go of it (macroHullBoundsExcluding). A macro the drag might JOIN instead keeps its
+//    ordinary live hull (the dragged module isn't yet a member of it).
 // ---------------------------------------------------------------------------------------------
 
-TEST(MacroDragMembership, PaintedHullOfOwnMacroExcludesDraggedMemberFromTheFirstTick) {
+// A is the macro's top member, so it defines the hull's top edge: the live union moves the moment A does.
+TEST(MacroDragMembership, SmallDragOfAnEdgeMemberKeepsThePressTimeBorderAndMembership) {
+    for (const auto mods : {kPlainClick, kCmdClick}) {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        auto* compA = findComponent(editor, a);
+        ASSERT_NE(compA, nullptr);
+
+        const auto hullAtPress = editor.getMacroController().macroHullBounds(macroId);
+        ASSERT_FALSE(hullAtPress.isEmpty());
+        ASSERT_NE(hullAtPress, editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a)))
+            << "sanity: A shapes the hull, so excluding it would change the border";
+
+        editor.setSelectedNodes({a}); // a plain press on a selected module would drag the whole selection
+        dragBodyBy(*compA, {20, 15}, mods, [&] {
+            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), hullAtPress)
+                << "the border stays where it was at press while A is still inside it";
+            EXPECT_TRUE(editor.getMacroDragLeaveId().isEmpty()) << "A has not left the border, so no LEAVE is armed";
+            EXPECT_EQ(editor.getMacroController().macroChipBounds(macroId).getX(), hullAtPress.getX() + 8)
+                << "the chip follows the painted border too";
+        });
+
+        EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr) << "dropped inside: still a member";
+    }
+}
+
+TEST(MacroDragMembership, DraggingAnEdgeMemberPastTheFrozenBorderReleasesIt) {
+    for (const auto mods : {kPlainClick, kCmdClick}) {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(2400, 1200);
+
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        auto* compA = findComponent(editor, a);
+        ASSERT_NE(compA, nullptr);
+        const auto excludingA = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
+
+        editor.setSelectedNodes({a});
+        dragBodyBy(*compA, {900, 0}, mods, [&] {
+            EXPECT_EQ(editor.getMacroDragLeaveId(), macroId);
+            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), excludingA)
+                << "once A's centre is past the frozen border the hull paints without A";
+        });
+
+        EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "dropped outside: A left the macro";
+    }
+}
+
+// The input/output side strips are painted from the painted border, so they stay with the macro instead of
+// stretching to follow the member being pulled out.
+TEST(MacroDragMembership, SideStripsDoNotFollowAMemberDraggedOutOfTheMacro) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    editor.setSize(1600, 1200);
+    editor.setSize(2400, 1200);
 
     NodeID a, b;
     const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
-
     auto* compA = findComponent(editor, a);
     ASSERT_NE(compA, nullptr);
+    auto& content = *compA->getParentComponent();
+    const auto outW = editor.getMacroController().macroHullStripWidths(macroId).second;
+    const auto excluding = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
 
-    // B is the macro's only OTHER member, so excluding A leaves exactly B's own padded hull — a
-    // fixed rectangle that does not move as A is dragged, which is what makes this assertable
-    // without duplicating the union math here.
-    const auto expectedExcludingA = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
-    ASSERT_FALSE(expectedExcludingA.isEmpty());
+    // Dots of the drag grid sit every 40px; step off them so a pixel read is the strip or the bare canvas.
+    const auto clearOfGrid = [](juce::Point<int> p) {
+        return juce::Point<int>(p.x - p.x % 40 + 20, p.y - p.y % 40 + 20);
+    };
 
-    // A small drag, nowhere near leaving the excluding hull — proves the shrink happens on the
-    // FIRST tick of the gesture, not only once a LEAVE candidate actually arms (the bug the user
-    // hit: the live union kept including A for the whole first stretch of the pull-out).
-    dragBodyBy(*compA, {20, 15}, kCmdClick, [&] {
-        EXPECT_FALSE(editor.hasMacroDragCandidate())
-            << "sanity: this small a drag must not arm any LEAVE/JOIN candidate yet";
-        EXPECT_EQ(editor.paintedMacroHullBounds(macroId), expectedExcludingA)
-            << "the macro A is being dragged OUT of must already paint as the excluding hull, "
-               "before any candidate is armed";
+    editor.setSelectedNodes({a});
+    dragBodyBy(*compA, {900, 0}, kPlainClick, [&] {
+        const auto live = editor.getMacroController().macroHullBounds(macroId);
+        ASSERT_GT(live.getRight(), excluding.getRight() + 400) << "sanity: the live hull chases A";
+        // Software image: a native-backed image reads back zeros on a headless Windows runner.
+        juce::Image img(juce::Image::ARGB, live.getRight() + 60, live.getBottom() + 60, true,
+                        juce::SoftwareImageType());
+        {
+            juce::Graphics g(img);
+            content.paintEntireComponent(g, false);
+        }
+        const auto canvas = img.getPixelAt(clearOfGrid({live.getRight() + 20, live.getY() + 12}).x,
+                                           clearOfGrid({live.getRight() + 20, live.getY() + 12}).y);
+        const auto stripOfExcluding = clearOfGrid({excluding.getRight() - outW + 12, excluding.getY() + 12});
+        const auto stripOfLive = clearOfGrid({live.getRight() - outW + 12, live.getY() + 12});
+        EXPECT_NE(img.getPixelAt(stripOfExcluding.x, stripOfExcluding.y), canvas)
+            << "the strip is still painted along the macro's own border";
+        EXPECT_EQ(img.getPixelAt(stripOfLive.x, stripOfLive.y), canvas)
+            << "no strip is painted out where the dragged member is";
     });
 }
 

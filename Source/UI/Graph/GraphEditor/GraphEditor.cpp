@@ -23,6 +23,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     addAndMakeVisible(content);
     addAndMakeVisible(modMatrix);
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
+    macroController_.setPaintedHullProvider([this](const juce::String& id) { return paintedMacroHullBounds(id); });
 
     // Minimap (issue #159): visibility is driven by setMinimapVisible(), called by the owner once
     // it has restored the persisted preference — NOT addAndMakeVisible, which would show it before
