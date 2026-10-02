@@ -697,6 +697,9 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
             dragStartPosition = getPosition();
             bodyDragActive = true;
+            // The macro borders as they are at press, before the card moves; kept even when reparent is not
+            // armed yet, since Cmd can arm it mid-drag.
+            owner.beginMacroDragFreeze(nodeId);
             if (undoManager)
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
@@ -817,7 +820,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         if (reparentArmed)
             owner.updateMacroDragCandidate(nodeId, getBounds().getCentre());
         else
-            owner.clearMacroDragCandidate();
+            owner.clearMacroDragCandidate(/*keepFrozenBorders=*/true);
 
         if (auto* p = getParentComponent())
             p->repaint();

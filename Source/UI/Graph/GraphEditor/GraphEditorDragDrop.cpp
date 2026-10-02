@@ -415,12 +415,13 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
 void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId,
                                            juce::Point<int> canvasCentre) {
     // Set unconditionally, BEFORE the candidate early-return below, so paintedMacroHullBounds
-    // already excludes the dragged module from its own macro's hull from the very first tick of the
-    // drag — not only once the drag actually crosses into LEAVE-candidate territory. That first
-    // stretch (still inside the excluding hull, no candidate yet) is exactly the phase where a live
-    // union would otherwise keep inflating around the module being pulled out.
+    // holds the dragged module's macro borders from the very first tick of the drag, not only once
+    // the drag crosses into LEAVE-candidate territory.
     const bool nodeChanged = draggedNodeId != macroDragDraggedNodeId_;
     macroDragDraggedNodeId_ = draggedNodeId;
+    // A drag with no press-time snapshot (the module was never pressed through ModuleComponent) freezes now.
+    if (!macroController_.hasFrozenDragHulls())
+        macroController_.freezeHullsForDrag(draggedNodeId);
 
     const auto targets = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
     if (targets.leave == macroDragLeaveId_ && targets.join == macroDragJoinId_ && !nodeChanged)
@@ -430,9 +431,16 @@ void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID dra
     repaintCanvas();
 }
 
-void GraphEditor::clearMacroDragCandidate() {
+void GraphEditor::beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId) {
+    macroController_.freezeHullsForDrag(draggedNodeId);
+}
+
+void GraphEditor::clearMacroDragCandidate(bool keepFrozenBorders) {
     const bool nodeWasSet = macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{};
-    if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet)
+    const bool froze = !keepFrozenBorders && macroController_.hasFrozenDragHulls();
+    if (!keepFrozenBorders)
+        macroController_.clearFrozenDragHulls();
+    if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet && !froze)
         return;
     macroDragLeaveId_.clear();
     macroDragJoinId_.clear();
@@ -440,20 +448,22 @@ void GraphEditor::clearMacroDragCandidate() {
     repaintCanvas();
 }
 
-// macroHullBounds(macroId), except while a reparent drag is pulling one of macroId's OWN members
-// out: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away from the
-// module instead of the live union chasing it. Paint-only. The macro the dragged module is
-// CURRENTLY a member of (the one a LEAVE would remove it from) gets the excluding hull, and so does
-// each of its ancestors (their live hulls union the child's, so they would chase the module too). A macro it
-// might JOIN is by construction not its current macro (a transfer joins a DIFFERENT one, per
-// macroDragJoinOrLeaveTarget), so the dragged module contributes nothing to that hull and it keeps
-// its live bounds.
+// The border painted for macroId (and read by its chip, buttons and strips). Normally the live
+// hull. While a reparent drag moves one of macroId's OWN members (macroId is that member's macro
+// or one of its ancestors) the live union would chase the dragged card, so instead: the border
+// frozen at press while the drag is still staying inside (macroDragLeaveId_ empty), and the hull
+// without that member once a LEAVE is armed, so the macro visibly lets go of it. A macro the drag
+// might JOIN holds none of the dragged module, so it keeps its live bounds. Without a frozen
+// snapshot (a drag that never went through a press) the excluding hull is painted from the first tick.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
         const auto ancestors = ownMacro != nullptr ? macros.ancestorChain(ownMacro->id) : std::vector<juce::String>();
         if (ownMacro != nullptr &&
             (ownMacro->id == macroId || std::find(ancestors.begin(), ancestors.end(), macroId) != ancestors.end())) {
+            if (macroDragLeaveId_.isEmpty())
+                if (const auto frozen = macroController_.frozenDragHull(macroId); !frozen.isEmpty())
+                    return frozen;
             const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }

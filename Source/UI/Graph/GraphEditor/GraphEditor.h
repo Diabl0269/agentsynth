@@ -219,7 +219,10 @@ public:
     /** The module a reparent drag is currently moving, invalid between gestures. */
     juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
     void updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId, juce::Point<int> canvasCentre);
-    void clearMacroDragCandidate();
+    void clearMacroDragCandidate(bool keepFrozenBorders = false);
+    /** Freezes the borders of the module's macro and ancestors for a reparent drag; cleared by clearMacroDragCandidate.
+     */
+    void beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId);
     /** Paint-only hull bounds (hit-testing keeps using macroHullBounds). */
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
     /** Single-undo-step finalize (position + leave + join). `module` must not be touched afterwards. */

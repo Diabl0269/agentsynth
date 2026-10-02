@@ -196,6 +196,45 @@ juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::
     return computeMacroHullBounds(host_, *macro, excludedMemberUuid);
 }
 
+// The border a reparent drag treats as "the macro" while it runs: the live hull of the dragged
+// node's own macro and of every ancestor, snapshotted INCLUDING the dragged card and held until
+// clearFrozenDragHulls. The live union would collapse the moment an edge member started moving (it
+// defines that edge), so the member would count as outside on the first tick; the snapshot keeps
+// the border where it was at press, and the member only leaves once its centre leaves it.
+void MacroGroupController::freezeHullsForDrag(juce::AudioProcessorGraph::NodeID draggedNodeId) {
+    frozenDragHulls_.clear();
+    frozenDragNode_ = draggedNodeId;
+    const auto& macros = host_.getMacros();
+    const auto* own = macros.findByMember(nodeUuidFor(draggedNodeId));
+    if (own == nullptr)
+        return;
+    auto chain = macros.ancestorChain(own->id);
+    chain.push_back(own->id);
+    for (const auto& id : chain)
+        if (const auto hull = macroHullBounds(id); !hull.isEmpty())
+            frozenDragHulls_[id] = hull;
+}
+
+void MacroGroupController::clearFrozenDragHulls() {
+    frozenDragHulls_.clear();
+    frozenDragNode_ = {};
+}
+
+bool MacroGroupController::hasFrozenDragHulls() const { return !frozenDragHulls_.empty(); }
+
+juce::Rectangle<int> MacroGroupController::frozenDragHull(const juce::String& macroId) const {
+    const auto it = frozenDragHulls_.find(macroId);
+    return it != frozenDragHulls_.end() ? it->second : juce::Rectangle<int>();
+}
+
+// The rect chip / collapse / '+' '-' buttons and hull hit tests read: the live hull, unless the
+// editor installed a provider (GraphEditor::paintedMacroHullBounds) that holds the border still
+// during a reparent drag. Port widgets are NOT re-docked per tick, so while the border is
+// shrinking away from a member being pulled out the widgets stay on the frozen border.
+juce::Rectangle<int> MacroGroupController::paintedHullBounds(const juce::String& macroId) const {
+    return paintedHullProvider_ ? paintedHullProvider_(macroId) : macroHullBounds(macroId);
+}
+
 namespace {
 // The shared body of macroHullAt / macroChipAt / macroCollapseButtonAt: of the macros whose
 // `boundsOf` rect contains the point, the DEEPEST wins (a nested child's rect always lies inside its
@@ -227,7 +266,8 @@ juce::String deepestMacroAt(const synth::MacroSet& macros, juce::Point<int> canv
 //
 // LEAVE test: the plain hull is a LIVE union of member bounds, so the member being dragged OUT
 // keeps inflating its own macro's hull and would never test as outside it. The test is therefore
-// against macroHullBoundsExcluding(current, uuid). An EMPTY excluding hull (the dragged node is
+// against the border frozen at press (freezeHullsForDrag) while a drag holds one, else against
+// macroHullBoundsExcluding(current, uuid). An EMPTY excluding hull (the dragged node is
 // the macro's only ordinary member, so there is nothing left to union) also means "staying": with
 // no remaining body to leave, the gesture is a plain move.
 //
@@ -257,7 +297,16 @@ MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::Node
     const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
     if (hullExcludingSelf.isEmpty())
         return {};
-    const bool stillInside = hullExcludingSelf.contains(canvasCentre);
+    // Against the border frozen at press when this node's drag has one (see freezeHullsForDrag);
+    // otherwise the excluding hull, e.g. a query with no drag behind it.
+    const bool haveFrozen = frozenDragNode_ == draggedNodeId && !frozenDragHulls_.empty();
+    const auto borderOf = [&](const juce::String& id) {
+        if (haveFrozen)
+            if (const auto frozen = frozenDragHull(id); !frozen.isEmpty())
+                return frozen;
+        return macroHullBoundsExcluding(id, uuid);
+    };
+    const bool stillInside = borderOf(currentMacro->id).contains(canvasCentre);
 
     const auto ancestors = macros.ancestorChain(currentMacro->id);
     const auto isAncestor = [&ancestors](const juce::String& id) {
@@ -271,7 +320,7 @@ MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::Node
             if (std::find(chain.begin(), chain.end(), currentMacro->id) == chain.end())
                 return juce::Rectangle<int>(); // only macros nested below the current one
         }
-        return isAncestor(macro.id) ? macroHullBoundsExcluding(macro.id, uuid) : macroHullBounds(macro.id);
+        return isAncestor(macro.id) ? borderOf(macro.id) : macroHullBounds(macro.id);
     });
     if (stillInside && join.isEmpty())
         return {};
@@ -289,12 +338,12 @@ juce::String MacroGroupController::macroHullAtExcluding(juce::Point<int> canvasP
     return deepestMacroAt(host_.getMacros(), canvasPos, [&](const synth::Macro& macro) {
         if (excludedMacroId.isNotEmpty() && macro.id == excludedMacroId)
             return juce::Rectangle<int>();
-        return macroHullBounds(macro.id);
+        return paintedHullBounds(macro.id);
     });
 }
 
 juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& macroId) const {
-    const auto hull = macroHullBounds(macroId);
+    const auto hull = paintedHullBounds(macroId);
     if (hull.isEmpty())
         return {};
 
@@ -323,7 +372,7 @@ constexpr int kMacroCollapseButtonMargin = 6;
 } // namespace
 
 juce::Rectangle<int> MacroGroupController::macroCollapseButtonBounds(const juce::String& macroId) const {
-    const auto hull = macroHullBounds(macroId);
+    const auto hull = paintedHullBounds(macroId);
     if (hull.isEmpty())
         return {};
 
@@ -427,7 +476,7 @@ std::pair<int, int> MacroGroupController::macroHullStripWidths(const juce::Strin
 }
 
 juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const {
-    const auto hull = macroHullBounds(macroId);
+    const auto hull = paintedHullBounds(macroId);
     if (hull.isEmpty())
         return {};
     const int size = (int)kMacroPortFooterButtonSize;
@@ -439,7 +488,7 @@ juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::
 juce::Rectangle<int> MacroGroupController::macroHullRemoveButtonBounds(const juce::String& macroId, bool isInput,
                                                                        float zoom) const {
     const auto* macro = host_.getMacros().find(macroId);
-    const auto hull = macroHullBounds(macroId);
+    const auto hull = paintedHullBounds(macroId);
     if (macro == nullptr || hull.isEmpty() || !macroPortRemoveClickableAtZoom(zoom))
         return {};
     const bool hasPort = std::any_of(macro->ports.begin(), macro->ports.end(),

@@ -168,7 +168,12 @@ TEST(MacroNestedDrag, DraggingAChildsMemberIntoTheParentsSpaceTransfersItUpOneLe
     auto* comp = findComponent(f.editor, f.c1);
     ASSERT_NE(comp, nullptr);
 
-    dragBodyBy(*comp, deltaTo(*comp, kParentOnlySpace), kCmdClick, [&] {
+    // The child keeps the border it had at press (c1's own card included) until c1's centre leaves it, so the
+    // target is just below that border, still inside the parent.
+    const auto childAtPress = f.ctl().macroHullBounds(f.childId);
+    const juce::Point<int> belowChild{childAtPress.getCentreX(), childAtPress.getBottom() + 40};
+    ASSERT_TRUE(f.ctl().macroHullBounds(f.parentId).contains(belowChild)) << "sanity: still inside the parent";
+    dragBodyBy(*comp, deltaTo(*comp, belowChild), kCmdClick, [&] {
         EXPECT_EQ(f.editor.getMacroDragLeaveId(), f.childId);
         EXPECT_EQ(f.editor.getMacroDragJoinId(), f.parentId);
     });

@@ -4,8 +4,9 @@
 // (under the name pill and collapse button, which paint after it) to the hull's bottom, with the '+' (and '-') at its
 // foot. Drawn from GraphContentComponent::paint just before the dashed hull outline, so the port widgets and the
 // members (child components) sit on top of it and the outline draws over the strip's outer edge. Geometry comes only
-// from MacroGroupController (macroHullBounds / macroHullStripWidths / the button bounds), the same source the port
-// dock and the hit-testing read (docs/macros/ports.md#how-a-port-is-drawn).
+// from the painted hull (GraphEditor::paintedMacroHullBounds, so a drag holds the border still), MacroGroupController's
+// macroHullStripWidths and the button bounds, the same source the port dock and the hit-testing read
+// (docs/macros/ports.md#how-a-port-is-drawn).
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
@@ -29,7 +30,7 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     // Parents first, so a nested child's strips paint over its parent's interior.
     for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
         const auto& macro = *macroPtr;
-        const auto hull = controller.macroHullBounds(macro.id);
+        const auto hull = editor.paintedMacroHullBounds(macro.id);
         if (hull.isEmpty())
             continue;
 
