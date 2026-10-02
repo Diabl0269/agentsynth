@@ -648,7 +648,9 @@ void GraphEditor::armMacroCrossingAnimation(const std::vector<VisibleCable>& cab
 // A cable dropped across a macro boundary has no earlier self to slide from, so each cable it created that
 // ends on a minted port emerges from the drop point instead (MacroCrossingAnimator::armSlideFrom).
 void GraphEditor::armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint) {
-    const auto isPort = [this](uint32_t uid) { return macroController_.nodeIsMacroPort(NodeID{uid}); };
+    const auto isPort = [this](uint32_t uid) {
+        return macroController_.nodeIsMacroPort(juce::AudioProcessorGraph::NodeID{uid});
+    };
     if (macroCrossingAnim_.armSlideFrom(cablesBeforeDrop, rebuildVisibleCables(), dropPoint, isPort)) {
         cablesCacheValid = false; // the memo was built before the slide existed
         startMacroCrossingDriver();
