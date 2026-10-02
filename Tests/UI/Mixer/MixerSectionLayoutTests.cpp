@@ -39,50 +39,19 @@ TEST(MixerSectionLayoutTest, HeightsSnapToWholeRowsWithinOneAndTheMaximumRowCoun
 TEST(MixerSectionLayoutTest, WithRoomEverySectionGetsItsHeightAndTheFaderTakesTheRest) {
     Layout layout;
     const auto g = layout.resolve(600);
-    EXPECT_EQ(g.sectionTop[at(MixerSection::Inserts)], 40) << "under the 24 px header and 14 px source line";
+    EXPECT_EQ(g.sectionTop[at(MixerSection::Inserts)], 26) << "directly under the 24 px header";
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 90);
-    EXPECT_EQ(g.dividerTop[at(MixerSection::Inserts)], 130);
-    EXPECT_EQ(g.sectionTop[at(MixerSection::Sends)], 136);
+    EXPECT_EQ(g.dividerTop[at(MixerSection::Inserts)], 116);
+    EXPECT_EQ(g.sectionTop[at(MixerSection::Sends)], 122);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Sends)], 60);
-    EXPECT_EQ(g.sectionTop[at(MixerSection::Eq)], 202);
+    EXPECT_EQ(g.sectionTop[at(MixerSection::Eq)], 188);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Eq)], 28);
-    EXPECT_EQ(g.panTop, 236);
+    EXPECT_EQ(g.panTop, 222);
     EXPECT_EQ(g.panHeight, 28);
-    EXPECT_EQ(g.readoutTop, 264);
-    EXPECT_EQ(g.faderTop, 276);
+    EXPECT_EQ(g.readoutTop, 250);
+    EXPECT_EQ(g.faderTop, 262);
     EXPECT_EQ(g.msTop, 600 - 2 - 20);
     EXPECT_EQ(g.faderHeight, g.msTop - g.faderTop);
-}
-
-TEST(MixerSectionLayoutTest, WithoutASourceLineTheRowIsZeroPixelsAndEverythingBelowMovesUp) {
-    Layout layout;
-    const auto with = layout.resolve(600);
-    EXPECT_EQ(with.sourceLineTop, 26);
-    EXPECT_EQ(with.sourceLineHeight, 14);
-
-    EXPECT_TRUE(layout.setSourceLineVisible(false));
-    EXPECT_FALSE(layout.setSourceLineVisible(false)) << "no change, no notification";
-    const auto without = layout.resolve(600);
-    EXPECT_EQ(without.sourceLineHeight, 0);
-    EXPECT_EQ(without.sectionTop[at(MixerSection::Inserts)], with.sectionTop[at(MixerSection::Inserts)] - 14);
-    EXPECT_EQ(without.faderTop, with.faderTop - 14);
-    EXPECT_EQ(without.msTop, with.msTop) << "the M/S row stays on the column's bottom edge";
-    EXPECT_EQ(without.faderHeight, with.faderHeight + 14) << "the fader takes the row back";
-}
-
-TEST(MixerSectionLayoutTest, TheSourceLineVisibilityChangesTheRequiredHeightAndNotifiesOnlyWhenAsked) {
-    Layout layout;
-    const int with = layout.requiredColumnHeight();
-    int notified = 0;
-    layout.onGeometryChanged = [&notified] { ++notified; };
-
-    layout.setSourceLineVisible(false, /*notify=*/false);
-    EXPECT_EQ(notified, 0);
-    EXPECT_EQ(layout.requiredColumnHeight(), with - Layout::kSourceLineHeight);
-    EXPECT_FALSE(layout.isSourceLineVisible());
-    layout.setSourceLineVisible(true);
-    EXPECT_EQ(notified, 1);
-    EXPECT_EQ(layout.requiredColumnHeight(), with);
 }
 
 // Regression test for FRO298: at the bottom dock's default column height the fader must keep its
@@ -93,14 +62,14 @@ TEST(MixerSectionLayoutTest, AShortColumnGivesWayEqThenSendsThenInsertsAndTheFad
     EXPECT_EQ(g.faderHeight, Layout::kMinFaderHeight);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Eq)], 0);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Sends)], 0);
-    EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 22);
+    EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 36);
     EXPECT_EQ(g.panHeight, Layout::kPanHeight) << "the pan knob gives way only after every section";
 }
 
 TEST(MixerSectionLayoutTest, RequiredColumnHeightFitsEverySectionWithTheFaderAtItsMinimum) {
     Layout layout;
     const int required = layout.requiredColumnHeight();
-    EXPECT_EQ(required, 354);
+    EXPECT_EQ(required, 340);
     const auto g = layout.resolve(required);
     EXPECT_EQ(g.faderHeight, Layout::kMinFaderHeight);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 90);

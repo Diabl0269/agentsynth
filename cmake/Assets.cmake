@@ -79,6 +79,9 @@ juce_add_binary_data(Assets SOURCES
     # The Range edit tool (EditTool::Range), appended after the other tool glyphs. BinaryData
     # symbol: toolrange_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/tool-range.svg
+    # The mixer header's "plays into this channel" badge (arrow into a bracket). BinaryData symbol:
+    # mixersources_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-sources.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

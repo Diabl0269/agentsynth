@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/TrackColour.h"
@@ -22,6 +23,9 @@
 // Keyboard: Tab visits the colour sliders, the hex field, the add-to-favourites star and each
 // favourite swatch (Space or Return applies it); Escape puts the colour back to what it was when
 // the popup opened and closes the popup.
+//
+// In a juce::CallOutBox the popup eases in (CalloutReveal.h: a 160 ms fade and a short slide out of the element that
+// opened it; at once under the OS's reduced-motion setting).
 //
 // Favourites persist across sessions via a caller-owned juce::PropertiesFile (nullptr means
 // "in-memory only for this popup instance", which is what keeps this class usable from a headless
@@ -156,6 +160,8 @@ public:
         });
     }
 
+    void parentHierarchyChanged() override { reveal_.startIfInCallout(); }
+
     void resized() override {
         auto bounds = getLocalBounds();
         selector_.setBounds(bounds.removeFromTop(bounds.getHeight() - kFavouritesAreaHeight));
@@ -177,6 +183,7 @@ public:
     }
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
+    CalloutReveal& getRevealForTest() noexcept { return reveal_; }
     juce::Colour getCurrentColourForTest() const { return lastColour_; }
     // dontSendNotification + a direct preview call, NOT sendNotificationSync: with sliders shown,
     // ColourSelector's sync path re-enters itself from the FIRST slider's callback and rebuilds
@@ -366,6 +373,8 @@ private:
     juce::Colour lastColour_;
     juce::Colour initial_; // what the popup opened with: Escape restores it
     bool committed_ = false;
+
+    CalloutReveal reveal_{*this};
 
     juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders |
                                    juce::ColourSelector::showColourspace};

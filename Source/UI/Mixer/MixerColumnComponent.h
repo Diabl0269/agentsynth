@@ -9,7 +9,6 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"
-#include "MixerSourceLine.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -28,7 +27,7 @@ class ModuleBase;
 class ChannelStripModule;
 
 // MixerColumnComponent.h (docs/mixer/panel.md#what-the-mixer-shows): one ChannelStrip's column --
-// header, source line, insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
+// header (colour dot, name, sources badge), insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
 // the tracks-feeding row. A background click (not on a control) selects the strip's macro on the
 // canvas (docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects its macro").
 namespace synth::ui {
@@ -54,18 +53,19 @@ public:
                    GraphEditor& graphEditor, AudioEngine& audioEngine,
                    synth::MeterReader meterReader = synth::MeterReader::Mixer);
 
-    /** `sourceLine`: the feeding tracks' names, comma-joined (computed by the caller, which holds
-     *  the TimelineDoc -- Core's MixerColumn only carries TrackIds). */
-    void setColumn(const synth::MixerColumn& column, const juce::String& sourceLine);
+    /** `sources`: the feeding tracks' names, comma-joined (computed by the caller, which holds the TimelineDoc --
+     *  Core's MixerColumn only carries TrackIds); they feed the header's sources badge. */
+    void setColumn(const synth::MixerColumn& column, const juce::String& sources);
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
-    /** True when the line under the header has something to say (a source that differs from the channel's name). */
-    bool hasSourceLine() const noexcept { return showsSourceLine_; }
+    /** The strip's stable uuid -- what the panel re-finds a column by across a rebuild. */
+    juce::String getUuid() const { return uuid_; }
+    /** True when the header shows a sources badge (a source that differs from the channel's name). */
+    bool hasSources() const noexcept { return showsSources_; }
 
     /** Test seam: the header this column owns -- a test drives its inline rename through
      *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
-    MixerSourceLine& getSourceLineLabelForTest() noexcept { return sourceLineLabel_; }
 
     /** Unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
      *  currently reference, and clears this column's own raw pointers into the graph -- called by
@@ -263,6 +263,11 @@ public:
      *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
     void setHeaderColour(juce::Colour colour) { header_.setColour(colour); }
 
+    /** Whether the header's dot opens a colour picker; false leaves it a plain swatch. */
+    void setColourEditable(bool editable) { header_.setColourEditable(editable); }
+    /** Fires when the dot is clicked or activated from the keyboard, with its screen bounds. */
+    std::function<void(juce::Rectangle<int>)> onColourPickRequested;
+
     /** Makes the header a drag handle for reordering this column (see MixerColumnHeader::ReorderHooks);
      *  a column that never calls it stays fixed. */
     void setReorderHooks(MixerColumnHeader::ReorderHooks hooks);
@@ -342,8 +347,7 @@ private:
 
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
-    juce::String sourceLine_;
-    bool showsSourceLine_ = false;
+    bool showsSources_ = false;
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
@@ -354,7 +358,6 @@ private:
     juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
-    MixerSourceLine sourceLineLabel_;
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;

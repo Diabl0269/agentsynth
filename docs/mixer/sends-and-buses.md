@@ -196,6 +196,18 @@ of transition in this codebase.
 **Every branch writes every send channel** — the reserved `5..7` and all of `8..15` are cleared
 unconditionally up front — or a stale block from the previous callback leaks into a bus.
 
+### Bypassing a send
+
+**A send can be bypassed on its own.** Like mute, the bypass is non-parameter trusted state
+(`isSendBypassed`/`setSendBypassed`, a `bypassMask_` atomic next to `muteMask_`, serialised as `"bypass"` in the send's
+entry in the strip's extra state; an entry saved before it existed loads un-bypassed, and `removeSend` and `addSend`
+clear it so a reused slot starts live). The level parameter is never touched, so restoring always returns the send at
+the level it left. **Unlike mute it ramps:** `writeSendLegs` makes a bypassed slot's level target 0 and lets the slot's
+own smoother carry it there over the usual 20 ms, so bypassing and restoring never click; once the ramp has settled at
+silence the slot is left at the hygiene pass's silence (no per-sample work), and a send restored as bypassed starts
+silent in `prepareToPlay` instead of ramping down from its level. A swap during a row reorder carries the bit with its
+send. The row's bypass button and the B key are described in [`panel.md`](panel.md#bypassing-a-row).
+
 ## Latency across the parallel path
 
 **Nothing new is written.** `juce::AudioProcessorGraph`'s built-in delay compensation already aligns
@@ -242,14 +254,14 @@ delay-compensated per-edge mute node, which is out of scope.
 ## The send and bus UI
 
 A bus column is an ordinary strip column with three differences: a **"BUS" badge** instead of the
-link glyph, a source line listing the feeding strips' names instead of tracks, and no track chip or
+link glyph, a sources badge listing the feeding strips' names instead of tracks, and no track chip or
 colour link. Its insert list works exactly like any other column's — including the bypassed Gate, EQ
 and Compressor "Add bus" builds — via the backward walk
 [`docs/mixer/mixer.md`](mixer.md#inserts-in-a-free-form-graph) describes for a column with no feeding
 track. **Buses sit after the track-driven strips and before Direct**, which is exactly where the
 existing orphan-strip append puts them.
 
-**A track channel that receives sends** (FRO355) keeps its link glyph and track source line and adds
+**A track channel that receives sends** (FRO355) keeps its link glyph and track sources badge and adds
 a compact **"receives" badge** — a small arrow plus the number of strips sending into it — whose
 tooltip lists them ("Receives sends from: Drums, Keys"). The names come from
 `MixerColumn::receivesFrom`, the Strip-kind twin of a bus's `busSources`; the header's tooltip and
@@ -257,8 +269,10 @@ accessible description spell every badge out in words (see [`mixer.md`](mixer.md
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
 target-bus button, a rotary level knob attached straight onto `sendNLevel`, a rotary **pan knob**
-(FRO294) attached straight onto `sendNPan`, an **"M" mute toggle** (FRO295), a `Pre`/`Post` toggle and
-an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
+(FRO294) attached straight onto `sendNPan`, a **bypass icon toggle** (see
+[Bypassing a send](#bypassing-a-send)), an **"M" mute toggle** (FRO295), a `Pre`/`Post` toggle and
+an `x` — plus a `+ Send` row while a slot is free. The bypass button's width came out of the row's other parts (the
+knobs, M and Pre/Post each gave up a few pixels), so a target name keeps about 28 px of a 140 px column and ellipsises. **FRO301: a screen reader names each level knob by
 its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
 the same "-6.0 dB" format as the fader and pan knob
 ([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)); the pan knob follows the

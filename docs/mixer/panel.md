@@ -11,7 +11,7 @@ widgets it is built from, the EQ thumbnail, and keyboard navigation. What a chan
 Strips, buses, Direct and Master. **Nothing else — never an arbitrary module's output.** To put
 something in the mixer, make it a channel. A bus IS a strip
 ([`docs/mixer/sends-and-buses.md`](sends-and-buses.md#a-bus-is-a-channel-strip)), so "buses" here
-names a badge and a source line, not a fourth column widget.
+names a badge and a header badge, not a fourth column widget.
 
 `MixerPanelComponent` renders one `MixerColumnComponent` per strip in track order, then strips with no
 track by node id, then Direct, then Master. Each column holds a `MixerFader`
@@ -24,15 +24,41 @@ sends** — its list is the post-fader chain between Master and the Rec Tap or A
 strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
 kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
-**Source line.** Under a strip's header a small `MixerSourceLine` names what plays into the channel: "From
-Oscillator 6", with "From" muted and the names in the primary text colour (a feeding track's name, or a bus's
-feeding strips, comma-joined and ellipsised to the column). Hovering it shows the full list ("Plays into this
-channel: A, B"); the same words are its accessible description and its name is the visible text. It is blank
-when the one source only repeats the channel's own name. **The row exists only while some strip column needs
-it:** after every rebuild `MixerPanelComponent` calls `MixerSectionLayout::setSourceLineVisible(any strip has
-a source line)`; when none does the row is 0 px and the sections and fader move up, and when any does every
-column (strips, Direct and Master) reserves the same 14 px, so the columns without a source keep an aligned
-blank and every fader stays level. It is information, not a control: it takes no focus and has no key.
+### The sources badge
+
+What plays into a channel is a small **sources badge** in the column header (`MixerIconButton` with
+`Icon::MixerSources`, an arrow running into a bracket), at the right of the name next to the link glyph, BUS tag
+and receives badge. It shows only on a channel with sources (a feeding track's name, or a bus's feeding strips) that
+are not just the channel's own name -- a linked channel named after its one track already says so with the link
+glyph. Hovering it shows the full list, "Plays into this channel: Osc 6, Track 2"; the same words are its
+screen-reader title and description, and the header's own description lists them too. **There is no row under the
+header:** a column without the badge costs nothing, so no column reserves a blank line and every fader stays level on
+the shared section layout alone (`MixerSectionLayout` has no source-line geometry).
+The badge is a Tab stop; Return or Space selects the channel on the canvas, the same as a click anywhere else on the
+header, and its keyboard focus ring is the shared one `AppLookAndFeel::drawDrawableButton` draws.
+
+### The colour dot
+
+The coloured dot at the left of a header is a real button (`MixerColourDot`), not painted swatch. Clicking it, or
+pressing Return or Space while it has focus (it is a Tab stop), opens the colour picker of what the colour comes from:
+
+- **A channel one track feeds** opens that track's picker -- the very one its Timeline swatch opens
+  (`buildTrackColourPicker`, `Source/UI/Timeline/TrackColourPicker.h`, shared by both). A live preview writes the track
+  colour with no undo step; the mixer re-tints through the usual `timelineChanged` -> `refreshTrackColours()`
+  path, and the track's channel macro follows through `TrackChannelLinkSurface::buildOwnedMacroColourPicker`. Closing
+  with no net change restores the colour and records nothing; any other close is **one undo step** (Cmd+Z restores the
+  track and the macro together).
+- **A bus, a channel two tracks share, an orphan strip** have no single track, so the dot opens the macro they take
+  their colour from (`GraphEditor::promptRecolourMacro`, the macro card's own picker).
+- **A channel with neither** keeps the dot as a plain swatch: disabled, not a Tab stop, with a tooltip saying so.
+  Direct and Master have no colour and show no dot.
+
+The dot is part of the header's drag handle: a press on it that becomes a drag reorders the column and the release is
+not a click. Its name is "<channel> colour" and its tooltip "Change this channel's colour".
+`MixerPanelComponent::buildTrackColourPicker` is wired by `MainComponent` through
+`BottomDockComponent::setOnBuildTrackColourPicker` and copied to the mirror view by `copyWiringFrom`. The picker opens
+in a `juce::CallOutBox` anchored on the dot and eases in ([popup reveal](../layout/animation.md#popup-reveal), which
+lands at once under the OS's Reduce Motion setting); every colour picker in the app does, the Timeline's included.
 
 **Column colour.** A column's header shows a swatch and a 2px stripe across its top edge in the colour of the
 one track that feeds it (the colour the Timeline shows), so a channel and its track match at a glance. A bus, a
@@ -74,7 +100,7 @@ dock-wide toggle/show split, the tab order and detach behaviour.
 
 ### Reordering columns
 
-A **track strip** column (a strip some track feeds) is dragged by its header, exactly as drawn (name included; the source line under it is plain text, not part of the handle, and blank when it would only repeat the channel name). The cursor stays the arrow until the press becomes a drag, then the grab hand until release; a plain click on the header or the source line selects the column, the same shared
+A **track strip** column (a strip some track feeds) is dragged by its header, exactly as drawn (name and colour dot included). The cursor stays the arrow until the press becomes a drag, then the grab hand until release; a plain click on the header selects the column, the same shared
 [reorder drag](../layout/animation.md#reorder-drag) the dock tabs use: the column follows the pointer
 at the spot it was grabbed, lifted (raised wash, 1 px `accent` border, soft shadow), the other track
 columns glide aside, and the columns viewport autoscrolls when the pointer nears its left or right
@@ -607,7 +633,7 @@ live in one `MixerSectionLayout` (`Source/UI/Mixer/MixerSections/`) that `MixerP
 owns; every strip column and Master resolve their geometry from it with
 `MixerSectionLayout::resolve(columnHeight)`, which depends only on the layout and the column height.
 **A column never sizes a section to its own content.** A column with fewer rows leaves the rest of
-the section empty; Master (no source line, sends, EQ or pan) leaves those rows blank so its Inserts
+the section empty; Master (no sends, EQ or pan) leaves those rows blank so its Inserts
 row and fader still line up; Direct has none of the rows and stays as it was. A standalone column
 (no panel, e.g. a test) falls back to its own private layout.
 
@@ -647,7 +673,7 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
   take `requiredColumnHeight()` and the panel's viewport scrolls vertically under the toolbar. Shrinking a section never shrinks the host: the space goes back to the fader.
 - **Showing the mixer fits it.** Whenever the mixer is shown -- the dock opens on (or switches to)
   the Mixer tab, the Own panel opens, or the app starts with either -- and the panel is shorter than
-  `requiredPanelHeight()` (the toolbar, plus header and source line, every section at its set height or its 14 px
+  `requiredPanelHeight()` (the toolbar, plus the header, every section at its set height or its 14 px
   strip, the dividers, pan, readout, a 56 px fader and the M/S row), `MainComponent::
   fitMixerHostToSections()` (or `MixerPlacementController` for the Own panel) calls
   `MixerPanelComponent::growHostToFitSections()`, which grows the host through the same
@@ -709,9 +735,12 @@ for only the first one in signal order**, Cubase's own single-slot idiom and a d
 
 The mixer panel is its own keyboard focus region, registered as the app's seventh region and sharing
 the bottom dock with `"timeline"`. `MixerPanelComponent` is the region's focusable leaf
-(`setWantsKeyboardFocus(true)`) and **every child control inside a column gives focus back up** — the
-same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
-several controls. The one other focusable element is the side pane's channel list, which has keys of its own
+(`setWantsKeyboardFocus(true)`) and **the controls that act on keys the panel owns give focus back up** (the fader,
+pan, M and S) — the same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
+several controls. The deliberate exceptions are small icon buttons that take no key beyond Return and Space, so every
+other key still bubbles to the panel: the toolbar's buttons, the header's colour dot and sources badge, and the
+bypass button on every insert and send row (each a Tab stop with a name, a tooltip and the accent focus ring). The one
+other focusable element is the side pane's channel list, which has keys of its own
 ([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
@@ -749,6 +778,8 @@ the other section, or back to column mode when none is left. Master has insert r
   send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:
   `captureBeforeState`, then the parameter's begin-gesture, set and end-gesture (what a knob drag produces),
   then `pushSnapshotFromCapture`. On an insert row the arrows do nothing, and never walk columns.
+- **B** (`mixerToggleRowBypass`, rebindable, Mixer category, default bare B) bypasses the focused row -- see
+  [Bypassing a row](#bypassing-a-row).
 - **Return** on an insert selects its channel on the canvas, the same `selectOnCanvas` the EQ thumbnail's
   click and the insert list's "Edit on canvas" link use. **Delete** or **Backspace** removes the send or
   insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus
@@ -763,6 +794,29 @@ the other section, or back to column mode when none is left. Master has insert r
   `"Send to Reverb Bus, -6.0 dB"` (plus `", muted"`), `"Insert 2, Compressor"` (plus `", bypassed"`) -- and
   announces a change.
 
+### Bypassing a row
+
+Every insert row and every send row ends in a bypass icon button (`MixerIconButton` with `Icon::ModuleBypass`; its
+accent wash and glyph show the on state). It is the mouse twin of the **B** key, and both land in the same
+`toggleBypassForRow()` on the row's list, so a click and a key cannot diverge:
+
+- **An insert** toggles its module's own bypass parameter (`ModuleBase::setBypassed`, the one the canvas card's bypass
+  button flips), bracketed by `captureBeforeState`/`pushSnapshotFromCapture` as one undo step. A branching (read-only)
+  chain bypasses too: bypass changes no topology. The Master column's insert rows have the button and the key too.
+- **A send** toggles its persisted bypass bit (`ChannelStripModule::isSendBypassed`, serialised as `"bypass"` in
+  the send's extra state and carried through a reorder swap), through `synth::setSendBypassed` in one
+  `recordGraphAndMacroChange`, like the send's mute. How the audio path treats it is in
+  [`sends-and-buses.md`](sends-and-buses.md#bypassing-a-send).
+
+A bypassed row reads dimmed: an insert's name paints in `textDisabled`; a send's name, level knob, pan knob and M
+button paint at the shared dimmed alpha (`kDimmedProperty`) but stay enabled. The button's screen-reader title carries
+the state in words ("Compressor bypass, on", "Bypass send to Reverb Bus, off"), the row's panel-level description
+gains ", bypassed" (and is announced when B changes it), and the tooltip names the key through
+`MixerIconButton::tooltipProvider` ("Bypass Compressor  (B)", "Turn Compressor back on  (B)"), computed each time it
+is shown so a rebind needs no rebuild. The key is read only while a row has the panel's row focus; in column mode B
+is not claimed. These per-row buttons act on the focused row, so, like the timeline's M, S and R buttons, they are not
+labelled by the Cmd-hold [shortcut hints](../control/shortcuts.md#shortcut-hints).
+
 ### Header controls and names
 
 The toolbar's Inserts, Sends and EQ toggles, Reset Meters and + Bus, the side pane's Filter channels field and
@@ -774,7 +828,7 @@ shortcut (`"Hide Sends  (Ctrl+S)"`) and follow a rebind. `AppLookAndFeel::drawDr
 ring for the toggles.
 
 Every control in every strip carries a name and a tooltip: the fader and pan sliders, M and S, the meter and its
-peak readout, the EQ thumbnail, the channel name and chip, the send knobs and mute buttons, and the send and
+peak readout, the EQ thumbnail, the channel name, colour dot and sources badge, the per-row bypass buttons, the chip, the send knobs and mute buttons, and the send and
 insert lists (their tooltip follows the part of a row under the pointer). `AccessibilityCoverageTests.cpp` audits a
 mixer with two tracks, a bus, a send, an insert and all three sections shown as the **Mixer** surface of the
 accessibility ratchet ([`docs/development/accessibility.md`](../development/accessibility.md)).

@@ -11,8 +11,8 @@ namespace {
 size_t indexOf(MixerSection section) noexcept { return (size_t)section; }
 
 // Everything a column lays out that is not a section, the pan knob or the fader itself.
-constexpr int fixedChrome(int sourceLineHeight) noexcept {
-    return 2 * MixerSectionLayout::kColumnInset + MixerSectionLayout::kHeaderHeight + sourceLineHeight +
+constexpr int fixedChrome() noexcept {
+    return 2 * MixerSectionLayout::kColumnInset + MixerSectionLayout::kHeaderHeight +
            MixerSectionLayout::kSectionCount * MixerSectionLayout::kDividerHeight +
            MixerSectionLayout::kMeterReadoutHeight + MixerSectionLayout::kMsRowHeight;
 }
@@ -105,8 +105,7 @@ MixerSectionLayout::Geometry MixerSectionLayout::resolve(int columnHeight) const
         heights[i] = hidden_[i] ? kCollapsedHeight : requested_[i];
     int pan = kPanHeight;
 
-    const int sourceLine = sourceLineHeight();
-    int deficit = fixedChrome(sourceLine) + kMinFaderHeight + pan - columnHeight;
+    int deficit = fixedChrome() + kMinFaderHeight + pan - columnHeight;
     for (const auto& h : heights)
         deficit += h;
     auto reclaim = [&deficit](int& budget) {
@@ -123,9 +122,6 @@ MixerSectionLayout::Geometry MixerSectionLayout::resolve(int columnHeight) const
 
     Geometry g;
     int y = kColumnInset + kHeaderHeight;
-    g.sourceLineTop = y;
-    g.sourceLineHeight = sourceLine;
-    y += sourceLine;
     for (size_t i = 0; i < heights.size(); ++i) {
         g.sectionTop[i] = y;
         g.sectionHeight[i] = heights[i];
@@ -145,19 +141,10 @@ MixerSectionLayout::Geometry MixerSectionLayout::resolve(int columnHeight) const
 }
 
 int MixerSectionLayout::requiredColumnHeight() const noexcept {
-    int total = fixedChrome(sourceLineHeight()) + kPanHeight + kMinFaderHeight;
+    int total = fixedChrome() + kPanHeight + kMinFaderHeight;
     for (size_t i = 0; i < requested_.size(); ++i)
         total += hidden_[i] ? kCollapsedHeight : requested_[i];
     return total;
-}
-
-bool MixerSectionLayout::setSourceLineVisible(bool visible, bool notify) {
-    if (sourceLineVisible_ == visible)
-        return false;
-    sourceLineVisible_ = visible;
-    if (notify)
-        notifyGeometry();
-    return true;
 }
 
 void MixerSectionLayout::setHoveredDivider(int dividerIndex) {

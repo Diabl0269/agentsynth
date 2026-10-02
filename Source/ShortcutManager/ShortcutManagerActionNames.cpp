@@ -75,6 +75,8 @@ juce::String mixerActionName(const juce::String& actionId) {
         return "Enter Mixer Send and Insert Rows";
     if (actionId == "mixerOpenEq")
         return "Open Mixer EQ";
+    if (actionId == "mixerToggleRowBypass")
+        return "Bypass Mixer Send or Insert";
     return {};
 }
 

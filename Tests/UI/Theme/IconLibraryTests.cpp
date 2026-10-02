@@ -302,8 +302,8 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
-    // ToolRange was appended after it later, so kCount is 44 now (see ToolRangeIconEnumOrdinal).
-    EXPECT_EQ((int)Icon::kCount, 44);
+    // ToolRange and MixerSources were appended after it later, so kCount is 45 now (see ToolRangeIconEnumOrdinal).
+    EXPECT_EQ((int)Icon::kCount, 45);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -341,5 +341,22 @@ TEST(IconLibraryTest, ToolRangeIconEnumOrdinal) {
         EXPECT_NE(d, nullptr) << "ToolRange icon returned null with assets present";
 #ifdef HAS_FONT_ASSETS
     EXPECT_GT(BinaryData::toolrange_svgSize, 0);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// MixerSourcesIconEnumOrdinalAndBinaryData (the mixer header's sources badge)
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, MixerSourcesIconEnumOrdinalAndBinaryData) {
+    // Appended immediately before kCount, after ToolRange, so no existing ordinal moved.
+    EXPECT_EQ((int)Icon::MixerSources, 44);
+    EXPECT_EQ((int)Icon::ToolRange, 43);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::MixerSources);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "MixerSources icon returned null with assets present";
+#ifdef HAS_FONT_ASSETS
+    EXPECT_GT(BinaryData::mixersources_svgSize, 0);
 #endif
 }

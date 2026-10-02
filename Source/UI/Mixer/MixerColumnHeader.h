@@ -1,14 +1,21 @@
 #pragma once
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Mixer/MixerHeader/MixerColourDot.h"
+#include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
+// MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour dot + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
 // MixerMasterColumn, so the three column kinds don't triplicate the same paint code (root
 // CLAUDE.md's "extract a real collaborator class" preference over copy-pasted paint()). Small
 // enough to stay header-only, same as the plan's own budget for this file.
+//
+// Two real buttons sit in the row: the colour dot at the left (click, Return or Space opens the colour picker,
+// docs/mixer/panel.md#the-colour-dot) and, only on a channel something plays into, the sources badge at the right
+// of the name (hover shows who plays into it, docs/mixer/panel.md#the-sources-badge). Both are Tab stops with a
+// screen-reader name and a tooltip.
 //
 // The name is also double-click-to-rename in place -- nameLabel_ reuses the exact
 // juce::Label(false, true, false) + onTextChange pattern TimelineTrackHeaderComponent::nameLabel_
@@ -39,6 +46,33 @@ public:
         // column -- so the header listens to the label's events too (see mouseDown() below).
         nameLabel_.addMouseListener(this, false);
         nameLabel_.setCursorSource(this);
+        addAndMakeVisible(colourDot_);
+        colourDot_.setVisible(false); // shown once setColour() gives it a colour
+        colourDot_.onClick = [this] {
+            if (colourDot_.consumeDragFlag())
+                return; // the release of a header drag, not a click
+            if (onColourClicked)
+                onColourClicked(colourDot_.getScreenBounds());
+        };
+        colourDot_.dragForwarding = {[this](const juce::MouseEvent& e) { mouseDown(e.getEventRelativeTo(this)); },
+                                     [this](const juce::MouseEvent& e) { mouseDrag(e.getEventRelativeTo(this)); },
+                                     [this](const juce::MouseEvent& e) {
+                                         mouseUp(e.getEventRelativeTo(this)); // may rebuild, and destroy, this header
+                                         return true;
+                                     },
+                                     [this] { return reorderHooks.isDragging && reorderHooks.isDragging(); }};
+        setColourEditable(false);
+
+        addChildComponent(sourcesButton_);
+        sourcesButton_.setIcon(synth::theme::Icon::MixerSources);
+        sourcesButton_.setComponentID("mixerSourcesBadge");
+        // Mostly information (its words are the tooltip and the screen-reader text); activating it selects the
+        // channel on the canvas, the same as a click anywhere else on the header.
+        sourcesButton_.onClick = [this] {
+            if (onHeaderClicked)
+                onHeaderClicked();
+        };
+
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -50,17 +84,51 @@ public:
         };
     }
 
-    /** An unset (default-constructed, alpha 0) colour paints no swatch -- Direct's header has no
+    /** An unset (default-constructed, alpha 0) colour shows no dot -- Direct's header has no
      *  colour of its own (docs/mixer/panel.md#what-the-mixer-shows). */
     void setColour(juce::Colour colour) {
         if (colour_ == colour)
             return;
-        // The swatch presence/absence shifts nameBounds() too, so layout must redo, not
+        // The dot's presence/absence shifts the name's bounds too, so layout must redo, not
         // just repaint.
         colour_ = colour;
+        colourDot_.setColour(colour);
+        colourDot_.setVisible(colour.getAlpha() > 0);
         resized();
         repaint();
     }
+
+    /** Whether clicking the dot opens a colour picker. A channel with no track or macro to recolour keeps the dot as
+     *  a plain swatch: it still paints and is still named, but takes no click and no focus. */
+    void setColourEditable(bool editable) {
+        colourDot_.setEnabled(editable);
+        colourDot_.setWantsKeyboardFocus(editable);
+        colourDot_.setTooltip(editable ? "Change this channel's colour"
+                                       : "This channel's colour (nothing here to recolour)");
+    }
+
+    /** Fires when the dot is clicked or activated from the keyboard, with the dot's screen bounds (where the picker
+     *  opens). Left null for Direct/Master, which have no colour. */
+    std::function<void(juce::Rectangle<int>)> onColourClicked;
+
+    /** The names of what plays into this channel, comma-joined (a feeding track, or a bus's feeding strips); empty
+     *  hides the sources badge. */
+    void setSources(const juce::String& sources) {
+        if (sources_ == sources)
+            return;
+        sources_ = sources;
+        const auto words = sources_.isEmpty() ? juce::String() : "Plays into this channel: " + sources_;
+        sourcesButton_.setTitle(words);
+        sourcesButton_.setDescription(words);
+        sourcesButton_.setTooltip(words);
+        sourcesButton_.setVisible(sources_.isNotEmpty());
+        badgesChanged();
+    }
+    juce::String getSources() const { return sources_; }
+
+    /** Test seams: the real buttons, so a test drives them through the clicks and keys a live press produces. */
+    MixerColourDot& getColourDotForTest() noexcept { return colourDot_; }
+    MixerIconButton& getSourcesButtonForTest() noexcept { return sourcesButton_; }
 
     // Named setDisplayName/getDisplayName, not setName/getName -- juce::Component already declares
     // a virtual setName()/getName() pair for its OWN (debug/accessibility) component name, and
@@ -75,6 +143,7 @@ public:
         // the user's own edit does that, from the constructor's lambda above.
         nameLabel_.setText(name_, juce::dontSendNotification);
         nameLabel_.setTitle(name_ + " name");
+        colourDot_.setTitle(name_ + " colour");
     }
     juce::String getDisplayName() const { return name_; }
 
@@ -160,29 +229,23 @@ public:
         g.fillRect(getLocalBounds());
 
         // a 2px stripe in the same colour across the top edge, so the channel's track colour reads at a glance
-        // even when the small swatch is skimmed past (Cubase-style).
+        // even when the small dot is skimmed past (Cubase-style).
         if (colour_.getAlpha() > 0) {
             g.setColour(colour_);
             g.fillRect(getLocalBounds().removeFromTop(2));
         }
 
-        auto bounds = getLocalBounds().reduced(4);
-        if (colour_.getAlpha() > 0) {
-            auto swatch = bounds.removeFromLeft(10).reduced(0, 2);
-            g.setColour(colour_);
-            g.fillRoundedRectangle(swatch.toFloat(), 2.0f);
-            bounds.removeFromLeft(4);
-        }
+        const auto slots = layoutSlots();
         g.setFont(juce::Font(juce::FontOptions(10.0f)));
         if (busBadgeVisible_) {
             g.setColour(text.withAlpha(0.7f));
-            g.drawText("BUS", bounds.removeFromRight(kBusBadgeWidth), juce::Justification::centred, false);
+            g.drawText("BUS", slots.badge, juce::Justification::centred, false);
         } else if (linkedBadgeVisible_) {
-            paintLinkGlyph(g, bounds.removeFromRight(kLinkBadgeWidth).toFloat(), accent);
+            paintLinkGlyph(g, slots.badge.toFloat(), accent);
         }
         if (!receivesFrom_.isEmpty()) {
             // A small right-pointing arrow (audio arriving) followed by the sender count.
-            auto badge = bounds.removeFromRight(kReceivesBadgeWidth).toFloat();
+            auto badge = slots.receives.toFloat();
             const auto arrow = badge.removeFromLeft(9.0f);
             g.setColour(text.withAlpha(0.7f));
             g.drawArrow({arrow.getX(), arrow.getCentreY(), arrow.getRight(), arrow.getCentreY()}, 1.2f, 5.0f, 4.0f);
@@ -190,12 +253,17 @@ public:
         }
         // The name itself is nameLabel_ (a real child component, so double-click can turn it into a
         // live text editor) -- resized() positions it over exactly this same reduction of bounds
-        // (nameBounds() below), so the two must stay in step; nothing else is drawn into it here.
+        // (layoutSlots() below), so the two must stay in step; nothing else is drawn into it here.
         nameLabel_.setColour(juce::Label::textColourId, text);
         nameLabel_.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
     }
 
-    void resized() override { nameLabel_.setBounds(nameBounds()); }
+    void resized() override {
+        const auto slots = layoutSlots();
+        colourDot_.setBounds(slots.dot);
+        sourcesButton_.setBounds(slots.sources);
+        nameLabel_.setBounds(slots.name);
+    }
 
     /** Drag-to-reorder hooks. All unset (Direct, Master, a pinned column) leaves the header a plain
      *  click target. `onRelease` returns true when the gesture was a drag, which swallows the click.
@@ -242,21 +310,27 @@ public:
     }
 
 private:
-    // The header's content rect after the swatch and the linked/bus badge have each claimed their
-    // space -- exactly what paint() leaves undrawn and nameLabel_ occupies. Kept as one function so
-    // painting the badge and sizing the editable name label can never drift apart (paint() redoes
-    // the same swatch/badge removal on its own copy of the bounds, to draw them).
-    juce::Rectangle<int> nameBounds() const {
+    // Where every part of the row sits, left to right: the colour dot, the name, then (right to left) the
+    // linked/bus badge, the receives badge and the sources button. Painting the badges and placing the
+    // child components both read this, so they can never drift apart; the name label takes whatever is left.
+    struct Slots {
+        juce::Rectangle<int> dot, name, badge, receives, sources;
+    };
+    Slots layoutSlots() const {
+        Slots slots;
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0)
-            bounds.removeFromLeft(10 + 4);
+            slots.dot = bounds.removeFromLeft(kDotButtonWidth);
         if (busBadgeVisible_)
-            bounds.removeFromRight(kBusBadgeWidth);
+            slots.badge = bounds.removeFromRight(kBusBadgeWidth);
         else if (linkedBadgeVisible_)
-            bounds.removeFromRight(kLinkBadgeWidth);
+            slots.badge = bounds.removeFromRight(kLinkBadgeWidth);
         if (!receivesFrom_.isEmpty())
-            bounds.removeFromRight(kReceivesBadgeWidth);
-        return bounds;
+            slots.receives = bounds.removeFromRight(kReceivesBadgeWidth);
+        if (!sources_.isEmpty())
+            slots.sources = bounds.removeFromRight(kSourcesBadgeWidth);
+        slots.name = bounds;
+        return slots;
     }
 
     // The badges in words: the header's tooltip and its accessible description, one string so the
@@ -269,6 +343,8 @@ private:
             parts.add(linkedTrackName_.isNotEmpty() ? "Linked to track " + linkedTrackName_ : "Linked to a track");
         if (!receivesFrom_.isEmpty())
             parts.add("Receives sends from: " + receivesFrom_.joinIntoString(", "));
+        if (sources_.isNotEmpty())
+            parts.add("Plays into this channel: " + sources_);
         return parts.joinIntoString(". ");
     }
 
@@ -276,7 +352,7 @@ private:
         const auto words = badgeText();
         setTooltip(words);
         setDescription(words);
-        resized(); // a badge claims space out of nameBounds() too -- see setColour()'s own comment
+        resized(); // a badge claims space out of the name's bounds too -- see setColour()'s own comment
         repaint();
     }
 
@@ -292,6 +368,8 @@ private:
     static constexpr int kBusBadgeWidth = 26;
     static constexpr int kLinkBadgeWidth = 16;
     static constexpr int kReceivesBadgeWidth = 22;
+    static constexpr int kSourcesBadgeWidth = 16;
+    static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
@@ -300,6 +378,9 @@ private:
     juce::String linkedTrackName_;
     bool busBadgeVisible_ = false;
     juce::StringArray receivesFrom_;
+    juce::String sources_;
+    MixerColourDot colourDot_;
+    MixerIconButton sourcesButton_{"mixerSourcesBadge"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };

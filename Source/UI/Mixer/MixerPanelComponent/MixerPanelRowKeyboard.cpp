@@ -92,6 +92,8 @@ bool MixerPanelComponent::handleRowKey(const juce::KeyPress& key) {
     if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) &&
         !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isAltDown())
         return removeFocusedRow();
+    if (matchesAction(key, "mixerToggleRowBypass", juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0)))
+        return toggleFocusedRowBypass();
     return false;
 }
 
@@ -131,6 +133,24 @@ bool MixerPanelComponent::removeFocusedRow() {
         inserts->removeRow(row.index);
     }
     reconcileRowFocus();
+    return true;
+}
+
+// The same toggle a click on the row's bypass button makes: one undo step through the list. The mixer rebuild it
+// triggers destroys that list, so nothing may touch it afterwards; reconcileRowFocus() re-derives the row (and so its
+// screen-reader text, which now says "bypassed") from the new lists.
+bool MixerPanelComponent::toggleFocusedRowBypass() {
+    if (!rowFocus_.has_value())
+        return true;
+    const auto row = *rowFocus_;
+    if (row.kind == MixerRowKind::Send) {
+        if (auto* sends = focusedSendList())
+            sends->toggleBypassForRow(row.index);
+    } else if (auto* inserts = focusedInsertList()) {
+        inserts->toggleBypassForRow(row.index);
+    }
+    reconcileRowFocus();
+    refreshRowAccessibility();
     return true;
 }
 

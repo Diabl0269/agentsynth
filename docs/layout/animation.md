@@ -279,6 +279,26 @@ shortcut.
   origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
   nothing is committed — no undo step.
 
+## Popup reveal
+
+A popover opened in a `juce::CallOutBox` eases in with `CalloutReveal` (`Source/UI/Layout/CalloutReveal.{h,cpp}`),
+owned by the popup content and started from its `parentHierarchyChanged()`: the callout is hidden (alpha 0) the moment
+the content is parented, then, on the next message-loop turn once it is showing, fades in over 160 ms (`easeOutCubic`)
+while sliding 8 px out of the side that faces the element that opened it (the side of the callout with the largest inset,
+`directionToAnchor`; a popover under a button grows down from it), landing exactly on its final bounds. Only the entrance
+is animated: a callout dismisses synchronously, so the 110 ms exit of the motion rules has nothing to run on. Today the
+colour picker (`ColourPickerPopup`) uses it, which covers the Timeline track swatch, the ruler's marker colours, the macro
+recolour and the mixer's colour dot.
+
+### Reduced motion
+
+`synth::ui::prefersReducedMotion()` (`Source/UI/Layout/ReducedMotion.h`) answers whether the OS asks apps to cut
+non-essential motion: macOS Reduce Motion (`NSWorkspace.accessibilityDisplayShouldReduceMotion`, read each time in
+`ReducedMotionMac.mm`). Windows and Linux answer false for now -- their settings are not read yet. `CalloutReveal` is the
+first consumer: with the preference on, the popup is never hidden and nothing animates; it also lands at once when the
+callout is not on screen (no VBlank reaches it). The other animations in this document are still unconditional; a new
+non-essential one asks this before it starts. `setReducedMotionForTest` forces the answer.
+
 ## formatShortcutHint
 
 ```cpp
@@ -314,6 +334,7 @@ strings.
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
 | **Card make-room / return / auto-arrange glide** | Cards moved by a make-room push, a macro slid in from the canvas edge, a neighbour return or Auto Arrange slide from the old to the new spot (160 ms, `easeOutCubic`): geometry is final at once, the real card is hidden (alpha 0) and a snapshot glides on a canvas overlay; cables touching it follow; hulls and port strips land at once; undo/redo glide the cards back and forth (see [Undo and redo glide](#undo-and-redo-glide)); loads land at once; a retarget starts from the drawn position; frames only while it runs; see [Making room](layout.md#making-room-when-something-grows) | `CardGlideAnimator` via `GraphEditor` |
 | **Macro-crossing cable slide + module flash (FRO41)** | Also on a cable drop that mints a macro port: the new cables' port ends emerge from the release point (no flash). On a Cmd-drag finalize that actually crosses an expanded macro's hull: a cable re-routed through an auto-created/removed port slides to its new anchor (220 ms, `easeOutCubic`), and the dragged module gets a fading ring — pure tween state in `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), driven by `macroCrossingDriverAnim_`; see [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41) | `GraphEditor` |
+| **Colour picker (popup reveal)** | The callout fades in 160 ms `easeOutCubic` and slides 8 px out of the side facing the dot, swatch or chip that opened it; at once under macOS Reduce Motion or when not on screen; entrance only; see [Popup reveal](#popup-reveal) | `CalloutReveal` via `ColourPickerPopup` |
 | **Shortcut hint bubbles** | One tween value `t` scales (0.6 -> 1), moves (from the labelled button's centre, or 12 px below a hidden-panel pill) and fades every Cmd-hold key-cap bubble: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` back out from the current `t`; pure geometry in `hint::animatedBubbleBounds`; one `AnimationDriver`, no timer besides the 500 ms show delay; see [`docs/control/shortcuts.md`](../control/shortcuts.md#shortcut-hints) | `ShortcutHintOverlay` |
 | **Toolbar toggle pill** | Instant state change (accent pill when on), no timer or animation — driven by `applyToolbarIcons()`'s and `setLibraryVisible()`'s `setToggleState(dontSendNotification)` calls | `ToolbarComponent` |
 | **Velocity strip readout** | The value beside a hovered or dragged stick fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity and slides ~4 px from the stick head to its spot (`velocitylane::readoutSlidePx`); stick-to-stick moves and edits keep the current opacity; lands at once when not on screen; one `AnimationDriver` | `PianoRollVelocityLane` |

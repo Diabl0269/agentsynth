@@ -144,6 +144,7 @@ add_executable(Tests
     Mixer/MixerModel/MixerModelInsertTests.cpp
     Mixer/MixerModel/MixerModelBusColumnTests.cpp
     Mixer/Sends/MixerSendLevelTests.cpp
+    Mixer/Sends/MixerSendBypassTests.cpp
     Mixer/Sends/MixerSendFlowTests.cpp
     Mixer/Sends/MixerBusSoloTests.cpp
     Mixer/Sends/MixerSendLatencyTests.cpp
@@ -582,10 +583,13 @@ add_executable(Tests
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelColumnDragTests.cpp
-    UI/Mixer/MixerSourceLineTests.cpp
+    UI/Mixer/MixerSourcesBadgeTests.cpp
+    UI/Mixer/MixerColourDotTests.cpp
+    UI/Mixer/MixerRowBypassTests.cpp
     UI/Mixer/MixerZonesKeyboardTests.cpp
     UI/Mixer/MixerZonesTests.cpp
     UI/Mixer/MixerZonesVisibilityTests.cpp
+    UI/Layout/CalloutRevealTests.cpp
     UI/Layout/SidePane/SidePaneTests.cpp
     UI/Layout/SidePane/SidePaneShortcutTests.cpp
     Mixer/MixerViewDocTests.cpp

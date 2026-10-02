@@ -11,6 +11,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -84,6 +85,16 @@ void MixerSendList::rebuildKnobs() {
         row.muteButton->onClick = [this, rowIndex] { toggleMuteForRow(rowIndex); };
         addAndMakeVisible(*row.muteButton);
 
+        // The bypass toggle: an icon button (the same MixerIconButton the insert rows use). Its title carries the
+        // on/off state in words, like the M button's, since it is built with setClickingTogglesState(false).
+        row.bypassButton = std::make_unique<MixerIconButton>("mixerSendBypass");
+        row.bypassButton->setIcon(synth::theme::Icon::ModuleBypass);
+        row.bypassButton->setToggleState(entry.bypassed, juce::dontSendNotification);
+        row.bypassButton->setTitle(bypassTitle(entry));
+        row.bypassButton->tooltipProvider = [this, rowIndex] { return bypassTooltip(rowIndex); };
+        row.bypassButton->onClick = [this, rowIndex] { toggleBypassForRow(rowIndex); };
+        addAndMakeVisible(*row.bypassButton);
+
         row.knob = std::make_unique<juce::Slider>();
         row.knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -139,7 +150,21 @@ void MixerSendList::rebuildKnobs() {
                 onSendKnobBuilt(*row.panKnob, panParam);
         }
         rows_.push_back(std::move(row));
+        // A bypassed send reads greyed out: its knobs and M button stay enabled (they still edit the level it
+        // comes back at) but paint at the shared dimmed alpha.
+        applyBypassLook(rowIndex);
     }
+}
+
+juce::String MixerSendList::bypassTooltip(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return {};
+    const auto& entry = entries_[(size_t)rowIndex];
+    const auto target = entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                            ? "send to " + entry.targetName
+                            : "send " + juce::String(entry.slot + 1) + " (no target)";
+    const auto base = entry.bypassed ? "Turn " + target + " back on" : "Bypass " + target;
+    return formatShortcutHint(base, bypassShortcutText ? bypassShortcutText() : juce::String());
 }
 
 int MixerSendList::liveUnbindCalls_ = 0;
@@ -171,6 +196,10 @@ juce::Slider* MixerSendList::getKnobForTest(int rowIndex) const {
 
 juce::Slider* MixerSendList::getPanKnobForTest(int rowIndex) const {
     return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].panKnob.get() : nullptr;
+}
+
+MixerIconButton* MixerSendList::getBypassButtonForTest(int rowIndex) const {
+    return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].bypassButton.get() : nullptr;
 }
 
 juce::Button* MixerSendList::getMuteButtonForTest(int rowIndex) const {
@@ -234,6 +263,7 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
     g.drawText(entry.preFader ? "Pre" : "Post", toggle, juce::Justification::centred, false);
 
     row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see placeRows()
+    row.removeFromRight(kBypassWidth);  // the bypass button is a real child component -- see placeRows()
     row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see placeRows()
     row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see placeRows()
 
@@ -247,7 +277,10 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
         g.fillEllipse(monoTag.withSizeKeepingCentre(4.0f, 4.0f));
     }
 
-    g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);
+    // A bypassed send's name is dimmed like its knobs.
+    const float nameAlpha = entry.bypassed ? synth::theme::AppLookAndFeel::kDisabledControlAlpha : 1.0f;
+    g.setColour(
+        (entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text).withMultipliedAlpha(nameAlpha));
     g.drawText(entry.targetName, row.reduced(2, 0), juce::Justification::centredLeft, true);
 }
 
@@ -290,13 +323,16 @@ void MixerSendList::placeRows() {
         bounds.removeFromRight(kRemoveWidth + kToggleWidth);
         if (row.muteButton != nullptr)
             row.muteButton->setBounds(bounds.removeFromRight(kMuteWidth).reduced(1));
+        if (row.bypassButton != nullptr)
+            row.bypassButton->setBounds(bounds.removeFromRight(kBypassWidth).reduced(1));
         if (row.knob != nullptr)
             row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
         if (row.panKnob != nullptr)
             row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
         if (i == lifted) {
             for (juce::Component* control :
-                 {static_cast<juce::Component*>(row.muteButton.get()), static_cast<juce::Component*>(row.knob.get()),
+                 {static_cast<juce::Component*>(row.muteButton.get()),
+                  static_cast<juce::Component*>(row.bypassButton.get()), static_cast<juce::Component*>(row.knob.get()),
                   static_cast<juce::Component*>(row.panKnob.get())})
                 if (control != nullptr)
                     control->toFront(false);
@@ -312,7 +348,7 @@ bool MixerSendList::isNameArea(juce::Point<int> position) const {
     // toggle and the target name, so a press never reaches this list on any of them -- only the
     // shape of the "everything past them is the name" test moves.
     const int fromRight = getWidth() - position.x;
-    return fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth;
+    return fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kBypassWidth + kKnobWidth + kPanKnobWidth;
 }
 
 void MixerSendList::updateHoverCursor(juce::Point<int> position) {
@@ -552,6 +588,44 @@ void MixerSendList::toggleMuteForRow(int rowIndex) {
     const int slot = entry.slot;
     const bool newMuted = !entry.muted;
     mutateAndNotify([&] { return graph_ != nullptr && synth::setSendMuted(*graph_, stripNodeId_, slot, newMuted); });
+}
+
+// The send's bypass is its own persisted bit, never its level, so the row comes back at the level it left at.
+void MixerSendList::toggleBypassForRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    const auto& entry = entries_[(size_t)rowIndex];
+    const int slot = entry.slot;
+    const bool newBypassed = !entry.bypassed;
+    mutateAndNotify([&] {
+        if (graph_ == nullptr || !synth::setSendBypassed(*graph_, stripNodeId_, slot, newBypassed))
+            return false;
+        // The row reads right even where nothing rebuilds the list afterwards (a bare list in a test).
+        entries_[(size_t)rowIndex].bypassed = newBypassed;
+        applyBypassLook(rowIndex);
+        return true;
+    });
+}
+
+void MixerSendList::applyBypassLook(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)rows_.size() || rowIndex >= (int)entries_.size())
+        return;
+    const auto& entry = entries_[(size_t)rowIndex];
+    auto& row = rows_[(size_t)rowIndex];
+    row.bypassButton->setToggleState(entry.bypassed, juce::dontSendNotification);
+    row.bypassButton->setTitle(bypassTitle(entry));
+    for (juce::Component* control :
+         {static_cast<juce::Component*>(row.muteButton.get()), static_cast<juce::Component*>(row.knob.get()),
+          static_cast<juce::Component*>(row.panKnob.get())})
+        control->getProperties().set(synth::theme::AppLookAndFeel::kDimmedProperty, entry.bypassed);
+    repaint();
+}
+
+juce::String MixerSendList::bypassTitle(const synth::MixerSendEntry& entry) {
+    const auto target = entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                            ? "Bypass send to " + entry.targetName
+                            : "Bypass send " + juce::String(entry.slot + 1) + " (no target)";
+    return target + ", " + (entry.bypassed ? "on" : "off");
 }
 
 void MixerSendList::moveRow(int fromRow, int toRow) {

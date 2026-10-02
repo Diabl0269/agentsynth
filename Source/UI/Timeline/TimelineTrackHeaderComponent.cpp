@@ -7,6 +7,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TrackColourPicker.h"
 
 namespace synth::ui {
 
@@ -274,49 +275,18 @@ void TimelineTrackHeaderComponent::toggleArmed() {
 }
 
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buildColourPicker() {
-    const auto* t = track();
-    if (t == nullptr)
-        return nullptr;
-    // The colour a no-net-change close restores, and what a "keep the final pick" undo step
-    // restores TO (see the onCommit lambda below).
-    const juce::uint32 originalColour = t->colourArgb;
-
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
-    // docs/mixer/mixer.md#a-track-and-its-macro-share-a-colour: the picker of a track that owns its channel macro fans
-    // every preview write out to that macro as well, and commits both as ONE undo step. Null for anything else -- the
-    // single-target body below is then reached byte-for-byte as before.
-    if (auto* link = linkSurface(); link != nullptr) {
-        if (auto popup =
-                link->buildOwnedMacroColourPicker(trackId_, props != nullptr ? props->getUserSettings() : nullptr))
-            return popup;
-    }
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
-
-    return std::make_unique<synth::ui::ColourPickerPopup>(
-        juce::Colour(originalColour), props != nullptr ? props->getUserSettings() : nullptr,
-        [safeThis](juce::Colour c) {
-            // Live preview: writes the doc directly, no undo — every drag/favourite click
-            // repaints the row immediately, exactly like the old palette-cycle click did.
-            if (auto* self = safeThis.getComponent())
-                self->doc_.setTrackColour(self->trackId_, c.getARGB());
-        },
-        [safeThis, originalColour](juce::Colour finalColour) {
-            auto* self = safeThis.getComponent();
-            if (self == nullptr)
-                return; // the header (or its window) is gone — nothing left to restore or undo
-            if (finalColour.getARGB() == originalColour) {
-                // No net change: put back exactly what was there (a preview may have nudged it)
-                // and record no undo step — matching every other no-op edit in this file.
-                self->doc_.setTrackColour(self->trackId_, originalColour);
-                return;
-            }
-            // ONE undo step whose undo restores the ORIGINAL colour: silently put the original
-            // back first (outside the undo-recorded mutation, so it does not itself become
-            // undoable), then perform the real edit as the one recorded step.
-            self->doc_.setTrackColour(self->trackId_, originalColour);
-            self->performEdit(
-                [self, finalColour] { self->doc_.setTrackColour(self->trackId_, finalColour.getARGB()); });
-        });
+    synth::ui::TrackColourPickerContext context;
+    context.doc = &doc_;
+    context.favourites = props != nullptr ? props->getUserSettings() : nullptr;
+    context.link = linkSurface();
+    context.performEdit = [safeThis](const std::function<void()>& mutation) {
+        if (auto* self = safeThis.getComponent())
+            self->performEdit(mutation);
+    };
+    context.isAlive = [safeThis] { return safeThis != nullptr; };
+    return synth::ui::buildTrackColourPicker(context, trackId_);
 }
 
 bool TimelineTrackHeaderComponent::tickChannelMeter() {
