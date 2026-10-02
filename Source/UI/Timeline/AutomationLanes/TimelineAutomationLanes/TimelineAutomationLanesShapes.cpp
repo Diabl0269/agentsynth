@@ -7,6 +7,9 @@ void TimelineAutomationLanes::setDrawShape(DrawShape shape) {
     drawShape_ = shape;
     for (auto& [id, editor] : editors_)
         editor->setDrawShape(shape);
+    for (auto& [id, entry] : modulators_)
+        for (auto& band : entry.bands)
+            band->setDrawShape(shape);
 }
 
 // Every editor repaints, not just the range's: the band may have just left another lane.

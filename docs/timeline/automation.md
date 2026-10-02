@@ -374,7 +374,9 @@ falls through to the panel.
 The Draw tool puts down one of six shapes (`synth::ui::DrawShape`, `AutomationLanes/LaneShapes/DrawShape.h`):
 **Free** (the freehand pen; Shift+drag still draws a straight line), **Line** (a straight line), and four
 periodic shapes, **Sine**, **Triangle**, **Saw** and **Square**. The panel owns the shape next to the edit
-tool and pushes it to every lane editor the same way (`TimelinePanelComponent::setDrawShape`).
+tool and pushes it to every lane editor the same way (`TimelinePanelComponent::setDrawShape`), the
+[amount lanes](#amount-lane)' editors included (`ModulatorBand::setDrawShape`), so a box stamp works on an LFO's
+amount too and creates its lane like a first pen stroke. The lane range is for ordinary lanes only.
 
 **The shape strip.** Six small icon buttons (`DrawShapeStrip`) slide out of the right side of the Draw button
 while Draw is the active tool or a lane range is selected (whatever the tool, so Range-drag then one click on a
