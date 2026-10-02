@@ -8,6 +8,8 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 namespace {
@@ -146,13 +148,17 @@ void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeI
 
 // One undo step. An attenuverter chain goes as a whole (hidden node and both edges, what deleting the
 // cable on the canvas does); a direct or poly cable loses its edges into the target. A macro port the
-// cable crossed is swept when nothing is left on it. The source goes too when asked and it drives
+// cable crossed (on either side of the attenuverter, however many macros deep) is swept when nothing is left
+// on one side of it. The source goes too when asked and it drives
 // nothing else any more -- through the single-node removal path, so every pre-removal unbind runs.
 // `recordUndo` false leaves the undo step to the caller (the timeline's Remove modulator, which takes the
 // LFO's sections lane in the same step).
 void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
     auto mutation = [this, &graph, routing, removeLonelySource] {
+        // The chain is read before anything is cut: once the attenuverter is gone there is no edge to follow.
+        const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
+        const auto chain = synth::ui::resolveRouting(graph, routing, isPort);
         if (routing.kind == AudioEngine::RoutingKind::AttenuverterChain) {
             audioEngine.removeModRouting(routing.attenuverterNodeID);
         } else {
@@ -162,12 +168,13 @@ void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeL
                     c.destination.channelIndex < routing.destChannelIndex + std::max(1, routing.voiceCount))
                     graph.removeConnection(c);
         }
-        for (const auto id : {routing.sourceNodeID, routing.destNodeID})
-            if (autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(id))
-                macroController_.autoDeleteOrphanedMacroPort(id);
-        if (removeLonelySource && graph.getNodeForId(routing.sourceNodeID) != nullptr &&
-            !hasOutgoingConnection(graph, routing.sourceNodeID))
-            requestDeleteModule(routing.sourceNodeID, /*recordUndo=*/false); // ends in updateComponents()
+        // Every port the cable crossed that now has nothing on one side goes, on both sides of the routing
+        // and across nested macros, whatever the auto-delete preference says: the removal is the request.
+        macroController_.sweepOneSidedMacroPorts(chain.ports, /*ignorePreference=*/true);
+        // After the sweep, not before: the LFO's edge into a port counts as outgoing until the port is gone.
+        if (removeLonelySource && chain.source.valid() && graph.getNodeForId(chain.source.node) != nullptr &&
+            !hasOutgoingConnection(graph, chain.source.node))
+            requestDeleteModule(chain.source.node, /*recordUndo=*/false); // ends in updateComponents()
         else
             updateComponents();
     };

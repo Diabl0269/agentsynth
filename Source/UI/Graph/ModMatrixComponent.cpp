@@ -20,53 +20,10 @@ namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
 using Connection = juce::AudioProcessorGraph::Connection;
 
-/** One end of a routing: a node and the channel the attenuverter's edge lands on or leaves from. */
-struct Endpoint {
-    NodeID node;
-    int channel = 0;
-    bool valid() const noexcept { return node.uid != 0; }
-};
-
-/** The attenuverter's channel-0 edge in (incoming) or out, if it has one. */
-std::optional<Connection> attenuverterEdge(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming) {
-    for (const auto& c : graph.getConnections())
-        if (incoming ? (c.destination.nodeID == atten && c.destination.channelIndex == 0)
-                     : (c.source.nodeID == atten && c.source.channelIndex == 0))
-            return c;
-    return std::nullopt;
-}
-
-/** The edges landing on and leaving `node`. */
-void edgesAround(juce::AudioProcessorGraph& graph, NodeID node, std::vector<Connection>& in,
-                 std::vector<Connection>& out) {
-    for (const auto& c : graph.getConnections()) {
-        if (c.destination.nodeID == node)
-            in.push_back(c);
-        if (c.source.nodeID == node)
-            out.push_back(c);
-    }
-}
-
-/** The real module at one end of the attenuverter's routing: the far end of its edge, looking through
- *  every macro port that routing alone uses (one edge in, one out). Invalid when the edge is absent. */
-Endpoint realEndpointBehindPorts(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming,
-                                 const std::function<bool(NodeID)>& isPort) {
-    auto edge = attenuverterEdge(graph, atten, incoming);
-    if (!edge)
-        return {};
-    for (;;) {
-        const NodeID far = incoming ? edge->source.nodeID : edge->destination.nodeID;
-        if (!isPort(far))
-            break;
-        std::vector<Connection> in, out;
-        edgesAround(graph, far, in, out);
-        if (in.size() != 1 || out.size() != 1)
-            break; // shared with another routing: it stays where it is
-        edge = incoming ? in.front() : out.front();
-    }
-    return incoming ? Endpoint{edge->source.nodeID, edge->source.channelIndex}
-                    : Endpoint{edge->destination.nodeID, edge->destination.channelIndex};
-}
+using Endpoint = synth::ui::RoutingEndpoint;
+using synth::ui::attenuverterEdge;
+using synth::ui::edgesAround;
+using synth::ui::realEndpointBehindPorts;
 
 /** Moves the attenuverter downstream of every macro inlet its output feeds, so a routing entering a macro
  *  reads source -> inlet -> attenuverter -> member: the shape a dragged cable builds, and the one that

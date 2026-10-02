@@ -158,8 +158,9 @@ cable exists, so the cable is interior and no port is minted); otherwise `makeRo
 All of it is ONE `recordGraphAndMacroChange` step. A parameter with no CV jack keeps the item, disabled, as
 "Add LFO modulator (no CV input)": a menu item has no tooltip, and the reason has to reach a screen reader.
 
-**The row** (`ModulatorRow`, `Source/UI/Timeline/AutomationLanes/Modulators/`) is 34 px times the row zoom,
-indented 44 px (one step further in than a lane header), two lines in the header column:
+**The row** (`ModulatorRow`, `Source/UI/Timeline/AutomationLanes/Modulators/`) is 54 px times the row zoom,
+indented 28 px (one step further in than a lane header), three lines in the header column (title; shape and
+rate; sync and depth):
 
 - an `LFO` tag in the mod-wire colour (resolved by `GraphEditor::modulationWireColour`, i.e. through
   `resolveCableColour`, so a user colour override applies), the LFO card's title, a **Sync** toggle and a
@@ -178,8 +179,15 @@ card's `ModuleComponent` captures into the same single undo slot on a gesture, a
 would interleave. The rows read their values back (`getNodeParameter`) on the panel's existing transport
 poll, only for rows on screen, writing a control only when its value moved and never the one mid-drag.
 
+**Macro ports in the chain.** A row names the real modulator and the real parameter, not the macro ports
+between them: `MainComponent::getModulators` follows each end of the routing through ports
+(`realEndpointBehindPorts`, `Source/UI/Graph/ModMatrixEndpoints.h`), whether the attenuverter sits before or
+after the port and however many macros deep. **Remove modulator** follows the cable the same way and removes
+every port the removal leaves with nothing on one side, even when the "delete ports on last cable" preference
+is off (the person asked for the removal), all in the one undo step.
+
 **Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
-whole, or a direct cable's edges), sweeps a macro port the cable leaves empty, and removes the LFO too when
+whole, or a direct cable's edges), sweeps the macro ports the cable leaves empty, and removes the LFO too when
 no other cable leaves it, through `requestDeleteModule(..., recordUndo=false)` so every pre-removal unbind
 runs -- all one undo step. When the LFO goes, its [sections](#sections) lane goes in the same step
 (`MainComponent::removeModulator` wraps the graph edit and the lane removal in one
@@ -399,7 +407,8 @@ and a saved project with lanes and a macro LFO reopening, and the "+ Add automat
 entry (`AutomationLanesAddRowTests.cpp`, with the MainComponent side, what each track offers and where a
 pick lands, in `AutomationLanesAddMainTests.cpp`). Modulators: `AutomationLanesModulatorRowTests.cpp` (layout,
 hit testing, row controls and names against a stub host), `AutomationLanesModulatorMainTests.cpp` (add, macro
-join, no CV jack, a hand-patched cable, remove, undo) and `AutomationLanesModulatorEditTests.cpp` (row edits and
+join, no CV jack, a hand-patched cable, remove, undo), `AutomationLanesModulatorMacroRemovalTests.cpp` (rows
+and Remove through macro ports, nested and either chain shape, a shared LFO, the preference off) and `AutomationLanesModulatorEditTests.cpp` (row edits and
 their undo, the CV moving across a render and stopping at depth 0, a saved project reopening with its row).
 Sections: `AutomationLanesSectionsModelTests.cpp` (the blocks/breakpoints algebra), `AutomationLanesSectionsBandTests.cpp`
 (real mouse and key events on the band: each tool, one undo step and one doc write per gesture, names) and

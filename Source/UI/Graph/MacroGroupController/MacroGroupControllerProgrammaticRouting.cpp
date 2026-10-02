@@ -180,9 +180,10 @@ void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection>
 // same "only interior left" reading autoDeleteOrphanedAttenuverter already applies. Splicing out a
 // port can strand the port it was wired to (a send between two macros runs outlet -> inlet), so
 // every port neighbour of a spliced port is re-checked; the walk only ever visits port nodes.
-// Gated on the same auto-delete preference as the cable-gesture sweep.
-void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidates) {
-    if (!host_.getAutoDeleteMacroPortsOnLastCableEnabled())
+// Gated on the same auto-delete preference as the cable-gesture sweep, unless the caller is an explicit
+// removal (`ignorePreference`): the person asked for it, so a port left behind would be the bug.
+void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidates, bool ignorePreference) {
+    if (!ignorePreference && !host_.getAutoDeleteMacroPortsOnLastCableEnabled())
         return;
     auto& graph = host_.graph();
 
