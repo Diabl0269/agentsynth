@@ -341,6 +341,8 @@ private:
     bool canGroupSelection() const;
     bool touchesAnyMacro() const;
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
+    synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
+    bool hasPointSelection() const;
     bool isBottomDockVisibleForSnap() const;
     bool isZoomCommandActive(juce::CommandID id) const;
     bool isWelcomeScreenHidden() const;

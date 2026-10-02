@@ -156,6 +156,7 @@ public:
     void pickDrawShape(DrawShape shape);
     DrawShapeStrip& getDrawShapeStrip() noexcept { return shapeStrip_; }
     TimelineAutomationLanes& getAutomationLanes() noexcept { return automationLanes_; }
+    const TimelineAutomationLanes& getAutomationLanes() const noexcept { return automationLanes_; }
 
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // See TimelinePanelClipClipboard.cpp for why this panel owns the clipboard.

@@ -96,6 +96,14 @@ bool MainComponent::performSelectAllModules() {
         else
             statusBar.showMessage("Nothing to select - the clip has no notes");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->selectAllPoints())
+            statusBar.showMessage("Selected " + juce::String(editor->getPointSelection().size()) + " points");
+        else
+            statusBar.showMessage("Nothing to select - the lane has no points");
+        return true;
+    }
     case EditSurface::Mixer:
         // No "select all" meaning on the mixer -- no-op, rather than falling through to Graph below.
         statusBar.showMessage("Nothing to select - Select All has no effect on the mixer");
@@ -135,6 +143,14 @@ bool MainComponent::performCopySelection() {
         else
             statusBar.showMessage("Nothing to copy - select one or more notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->copySelectedPoints())
+            statusBar.showMessage("Copied the selected points");
+        else
+            statusBar.showMessage("Nothing to copy - select one or more points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // isEditSurfaceCommandActive() reports Mixer inactive -- belt-and-suspenders
     case EditSurface::Graph:
@@ -168,6 +184,14 @@ bool MainComponent::performPasteSelection() {
         else
             statusBar.showMessage("Nothing to paste - copy some notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->pasteAtPlayhead())
+            statusBar.showMessage("Pasted points at the playhead");
+        else
+            statusBar.showMessage("Nothing to paste - copy some points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
@@ -195,6 +219,9 @@ bool MainComponent::performDuplicateSelection() {
             statusBar.showMessage("Duplicated the selected notes");
         else
             statusBar.showMessage("Nothing to duplicate - select one or more notes first");
+        return true;
+    case EditSurface::AutomationLane:
+        statusBar.showMessage("Duplicate does not apply to automation points - copy and paste instead");
         return true;
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
@@ -228,6 +255,14 @@ bool MainComponent::performCutSelection() {
         else
             statusBar.showMessage("Nothing to cut - select one or more notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->cutSelectedPoints())
+            statusBar.showMessage("Cut points");
+        else
+            statusBar.showMessage("Nothing to cut - select one or more points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
@@ -291,6 +326,7 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
             timelinePanel.getPianoRoll().zoomHorizontal(factor);
         statusBar.showMessage(vertical ? "Piano roll: vertical zoom" : "Piano roll: zoom");
         return true;
+    case EditSurface::AutomationLane: // the lane rows scale with the timeline
     case EditSurface::TimelineClips:
         if (vertical)
             timelinePanel.zoomTimelineVertical(factor);

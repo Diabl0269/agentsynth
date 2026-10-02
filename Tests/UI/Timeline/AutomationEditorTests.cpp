@@ -19,6 +19,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Timeline/AutomationKernel.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent.h"
@@ -148,11 +149,19 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 0.0) << "the LEFT point's beat/value must be untouched";
     EXPECT_NEAR(lane->points[0].value, 20.0, 1e-6);
 
-    // Clamp: a huge upward drag pins at +1.0, still one step.
-    const auto hugeDrag = juce::Point<float>(anchor.x, anchor.y - 500.0f);
-    f.editor.mouseDown(leftClick(f.editor, anchor));
-    f.editor.mouseDrag(leftDrag(f.editor, hugeDrag, anchor));
-    f.editor.mouseUp(leftDrag(f.editor, hugeDrag, anchor));
+    // Clamp: a huge upward drag pins at +1.0, still one step. The segment now bows away from the first press, and a
+    // press has to be on the curve itself to scrub it (anywhere else in the span starts a box), so press on the
+    // reshaped line.
+    std::vector<synth::TimelineSnapshot::Point> shape;
+    for (const auto& bp : f.doc.getLane(f.laneId)->points)
+        shape.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+    synth::AutomationCursor cursor{};
+    const double onCurve = synth::AutomationKernel::evaluate(shape.data(), (int)shape.size(), 2.0, 50.0, cursor);
+    const auto second = juce::Point<float>(anchor.x, (float)f.editor.valueToY(onCurve));
+    const auto hugeDrag = juce::Point<float>(second.x, second.y - 500.0f);
+    f.editor.mouseDown(leftClick(f.editor, second));
+    f.editor.mouseDrag(leftDrag(f.editor, hugeDrag, second));
+    f.editor.mouseUp(leftDrag(f.editor, hugeDrag, second));
     EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 1.0f, 1e-6f);
 
     f.undo.undo();

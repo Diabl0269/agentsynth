@@ -5,6 +5,10 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h"
+#include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -38,6 +42,10 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // Pointer tool: the point under the pointer, or being dragged, shows a value bubble above it (text from
 // valueToText); a point shows the grab cursor; pressing the flat line of a lane with NO points and dragging
 // vertically sets the lane's constant value, committed once on mouse-up.
+// Points select like clips and notes (LanePointSelection): click selects, Shift/Cmd-click toggles, a plain drag on
+// empty space draws a box, Escape clears; dragging a selected point moves the whole selection, Delete/Backspace
+// removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step. Cmd+A/C/X/V reach
+// it as the app's edit commands (MainComponent routes them to the focused lane editor).
 // Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
@@ -62,6 +70,7 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
+    void focusLost(juce::Component::FocusChangeType cause) override;
 
     /** Text for a lane value in the parameter's own units ("-6.0 dB"); may be null or return empty, which falls
      *  back to the plain number. */
@@ -71,7 +80,10 @@ public:
     std::function<void()> onFocused;
 
     // Non-owning setters; same null-safety contract as every other timeline sub-component.
-    void setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
+    void setTimelineDoc(synth::TimelineDoc* doc) noexcept {
+        doc_ = doc;
+        syncedRevision_ = -1;
+    }
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
     void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
     AppUndoManager* getUndoManager() const noexcept { return undoManager_; }
@@ -80,14 +92,7 @@ public:
 
     // Which lane this canvas shows/edits. Invalid (default-constructed) means "nothing to show" —
     // paint() then draws only the grid backdrop. Resets any in-flight drag.
-    void setActiveLane(synth::LaneId id) noexcept {
-        laneId_ = id;
-        dragMode_ = DragMode::None;
-        hoveredBeat_.reset();
-        bubble_.hide();
-        shapeGesture_.cancel();
-        repaint();
-    }
+    void setActiveLane(synth::LaneId id);
     synth::LaneId getActiveLane() const noexcept { return laneId_; }
 
     // Picks the tool directly and stops following the timeline's edit tool.
@@ -111,6 +116,25 @@ public:
     // otherwise), like the piano roll's velocity strip.
     juce::MouseCursor getMouseCursor() override;
     void lookAndFeelChanged() override;
+
+    // ---- Point selection (AutomationLaneEditorPoints.cpp) ----
+    LanePointSelection& getPointSelection() noexcept { return selection_; }
+    const LanePointSelection& getPointSelection() const noexcept { return selection_; }
+    // Fired after the selection or the keyboard cursor changed; may be null.
+    std::function<void()> onSelectionChanged;
+    // Re-reads the lane after any doc change: drops selected points that are gone and glides removals/additions.
+    void laneDocChanged();
+    // The clipboard Cmd+C/X/V use (non-owning, may be null); the lane pool owns it so it outlives this editor.
+    void setClipboard(LanePointClipboard* clipboard) noexcept { clipboard_ = clipboard; }
+    // The app's edit commands, each false when it had nothing to act on.
+    bool selectAllPoints();
+    bool copySelectedPoints();
+    bool cutSelectedPoints();
+    bool canPastePoints() const;
+    // Pastes at the transport position (snapped), or at `beat` (snapped); the pasted points become the selection.
+    bool pasteAtPlayhead();
+    bool pasteAtBeat(double beat);
+    bool deleteSelectedPoints();
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
@@ -159,6 +183,8 @@ private:
     static constexpr float kHandleHitRadiusPx = 7.0f;
 
     std::optional<HandleHit> hitTestHandle(juce::Point<int> pos) const;
+    // True when `pos` is within a handle radius of the curve itself (where a press scrubs a segment's tension).
+    bool onCurve(juce::Point<int> pos) const;
     // The index of the LEFT point of the segment whose beat range contains the beat under pixel
     // column `x`, or nullopt if there is no such segment (fewer than 2 points, or `x` lands
     // outside the lane's span altogether).
@@ -177,6 +203,8 @@ private:
     void paintCommittedCurve(juce::Graphics& g, const synth::AutomationLane& lane);
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
+    void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
+                     juce::Colour colour, float thickness) const;
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
 
     // Hover/bubble: follows the point under `pos` (none = hidden), and floats over (beat, value) with its text.
@@ -185,6 +213,22 @@ private:
     juce::String valueText(double value) const;
     // True when `pos` is on the flat line of the active lane while it has no points.
     bool onFlatLine(juce::Point<int> pos) const;
+
+    // ---- Selection glue (AutomationLaneEditorPoints.cpp) ----
+    const std::vector<LaneBreakpoint>* lanePoints() const;
+    LanePointMapper pointMapper() const;
+    LaneEditTarget editTarget() const;
+    void grabPoint(const HandleHit& hit);
+    std::vector<LaneBreakpoint> dragMovedPoints() const;
+    void commitPointMove();
+    bool nudgePoints(double beatDirection, double valueDirection, bool coarse);
+    bool stepCursor(int direction);
+    bool handleSelectionKey(const juce::KeyPress& key);
+    void selectionChanged();
+    void syncToDoc();
+    void selectOnly(const LaneBreakpoint& point);
+    juce::String describePoints() const;
+    void refreshDescription();
 
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
@@ -204,11 +248,10 @@ private:
     DragMode dragMode_ = DragMode::None;
     juce::Point<int> mouseDownPos_;
 
-    // ---- MoveHandle preview ----
+    // ---- MoveHandle preview: the grabbed point's beat/value, and every selected point as it was when grabbed ----
+    std::vector<LaneBreakpoint> dragPoints_;
     double dragOriginalBeat_ = 0.0;
     double dragOriginalValue_ = 0.0;
-    float dragOriginalTension_ = 0.0f;
-    int dragOriginalCurve_ = 0;
     double previewBeat_ = 0.0;
     double previewValue_ = 0.0;
 
@@ -232,6 +275,10 @@ private:
 
     AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
     PointValueBubble bubble_{*this};
+    LanePointSelection selection_{*this};
+    LanePointGlide glide_{*this};
+    LanePointClipboard* clipboard_ = nullptr;
+    std::int64_t syncedRevision_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };

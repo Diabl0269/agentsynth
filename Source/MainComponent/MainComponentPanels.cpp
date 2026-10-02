@@ -225,6 +225,7 @@ bool MainComponent::performRepeatSelection(int count) {
     case EditSurface::PianoRoll:
         return timelinePanel.getPianoRoll().repeatSelectedNotes(repeats);
     case EditSurface::Mixer:
+    case EditSurface::AutomationLane:
     case EditSurface::Graph:
         break;
     }
@@ -251,6 +252,7 @@ void MainComponent::promptRepeatSelection() {
             subject = "selected notes";
         break;
     case EditSurface::Mixer:
+    case EditSurface::AutomationLane:
     case EditSurface::Graph:
         break;
     }
@@ -334,6 +336,8 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
                 return EditSurface::PianoRoll;
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
                 return EditSurface::TimelineClips;
+            if (timelinePanel.getAutomationLanes().focusedEditor() != nullptr)
+                return EditSurface::AutomationLane;
         }
     }
     if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
