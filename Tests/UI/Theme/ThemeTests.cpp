@@ -127,7 +127,7 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::ComboBox::arrowColourId), c.textMuted);
     EXPECT_EQ(lf.findColour(juce::ComboBox::buttonColourId), c.surfaceHi);
 
-    EXPECT_EQ(lf.findColour(juce::PopupMenu::backgroundColourId), c.surface);
+    EXPECT_EQ(lf.findColour(juce::PopupMenu::backgroundColourId), c.surface.withAlpha(0.99f));
     EXPECT_EQ(lf.findColour(juce::PopupMenu::textColourId), c.textPrimary);
     EXPECT_EQ(lf.findColour(juce::PopupMenu::highlightedTextColourId), c.textPrimary);
     // Highlighted bg = accent with alpha 0.25

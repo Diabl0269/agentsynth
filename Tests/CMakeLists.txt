@@ -410,6 +410,7 @@ add_executable(Tests
     UI/Theme/ModuleCardTitleTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/FaderRenderTests.cpp
+    UI/Theme/MenuCornerTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp

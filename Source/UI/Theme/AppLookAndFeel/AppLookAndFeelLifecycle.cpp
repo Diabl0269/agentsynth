@@ -90,7 +90,10 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::ComboBox::arrowColourId, c.textMuted);
     setColour(juce::ComboBox::buttonColourId, c.surfaceHi);
 
-    setColour(juce::PopupMenu::backgroundColourId, c.surface);
+    // JUCE makes a menu window opaque (and fills it white) only when this colour is fully opaque.
+    // drawPopupMenuBackground paints the real rounded surface itself, so the colour is kept
+    // just shy of opaque: the window stays transparent outside the rounded corners.
+    setColour(juce::PopupMenu::backgroundColourId, c.surface.withAlpha(0.99f));
     setColour(juce::PopupMenu::textColourId, c.textPrimary);
     setColour(juce::PopupMenu::highlightedBackgroundColourId, c.accent.withAlpha(0.25f));
     setColour(juce::PopupMenu::highlightedTextColourId, c.textPrimary);
