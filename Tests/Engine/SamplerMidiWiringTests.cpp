@@ -1,6 +1,7 @@
 // AudioEngine::refreshMidiWiring: every Sampler is told whether a cable feeds its MIDI input, so a
 // MIDI-only Sampler waits for its first note instead of free-running.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
@@ -48,4 +49,26 @@ TEST(SamplerMidiWiringTest, AnAudioCableIntoTheSamplerDoesNotCountAsMidi) {
 
     engine.refreshMidiWiring();
     EXPECT_FALSE(sampler->isMidiInputWired());
+}
+
+// Regression test for FRO480: opening a project applied the saved connections but only told the Sampler about its
+// MIDI cable on a later message-thread pass, so the first block after the open still free-ran and fired the sample.
+TEST(SamplerMidiWiringTest, ApplyingAPatchPublishesTheWiringBeforeAnyBlockCanRender) {
+    AudioEngine source(AudioEngine::HostMode::Standalone);
+    auto& sourceGraph = source.getGraph();
+    auto midiSource = sourceGraph.addNode(std::make_unique<SequencerModule>());
+    auto samplerNode = sourceGraph.addNode(std::make_unique<SamplerModule>());
+    ASSERT_TRUE(sourceGraph.addConnection({{midiSource->nodeID, kMidi}, {samplerNode->nodeID, kMidi}}));
+    const auto json = synth::AIStateMapper::graphToJSON(sourceGraph);
+
+    AudioEngine target(AudioEngine::HostMode::Standalone);
+    auto& targetGraph = target.getGraph();
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, targetGraph, /*clearExisting=*/true, /*trusted=*/true));
+
+    SamplerModule* restored = nullptr;
+    for (auto* node : targetGraph.getNodes())
+        if (auto* candidate = dynamic_cast<SamplerModule*>(node->getProcessor()))
+            restored = candidate;
+    ASSERT_NE(restored, nullptr);
+    EXPECT_TRUE(restored->isMidiInputWired()) << "no publishTimeline or change broadcast has run yet";
 }

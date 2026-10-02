@@ -2,15 +2,14 @@
 // gate it keeps honest.
 
 #include "AudioEngine.h"
+#include "AudioEngine/SamplerMidiWiring.h"
 #include "AudioEngine/SidechainConnections.h"
 #include "AudioEngine/StereoDownMix.h"
 #include "Mixer/SoloAudibleSet.h"
 #include "Modules/ChannelStripModule.h"
-#include "Modules/SamplerModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <map>
-#include <set>
 
 // Builds the snapshot, resolves every automation lane against the CURRENT graph, and publishes the
 // snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot pointer
@@ -175,23 +174,10 @@ void AudioEngine::refreshSoloGate() {
 // change (a plain cable drag or unplug never reaches publishTimeline).
 void AudioEngine::refreshSidechainKeys() { synth::publishSidechainConnections(mainProcessorGraph); }
 
-// Whether each Sampler has a cable on its MIDI input. One scan of the connections, then one atomic
-// store per Sampler; the audio thread reads it once per block. Runs at the same three call sites as
-// refreshNormalling() (publishTimeline, the plugin's setStateInformation, and the graph's own change
-// broadcast) because a plain canvas cable drag reaches neither of the first two.
-void AudioEngine::refreshMidiWiring() {
-    std::set<juce::AudioProcessorGraph::NodeID> midiFed;
-    for (const auto& connection : mainProcessorGraph.getConnections())
-        if (connection.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex)
-            midiFed.insert(connection.destination.nodeID);
-
-    for (auto* node : mainProcessorGraph.getNodes()) {
-        if (node == nullptr)
-            continue;
-        if (auto* sampler = dynamic_cast<SamplerModule*>(node->getProcessor()))
-            sampler->setMidiInputWired(midiFed.count(node->nodeID) != 0);
-    }
-}
+// Runs at the same three call sites as refreshNormalling() (publishTimeline, the plugin's setStateInformation, and
+// the graph's own change broadcast) because a plain canvas cable drag reaches neither of the first two. Opening a
+// project is covered earlier still: applyJSONToGraph publishes the wiring itself, under the callback lock.
+void AudioEngine::refreshMidiWiring() { synth::publishSamplerMidiWiring(mainProcessorGraph); }
 
 namespace {
 // True iff `nodeId`'s raw ch0 has an incoming connection and `rightChannel` does not. Shared by
