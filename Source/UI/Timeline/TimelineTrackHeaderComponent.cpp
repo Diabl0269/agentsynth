@@ -3,6 +3,7 @@
 #include "TrackColour.h"
 #include "TrackRoutingMenus.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -862,11 +863,11 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
 }
 
 bool TimelineTrackHeaderComponent::showContextMenuForKeyboardFocus() {
-    showContextMenu();
+    showContextMenu(getScreenBounds());
     return true;
 }
 
-void TimelineTrackHeaderComponent::showContextMenu() {
+void TimelineTrackHeaderComponent::showContextMenu(std::optional<juce::Rectangle<int>> keyboardAnchor) {
     auto menu = buildContextMenu();
     if (showContextMenuHook_) {
         showContextMenuHook_(menu);
@@ -874,7 +875,7 @@ void TimelineTrackHeaderComponent::showContextMenu() {
     }
 
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this), [safeThis](int result) {
+    menu.showMenuAsync(synth::ui::contextMenuOptions(keyboardAnchor), [safeThis](int result) {
         if (auto* self = safeThis.getComponent())
             self->applyContextMenuChoice(result);
     });

@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -152,8 +153,8 @@ public:
      *  inspect the built menu (item count, an item's text) or invoke an item's action directly,
      *  instead of the real showMenuAsync(). A null hook restores the real behaviour. */
     void setShowMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showMenuHook_ = hook ? std::move(hook)
+                             : [](juce::PopupMenu& m) { m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
     }
 
     void paint(juce::Graphics& g) override;
@@ -256,7 +257,7 @@ private:
 
     // See setShowMenuHookForTest's own comment.
     std::function<void(juce::PopupMenu&)> showMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     static int liveUnbindCalls_;

@@ -6,6 +6,7 @@
 // rest of the class.
 
 #include "TimelineClipLaneArea.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
 #include "UI/Layout/DragCursor.h"
@@ -449,9 +450,7 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
 
-    auto options = juce::PopupMenu::Options();
-    if (keyboardMenuAnchor_)
-        options = options.withTargetScreenArea(*keyboardMenuAnchor_);
+    const auto options = synth::ui::contextMenuOptions(keyboardMenuAnchor_);
     menu.showMenuAsync(options);
 }
 

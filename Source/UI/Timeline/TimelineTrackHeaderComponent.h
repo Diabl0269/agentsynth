@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -708,7 +709,8 @@ private:
     int trackIndex() const;
 
     void showBindingMenu();
-    void showContextMenu();
+    /** `keyboardAnchor` set = opened from the keyboard, anchored at the header; empty = right-click, at the pointer. */
+    void showContextMenu(std::optional<juce::Rectangle<int>> keyboardAnchor = std::nullopt);
 
     // The app's channel surface, or null (no host, or a host that wires none -- a test
     // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.

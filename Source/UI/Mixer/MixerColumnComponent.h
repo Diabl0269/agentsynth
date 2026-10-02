@@ -11,6 +11,7 @@
 #include "MixerSendList.h"
 #include "MixerSourceLine.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
@@ -229,8 +230,9 @@ public:
      *  to inspect the menu a real right-click mouseDown() built, without ever opening a popup. A
      *  null hook restores the real showMenuAsync() behaviour. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     void mouseDown(const juce::MouseEvent& event) override;
@@ -327,7 +329,7 @@ private:
     /** Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test
      *  replaces it via setShowContextMenuHookForTest(). */
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     GraphEditor* graphEditor_ = nullptr;

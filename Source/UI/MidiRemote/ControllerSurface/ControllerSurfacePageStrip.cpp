@@ -6,6 +6,7 @@
 // flags only change WHEN the click fires, never which button triggered it.
 
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -117,7 +118,7 @@ void ControllerSurfacePageStrip::showDeletePageMenu(int page) {
     if (auto& hook = test_hooks::pageStripContextMenuHookForTest())
         hook(menu);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options());
+        menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 juce::Button* ControllerSurfacePageStrip::getPageButtonForTest(int page) const {

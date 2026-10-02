@@ -425,3 +425,20 @@ card lands, on the soft 8 px grid. A theme switch re-resolves the guide colour a
 A toggle lives at `Settings -> Preferences -> Graph -> Show Alignment Guides` (see [settings-preferences.md](settings-preferences.md)), persisted as
 `alignmentGuidesEnabled` in `juce::ApplicationProperties` and on by default. Off, only the module
 ghost is drawn.
+
+## Context menu placement
+
+A right-click menu opens with its top-left corner at the pointer. It moves off the pointer only
+where JUCE clamps it to keep it on screen (near the right or bottom edge). A plain
+`juce::PopupMenu::Options()` targets an *empty* rectangle at the mouse, which JUCE places on the
+nearer screen half, so on the right half of the screen the menu opened to the left of the pointer.
+
+Every pointer-driven menu therefore builds its options with `ContextMenuPlacement.h`
+(`Source/UI/Layout/`):
+
+- `contextMenuOptionsAtPointer()` / `contextMenuOptionsAtPoint(p)`: top-left at the pointer / a screen point.
+- `contextMenuOptions(keyboardAnchor)`: the anchor when the menu was opened from the keyboard
+  (Shift+F10, see the `openContextMenu` action), otherwise the pointer.
+
+Dropdown and button menus keep `withTargetComponent(&button)` so they stay anchored to their button.
+`Tests/UI/Layout/MenuPlacementTests.cpp` pins the options the helpers build.

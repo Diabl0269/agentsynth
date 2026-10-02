@@ -2,6 +2,7 @@
 // or the right zone, sizing the zones (a zone takes at most its share of half the width and scrolls
 // inside itself past that), the pin menu on a column header, and feeding the side pane's channel list.
 #include "MixerPanelComponent.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerPanelInternal.h"
@@ -206,9 +207,7 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::op
         showZoneMenuHook_(menu);
         return;
     }
-    auto options = juce::PopupMenu::Options();
-    if (anchor)
-        options = options.withTargetScreenArea(*anchor);
+    const auto options = synth::ui::contextMenuOptions(anchor);
     menu.showMenuAsync(options);
 }
 

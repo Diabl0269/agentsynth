@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -84,8 +85,9 @@ public:
      *  capturing hook to inspect the menu the real mouseDown() gesture actually built — including
      *  the addCandidateSelection it was passed — without ever opening a popup. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c); // live jack preview; true iff moved

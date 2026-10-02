@@ -3,6 +3,7 @@
 #include "Timeline/AutomationKernel.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
@@ -701,7 +702,7 @@ void AutomationLaneEditor::showHandleContextMenu(double beat) {
             mutate();
         repaint();
     });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
@@ -719,7 +720,7 @@ void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
     menu.addItem("Linear", true, currentCurve == static_cast<int>(synth::BreakpointCurve::Linear), [this, leftBeat] {
         applySegmentCurveChoice(leftBeat, static_cast<int>(synth::BreakpointCurve::Linear));
     });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 } // namespace synth::ui

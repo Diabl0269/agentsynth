@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
@@ -241,9 +242,7 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos, std::optiona
         showCanvasContextMenuHook_(m);
         return;
     }
-    auto options = juce::PopupMenu::Options();
-    if (screenAnchor)
-        options = options.withTargetScreenArea(*screenAnchor);
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
     m.showMenuAsync(options);
 }
 

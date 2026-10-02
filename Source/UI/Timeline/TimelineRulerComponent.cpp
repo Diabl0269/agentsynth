@@ -1,6 +1,7 @@
 #include "TimelineRulerComponent.h"
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -353,7 +354,7 @@ void TimelineRulerComponent::openMarkerContextMenu(synth::MarkerId id) {
     // the mouse. Deliberately NOT withTargetComponent(this): this strip is full-width and 24 px
     // tall, so anchoring to the whole component puts the menu somewhere unrelated to the flag that
     // was clicked, and it ties the menu's lifetime to a component this gesture repaints.
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 void TimelineRulerComponent::applyMarkerContextChoice(synth::MarkerId id, MarkerContextChoice choice) {

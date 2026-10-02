@@ -2,6 +2,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
@@ -166,8 +167,9 @@ public:
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- see
      *  MixerColumnComponent::setShowContextMenuHookForTest's comment. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     void mouseDown(const juce::MouseEvent& event) override;
@@ -221,7 +223,7 @@ private:
     // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     // A juce::Label that turns a vertical drag into a live BPM change: ±1.0 BPM per 4 px, or
