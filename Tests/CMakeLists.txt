@@ -21,6 +21,7 @@ add_executable(Tests
     UI/Graph/AutoArrangeMacroTests.cpp
     UI/Graph/CardGlide/CardGlideTests.cpp
     UI/Graph/CardGlide/CardGlideUndoTests.cpp
+    UI/Graph/MacroHullGlideTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/OscillatorPulseWidthGlideTests.cpp

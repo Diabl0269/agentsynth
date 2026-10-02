@@ -913,7 +913,8 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
 
 bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
                                                const std::function<void()>& mutation,
-                                               const juce::var& graphBeforeOverride) {
+                                               const juce::var& graphBeforeOverride,
+                                               const juce::var& macrosBeforeOverride) {
     if (!mutation)
         return false;
 
@@ -926,7 +927,7 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     // would be too late). Every other caller passes the default and keeps today's behaviour exactly.
     const juce::var graphBefore =
         graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
-    const juce::var macrosBefore = macros.toVar();
+    const juce::var macrosBefore = macrosBeforeOverride.isVoid() ? macros.toVar() : macrosBeforeOverride;
 
     mutation();
 

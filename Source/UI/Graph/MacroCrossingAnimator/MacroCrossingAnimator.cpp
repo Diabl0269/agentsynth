@@ -29,10 +29,6 @@ struct EndpointKey {
 EndpointKey srcKey(const CableId& id) noexcept { return {id.srcUid, id.srcPort, true}; }
 EndpointKey dstKey(const CableId& id) noexcept { return {id.dstUid, id.dstPort, false}; }
 
-juce::Point<float> lerpPoint(juce::Point<float> from, juce::Point<float> to, float t) noexcept {
-    return from + (to - from) * t;
-}
-
 } // namespace
 
 namespace {
@@ -154,8 +150,10 @@ void MacroCrossingAnimator::applyTo(std::vector<VisibleCable>& cables) const {
         for (const auto& tween : tweens_) {
             if (!(cable.id == tween.afterId))
                 continue;
-            cable.p1 = lerpPoint(tween.fromP1, tween.toP1, progress_);
-            cable.p2 = lerpPoint(tween.fromP2, tween.toP2, progress_);
+            // Offset from the live anchors rather than lerped between fixed ones: a crossing applied mid-drag
+            // keeps moving its module, and the cable end on that card must stay on it.
+            cable.p1 += (tween.fromP1 - tween.toP1) * (1.0f - progress_);
+            cable.p2 += (tween.fromP2 - tween.toP2) * (1.0f - progress_);
             break;
         }
     }

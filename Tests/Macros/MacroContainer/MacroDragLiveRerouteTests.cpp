@@ -218,3 +218,123 @@ TEST(MacroDragLiveReroute, AModulationReroutedByADragOutIsFullyRemovedFromTheLfo
         EXPECT_FALSE(engine.getModulationRoutings().empty());
     }
 }
+
+namespace {
+
+// One gesture with several drag ticks: each entry in `centres` is where the card's centre is moved to, and
+// `atEach` runs after that tick (before the next one, or the release).
+void dragThrough(ModuleComponent& comp, const std::vector<juce::Point<int>>& centres,
+                 const std::function<void(size_t)>& atEach) {
+    const juce::Point<int> pressPos(comp.getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const auto startCentre = comp.getBounds().getCentre();
+    comp.mouseDown(realMouseEvent(comp, pressPos, pressPos, kPlainClick));
+    juce::Point<int> pos = pressPos;
+    for (size_t i = 0; i < centres.size(); ++i) {
+        // ComponentDragger adds (position - press point) to the card's CURRENT bounds each tick.
+        const auto step = centres[i] - comp.getBounds().getCentre();
+        pos = pressPos + step;
+        comp.mouseDrag(realMouseEvent(comp, pos, pressPos, kPlainClick, /*wasDragged=*/true));
+        atEach(i);
+    }
+    juce::ignoreUnused(startCentre);
+    comp.mouseUp(realMouseEvent(comp, pressPos, pressPos, kPlainClick, /*wasDragged=*/true));
+}
+
+struct PortedLfoRig {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    NodeID a, b, lfo;
+    juce::String macroId;
+
+    PortedLfoRig() {
+        undo.setGraphEditor(&editor);
+        editor.setSize(2400, 1400);
+        a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+        b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 600);
+        lfo = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 1000, 150);
+        editor.connectPorts(lfo, 0, b, 0, /*isMidi=*/false);
+        editor.setSelectedNodes({a, b});
+        macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+        editor.getMacroController().setMacroCollapsed(macroId, false);
+        editor.setSelectedNodes({});
+    }
+    bool inside() { return editor.getMacroController().macroForNode(lfo) != nullptr; }
+    size_t ports() { return editor.getMacros().find(macroId)->ports.size(); }
+    // Empty canvas right of the Oscillator, inside the border the two members span.
+    juce::Point<int> insideSpot() {
+        const auto hull = editor.getMacroController().macroHullBounds(macroId);
+        return {hull.getRight() - 160, hull.getY() + 250};
+    }
+};
+
+} // namespace
+
+// Regression test for FRO563: the cables re-routed only on the drop, so the port and its name stayed on the
+// border while the module sat inside, and everything jumped on release.
+TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesNotOnTheDrop) {
+    PortedLfoRig r;
+    ASSERT_EQ(r.ports(), 1u);
+    const auto outside = findComponent(r.editor, r.lfo)->getBounds().getCentre();
+    const auto in = r.insideSpot();
+
+    dragThrough(*findComponent(r.editor, r.lfo), {in, outside, in}, [&](size_t tick) {
+        const bool shouldBeInside = tick != 1;
+        EXPECT_EQ(r.inside(), shouldBeInside) << "tick " << tick;
+        EXPECT_EQ(r.ports(), shouldBeInside ? 0u : 1u) << "the port goes and comes back as it crosses, tick " << tick;
+        EXPECT_EQ(hasDirectEdge(r.engine, r.lfo, r.b), shouldBeInside) << "tick " << tick;
+        EXPECT_TRUE(r.editor.hasMacroDragCandidate() == shouldBeInside) << "tick " << tick;
+    });
+
+    EXPECT_TRUE(r.inside()) << "dropped where it was last carried: inside";
+    EXPECT_EQ(r.ports(), 0u);
+}
+
+TEST(MacroDragLiveReroute, OneUndoPutsBackTheWholeGestureHoweverOftenItCrossed) {
+    PortedLfoRig r;
+    const auto uuid = uuidOf(r.engine, r.lfo);
+    auto* node = r.engine.getGraph().getNodeForId(r.lfo);
+    const int x0 = node->properties["x"], y0 = node->properties["y"];
+    const auto outside = findComponent(r.editor, r.lfo)->getBounds().getCentre();
+    const auto in = r.insideSpot();
+    const int serial = r.undo.getEditSerial();
+
+    dragThrough(*findComponent(r.editor, r.lfo), {in, outside + juce::Point<int>(0, 200), in}, [](size_t) {});
+    ASSERT_TRUE(r.inside());
+    EXPECT_EQ(r.undo.getEditSerial(), serial + 1) << "the gesture is one undo step";
+
+    ASSERT_TRUE(r.undo.undo());
+    const auto lfoAfter = nodeIdForUuid(r.engine, uuid);
+    ASSERT_NE(lfoAfter.uid, 0u);
+    EXPECT_EQ(r.editor.getMacros().findByMember(uuid), nullptr) << "back outside";
+    EXPECT_EQ(r.ports(), 1u) << "with its port";
+    EXPECT_EQ((int)r.engine.getGraph().getNodeForId(lfoAfter)->properties["x"], x0) << "where it was pressed";
+    EXPECT_EQ((int)r.engine.getGraph().getNodeForId(lfoAfter)->properties["y"], y0);
+}
+
+TEST(MacroDragLiveReroute, TheBorderGlidesToItsNewSizeAndThePortWidgetsGoWithIt) {
+    PortedLfoRig r;
+    const auto hullBefore = r.editor.paintedMacroHullBounds(r.macroId);
+    const auto outside = findComponent(r.editor, r.lfo)->getBounds().getCentre();
+    const auto farOut = outside + juce::Point<int>(300, 0);
+
+    dragThrough(*findComponent(r.editor, r.lfo), {r.insideSpot(), farOut}, [&](size_t tick) {
+        if (tick != 0)
+            return;
+        ASSERT_TRUE(r.inside());
+        EXPECT_TRUE(r.editor.isHullGlideLiveForTest()) << "joining moved the border, so it glides";
+        EXPECT_EQ(r.editor.paintedMacroHullBounds(r.macroId), hullBefore)
+            << "at the start of the glide the border is drawn where it was";
+        r.editor.finishHullGlideForTest();
+        EXPECT_NE(r.editor.paintedMacroHullBounds(r.macroId), hullBefore) << "and it settles around the newcomer";
+    });
+    ASSERT_FALSE(r.inside());
+    ASSERT_EQ(r.ports(), 1u);
+    r.editor.finishHullGlideForTest();
+    // The port widget docks against the border that is drawn, so it slides with it.
+    const auto& port = r.editor.getMacros().find(r.macroId)->ports.front();
+    auto* portComp = findComponent(r.editor, nodeIdForUuid(r.engine, port.nodeUuid));
+    ASSERT_NE(portComp, nullptr);
+    const auto painted = r.editor.paintedMacroHullBounds(r.macroId);
+    EXPECT_LE(std::abs(portComp->getX() - painted.getX()), 60) << "the inlet sits on the drawn border's left side";
+}

@@ -12,6 +12,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 #include "UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/MacroHullGlide/MacroHullGlide.h"
 #include "UI/Graph/ModuleClipboard.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
@@ -212,10 +213,11 @@ public:
     juce::String getMacroDragLeaveId() const noexcept { return macroDragLeaveId_; }
     /** The macro a live reparent drag (or a library drag, see setMacroDropCandidate) would join. */
     juce::String getMacroDragJoinId() const noexcept { return macroDragJoinId_; }
-    /** Whether a live reparent drag currently has any leave or join candidate. */
-    bool hasMacroDragCandidate() const noexcept {
-        return macroDragLeaveId_.isNotEmpty() || macroDragJoinId_.isNotEmpty();
-    }
+    /** Whether a live reparent drag has a leave or join candidate, or has already moved its module into or
+     *  out of a macro as it crossed. */
+    bool hasMacroDragCandidate() const;
+    /** The macro a live drag has moved its module into as it crossed, empty when it is back where it started. */
+    juce::String getMacroDragLiveOwnerId() const;
     /** The module a reparent drag is currently moving, invalid between gestures. */
     juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
     void updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId, juce::Point<int> canvasCentre);
@@ -227,6 +229,8 @@ public:
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
     /** Single-undo-step finalize (position + leave + join). `module` must not be touched afterwards. */
     void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId, const juce::String& joinId);
+    /** True once the drag in progress has moved its module into or out of a macro (applied as it crossed). */
+    bool hasLiveMacroMembershipChange() const noexcept { return liveMembershipChanged_; }
 
     /** Preference "macroDragWithoutCmd": reparent by drag without Cmd (single-module drags only). */
     void setMacroDragWithoutCmdEnabled(bool enabled) { macroDragWithoutCmdEnabled = enabled; }
@@ -635,6 +639,9 @@ public:
     void advanceMacroCrossingAnimForTest(float t);
     /** Lands the tween at its final state, same as the real driver's onComplete. */
     void finishMacroCrossingAnimForTest();
+    /** Lands every macro border glide (MacroHullGlide.h), as the real driver's onComplete does. */
+    void finishHullGlideForTest();
+    bool isHullGlideLiveForTest() const noexcept { return hullGlide_.isLive(); }
 
     /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
     CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
@@ -764,6 +771,11 @@ private:
     // The macros a live Cmd-drag would LEAVE and JOIN if released now, empty for none.
     juce::String macroDragLeaveId_;
     juce::String macroDragJoinId_;
+    // Set once a drag has applied a membership change as it crossed; the macros as they were at press.
+    bool liveMembershipChanged_ = false;
+    juce::var macrosBeforeLiveDrag_;
+    juce::String liveMembershipPressOwner_; // the macro the module sat directly in at press, empty for none
+    bool liveMembershipAway_ = false;       // the module now sits somewhere other than at press
     // The module that drag is moving; set/cleared together with the two ids above.
     juce::AudioProcessorGraph::NodeID macroDragDraggedNodeId_;
 
@@ -823,6 +835,10 @@ private:
     // Paint-only slide of cards a make-room / return / auto-arrange moved (CardGlideAnimator.h).
     CardGlideAnimator cardGlide_;
 
+    // Expanded macro borders gliding to new bounds (MacroHullGlide.h) plus its driver.
+    MacroHullGlide hullGlide_;
+    synth::ui::AnimationDriver hullGlideDriverAnim_;
+
     // ---- Alignment guides (drag-preview feedback) ----
     using AlignmentGuide = graph_editor_types::AlignmentGuide;
     std::vector<AlignmentGuide> alignmentGuides;
@@ -849,6 +865,16 @@ private:
     // Slides the port-side end of every cable a cable drop created from `dropPoint` (canvas coordinates) to its anchor.
     void armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint);
     void startMacroCrossingDriver();
+    // ---- Live membership change and border glide (GraphEditorMacroLiveDrag.cpp) ----
+    juce::Rectangle<int> macroHullTargetBounds(const juce::String& macroId) const;
+    MacroHullGlide::Hulls snapshotPaintedHulls() const;
+    void glideHullsFrom(const MacroHullGlide::Hulls& before);
+    bool canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId) const;
+    void applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
+                             const juce::String& joinId);
+    void recordUnfinishedLiveMembershipChange();
+    juce::String currentOwnerOfDraggedModule() const;
+    void revertLiveMembership();
 
     // ---- Cable memo (perf) ----
     std::vector<VisibleCable> rebuildVisibleCables();

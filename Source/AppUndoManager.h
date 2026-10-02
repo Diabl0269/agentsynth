@@ -212,10 +212,12 @@ public:
      * @param mutation Lambda that performs the combined mutation.
      * @param graphBeforeOverride Optional graph "before" override for a caller whose live
      *        gesture already wrote intermediate state into the graph — see the .cpp definition.
+     * @param macrosBeforeOverride The same for the macro set (a drag that changed membership live).
      * @return true if either domain changed and a transaction was pushed, false if neither did.
      */
     bool recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
-                                   const std::function<void()>& mutation, const juce::var& graphBeforeOverride = {});
+                                   const std::function<void()>& mutation, const juce::var& graphBeforeOverride = {},
+                                   const juce::var& macrosBeforeOverride = {});
 
     /**
      * @brief Records a mutation that may touch the graph, the TimelineDoc, AND a synth::MacroSet all

@@ -942,7 +942,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // has no way to ask for one without the other (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border).
     const juce::String leaveId = wasReparentArmed ? owner.getMacroDragLeaveId() : juce::String();
     const juce::String joinId = wasReparentArmed ? owner.getMacroDragJoinId() : juce::String();
-    if (leaveId.isNotEmpty() || joinId.isNotEmpty()) {
+    if (leaveId.isNotEmpty() || joinId.isNotEmpty() || owner.hasLiveMacroMembershipChange()) {
         // This capture was never going to be consumed by a pushSnapshotFromCapture — the reparent
         // finalize below consumes it itself instead (GraphEditor::finalizeMacroMembershipDrag's
         // own comment has the full story on why it needs the ORIGINAL mousedown-time capture

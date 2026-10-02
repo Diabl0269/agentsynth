@@ -77,8 +77,8 @@ TEST(MacroDragTransfer, CmdDragMemberOfAIntoBHullLeavesAAndJoinsB) {
     ASSERT_NE(comp, nullptr);
 
     dragBodyBy(*comp, deltaIntoHull(editor, *comp, t.macroB), kCmdClick, [&] {
-        EXPECT_EQ(editor.getMacroDragLeaveId(), t.macroA) << "mid-drag: A must be the LEAVE candidate";
-        EXPECT_EQ(editor.getMacroDragJoinId(), t.macroB) << "mid-drag: B must be the JOIN candidate (A is skipped)";
+        EXPECT_FALSE(isMemberOf(editor, t.macroA, uuidA1)) << "mid-drag: it has already left A";
+        EXPECT_TRUE(isMemberOf(editor, t.macroB, uuidA1)) << "mid-drag: and joined B (A is skipped)";
     });
 
     EXPECT_FALSE(isMemberOf(editor, t.macroA, uuidA1)) << "the dragged module must have left A";
@@ -332,8 +332,9 @@ TEST(MacroDragTransfer, PreferenceOnPlainDragJoinsAndLeaves) {
     editor.setSelectedNodes({c});
     auto* compC = findComponent(editor, c);
     ASSERT_NE(compC, nullptr);
-    dragBodyBy(*compC, deltaIntoHull(editor, *compC, t.macroB), kPlainClick,
-               [&] { EXPECT_EQ(editor.getMacroDragJoinId(), t.macroB) << "a plain drag arms the join candidate"; });
+    dragBodyBy(*compC, deltaIntoHull(editor, *compC, t.macroB), kPlainClick, [&] {
+        EXPECT_TRUE(isMemberOf(editor, t.macroB, uuidOf(engine, c))) << "a plain drag joins as it crosses";
+    });
     EXPECT_TRUE(isMemberOf(editor, t.macroB, uuidOf(engine, c))) << "pref on: a plain drag joins";
 
     // LEAVE: a plain drag of an A member far outside every hull.
