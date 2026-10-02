@@ -1,12 +1,12 @@
-type Poly MIDI size 280x185
+type Poly MIDI size 280x169
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,147 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 122,129 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 combo id="" at 40,91 200x24 visible=1 title="Voice Steal" tip="Voice Steal" focusOrder=0 wantsFocus=1
   child 6 label id="" at 40,73 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 7 toggle id="Vel -> Gate" at 12,121 256x24 visible=1 title="Vel -> Gate" tip="Vel -> Gate" focusOrder=0 wantsFocus=1
+  child 7 toggle id="Vel -> Gate" at 12,129 104x20 visible=1 title="Velocity sets gate" tip="Vel -> Gate" focusOrder=0 wantsFocus=1
   child 8 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 9 component id="" at 264,52 12x12 visible=1 title="Poly Out output" tip="" focusOrder=0 wantsFocus=0
   out 0 270, 58

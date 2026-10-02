@@ -72,7 +72,7 @@ struct Scene {
 
     Scene() {
         bank = c.bank(400, 300, kSmall);
-        neighbour = c.osc(504, 650);
+        neighbour = c.osc(504, 620);
         neighbourHome = c.rect(neighbour);
     }
 };

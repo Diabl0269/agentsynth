@@ -169,7 +169,7 @@ TEST(CardBodyGolden, EveryCardMatchesItsGoldenFile) {
     for (const auto& type : goldenTypes()) {
         const auto actual = describeCardOfType(editor, type);
         if (goldenWriteRequested(request, type)) {
-            ASSERT_TRUE(goldenFileFor(type).replaceWithText(actual.joinIntoString("\n") + "\n"));
+            ASSERT_TRUE(goldenFileFor(type).replaceWithText(actual.joinIntoString("\n") + "\n", false, false, "\n"));
             ++written;
             continue;
         }

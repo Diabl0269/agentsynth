@@ -531,15 +531,14 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
 }
 
 // A knob hidden on an inactive tab page (or in a folded More row) keeps the bounds it had when last
-// laid out, so drawing from them paints a ring over empty card -- UNLESS it is hidden only because its
-// own *Div combo swapped in over it (BPM mode), or a layout's swap group shows a sibling in its cell
-// (CardBody::isSwappedOut); either keeps the SAME cell a jack still legitimately lands on, so the jack
-// never falls back to the gutter and the card never grows on a swap; see isEnvelopeDivSwappedForSlider's
-// own comment (ModuleComponentEnvelopeCard.cpp).
+// laid out, so drawing from them paints a ring over empty card -- UNLESS a layout's swap group shows a
+// sibling in its cell (CardBody::isSwappedOut, the ADSR's stage time swapped for its tempo division
+// included): that keeps the SAME cell a jack still legitimately lands on, so the jack never falls back to
+// the gutter and the card never grows on a swap.
 int ModuleComponent::shownRingSliderIndex(int si) const {
     if (!showsModulation(*sliders[si]))
         return -1;
-    if (sliders[si]->isVisible() || isEnvelopeDivSwappedForSlider(si))
+    if (sliders[si]->isVisible())
         return si;
     return cardBody_ != nullptr && cardBody_->isSwappedOut(*sliders[si]) ? si : -1;
 }
@@ -838,10 +837,7 @@ void ModuleComponent::resized() {
 
     // --- MIDI Keyboard Layout ---
     if (getType(module) == ModuleType::MidiKeyboard) {
-        setSize(synth::LayoutUtil::kDoubleWidth, 150); // Appropriate size for a keyboard
-        if (keyboardComponent) {
-            keyboardComponent->setBounds(10, 50, getWidth() - 20, getHeight() - 60);
-        }
+        layoutMidiKeyboardCard(); // the Octave row and the keys; ModuleComponentMidiKeyboardCard.cpp
         return;
     }
 

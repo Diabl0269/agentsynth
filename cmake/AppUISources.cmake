@@ -350,6 +350,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAccessibility.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
@@ -418,6 +419,7 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/WavetableDisplayComponent.h
     Source/UI/ModuleViews/TriggerMeterComponent.h
     Source/UI/ModuleViews/ThresholdControlComponent.h
+    Source/UI/ModuleViews/GainReductionMeterComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
     Source/UI/Graph/ModMatrixEndpoints.cpp

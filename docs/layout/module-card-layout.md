@@ -10,7 +10,7 @@ v2 and its reader/writer, the shared layout store with its `ModuleCardLayouts` r
 every card resolves its per-type default against it), the per-instance `cardLayout` node property with
 its undo, the pure resolver with an empty code-default registry, `CardBody`, which builds and lays out
 every built-in card's body from the resolved layout, with the folded More row, section header rows,
-label overrides and the Threshold view in its view registry, the `knobLarge`, `faderV`, `faderH`,
+label overrides and the Threshold and Envelope views in its view registry, the `knobLarge`, `faderV`, `faderH`,
 `segmented` and `stepper` widgets, Hide from card / Show on card / Show as fader / Show as knob on every
 control's right-click menu, the **Edit Layout...** editor shared with the hosted plugin's picker,
 conditions read live (dim, swap groups, conditional sections, code dim rules), the footer row with the
@@ -56,7 +56,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | Resolver (instance, type default, code default, automatic) and the empty `DefaultCardLayouts` registry | `Source/UI/Graph/CardBody/ModuleCardLayoutResolver.*`, `DefaultCardLayouts.*` |
 | `CardBody`: builds, binds and lays out a card's body; the folded More row | `Source/UI/Graph/CardBody/CardBody.*`, `CardBodyLayout.cpp`, `CardBodyMoreRow.cpp`, `CardBodyMoreButton.h` |
 | The plan (which widget per parameter, the skip rules, placement, More) and the run layouts | `CardBodyPlan.*`, `CardBodyGeometry.*`, `CardBodyLayoutWalk.h` |
-| The view registry (only `threshold` is registered) | `CardBodyViews.*` |
+| The view registry (`threshold`, and the ADSR's `envelope`) | `CardBodyViews.*` |
 | Conditions read live: `when` (dim, swap groups), `visibleWhen`, code dim rules, the parameter listener | `CardBodyConditions.cpp` |
 | The footer row (`CardSection::kFooterId`) and the small toggle pill | `CardBodyFooter.cpp`; `Source/UI/Graph/CardWidgets/CardTogglePill.h`, `AppLookAndFeel::paintTogglePill` |
 | One registration unit per module family, and the `cardlayout::` builders | `Source/UI/Graph/CardBody/DefaultLayouts/` |
@@ -225,7 +225,9 @@ envelope, LFO curve and threshold components plug in unchanged.
   audio thread, only triggers an `AsyncUpdater`), re-reads them on the message thread, and re-lays out
   only when a result changed. A `dim` keeps the cell and marks the control dimmed (painted greyed by the
   look-and-feel, still enabled, focusable and operable, with an "Inactive in this mode" description and
-  tooltip hint); consecutive `show` items testing one parameter are one **swap group** in one cell,
+  tooltip hint); consecutive `show` items testing one parameter are one **swap group** in one cell (a
+  member repeating a condition already in the group starts the next group, so the ADSR's four
+  time/division pairs, all testing `tempoSync`, are four groups),
   laid out in the run of its tallest member, every member fitted to that cell at its own height, so a
   swap never moves anything and a swapped-out knob keeps its knob-bound jack (`CardBody::isSwappedOut`);
   a lone `show` item is a group of one whose cell stays empty while it is off. A swapped-out item is
@@ -260,7 +262,7 @@ envelope, LFO curve and threshold components plug in unchanged.
 | `knobLarge` | the one control a module is "about" (Cutoff, Drive, Delay Time) | same widget, 60 px dial, spans one cell |
 | `faderV` | levels and stages compared side by side (ADSR stages, Reverb Dry/Wet, Limiter Input/Ceiling) | new `CardFader` |
 | `faderH` | a single level across the card (VCA Gain, Voice Mixer Level, footer output trims) | new `CardFader` |
-| `segmented` | a choice with up to about 6 short values (waveform, filter family, clock source) | new; the ADSR MS/BPM control is the precedent |
+| `segmented` | a choice with up to about 6 short values (waveform, filter family, clock source) | new; the ADSR MS/BPM control is the precedent; a bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and "Tempo") |
 | `choice` | longer choice lists | today's `ComboBox` |
 | `toggle` | booleans | today's toggle; footer toggles are the small pill |
 | `stepper` | a small integer with a musical reading (MIDI Keyboard octave) | new; − value + |
@@ -293,29 +295,29 @@ added.
 
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
-| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, (new Glide); Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan; footer | Detune dims at 1 voice; Pulse Width dims unless Square |
-| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged |
+| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, Glide (one row of four); Unison: Voices, Detune, Pulse Width; Output: Level, Pan; footer (Poly, Show Scope) | Detune dims at 1 voice (a code dim rule); Pulse Width dims unless Square. As built: every parameter is placed, so no More row |
+| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: Key Track, Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged. As built: the response panel stays card chrome, closed until opened; Show Response and Show Spectrum are footer pills, so there is no `response` item in the layout |
 | VCA | Gain `faderH`; footer | — |
-| ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place |
-| LFO | `lfoShape` view; Shape `segmented` (incl. Draw → `lfoCurve` view); Free/Sync `segmented`; Rate `knobLarge`, (new Phase, new Fade in); Level, Glide; footer: Bipolar, Restart on note | Rate swaps Hz ↔ division; Glide dims unless S&H |
-| Noise | Type `segmented`; Color, Level; footer | — |
-| Sampler | `waveform` view + load row; Mode `segmented`; Start, (new End), Level; Pitch, Root (note name), (new Fine); footer: Loop, (new Reverse) | Granular swaps in Grain Size, Density, Spray |
+| ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place. As built: Velocity is a `faderH` row; the Time/Tempo caption is "Stage times"; captions Atk, Hold, Dec, Sus, Rel; the footer holds Poly, Show Envelope Graph and Show Scope; the same entry is registered for Amp Env and Filter Env; the card is 597 px tall |
+| LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch); the Sync control is a Free/Sync `segmented` switch on the `mode` bool (its own off and on texts); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
+| Noise | Type `segmented`; Color, Level; footer (Poly, Show Scope) | As built: as designed |
+| Sampler | waveform and load row (card chrome, above the body); Mode `segmented`; Start, End, Level; Pitch: Pitch, Root, Fine; Grains: Grain Size, Density, Spray; footer: Loop, Reverse | The grain controls dim unless Mode is Granular (as built: a dim, not a swap or a hidden section, so their CV jacks keep a knob to land on and the mode switch never resizes the card; they stay on the card in Sample mode, as before). As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already) |
 | Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
-| Delay | (new ms/Sync `segmented`); Time `knobLarge`, Feedback, Mix; footer: (new Ping-pong), Level | Sync swaps Time for a division |
-| Reverb | Room: Size, Damping, (new Pre-delay); Mix: Dry, Wet `faderV`, Width; footer: Level | — |
-| Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | — |
-| Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | — |
-| Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | — |
-| Ring Modulator | Drive, Character, Mix; footer: Quality, Level | — |
-| Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz) |
-| Compressor | (new `gainReduction` view), Threshold `faderV`; Ratio, Makeup, Attack, Release; footer: (new Knee) | — |
-| Limiter | Input `faderV`, (new `gainReduction`), (new Ceiling `faderV`), Release | — |
-| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | — |
-| Sample & Hold | Source, Mode `segmented` side by side; Clock `segmented`; Rate, Slew; Level, Offset | External clock swaps Rate for the `threshold` view |
+| Delay | Tempo Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Tempo Sync is a Time/Sync `segmented` switch on the boolean (its own off and on texts); the division stays a choice in Time's cell |
+| Reverb | Room: Size, Damping, Pre-delay; Mix: Dry, Wet, Width; footer: Level | As built: Dry and Wet are both `faderV` (side by side, as the widget table says), Width a knob |
+| Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | As built: Chorus and Flanger caption Centre Delay as "Delay (ms)" (the full name stays in the tooltip), because the full caption ellipsises at a knob's width |
+| Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | As built: Quality is the Oversampling choice, drawn as a combo with its caption in the footer |
+| Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | As built: Dither is continuous, so it is a footer fader, not a pill |
+| Ring Modulator | Drive, Character, Mix; footer: Quality, Level | As built: Quality is the Oversampling choice, as for Distortion |
+| Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz). As built: a swap group holds one cell and two controls swap for one, so Pitch and Shift swap in one cell and Fine dims in Frequency mode (two conditional sections would hide knobs whose CV jacks stay knob-bound, and resize the card on every flip); the card never changes size on the mode |
+| Compressor | (new `gainReduction` view); Threshold, Makeup `faderV` side by side; Ratio, Attack, Release; footer: (new Knee) | As built: Makeup is captioned "Makeup (dB)" (the full name stays in the tooltip), because "Makeup Gain (dB)" ellipsises; the card is 365 px tall |
+| Limiter | `gainReduction`; Input, Ceiling `faderV` side by side; Release | As built: Threshold is also on the card, before Release, so its CV jack has a knob to land on; the card is 309 px tall |
+| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | As built: Threshold is a knob, because the Gate publishes no live level for the `threshold` view yet |
+| Sample & Hold | Source, Mode `segmented` side by side; Clock `segmented`; Rate, Slew; Level, Offset | External clock swaps Rate for the `threshold` view. As built: Source, Mode and Clock stack (spans are not drawn); the first knob cell swaps Rate for the Threshold knob (Threshold keeps its CV jack in the cell) and the `threshold` meter opens above the knobs (a section's `visibleWhen`, since a view cannot join a swap group), so only the Clock switch changes the card's height; the knobs are two columns (Rate or Threshold, Slew; Level, Offset) |
 | Envelope Follower | Detection `segmented`; Attack, Release, Sensitivity; footer | — |
-| Voice Mixer | Level `faderH` | — |
-| Poly MIDI | Voice Steal `segmented`; footer: Velocity sets gate | — |
-| MIDI Keyboard | bespoke keys plus an Octave `stepper` row (the parameter exists today, with no control) | — |
+| Voice Mixer | Level `faderH` | As built: no footer (the card has no Poly or Scope) |
+| Poly MIDI | Voice Steal `segmented`; footer: Velocity sets gate | As built: Voice Steal stays a combo, because "Round-Robin" is longer than a switch's 10 characters (the value strings are the patch contract) |
+| MIDI Keyboard | bespoke keys plus an Octave `stepper` row (the parameter exists today, with no control) | As built: the row sits above the keys (card 560x160), the stepper's two buttons are Tab stops titled "Octave down" and "Octave up", the card listens to them for the right-click and MIDI Learn menu; it is card code (`ModuleComponentMidiKeyboardCard.cpp`), not a layout entry |
 | Math | Clip `segmented`; footer | — |
 | Comparator | unchanged (`threshold` view) | — |
 
@@ -324,17 +326,26 @@ patch node's `params` is an open record there, and per-module ranges come from t
 
 As built: `DefaultCardLayouts::builtIn()` calls one registration function per module family, each in
 its own unit under `Source/UI/Graph/CardBody/DefaultLayouts/` (`DefaultCardLayoutsSources.cpp`:
-Oscillator, Noise, Sampler, LFO, Wavetable; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
+Oscillator, Noise, Sampler, LFO; Wavetable stays bespoke for now; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
 Env, VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer, Poly MIDI, MIDI Keyboard;
 `DefaultCardLayoutsFilterDynamics.cpp`: Filter, Compressor, Limiter, Gate; `DefaultCardLayoutsEffects.cpp`:
 Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), all
-empty so far. An entry is `defaults.add(type, layout, revision, dimRules)`, written with the
+empty so far (the envelopes and utilities family has its entries, below). An entry is `defaults.add(type, layout, revision, dimRules)`, written with the
 `cardlayout::` builders in `DefaultCardLayoutsFamilies.h` (`param`, `showWhen`, `dimUnless`, `view`,
 `section`, `footer`). A family's goldens (`Tests/fixtures/card-body/<Type>.golden`) are recaptured with
 `CARDBODY_WRITE_GOLDEN=<Type>,<Type>`, and its heights live in its own table in
 [module-card.md](module-card.md#body-layout), so no two families edit the same file. The MIDI Keyboard
 and the Wavetable build no data-driven body today, so an entry for them has no effect until their cards
 do.
+
+The envelopes and utilities family, as built. The ADSR draws its graph as the card body's `envelope`
+view (the `CurveEditorComponent` unchanged, built by `CardBodyViews.cpp`); the card wires it to the
+parameters (`ModuleComponentEnvelopeCard.cpp`) and its **Show Envelope Graph** toggle closes and reopens
+it through `CardBody::setViewOpen` (a view item's `open` is the initial state, not persisted; a closed
+view takes no height). The old card-owned MS|BPM buttons, knob-hiding and division combos are gone: the
+Time/Tempo switch is the layout's `segmented` item on the `tempoSync` bool, and each stage's time and its
+division are a swap group, so the one mechanism is the card body's conditions. A layout that leaves the
+envelope view out draws no graph and no toggle.
 
 ### Decisions (2026-10-01)
 

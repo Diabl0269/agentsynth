@@ -10,6 +10,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -195,6 +196,19 @@ TEST_F(GraphEditorTest, ModTargetAnchorFollowsTheDialForAdsrAndIsUnchangedForBel
     EXPECT_NEAR(flangerAnchor->y, flangerExpected.y, 0.01f);
 
     auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    {
+        // The ADSR's designed default draws faders; the dial-offset rule is about its rotary knobs
+        // (text box above), which a layout can still ask for.
+        synth::CardParamItem attack;
+        attack.paramId = "attack";
+        attack.widget = synth::CardWidget::Knob;
+        synth::CardSection section;
+        section.id = "main";
+        section.items.emplace_back(attack);
+        synth::CardLayout layout;
+        layout.sections = {section};
+        synth::setCardLayoutOverride(engine.getGraph(), nullptr, adsrNode->nodeID, layout);
+    }
     editor.updateComponents();
     ModuleComponent* adsrComp = nullptr;
     if (auto* content = editor.getChildComponent(0))

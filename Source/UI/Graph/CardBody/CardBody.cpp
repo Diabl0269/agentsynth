@@ -81,7 +81,7 @@ CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const st
     , plan_(CardBodyPlan::forModule(module, layout, dimRules))
     , layout_(layout) {}
 
-CardBody::~CardBody() = default;
+CardBody::~CardBody() { *widgetsAlive_ = false; }
 
 // The layout chain (docs/layout/module-card-layout.md#where-a-layout-comes-from): the node's own
 // override, then the type's stored default in `store` (the app binds one per GraphEditor,
@@ -123,6 +123,7 @@ void CardBody::createViews() {
         if (const auto* factory = findCardViewFactory(item.view)) {
             if (auto view = factory->create(module_)) {
                 card_.addAndMakeVisible(view.get());
+                view->setVisible(item.open);
                 item.widget = views_.add(view.release());
             }
         }
@@ -142,7 +143,7 @@ void CardBody::createParameterWidgets() {
         else if (item.kind == CardBodyItem::Kind::FaderV || item.kind == CardBodyItem::Kind::FaderH)
             createFader(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Segmented)
-            createSegmented(item, *static_cast<juce::AudioParameterChoice*>(item.param));
+            createSegmented(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Stepper)
             createStepper(item, *static_cast<juce::AudioParameterInt*>(item.param));
     }
@@ -162,7 +163,7 @@ void CardBody::styleFooterItems() {
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
             synth::ui::setTogglePillStyle(*toggle, true);
         if (auto* label = dynamic_cast<juce::Label*>(item.label)) {
-            label->setFont(juce::Font(juce::FontOptions(synth::theme::AppLookAndFeel::kTogglePillFontHeight)));
+            label->setFont(synth::theme::AppLookAndFeel::uiFont(synth::theme::AppLookAndFeel::kTogglePillFontHeight));
             label->setJustificationType(juce::Justification::centredLeft);
         }
     }
@@ -282,7 +283,10 @@ juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter
 
 // Everything a knob has -- the sliders/sliderParams entry (Automate, value reflection, modulation-target
 // lookup), MIDI Learn, the card gestures, the attachment and the ADSR display skew -- plus the default
-// a Cmd-click or double-click returns to. The painter picks the look from the fader's size.
+// a Cmd-click or double-click returns to. The painter picks the look from the fader's size. A choice drawn
+// as a fader (a division swapping with its time, promoteChoicesBesideFaders) is a stepped one: the
+// attachment gives it the choice's integer steps, its value box the step's text, and its default is the
+// choice's default.
 void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
     const bool vertical = item.kind == CardBodyItem::Kind::FaderV;
     auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical
@@ -297,6 +301,8 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
     sliderAttachments_.add(new juce::SliderParameterAttachment(param, *fader));
     if (dynamic_cast<juce::AudioParameterFloat*>(&param) != nullptr)
         applyAdsrTimeSkew(*fader, param);
+    if (vertical) // 40 px wide: "1.00 s" would truncate, "1.00s" fits
+        fader->useCompactValueText(param);
     fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));
     card_.sliderParams.add(&param);
     card_.sliderLabels.add(
@@ -306,17 +312,19 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
 
 // Bound through a plain ParameterAttachment: a pick is one complete gesture (one undo step), and a
 // value from automation or undo moves the selection without notifying back.
-void CardBody::createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param) {
-    auto* segmented = new synth::ui::CardSegmentedSwitch(param.getName(100), param.choices);
+void CardBody::createSegmented(CardBodyItem& item, juce::RangedAudioParameter& param) {
+    auto* segmented = new synth::ui::CardSegmentedSwitch(param.getName(100), cardBodySegmentLabels(param));
     widgets_.add(segmented);
     segmented->setComponentID(param.getName(100));
     segmented->setTooltip(param.getName(100));
     card_.addAndMakeVisible(segmented);
     segmented->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*segmented, &param);
-    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(param, [segmented](float value) {
-        segmented->setSelectedIndex(juce::roundToInt(value), juce::dontSendNotification);
-    }));
+    auto* attachment =
+        paramAttachments_.add(new juce::ParameterAttachment(param, [segmented, alive = widgetsAlive_](float value) {
+            if (*alive)
+                segmented->setSelectedIndex(juce::roundToInt(value), juce::dontSendNotification);
+        }));
     segmented->onChange = [attachment](int index) { attachment->setValueAsCompleteGesture((float)index); };
     attachment->sendInitialUpdate();
     addCaption(item, param, juce::Justification::centredLeft);
@@ -333,8 +341,11 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
     card_.addAndMakeVisible(stepper);
     stepper->addMouseListener(&card_, true);
     card_.registerMidiLearnable(*stepper, &param);
-    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(
-        param, [stepper, &param](float) { stepper->setValueText(param.getCurrentValueAsText()); }));
+    auto* attachment =
+        paramAttachments_.add(new juce::ParameterAttachment(param, [stepper, &param, alive = widgetsAlive_](float) {
+            if (*alive)
+                stepper->setValueText(param.getCurrentValueAsText());
+        }));
     stepper->onStep = [attachment, &param](int delta) {
         const auto range = param.getRange();
         const int next = juce::jlimit(range.getStart(), range.getEnd(), param.get() + delta);
@@ -349,6 +360,29 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
 juce::Component* CardBody::findWidget(const juce::String& paramId) const {
     const int index = plan_.findParam(paramId);
     return index >= 0 ? plan_.items[(size_t)index].widget : nullptr;
+}
+
+juce::Component* CardBody::findView(CardView view) const {
+    for (const auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view)
+            return item.widget;
+    return nullptr;
+}
+
+void CardBody::setViewOpen(CardView view, bool open) {
+    for (auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view) {
+            item.open = open;
+            if (item.widget != nullptr)
+                item.widget->setVisible(open);
+        }
+}
+
+bool CardBody::isViewOpen(CardView view) const {
+    for (const auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view)
+            return item.open;
+    return false;
 }
 
 ThresholdControlComponent* CardBody::getThresholdView() const {
@@ -366,8 +400,11 @@ void CardBody::releaseViews() {
 }
 
 // During an undo the graph may already have freed the processor and its parameters; detaching an
-// attachment then touches freed memory, so they are released (leaked) instead.
+// attachment then touches freed memory, so they are released (leaked) instead. A leaked attachment can
+// still deliver an update it had already queued, so the switch and stepper callbacks check widgetsAlive_
+// before touching a widget that is about to be deleted.
 void CardBody::releaseBindings(bool processorAlive) {
+    *widgetsAlive_ = false;
     stopWatchingConditions(processorAlive);
     if (processorAlive) {
         sliderAttachments_.clear();

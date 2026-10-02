@@ -123,8 +123,8 @@ bool CardBodyPlan::hasFooter() const {
 
 // What shows now: a More-row parameter while the row is unfolded; a placed one while its section is
 // shown and (in a swap group) its condition holds. Only those the body governs are touched (the More
-// row, swap groups, conditional sections), so a widget a card hides itself (an ADSR time knob in BPM
-// mode, a Wavetable page) stays as the card left it. A folded or swapped-out widget is hidden, not
+// row, swap groups, conditional sections), so a widget a card hides itself (a Wavetable page) stays
+// as the card left it. A folded or swapped-out widget is hidden, not
 // destroyed: it keeps its attachment, MIDI Learn entry and value. A dimmed widget and its caption are
 // marked (AppLookAndFeel::kDimmedProperty), which the look-and-feel paints greyed out; it keeps its
 // cell and stays enabled, so it is still a Tab stop, in the accessibility tree and operable.
@@ -138,7 +138,9 @@ void CardBody::applyVisibility() {
         const bool folded = inMore.count(i) > 0;
         const bool governed = folded || item.swapGroup >= 0 ||
                               (item.section >= 0 && plan_.sections[(size_t)item.section].visibleWhen.has_value());
-        const bool visible = folded ? moreUnfolded_ : plan_.isOnCard(i) && item.shown;
+        bool visible = folded ? moreUnfolded_ : plan_.isOnCard(i) && item.shown;
+        if (item.kind == CardBodyItem::Kind::View)
+            visible = visible && item.open; // a view the card's toggle closed stays closed
         const bool dims = item.when.has_value() || dimmable.count(i) > 0;
         for (auto* component : {item.widget, item.label}) {
             if (component == nullptr)

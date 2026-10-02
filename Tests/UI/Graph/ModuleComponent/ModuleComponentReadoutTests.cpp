@@ -49,7 +49,7 @@ struct ReadoutCard {
         EXPECT_EQ(p->getText(p->convertTo0to1(value), 100), expected) << id;
         for (auto* stop : card->getKeyboardControls())
             if (stop->getTitle() == title) {
-                auto* knob = dynamic_cast<synth::ui::CardKnobSlider*>(stop);
+                auto* knob = dynamic_cast<juce::Slider*>(stop);
                 ASSERT_NE(knob, nullptr);
                 EXPECT_EQ(knob->getTextFromValue(value), expected) << id;
                 return;

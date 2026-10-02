@@ -215,18 +215,20 @@ for the same value.
 | `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
-## Gain-reduction meter source (no card view yet)
+## Gain-reduction meter
 
-`Source/Modules/GainReductionMeterSource.h`. The data a Compressor / Limiter gain-reduction view
-will read; **there is no card view for it yet**, so nothing in the card draws it today. It is the
+`Source/Modules/GainReductionMeterSource.h`. The data behind the `gainReduction` card view the
+Compressor and Limiter defaults place (`GainReductionMeterComponent`, registered in `CardBodyViews.cpp`:
+a caption and a bar that fills left to right over 0 to 24 dB, with the reading in decibels; read-only,
+so not a Tab stop, with a title, description and tooltip). The source is the
 dynamics counterpart of `ThresholdMeterSource`: `GainReductionMeterSource::getGainReductionDb()` is
 a lock-free atomic load (audio thread writes, any thread reads), in positive decibels, 0 meaning
 the module is not touching the signal. The module feeds it once per block through
 `synth::GainReductionMeter`, which takes a deeper reduction at once and lets a shallower one fall
-at 40 dB/s, so a view polling at its own timer rate sees transients. A later view binds with
-`dynamic_cast<GainReductionMeterSource*>(module)` exactly as `ModuleComponent` does for the
-threshold meter, and — like `ThresholdControlComponent` — owns its own timer and repaints only
-itself, so a card buffered to an image is not invalidated on every tick. See
+at 40 dB/s, so a view polling at its own timer rate sees transients. The view binds with
+`dynamic_cast<GainReductionMeterSource*>(module)`, and — like `ThresholdControlComponent` — owns its
+own 20 Hz timer (running only while it is on screen) and repaints only itself, and only when the
+reading changes by a tenth of a dB, so a card buffered to an image is not invalidated on every tick. See
 [`../modules/fx-modules.md#compressor-module`](../modules/fx-modules.md#compressor-module) and
 [`../modules/fx-modules.md#limiter-module`](../modules/fx-modules.md#limiter-module).
 

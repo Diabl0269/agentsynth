@@ -70,6 +70,16 @@ int contentTopY(const CardBodyPlan& plan, ModuleBase& module) {
     return y;
 }
 
+// The ADSR's Show Envelope Graph toggle exists when its layout places the Envelope view.
+bool hasEnvelopeToggle(const CardBodyPlan& plan, ModuleBase& module) {
+    if (module.getModuleType() != ModuleType::ADSR)
+        return false;
+    for (const auto& item : plan.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == CardView::Envelope)
+            return true;
+    return false;
+}
+
 bool hasScopeToggle(ModuleBase& module) {
     const auto type = module.getModuleType();
     return module.getVisualBuffer() != nullptr && type != ModuleType::ExternalMidi && type != ModuleType::ParametricEQ;
@@ -77,8 +87,10 @@ bool hasScopeToggle(ModuleBase& module) {
 
 // The chrome toggles a fresh card shows, in footerChromeToggles' order (Show Spectrum stays hidden until
 // the response view opens, which a fresh card never has).
-std::vector<CardFooterExtra> freshChromeToggles(ModuleBase& module) {
+std::vector<CardFooterExtra> freshChromeToggles(const CardBodyPlan& plan, ModuleBase& module) {
     std::vector<CardFooterExtra> toggles;
+    if (hasEnvelopeToggle(plan, module))
+        toggles.push_back({nullptr, kShowEnvelopeText});
     if (dynamic_cast<FilterModule*>(&module) != nullptr)
         toggles.push_back({nullptr, kShowResponseText});
     if (hasScopeToggle(module))
@@ -86,15 +98,15 @@ std::vector<CardFooterExtra> freshChromeToggles(ModuleBase& module) {
     return toggles;
 }
 
-// The rows layoutDefaultContent adds below the body: the ADSR graph's disclosure row, then the Filter's
+// The rows layoutDefaultContent adds below the body: the ADSR's Show Envelope Graph row, the Filter's
 // Show Response row and Show Scope (or, on a card with a footer, the footer row holding them), then the
 // folded More row.
 int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, const BodyGeometry& g) {
-    if (module.getModuleType() == ModuleType::ADSR)
-        y += kRowHeight + 2;
     if (plan.hasFooter()) {
-        y = layoutCardBodyFooter(plan, freshChromeToggles(module), y, g, /*apply*/ false);
+        y = layoutCardBodyFooter(plan, freshChromeToggles(plan, module), y, g, /*apply*/ false);
     } else {
+        if (hasEnvelopeToggle(plan, module))
+            y += kRowHeight + 2;
         if (dynamic_cast<FilterModule*>(&module) != nullptr)
             y += kRowHeight + 2;
         if (hasScopeToggle(module))

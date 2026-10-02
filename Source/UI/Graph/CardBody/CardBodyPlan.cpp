@@ -26,19 +26,17 @@ ModuleType typeOf(juce::AudioProcessor& module) {
 bool isAdsr(juce::AudioProcessor& module) { return typeOf(module) == ModuleType::ADSR; }
 
 // Parameters with no widget of their own. bypassed/muted/dualIO are the header buttons. The ADSR's
-// three curve amounts are edited on the envelope graph's bend handles, its four note divisions by the
-// pickers the envelope card swaps in over each time knob in BPM mode, and its tempoSync by the card's
-// MS|BPM switch. A parameter a registered view edits (the Threshold slider inside the Threshold view)
-// gets no knob either.
+// three curve amounts are edited on the envelope graph's bend handles. A parameter a registered view
+// edits (the Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
+// four note divisions are ordinary items: a layout swaps each division in for its time with a condition
+// on tempoSync (one mechanism, the layout's), and the automatic layout shows them as plain controls.
 bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
     const auto& id = param.paramID;
     if (dynamic_cast<const juce::AudioParameterBool*>(&param) != nullptr &&
         (id == "bypassed" || id == "muted" || id == "dualIO"))
         return true;
     if (isAdsr(module)) {
-        if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve" || id == "tempoSync")
-            return true;
-        if (id == "attackDiv" || id == "holdDiv" || id == "decayDiv" || id == "releaseDiv")
+        if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve")
             return true;
     }
     if (const auto* threshold = findCardViewFactory(CardView::Threshold);
@@ -54,10 +52,23 @@ constexpr int kMaxSegmentChars = 10;
 // A stepper walks one value at a time, so it only suits a small integer range.
 constexpr int kMaxStepperSpan = 24;
 
-bool suitsSegmented(const juce::AudioParameterChoice& choice) {
-    if (choice.choices.size() < 2 || choice.choices.size() > kMaxSegments)
+bool isBool(const juce::RangedAudioParameter& param) {
+    return dynamic_cast<const juce::AudioParameterBool*>(&param) != nullptr;
+}
+
+// A bool is a switch only when its module names its two states (the ADSR's Tempo Sync reads "Time" and
+// "Tempo"): a plain "Off" and "On" is what a toggle already says, so it stays a toggle.
+bool statesAreNamed(const juce::StringArray& values) {
+    return !(values[0].equalsIgnoreCase("Off") && values[1].equalsIgnoreCase("On"));
+}
+
+bool suitsSegmented(const juce::RangedAudioParameter& param) {
+    const auto values = cardBodySegmentLabels(param);
+    if (isBool(param) && !(values.size() == 2 && statesAreNamed(values)))
         return false;
-    for (const auto& value : choice.choices)
+    if (values.size() < 2 || values.size() > kMaxSegments)
+        return false;
+    for (const auto& value : values)
         if (value.length() > kMaxSegmentChars)
             return false;
     return true;
@@ -161,6 +172,21 @@ void applyFooterKind(CardBodyItem& item) {
         item.kind = CardBodyItem::Kind::FaderH;
 }
 
+// A choice that swaps with a vertical fader in one cell (the ADSR's note division in place of its time) is
+// drawn as a vertical stepped fader over the choice's steps: a combo has no room in a 40 px wide, tall fader
+// cell (its text truncates), while a fader's value box shows the choice's text whole. Called as each member
+// joins the group, so the order of fader and choice does not matter.
+void promoteChoicesBesideFaders(CardBodyPlan& plan, const CardBodyPlan::SwapGroup& group) {
+    bool hasFader = false;
+    for (int member : group.members)
+        hasFader = hasFader || plan.items[(size_t)member].kind == CardBodyItem::Kind::FaderV;
+    if (!hasFader)
+        return;
+    for (int member : group.members)
+        if (auto& item = plan.items[(size_t)member]; item.kind == CardBodyItem::Kind::Choice)
+            item.kind = CardBodyItem::Kind::FaderV;
+}
+
 // Placement state while one section is read: consecutive `show` items testing the same parameter join
 // one swap group.
 struct SectionPlacer {
@@ -168,6 +194,18 @@ struct SectionPlacer {
     CardBodyPlan::Section& section;
     int sectionIndex;
     juce::String openGroupParam; // the condition parameter of the group still open, or empty
+
+    // True when a member of the open group already shows under `source`'s own condition: two members
+    // that show together are not alternatives for one cell, so `source` starts the next group (the ADSR's
+    // four time/division pairs, all testing tempoSync, are four groups).
+    bool repeatsMember(const CardParamItem& source) const {
+        for (int member : plan.swapGroups.back().members) {
+            const auto& when = plan.items[(size_t)member].when;
+            if (when.has_value() && when->is == source.when->is)
+                return true;
+        }
+        return false;
+    }
 
     void place(int index, const CardParamItem& source) {
         auto& planned = plan.items[(size_t)index];
@@ -180,12 +218,13 @@ struct SectionPlacer {
             openGroupParam.clear();
             return;
         }
-        if (openGroupParam.isEmpty() || openGroupParam != source.when->param) {
+        if (openGroupParam.isEmpty() || openGroupParam != source.when->param || repeatsMember(source)) {
             plan.swapGroups.push_back({});
             openGroupParam = source.when->param;
         }
         auto& group = plan.swapGroups.back();
         group.members.push_back(index);
+        promoteChoicesBesideFaders(plan, group);
         group.span = std::max(group.span, juce::jlimit(1, 6, source.span));
         if (group.members.size() == 1 || cellHeight(planned.kind) > cellHeight(group.cellKind))
             group.cellKind = planned.kind;
@@ -214,6 +253,7 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
     } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
         placer.openGroupParam.clear();
         if (const int view = addViewItem(module, v->view, plan); view >= 0) {
+            plan.items[(size_t)view].open = v->open;
             plan.items[(size_t)view].section = placer.sectionIndex;
             placer.section.items.push_back(view);
         }
@@ -299,6 +339,14 @@ CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::op
     return plan;
 }
 
+juce::StringArray cardBodySegmentLabels(const juce::RangedAudioParameter& param) {
+    if (const auto* choice = dynamic_cast<const juce::AudioParameterChoice*>(&param))
+        return choice->choices;
+    if (isBool(param))
+        return {param.getText(0.0f, 100), param.getText(1.0f, 100)};
+    return {};
+}
+
 bool isContinuousKind(CardBodyItem::Kind kind) {
     using Kind = CardBodyItem::Kind;
     return kind == Kind::Knob || kind == Kind::KnobLarge || kind == Kind::FaderV || kind == Kind::FaderH;
@@ -320,7 +368,7 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
     case CardWidget::FaderH:
         return continuous ? Kind::FaderH : automatic;
     case CardWidget::Segmented:
-        return choice != nullptr && suitsSegmented(*choice) ? Kind::Segmented : automatic;
+        return (choice != nullptr || isBool(param)) && suitsSegmented(param) ? Kind::Segmented : automatic;
     case CardWidget::Stepper:
         return integer != nullptr && suitsStepper(*integer) ? Kind::Stepper : automatic;
     case CardWidget::Auto:

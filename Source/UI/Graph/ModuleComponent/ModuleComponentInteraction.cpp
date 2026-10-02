@@ -159,8 +159,9 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                (param->paramID == "attack" || param->paramID == "hold" || param->paramID == "decay" ||
                 param->paramID == "sustain" || param->paramID == "release" || param->paramID == "attackCurve" ||
                 param->paramID == "decayCurve" || param->paramID == "releaseCurve" || param->paramID == "attackDiv" ||
-                param->paramID == "holdDiv" || param->paramID == "decayDiv" || param->paramID == "releaseDiv")) {
-        // Ms params and *Div (BPM mode): keep the envelope graph in sync with knob
+                param->paramID == "holdDiv" || param->paramID == "decayDiv" || param->paramID == "releaseDiv" ||
+                param->paramID == "tempoSync")) {
+        // Ms params, *Div and tempoSync (tempo mode): keep the envelope graph in sync with knob
         // drags, combo picks, automation, undo/redo and preset loads. syncEnvelopeCurveFromParams
         // itself no-ops while envelopeCurveGestureActive (a live graph drag is already the source
         // of truth for that span); a combo pick never sets that flag, so it always rebuilds here.
@@ -184,18 +185,6 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             juce::MessageManager::callAsync([safeThis] {
                 if (safeThis != nullptr)
                     safeThis->syncLfoCustomSectionVisibility();
-            });
-        }
-    } else if (getType(module) == ModuleType::ADSR && param->paramID == "tempoSync") {
-        // Keep the MS|BPM toggle pair in sync with automation/undo/preset loads, the
-        // same reverse-sync shape as the envelope graph branch above.
-        if (juce::MessageManager::existsAndIsCurrentThread()) {
-            syncEnvelopeSyncToggleFromParam();
-        } else {
-            juce::Component::SafePointer<ModuleComponent> safeThis(this);
-            juce::MessageManager::callAsync([safeThis] {
-                if (safeThis != nullptr)
-                    safeThis->syncEnvelopeSyncToggleFromParam();
             });
         }
     }

@@ -170,13 +170,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         setCachedComponentImage(cache.release()); // Component takes ownership
     }
     createControls();
-    // ADSR only (createEnvelopeCardControls() no-ops the componentID rename otherwise); after
-    // createControls() so its five remaining knobs (sliders/sliderLabels) already exist to
-    // shorten and read.
-    if (getType(module) == ModuleType::ADSR) {
-        applyEnvelopeKnobShortLabels();
+    // ADSR only: after createControls() so the stage controls exist, and after the body built its views.
+    if (getType(module) == ModuleType::ADSR)
         createEnvelopeCardControls();
-    }
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
@@ -224,6 +220,9 @@ void ModuleComponent::detachFromProcessor() {
     keyboardComponent.reset();
     // Same reasoning: the threshold control times itself and holds a reference to the module.
     thresholdControl = nullptr;
+    // The envelope editor is the body's Envelope view; its gesture callbacks reach back into `module`.
+    envelopeCurveEditor = nullptr;
+    envelopeGraphToggle.reset();
     if (cardBody_ != nullptr)
         cardBody_->releaseViews();
 
@@ -279,7 +278,7 @@ void ModuleComponent::detachFromProcessor() {
         bypassAttachment.reset();
         muteAttachment.reset();
         dualIOAttachment.reset();
-        envelopeDivAttachments_.clear(); // same live-processor-pointer contract as the card body's attachments
+        octaveAttachment_.reset();
         for (auto* param : module->getParameters())
             param->removeListener(this);
     } else {
@@ -289,8 +288,7 @@ void ModuleComponent::detachFromProcessor() {
         (void)bypassAttachment.release();
         (void)muteAttachment.release();
         (void)dualIOAttachment.release();
-        while (envelopeDivAttachments_.size() > 0)
-            (void)envelopeDivAttachments_.removeAndReturn(envelopeDivAttachments_.size() - 1);
+        (void)octaveAttachment_.release();
     }
 
     module = nullptr;
@@ -592,6 +590,7 @@ void ModuleComponent::createControls() {
         applyKeyboardThemeColours();
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
+        createMidiKeyboardOctaveRow();
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {
         createExternalMidiControls(extMidi);
     } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {

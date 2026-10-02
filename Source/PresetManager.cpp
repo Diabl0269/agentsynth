@@ -87,8 +87,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Keyboard row:    y = 1000 — gap from Seq bottom (986+6=992) → 1000-6=994 > 992 ✓
     //
     // FX chain stacking (col 4, x = 1250), starting y = 10:
-    //   Distortion (h=350): y=10, bottom=360; Delay (h=220): y=380, bottom=600;
-    //   Reverb (h=300):     y=620, bottom=920
+    //   Distortion (h=375): y=10, bottom=385; Delay (h=343): y=400, bottom=743;
+    //   Reverb (h=423):     y=770, bottom=1193
     //
     // All pairs verified pairwise with kCollisionGap = 12; zero overlaps per preset.
     //
@@ -128,8 +128,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 620}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
     {"id": 8, "type": "Sequencer", "position": {"x": 10, "y": 580}, "params": {"run": false, "bpm": 120.0}},
     {"id": 10, "type": "Distortion", "position": {"x": 1250, "y": 10}, "params": {"drive": 0.5, "mix": 0.5}},
-    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 380}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
-    {"id": 12, "type": "Reverb", "position": {"x": 1250, "y": 740}, "params": {"roomSize": 0.5, "damping": 0.5, "wet": 0.33, "dry": 0.4, "width": 1.0}},
+    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 400}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
+    {"id": 12, "type": "Reverb", "position": {"x": 1250, "y": 770}, "params": {"roomSize": 0.5, "damping": 0.5, "wet": 0.33, "dry": 0.4, "width": 1.0}},
     {"id": 13, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 14, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 1.0}},
     {"id": 15, "type": "MIDI Keyboard", "position": {"x": 10, "y": 1000}}
@@ -207,7 +207,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
     {"id": 6, "type": "ADSR", "position": {"x": 650, "y": 620}, "params": {"attack": 1.5, "decay": 1.0, "sustain": 0.8, "release": 2.0}},
     {"id": 7, "type": "Delay", "position": {"x": 1250, "y": 10}, "params": {"time": 0.5, "feedback": 0.6, "mix": 0.4}},
-    {"id": 8, "type": "Reverb", "position": {"x": 1250, "y": 360}, "params": {"roomSize": 0.9, "damping": 0.3, "wet": 0.5}},
+    {"id": 8, "type": "Reverb", "position": {"x": 1250, "y": 390}, "params": {"roomSize": 0.9, "damping": 0.3, "wet": 0.5}},
     {"id": 9, "type": "MIDI Keyboard", "position": {"x": 10, "y": 1000}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 11, "type": "Sequencer", "position": {"x": 10, "y": 580}, "params": {"run": false}}

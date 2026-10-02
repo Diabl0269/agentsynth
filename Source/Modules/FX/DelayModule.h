@@ -14,7 +14,11 @@ public:
         // (the same division list as the LFO and ADSR) instead of the Time knob. Off (default) is the
         // plain ms delay; Time and its CV are ignored while synced. `pingPong` off (default) is the
         // plain stereo delay.
-        addParameter(tempoSyncParam = new juce::AudioParameterBool("tempoSync", "Tempo Sync", false));
+        // The text is what the card's Time/Sync switch shows for off and on.
+        addParameter(tempoSyncParam = new juce::AudioParameterBool(
+                         "tempoSync", "Tempo Sync", false,
+                         juce::AudioParameterBoolAttributes().withStringFromValueFunction(
+                             [](bool on, int) { return on ? juce::String("Sync") : juce::String("Time"); })));
         addParameter(timeDivParam =
                          new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 2));
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));

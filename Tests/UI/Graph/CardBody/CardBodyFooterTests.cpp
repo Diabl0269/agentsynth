@@ -50,6 +50,13 @@ synth::CardLayout oscillatorWithFooter() {
 
 } // namespace
 
+// The pill width is measured in the embedded Inter, not the system typeface, so it is the same fixed
+// number of pixels on macOS, Windows and Linux (it was 79 on macOS and 81 on Windows when it used the
+// system font). A different value here means the text measure left the embedded font.
+TEST(CardBodyFooter, ThePillWidthComesFromTheEmbeddedFontSoItIsTheSameOnEveryPlatform) {
+    EXPECT_EQ(synth::theme::AppLookAndFeel::togglePillWidth("Show Scope"), 79);
+}
+
 TEST(CardBodyFooter, TheFooterRowHoldsAPillAFaderAndTheChromeToggles) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<OscillatorModule>(), 0, 0, oscillatorWithFooter());
@@ -95,7 +102,8 @@ TEST(CardBodyFooter, TheFooterRowHoldsAPillAFaderAndTheChromeToggles) {
 
 TEST(CardBodyFooter, ACardWithoutAFooterKeepsItsChromeRows) {
     CardCanvas canvas;
-    const auto plain = canvas.add(std::make_unique<OscillatorModule>(), 0, 0);
+    const auto plain = canvas.add(std::make_unique<OscillatorModule>(), 0, 0,
+                                  layoutOf({section("main", std::nullopt, {param("waveform"), param("octave")})}));
     const auto withFooter = canvas.add(std::make_unique<OscillatorModule>(), 400, 0, oscillatorWithFooter());
     canvas.editor.updateComponents();
     auto* scope = chromeToggle(*canvas.card(plain), synth::cardbody::kShowScopeText);

@@ -74,7 +74,11 @@ public:
         // 1.0 s default lands on "1/2" exactly (2 beats @ 120 BPM); attack/hold/release all want
         // something far shorter than the coarsest division below "1/32" gets them (62.5 ms vs.
         // 1/0/15 ms), which is an accepted tradeoff of sync's coarser resolution, not a bug.
-        addParameter(tempoSyncParam = new juce::AudioParameterBool("tempoSync", "Tempo Sync", false));
+        // The text is what the card's Time/Tempo switch shows for off and on.
+        addParameter(tempoSyncParam = new juce::AudioParameterBool(
+                         "tempoSync", "Tempo Sync", false,
+                         juce::AudioParameterBoolAttributes().withStringFromValueFunction(
+                             [](bool on, int) { return on ? juce::String("Tempo") : juce::String("Time"); })));
         addParameter(attackDivParam =
                          new juce::AudioParameterChoice("attackDiv", "Attack Div", synth::envelopeNoteDivisions(), 5));
         addParameter(holdDivParam =

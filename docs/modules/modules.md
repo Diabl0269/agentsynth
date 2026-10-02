@@ -408,11 +408,13 @@ Loads an audio file from disk and plays it back one of two ways.
   the card section below) — `getPlayheadLevel()` remains unused, held for a future level readout.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 - **Threshold control**: `ThresholdControlComponent` in slider+meter mode — a live unipolar bar of the Gate jack with the Threshold slider attached, so the slice can be set by eye.
-- **Card UI (FRO112)**: `ModuleComponentEnvelopeCard.cpp`. Five rotary knobs
-  (attack/hold/decay/sustain/release, styled and readout-boxed identically to the generic auto-UI
-  — see below) flow through the same 3-per-row knob grid as every other module
-  (`ModuleComponentLayout.cpp`'s `layoutDefaultContent`), wrapping 3+2 at the shared 280px width;
-  `attackCurve`/`decayCurve`/`releaseCurve` are no longer sliders at all — they're edited only via
+- **Card UI (FRO112)**: `ModuleComponentEnvelopeCard.cpp`. The card draws the designed default
+  layout in `DefaultCardLayoutsEnvelopes.cpp` (one entry each for ADSR, Amp Env and Filter Env;
+  [`module-card-layout.md`](../layout/module-card-layout.md#default-layouts)): the envelope view open,
+  the Time/Tempo switch, Attack/Hold/Decay/Sustain/Release as vertical faders in one row (readout-boxed
+  like the generic auto-UI — see below), Velocity, the Threshold view and a footer. The graph is the
+  card body's `envelope` view (`CardBodyViews.cpp`, the `CurveEditorComponent` unchanged), which the
+  card wires to the parameters. `attackCurve`/`decayCurve`/`releaseCurve` are no longer sliders at all — they're edited only via
   the breakpoint curve editor's bend handles (`Source/UI/ModuleViews/CurveEditor/`, FRO111), on a
   fixed 5-node topology (origin, attack peak, hold end, sustain, release end) whose node x is
   cumulative time and whose ripple contract (`CurveModel::setNodeX`) preserves every other
@@ -437,9 +439,10 @@ Loads an audio file from disk and plays it back one of two ways.
     module's current parameter values on every relevant `parameterValueChanged` callback, except
     while a graph gesture is itself in flight (the graph is its own source of truth for that
     span) — it snaps once more at the gesture's end to settle on the quantised/clamped values.
-  - **Graph section**: collapsed by default behind a disclosure toggle, sizing the card via the
-    same `setVisible()` -> `updateLayout()` idiom the scope/frequency-response toggles use. The
-    expanded/collapsed state is **not persisted** — it resets to collapsed on every construction,
+  - **Graph section**: open by default (the layout's `open`), with a Show Envelope Graph toggle that
+    closes and reopens it (a pill in the footer row), sizing the card via the same
+    `CardBody::setViewOpen` -> `updateLayout()` idiom the scope/frequency-response toggles use. The
+    open/closed state is **not persisted** — it resets to the layout's `open` on every construction,
     matching the scope and frequency-response toggles rather than Macro Group's persisted
     `collapsed` flag; persisting would need `ModuleBase::setExtraState`, which the root
     `CLAUDE.md` flags as a trusted-path-only, security-sensitive surface not worth spending on a
@@ -451,25 +454,24 @@ Loads an audio file from disk and plays it back one of two ways.
     no new `juce::Timer` — since `CurveEditorComponent::setPlayhead` already no-ops on an
     unchanged value, an idle or collapsed card costs nothing beyond that one guard check. See
     [`layout/visualizers.md`](../layout/visualizers.md).
-  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle, wired to
-    FRO113's `tempoSync` bool param (FRO117) — clicking either button writes `tempoSync` via
-    `setValueNotifyingHost`, and an external write (automation/undo/preset load) syncs the pair
-    back via `parameterValueChanged`, the same reverse-sync shape as the envelope graph itself.
-    FRO113 also added one `AudioParameterChoice` note-division param per stage time
-    (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's rateSync division list) and the
-    tempo-following DSP behind them; both `tempoSync` and the four division params are excluded
-    from the generic per-param UI (`isEditedElsewhere` in
+  - **Time | Tempo switch**: a segmented switch (a bool as two segments, "Time" and "Tempo", the
+    texts `ADSRModule` gives `tempoSync`) wired to FRO113's `tempoSync` bool param (FRO117) — picking a
+    segment writes `tempoSync` as one complete gesture, and an external write (automation/undo/preset
+    load) moves the switch back through its attachment. FRO113 also added one `AudioParameterChoice`
+    note-division param per stage time (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's
+    rateSync division list) and the tempo-following DSP behind them. All of them are ordinary items of
+    the layout; only the three curve amounts are edited elsewhere (`isEditedElsewhere` in
     `Source/UI/Graph/CardBody/CardBodyPlan.cpp`).
-  - **BPM-mode pickers (FRO118)**: in BPM mode, each of the ATK/HOLD/DEC/REL knobs is replaced —
-    in its own grid cell, short caption label kept — by a `juce::ComboBox` bound to its matching
-    `*Div` param via a plain `juce::ComboBoxParameterAttachment` (the same binding/undo idiom the
-    generic per-param combos use — a combo pick is one `beginChangeGesture`/`setValueNotifyingHost`/
-    `endChangeGesture`, so `ModuleComponent`'s existing `parameterGestureChanged` capture gives it
-    one undo step for free, no bespoke onChange needed). SUS stays a knob in both modes. The four
-    combos are created lazily, the first time a card enters BPM mode (`ensureEnvelopeDivCombosCreated`)
-    — never for a card that stays in MS — so a fresh MS-default card has no extra `ComboBox`
-    children. `buildEnvelopeCurveModel` sources each stage's duration from
-    `envelopeNoteDivisionSeconds(index, bpm)` in BPM mode (`ADSRModule::getLastSeenBpm()`, an
+  - **Tempo-mode divisions (FRO118)**: in Tempo mode, each of the Attack/Hold/Decay/Release faders is
+    replaced — in its own cell, caption kept — by a `juce::ComboBox` bound to its matching `*Div` param
+    via a plain `juce::ComboBoxParameterAttachment` (the same binding/undo idiom the generic per-param
+    combos use — a combo pick is one `beginChangeGesture`/`setValueNotifyingHost`/`endChangeGesture`,
+    so `ModuleComponent`'s existing `parameterGestureChanged` capture gives it one undo step for free,
+    no bespoke onChange needed). The swap is the layout's own: each time/division pair is a swap group
+    conditioned on `tempoSync` (`CardBody`'s conditions, one mechanism; the card has no swap code of its
+    own), a swapped-out fader keeps its knob-bound jack, and Sustain stays a fader in both modes. The
+    four combos exist from the start (hidden in Time mode). `buildEnvelopeCurveModel` sources each stage's duration from
+    `envelopeNoteDivisionSeconds(index, bpm)` in Tempo mode (`ADSRModule::getLastSeenBpm()`, an
     atomic refreshed every block from the module's playhead, default 120 before the first
     `processBlock`) instead of the ms param; dragging a node's x snaps `writeEnvelopeParamsFromCurve`'s
     write to the nearest division by comparing durations in log-time, and writes the `*Div` param

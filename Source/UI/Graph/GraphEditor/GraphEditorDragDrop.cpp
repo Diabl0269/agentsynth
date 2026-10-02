@@ -38,7 +38,8 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
-        return {synth::LayoutUtil::kDoubleWidth, 150};
+        // The keys under a 24 px Octave stepper row; pinned to the real card (ModuleComponentMidiKeyboardCard.cpp).
+        return {synth::LayoutUtil::kDoubleWidth, 160};
     if (typeName == "PolyMidi")
         return {280, 185}; // an alias with no factory entry, so not measurable; "Poly MIDI" is measured
     if (typeName == "AudioInput" || typeName == "Audio Input")

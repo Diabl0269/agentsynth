@@ -14,6 +14,20 @@
 using namespace cardlayouteditor_test;
 using synth::CardWidget;
 
+namespace {
+
+// A Filter whose card draws the automatic layout written out as one stored section (the Filter's own code
+// default has several sections and a footer), so the group tests below see one group to start from.
+NodeID addAutomaticFilter(EditorCanvas& rig) {
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    EXPECT_TRUE(synth::setCardLayoutOverride(rig.canvas.engine.getGraph(), nullptr, id,
+                                             cardbody_test::automaticLayoutWith(*rig.canvas.processor(id), {})));
+    rig.canvas.editor.updateComponents();
+    return id;
+}
+
+} // namespace
+
 TEST(CardLayoutEditorBuiltIn, EditLayoutFromAControlAndFromTheModuleMenuOpensTheEditor) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
@@ -112,7 +126,7 @@ TEST(CardLayoutEditorBuiltIn, ASegmentedChoiceIsOfferedForAShortChoice) {
 
 TEST(CardLayoutEditorBuiltIn, AddGroupAndATitleDrawAHeaderRowOnTheCardAndMeasureMatchesApply) {
     EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
+    const auto id = addAutomaticFilter(rig);
     const int heightBefore = rig.card(id)->getHeight();
     auto* editor = rig.openFromControl(id, "cutoff");
     ASSERT_NE(editor, nullptr);
@@ -145,7 +159,7 @@ TEST(CardLayoutEditorBuiltIn, AddGroupAndATitleDrawAHeaderRowOnTheCardAndMeasure
 
 TEST(CardLayoutEditorBuiltIn, ADragAcrossAGroupHeaderMovesTheControlIntoThatGroup) {
     EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
+    const auto id = addAutomaticFilter(rig);
     auto* editor = rig.openFromControl(id, "cutoff");
     ASSERT_NE(editor, nullptr);
     editor->triggerAddGroupForTest();
@@ -176,7 +190,7 @@ TEST(CardLayoutEditorBuiltIn, ADragAcrossAGroupHeaderMovesTheControlIntoThatGrou
 
 TEST(CardLayoutEditorBuiltIn, SearchFiltersTheRowsButKeepsTheGroupHeaders) {
     EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
+    const auto id = addAutomaticFilter(rig);
     auto* editor = rig.openFromControl(id, "cutoff");
     ASSERT_NE(editor, nullptr);
     editor->setSearchTextForTest("res");

@@ -168,8 +168,8 @@ TEST_F(ModuleComponentTest, RightClickBoolToggleShowsMidiLearnAndDoesNotToggleTh
 TEST_F(ModuleComponentTest, RightClickComboDoesNotOpenItsPopupAndShowsMidiLearn) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    OscillatorModule osc;
-    ModuleComponent card(&osc, juce::AudioProcessorGraph::NodeID(1), editor);
+    LFOModule lfo; // its Shape stays a combo
+    ModuleComponent card(&lfo, juce::AudioProcessorGraph::NodeID(1), editor);
     card.setSize(280, 500);
     editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
 
@@ -178,7 +178,7 @@ TEST_F(ModuleComponentTest, RightClickComboDoesNotOpenItsPopupAndShowsMidiLearn)
 
     const auto menu = rightClickChild(card, *combo);
     EXPECT_FALSE(combo->isPopupActive()) << "right-click must never open the choice popup";
-    EXPECT_TRUE(menuContains(menu, "MIDI Learn 'Waveform'..."));
+    EXPECT_TRUE(menuContains(menu, "MIDI Learn 'Shape'..."));
 }
 
 TEST_F(ModuleComponentTest, RightClickBypassShowsMidiLearnAndDoesNotToggleBypass) {

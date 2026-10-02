@@ -134,7 +134,7 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
     if (kind == Kind::View) {
         const auto& view = plan.items[(size_t)run.front().item];
         const auto* factory = findCardViewFactory(view.view);
-        if (factory == nullptr || (apply && view.widget == nullptr))
+        if (factory == nullptr || !view.open || (apply && view.widget == nullptr))
             return y;
         return cardbody::layoutViewRow(view.widget, factory->preferredHeight(module), y, g, apply);
     }

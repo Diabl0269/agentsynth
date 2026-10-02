@@ -159,8 +159,7 @@ bool AppLookAndFeel::paintsDimmed(const juce::Component& component) {
 
 int AppLookAndFeel::togglePillWidth(const juce::String& text) {
     constexpr int kSidePadding = 10;
-    return juce::GlyphArrangement::getStringWidthInt(juce::Font(juce::FontOptions(kTogglePillFontHeight)), text) +
-           2 * kSidePadding;
+    return uiTextWidth(text, kTogglePillFontHeight) + 2 * kSidePadding;
 }
 
 // The footer row's small toggle: a rounded pill, filled with the tick colour when on (text in the
@@ -183,7 +182,7 @@ void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& butt
 
     const auto text = on ? c.bg0 : button.findColour(juce::ToggleButton::textColourId);
     g.setColour(text.withMultipliedAlpha(shouldDrawButtonAsHighlighted || on ? 1.0f : 0.9f));
-    g.setFont(juce::Font(juce::FontOptions(kTogglePillFontHeight)));
+    g.setFont(uiFont(kTogglePillFontHeight));
     g.drawFittedText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
 
     if (disabled)
