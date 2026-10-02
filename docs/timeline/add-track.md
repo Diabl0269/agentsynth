@@ -6,7 +6,7 @@ The header rows it creates are [tracks](tracks.md); the channel chains it builds
 
 ## The menu
 
-`"+ Track"` is the first keyboard stop of the header column: Down from the Timeline region root lands on it
+`"+ Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
 and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
 [shortcuts](../control/shortcuts.md#timeline)). It carries the tooltip *"Add a MIDI or Audio track"* so the menu is not a surprise, and
 opens:

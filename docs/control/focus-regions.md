@@ -90,7 +90,7 @@ below for the Mixer region's own keyboard behaviour.
   no `ShortcutManager` actions): in the **Toolbar**, Left/Right move the ring across the visible, enabled
   buttons (no wrap), Home/End jump to the ends, Space/Return press the ringed button; in the **Dock tabs**
   region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
-  Return moves focus into the selected panel (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
+  Return moves focus into the selected panel, and Down does too and then takes the panel's first Down step (on the Timeline that lands on `"+ Track"`) (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
   Cmd+T, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+T closing the pane
   around the focus focuses the Canvas region instead. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and

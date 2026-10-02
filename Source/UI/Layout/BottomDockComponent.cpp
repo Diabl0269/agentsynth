@@ -815,8 +815,9 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 }
 
 // Plain Left/Right/Home/End walk the tabs that are offered, in the user's tab order, and stop at the
-// ends (tabStripKeyTarget); Return hands focus to the selected tab's panel root. Everything else
-// (Cmd+1/2/3 included) is left for the app-wide shortcuts.
+// ends (tabStripKeyTarget); Return hands focus to the selected tab's panel root, and Down does the same
+// then takes the panel's own first Down step (on the Timeline: "+ Track"), since the panel sits below
+// the strip. Everything else (Cmd+1/2/3 included) is left for the app-wide shortcuts.
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
@@ -832,13 +833,17 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
         selectTabAt(*target);
         return true;
     }
-    if (!key.isKeyCode(juce::KeyPress::returnKey))
+    const bool down = key.isKeyCode(juce::KeyPress::downKey);
+    if (!down && !key.isKeyCode(juce::KeyPress::returnKey))
         return false;
     if (auto* panel = getActivePanelRoot()) {
         if (panelFocusHook_)
             panelFocusHook_(*panel);
         else
             panel->grabKeyboardFocus();
+        if (down)
+            if (auto* focused = juce::Component::getCurrentlyFocusedComponent())
+                focused->keyPressed(key);
     }
     return true;
 }
