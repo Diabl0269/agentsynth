@@ -327,7 +327,11 @@ the track recolours its lanes at once; text-muted on the Unassigned section). Th
 `readableOn(colour, laneBackground)` (`TrackColour.h`): a palette colour too pale for the light theme's lane
 background (amber, green) is darkened toward black, and on a dark theme lightened, until it reaches a 3:1
 contrast ratio, keeping its hue. A point being dragged is accent, one the eraser has touched is error, and
-every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Under
+every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Where
+points crowd (a neighbour on either side closer than two handle widths on screen, as in a shape stamped at a
+fine grid) their handles are not drawn, so a dense run reads as its curve; the handle under the pointer and
+the one being dragged, scrubbed or erased are always drawn, every point is still hit-tested, and zooming in
+brings the handles back (`AutomationLanes/AutomationHandleDensity.h`). Under
 the Draw tool the lane shows the pen cursor ([edit-tools](edit-tools.md#tool-cursors)).
 
 X is the SAME shared `TimelineViewState` the clip lanes use, so it lines up with the playhead
@@ -535,7 +539,9 @@ Remove modulator with and without the LFO, Move to track, a saved project reopen
 sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; the
 applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
-partial cycles, the estimate) and `AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
+partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from
+rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
+`AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
 cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key
 stamping over it, Line ramping on it, Delete, the point cap refusal, stamped points edited with Select,

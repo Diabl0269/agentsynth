@@ -4,6 +4,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -322,7 +323,11 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         erase = juce::Colours::red;
     }
 
-    for (const auto& bp : lane.points) {
+    // Crowded handles are left out (visibleHandleMask) so a dense run reads as its curve; the one being
+    // dragged, scrubbed, erased or hovered is always drawn.
+    const auto visible = visibleHandleMask(handleScreenPositions(lane), kHandleRadiusPx * 4.0f);
+    for (std::size_t i = 0; i < lane.points.size(); ++i) {
+        const auto& bp = lane.points[i];
         double beat = bp.beat;
         double value = bp.value;
         bool active = false;
@@ -335,12 +340,49 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         }
 
         const bool erased = dragMode_ == DragMode::Eraser && erasedBeats_.count(bp.beat) > 0;
+        const bool hovered = hoveredBeat_ == bp.beat;
+        if (!visible[i] && !active && !erased && !hovered)
+            continue;
         const float x = (float)viewState_.beatToX(beat);
         const float y = (float)valueToY(value);
         g.setColour(erased ? erase : (active ? accent : normal));
         g.fillEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f);
         g.setColour(outline);
         g.drawEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f, 1.0f);
+    }
+}
+
+std::vector<juce::Point<float>> AutomationLaneEditor::handleScreenPositions(const synth::AutomationLane& lane) const {
+    std::vector<juce::Point<float>> screen;
+    screen.reserve(lane.points.size());
+    for (const auto& bp : lane.points)
+        screen.push_back({(float)viewState_.beatToX(bp.beat), (float)valueToY(bp.value)});
+    return screen;
+}
+
+int AutomationLaneEditor::visibleHandleCountForTest() const {
+    const auto* lane = doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
+    if (lane == nullptr)
+        return 0;
+    const auto mask = visibleHandleMask(handleScreenPositions(*lane), kHandleRadiusPx * 4.0f);
+    return (int)std::count(mask.begin(), mask.end(), true);
+}
+
+// A hidden handle under the pointer is drawn, so the point about to be grabbed is always visible.
+void AutomationLaneEditor::mouseMove(const juce::MouseEvent& e) {
+    std::optional<double> hovered;
+    if (auto hit = hitTestHandle(e.getPosition()))
+        hovered = hit->beat;
+    if (hovered != hoveredBeat_) {
+        hoveredBeat_ = hovered;
+        repaint();
+    }
+}
+
+void AutomationLaneEditor::mouseExit(const juce::MouseEvent&) {
+    if (hoveredBeat_.has_value()) {
+        hoveredBeat_.reset();
+        repaint();
     }
 }
 

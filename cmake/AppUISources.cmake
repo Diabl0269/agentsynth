@@ -103,6 +103,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h
     Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
+    Source/UI/Timeline/AutomationLanes/AutomationHandleDensity.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h

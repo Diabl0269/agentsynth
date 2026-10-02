@@ -330,16 +330,20 @@ void AutomationLaneShapeGesture::paintBoxPreview(juce::Graphics& g, juce::Colour
         pts.reserve(points.size());
         for (const auto& bp : points)
             pts.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+        // A flag, not path.isEmpty(): a juce::Path holding only its start point still reports empty, so
+        // every column would restart the sub-path and nothing would ever be stroked.
         juce::Path path;
         AutomationCursor cursor{};
+        bool started = false;
         for (int x = (int)box.getX(); x <= (int)box.getRight(); ++x) {
             const double v =
                 AutomationKernel::evaluate(pts.data(), (int)pts.size(), viewState_.xToBeat((double)x), 0.0, cursor);
             const auto y = (float)editor_.valueToY(v);
-            if (path.isEmpty())
+            if (!started)
                 path.startNewSubPath((float)x, y);
             else
                 path.lineTo((float)x, y);
+            started = true;
         }
         g.setColour(accent);
         g.strokePath(path, juce::PathStrokeType(2.0f));

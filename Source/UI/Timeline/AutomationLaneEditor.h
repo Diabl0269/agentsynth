@@ -51,6 +51,8 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
@@ -110,6 +112,8 @@ public:
     // resolve — what a test uses to compute where to synthesize a mouse event, mirroring
     // TimelineClipLaneArea::getClipRect / PianoRollComponent::getNoteRect.
     juce::Rectangle<int> getHandleRectForTest(double beat) const;
+    // How many point handles are drawn at the current zoom (crowded ones are left out).
+    int visibleHandleCountForTest() const;
     bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None || shapeGesture_.isActive(); }
 
     // Pure value<->y mapping for the active lane's current range (no drag state involved) — what a
@@ -157,6 +161,7 @@ private:
     void paintCommittedCurve(juce::Graphics& g, const synth::AutomationLane& lane);
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
+    std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
 
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
@@ -200,6 +205,7 @@ private:
 
     // ---- Eraser preview (beats of the handles touched so far this drag) ----
     std::set<double> erasedBeats_;
+    std::optional<double> hoveredBeat_; // the handle under the pointer, always drawn
 
     AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
 
