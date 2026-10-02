@@ -138,7 +138,8 @@ private:
     juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments_;
     juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments_;
     juce::OwnedArray<juce::ButtonParameterAttachment> buttonAttachments_;
-    juce::OwnedArray<juce::ParameterAttachment> paramAttachments_; ///< Segmented switches and steppers.
+    juce::OwnedArray<juce::ParameterAttachment> paramAttachments_;      ///< Segmented switches and steppers.
+    std::shared_ptr<bool> widgetsAlive_ = std::make_shared<bool>(true); ///< False once the widgets go.
 
     JUCE_DECLARE_NON_COPYABLE(CardBody)
 };

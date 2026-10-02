@@ -66,8 +66,34 @@ juce::Typeface::Ptr loadEmbeddedTypeface(const juce::String& family, bool bold, 
 #endif
 }
 
+namespace {
+
+// The embedded UI typeface that uiFont measures and paints with, loaded once. Creating a typeface from
+// font data is expensive (and on Windows registers a font resource each time), so it must not happen per
+// measure or per repaint. DeletedAtShutdown releases it before JUCE shuts down, which a plain static
+// Typeface::Ptr would outlive (see typefaceCache in AppLookAndFeel.h).
+class EmbeddedUiTypeface : private juce::DeletedAtShutdown {
+public:
+    /** Message thread only (fonts are measured and painted there). */
+    static juce::Typeface::Ptr get() {
+        if (instance == nullptr)
+            instance = new EmbeddedUiTypeface();
+        return instance->face;
+    }
+
+private:
+    EmbeddedUiTypeface()
+        : face(loadEmbeddedTypeface("Inter", false, false)) {}
+    ~EmbeddedUiTypeface() override { instance = nullptr; }
+
+    static inline EmbeddedUiTypeface* instance = nullptr;
+    juce::Typeface::Ptr face;
+};
+
+} // namespace
+
 juce::Font AppLookAndFeel::uiFont(float height) {
-    if (auto face = loadEmbeddedTypeface("Inter", false, false))
+    if (auto face = EmbeddedUiTypeface::get())
         return juce::Font(juce::FontOptions(face).withHeight(height));
     return juce::Font(juce::FontOptions(height));
 }

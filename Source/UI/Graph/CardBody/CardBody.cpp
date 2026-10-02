@@ -81,7 +81,7 @@ CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const st
     , plan_(CardBodyPlan::forModule(module, layout, dimRules))
     , layout_(layout) {}
 
-CardBody::~CardBody() = default;
+CardBody::~CardBody() { *widgetsAlive_ = false; }
 
 // The layout chain (docs/layout/module-card-layout.md#where-a-layout-comes-from): the node's own
 // override, then the type's stored default in `store` (the app binds one per GraphEditor,
@@ -320,9 +320,11 @@ void CardBody::createSegmented(CardBodyItem& item, juce::RangedAudioParameter& p
     card_.addAndMakeVisible(segmented);
     segmented->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*segmented, &param);
-    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(param, [segmented](float value) {
-        segmented->setSelectedIndex(juce::roundToInt(value), juce::dontSendNotification);
-    }));
+    auto* attachment =
+        paramAttachments_.add(new juce::ParameterAttachment(param, [segmented, alive = widgetsAlive_](float value) {
+            if (*alive)
+                segmented->setSelectedIndex(juce::roundToInt(value), juce::dontSendNotification);
+        }));
     segmented->onChange = [attachment](int index) { attachment->setValueAsCompleteGesture((float)index); };
     attachment->sendInitialUpdate();
     addCaption(item, param, juce::Justification::centredLeft);
@@ -339,8 +341,11 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
     card_.addAndMakeVisible(stepper);
     stepper->addMouseListener(&card_, true);
     card_.registerMidiLearnable(*stepper, &param);
-    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(
-        param, [stepper, &param](float) { stepper->setValueText(param.getCurrentValueAsText()); }));
+    auto* attachment =
+        paramAttachments_.add(new juce::ParameterAttachment(param, [stepper, &param, alive = widgetsAlive_](float) {
+            if (*alive)
+                stepper->setValueText(param.getCurrentValueAsText());
+        }));
     stepper->onStep = [attachment, &param](int delta) {
         const auto range = param.getRange();
         const int next = juce::jlimit(range.getStart(), range.getEnd(), param.get() + delta);
@@ -395,8 +400,11 @@ void CardBody::releaseViews() {
 }
 
 // During an undo the graph may already have freed the processor and its parameters; detaching an
-// attachment then touches freed memory, so they are released (leaked) instead.
+// attachment then touches freed memory, so they are released (leaked) instead. A leaked attachment can
+// still deliver an update it had already queued, so the switch and stepper callbacks check widgetsAlive_
+// before touching a widget that is about to be deleted.
 void CardBody::releaseBindings(bool processorAlive) {
+    *widgetsAlive_ = false;
     stopWatchingConditions(processorAlive);
     if (processorAlive) {
         sliderAttachments_.clear();
