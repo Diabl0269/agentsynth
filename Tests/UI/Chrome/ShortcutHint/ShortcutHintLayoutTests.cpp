@@ -78,6 +78,20 @@ TEST(ShortcutHintLayout, LaterBubbleStaggersIntoASecondRowWhenSlidingHalfItsWidt
     EXPECT_FALSE(placed[0]->intersects(*placed[1]));
 }
 
+TEST(ShortcutHintLayout, ARowOfNarrowButtonsWithWideKeyTextLabelsEveryButton) {
+    // The Draw shape strip off the Mac: six 22 px buttons 26 px apart, each with a ~54 px "Shift+N" bubble.
+    std::vector<hint::BubbleRequest> requests;
+    for (int i = 0; i < 6; ++i)
+        requests.push_back({{400 + i * 26, 10, 22, 30}, {54, 16}, {}});
+    const auto placed = hint::placeBubbles(requests, kWindow);
+    for (size_t i = 0; i < placed.size(); ++i) {
+        ASSERT_TRUE(placed[i].has_value()) << "button " << i;
+        EXPECT_LE(std::abs(placed[i]->getCentreX() - requests[i].anchor.getCentreX()), 30) << "near its button";
+        for (size_t j = 0; j < i; ++j)
+            EXPECT_FALSE(placed[i]->intersects(*placed[j])) << i << " vs " << j;
+    }
+}
+
 TEST(ShortcutHintLayout, LaterBubbleIsDroppedWhenNoSecondRowFits) {
     // The container ends right under the first row, so there is nowhere to stagger to.
     const Rectangle<int> strip{0, 0, 800, 50};
