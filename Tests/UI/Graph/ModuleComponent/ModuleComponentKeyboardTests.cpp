@@ -236,3 +236,31 @@ TEST(ModuleComponentKeyboard, CardsBuiltByLoadingASavedPatchAreNamed) {
     }
     EXPECT_GT(knobs, 0);
 }
+
+namespace {
+
+juce::MouseEvent pressOn(ModuleComponent& card, juce::Component& target, juce::Point<float> pos) {
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    return juce::MouseEvent(source, pos, juce::ModifierKeys::leftButtonModifier, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &target,
+                            &card, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+}
+
+} // namespace
+
+// A press on the card body selects it and leaves focus on the canvas; it must not step into the card.
+TEST(ModuleComponentKeyboard, PressingTheCardBodyFocusesTheCanvasNotItsFirstControl) {
+    FilterCard f;
+    ASSERT_NE(f.card, nullptr);
+    f.card->setRecordFocusForTest(true);
+    f.card->mouseDown(pressOn(*f.card, *f.card, {20.0f, 8.0f}));
+    EXPECT_EQ(f.card->getRecordedFocusForTest(), &f.editor);
+}
+
+// A press on a control keeps the focus that control took; the card does not pull it away.
+TEST(ModuleComponentKeyboard, PressingAControlLeavesFocusWithThatControl) {
+    FilterCard f;
+    f.card->setRecordFocusForTest(true);
+    auto* control = f.card->getKeyboardControls().front();
+    f.card->mouseDown(pressOn(*f.card, *control, {2.0f, 2.0f}));
+    EXPECT_EQ(f.card->getRecordedFocusForTest(), nullptr);
+}

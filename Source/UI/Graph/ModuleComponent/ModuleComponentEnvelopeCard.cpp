@@ -93,7 +93,8 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
         hold = divSeconds("holdDiv");
         decay = divSeconds("decayDiv");
         release = divSeconds("releaseDiv");
-        maxStageSeconds = (double)synth::envelopeNoteDivisionSeconds(0, bpm); // "1/1", the coarsest
+        maxStageSeconds = (double)synth::envelopeNoteDivisionSeconds(synth::envelopeNoteDivisions().size() - 1,
+                                                                     bpm); // "1/1", the coarsest
     } else {
         attack = (double)floatParam("attack");
         hold = (double)floatParam("hold");

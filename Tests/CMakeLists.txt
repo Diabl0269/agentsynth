@@ -61,6 +61,7 @@ add_executable(Tests
     Modules/ADSR/ADSRCVTests.cpp
     Modules/ADSR/ADSRVelocityTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
+    Modules/Envelope/TempoDivisionTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
     Modules/ModulationTargetBindingTests.cpp

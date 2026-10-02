@@ -155,10 +155,10 @@ TEST_F(ADSRTest, SustainCVRaisesSustainLevel) {
 
 TEST_F(ADSRTest, DecayCVIgnoredWhileTempoSynced) {
     setBoolParam(adsr, "tempoSync", true);
-    setChoiceIndex(adsr, "attackDiv", 5); // fastest ("1/32")
-    setChoiceIndex(adsr, "holdDiv", 5);
-    setChoiceIndex(adsr, "decayDiv", 2); // "1/4" -- 1 beat @ 120 BPM
-    setChoiceIndex(adsr, "releaseDiv", 5);
+    setChoiceIndex(adsr, "attackDiv", 2); // fastest used here ("1/32")
+    setChoiceIndex(adsr, "holdDiv", 2);
+    setChoiceIndex(adsr, "decayDiv", 5); // "1/4" -- 1 beat @ 120 BPM
+    setChoiceIndex(adsr, "releaseDiv", 2);
     setFloat(adsr, "sustain", 0.0f); // stays in Sustain (silent) once Decay lands, never Idle
 
     synth::TransportService transport;

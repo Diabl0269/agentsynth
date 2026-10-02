@@ -5,6 +5,7 @@
 // AppLookAndFeel::paintToggleButton with the focus state given. Images use SoftwareImageType(): the
 // default native image type reads back zeros on a Windows runner.
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -82,4 +83,13 @@ TEST(ToggleFocusRingTest, RingStaysInsideAShortRow) {
     EXPECT_EQ(painted.image.getPixelAt(centreX, 0), accent) << "top of the ring is on the top row, not cut off";
     EXPECT_EQ(painted.image.getPixelAt(centreX, painted.image.getHeight() - 1), accent)
         << "bottom of the ring is on the bottom row, not cut off";
+}
+
+TEST(ToggleFocusRingTest, LightThemeRingIsThickerThanTheDarkOne) {
+    synth::theme::Theme dark;
+    dark.isDark = true;
+    synth::theme::Theme light;
+    light.isDark = false;
+    EXPECT_FLOAT_EQ(synth::ui::focusRingThickness(dark), dark.metrics.borderWidth * 1.5f);
+    EXPECT_GT(synth::ui::focusRingThickness(light), synth::ui::focusRingThickness(dark));
 }

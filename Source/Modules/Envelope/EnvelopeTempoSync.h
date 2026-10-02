@@ -4,36 +4,29 @@
 
 namespace synth {
 
-/** The note-division list shared by every stage's *Div choice parameter on ADSRModule when
- *  `tempoSync` is on. Deliberately the SAME six entries, in the SAME order, as LFOModule's
- *  `rateSync` choice -- one set of division names across the app, not a per-module
- *  invention. Local to the envelope rather than shared code with LFOModule.h: six strings and
- *  a beats table is not worth a cross-file dependency for.
+/** The ONE tempo-division list for the whole app: ADSR stage lengths (`tempoSync` on), LFO `rateSync`,
+ *  Delay `timeDiv` and the timeline-modulator rate picker all offer exactly these names, in this order.
+ *  Shortest first, so index 0 / the bottom of a fader is the shortest value (1/128) and the top is
+ *  the longest (1/1). Saved projects store the choice NAME ("1/4"), never the index, so reordering or
+ *  growing this list never changes what an old project means.
  */
 inline const juce::StringArray& envelopeNoteDivisions() {
-    static const juce::StringArray divisions{"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
+    static const juce::StringArray divisions{"1/128", "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1/1"};
     return divisions;
 }
 
+/** Index of `name` in envelopeNoteDivisions() ("1/4" -> 5), or -1. */
+inline int envelopeNoteDivisionIndex(const juce::String& name) noexcept {
+    return envelopeNoteDivisions().indexOf(name);
+}
+
 /** Beats spanned by `envelopeNoteDivisions()[index]` -- 1/1 is a whole note (4 beats) down to
- *  1/32. Mirrors LFOModule::processBlock's `subdivision` switch exactly.
+ *  1/128. An out-of-range index clamps to the nearest end.
  */
 inline float envelopeNoteDivisionBeats(int index) noexcept {
-    switch (index) {
-    case 0:
-        return 4.0f; // 1/1
-    case 1:
-        return 2.0f; // 1/2
-    case 2:
-        return 1.0f; // 1/4
-    case 3:
-        return 0.5f; // 1/8
-    case 4:
-        return 0.25f; // 1/16
-    case 5:
-    default:
-        return 0.125f; // 1/32
-    }
+    const int last = envelopeNoteDivisions().size() - 1;
+    const int clamped = index < 0 ? 0 : (index > last ? last : index);
+    return 0.03125f * static_cast<float>(1 << clamped); // 1/128 note = 1/32 beat, doubling per step
 }
 
 /** A tempo-synced stage length in seconds, for the given division index at the given bpm.

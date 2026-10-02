@@ -41,7 +41,7 @@ all three. At the narrowest width the M/S/R block and the fold arrow still fit; 
 
 **Toggle sizing.** The `M`/`S`/`R` toggles are `kToggleWidth` (24 px) with an explicit
 `kToggleGap` (4 px) between adjacent buttons; laid out edge-to-edge with no gap they read as one
-fused block. The default `Metrics::timelineTrackHeaderWidth` is 190 px so the gapped toggle group, the
+fused block. The default `Metrics::timelineTrackHeaderWidth` is 200 px so the gapped toggle group, the
 fold arrow and the kind badge do not crush the name label.
 
 ## The document is the truth

@@ -167,8 +167,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
                     << "the auto-wired ADSR must be non-poly — its poly branch ignores MIDI entirely";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "sustain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f)
-                    << "sustain must be overridden so a held note doesn't decay to silence";
+                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f)
+                    << "the auto-wired ADSR keeps the library's stock sustain, so a held note holds";
     }
     for (auto* param : vca->getProcessor()->getParameters()) {
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))

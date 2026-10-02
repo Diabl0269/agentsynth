@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Envelope/EnvelopeTempoSync.h"
 #include "Lfo/LfoCustomWave.h"
 #include "ModuleBase.h"
 #include "ParameterText.h"
@@ -60,8 +61,8 @@ public:
                          "rateHz", "Rate (Hz)", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f), 1.0f));
 
         // Rate Sync
-        juce::StringArray syncs({"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"});
-        addParameter(rateSyncParam = new juce::AudioParameterChoice("rateSync", "Sync Rate", syncs, 2)); // Default 1/4
+        addParameter(rateSyncParam = new juce::AudioParameterChoice("rateSync", "Sync Rate",
+                                                                    synth::envelopeNoteDivisions(), 5)); // Default 1/4
 
         // Retrig
         addParameter(retrigParam = new juce::AudioParameterBool("retrig", "Retrig", false));
@@ -376,33 +377,7 @@ private:
                 }
             }
 
-            float subdivision = 4.0f; // 1/1 = 4 quarter notes
-            int syncIndex = rateSyncParam->getIndex();
-            // "1/1", "1/2", "1/4", "1/8", "1/16", "1/32"
-            // 1/1 = 4 beats
-            // 1/2 = 2 beats
-            // 1/4 = 1 beat
-            // 1/8 = 0.5 beats
-            switch (syncIndex) {
-            case 0:
-                subdivision = 4.0f;
-                break; // 1/1
-            case 1:
-                subdivision = 2.0f;
-                break; // 1/2
-            case 2:
-                subdivision = 1.0f;
-                break; // 1/4
-            case 3:
-                subdivision = 0.5f;
-                break; // 1/8
-            case 4:
-                subdivision = 0.25f;
-                break; // 1/16
-            case 5:
-                subdivision = 0.125f;
-                break; // 1/32
-            }
+            const float subdivision = synth::envelopeNoteDivisionBeats(rateSyncParam->getIndex());
 
             // Frequency = BPM / 60 / subdivision_in_beats?
             // rate in Hz = 1 / (time associated with subdivision)

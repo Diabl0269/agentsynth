@@ -66,7 +66,7 @@ MIDI Learn as a whole: a right click on any part of it resolves to the registere
 | Thing that takes focus | Helper |
 | --- | --- |
 | A whole panel or focus region | `paintFocusRegionOutline` (`Source/UI/Layout/FocusRegion.h`) - translucent, panel-weight outline |
-| A small control (button, toggle, knob, slider, custom widget) | `paintFocusRing` (`Source/UI/Layout/FocusRing.h`) - solid accent ring, 1.5x the theme border weight |
+| A small control (button, toggle, knob, slider, custom widget) | `paintFocusRing` (`Source/UI/Layout/FocusRing.h`) - solid accent ring, 1.5x the theme border weight (2.5x on a light theme, where a thin ring vanishes against a white control) |
 
 A ring that follows a tracked item rather than the component's own focus (the piano roll's focused
 note) calls `paintFocusRingAlways`, which draws the same ring without the focus check.

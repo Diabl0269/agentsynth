@@ -141,10 +141,11 @@ struct Metrics {
 
     // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
     int timelinePanelHeight{220}; // code-only; not parsed from user JSON
-    // 190 (was 160): widened alongside the M/S/R toggle row (TimelineTrackHeaderComponent::
+    // 200 (was 190, 160 before that): 190 was widened alongside the M/S/R toggle row (TimelineTrackHeaderComponent::
     // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the
-    // name label down to a handful of pixels next to the fold arrow and lane badge.
-    int timelineTrackHeaderWidth{190}; // code-only; not parsed from user JSON
+    // name label down to a handful of pixels next to the fold arrow and lane badge; 200 leaves room for an LFO
+    // modulator row's shape combo beside a sync-rate combo that now lists "1/128".
+    int timelineTrackHeaderWidth{200}; // code-only; not parsed from user JSON
     // 34 (was 28): grown so TimelineTransportBar's glyph buttons (kButtonSize 22->26) actually
     // render larger instead of being clamped back down by the strip height.
     int timelineTransportBarHeight{34}; // code-only; not parsed from user JSON

@@ -80,13 +80,13 @@ public:
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(
                              [](bool on, int) { return on ? juce::String("Tempo") : juce::String("Time"); })));
         addParameter(attackDivParam =
-                         new juce::AudioParameterChoice("attackDiv", "Attack Div", synth::envelopeNoteDivisions(), 5));
+                         new juce::AudioParameterChoice("attackDiv", "Attack Div", synth::envelopeNoteDivisions(), 2));
         addParameter(holdDivParam =
-                         new juce::AudioParameterChoice("holdDiv", "Hold Div", synth::envelopeNoteDivisions(), 5));
+                         new juce::AudioParameterChoice("holdDiv", "Hold Div", synth::envelopeNoteDivisions(), 2));
         addParameter(decayDivParam =
-                         new juce::AudioParameterChoice("decayDiv", "Decay Div", synth::envelopeNoteDivisions(), 1));
+                         new juce::AudioParameterChoice("decayDiv", "Decay Div", synth::envelopeNoteDivisions(), 6));
         addParameter(releaseDivParam = new juce::AudioParameterChoice("releaseDiv", "Release Div",
-                                                                      synth::envelopeNoteDivisions(), 5));
+                                                                      synth::envelopeNoteDivisions(), 2));
         // `gateThreshold`, not `threshold` / `trigThreshold`: Compressor owns `threshold` as dB,
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
         addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));

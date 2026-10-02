@@ -394,6 +394,8 @@ public:
 
 private:
     void focusForKeyboard(juce::Component* target);
+    // True when `hit` is one of the card's keyboard controls (or inside one): a press there keeps its own focus.
+    bool isOnKeyboardControl(const juce::Component* hit);
     juce::Component* currentKeyboardFocus() const;
     void applyControlAccessibility();
     void syncPortAccessibility();
