@@ -121,6 +121,18 @@ juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std:
 }
 
 //==============================================================================
+// findFreeSlotBelow
+//==============================================================================
+juce::Point<int> findFreeSlotBelow(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, int gap) {
+    auto p = snap(desired);
+    p = {juce::jmax(0, p.x), juce::jmax(0, p.y)};
+    for (int step = 0; step < kWalkDownMaxSteps; ++step, p.y += kGridSize)
+        if (!intersectsAny({p.x, p.y, w, h}, others, NodeID{}, gap))
+            return p;
+    return p;
+}
+
+//==============================================================================
 // resolveDisplacement
 //==============================================================================
 namespace {

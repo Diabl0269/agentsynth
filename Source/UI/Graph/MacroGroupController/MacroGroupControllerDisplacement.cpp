@@ -8,6 +8,7 @@
 
 #include "MacroGroupController.h"
 #include "MacroNesting.h"
+#include "ModelCardBounds.h"
 
 #include "Mixer/MasterSplice.h"
 
@@ -334,9 +335,28 @@ MacroGroupController::placementBlockers(const std::vector<juce::AudioProcessorGr
     }
 
     std::vector<synth::LayoutUtil::Box> boxes;
-    for (auto* comp : host_.modules())
-        if (comp != nullptr && comp->getModule() != nullptr && comp->isVisible() && !isExcludedNode(comp->getNodeId()))
+    std::set<juce::uint32> carded;
+    for (auto* comp : host_.modules()) {
+        if (comp == nullptr)
+            continue;
+        carded.insert(comp->getNodeId().uid);
+        if (comp->getModule() != nullptr && comp->isVisible() && !isExcludedNode(comp->getNodeId()))
             boxes.push_back({comp->getNodeId(), comp->getBounds()});
+    }
+    // A node with no card still blocks, from the model (stored x/y, estimated size): the canvas detaches every
+    // card for an AI edit plan, which builds its tracks before any card exists again. A member of a collapsed
+    // macro is skipped exactly as its invisible card would be.
+    for (auto* node : host_.graph().getNodes()) {
+        if (carded.count(node->nodeID.uid) > 0 || isExcludedNode(node->nodeID))
+            continue;
+        const auto* owner = macros.findByMember(node->properties["uuid"].toString());
+        if (owner != nullptr && macros.isEffectivelyCollapsed(owner->id))
+            continue;
+        const auto rect =
+            synth::modelCardBounds(*node, [this](const juce::String& t) { return host_.estimateModuleSizeForType(t); });
+        if (!rect.isEmpty())
+            boxes.push_back({node->nodeID, rect});
+    }
 
     // No real node id is anywhere near the top of the range, so a sentinel is never mistaken for `selfId`.
     juce::uint32 sentinel = 0xFFFF0000u;

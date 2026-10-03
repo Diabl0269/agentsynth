@@ -361,6 +361,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
+    Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
+    Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
     Source/UI/Graph/CanvasFrame/CanvasFrame.h
     Source/UI/Graph/CanvasFrame/CanvasFrame.cpp
     Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.h
@@ -381,6 +383,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerProgrammaticRouting.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     Source/UI/Graph/MacroGroupController/MacroNesting.h
+    Source/UI/Graph/MacroGroupController/ModelCardBounds.h
     Source/UI/Graph/MacroGroupController/MacroNesting.cpp
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp

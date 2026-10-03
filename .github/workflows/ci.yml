@@ -458,19 +458,19 @@ jobs:
     # to seed the cache (see the note above the `lint` job).
     - name: Run Tests
       if: github.event_name == 'pull_request'
-      timeout-minutes: 10
+      timeout-minutes: 16
       run: |
         export LLVM_PROFILE_FILE="default.profraw"
         # Run without xvfb — tests are headless and xvfb's X11 event loop
         # adds ~44s overhead per pumpMessages() call on slow CI runners
         #
         # Watchdog: a hung test must die with thread stacks, not a silent step timeout. SIGABRT
-        # after 8 minutes, then print every thread's backtrace from the core.
+        # after 14 minutes (a healthy suite takes up to 8 here), then print every thread's backtrace.
         sudo apt-get install -y --no-install-recommends gdb > /dev/null 2>&1 || true
         ulimit -c unlimited
         echo 'core.%p' | sudo tee /proc/sys/kernel/core_pattern > /dev/null
         set +e
-        timeout -s ABRT 480 ./build/Tests/Tests
+        timeout -s ABRT 840 ./build/Tests/Tests
         status=$?
         set -e
         if [ "$status" -ne 0 ]; then

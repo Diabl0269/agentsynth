@@ -153,7 +153,9 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   clear, so the card sits where it was and the neighbours' old spots are clear of it again.
 - **Placement blockers.** A module being dropped or dragged lands through `findFreeSlot` against the same layout
   units, flattened over every level (`MacroGroupController::placementBlockers`): each visible module, each collapsed
-  card, each open hull. The hidden members of a collapsed macro are not blockers (they still sit at their
+  card, each open hull. A node with no card at all (the canvas detached them for an AI edit plan) blocks through its
+  model rect, its stored `x`/`y` and estimated size (`ModelCardBounds.h`), and an open hull unions the same rects for
+  such members ([where an edit plan's additions land](../ai/timeline-ops.md#where-things-land)). The hidden members of a collapsed macro are not blockers (they still sit at their
   pre-collapse spots under and around the card, which is why a module set just below a card used to jump away).
   Left out are the placed module itself, every macro that contains it (its own hull and its ancestors'), the
   collapsed macros a group drag carries, and the macro the drop is about to join, whose hull is where the module is

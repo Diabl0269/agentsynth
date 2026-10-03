@@ -173,6 +173,41 @@ backstop through a failing fake host, both request shapes),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step
 through the real host), `Tests/AI/AIStateMapper/AIStateMapperIdScopeTests.cpp` (the scope).
 
+### Where things land
+
+Positions are the app's, not the model's: a plan rarely sends `"position"`, and the canvas has no cards
+while the batch runs (`aiPatchAboutToApply` detached them). Both rules below run inside the plan's one
+undo step.
+
+- **A new track goes below every existing one.** `addInstrumentTrack` places its Track In, and so the
+  whole channel row and its macro, with the same `GraphEditor::findLeftEdgeSlotBelowModules` "+ Track"
+  uses: the left edge, one gap below the lowest card, collapsed macro card or open macro hull. While
+  the cards are detached, `MacroGroupController::placementBlockers` and the open-hull union read each
+  node's model rect instead (stored `x`/`y`, estimated card size, `ModelCardBounds.h`), so existing
+  track macros still count. On an empty canvas the track lands where it always did. "+ Track" itself is unchanged, since its cards are
+  attached.
+- **A new module goes beside what it connects to.** After the patch, `TimelineOpsHost::placeNewModules`
+  gets every node the plan created; the app host (`synth::placeNewModulesBesideConnections`,
+  `Source/UI/Graph/NewModulePlacement/`) places the ones with no stored position, one at a time:
+  1. the source of a connection or modulation into an already-placed node goes **left** of its first
+     such destination, on that node's row;
+  2. otherwise the destination of a connection from an already-placed node goes **right** of it;
+  3. otherwise below the last node it placed (the canvas' left edge below everything, for the first).
+
+  The spot is walked down in grid steps (`LayoutUtil::findFreeSlotBelow`) until it clears every
+  placement blocker, so it never covers a card; a "left of" spot that would cross the canvas origin
+  is clamped there and walks down too. A placed node counts as placed for the rest, so a chain with no
+  positions lays out left to right. A modulation's attenuverter is looked through (LFO -> Filter);
+  MIDI cables and the output dock (Master, Rec Tap, Audio Output) never anchor, because the merge
+  auto-wires MIDI from whichever source it finds first and the dock sits right of everything. A node
+  anchored on a macro member joins that macro (`addSelectionToMacro`, no undo record of its own),
+  lands inside its outline clear of every member, hidden ones included, and the macro makes room:
+  the cards it pushes glide (`CardGlideAnimator`). Undo restores the whole plan in one step; that
+  restore rebuilds the cards, so it lands at once.
+
+Tests: `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditPlacementTests.cpp`, and the walk-down in
+`Tests/UI/Layout/LayoutUtilTests.cpp`.
+
 ## `placeMidiClip` and the `.mid` blob
 
 Every other op in this grammar is closed field by field. `placeMidiClip` is the one exception that

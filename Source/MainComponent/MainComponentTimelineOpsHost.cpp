@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 
 // The same build "+ Track -> Instrument" runs (MainComponent::buildInstrumentTrackBody), with the
 // exact name the op asked for and WITHOUT the user's default-preset lookup: the preview the user
@@ -35,3 +36,9 @@ bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& muta
 // The doc an AIIntegrationService edit plan writes to from inside recordBatch: the app's one live
 // timeline, the same one recordBatch snapshots.
 synth::TimelineDoc* MainComponentTimelineOpsHost::editableTimelineDoc() { return &owner_.timelineDoc; }
+
+// Inside recordBatch, after the plan's patch: the nodes it added without a "position" land beside what they connect
+// to (docs/ai/timeline-ops.md#where-things-land), so their spots and any make-room are part of the one undo step.
+void MainComponentTimelineOpsHost::placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
+    synth::placeNewModulesBesideConnections(owner_.graphEditor, created);
+}
