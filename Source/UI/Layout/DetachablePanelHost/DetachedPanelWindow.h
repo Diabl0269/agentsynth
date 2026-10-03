@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -29,7 +30,7 @@ namespace synth::ui {
 // KeyListener -- see MainComponentSetup.cpp's comment -- so Tab here would otherwise go nowhere),
 // so this window resolves Tab/Shift+Tab itself, against its OWN one-region FocusRegionRegistry
 // (registerHostedPanelFocusRegion()), via the shared synth::ui::resolveFocusCycleKeyPress()
-// (FocusRegion.h). It also owns its own juce::TooltipWindow -- MainComponent's only covers its own
+// (FocusRegion.h). It also owns its own synth::ui::AppTooltipWindow -- MainComponent's only covers its own
 // tree, never a second top-level window -- and registers as a Desktop FocusChangeListener to
 // repaint its own region root's accent outline (mirrors MainComponent::globalFocusChanged).
 class DetachedPanelWindow
@@ -122,7 +123,7 @@ private:
     // window's own teardown order delete; this destructor drops the window's reference to it before
     // its own members (content_ included) unwind, so nothing borrowed is ever touched after.
     std::unique_ptr<Content> content_;
-    std::unique_ptr<juce::TooltipWindow> tooltipWindow_;
+    std::unique_ptr<synth::ui::AppTooltipWindow> tooltipWindow_;
     synth::ui::FocusRegionRegistry focusRegions_;
     juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
 

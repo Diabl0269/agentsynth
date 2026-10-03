@@ -415,6 +415,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltipsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategoryTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
@@ -453,6 +454,7 @@ add_executable(Tests
     UI/Layout/UIAnimationTests.cpp
     UI/Layout/ScrollTweenTests.cpp
     UI/Layout/PopupMotionTests.cpp
+    UI/Layout/AppTooltipWindowTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp

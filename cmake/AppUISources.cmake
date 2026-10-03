@@ -214,6 +214,9 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
+    Source/UI/Layout/AppTooltipWindow.h
+    Source/UI/Layout/AppTooltipWindow.cpp
+    Source/UI/Layout/HelperTooltip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/SidePane/SidePane.h
@@ -586,6 +589,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocation.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabSections.cpp

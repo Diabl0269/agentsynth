@@ -267,6 +267,9 @@ above its anchor slides up; a submenu beside its parent row slides sideways; a w
 pointer inside it, or a dialog opened from the keyboard, slides down. Reduce motion is
 `synth::ui::prefersReducedMotion()` (`ReducedMotion.h`): macOS Reduce motion; other platforms do not read a setting yet and answer false. It is read each time a popup shows or hides.
 
+**Tooltips** are the exception to "popup windows": they are children of their app window, so they
+do not go through `PopupMotion`. See [Tooltips](#tooltips).
+
 **How windows are caught.** JUCE has no "window created" event, so each kind is caught at the
 earliest look-and-feel call that receives it, before it is first shown
 (`AppLookAndFeelWindowMotion.cpp`):
@@ -329,6 +332,8 @@ shortcut.
   item or a ghost of it follows the pointer, and a reorderable list makes room with
   `ReorderDragAnimator` — see [Drag-and-drop cursor](#drag-and-drop-cursor) and
   [Reorder drag](#reorder-drag).
+- **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
+  Reduce Motion: [Tooltips](#tooltips).
 - **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its
   anchor and leaves the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. One shared
   mechanism, never per call site: [Popup windows](#popup-windows).
@@ -344,6 +349,24 @@ shortcut.
 - **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its
   origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
   nothing is committed — no undo step.
+
+## Tooltips
+
+One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app
+window: `MainComponent` owns one and each `DetachedPanelWindow` owns one. It is a `juce::TooltipWindow` that fades
+a tip in over 160 ms (`easeOutCubic`) and out over 110 ms (`easeInCubic`), the numbers from `popup_motion`, with no
+slide. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling that paints the same text.
+Under Reduce Motion (`prefersReducedMotion()`) a tip uses the popups' plain 80 ms fade in and out (no slide was ever
+there), and a window that is not on screen never animates. Never create a bare `juce::TooltipWindow`.
+
+**Info and helper tips.** Preferences > Panels & Windows > "Show info tooltips" (user setting `showInfoTooltips`,
+default on) hides the *info* tooltips, the ones that explain a control. A *helper* tip tells you something the screen
+does not show anywhere else and keeps showing: mark its component with `synth::ui::markHelperTooltip(component)`
+(`Source/UI/Layout/HelperTooltip.h`). Today those are the mixer sources badge ("Plays into this channel: ...") and the
+preference's own toggle, so it can always say how to bring tips back. The window reads the setting each time it is
+asked for a tip (`AppTooltipWindow::getTipFor`), so a toggle applies at once in every window with no push. The mod-dot
+drag readout is painted on the canvas, not a hover tooltip, and is unaffected. Tests:
+`Tests/UI/Layout/AppTooltipWindowTests.cpp`.
 
 ## Popup reveal
 

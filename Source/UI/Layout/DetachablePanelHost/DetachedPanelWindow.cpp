@@ -78,7 +78,7 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     // MainComponent's TooltipWindow only covers its own component tree -- a second top-level
     // window needs its own, or the detach button's tooltip (and every control inside the hosted
     // panel) never shows here.
-    tooltipWindow_ = std::make_unique<juce::TooltipWindow>(this);
+    tooltipWindow_ = std::make_unique<synth::ui::AppTooltipWindow>(this, appProperties);
 
     // Repaints our own focus-region root's accent outline on focus changes -- see
     // MainComponent::globalFocusChanged, the same idiom, scoped to this window's own registry.
