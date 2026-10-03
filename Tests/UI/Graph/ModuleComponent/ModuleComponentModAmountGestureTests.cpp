@@ -185,7 +185,7 @@ TEST_F(ModuleComponentTest, PlainDragInTheKnobCentreStillMovesTheKnob) {
 // on a second LFO's output jack, must wire that new source in exactly like a real (visible) input
 // jack always could -- proving the pickup gesture reaches the SAME GraphEditor::beginConnectionDrag/
 // dragConnection/endConnectionDrag machinery, not a bespoke stand-in.
-TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDrag) {
+TEST_F(ModuleComponentTest, CmdPickupGestureOnTheLandingDotStartsARealConnectionDrag) {
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
     ASSERT_NE(f.vcaCard, nullptr);
@@ -225,12 +225,13 @@ TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDra
     const auto lfo2OutputGlobal = lfo2Comp->getBounds().getPosition() + lfo2Comp->getPortCenter(0, /*isInput*/ false);
     const auto knobLocalDrop = f.gainKnob->getLocalPoint(nullptr, lfo2OutputGlobal);
 
-    const auto plain = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    // Cmd: a plain press on the dot of a modulated knob drags the amount instead (ModDotGestureTests.cpp).
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
     const int connectionsBefore = (int)graph.getConnections().size();
 
-    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, knobLocalDown, plain));
-    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
-    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
+    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, knobLocalDown, cmd));
+    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, cmd));
+    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, cmd));
 
     EXPECT_GT((int)graph.getConnections().size(), connectionsBefore)
         << "the pickup gesture must start a real INPUT connection drag and wire the new source when dropped";

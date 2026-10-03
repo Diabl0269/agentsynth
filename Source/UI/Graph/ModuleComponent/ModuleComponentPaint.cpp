@@ -862,6 +862,7 @@ void ModuleComponent::resized() {
 
     // --- Default Layout ---
     layoutDefaultContent(/*apply*/ true);
+    syncModDotButtons(); // the dots follow their knobs
 }
 
 void ModuleComponent::refreshPortLayout() {

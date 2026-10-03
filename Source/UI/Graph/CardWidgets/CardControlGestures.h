@@ -2,7 +2,8 @@
 
 // The gestures every continuous control on a module card carries, whatever it looks like: the
 // modulation-amount drag (a press the card claims to adjust a routing's attenuverter instead of the
-// value), the cable pickup (a press on the cable's landing dot re-drags that cable), the hover that
+// value), the mod dot (a press on the cable's landing dot drags the amount of the source last chosen), the
+// cable pickup (a Cmd-press on that dot, or a press on a dot with no attenuverter, re-drags the cable), the hover that
 // highlights the cable landing on the control, and the keyboard steps. CardKnobSlider and CardFader
 // both inherit it and route their mouse events through it first, so the two can never drift apart;
 // ModuleComponent::wireCardControlGestures wires the callbacks for either.
@@ -29,6 +30,14 @@ public:
     /** mouseEnter (true) / mouseExit (false); unset for a control with no routing. */
     std::function<void(bool entered)> onHoverChanged;
     /** Asked on mouseDown right after wantsModAmountGesture declines; true claims the gesture for
+     *  onModDotGesture (the press landed on the control's mod dot). */
+    std::function<bool(const juce::MouseEvent&)> wantsModDotGesture;
+    /** Down (0), drag (1), up (2) of a claimed mod-dot press; the control's own value is never touched. */
+    std::function<void(const juce::MouseEvent&, int phase)> onModDotGesture;
+    /** Esc while a mod-dot press is held: the gesture restores its starting amount and the rest of the
+     *  press (drag, release) is swallowed. */
+    std::function<void()> onModDotCancelled;
+    /** Asked on mouseDown right after wantsModDotGesture declines; true claims the gesture for
      *  onCablePickupGesture. */
     std::function<bool(const juce::MouseEvent&)> wantsCablePickupGesture;
     /** Down (0), drag (1), up (2) of a claimed cable pickup. */
@@ -85,6 +94,16 @@ public:
         return true;
     }
 
+    /** True when Esc cancelled a mod-dot press in flight; the control returns true from keyPressed then. */
+    bool cancelModDotOnEscape(const juce::KeyPress& key) {
+        if (!modDotActive_ || modDotCancelled_ || !key.isKeyCode(juce::KeyPress::escapeKey))
+            return false;
+        modDotCancelled_ = true;
+        if (onModDotCancelled)
+            onModDotCancelled();
+        return true;
+    }
+
     static constexpr double kStep = 0.01;      // of the travel
     static constexpr double kFineStep = 0.001; // Shift
     static constexpr double kCoarseStep = 0.1; // Page Up / Page Down
@@ -96,6 +115,13 @@ protected:
         if (modAmountActive_) {
             if (onModAmountGesture)
                 onModAmountGesture(e, 0);
+            return true;
+        }
+        modDotActive_ = wantsModDotGesture && wantsModDotGesture(e);
+        if (modDotActive_) {
+            modDotCancelled_ = false;
+            if (onModDotGesture)
+                onModDotGesture(e, 0);
             return true;
         }
         pickupActive_ = wantsCablePickupGesture && wantsCablePickupGesture(e);
@@ -116,6 +142,13 @@ protected:
                 onModAmountGesture(e, phase);
             return true;
         }
+        if (modDotActive_) {
+            if (phase == 2)
+                modDotActive_ = false;
+            if (onModDotGesture)
+                onModDotGesture(e, phase); // the controller swallows a cancelled press itself
+            return true;
+        }
         if (pickupActive_) {
             if (phase == 2)
                 pickupActive_ = false;
@@ -133,6 +166,8 @@ protected:
 
 private:
     bool modAmountActive_ = false;
+    bool modDotActive_ = false;
+    bool modDotCancelled_ = false;
     bool pickupActive_ = false;
 };
 

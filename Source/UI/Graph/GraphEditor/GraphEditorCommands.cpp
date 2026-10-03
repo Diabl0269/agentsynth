@@ -14,6 +14,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "SnippetManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
@@ -951,6 +952,11 @@ void GraphEditor::timerCallback() {
     // Compute the routing traversal once; derive display info from the same snapshot.
     cachedModRoutings = audioEngine.getModulationRoutings();
     cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
+    // Mod dots follow the routing set; layout changes re-sync from the card's own layout pass.
+    if (modDot_->routingsChanged(cachedModRoutings))
+        for (auto* card : content.getModules())
+            if (card != nullptr)
+                card->syncModDotButtons();
     content.connectionAnimPhase += 0.02f;
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;

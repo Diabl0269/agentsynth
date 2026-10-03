@@ -405,6 +405,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
+    Source/UI/Graph/ModDot/KnobModSources.h
+    Source/UI/Graph/ModDot/KnobModSources.cpp
+    Source/UI/Graph/ModDot/ModDotButton.h
+    Source/UI/Graph/ModDot/ModDotController.h
+    Source/UI/Graph/ModDot/ModDotController.cpp
+    Source/UI/Graph/ModDot/ModDotTooltip.h
+    Source/UI/Graph/ModDot/ModDotTooltip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp

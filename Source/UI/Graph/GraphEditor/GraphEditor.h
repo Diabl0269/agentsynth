@@ -28,6 +28,9 @@
 #include <set>
 #include <vector>
 
+namespace synth::ui {
+class ModDotController; // UI/Graph/ModDot/ModDotController.h
+}
 class AudioEngine;
 class CanvasCardKeyboard;
 class ModuleComponent;
@@ -268,6 +271,8 @@ public:
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
 
     // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
+    /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
+    synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
     SmartConnectionEngine& getSmartConnections() noexcept { return smartConnections_; }
@@ -747,6 +752,7 @@ private:
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this};
+    std::unique_ptr<synth::ui::ModDotController> modDot_; // the mod dot's drag, tooltip and last-chosen source
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;

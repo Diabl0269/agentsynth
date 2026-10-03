@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
@@ -252,6 +253,12 @@ public:
     /** `si` when that slider is a rotary a ring may be drawn on right now, else -1. */
     int shownRingSliderIndex(int si) const;
 
+    /** Creates, places, names and shows/hides the mod-dot Tab-stop buttons from the live routings; cheap
+     *  and idempotent (GraphEditor calls it every tick and the card on every layout). */
+    void syncModDotButtons();
+    /** The mod-dot button for raw `destChannel`, or null when that knob has none right now. */
+    synth::ui::ModDotButton* getModDotButton(int destChannel) const;
+
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
 
@@ -429,10 +436,19 @@ private:
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
     bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
+    /** The shared hit zone of the landing dot (mod dot and cable pickup). */
+    bool pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                             const juce::MouseEvent& e) const;
     void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 
     /** The RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
+
+    // The mod dot: ModuleComponentModDot.cpp. One transparent Tab-stop button per knob/fader with an
+    // attenuverter routing; the pointer gesture itself lives in synth::ui::ModDotController.
+    juce::OwnedArray<synth::ui::ModDotButton> modDotButtons_;
+    void wireModDotGesture(juce::Slider& control, synth::ui::CardControlGestures& gestures,
+                           juce::RangedAudioParameter* param);
 
     // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
     // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a

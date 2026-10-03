@@ -25,7 +25,9 @@ public:
     CardKnobSlider() { setWantsKeyboardFocus(true); }
 
     /** Each press is one change gesture, the same begin/set/end a mouse drag makes. */
-    bool keyPressed(const juce::KeyPress& key) override { return applyValueKey(*this, key); }
+    bool keyPressed(const juce::KeyPress& key) override {
+        return cancelModDotOnEscape(key) || applyValueKey(*this, key);
+    }
 
     /** The value `key` would set, or nullopt when it is not a knob key. */
     std::optional<double> valueForKey(const juce::KeyPress& key) {
