@@ -144,6 +144,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h
     Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h

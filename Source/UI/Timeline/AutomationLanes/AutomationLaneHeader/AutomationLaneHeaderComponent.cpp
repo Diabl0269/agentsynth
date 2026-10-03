@@ -12,7 +12,6 @@ namespace synth::ui {
 namespace {
 constexpr int kPadding = 4;
 constexpr int kComboWidth = 62;
-constexpr int kMenuButtonWidth = 18;
 constexpr float kStripeAlpha = 0.45f;
 constexpr float kNameFontSize = 11.0f;
 constexpr float kModuleFontSize = 9.5f;
@@ -59,18 +58,8 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     readout_.addMouseListener(this, false);
     // Up/Down on the combo would change its selection, so the lane keys are offered before the combo sees them.
     recordMode_.addKeyListener(this);
-    addAndMakeVisible(menuButton_);
-    menuButton_.onClick = [this] { showMenu(); };
-    menuButton_.addKeyListener(this);
 
     refreshFromDoc();
-}
-
-AutomationLaneHeaderComponent::MenuButton::MenuButton()
-    : IconButton("automationLaneMenu", synth::theme::Glyph::MenuDots, Style::Bare) {
-    setComponentID("automationLaneMenu");
-    setWantsKeyboardFocus(true);
-    setMouseClickGrabsKeyboardFocus(false);
 }
 
 // Names, colour and record mode are document state, so every doc notification re-reads them; the
@@ -91,9 +80,7 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     recordMode_.setTitle(parameterName_ + " record mode");
     recordMode_.setTooltip(parameterName_ + " record mode");
     setTooltip("Click the name to change what " + parameterName_ +
-               " controls; right-click or Shift+F10 for the lane menu");
-    menuButton_.setTitle("Lane menu for " + parameterName_);
-    menuButton_.setTooltip("Lane menu for " + parameterName_);
+               " controls; right-click, Shift+F10 or Return for the lane menu");
     applyRecordModeColour();
     repaint();
 }
@@ -133,7 +120,6 @@ void AutomationLaneHeaderComponent::resized() {
     bounds.removeFromRight(kPadding);
     auto top = bounds.removeFromTop(bounds.getHeight() / 2);
     auto bottom = bounds;
-    menuButton_.setBounds(top.removeFromRight(kMenuButtonWidth).reduced(0, 1));
     readout_.setBounds(top.removeFromRight(kReadoutWidth));
     recordMode_.setBounds(bottom.removeFromRight(kComboWidth).reduced(0, 1));
     nameArea_ = top.getUnion(bottom.withTrimmedRight(kPadding));

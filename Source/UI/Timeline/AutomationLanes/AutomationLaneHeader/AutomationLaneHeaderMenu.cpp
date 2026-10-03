@@ -69,7 +69,7 @@ void AutomationLaneHeaderComponent::openAddModulatorPicker() {
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), menuButton_.getScreenBounds(), nullptr);
+    juce::CallOutBox::launchAsynchronously(std::move(picker), getScreenBounds(), nullptr);
 }
 
 // Both edits can remove this lane (and with it this component) from inside the call, so the doc,
@@ -101,10 +101,6 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
     moveLaneUndoable(doc, undo, lane, dest, amountLanesTravellingWith(doc, host_, lane));
 }
 
-void AutomationLaneHeaderComponent::showMenu() {
-    showMenuAt(juce::PopupMenu::Options().withTargetComponent(&menuButton_));
-}
-
 void AutomationLaneHeaderComponent::showMenuAt(const juce::PopupMenu::Options& options) {
     auto menu = buildMenu();
     if (auto& hook = test_hooks::laneMenuHookForTest()) {
@@ -119,8 +115,8 @@ void AutomationLaneHeaderComponent::showMenuAt(const juce::PopupMenu::Options& o
 }
 
 // A right-click anywhere on the header opens the lane menu at the pointer; a left click on the parameter name
-// opens the picker that changes what the lane controls. The record-mode combo and the "..." button take their
-// own clicks. The value readout forwards its events here (see the constructor).
+// opens the picker that changes what the lane controls. The record-mode combo takes its own clicks. The value readout
+// forwards its events here (see the constructor).
 void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     const auto local = e.getEventRelativeTo(this);
     if (e.mods.isPopupMenu()) {
@@ -157,12 +153,15 @@ bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::
     return onLaneKey && onLaneKey(key);
 }
 
-// Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below. Everything else bubbles on.
+// Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane
+// menu beside the row. Everything else bubbles on.
 bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (onLaneKey && onLaneKey(key))
         return true;
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
+    if (key.isKeyCode(juce::KeyPress::returnKey))
+        return showContextMenuForKeyboardFocus();
     if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
@@ -192,8 +191,8 @@ juce::MouseCursor AutomationLaneHeaderComponent::getMouseCursor() {
     return juce::Component::getMouseCursor();
 }
 
-// Shift+F10 (or the menu key) on the record-mode combo or the "..." button: the menu opens beside the focused
-// control, the way a right-click would open it at the pointer.
+// Shift+F10 (or the menu key) or Return on the row, or Shift+F10 on the record-mode combo: the menu opens beside the
+// focused control, the way a right-click would open it at the pointer.
 bool AutomationLaneHeaderComponent::showContextMenuForKeyboardFocus() {
     if (doc_.getLane(laneId_) == nullptr)
         return false;

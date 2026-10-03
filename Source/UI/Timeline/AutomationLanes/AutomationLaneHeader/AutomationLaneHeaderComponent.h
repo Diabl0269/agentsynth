@@ -2,7 +2,6 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ContextMenuPlacement.h"
-#include "UI/Layout/IconButton.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
@@ -63,9 +62,8 @@ public:
     void resized() override;
 
     juce::ComboBox& getRecordModeCombo() noexcept { return recordMode_; }
-    juce::Button& getMenuButton() noexcept { return menuButton_; }
 
-    /** The "..." menu as the button shows it; item ids are the k*MenuId constants above. */
+    /** The lane menu (right-click, Shift+F10 or Return on the row); item ids are the k*MenuId constants above. */
     juce::PopupMenu buildMenu();
     /** Applies a menu choice; may destroy this component (see the class comment). */
     void applyMenuChoice(int menuId);
@@ -98,7 +96,7 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
-    /** Keys for the header row itself (or bubbling from its "..." button): Up/Down ask the owner to move keyboard focus
+    /** Keys for the header row itself: Return opens the lane menu, Up/Down ask the owner to move keyboard focus
      *  to the previous/next row; the record-mode combo keeps its own Up/Down. */
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
@@ -111,12 +109,6 @@ public:
     bool showContextMenuForKeyboardFocus() override;
 
 private:
-    class MenuButton : public IconButton {
-    public:
-        MenuButton();
-    };
-
-    void showMenu();
     void openParameterPicker(bool duplicate);
     bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
@@ -133,7 +125,6 @@ private:
     juce::String valueText_;
     juce::Colour trackColour_{juce::Colours::grey};
     juce::ComboBox recordMode_;
-    MenuButton menuButton_;
     LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 

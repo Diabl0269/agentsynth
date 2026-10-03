@@ -107,7 +107,7 @@ TEST(AutomationLanesEditingTest, LaneMenuMovesTheLaneToAnotherTrackAndUndoBrings
     f.doc.addTrack(TrackKind::Audio, "Vox");
     auto* header = f.panel.laneHeaderForTest(f.lane);
     ASSERT_NE(header, nullptr);
-    EXPECT_EQ(header->getMenuButton().getTitle(), "Lane menu for cutoff");
+    EXPECT_EQ(header->getTitle(), "cutoff automation lane");
 
     auto menu = header->buildMenu();
     EXPECT_NE(findMenuItem(menu, "Vox"), nullptr) << "Audio tracks are move targets too";
@@ -202,6 +202,6 @@ TEST(AutomationLanesEditingTest, LaneHeaderNamesItsParameterThroughThePanelsHost
     auto* header = f.panel.laneHeaderForTest(lane);
     ASSERT_NE(header, nullptr);
     EXPECT_EQ(header->getRecordModeCombo().getTitle(), "Cutoff record mode");
-    EXPECT_EQ(header->getMenuButton().getTitle(), "Lane menu for Cutoff");
+    EXPECT_EQ(header->getTitle(), "Cutoff automation lane");
     f.panel.setTrackHeaderHost(nullptr); // the host dies first
 }

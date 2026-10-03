@@ -22,8 +22,15 @@ enum class Glyph {
     MenuDots,
     EyeOpen,
     EyeHidden,
-    SidePane,    // a window with a divider after its left strip: a side pane that is closed
-    SidePaneOpen // the same window with the left strip filled: a side pane that is open
+    SidePane,     // a window with a divider after its left strip: a side pane that is closed
+    SidePaneOpen, // the same window with the left strip filled: a side pane that is open
+    // One period of an oscillator's waveform, for a modulator row's shape icon.
+    ShapeSine,
+    ShapeTriangle,
+    ShapeSaw,
+    ShapeSquare,
+    ShapeRandom, // sample and hold: a staircase of uneven steps
+    ShapeCustom  // a drawn wave: a curve with its points marked
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.

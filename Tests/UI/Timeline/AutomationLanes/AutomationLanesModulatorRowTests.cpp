@@ -5,6 +5,7 @@
 // The MainComponent side -- adding, removing and undoing real modulators -- is in
 // AutomationLanesModulatorMainTests.cpp.
 
+#include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
@@ -173,9 +174,10 @@ TEST(AutomationLanesModulatorRowTest, EveryControlIsANamedTabStopAndADragIsOneGe
     EXPECT_EQ(row->getShapeCombo().getTitle(), "Cutoff LFO shape");
     EXPECT_EQ(row->getShapeCombo().getTooltip(), "Cutoff LFO shape");
     EXPECT_EQ(row->getSyncToggle().getTitle(), "Cutoff LFO sync");
-    EXPECT_EQ(row->getMenuButton().getTooltip(), "Modulator menu for Cutoff LFO");
+    EXPECT_EQ(row->getShapeIcon().getTitle(), "Sine shape");
+    EXPECT_EQ(row->getShapeIcon().getTooltip(), "Sine shape");
     for (juce::Component* c : std::initializer_list<juce::Component*>{&row->getShapeCombo(), &row->getSyncRateCombo(),
-                                                                      &row->getSyncToggle(), &row->getMenuButton()})
+                                                                      &row->getSyncToggle()})
         EXPECT_TRUE(c->getWantsKeyboardFocus()) << c->getTitle();
     EXPECT_TRUE(row->getSyncRateCombo().isVisible()) << "synced: the 1/4-style rate";
     EXPECT_FALSE(row->getRateSlider().isVisible());
@@ -231,7 +233,7 @@ TEST(AutomationLanesModulatorRowTest, ANonLfoSourceGetsAReadOnlyRowWithItsTitleA
     EXPECT_EQ(band->getTitle(), "Cutoff Filter Env amount");
     EXPECT_FALSE(row->getShapeCombo().isVisible());
     EXPECT_FALSE(row->getSyncToggle().isVisible());
-    EXPECT_FALSE(row->getMenuButton().isVisible()) << "nothing to remove or retune from here";
+    EXPECT_FALSE(row->getShapeIcon().isVisible()) << "a source that is not an LFO has no shape";
 }
 
 TEST(AutomationLanesModulatorRowTest, TheLaneMenuOffersAnLfoModulatorOnlyWhenTheParameterHasACvJack) {
@@ -343,4 +345,93 @@ TEST(AutomationLanesModulatorRowTest, ADirectCableHasNoAmountAndADecorationBand)
     band->getInterceptsMouseClicks(clicks, childClicks);
     EXPECT_FALSE(clicks);
     EXPECT_FALSE(band->isAccessible());
+}
+
+namespace {
+// What the icon paints at its own size: every pixel, so two shapes can be told apart.
+juce::Image renderShape(synth::ui::ModulatorShapeIcon& icon) {
+    juce::Image image(juce::Image::ARGB, 40, 24, true, juce::SoftwareImageType());
+    icon.setBounds(0, 0, 40, 24);
+    juce::Graphics g(image);
+    icon.paintEntireComponent(g, true);
+    return image;
+}
+
+bool sameImage(const juce::Image& a, const juce::Image& b) {
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return false;
+    return true;
+}
+} // namespace
+
+TEST(AutomationLanesModulatorRowTest, RightClickReturnAndShiftF10OnAModulatorRowOpenItsMenu) {
+    HostedLanes h;
+    h.host.modulators = {lfoInfo("1")};
+    auto& f = h.f;
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto cutoff = f.addLane(bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(bass, true);
+    auto* row = f.panel.modulatorRowForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    lane_menu_test::MenuCapture capture;
+
+    const auto click = makeClickEvent(*row, {60.0f, 4.0f}, lane_menu_test::rightButton());
+    row->mouseDown(click);
+    ASSERT_EQ(capture.count, 1);
+    const auto fromRightClick = capture.itemTexts();
+    EXPECT_TRUE(fromRightClick.contains("Show on canvas"));
+    EXPECT_TRUE(fromRightClick.contains("Remove modulator"));
+
+    EXPECT_TRUE(row->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(capture.count, 2);
+    EXPECT_EQ(capture.itemTexts(), fromRightClick) << "Return opens the same menu";
+
+    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(row)) << "what Shift+F10 resolves to";
+    EXPECT_EQ(capture.count, 3);
+    EXPECT_EQ(capture.itemTexts(), fromRightClick);
+
+    // A right-click on the shape picture is a right-click on the row.
+    auto& icon = row->getShapeIcon();
+    row->mouseDown(makeClickEvent(icon, {5.0f, 5.0f}, lane_menu_test::rightButton()).getEventRelativeTo(row));
+    EXPECT_EQ(capture.count, 4);
+
+    // No "..." button is left on the row.
+    for (auto* child : row->getChildren())
+        EXPECT_FALSE(dynamic_cast<juce::Button*>(child) != nullptr && child->getTitle().containsIgnoreCase("menu"))
+            << child->getTitle();
+}
+
+TEST(AutomationLanesModulatorRowTest, TheShapePictureFollowsTheShapeAndIsNamedForIt) {
+    HostedLanes h;
+    h.host.modulators = {lfoInfo("1")};
+    auto& f = h.f;
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto cutoff = f.addLane(bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(bass, true);
+    auto* row = f.panel.modulatorRowForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    auto& icon = row->getShapeIcon();
+    EXPECT_TRUE(icon.isVisible());
+    EXPECT_FALSE(icon.getWantsKeyboardFocus()) << "the combo beside it is the control";
+
+    const juce::StringArray names{"Sine", "Triangle", "Sawtooth", "Square", "Sample and hold", "Custom"};
+    std::vector<juce::Image> pictures;
+    for (int shape = 0; shape < names.size(); ++shape) {
+        row->getShapeCombo().setSelectedId(shape + 1, juce::sendNotificationSync); // the user's pick
+        EXPECT_EQ(icon.getShape(), shape);
+        EXPECT_EQ(icon.getTitle(), names[shape] + " shape");
+        EXPECT_EQ(icon.getTooltip(), names[shape] + " shape");
+        EXPECT_EQ(icon.getGlyph(), synth::ui::ModulatorShapeIcon::glyphForShape(shape));
+        pictures.push_back(renderShape(icon));
+    }
+    for (size_t a = 0; a < pictures.size(); ++a)
+        for (size_t b = a + 1; b < pictures.size(); ++b)
+            EXPECT_FALSE(sameImage(pictures[a], pictures[b])) << "shapes " << a << " and " << b << " look the same";
+
+    // The graph changing the shape under the row (undo, the card, a preset) moves the picture too.
+    h.host.values["lfo-1.shape"] = 3.0f;
+    row->refreshValues();
+    EXPECT_EQ(icon.getTitle(), "Square shape");
 }

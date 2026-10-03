@@ -53,12 +53,26 @@ TEST(AutomationLanesMenuTest, RightClickOnTheHeaderOpensTheSameMenuAtThePointer)
     EXPECT_TRUE(hasItem(capture.itemTexts(), "Change parameter..."));
     EXPECT_EQ(capture.options.getTargetScreenArea(), screenPointArea(click));
 
-    // The "..." button's menu is the same list.
+    // Return on the focused row opens the same list, beside the row.
     const auto before = capture.itemTexts();
     capture.count = 0;
-    clickButton(header->getMenuButton());
+    EXPECT_TRUE(header->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(capture.count, 1);
     EXPECT_EQ(capture.itemTexts(), before);
+    EXPECT_FALSE(header->keyPressed(juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0)))
+        << "a modified Return is not the menu key";
+}
+
+TEST(AutomationLanesMenuTest, NoLaneHeaderOrModulatorRowHasAMenuButtonAnyMore) {
+    MenuPanel f;
+    auto* header = f.header(f.lane);
+    ASSERT_NE(header, nullptr);
+    const auto isMenuButton = [](juce::Component* c) {
+        return dynamic_cast<juce::Button*>(c) != nullptr &&
+               (c->getComponentID().containsIgnoreCase("menu") || c->getTitle().containsIgnoreCase("menu"));
+    };
+    for (auto* child : header->getChildren())
+        EXPECT_FALSE(isMenuButton(child)) << child->getComponentID() << " / " << child->getTitle();
 }
 
 TEST(AutomationLanesMenuTest, RightClickOnAHandleStillOpensTheHandleMenuNotTheLaneMenu) {
@@ -107,7 +121,7 @@ TEST(AutomationLanesMenuTest, TheMenuKeyOnAFocusedLaneHeaderOrEditorOpensTheLane
     EXPECT_EQ(capture.count, 2);
     EXPECT_TRUE(hasItem(capture.itemTexts(), "Duplicate"));
     // The keyboard route resolves through the same walk the app's command uses: the nearest provider above focus.
-    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(&header->getMenuButton()));
+    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(&header->getRecordModeCombo()));
     EXPECT_EQ(capture.count, 3);
 }
 
@@ -170,4 +184,33 @@ TEST(AutomationLanesMenuTest, RightClickOnAModulatorBandOpensTheRowsMenuAndStart
     EXPECT_EQ(capture.options.getTargetScreenArea(), screenPointArea(click));
     EXPECT_TRUE(band.showContextMenuForKeyboardFocus());
     EXPECT_EQ(capture.count, 2);
+}
+
+TEST(AutomationLanesMenuTest, RightClickReturnAndShiftF10OnATrackRowOpenItsMenu) {
+    MenuPanel f;
+    auto* row = f.panel.getTrackHeaderAt(0);
+    ASSERT_NE(row, nullptr);
+    int menus = 0;
+    juce::StringArray lastItems;
+    row->setShowContextMenuHookForTest([&](juce::PopupMenu& menu) {
+        ++menus;
+        lastItems.clear();
+        juce::PopupMenu::MenuItemIterator it(menu, true);
+        while (it.next())
+            lastItems.add(it.getItem().text);
+    });
+
+    row->mouseDown(makeClickEvent(*row, {110.0f, 3.0f}, rightButton()));
+    ASSERT_EQ(menus, 1);
+    EXPECT_TRUE(lastItems.contains("Delete Track"));
+    const auto fromRightClick = lastItems;
+
+    EXPECT_TRUE(row->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(menus, 2);
+    EXPECT_EQ(lastItems, fromRightClick) << "Return opens the same menu";
+
+    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(row)) << "what Shift+F10 resolves to";
+    EXPECT_EQ(menus, 3);
+    EXPECT_FALSE(row->keyPressed(juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::commandModifier, 0)));
+    EXPECT_EQ(menus, 3);
 }

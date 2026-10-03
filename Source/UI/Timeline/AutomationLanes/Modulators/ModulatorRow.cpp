@@ -14,7 +14,7 @@ namespace synth::ui {
 namespace {
 constexpr int kPadding = 4;
 constexpr int kTagWidth = 22;
-constexpr int kMenuButtonWidth = 16;
+constexpr int kShapeIconWidth = 22;
 constexpr int kSyncWidth = 48;
 constexpr int kGap = 2;
 constexpr int kAmountTextWidth = 34; // "-100%"
@@ -87,6 +87,7 @@ void ModulatorRow::initLfoControls() {
 
     const auto lfo = info_.sourceUuid;
     shape_.onChange = [this, lfo] {
+        shapeIcon_.setShape(shape_.getSelectedId() - 1);
         edit(lfo, "shape", (float)(shape_.getSelectedId() - 1), ParameterEditPhase::Once);
     };
     syncRate_.onChange = [this, lfo] {
@@ -98,8 +99,9 @@ void ModulatorRow::initLfoControls() {
     };
     wireDragEdits(rateHz_, lfo, "rateHz", [](double v) { return (float)v; });
 
-    addAndMakeVisible(menuButton_);
-    menuButton_.onClick = [this] { showMenu(); };
+    // The picture is display only; a right-click on it reaches the row's menu through the row's mouse listener.
+    addAndMakeVisible(shapeIcon_);
+    shapeIcon_.addMouseListener(this, false);
 }
 
 void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parameterName) {
@@ -121,11 +123,11 @@ void ModulatorRow::applyNames() {
             tip->setTooltip(text);
     };
     setTitle(who);
+    setTooltip("Right-click, Shift+F10 or Return for the " + who + " modulator menu");
     name(shape_, who + " shape");
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
     name(sync_, who + " sync");
-    name(menuButton_, "Modulator menu for " + who);
 }
 
 void ModulatorRow::resized() {
@@ -135,7 +137,7 @@ void ModulatorRow::resized() {
     auto middle = bounds.removeFromTop(lineHeight);
     tagArea_ = title.removeFromLeft(kTagWidth);
     if (info_.isLfo) {
-        menuButton_.setBounds(title.removeFromRight(kMenuButtonWidth).reduced(0, 1));
+        shapeIcon_.setBounds(title.removeFromRight(kShapeIconWidth).reduced(0, 1));
         layoutLfoControls(middle, bounds);
     } else {
         layoutAmount(middle);
@@ -218,15 +220,8 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
-        if (child->isVisible() && child != &menuButton_) // the menu button paints its own ring
+        if (child->isVisible() && child != &shapeIcon_) // the shape picture takes no focus
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
-}
-
-ModulatorRow::MenuButton::MenuButton()
-    : IconButton("modulatorMenu", synth::theme::Glyph::MenuDots, Style::Bare) {
-    setComponentID("modulatorMenu");
-    setWantsKeyboardFocus(true);
-    setMouseClickGrabsKeyboardFocus(false);
 }
 
 } // namespace synth::ui

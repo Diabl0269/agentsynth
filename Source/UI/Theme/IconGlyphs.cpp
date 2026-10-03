@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace synth::theme {
 
@@ -111,6 +112,75 @@ void paintMenuDots(juce::Graphics& g, juce::Rectangle<float> area) {
         g.fillEllipse(juce::Rectangle<float>(dot, dot).withCentre(area.getCentre().translated((float)i * 4.5f, 0.0f)));
 }
 
+// One period of a waveform, stroked across the glyph's wide box (twice as wide as it is tall, centred in `area`). The
+// shapes are polylines so a headless build draws them like the app.
+juce::Rectangle<float> waveBox(juce::Rectangle<float> area) {
+    const float height = std::min(area.getHeight() * 0.7f, area.getWidth() * 0.4f);
+    return juce::Rectangle<float>(std::min(area.getWidth() - 2.0f, height * 2.0f), height).withCentre(area.getCentre());
+}
+
+void strokePoints(juce::Graphics& g, const std::vector<juce::Point<float>>& points, juce::Rectangle<float> box) {
+    juce::Path path;
+    for (size_t i = 0; i < points.size(); ++i) {
+        const float x = box.getX() + points[i].x * box.getWidth();
+        const float y = box.getBottom() - points[i].y * box.getHeight();
+        if (i == 0)
+            path.startNewSubPath(x, y);
+        else
+            path.lineTo(x, y);
+    }
+    g.strokePath(path, juce::PathStrokeType(1.3f, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
+}
+
+void paintShape(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area) {
+    const auto box = waveBox(area);
+    switch (glyph) {
+    case Glyph::ShapeSine: {
+        std::vector<juce::Point<float>> points;
+        for (int i = 0; i <= 24; ++i) {
+            const float t = (float)i / 24.0f;
+            points.push_back({t, 0.5f + 0.5f * std::sin(t * juce::MathConstants<float>::twoPi)});
+        }
+        strokePoints(g, points, box);
+        break;
+    }
+    case Glyph::ShapeTriangle:
+        strokePoints(g, {{0.0f, 0.5f}, {0.25f, 1.0f}, {0.75f, 0.0f}, {1.0f, 0.5f}}, box);
+        break;
+    case Glyph::ShapeSaw:
+        strokePoints(g, {{0.0f, 0.0f}, {0.5f, 1.0f}, {0.5f, 0.0f}, {1.0f, 1.0f}}, box);
+        break;
+    case Glyph::ShapeSquare:
+        strokePoints(g, {{0.0f, 0.0f}, {0.0f, 1.0f}, {0.5f, 1.0f}, {0.5f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}}, box);
+        break;
+    case Glyph::ShapeRandom:
+        strokePoints(g,
+                     {{0.0f, 0.55f},
+                      {0.2f, 0.55f},
+                      {0.2f, 1.0f},
+                      {0.4f, 1.0f},
+                      {0.4f, 0.1f},
+                      {0.6f, 0.1f},
+                      {0.6f, 0.75f},
+                      {0.8f, 0.75f},
+                      {0.8f, 0.3f},
+                      {1.0f, 0.3f}},
+                     box);
+        break;
+    case Glyph::ShapeCustom: {
+        const std::vector<juce::Point<float>> points{{0.0f, 0.3f}, {0.3f, 0.9f}, {0.6f, 0.2f}, {1.0f, 0.7f}};
+        strokePoints(g, points, box);
+        for (const auto& p : points)
+            g.fillEllipse(
+                juce::Rectangle<float>(3.0f, 3.0f)
+                    .withCentre({box.getX() + p.x * box.getWidth(), box.getBottom() - p.y * box.getHeight()}));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void paintEye(juce::Graphics& g, juce::Rectangle<float> bounds, bool hidden) {
     const auto area = juce::Rectangle<float>(14.0f, 9.0f).withCentre(bounds.getCentre());
     juce::Path lid;
@@ -185,6 +255,14 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::SidePaneOpen:
         paintSidePane(g, area, true);
+        break;
+    case Glyph::ShapeSine:
+    case Glyph::ShapeTriangle:
+    case Glyph::ShapeSaw:
+    case Glyph::ShapeSquare:
+    case Glyph::ShapeRandom:
+    case Glyph::ShapeCustom:
+        paintShape(g, glyph, area);
         break;
     }
 }
