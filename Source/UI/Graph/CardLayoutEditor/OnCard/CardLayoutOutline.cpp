@@ -35,8 +35,18 @@ CardLayoutOutline::CardLayoutOutline(juce::String paramId, juce::String caption)
 void CardLayoutOutline::setCell(juce::Rectangle<int> cell) { setBounds(cell.expanded(kPad)); }
 
 void CardLayoutOutline::setCaption(const juce::String& caption) {
-    setTitle(caption + ", layout: drag to move, Return for options");
-    setTooltip("Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
+    caption_ = caption;
+    setTitle(caption + (panelOnly_ ? ", layout: Return for options" : ", layout: drag to move, Return for options"));
+    setTooltip(panelOnly_ ? "Right-click for options"
+                          : "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
+}
+
+void CardLayoutOutline::setPanelOnly(bool panelOnly) {
+    if (panelOnly == panelOnly_)
+        return;
+    panelOnly_ = panelOnly;
+    setCaption(caption_);
+    repaint();
 }
 
 void CardLayoutOutline::setLift(float lift) {
@@ -88,6 +98,8 @@ void CardLayoutOutline::paintButton(juce::Graphics& g, bool, bool) {
     }
     paintFocusRing(g, area, *this, kCornerRadius);
 
+    if (panelOnly_)
+        return;
     const auto grip = getGripArea();
     g.setColour(theme.colors.surfaceHi);
     g.fillRect(grip);

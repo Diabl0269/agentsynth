@@ -1,4 +1,4 @@
-// CardLayoutEditBar.cpp -- Cancel and Done over the card's own header controls.
+// CardLayoutEditBar.cpp -- Preset, Apply to, Cancel and Done over the card's own header controls.
 #include "CardLayoutEditBar.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -7,6 +7,18 @@ namespace synth::ui {
 CardLayoutEditBar::CardLayoutEditBar() {
     setTitle("Layout editing");
     setFocusContainerType(FocusContainerType::focusContainer);
+    preset_.setTitle("Preset");
+    preset_.setTooltip("Save, load or reset this card's layout");
+    preset_.onClick = [this] {
+        if (onPreset)
+            onPreset();
+    };
+    applyTo_.setTitle("Apply to");
+    applyTo_.setTooltip("Choose which cards this layout changes");
+    applyTo_.onClick = [this] {
+        if (onApplyTo)
+            onApplyTo();
+    };
     cancel_.setTitle("Cancel");
     cancel_.setTooltip("Undo everything since Edit layout (Esc)");
     cancel_.onClick = [this] {
@@ -19,6 +31,8 @@ CardLayoutEditBar::CardLayoutEditBar() {
         if (onDone)
             onDone();
     };
+    addAndMakeVisible(preset_);
+    addAndMakeVisible(applyTo_);
     addAndMakeVisible(cancel_);
     addAndMakeVisible(done_);
 }
@@ -41,6 +55,10 @@ void CardLayoutEditBar::resized() {
     done_.setBounds(area.removeFromRight(kButtonWidth));
     area.removeFromRight(kGap);
     cancel_.setBounds(area.removeFromRight(kButtonWidth));
+    area.removeFromRight(kGap);
+    applyTo_.setBounds(area.removeFromRight(kApplyToWidth));
+    area.removeFromRight(kGap);
+    preset_.setBounds(area.removeFromRight(kPresetWidth));
 }
 
 } // namespace synth::ui

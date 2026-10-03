@@ -7,6 +7,8 @@
 
 #include "../CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h"
 #include "UI/Layout/ReducedMotion.h"
 
@@ -14,6 +16,9 @@ namespace oncard_test {
 
 using cardlayouteditor_test::EditorCanvas;
 using cardlayouteditor_test::NodeID;
+using synth::ui::CardLayoutAddPanel;
+using synth::ui::CardLayoutAddRow;
+using synth::ui::CardLayoutControlPanel;
 using synth::ui::CardLayoutOnCardEditor;
 using synth::ui::CardLayoutOutline;
 
@@ -89,6 +94,51 @@ inline const synth::CardParamItem* storedItem(const synth::CardLayout& layout, c
 /** The widget `paramId`'s card draws now. */
 inline juce::Component* widgetOf(ModuleComponent& card, const juce::String& paramId) {
     return card.getCardBody()->findWidget(paramId);
+}
+
+/** Opens `key`'s control panel with Return on its outline; the rig keeps the panel. */
+inline CardLayoutControlPanel* openControlPanel(OnCardRig& rig, CardLayoutOnCardEditor& editor,
+                                                const juce::String& key) {
+    rig.panelLaunched.reset();
+    editor.getOutlineForTest(key)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    return dynamic_cast<CardLayoutControlPanel*>(rig.panelLaunched.get());
+}
+
+/** Hides `key` through the Hide from card button of its panel. */
+inline void hideThroughPanel(OnCardRig& rig, CardLayoutOnCardEditor& editor, const juce::String& key) {
+    auto* panel = openControlPanel(rig, editor, key);
+    ASSERT_NE(panel, nullptr) << key;
+    panel->getHideButtonForTest().onClick();
+}
+
+/** Opens the Add control panel with a click on the strip's button; the rig keeps the panel. */
+inline CardLayoutAddPanel* openAddPanel(OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+    rig.panelLaunched.reset();
+    editor.getAddButtonForTest().onClick();
+    return dynamic_cast<CardLayoutAddPanel*>(rig.panelLaunched.get());
+}
+
+/** A mouse event on `comp` whose screen position is `screen`. */
+inline juce::MouseEvent eventAtScreen(juce::Component& comp, juce::Point<int> screen, int mods) {
+    return cardbody_test::mouseAt(comp, comp.getLocalPoint(nullptr, screen).toFloat(), juce::ModifierKeys(mods));
+}
+
+/** A click on a row of the Add control panel. */
+inline void clickRow(CardLayoutAddRow& row) {
+    const auto at = row.localPointToGlobal(row.getLocalBounds().getCentre());
+    row.mouseDown(eventAtScreen(row, at, juce::ModifierKeys::leftButtonModifier));
+    row.mouseUp(eventAtScreen(row, at, 0));
+}
+
+/** Drags a row out of the panel and releases it over `to` (overlay pixels). */
+inline void dragRowTo(CardLayoutOnCardEditor& editor, CardLayoutAddRow& row, juce::Point<int> to) {
+    const auto from = row.localPointToGlobal(row.getLocalBounds().getCentre());
+    const auto target = editor.localPointToGlobal(to);
+    constexpr int left = juce::ModifierKeys::leftButtonModifier;
+    row.mouseDown(eventAtScreen(row, from, left));
+    row.mouseDrag(eventAtScreen(row, (from + target) / 2, left));
+    row.mouseDrag(eventAtScreen(row, target, left));
+    row.mouseUp(eventAtScreen(row, target, 0));
 }
 
 } // namespace oncard_test

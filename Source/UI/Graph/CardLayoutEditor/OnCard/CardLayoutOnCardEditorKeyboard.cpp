@@ -59,12 +59,13 @@ bool CardLayoutOnCardEditor::handleKey(const juce::String& key, const juce::KeyP
     return false;
 }
 
-// Esc: an open control panel closes first, then a drag in progress goes back, else the session is cancelled. It reaches
-// here from the outlines (through handleKey) and from the bar's buttons, which leave the key to bubble.
+// Esc: an open panel (the control's or Add control) closes first, then a drag in progress goes back, else the session
+// is cancelled. It reaches here from the outlines (through handleKey) and from the bar's buttons, which leave the key
+// to bubble.
 bool CardLayoutOnCardEditor::keyPressed(const juce::KeyPress& key) {
     if (closed_ || key != juce::KeyPress::escapeKey)
         return false;
-    if (panel_ != nullptr)
+    if (panel_ != nullptr || addPanel_ != nullptr)
         closePanel();
     else if (drag_.pressed)
         cancelDrag();
@@ -77,7 +78,7 @@ bool CardLayoutOnCardEditor::keyPressed(const juce::KeyPress& key) {
 // held arrow is one write and one glide for whatever it pushed.
 void CardLayoutOnCardEditor::nudge(const juce::String& key, int dx, int dy) {
     int cell = indexOfCell(key);
-    if (cell < 0)
+    if (cell < 0 || cells_[(size_t)cell].panelOnly)
         return;
     if (nudgeKey_ != key) {
         flushNudge();

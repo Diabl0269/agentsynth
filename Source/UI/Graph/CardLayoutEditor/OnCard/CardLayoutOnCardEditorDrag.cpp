@@ -49,7 +49,7 @@ void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseE
     if (finishGlide_)
         std::exchange(finishGlide_, nullptr)();
     const int cell = indexOfCell(key);
-    if (cell < 0 || closed_)
+    if (cell < 0 || closed_ || cells_[(size_t)cell].panelOnly)
         return;
     drag_ = {};
     drag_.cell = cell;
@@ -192,7 +192,7 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
     if (source_ == nullptr)
         return;
     writing_ = true;
-    source_->apply(layout, false);
+    source_->apply(layout, applyToAll_);
     writing_ = false;
     syncToCard();
 }

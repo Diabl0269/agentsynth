@@ -27,6 +27,9 @@ public:
     void setCell(juce::Rectangle<int> cell);
     /** Renames the control: the accessible title and tooltip follow its caption. */
     void setCaption(const juce::String& caption);
+    /** A footer or tab control: no grip, no drag; it only opens its options (Return, double-click, right-click). */
+    void setPanelOnly(bool panelOnly);
+    bool isPanelOnly() const noexcept { return panelOnly_; }
     /** 0..1: how far the control is lifted off the card while it is dragged. */
     void setLift(float lift);
 
@@ -56,6 +59,8 @@ private:
     void animateHover(bool over);
 
     juce::String paramId_;
+    juce::String caption_;
+    bool panelOnly_ = false;
     float hover_ = 0.0f;
     float lift_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};

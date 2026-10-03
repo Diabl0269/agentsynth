@@ -9,10 +9,6 @@ namespace synth::ui {
 
 namespace {
 
-bool isEditableSection(const CardBodyPlan::Section& section) {
-    return section.visible && !section.footer && section.tabGroup < 0;
-}
-
 // The members of the cell that starts at `section.items[from]`: one item, or a run of one swap group.
 std::vector<int> membersAt(const CardBodyPlan& plan, const CardBodyPlan::Section& section, size_t from) {
     const int group = plan.items[(size_t)section.items[from]].swapGroup;
@@ -64,15 +60,17 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
     const auto& plan = body->getPlan();
     for (int s = 0; s < (int)plan.sections.size(); ++s) {
         const auto& section = plan.sections[(size_t)s];
-        if (!isEditableSection(section))
+        if (!section.visible)
             continue;
         for (size_t i = 0; i < section.items.size();) {
             const auto members = membersAt(plan, section, i);
             i += members.size();
             OnCardCell cell;
             if (plan.items[(size_t)members.front()].kind != CardBodyItem::Kind::View &&
-                makeCell(plan, s, members, cell))
+                makeCell(plan, s, members, cell)) {
+                cell.panelOnly = section.footer || section.tabGroup >= 0;
                 cells.push_back(std::move(cell));
+            }
         }
     }
     return cells;

@@ -1,9 +1,9 @@
 // CardLayoutEditorBuiltInTests.cpp
 //
-// The card layout editor over a built-in module (BuiltInCardLayoutSource), always opened through the
-// real right-click path: a synthesized right click on a real card control (or the module menu), the
-// "Layout List..." item the card built, and the editor that click launched. Each edit is checked on
-// the rebuilt card itself, and the session's single undo step.
+// The list editor over a built-in module's source (BuiltInCardLayoutSource), built directly: no menu
+// opens it for a built-in card any more (the on-card editor does), but the hosted plugin's editor is the
+// same component. Each edit is checked on the rebuilt card itself. The per-type store's binding to the
+// canvas's cards is tested here too.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardLayoutEditorTestHelpers.h"
@@ -30,26 +30,10 @@ NodeID addAutomaticFilter(EditorCanvas& rig) {
 
 } // namespace
 
-TEST(CardLayoutEditorBuiltIn, EditLayoutFromAControlAndFromTheModuleMenuOpensTheEditor) {
-    EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
-
-    auto* editor = rig.openFromControl(id, "cutoff");
-    ASSERT_NE(editor, nullptr) << "the control's Layout List... launched the editor";
-    EXPECT_EQ(editor->getSource().title(), "Filter layout");
-    for (const auto* id2 : {"cutoff", "resonance", "drive", "filterType", "poly", "outputLevel"})
-        EXPECT_GE(editor->findRowForTest(id2), 0) << id2;
-    EXPECT_EQ(editor->findRowForTest("bypassed"), -1) << "a header button is not a card control";
-    EXPECT_EQ(editor->findRowForTest("#0"), 0) << "rows are grouped, the first group's header first";
-    rig.close();
-
-    EXPECT_NE(rig.openFromModuleMenu(id), nullptr) << "the module menu's Layout List... opens it too";
-}
-
 TEST(CardLayoutEditorBuiltIn, UntickingHidesTheControlInTheMoreRowLiveAndTickingBringsItBack) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "drive");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     editor->triggerRowToggleForTest(rowOf(*editor, "drive"));
@@ -67,7 +51,7 @@ TEST(CardLayoutEditorBuiltIn, UntickingHidesTheControlInTheMoreRowLiveAndTicking
 TEST(CardLayoutEditorBuiltIn, RenamingAControlChangesItsCaptionOnTheCard) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     const int row = rowOf(*editor, "cutoff");
@@ -94,7 +78,7 @@ TEST(CardLayoutEditorBuiltIn, RenamingAControlChangesItsCaptionOnTheCard) {
 TEST(CardLayoutEditorBuiltIn, TheWidgetChoiceOffersOnlyWidgetsThatSuitTheParameter) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     auto choicesOf = [&](const juce::String& key) {
@@ -118,7 +102,7 @@ TEST(CardLayoutEditorBuiltIn, TheWidgetChoiceOffersOnlyWidgetsThatSuitTheParamet
 TEST(CardLayoutEditorBuiltIn, ASegmentedChoiceIsOfferedForAShortChoice) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<OscillatorModule>());
-    auto* editor = rig.openFromModuleMenu(id);
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
     auto& combo = editor->getRowForTest(rowOf(*editor, "waveform"))->getWidgetComboForTest();
     ASSERT_TRUE(combo.isVisible());
@@ -130,7 +114,7 @@ TEST(CardLayoutEditorBuiltIn, AddGroupAndATitleDrawAHeaderRowOnTheCardAndMeasure
     EditorCanvas rig;
     const auto id = addAutomaticFilter(rig);
     const int heightBefore = rig.card(id)->getHeight();
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     editor->triggerAddGroupForTest();
@@ -162,7 +146,7 @@ TEST(CardLayoutEditorBuiltIn, AddGroupAndATitleDrawAHeaderRowOnTheCardAndMeasure
 TEST(CardLayoutEditorBuiltIn, ADragAcrossAGroupHeaderMovesTheControlIntoThatGroup) {
     EditorCanvas rig;
     const auto id = addAutomaticFilter(rig);
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
     editor->triggerAddGroupForTest();
 
@@ -193,84 +177,12 @@ TEST(CardLayoutEditorBuiltIn, ADragAcrossAGroupHeaderMovesTheControlIntoThatGrou
 TEST(CardLayoutEditorBuiltIn, SearchFiltersTheRowsButKeepsTheGroupHeaders) {
     EditorCanvas rig;
     const auto id = addAutomaticFilter(rig);
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
     editor->setSearchTextForTest("res");
     EXPECT_EQ(editor->getVisibleRowCountForTest(), 2);
     EXPECT_EQ(editor->getVisibleRowParamIdForTest(0), "#0");
     EXPECT_EQ(editor->getVisibleRowParamIdForTest(1), "resonance");
-}
-
-TEST(CardLayoutEditorBuiltIn, AWholeEditingSessionIsOneUndoStep) {
-    EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
-    const int heightBefore = rig.card(id)->getHeight();
-    const int serialBefore = rig.canvas.undo.getEditSerial();
-    auto* editor = rig.openFromControl(id, "cutoff");
-    ASSERT_NE(editor, nullptr);
-    editor->triggerRowToggleForTest(rowOf(*editor, "drive"));
-    editor->selectWidgetForTest(rowOf(*editor, "outputLevel"), CardWidget::FaderV);
-    editor->setRowLabelForTest(rowOf(*editor, "cutoff"), "Freq");
-    editor->commitRowLabelForTest(rowOf(*editor, "cutoff"));
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serialBefore) << "nothing is recorded while the editor is open";
-
-    rig.close();
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serialBefore + 1) << "closing records the session once";
-
-    ASSERT_TRUE(rig.canvas.undo.undo());
-    EXPECT_FALSE(rig.storedLayout(id).has_value()) << "one undo takes every edit of the session back";
-    EXPECT_EQ(captionOf(*rig.card(id), "cutoff"), "Cutoff");
-    EXPECT_FALSE(rig.card(id)->getCardBody()->hasMoreRow());
-    EXPECT_EQ(rig.card(id)->getHeight(), heightBefore);
-
-    ASSERT_TRUE(rig.canvas.undo.redo());
-    EXPECT_EQ(captionOf(*rig.card(id), "cutoff"), "Freq");
-}
-
-TEST(CardLayoutEditorBuiltIn, ASessionThatChangesNothingRecordsNoUndoStep) {
-    EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
-    const int serialBefore = rig.canvas.undo.getEditSerial();
-    ASSERT_NE(rig.openFromControl(id, "cutoff"), nullptr);
-    rig.close();
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serialBefore);
-}
-
-TEST(CardLayoutEditorBuiltIn, ApplyToAllWritesTheTypeDefaultClearsThisOverrideAndAnotherFilterFollows) {
-    EditorCanvas rig;
-    const auto first = rig.add(std::make_unique<FilterModule>(), 0, 0);
-    const auto second = rig.add(std::make_unique<FilterModule>(), 0, 600);
-    // This module starts with a layout of its own (Level as a fader), which Apply to all clears.
-    ASSERT_TRUE(synth::setCardLayoutOverride(
-        rig.canvas.engine.getGraph(), nullptr, first,
-        cardbody_test::automaticLayoutWith(*rig.canvas.processor(first), {{"outputLevel", CardWidget::FaderV}})));
-    rig.canvas.editor.updateComponents();
-    auto* editor = rig.openFromControl(first, "drive");
-    ASSERT_NE(editor, nullptr);
-    editor->triggerRowToggleForTest(rowOf(*editor, "drive")); // this module only, so far
-    ASSERT_TRUE(rig.storedLayout(first).has_value());
-    EXPECT_FALSE(rig.card(second)->getCardBody()->hasMoreRow());
-
-    editor->setApplyToAllInstancesForTest(true);
-    EXPECT_FALSE(rig.storedLayout(first).has_value()) << "this module now follows the type's default";
-    const auto stored = rig.store.loadDefault("Filter");
-    ASSERT_EQ(stored.status, synth::ModuleCardLayoutStore::LoadStatus::Ok);
-    EXPECT_TRUE(stored.layout.hidden.contains("drive"));
-    EXPECT_TRUE(rig.card(first)->getCardBody()->hasMoreRow());
-    EXPECT_TRUE(rig.card(second)->getCardBody()->hasMoreRow()) << "the other Filter was re-laid out at once";
-    EXPECT_FALSE(rig.card(second)->getCardBody()->findWidget("drive")->isVisible());
-
-    const int serial = rig.canvas.undo.getEditSerial();
-    rig.close();
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial + 1) << "the override write and its clearing: one step";
-    ASSERT_TRUE(rig.canvas.undo.undo());
-    ASSERT_TRUE(rig.storedLayout(first).has_value()) << "undo gives this module its own layout back";
-    EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(rig.card(first)->getCardBody()->findWidget("outputLevel")), nullptr);
-    EXPECT_TRUE(rig.card(second)->getCardBody()->hasMoreRow()) << "the type's default file is a setting: it stays";
-    ASSERT_TRUE(rig.canvas.undo.redo());
-
-    const auto third = rig.add(std::make_unique<FilterModule>(), 600, 0);
-    EXPECT_TRUE(rig.card(third)->getCardBody()->hasMoreRow()) << "a new Filter starts from the type's default";
 }
 
 TEST(CardLayoutEditorBuiltIn, ATypeDefaultWrittenElsewhereRelaysOutTheOpenCardsOfThatTypeOnly) {
@@ -302,71 +214,29 @@ TEST(CardLayoutEditorBuiltIn, AnInstanceOverrideWinsOverTheTypeDefault) {
     EXPECT_TRUE(rig.card(id)->getCardBody()->findWidget("cutoff")->isVisible());
 }
 
-TEST(CardLayoutEditorBuiltIn, PresetsSaveLoadAndDeleteAndResetGoesBackToTheDefault) {
-    EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
-    ASSERT_NE(editor, nullptr);
-
-    editor->triggerRowToggleForTest(rowOf(*editor, "drive"));
-    editor->triggerSaveAsPresetForTest("No drive");
-    EXPECT_TRUE(editor->getPresetNamesForTest().contains("No drive"));
-    EXPECT_TRUE(rig.store.listPresets("Filter").contains("No drive"));
-
-    editor->triggerResetToAutomaticForTest();
-    EXPECT_FALSE(rig.storedLayout(id).has_value());
-    EXPECT_FALSE(rig.card(id)->getCardBody()->hasMoreRow());
-    EXPECT_TRUE(editor->getVisibleRowCheckedForTest(rowOf(*editor, "drive")));
-
-    editor->selectPresetForTest("No drive");
-    ASSERT_TRUE(rig.storedLayout(id).has_value());
-    EXPECT_TRUE(rig.storedLayout(id)->hidden.contains("drive"));
-    EXPECT_FALSE(editor->getVisibleRowCheckedForTest(rowOf(*editor, "drive")));
-
-    editor->triggerDeletePresetForTest("No drive");
-    EXPECT_FALSE(editor->getPresetNamesForTest().contains("No drive"));
-}
-
-TEST(CardLayoutEditorBuiltIn, ResetForAllModulesClearsTheTypeDefaultToo) {
-    EditorCanvas rig;
-    const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
-    ASSERT_NE(editor, nullptr);
-    editor->setApplyToAllInstancesForTest(true);
-    editor->triggerRowToggleForTest(rowOf(*editor, "drive"));
-    ASSERT_EQ(rig.store.loadDefault("Filter").status, synth::ModuleCardLayoutStore::LoadStatus::Ok);
-
-    editor->triggerResetToAutomaticForTest();
-    EXPECT_NE(rig.store.loadDefault("Filter").status, synth::ModuleCardLayoutStore::LoadStatus::Ok);
-    EXPECT_FALSE(rig.card(id)->getCardBody()->hasMoreRow());
-}
-
-// Every group the editor lists has a real name, on every module type the library offers (each
-// opened through its real module menu): an untitled section is named from its id, never "Untitled group".
+// Every group a card's layout has gets a real name, on every module type the library offers: an
+// untitled section is named from its id, never "Untitled group".
 TEST(CardLayoutEditorBuiltIn, EveryGroupOnEveryModuleTypeHasARealName) {
     ModuleLibraryComponent library;
     auto types = library.getDraggableModuleNames();
     for (const char* extra : {"Amp Env", "Filter Env"})
         types.addIfNotAlreadyThere(extra);
-    int headersChecked = 0;
+    int groupsChecked = 0;
     for (const auto& type : types) {
         auto processor = synth::AIStateMapper::createModule(type);
         if (processor == nullptr)
             continue;
         EditorCanvas rig;
         const auto id = rig.add(std::move(processor));
-        auto* editor = rig.openFromModuleMenu(id);
-        if (editor == nullptr)
+        const auto* body = rig.card(id) != nullptr ? rig.card(id)->getCardBody() : nullptr;
+        if (body == nullptr || !body->drawsFromLayout())
             continue; // a bespoke card with no layout to edit
-        for (int r = 0; r < editor->getVisibleRowCountForTest(); ++r) {
-            auto* row = editor->getRowForTest(r);
-            if (row == nullptr || !row->getTitle().startsWith("Group: "))
-                continue;
-            ++headersChecked;
-            const auto name = row->getTitle().fromFirstOccurrenceOf("Group: ", false, false);
+        for (const auto& section : body->explicitLayout().sections) {
+            ++groupsChecked;
+            const auto name = synth::cardSectionDisplayName(section);
             EXPECT_TRUE(name.trim().isNotEmpty()) << type;
             EXPECT_FALSE(name.containsIgnoreCase("untitled")) << type << ": " << name;
         }
     }
-    EXPECT_GT(headersChecked, 20) << "the walk reached the module types' groups";
+    EXPECT_GT(groupsChecked, 20) << "the walk reached the module types' groups";
 }

@@ -110,3 +110,35 @@ TEST(OnCardLayoutMath, DescribeMoveNamesTheDirectionAndDistance) {
     EXPECT_EQ(describeMove("Cutoff", 0, -8), "Cutoff moved up 8");
     EXPECT_EQ(describeMove("Cutoff", 60, 12), "Cutoff moved right 60, down 12");
 }
+
+TEST(OnCardLayoutMath, AFreeSpotInAnEmptyGroupIsItsTopLeft) {
+    EXPECT_EQ(findFreeSpot({80, 76}, {}, kLimits), juce::Point<int>(12, 40));
+}
+
+TEST(OnCardLayoutMath, AFreeSpotSitsBesideTheControlsWithTheGapBetween) {
+    const std::vector<Rectangle<int>> occupied{{12, 40, 80, 76}, {100, 40, 80, 76}};
+    const auto spot = findFreeSpot({80, 76}, occupied, kLimits);
+    EXPECT_EQ(spot, juce::Point<int>(188, 40)) << "the third column of the first row";
+    EXPECT_TRUE(allClear({spot.x, spot.y, 80, 76}, occupied));
+}
+
+TEST(OnCardLayoutMath, AFreeSpotGoesBelowARowThatHasNoRoomLeft) {
+    const std::vector<Rectangle<int>> occupied{{12, 40, 90, 76}, {104, 40, 90, 76}, {196, 40, 90, 76}};
+    const auto spot = findFreeSpot({90, 76}, occupied, kLimits);
+    EXPECT_EQ(spot, juce::Point<int>(12, 124));
+}
+
+TEST(OnCardLayoutMath, AFreeSpotTakesTheHighestOpenPlaceEvenInALowerRow) {
+    const std::vector<Rectangle<int>> occupied{
+        {12, 40, 90, 76}, {104, 40, 90, 76}, {196, 40, 90, 76}, {104, 124, 90, 76}};
+    const auto spot = findFreeSpot({90, 76}, occupied, kLimits);
+    EXPECT_EQ(spot, juce::Point<int>(202, 124)) << "beside the lower row's one control, not under the first";
+    EXPECT_TRUE(allClear({spot.x, spot.y, 90, 76}, occupied));
+}
+
+TEST(OnCardLayoutMath, AControlWiderThanTheGroupStillGetsAPlaceBelowEverything) {
+    const std::vector<Rectangle<int>> occupied{{12, 40, 80, 76}};
+    const auto spot = findFreeSpot({400, 24}, occupied, kLimits);
+    EXPECT_EQ(spot.x, kLimits.minX);
+    EXPECT_GE(spot.y, 116 + kControlGap);
+}

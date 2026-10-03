@@ -61,6 +61,8 @@ void CardBody::selectTab(int group, int tab) {
     card_.resized();
     card_.repaint();
     card_.owner.notifyModuleContentChanged();
+    if (onTabSelected)
+        onTabSelected();
 }
 
 bool CardBody::isTabbed(const juce::Component& widget) const {

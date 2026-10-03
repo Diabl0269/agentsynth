@@ -171,34 +171,16 @@ struct FreeCell {
     std::optional<juce::Point<int>> at;
 };
 
-// The cell's natural size, by the widths and heights the run layouts give a cell of its kind.
+// The cell's natural size: a view's by its factory, any other kind's by cardBodyCellSize.
 juce::Rectangle<int> naturalCellSize(const CardBodyPlan& plan, juce::AudioProcessor& module, const Cell& cell,
                                      int columns, const cardbody::BodyGeometry& g) {
-    using namespace cardbody;
-    const int gridW = gridCellWidth(columns, g);
-    switch (cell.runKind) {
-    case Kind::Knob:
-        return {gridW, kLabelHeight + kKnobHeight};
-    case Kind::KnobLarge:
-        return {gridW, kLabelHeight + kKnobLargeHeight};
-    case Kind::FaderV:
-        return {gridW, kLabelHeight + kFaderVHeight};
-    case Kind::FaderH:
-        return {g.contentW, kLabelHeight + kFaderHHeight};
-    case Kind::Segmented:
-        return {g.contentW, kLabelHeight + kRowHeight};
-    case Kind::Stepper:
-    case Kind::Choice:
-        return {g.narrowW, kLabelHeight + kRowHeight};
-    case Kind::Toggle:
-        return {g.contentW, kRowHeight};
-    case Kind::View: {
-        const auto& view = plan.items[(size_t)cell.item];
-        const auto* factory = findCardViewFactory(view.view);
-        return {g.contentW, factory != nullptr && view.open ? factory->preferredHeight(module) : 0};
+    if (cell.runKind != Kind::View) {
+        const auto size = cardBodyCellSize(cell.runKind, columns, g);
+        return {size.x, size.y};
     }
-    }
-    return {};
+    const auto& view = plan.items[(size_t)cell.item];
+    const auto* factory = findCardViewFactory(view.view);
+    return {g.contentW, factory != nullptr && view.open ? factory->preferredHeight(module) : 0};
 }
 
 std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell) {
@@ -289,6 +271,32 @@ int layoutTabGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, const
 }
 
 } // namespace
+
+// The widths and heights the run layouts give a cell of its kind.
+juce::Point<int> cardBodyCellSize(CardBodyItem::Kind kind, int columns, const cardbody::BodyGeometry& g) {
+    using namespace cardbody;
+    const int gridW = gridCellWidth(columns, g);
+    switch (kind) {
+    case Kind::Knob:
+        return {gridW, kLabelHeight + kKnobHeight};
+    case Kind::KnobLarge:
+        return {gridW, kLabelHeight + kKnobLargeHeight};
+    case Kind::FaderV:
+        return {gridW, kLabelHeight + kFaderVHeight};
+    case Kind::FaderH:
+        return {g.contentW, kLabelHeight + kFaderHHeight};
+    case Kind::Segmented:
+        return {g.contentW, kLabelHeight + kRowHeight};
+    case Kind::Stepper:
+    case Kind::Choice:
+        return {g.narrowW, kLabelHeight + kRowHeight};
+    case Kind::Toggle:
+        return {g.contentW, kRowHeight};
+    case Kind::View:
+        break;
+    }
+    return {};
+}
 
 int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<int>& indices,
                         int columns, int y, const cardbody::BodyGeometry& g, bool apply) {

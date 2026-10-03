@@ -69,6 +69,11 @@ BuiltInCardLayoutSource::BuiltInCardLayoutSource(GraphEditor& editor, AppUndoMan
         openedOn_ = node->getProcessor();
         moduleType_ = AIStateMapper::getFactoryTypeName(openedOn_);
         openingOverride_ = getCardLayoutOverride(graph, nodeId).clone();
+        if (auto* types = store()) {
+            const auto stored = types->loadDefault(moduleType_);
+            if (stored.status == ModuleCardLayoutStore::LoadStatus::Ok)
+                openingDefault_ = stored.layout;
+        }
     }
     if (undo_ != nullptr)
         sessionBefore_ = AIStateMapper::graphToJSON(graph);
@@ -161,6 +166,7 @@ void BuiltInCardLayoutSource::apply(const CardLayout& layout, bool allOfType) {
     auto* types = store();
     if (allOfType && types != nullptr) {
         setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
+        defaultTouched_ = true;
         types->setDefault(moduleType_, layout);
     } else {
         setCardLayoutOverride(*g, nullptr, nodeId_, layout);
@@ -173,8 +179,10 @@ CardLayout BuiltInCardLayoutSource::reset(bool allOfType) {
     if (g == nullptr || !isAlive())
         return currentLayout();
     setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
-    if (auto* types = store(); allOfType && types != nullptr)
+    if (auto* types = store(); allOfType && types != nullptr) {
+        defaultTouched_ = true;
         types->clearDefault(moduleType_);
+    }
     refreshCard();
     return currentLayout();
 }
@@ -184,6 +192,13 @@ void BuiltInCardLayoutSource::restoreOpeningLayout() {
     if (g == nullptr || !isAlive())
         return;
     restoreCardLayoutOverride(*g, nodeId_, openingOverride_);
+    if (auto* types = store(); defaultTouched_ && types != nullptr) {
+        defaultTouched_ = false;
+        if (openingDefault_.has_value())
+            types->setDefault(moduleType_, *openingDefault_);
+        else
+            types->clearDefault(moduleType_);
+    }
     refreshCard();
 }
 

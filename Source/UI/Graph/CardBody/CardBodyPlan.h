@@ -53,7 +53,8 @@ struct CardBodyPlan {
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
         /** Where the last applied layout put this section's cells: the y below its header and the y
          *  below its last cell, in card pixels. Written by a live layout pass only (a free position is
-         *  relative to cellTop); stale for a tab section, which the on-card editor does not edit. */
+         *  relative to cellTop); stale for a tab section, whose controls the on-card editor outlines but never moves.
+         */
         mutable int cellTop = 0;
         mutable int cellBottom = 0;
 

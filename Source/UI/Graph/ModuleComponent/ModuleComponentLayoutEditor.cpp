@@ -1,10 +1,8 @@
 // ModuleComponentLayoutEditor.cpp -- opening the card layout editor ("Edit Layout...", on the card
-// itself) and the layout list ("Layout List...", beside it). docs/layout/module-card-layout.md#editing-a-layout.
+// itself) and the call-out a hosted plugin's list editor opens in. docs/layout/module-card-layout.md#editing-a-layout.
 #include "ModuleComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
-#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
-#include "UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -45,16 +43,6 @@ void ModuleComponent::showCardLayoutEditor() {
     if (launcher)
         return launcher(std::move(editor));
     synth::ui::adoptOnCardLayoutEditor(graph, std::move(editor));
-}
-
-// "Layout List...": the list editor in a call-out beside the card.
-void ModuleComponent::showCardLayoutList() {
-    if (cardBody_ == nullptr || !cardBody_->drawsFromLayout())
-        return;
-    auto source = std::make_unique<synth::ui::BuiltInCardLayoutSource>(owner, undoManager, nodeId);
-    auto editor = std::make_unique<synth::ui::CardLayoutEditorComponent>(std::move(source),
-                                                                         owner.getCardKeyboard().getShortcutManager());
-    launchCardLayoutEditorCallOutBox(std::move(editor), getScreenBounds());
 }
 
 // Default: a real juce::CallOutBox, which owns the editor and deletes it (ending its session) when it

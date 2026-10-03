@@ -2,7 +2,7 @@
 // combo's onChange is wired in buildScopeAndPresetControls(): switching it re-applies the working layout
 // to the newly chosen scope at once. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutEditorComponent.h"
-#include "UI/Layout/PopupMotion.h"
+#include "PresetNamePrompt.h"
 
 namespace synth::ui {
 
@@ -26,24 +26,11 @@ void CardLayoutEditorComponent::loadPreset(const juce::String& name) {
 }
 
 void CardLayoutEditorComponent::promptSaveAsPreset() {
-    auto* window = new juce::AlertWindow("Save preset", "Preset name:", juce::AlertWindow::NoIcon);
-    window->addTextEditor("name", {}, "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
     juce::Component::SafePointer<CardLayoutEditorComponent> safeThis(this);
-    synth::ui::PopupMotion::attach(*window);
-    window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
-                                std::unique_ptr<juce::AlertWindow> owned(window);
-                                if (result != 1)
-                                    return;
-                                const auto typed = owned->getTextEditorContents("name").trim();
-                                if (typed.isEmpty())
-                                    return;
-                                if (auto* self = safeThis.getComponent())
-                                    self->commitSaveAsPreset(typed);
-                            }),
-                            false);
+    promptForPresetName([safeThis](const juce::String& name) {
+        if (auto* self = safeThis.getComponent())
+            self->commitSaveAsPreset(name);
+    });
 }
 
 // A preset is a named layout, not tied to a scope; the reserved "default" name fails in the store.

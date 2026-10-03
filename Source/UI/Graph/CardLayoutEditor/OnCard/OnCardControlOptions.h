@@ -31,6 +31,10 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
                                                  const std::vector<CardLayoutEditorParam>& params,
                                                  const CardLayout& layout, const juce::String& paramId);
 
+/** `layout` with an item for `paramId` in the section the card draws it in, when the layout has none (the
+ *  footer's Poly toggle joins the footer without being listed): every edit below needs an item to change. */
+CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const synth::CardBody& body);
+
 /** `layout` with `paramId`'s item drawn as `widget`, or unchanged when the layout has no such item. */
 CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget);
 /** `layout` with `paramId`'s caption override set from `text` (labelOverrideFor's rule). */

@@ -16,6 +16,8 @@ bool CardLayoutOnCardEditor::sendEscapeToDragForTest() {
 void CardLayoutOnCardEditor::finishMotionForTest() {
     if (finishGlide_)
         std::exchange(finishGlide_, nullptr)();
+    if (finishAddFade_)
+        std::exchange(finishAddFade_, nullptr)();
 }
 
 } // namespace synth::ui

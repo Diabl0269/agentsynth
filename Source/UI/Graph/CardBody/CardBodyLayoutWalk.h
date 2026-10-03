@@ -8,6 +8,10 @@
 
 namespace synth {
 
+/** The width and height a freeform section gives one control of `kind` (caption included) in a section of
+ *  `columns`; empty for a view, whose height is its factory's. */
+juce::Point<int> cardBodyCellSize(CardBodyItem::Kind kind, int columns, const cardbody::BodyGeometry& g);
+
 /** `indices` (into plan.items) in card order, `columns` knobs per row; returns the y below them. */
 int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<int>& indices,
                         int columns, int y, const cardbody::BodyGeometry& g, bool apply);
