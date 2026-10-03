@@ -6,6 +6,7 @@
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/EditTool.h"
 #include <algorithm>
 
@@ -265,4 +266,45 @@ TEST_F(ShortcutHintMainWindowTest, HiddenDockShowsTheTabsAsPillsAndOmitsADetache
     dock.getMixerHost().setDetached(false);
     // The open/closed state is persisted to the shared settings file: leave it open like the default.
     setDockOpen(mc, true);
+}
+
+// The pill's label is drawn without ellipsis into the width left after the key cap, so a width rounded
+// DOWN from the measured text clips the last letter ("Timelin").
+TEST_F(ShortcutHintMainWindowTest, HiddenDockPillsLeaveRoomForTheWholeLabel) {
+    synth::theme::AppLookAndFeel lookAndFeel; // outlives mc: the real, themed face the pills are drawn in
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setLookAndFeel(&lookAndFeel);
+    mc.setSize(1600, 900);
+    mc.newPatchForTest();
+    setDockOpen(mc, false);
+
+    auto* overlay = findOverlay(mc);
+    ASSERT_NE(overlay, nullptr);
+    double now = 0.0;
+    overlay->setClockForTest([&] { return now; });
+    holdCmd(*overlay, now);
+    ASSERT_TRUE(overlay->areHintsShowing());
+
+    const auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&overlay->getLookAndFeel());
+    ASSERT_NE(lf, nullptr);
+    const juce::Font font(
+        juce::FontOptions(lf->getTheme().type.uiFamily, lf->getTheme().type.label + 1.0f, juce::Font::plain));
+    int pills = 0;
+    bool sawTimeline = false;
+    for (const auto& e : overlay->getEntries()) {
+        if (!e.isPill)
+            continue;
+        ++pills;
+        sawTimeline = sawTimeline || e.label == "Timeline";
+        // The rectangle ShortcutHintOverlay::paint() draws the label into.
+        const auto text = e.bounds.withTrimmedLeft(e.cap.getRight() - e.bounds.getX() + 6).withTrimmedRight(8);
+        EXPECT_GE((float)text.getWidth(), juce::GlyphArrangement::getStringWidth(font, e.label))
+            << "label '" << e.label << "' would be clipped";
+    }
+    EXPECT_GE(pills, 3);
+    EXPECT_TRUE(sawTimeline);
+
+    overlay->modifierKeysChanged(juce::ModifierKeys());
+    setDockOpen(mc, true);
+    mc.setLookAndFeel(nullptr);
 }
