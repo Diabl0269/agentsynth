@@ -35,6 +35,7 @@ StatusBarComponent::StatusBarComponent() {
     setTitle("Status bar");
     addAndMakeVisible(masterMuteButton_);
 
+    transportButton_.setGlyphWhenOn(synth::theme::Glyph::Stop); // playing: accent, shows the stop square
     addAndMakeVisible(transportButton_);
     transportButton_.setComponentID("statusBarTransportPlayStop");
     transportButton_.setClickingTogglesState(false); // the transport is the truth — see updateTransport()
@@ -114,43 +115,6 @@ std::unique_ptr<juce::AccessibilityHandler> StatusBarComponent::createAccessibil
         *this, juce::AccessibilityRole::group, juce::AccessibilityActions{},
         juce::AccessibilityHandler::Interfaces{
             std::make_unique<synth::ui::ReadOnlyTextValue>([this] { return getAccessibilityText(); })});
-}
-
-// ---------------------------------------------------------------------------
-// TransportButton::paintButton — the play/stop glyph. Same triangle/square shapes as
-// TimelineTransportBar::GlyphButton's PlayStop case (Source/UI/Timeline/TimelineTransportBar.cpp),
-// reproduced rather than shared — see the class comment in the header. getToggleState() is playing
-// (true draws the stop square, false draws the play triangle); accent while playing is the
-// "obviously running" cue the always-visible cluster exists for.
-void StatusBarComponent::TransportButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool) {
-    using namespace synth::theme;
-
-    juce::Colour accent = juce::Colours::cyan;
-    juce::Colour textPrimary = juce::Colours::white;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        accent = lf->getTheme().colors.accent;
-        textPrimary = lf->getTheme().colors.textPrimary;
-    }
-
-    if (shouldDrawHighlighted) {
-        g.setColour(textPrimary.withAlpha(0.08f));
-        g.fillRoundedRectangle(getLocalBounds().toFloat(), 3.0f);
-    }
-
-    const auto bounds = getLocalBounds().toFloat();
-    const float side = juce::jmin(bounds.getWidth(), bounds.getHeight());
-    const auto glyphArea = juce::Rectangle<float>(side, side).withCentre(bounds.getCentre()).reduced(side * 0.2f);
-
-    g.setColour(getToggleState() ? accent : textPrimary.withAlpha(0.75f));
-    if (getToggleState()) {
-        g.fillRoundedRectangle(glyphArea.reduced(glyphArea.getWidth() * 0.06f), 1.5f); // stop = square
-    } else {
-        // Optical centring, same nudge TimelineTransportBar's PlayStop triangle uses.
-        const auto tri = glyphArea.withTrimmedLeft(glyphArea.getWidth() * 0.12f);
-        juce::Path triangle;
-        triangle.addTriangle(tri.getX(), tri.getY(), tri.getX(), tri.getBottom(), tri.getRight(), tri.getCentreY());
-        g.fillPath(triangle);
-    }
 }
 
 // ---------------------------------------------------------------------------

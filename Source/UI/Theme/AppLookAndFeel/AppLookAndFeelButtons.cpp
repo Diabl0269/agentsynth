@@ -1,9 +1,10 @@
 #include "AppLookAndFeel.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/IconButton.h"
 
 namespace synth::theme {
 
-// Concern: text buttons, drawable (toolbar) buttons, and toggle buttons.
+// Concern: text buttons, drawable (toolbar) buttons, icon buttons, and toggle buttons.
 
 void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour,
                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
@@ -126,6 +127,101 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     }
 
     synth::ui::paintFocusRing(g, bounds, button, m.pillRadius);
+}
+
+// ---- the one icon button ---------------------------------------------------------------------
+namespace {
+// The wash behind an engaged button that has an on-colour (the record button), so "armed" reads from
+// across the room and not only from the small glyph.
+constexpr float kOnWashAlpha = 0.18f;
+constexpr float kBareHoverAlpha = 0.08f;
+constexpr float kBarePressAlpha = 0.14f;
+constexpr float kRoundHoverAlpha = 0.18f;
+constexpr float kRoundPressAlpha = 0.28f;
+constexpr float kDangerHoverAlpha = 0.15f;
+constexpr float kDangerPressAlpha = 0.28f;
+constexpr float kFramedHoverBrighten = 0.15f;
+} // namespace
+
+juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
+                                   bool down) {
+    const auto& c = theme.colors;
+    if (!button.isEnabled())
+        return c.textDisabled;
+    if (button.getToggleState())
+        return button.getOnTone() == synth::ui::IconButton::OnTone::Plain ? c.textPrimary
+                                                                          : button.getOnColour().value_or(c.accent);
+    if (highlighted || down)
+        return button.getStyle() == synth::ui::IconButton::Style::Danger ? c.error : c.textPrimary;
+    return c.textMuted;
+}
+
+namespace {
+void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme, bool hot,
+                               bool down) {
+    using Style = synth::ui::IconButton::Style;
+    const auto& c = theme.colors;
+    const float radius = theme.metrics.cornerRadiusSmall;
+    const auto full = button.getLocalBounds().toFloat();
+
+    switch (button.getStyle()) {
+    case Style::Framed: {
+        const auto bounds = full.reduced(1.0f);
+        const bool engaged = button.getToggleState() && button.getOnColour().has_value();
+        g.setColour(hot ? c.surface.brighter(kFramedHoverBrighten) : c.surface);
+        g.fillRoundedRectangle(bounds, radius);
+        if (engaged) {
+            g.setColour(button.getOnColour()->withAlpha(kOnWashAlpha));
+            g.fillRoundedRectangle(bounds, radius);
+        }
+        g.setColour(engaged ? *button.getOnColour() : c.border);
+        g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
+        break;
+    }
+    case Style::Bare:
+        if (hot) {
+            g.setColour(c.textPrimary.withAlpha(down ? kBarePressAlpha : kBareHoverAlpha));
+            g.fillRoundedRectangle(full, radius);
+        }
+        break;
+    case Style::Round:
+        if (hot) {
+            g.setColour(c.accent.withAlpha(down ? kRoundPressAlpha : kRoundHoverAlpha));
+            g.fillEllipse(full);
+        }
+        break;
+    case Style::Danger:
+        if (hot) {
+            g.setColour(c.error.withAlpha(down ? kDangerPressAlpha : kDangerHoverAlpha));
+            g.fillRoundedRectangle(full, radius);
+        }
+        break;
+    }
+}
+} // namespace
+
+void paintIconButton(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme, bool highlighted,
+                     bool down) {
+    using Style = synth::ui::IconButton::Style;
+    const bool hot = button.isEnabled() && (highlighted || down);
+    paintIconButtonBackground(g, button, theme, hot, down);
+
+    const auto full = button.getLocalBounds().toFloat();
+    const auto glyphArea = button.getStyle() == Style::Framed ? full.reduced(1.0f) : full;
+    synth::theme::paintGlyph(g, button.currentGlyph(), glyphArea,
+                             iconButtonGlyphColour(theme, button, highlighted, down));
+
+    // juce::Button::paint() hands paintButton() only isOver()/isDown(), never focus state, so the
+    // ring is drawn here; Button repaints on focus changes itself.
+    const bool round = button.getStyle() == Style::Round;
+    const float ringRadius = round ? full.getWidth() * 0.5f : theme.metrics.cornerRadiusSmall;
+    (button.forceFocusRingForTest ? synth::ui::paintFocusRingAlways : synth::ui::paintFocusRing)(g, full, button,
+                                                                                                 ringRadius);
+}
+
+void AppLookAndFeel::drawIconButton(juce::Graphics& g, synth::ui::IconButton& button,
+                                    bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+    paintIconButton(g, button, theme, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
 }
 
 void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,

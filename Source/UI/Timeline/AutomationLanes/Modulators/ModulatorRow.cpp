@@ -218,26 +218,15 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
-        if (child->isVisible())
+        if (child->isVisible() && child != &menuButton_) // the menu button paints its own ring
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
 }
 
 ModulatorRow::MenuButton::MenuButton()
-    : juce::Button("modulatorMenu") {
+    : IconButton("modulatorMenu", synth::theme::Glyph::MenuDots, Style::Bare) {
     setComponentID("modulatorMenu");
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
-}
-
-// Three drawn dots, like the lane header's menu, so the button never depends on font coverage.
-void ModulatorRow::MenuButton::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto colours = coloursFor(*this);
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour(highlighted ? colours.text : colours.textMuted);
-    constexpr float dot = 2.5f;
-    for (int i = -1; i <= 1; ++i)
-        g.fillEllipse(
-            juce::Rectangle<float>(dot, dot).withCentre(bounds.getCentre().translated((float)i * 4.0f, 0.0f)));
 }
 
 } // namespace synth::ui

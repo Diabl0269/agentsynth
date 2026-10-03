@@ -139,9 +139,10 @@ shrinking below the point where toolbar buttons could clip to zero width.
   shown only while the whole cluster fits before the voice-count slot — the same fit-check-then-drop
   the round-trip segment uses, computed in `resized()` rather than `paint()` because the button is a
   live child component that must actually be hidden (`setVisible(false)`), not merely left undrawn.
-  The glyph is accent-coloured while playing and a neutral outline while stopped, the same
-  triangle/square shapes as `TimelineTransportBar::GlyphButton`'s PlayStop case, reproduced rather
-  than shared because `StatusBarComponent` lives in `Core` and cannot depend on `AppUI`. **The
+  The button is the shared `synth::ui::IconButton` (Bare style, Play glyph, Stop while on): accent
+  while playing, muted while stopped, the same glyphs as the timeline bar's play/stop
+  ([`theming.md`](theming.md#themed-widgets)); `IconButton` and `IconGlyphs` are compiled into `Core`
+  precisely so this bar can use them. **The
   cluster is visible regardless of the timeline panel's visibility** — play/stop/position previously
   existed only inside `TimelineTransportBar`, a child of the often-hidden timeline panel.
 - Voice count: right-aligned before the mute button slot.

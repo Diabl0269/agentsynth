@@ -6,7 +6,20 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
+namespace synth::ui {
+class IconButton;
+}
+
 namespace synth::theme {
+
+// Paints a synth::ui::IconButton (background for its style, glyph, focus ring) from `theme`.
+// AppLookAndFeel::drawIconButton calls it with its own theme; IconButton calls it with a default
+// Theme when it sits outside any AppLookAndFeel.
+void paintIconButton(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme, bool highlighted,
+                     bool down);
+// The colour the glyph is painted in: disabled, lit (the on-colour or accent), hot, then rest.
+juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
+                                   bool down);
 
 // Single source of all theming-aware drawing. Holds a COPY of the active Theme (cheap,
 // ~few hundred bytes) updated via applyTheme() on every theme change. Owned by Main.cpp /
@@ -110,6 +123,9 @@ public:
     void drawTabbedButtonBarBackground(juce::TabbedButtonBar&, juce::Graphics&) override;
     void drawDrawableButton(juce::Graphics&, juce::DrawableButton&, bool shouldDrawButtonAsHighlighted,
                             bool shouldDrawButtonAsDown) override;
+    // The one icon button (Source/UI/Layout/IconButton.h): not a JUCE override, called by IconButton::paintButton.
+    void drawIconButton(juce::Graphics&, synth::ui::IconButton&, bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown);
 
     // Resolve a font's family name to an embedded typeface (cached). Falls back to the JUCE
     // default sans/mono if the family is unavailable (tests / missing BinaryData — section 8.4).

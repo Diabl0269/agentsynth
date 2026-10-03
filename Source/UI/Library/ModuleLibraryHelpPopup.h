@@ -3,6 +3,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -293,53 +294,19 @@ private:
     // must always be reachable": keeping the whole popup on screen in the first place). ----------
     class TopBar : public juce::Component {
     public:
-        // The pin and close icons are real buttons, so Tab reaches them and Space/Return press them.
-        class IconButton : public juce::Button {
-        public:
-            enum class Glyph { Pin, Close };
-
-            IconButton(Glyph glyph, juce::String title, juce::String tooltip)
-                : juce::Button(title)
-                , glyph_(glyph) {
-                setTitle(title);
-                setTooltip(tooltip);
-                setMouseCursor(juce::MouseCursor::PointingHandCursor);
-            }
-
-            void applyThemeColours(juce::Colour text, juce::Colour accent) {
-                textColour_ = text;
-                accentColour_ = accent;
-                repaint();
-            }
-
-            void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override {
-                const auto area = getLocalBounds().toFloat();
-                // Hover highlight — the same "accent fill behind the glyph" treatment
-                // ModuleLibraryComponent's own "?" button uses for its hover state.
-                if (highlighted) {
-                    g.setColour(accentColour_.withAlpha(0.18f));
-                    g.fillEllipse(area);
-                }
-                if (glyph_ == Glyph::Pin) {
-                    const bool pinned = getToggleState();
-                    drawPinGlyph(g, area, (pinned || highlighted) ? accentColour_ : textColour_, pinned);
-                } else {
-                    drawCloseGlyph(g, area, highlighted ? accentColour_ : textColour_);
-                }
-                synth::ui::paintFocusRing(g, area, *this, area.getWidth() * 0.5f);
-            }
-
-        private:
-            Glyph glyph_;
-            juce::Colour textColour_ = juce::Colours::white;
-            juce::Colour accentColour_ = juce::Colours::lightblue;
-        };
-
         TopBar(std::function<void()> onPin, std::function<void()> onClose)
-            : pinButton_(IconButton::Glyph::Pin, "Pin help", "Pin - keep open while you work")
-            , closeButton_(IconButton::Glyph::Close, "Close help", "Close (Esc)")
+            : pinButton_("Pin help", synth::theme::Glyph::Pin, synth::ui::IconButton::Style::Round)
+            , closeButton_("Close help", synth::theme::Glyph::Close, synth::ui::IconButton::Style::Round)
             , onPin_(std::move(onPin))
             , onClose_(std::move(onClose)) {
+            // The pin and close icons are real buttons, so Tab reaches them and Space/Return press them.
+            pinButton_.setGlyphWhenOn(synth::theme::Glyph::PinOn);
+            pinButton_.setTitle("Pin help");
+            pinButton_.setTooltip("Pin - keep open while you work");
+            pinButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+            closeButton_.setTitle("Close help");
+            closeButton_.setTooltip("Close (Esc)");
+            closeButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
             pinButton_.setToggleable(true);
             pinButton_.onClick = [this] { triggerPinForTest(); };
             closeButton_.onClick = [this] { triggerCloseForTest(); };
@@ -356,10 +323,8 @@ private:
         bool isPinned() const noexcept { return pinned_; }
         void setDraggable(bool draggable) noexcept { draggable_ = draggable; }
 
-        void applyThemeColours(juce::Colour text, juce::Colour accent) {
+        void applyThemeColours(juce::Colour text) {
             textColour_ = text;
-            pinButton_.applyThemeColours(text, accent);
-            closeButton_.applyThemeColours(text, accent);
             repaint();
         }
 
@@ -434,36 +399,12 @@ private:
                                     juce::Time::getCurrentTime(), 1, wasDragged);
         }
 
-        static void drawPinGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, bool pinned) {
-            const float headR = area.getWidth() * 0.22f;
-            const auto centre = area.getCentre();
-            juce::Path p;
-            p.addEllipse(centre.x - headR, area.getY() + headR * 0.4f, headR * 2.0f, headR * 2.0f);
-            p.addTriangle(centre.x - headR * 0.7f, area.getY() + headR * 1.8f, centre.x + headR * 0.7f,
-                          area.getY() + headR * 1.8f, centre.x, area.getBottom());
-            if (pinned)
-                p.applyTransform(
-                    juce::AffineTransform::rotation(juce::MathConstants<float>::pi * 0.25f, centre.x, centre.y));
-            g.setColour(colour);
-            if (pinned)
-                g.fillPath(p);
-            else
-                g.strokePath(p, juce::PathStrokeType(1.4f));
-        }
-
-        static void drawCloseGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour) {
-            auto b = area.reduced(area.getWidth() * 0.22f);
-            g.setColour(colour);
-            g.drawLine({b.getTopLeft(), b.getBottomRight()}, 1.6f);
-            g.drawLine({b.getTopRight(), b.getBottomLeft()}, 1.6f);
-        }
-
         static constexpr int kIconSize = 16;
         bool pinned_ = false;
         bool draggable_ = false;
         juce::Colour textColour_ = juce::Colours::white;
-        IconButton pinButton_;
-        IconButton closeButton_;
+        synth::ui::IconButton pinButton_;
+        synth::ui::IconButton closeButton_;
         std::function<void()> onPin_;
         std::function<void()> onClose_;
         juce::ComponentDragger dragger_;
@@ -623,14 +564,12 @@ private:
     void applyThemeColours() {
         juce::Colour text = juce::Colours::white;
         juce::Colour muted = juce::Colours::lightgrey;
-        juce::Colour accent = juce::Colours::lightblue;
         if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
             const auto& c = lf->getTheme().colors;
             text = c.textPrimary;
             muted = c.textMuted;
-            accent = c.accent;
         }
-        topBar_.applyThemeColours(text, accent);
+        topBar_.applyThemeColours(text);
         for (auto& section : sections_) {
             section.header->applyThemeColours(text);
             for (auto& row : section.body)

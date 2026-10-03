@@ -14,14 +14,15 @@ follow, in that order. `kButtonSize` (26) and `Metrics::timelineTransportBarHeig
 together so the glyphs render at their intended size instead of being clamped back down by
 `min(kButtonSize, bounds.getHeight())`.
 
-**No SVG assets.** Every button is one `GlyphButton` (a `juce::Button` subclass) drawing a plain
-`juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for record, an
-open arc with an arrowhead for loop, a filled ellipse notehead plus a `juce::Rectangle` stem for
-the metronome. This mirrors the root `CLAUDE.md` rule that themes never swap typefaces: a one-off
-shape for a single caller does not earn a new icon asset either.
+**No SVG assets.** Every button is one `GlyphButton`, a thin wrapper over the shared
+`synth::ui::IconButton` (Framed style, [`theming.md`](../layout/theming.md#themed-widgets)). The
+glyphs are plain `juce::Path` shapes in `Source/UI/Theme/IconGlyphs.cpp` — a triangle/square for
+play-stop, a circle for record, an open arc with an arrowhead for loop, a filled ellipse notehead
+plus a `juce::Rectangle` stem for the metronome. This mirrors the root `CLAUDE.md` rule that themes
+never swap typefaces: a one-off shape for a single caller does not earn a new icon asset either.
 
 **Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
-side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
+side, inset by `kGlyphInsetRatio` (24%, in `IconGlyphs.cpp`) on each edge — never a fraction of the *width* applied to
 both axes, which flattens all four glyphs once the strip gets short. Everything scales off that square (the
 loop arc's stroke and arrowhead, the note's head and stem), so the row stays legible at any strip
 height.
@@ -37,15 +38,17 @@ themes may not override it.
 **Why.** A hardware record LED is red on every desk; drawn in a cyan or green accent, "armed" stops
 reading as armed at all. It is the one colour on this bar that is not a theme token — every other
 lit glyph (play/stop, loop, metronome) still uses `colors.accent`. Idle record is a neutral outline
-(`colors.textPrimary` at 75%), not a dim red one. `GlyphButton::glyphColour()` is the single source
-for both the paint and the `getRecordGlyphColourForTest()` seam.
+(`colors.textMuted`, the shared icon-button rest colour), not a dim red one. Record is
+`IconButton::setOnColour(kRecordRedArgb)`; `IconButton::glyphColour()` is the single source for both
+the paint and the `getRecordGlyphColourForTest()` seam.
 
 ## The transport is the truth
 
 Every button click and every editor commit reads `TransportService::getPositionSnapshot()` **at the
 moment of the action**, rather than from a value this bar remembers between polls:
 
-- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`.
+- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`
+  (`IconButton::setGlyphWhenOn`).
   The click reads `getPositionSnapshot().playing` to decide `play()` vs `stop()`, so it works
   correctly even if nothing has polled `updateFromTransport()` since the last click.
 - **Loop** — the click reads the CURRENT `loopStartPpq` / `loopEndPpq` off the snapshot and

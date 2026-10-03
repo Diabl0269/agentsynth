@@ -11,6 +11,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -61,44 +62,15 @@ constexpr int kGlyphButtonGap = 2;
 constexpr int kColourSwatchSize = 16;
 constexpr int kDragHandleWidth = 14;
 
-// A compact icon-style Delete button — a small square button drawing an X as a couple of strokes,
-// the same "drawn Path/lines, not an SVG asset" idiom MacroCardComponent's own expand chevron
-// already uses. Cmd+Up/Cmd+Down on this button is the keyboard-accessible reorder (see
-// PortRowComponent's onReorderChord wiring below); Delete is its only glyph.
-class GlyphButton : public juce::Button {
+// The row's Delete button: the shared IconButton (Danger style, the drawn X glyph). Cmd+Up/Cmd+Down
+// on this button is the keyboard-accessible reorder (see PortRowComponent's onReorderChord wiring
+// below).
+class GlyphButton : public IconButton {
 public:
     enum class Glyph { Delete };
 
-    explicit GlyphButton(Glyph glyph)
-        : juce::Button(juce::String())
-        , glyph_(glyph) {}
-
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
-        juce::ignoreUnused(glyph_); // only one glyph remains; kept for a future affordance to reuse
-        const auto& c = liveThemeColours(*this);
-        const juce::Colour hotColour = c.error;
-        auto bounds = getLocalBounds().toFloat();
-
-        if (isEnabled() && (highlighted || down)) {
-            g.setColour(hotColour.withAlpha(down ? 0.28f : 0.15f));
-            g.fillRoundedRectangle(bounds, 4.0f);
-        }
-
-        juce::Colour glyphColour = c.textMuted;
-        if (!isEnabled())
-            glyphColour = c.textDisabled;
-        else if (highlighted || down)
-            glyphColour = hotColour;
-        g.setColour(glyphColour);
-
-        auto inner = bounds.reduced(bounds.getWidth() * 0.3f, bounds.getHeight() * 0.3f);
-        g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
-        g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
-
-        // juce::Button::paint() hands paintButton() only isOver()/isDown(), never focus state, so
-        // the ring is drawn here; Button repaints on focus changes itself.
-        (forceFocusRingForTest ? paintFocusRingAlways : paintFocusRing)(g, bounds, *this, 4.0f);
-    }
+    explicit GlyphButton(Glyph)
+        : IconButton(juce::String(), synth::theme::Glyph::Delete, Style::Danger) {}
 
     // The Delete button is the keyboard-accessible delete fallback (it gets Tab/Return/Space for
     // free from juce::Button) — this adds Up/Down-arrow FOCUS navigation between rows on top, wired
@@ -119,15 +91,11 @@ public:
                 return true;
             }
         }
-        return juce::Button::keyPressed(key);
+        return IconButton::keyPressed(key);
     }
 
     std::function<void(bool moveDown)> onVerticalArrow;
     std::function<void(bool moveDown)> onReorderChord; // Cmd+Up/Cmd+Down
-    bool forceFocusRingForTest = false;                // test seam
-
-private:
-    Glyph glyph_;
 };
 
 // The row's kind-tinted left-edge swatch — left-click opens a synth::ui::ColourPickerPopup (the

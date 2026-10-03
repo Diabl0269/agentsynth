@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -61,10 +62,9 @@ public:
     void applyRecordModeChoice(int comboId);
 
 private:
-    class MenuButton : public juce::Button {
+    class MenuButton : public IconButton {
     public:
         MenuButton();
-        void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
     };
 
     void showMenu();

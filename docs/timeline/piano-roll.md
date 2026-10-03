@@ -152,7 +152,7 @@ Cmd+Shift+wheel scales it within `[kMinPixelsPerSemitone, kMaxPixelsPerSemitone]
 
 A 20 px header strip sits above both the keys column and the grid. Its chips are plain
 `juce::Path` and text shapes, never a Unicode glyph through a themed font — the same "draw it,
-don't asset it" rule `TimelineTransportBar`'s `GlyphButton` follows, and the reason every label
+don't asset it" rule the shared icon glyphs (`Source/UI/Theme/IconGlyphs.cpp`) follow, and the reason every label
 here goes through `AppLookAndFeel`; see the root `CLAUDE.md`'s font-swap invariant.
 
 ## The keys column

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/IconButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // StatusBarComponent  (docs/layout/chrome.md#status-bar)
@@ -28,8 +29,7 @@
 // is the exact component under the mouse (juce::TooltipWindow::getTipFor() does not walk up
 // parents — see juce_TooltipWindow.cpp), which is true here for the painted segments since no
 // child covers that area. Hovering the masterMuteButton_/transportButton_ children instead reaches
-// THEIR OWN tooltip text (both are juce::Button, i.e. already SettableTooltipClient) — getTooltip()
-// below is never even called there.
+// their own tooltip text (both are juce::Buttons) — getTooltip() is never even called there.
 class StatusBarComponent
     : public juce::Component
     , public juce::TooltipClient
@@ -165,18 +165,7 @@ private:
     juce::String roundTripText_;
     int roundTripRepaintCount_{0};
 
-    // A small juce::Button subclass that draws the play/stop glyph as a plain path — the same
-    // triangle/square shapes TimelineTransportBar::GlyphButton::paintButton draws for its own
-    // PlayStop glyph, reproduced here rather than shared (that class is private to AppUI; this bar
-    // lives in Core — see the class comment).
-    class TransportButton : public juce::Button {
-    public:
-        TransportButton()
-            : juce::Button("statusBarTransportPlayStop") {}
-        void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
-    };
-
-    TransportButton transportButton_;
+    synth::ui::IconButton transportButton_{"statusBarTransportPlayStop", synth::theme::Glyph::Play}; // Stop while on
 
     // Transport cluster state, written by updateTransport(), read by paint()/resized().
     bool transportPlaying_{false};
