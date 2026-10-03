@@ -467,6 +467,9 @@ private:
                           const juce::String& paramId) override;
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
+    /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
+     *  modulator rows sit (the lane is made, as "Automate" does, when the parameter has none yet). */
+    void revealModulatorInTimeline(const synth::ui::ModulatorInfo& modulator);
     bool lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID lfoId);
     float getNodeParameter(const juce::String& uuid, const juce::String& paramId) override;
     void setNodeParameter(const juce::String& uuid, const juce::String& paramId, float value,

@@ -214,6 +214,13 @@ void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modul
     }
 }
 
+// The modulator rows of a parameter sit under its automation lane, so showing the modulator is showing that lane:
+// automateParameter finds the lane or makes it (one undo step), opens the Timeline tab and scrolls to the lane.
+void MainComponent::revealModulatorInTimeline(const synth::ui::ModulatorInfo& modulator) {
+    if (auto* target = findNodeByUuid(modulator.targetUuid))
+        automateParameter(target->nodeID, modulator.paramId);
+}
+
 float MainComponent::getNodeParameter(const juce::String& uuid, const juce::String& paramId) {
     auto* node = findNodeByUuid(uuid);
     auto* param = node != nullptr ? findParameterByID(node->getProcessor(), paramId) : nullptr;

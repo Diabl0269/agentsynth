@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -80,7 +81,6 @@ public:
 
 private:
     class Row;
-    class SearchField;
 
     void rebuildRows();
     void applyFilter();
@@ -99,7 +99,7 @@ private:
     int selectedId_ = 0;
     std::function<void(int)> onChoose_;
 
-    std::unique_ptr<SearchField> searchEditor_;
+    std::unique_ptr<NavigationSearchField> searchEditor_;
     juce::Viewport viewport_;
     juce::Component rowColumn_;
     std::vector<std::unique_ptr<Row>> rows_;

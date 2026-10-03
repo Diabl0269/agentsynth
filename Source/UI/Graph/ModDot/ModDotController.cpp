@@ -23,6 +23,9 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     : editor_(editor)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
+    onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
+        openPopover(card, destChannel, anchor);
+    };
 }
 
 juce::AudioProcessorGraph::NodeID ModDotController::chosenAttenuverter(juce::AudioProcessorGraph::NodeID card,

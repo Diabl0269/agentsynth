@@ -172,27 +172,13 @@ private:
     bool highlighted_ = false;
 };
 
-// A single-line editor that claims Up/Down/Return/Escape for the list. Its own caret handling would
-// swallow the arrows, and it reports Return and Escape through a posted command message, which would
-// make a pick land a message-loop turn late.
-class ModMatrixPicker::SearchField : public juce::TextEditor {
-public:
-    std::function<bool(const juce::KeyPress&)> onNavigationKey;
-
-    bool keyPressed(const juce::KeyPress& key) override {
-        if (onNavigationKey && onNavigationKey(key))
-            return true;
-        return juce::TextEditor::keyPressed(key);
-    }
-};
-
 ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId,
                                  std::function<void(int)> onChoose)
     : what_(std::move(what))
     , items_(std::move(items))
     , selectedId_(selectedId)
     , onChoose_(std::move(onChoose))
-    , searchEditor_(std::make_unique<SearchField>()) {
+    , searchEditor_(std::make_unique<NavigationSearchField>()) {
     setComponentID("modMatrixPicker");
     setTitle("Modulation " + what_ + " picker");
     setWantsKeyboardFocus(false);

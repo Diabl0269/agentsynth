@@ -527,6 +527,13 @@ public:
      *  False (nothing changed) when either node, the jack or the LFO is missing, or the LFO already drives it. */
     bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
                                      juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
+    /** Cables any modulation source (`sourceChannel` is the raw output channel a ModSourceItem names) into raw CV
+     *  channel `destChannel` of `targetId` at `depth`, through the same macro-port seam, as ONE undo step. Returns
+     *  the new routing's hidden attenuverter; invalid (nothing changed) when it can't or the pair is already wired. */
+    juce::AudioProcessorGraph::NodeID connectModulationSource(juce::AudioProcessorGraph::NodeID sourceId,
+                                                              int sourceChannel,
+                                                              juce::AudioProcessorGraph::NodeID targetId,
+                                                              int destChannel, float depth);
     /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step,
      *  or, with `recordUndo` false, as a plain edit for a caller whose own undo step already surrounds it. */
     void removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo = true);

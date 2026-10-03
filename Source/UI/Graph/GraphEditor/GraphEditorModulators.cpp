@@ -13,6 +13,7 @@
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <set>
 
 namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
@@ -47,18 +48,24 @@ bool hasOutgoingConnection(juce::AudioProcessorGraph& graph, NodeID id) {
 
 // The routing connectPorts just made into (target, raw): its hidden attenuverter gets a uuid (a node
 // id does not survive an undo restore, and the timeline row names it by uuid) and the default depth.
-void settleNewRouting(AudioEngine& engine, NodeID lfoId, NodeID targetId, int raw) {
+// `existing` are attenuverters that were there before the cable, so a second routing between the same two nodes
+// keeps its own depth.
+NodeID settleNewRouting(AudioEngine& engine, NodeID lfoId, NodeID targetId, int raw, float depth,
+                        const std::set<juce::uint32>& existing = {}) {
+    NodeID settled;
     for (const auto& r : engine.getModulationRoutings()) {
         if (r.kind != AudioEngine::RoutingKind::AttenuverterChain || r.sourceNodeID != lfoId ||
-            r.destNodeID != targetId || r.destChannelIndex != raw)
+            r.destNodeID != targetId || r.destChannelIndex != raw || existing.count(r.attenuverterNodeID.uid) > 0)
             continue;
         auto* atten = engine.getGraph().getNodeForId(r.attenuverterNodeID);
         if (atten == nullptr)
             continue;
         synth::AIStateMapper::ensureNodeUuid(atten);
         if (auto* amount = findParameterByID(atten->getProcessor(), "amount"))
-            amount->setValueNotifyingHost(amount->convertTo0to1(kDefaultModulatorDepth));
+            amount->setValueNotifyingHost(amount->convertTo0to1(depth));
+        settled = r.attenuverterNodeID;
     }
+    return settled;
 }
 } // namespace
 
@@ -112,7 +119,7 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
             return;
         connectPorts(lfoId, lfo->mapOutputChannel(0).visibleJackIndex, targetId,
                      dst->mapInputChannel(raw).visibleJackIndex, /*isMidi=*/false, /*recordUndo=*/false);
-        settleNewRouting(audioEngine, lfoId, targetId, raw);
+        settleNewRouting(audioEngine, lfoId, targetId, raw, kDefaultModulatorDepth);
 
         if (macroId.isNotEmpty())
             macroController_.addSelectionToMacro(macroId, {lfoUuid}, /*recordUndo=*/false);
@@ -133,28 +140,44 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
 // connection seam, so a macro boundary between the LFO and the knob is crossed with ports (the mixer sends and
 // the Mod Matrix do the same). Port creation, the cable and its depth are one undo step.
 bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, const juce::String& paramId) {
-    auto& graph = audioEngine.getGraph();
-    auto* lfo = moduleOf(graph, lfoId);
-    auto* dst = moduleOf(graph, targetId);
+    auto* lfo = moduleOf(audioEngine.getGraph(), lfoId);
     const int raw = modulationChannelFor(targetId, paramId);
-    if (lfo == nullptr || dst == nullptr || raw < 0 || dynamic_cast<LFOModule*>(lfo) == nullptr || lfoId == targetId)
+    if (lfo == nullptr || dynamic_cast<LFOModule*>(lfo) == nullptr || raw < 0)
         return false;
+    return connectModulationSource(lfoId, /*sourceChannel=*/0, targetId, raw, kDefaultModulatorDepth).uid != 0;
+}
+
+// Any modulation source (an LFO, an envelope, a macro knob...) onto one CV jack: `sourceChannel` is the raw output
+// channel a Mod Matrix source entry names. Returns the new routing's hidden attenuverter; invalid (nothing changed)
+// when a node or the jack is missing, the source is the target, or it already drives that jack from that channel.
+NodeID GraphEditor::connectModulationSource(NodeID sourceId, int sourceChannel, NodeID targetId, int destChannel,
+                                            float depth) {
+    auto& graph = audioEngine.getGraph();
+    auto* src = moduleOf(graph, sourceId);
+    auto* dst = moduleOf(graph, targetId);
+    if (src == nullptr || dst == nullptr || destChannel < 0 || sourceId == targetId)
+        return {};
     const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (!r.hasSource || !r.hasDest)
             continue;
         const auto real = synth::ui::resolveRouting(graph, r, isPort);
-        if (real.source.node == lfoId && real.dest.node == targetId && real.dest.channel == raw)
-            return false;
+        if (real.source.node == sourceId && real.source.channel == sourceChannel && real.dest.node == targetId &&
+            real.dest.channel == destChannel)
+            return {};
     }
 
-    auto mutation = [this, &graph, lfo, dst, lfoId, targetId, raw] {
-        connectPorts(lfoId, lfo->mapOutputChannel(0).visibleJackIndex, targetId,
-                     dst->mapInputChannel(raw).visibleJackIndex, /*isMidi=*/false, /*recordUndo=*/false);
-        settleNewRouting(audioEngine, lfoId, targetId, raw);
+    std::set<juce::uint32> existing;
+    for (const auto& r : audioEngine.getModulationRoutings())
+        existing.insert(r.attenuverterNodeID.uid);
+    NodeID created;
+    auto mutation = [&, this] {
+        connectPorts(sourceId, src->mapOutputChannel(sourceChannel).visibleJackIndex, targetId,
+                     dst->mapInputChannel(destChannel).visibleJackIndex, /*isMidi=*/false, /*recordUndo=*/false);
+        created = settleNewRouting(audioEngine, sourceId, targetId, destChannel, depth, existing);
         return true;
     };
-    auto step = [this, &mutation] {
+    auto step = [&, this] {
         macroController_.applyProgrammaticConnectionChange(autoCreateMacroPortsOnDragEnabled, mutation);
         updateComponents();
     };
@@ -163,7 +186,7 @@ bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, con
     else
         step();
     repaintCanvas();
-    return true;
+    return created;
 }
 
 // Two passes, like a library drop: an estimated size places the node before its card exists, then the
