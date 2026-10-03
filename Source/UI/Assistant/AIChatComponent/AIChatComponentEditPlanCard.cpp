@@ -1,5 +1,6 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth {
 
@@ -79,7 +80,8 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     addChildComponent(commentField);
     commentField.setComponentID("patchFeedbackComment");
     commentField.setText(data.ratingComment, juce::dontSendNotification);
-    commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", juce::Colours::grey);
+    commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)",
+                                        synth::theme::themeOf(*this).colors.textMuted);
     commentField.setTitle("Feedback comment");
     commentField.setTooltip("Optional: say why, then press Enter to send");
     commentField.onReturnKey = [this] { notifyRate(); };
@@ -103,12 +105,12 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
 }
 
 // Theme tokens, resolved again once the card is parented: at construction a card is not yet in the
-// themed window, so getLookAndFeel() is still the default and only the fallbacks would apply.
+// themed window, so themeOf() still answers with the default theme.
 void AIChatComponent::EditPlanCard::applyThemeColours() {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto colours = lf != nullptr ? lf->getTheme().colors : synth::theme::Theme{}.colors;
+    const auto& colours = synth::theme::themeOf(*this).colors;
     headerLabel.setColour(juce::Label::textColourId, planOk ? colours.accent2 : colours.warning);
     previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
+    commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", colours.textMuted);
     if (applyButton) {
         applyButton->setColour(juce::TextButton::buttonColourId, applied ? colours.surfaceHi : colours.accent);
         applyButton->setColour(juce::TextButton::textColourOffId, applied ? colours.textMuted : colours.textPrimary);
@@ -119,7 +121,7 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     thumbsDownButton.setColour(juce::TextButton::buttonColourId,
                                currentRating == AIChatComponent::PatchRatingUiState::Down ? colours.error
                                                                                           : colours.surfaceHi);
-    detailsDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
+    detailsDisplay.setColour(juce::TextEditor::backgroundColourId, colours.bg0.withAlpha(0.6f));
 }
 
 // After a successful Apply the plan is in the project: the button stays as a disabled "Applied" so
