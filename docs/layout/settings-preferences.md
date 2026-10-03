@@ -40,7 +40,7 @@ the Settings window is.
 | Timeline | loop-locator toggles, ask before removing an LFO's last destination, natural scrolling, zoom direction, piano roll key labels |
 | Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |
-| Panels & Windows | panel detach mode |
+| Panels & Windows | panel detach mode, show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)) |
 | MIDI Remote | default takeover, badges |
 
 ## How it is built
@@ -51,8 +51,8 @@ the Settings window is.
   constructor restores the saved choice (`setupCategorySelector`) before the first layout.
 - Each category has one `layout*Groups` function in the unit named for its concern
   (`layoutGraphGroups` in `...GraphBehaviour.cpp`, `layoutTimelineGroups`, `layoutAutosaveGroup`,
-  `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup` and
-  `layoutMidiRemoteGroup`, chained from the mixer group). Each sets `layoutCategory` first.
+  `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup`,
+  `layoutInfoTooltipsGroup` and `layoutMidiRemoteGroup`, chained from the mixer group). Each sets `layoutCategory` first.
 - `layoutContent` builds three closures (`groupMatches`, `setGroupVisible`, `beginGroup`) and calls the
   per-category functions in order. With an empty filter `groupMatches` is true only for groups whose
   `layoutCategory` equals `selectedCategory`; with a filter it is the text match, across all categories.

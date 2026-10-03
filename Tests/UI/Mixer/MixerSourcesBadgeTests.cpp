@@ -3,6 +3,7 @@
 // source that differs from its name; hovering it, its screen-reader title and its description list every source; it
 // is a Tab stop that acts on Return. A real off-screen MainComponent and its mixer panel.
 #include "MixerHeaderTestRig.h"
+#include "UI/Layout/HelperTooltip.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -69,6 +70,8 @@ TEST(MixerSourcesBadgeTest, ABusListsItsFeedingStripsAndALinkedChannelNamedAfter
     ASSERT_TRUE(bus->hasSources());
     const auto sender = rig.firstColumn().getHeaderForTest().getDisplayName();
     EXPECT_EQ(bus->getHeaderForTest().getSourcesButtonForTest().getTooltip(), "Plays into this channel: " + sender);
+    EXPECT_TRUE(synth::ui::isHelperTooltip(bus->getHeaderForTest().getSourcesButtonForTest()))
+        << "a helper tip: it keeps showing when \"Show info tooltips\" is off";
 
     EXPECT_FALSE(rig.firstColumn().hasSources()) << "a linked channel named after its one track says nothing more";
     EXPECT_FALSE(rig.firstColumn().getHeaderForTest().getSourcesButtonForTest().isVisible());

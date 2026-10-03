@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/HelperTooltip.h"
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -66,6 +67,9 @@ public:
         addChildComponent(sourcesButton_);
         sourcesButton_.setIcon(synth::theme::Icon::MixerSources);
         sourcesButton_.setComponentID("mixerSourcesBadge");
+        // A helper tip: it says who plays into the channel, which nothing else on screen does, so it keeps showing
+        // when Preferences > "Show info tooltips" is off (docs/layout/animation.md#tooltips).
+        synth::ui::markHelperTooltip(sourcesButton_);
         // Mostly information (its words are the tooltip and the screen-reader text); activating it selects the
         // channel on the canvas, the same as a click anywhere else on the header.
         sourcesButton_.onClick = [this] {

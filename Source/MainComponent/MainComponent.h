@@ -39,6 +39,7 @@
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
@@ -766,7 +767,7 @@ private:
 
     // Constructed last so all child components exist. Do NOT set tooltips here.
     std::unique_ptr<juce::Component> shortcutHints_; // Cmd-hold shortcut hints overlay
-    juce::TooltipWindow tooltipWindow{this};
+    synth::ui::AppTooltipWindow tooltipWindow{this, &appProperties};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

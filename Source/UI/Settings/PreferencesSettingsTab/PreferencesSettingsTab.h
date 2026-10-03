@@ -132,6 +132,11 @@ public:
     // above. Only the Mixer honours "both" today (see
     // BottomDockComponent::usesMixerMirrorForDetach and
     // docs/mixer/panel.md#placement-and-detachable-windows).
+    // "Show info tooltips" (Panels & Windows): off hides the tooltips that explain a control; helper tips (a mixer
+    // channel's "Plays into this channel: ...") keep showing. Read live by synth::ui::AppTooltipWindow.
+    bool isShowInfoTooltipsEnabled() const;
+    void setShowInfoTooltipsEnabled(bool enabled);
+
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
     // Where patch save/open dialogs start (Files & Autosave): with the project (default), the shared
@@ -288,6 +293,7 @@ private:
     void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     void persistMixerPlacement(const juce::String& placement);
     void persistPanelDetachMode(const juce::String& mode);
+    void persistShowInfoTooltips(bool enabled);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
@@ -311,6 +317,9 @@ private:
     // The panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
     // for the same baselined-constructor reason.
     void setupPanelDetachModeControls();
+    // The "Show info tooltips" row, chained from the tail of setupPanelDetachModeControls() before the MIDI Remote
+    // group.
+    void setupInfoTooltipsControls();
     // The MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
     // same baselined-constructor reason.
     void setupMidiRemoteControls();
@@ -374,8 +383,15 @@ private:
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // Lays out the MIDI Remote group, chained from layoutPanelDetachModeGroup() the same way
-    // that one is chained from layoutMixerPlacementGroup().
+    // Lays out the "Show info tooltips" row, chained from layoutPanelDetachModeGroup() and chaining on to the MIDI
+    // Remote group.
+    void
+    layoutInfoTooltipsGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                            const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                            const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the MIDI Remote group, chained from layoutInfoTooltipsGroup() (after the panel-detach-mode row) the same
+    // way that one is chained from layoutMixerPlacementGroup().
     void
     layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
                           const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
@@ -513,6 +529,9 @@ private:
     // it in both places (2) (see docs/mixer/panel.md#placement-and-detachable-windows).
     juce::Label panelDetachModeLabel;
     juce::ComboBox panelDetachModeCombo;
+    // "Show info tooltips" (default on) and its one-line hint.
+    juce::ToggleButton showInfoTooltipsToggle{"Show info tooltips"};
+    juce::Label showInfoTooltipsHint;
     // Default takeover (Jump / Pick-up / Scale) and the badge switch.
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;
