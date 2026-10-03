@@ -96,8 +96,7 @@ void ModuleComponent::refreshAutomatedMarkers() {
 }
 
 void ModuleComponent::paintAutomatedMarkers(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour textPrimary = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colour(0xffE8E8F0);
+    const juce::Colour textPrimary = synth::theme::themeOf(*this).colors.textPrimary;
     const double now = synth::ui::AutomatedMarkerFade::nowMs();
     for (const auto& e : midiLearnableRegistry_.entries()) {
         const float level = e.marker.level(now);

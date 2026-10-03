@@ -270,7 +270,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     // cast returns null, so we fall back to the legacy literals.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
-    const juce::Colour bgColour = lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1c1e);
+    const juce::Colour bgColour = synth::theme::themeOf(*this).colors.bg1;
     const juce::Colour surfaceHiColour =
         lf != nullptr ? lf->getTheme().colors.surfaceHi : juce::Colours::white.withAlpha(0.1f);
     const juce::Colour surfaceColour =
@@ -589,7 +589,7 @@ void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
     juce::Colour rowBg;
     if (isHovered) {
         // Hover: accent at low alpha over the base surface so it works on both even/odd rows.
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         rowBg = accentColour.withAlpha(0.10f);
     } else if (ModMatrixComponent::isZebraRow(rowIndex)) {
         // Odd rows: slightly raised surface to distinguish from even rows.

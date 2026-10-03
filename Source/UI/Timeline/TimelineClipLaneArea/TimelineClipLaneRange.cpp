@@ -179,7 +179,7 @@ void TimelineClipLaneArea::paintRange(juce::Graphics& g) {
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour wash = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    const juce::Colour edge = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour edge = synth::theme::themeOf(*this).colors.accent;
 
     const auto rectF = rect.toFloat();
     g.setColour(wash.withAlpha(0.16f));

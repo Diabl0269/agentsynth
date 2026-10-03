@@ -19,8 +19,7 @@ constexpr int kDividerWidth = 2;
 } // namespace
 
 void MixerPanelComponent::ZoneDivider::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    g.fillAll(laf != nullptr ? laf->getTheme().colors.border.brighter(0.35f) : juce::Colour(0xff4A5160));
+    g.fillAll(synth::theme::themeOf(*this).colors.border.brighter(0.35f));
 }
 
 MixerPanelComponent::Zone& MixerPanelComponent::zoneFor(synth::MixerZone zone) noexcept {

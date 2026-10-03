@@ -142,24 +142,14 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        juce::Colour bg = juce::Colour(0xff14171C);
-        juce::Colour gridColour = juce::Colour(0xff2A2F38);
-        juce::Colour barColour = juce::Colours::grey;
-        juce::Colour armedColour = juce::Colours::orange;
-        juce::Colour markerColour = juce::Colours::white;
-        juce::Colour mutedColour = juce::Colour(0xff5C6470);
-        juce::Colour captionColour = juce::Colours::lightgrey;
-
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            const auto& c = lf->getTheme().colors;
-            bg = c.bg1;
-            gridColour = c.border.withAlpha(0.6f);
-            barColour = c.textMuted;
-            armedColour = c.gateWire;
-            markerColour = c.accent;
-            mutedColour = c.textDisabled;
-            captionColour = c.textMuted;
-        }
+        const auto& c = synth::theme::themeOf(*this).colors;
+        const auto bg = c.bg1;
+        const auto gridColour = c.border.withAlpha(0.6f);
+        const auto barColour = c.textMuted;
+        const auto armedColour = c.gateWire;
+        const auto markerColour = c.accent;
+        const auto mutedColour = c.textDisabled;
+        const auto captionColour = c.textMuted;
 
         auto bounds = getLocalBounds().toFloat();
         if (slider != nullptr) {

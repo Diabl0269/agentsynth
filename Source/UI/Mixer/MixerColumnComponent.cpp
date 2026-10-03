@@ -433,10 +433,9 @@ std::unique_ptr<juce::AccessibilityHandler> MixerColumnComponent::createAccessib
 }
 
 void MixerColumnComponent::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto bg = synth::theme::themeOf(*this).colors.surface;
+    const auto border = synth::theme::themeOf(*this).colors.border;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(selected_ ? accent : border);
@@ -469,8 +468,7 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
 
     // A dragged column reads as raised: a faint light wash and an accent border, both fading with lift_.
     if (lift_ > 0.0f) {
-        const auto* liftLaf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const auto liftAccent = liftLaf != nullptr ? liftLaf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto liftAccent = synth::theme::themeOf(*this).colors.accent;
         g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
         g.fillRect(getLocalBounds());
         g.setColour(liftAccent.withMultipliedAlpha(lift_));
@@ -484,8 +482,7 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
     // paintFocusRegionOutline (that paints the REGION root -- the panel itself).
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }

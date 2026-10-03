@@ -136,9 +136,7 @@ void TimelinePlayheadOverlay::paint(juce::Graphics& g) {
     if (x < -kStripHalfWidth || x > bounds.getWidth() + kStripHalfWidth)
         return;
 
-    juce::Colour accent = juce::Colours::cyan;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent);
     g.fillRect((float)x - kLineWidth * 0.5f, 0.0f, kLineWidth, (float)bounds.getHeight());

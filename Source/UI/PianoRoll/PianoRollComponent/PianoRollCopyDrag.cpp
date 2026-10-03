@@ -172,9 +172,7 @@ void PianoRollComponent::paintCopyGhosts(juce::Graphics& g) {
     if (notes == nullptr)
         return;
 
-    juce::Colour accent = juce::Colours::cyan;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     for (const auto& origin : *notes) {
         const int pitch = rowShiftedPitch(origin.pitch, deltaRows);

@@ -12,19 +12,15 @@ constexpr float kFontSize = 10.0f;
 constexpr int kTextPadding = 8; // between the lane stripe's column and the text
 
 struct RowColours {
-    juce::Colour surface{0xff1B1F26};
-    juce::Colour border{0xff2A2F38};
-    juce::Colour text{0xffEAEEF3};
-    juce::Colour textMuted{0xff8A93A0};
+    juce::Colour surface;
+    juce::Colour border;
+    juce::Colour text;
+    juce::Colour textMuted;
 };
 
 RowColours coloursFor(const juce::Component& c) {
-    RowColours result;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
-        const auto& t = lf->getTheme().colors;
-        result = {t.surface, t.border, t.textPrimary, t.textMuted};
-    }
-    return result;
+    const auto& t = synth::theme::themeOf(c).colors;
+    return {t.surface, t.border, t.textPrimary, t.textMuted};
 }
 } // namespace
 

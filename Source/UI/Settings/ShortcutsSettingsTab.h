@@ -86,10 +86,6 @@ public:
     /** Whether a visible section shows its rows. A filter FORCES a matching section open without
      *  touching the collapse flag, so a match can never be trapped inside a fold — and clearing the
      *  query restores exactly the folds the user had. */
-    /** The section-header chevron (down = open, right = collapsed); the Preferences tab's "All" view
-     *  draws the same one so the two collapsible lists match. */
-    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, bool collapsed, juce::Colour colour);
-
     static bool sectionIsExpanded(bool filterActive, bool sectionHasMatch, bool collapsed) {
         if (filterActive)
             return sectionHasMatch;

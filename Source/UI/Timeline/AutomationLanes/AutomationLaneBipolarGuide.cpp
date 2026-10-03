@@ -24,9 +24,7 @@ bool isBipolarRange(float minValue, float maxValue) noexcept { return minValue <
 void paintBipolarGuide(juce::Graphics& g, const juce::Component& lane, float minValue, float maxValue, float zeroY) {
     if (!isBipolarRange(minValue, maxValue))
         return;
-    juce::Colour muted{0xff8A93A0};
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&lane.getLookAndFeel()))
-        muted = lf->getTheme().colors.textMuted;
+    const auto muted = synth::theme::themeOf(lane).colors.textMuted;
 
     const float width = (float)lane.getWidth();
     g.setColour(muted.withAlpha(0.7f));

@@ -6,7 +6,7 @@
 namespace synth::theme {
 
 // Concern: the small shared controls that have no stock JUCE draw method: chips, piano-key toggles,
-// colour swatches and text links. Each has a free paint function taking a Theme (so a control outside
+// colour swatches, text links and the fold arrow. Each has a free paint function taking a Theme (so a control outside
 // any AppLookAndFeel paints with a default-constructed one) and an AppLookAndFeel member calling it.
 
 const Theme& themeOf(const juce::Component& comp) {
@@ -131,6 +131,29 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
 void AppLookAndFeel::drawTextLink(juce::Graphics& g, juce::Button& button, juce::Justification justification,
                                   bool shouldDrawButtonAsHighlighted) {
     paintTextLink(g, button, theme, justification, shouldDrawButtonAsHighlighted);
+}
+
+void paintDisclosureChevron(juce::Graphics& g, juce::Rectangle<float> area, float openness, juce::Colour colour) {
+    juce::Path p;
+    p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
+    p.applyTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi * (1.0f - openness),
+                                                     area.getCentreX(), area.getCentreY()));
+    g.setColour(colour);
+    g.fillPath(p);
+}
+
+juce::Colour disclosureChevronColour(const Theme& theme, bool highlighted) {
+    return highlighted ? theme.colors.textPrimary : theme.colors.textMuted;
+}
+
+void paintDisclosureChevron(juce::Graphics& g, juce::Rectangle<float> area, float openness, const Theme& theme,
+                            bool highlighted) {
+    paintDisclosureChevron(g, area, openness, disclosureChevronColour(theme, highlighted));
+}
+
+void AppLookAndFeel::drawDisclosureChevron(juce::Graphics& g, juce::Rectangle<float> area, float openness,
+                                           bool highlighted) {
+    paintDisclosureChevron(g, area, openness, theme, highlighted);
 }
 
 } // namespace synth::theme

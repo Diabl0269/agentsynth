@@ -100,29 +100,14 @@ void MinimapComponent::navigateTo(juce::Point<float> localPos) {
 
 //==============================================================================
 void MinimapComponent::paint(juce::Graphics& g) {
-    auto* lnf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-
-    // Headless tests install the stock JUCE LnF; fall back to the token defaults (see
-    // StatusBarComponent::paint for the same shape) so colour resolution stays exercised.
-    juce::Colour bg0, bg1, border, accent;
-    float cornerRadius, borderWidth;
-    if (lnf) {
-        const auto& c = lnf->getTheme().colors;
-        const auto& m = lnf->getTheme().metrics;
-        bg0 = c.bg0;
-        bg1 = c.bg1;
-        border = c.border;
-        accent = c.accent;
-        cornerRadius = m.cornerRadius;
-        borderWidth = m.borderWidth;
-    } else {
-        bg0 = juce::Colours::black;
-        bg1 = juce::Colour(0xff13161b);
-        border = juce::Colours::grey;
-        accent = juce::Colours::cyan;
-        cornerRadius = 8.0f;
-        borderWidth = 1.0f;
-    }
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const auto& m = synth::theme::themeOf(*this).metrics;
+    const auto bg0 = c.bg0;
+    const auto bg1 = c.bg1;
+    const auto border = c.border;
+    const auto accent = c.accent;
+    const float cornerRadius = m.cornerRadius;
+    const float borderWidth = m.borderWidth;
 
     const auto bounds = getLocalBounds().toFloat();
 

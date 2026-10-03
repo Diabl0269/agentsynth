@@ -38,8 +38,7 @@ public:
     // hard-coded colour that would ignore a user's theme override.
     void setActive(bool active) {
         setToggleState(active, juce::dontSendNotification);
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+        const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
         setColour(juce::TextButton::buttonOnColourId, accent);
     }
 

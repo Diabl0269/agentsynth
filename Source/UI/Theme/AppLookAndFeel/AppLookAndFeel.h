@@ -44,6 +44,18 @@ juce::Colour paintChip(juce::Graphics& g, juce::Rectangle<float> bounds, const T
 // The "v" of a closed combo, stroked in `colour` around `centre`; shared by combo boxes and chip combos.
 void paintComboChevron(juce::Graphics& g, juce::Point<float> centre, juce::Colour colour);
 
+// The one fold arrow: a filled triangle filling `area`, pointing right when `openness` is 0 (closed) and
+// down at 1 (open), rotated in between so an animated fold turns it with the fold. A path, not a text
+// glyph, so it never depends on a font's arrow coverage.
+void paintDisclosureChevron(juce::Graphics& g, juce::Rectangle<float> area, float openness, juce::Colour colour);
+
+// The theme's colour for a fold arrow: textMuted at rest, textPrimary while highlighted.
+juce::Colour disclosureChevronColour(const Theme& theme, bool highlighted);
+
+// paintDisclosureChevron in that theme colour: what every fold arrow in the app calls.
+void paintDisclosureChevron(juce::Graphics& g, juce::Rectangle<float> area, float openness, const Theme& theme,
+                            bool highlighted);
+
 // A piano key drawn as a toggle (pianoKeyBlack/pianoKeyWhite base, accent when on, wash on hover/press).
 void paintKeyToggle(juce::Graphics& g, juce::ToggleButton& button, const Theme& theme, bool isBlackKey,
                     bool highlighted, bool down);
@@ -161,7 +173,7 @@ public:
     // The one icon button (Source/UI/Layout/IconButton.h): not a JUCE override, called by IconButton::paintButton.
     void drawIconButton(juce::Graphics&, synth::ui::IconButton&, bool shouldDrawButtonAsHighlighted,
                         bool shouldDrawButtonAsDown);
-    // The shared chip, piano-key toggle, colour swatch and text link (AppLookAndFeelSharedControls.cpp):
+    // The shared chip, piano-key toggle, colour swatch, text link and fold arrow (AppLookAndFeelSharedControls.cpp):
     // not JUCE overrides, called by the controls that own the content.
     juce::Colour drawChip(juce::Graphics&, juce::Rectangle<float> bounds, const ChipState&);
     void drawKeyToggle(juce::Graphics&, juce::ToggleButton&, bool isBlackKey, bool shouldDrawButtonAsHighlighted,
@@ -169,6 +181,7 @@ public:
     void drawColourSwatch(juce::Graphics&, synth::ui::ColourSwatchButton&, bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown);
     void drawTextLink(juce::Graphics&, juce::Button&, juce::Justification, bool shouldDrawButtonAsHighlighted);
+    void drawDisclosureChevron(juce::Graphics&, juce::Rectangle<float> area, float openness, bool highlighted);
 
     // Resolve a font's family name to an embedded typeface (cached). Falls back to the JUCE
     // default sans/mono if the family is unavailable (tests / missing BinaryData — section 8.4).

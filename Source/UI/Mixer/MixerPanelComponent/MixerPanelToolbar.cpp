@@ -91,9 +91,8 @@ void MixerPanelToolbar::resized() {
 }
 
 void MixerPanelToolbar::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    g.fillAll(laf != nullptr ? laf->getTheme().colors.bg0 : juce::Colour(0xff0B0D10));
-    g.setColour(laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38));
+    g.fillAll(synth::theme::themeOf(*this).colors.bg0);
+    g.setColour(synth::theme::themeOf(*this).colors.border);
     g.fillRect(0, getHeight() - 1, getWidth(), 1);
 }
 

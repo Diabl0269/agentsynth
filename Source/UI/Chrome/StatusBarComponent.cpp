@@ -199,26 +199,13 @@ void StatusBarComponent::timerCallback() {
 void StatusBarComponent::paint(juce::Graphics& g) {
     using namespace synth::theme;
 
-    auto* lnf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-
-    // --- Resolve colours: themed if LnF present, otherwise JUCE fallback ---
-    juce::Colour bg0, border, textPrimary, textMuted, warningColour, accentColour;
-    if (lnf) {
-        const auto& c = lnf->getTheme().colors;
-        bg0 = c.bg0;
-        border = c.border;
-        textPrimary = c.textPrimary;
-        textMuted = c.textMuted;
-        warningColour = c.warning;
-        accentColour = c.accent;
-    } else {
-        bg0 = findColour(juce::DocumentWindow::backgroundColourId);
-        border = juce::Colours::grey;
-        textPrimary = findColour(juce::Label::textColourId);
-        textMuted = textPrimary.withAlpha(0.6f);
-        warningColour = juce::Colours::orange;
-        accentColour = juce::Colours::cyan;
-    }
+    const auto& c = themeOf(*this).colors;
+    const auto bg0 = c.bg0;
+    const auto border = c.border;
+    const auto textPrimary = c.textPrimary;
+    const auto textMuted = c.textMuted;
+    const auto warningColour = c.warning;
+    const auto accentColour = c.accent;
 
     const auto bounds = getLocalBounds().toFloat();
 

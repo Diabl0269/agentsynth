@@ -67,8 +67,12 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void lookAndFeelChanged() override;
+    void parentHierarchyChanged() override;
 
 private:
+    void applyThemeColours();
+
     struct Item {
         bool isHeader = false;
         synth::MixerZone zone = synth::MixerZone::Scrolling; // the group, for a header

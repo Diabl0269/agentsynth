@@ -333,12 +333,11 @@ public:
         if (w <= 0.0f || h <= 0.0f)
             return;
 
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
-        const juce::Colour gridColor = lf ? lf->getTheme().colors.border.withAlpha(0.4f) : juce::Colour(0xff2a2a3e);
-        const juce::Colour mutedText = lf ? lf->getTheme().colors.textMuted : juce::Colour(0xff6a6a7e);
-        const juce::Colour accent = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00b4d8);
-        const juce::Colour accent2 = lf ? lf->getTheme().colors.accent2 : juce::Colour(0xff00D1FF);
+        const juce::Colour bgColor = synth::theme::themeOf(*this).colors.bg1;
+        const juce::Colour gridColor = synth::theme::themeOf(*this).colors.border.withAlpha(0.4f);
+        const juce::Colour mutedText = synth::theme::themeOf(*this).colors.textMuted;
+        const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
+        const juce::Colour accent2 = synth::theme::themeOf(*this).colors.accent2;
 
         g.fillAll(bgColor);
 

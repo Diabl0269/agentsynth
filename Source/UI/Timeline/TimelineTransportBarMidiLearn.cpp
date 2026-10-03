@@ -192,9 +192,8 @@ void TimelineTransportBar::repaintArmedMidiLearnOutline() {
 }
 
 void TimelineTransportBar::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
 
     for (const auto& [glyph, mapped] : midiLearnMappedBadges_) {
         if (!mapped)

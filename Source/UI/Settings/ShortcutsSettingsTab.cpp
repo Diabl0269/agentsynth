@@ -1,6 +1,7 @@
 #include "ShortcutsSettingsTab.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
 // Divider alpha under a section header. GENTLE on purpose: the row list is already visually grouped
@@ -329,13 +330,10 @@ void ShortcutsSettingsTab::HeaderButton::setCollapsed(bool isCollapsed) {
 void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) {
     const auto textColour =
         findColour(juce::Label::textColourId).withAlpha(highlighted ? kHeaderHoverTextAlpha : kHeaderTextAlpha);
-    // Chevron drawn as a path rather than a glyph — glyph coverage is not guaranteed across the
-    // embedded typefaces (see the theming font limitation), the same reason ModuleLibraryComponent
-    // draws its own.
-    drawChevron(g,
-                juce::Rectangle<float>(6.0f, (float)(getHeight() - kChevronSize) * 0.5f, (float)kChevronSize,
-                                       (float)kChevronSize),
-                collapsed_, textColour);
+    synth::theme::paintDisclosureChevron(g,
+                                         juce::Rectangle<float>(6.0f, (float)(getHeight() - kChevronSize) * 0.5f,
+                                                                (float)kChevronSize, (float)kChevronSize),
+                                         collapsed_ ? 0.0f : 1.0f, synth::theme::themeOf(*this), highlighted);
 
     g.setColour(textColour);
     g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
@@ -359,17 +357,6 @@ void ShortcutsSettingsTab::paintRows(juce::Graphics& g) {
                    juce::Rectangle<int>(6, 0, juce::jmax(0, rowsHost.getWidth() - 12), kRowHeight),
                    juce::Justification::centredLeft);
     }
-}
-
-void ShortcutsSettingsTab::drawChevron(juce::Graphics& g, juce::Rectangle<float> area, bool collapsed,
-                                       juce::Colour colour) {
-    juce::Path p;
-    p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
-    if (collapsed)
-        p.applyTransform(
-            juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi, area.getCentreX(), area.getCentreY()));
-    g.setColour(colour);
-    g.fillPath(p);
 }
 
 //==============================================================================

@@ -6,7 +6,9 @@
 # there with a 4+ letter capitals word that is not a known abbreviation (MIDI, ADSR, ...). Text that is
 # not UI (a hex colour code) opts out with a trailing `// not-ui-text: <reason>` marker.
 #
-# Comments are exempt. Runs in the Lint job: no compiler, ~1 s.
+# The same script also rejects the default theme's accent/text colour written as a literal outside
+# Source/UI/Theme/ (a fallback must go through synth::theme::themeOf); `// not-fallback: <reason>`
+# marks a fixed product colour. Comments are exempt. Runs in the Lint job: no compiler, ~1 s.
 #
 # Usage: bash scripts/tests/check-ui-caps.test.sh
 
@@ -70,14 +72,31 @@ check "an identifier in capitals (not a literal) passes" "verdict" \
 check "short capitals words (3 letters) pass" "verdict" \
     "$(flagged "$(fixture m.cpp 'auto s = juce::String("ATK DEC SUS REL");')")" "no"
 
+# --- default-theme colour literals (outside Source/UI/Theme) ----------------------------------
+check "the default accent literal is flagged" "verdict" \
+    "$(flagged "$(fixture n.cpp 'auto a = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);')")" "yes"
+check "the default text literal is flagged, in any case" "verdict" \
+    "$(flagged "$(fixture o.h 'juce::Colour text{0xffeaeef3};')")" "yes"
+check "a not-fallback marker exempts a product colour" "verdict" \
+    "$(flagged "$(fixture p.cpp 'juce::Colour k{0xff00D1FF}; // not-fallback: fixed brand colour')")" "no"
+check "a not-fallback marker without a reason does not exempt" "verdict" \
+    "$(flagged "$(fixture q.cpp 'juce::Colour k{0xff00D1FF}; // not-fallback:')")" "yes"
+check "the literal in a comment passes" "verdict" \
+    "$(flagged "$(fixture r.cpp '// was 0xff00D1FF before the theme lookup')")" "no"
+mkdir -p "$WORK/Source/UI/Theme"
+printf '%s\n' 'juce::Colour accent{0xff00D1FF};' >"$WORK/Source/UI/Theme/Theme.h"
+check "the Theme directory may hold the literals" "verdict" "$(flagged "$WORK/Source/UI/Theme/Theme.h")" "no"
+check "a longer hex number is not the literal" "verdict" \
+    "$(flagged "$(fixture s.cpp 'auto c = 0xff00D1FF00;')")" "no"
+
 # --- the real thing: the repo's own Source/UI tree must be clean ---------------------------
 output="$(bash "$CHECK" "$REPO_ROOT/Source/UI" 2>&1)"
 status=$?
 if [ "$status" -ne 0 ]; then
-    printf 'FAIL  Source/UI contains all-caps UI text\n\n%s\n\n' "$output"
+    printf 'FAIL  Source/UI contains all-caps UI text or a default-theme colour literal\n\n%s\n\n' "$output"
     fail=$((fail + 1))
 else
-    printf 'ok    Source/UI has no all-caps UI text\n'
+    printf 'ok    Source/UI has no all-caps UI text or default-theme colour literal\n'
     pass=$((pass + 1))
 fi
 

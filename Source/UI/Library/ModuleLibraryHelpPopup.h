@@ -437,20 +437,12 @@ private:
                 onClick();
         }
 
-        void paintButton(juce::Graphics& g, bool /*highlighted*/, bool /*down*/) override {
-            // Chevron drawn as a rotated triangle path — the same geometry
-            // ModuleLibraryComponent::drawChevron uses, duplicated here in miniature rather than
-            // shared: pulling that header in here would invert the ownership direction between
-            // the sidebar and its popup.
-            juce::Path p;
+        void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override {
             const juce::Rectangle<float> chevronArea(4.0f, (float)getHeight() * 0.5f - 4.0f, 8.0f, 8.0f);
-            p.addTriangle(chevronArea.getX(), chevronArea.getY(), chevronArea.getRight(), chevronArea.getY(),
-                          chevronArea.getCentreX(), chevronArea.getBottom());
-            p.applyTransform(juce::AffineTransform::rotation(expanded_ ? 0.0f : -juce::MathConstants<float>::halfPi,
-                                                             chevronArea.getCentreX(), chevronArea.getCentreY()));
-            g.setColour(textColour_);
-            g.fillPath(p);
+            synth::theme::paintDisclosureChevron(g, chevronArea, expanded_ ? 1.0f : 0.0f, synth::theme::themeOf(*this),
+                                                 highlighted);
 
+            g.setColour(textColour_);
             g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
             g.drawText(title_, 20, 0, getWidth() - 24, getHeight(), juce::Justification::centredLeft);
             synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);

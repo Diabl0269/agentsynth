@@ -52,8 +52,8 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                 // the same progress value as the fold, so the two read as one motion. Search
                 // forces matching sections open, so the chevron matches that layout.
                 const float chevronProgress = isSearchActive() ? 0.0f : getSectionProgress(entry.text);
-                drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f), chevronProgress,
-                            headerColour);
+                synth::theme::paintDisclosureChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f),
+                                                     1.0f - chevronProgress, synth::theme::themeOf(*this), false);
 
                 // Category icon at x=20 (null-guarded — no-op when LnF absent).
                 synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
@@ -101,8 +101,8 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             if (entry.kind == RowKind::SubHeader) {
                 const float chevronProgress =
                     isSearchActive() ? 0.0f : getSectionProgress(subsectionKey(entry.section, entry.text));
-                drawChevron(g, juce::Rectangle<float>(20.0f, (float)row.y + 8.0f, 6.0f, 6.0f), chevronProgress,
-                            mutedColour.withAlpha(0.6f));
+                synth::theme::paintDisclosureChevron(g, juce::Rectangle<float>(20.0f, (float)row.y + 8.0f, 6.0f, 6.0f),
+                                                     1.0f - chevronProgress, synth::theme::themeOf(*this), false);
                 g.setColour(mutedColour.withAlpha(0.6f));
                 g.setFont(juce::Font(juce::FontOptions(10.5f)));
                 g.drawText(entry.text, 32, row.y, contentWidth - 44, kItemHeight - 4, juce::Justification::centredLeft);
@@ -198,16 +198,6 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                    kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
                    juce::Justification::centredRight);
     }
-}
-
-void ModuleLibraryComponent::drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress,
-                                         juce::Colour colour) {
-    juce::Path p;
-    p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
-    p.applyTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi * progress, area.getCentreX(),
-                                                     area.getCentreY()));
-    g.setColour(colour);
-    g.fillPath(p);
 }
 
 synth::theme::Icon ModuleLibraryComponent::categoryIconForHeader(const juce::String& header) {

@@ -216,8 +216,8 @@ void CardLayoutEditorRow::paint(juce::Graphics& g) {
         g.fillRect(getLocalBounds().removeFromBottom(1).reduced(2, 0));
     }
     if (lift_ > 0.0f) {
-        const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-        const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
         paintReorderLift(g, getLocalBounds().toFloat(), lift_, surface, accent);
     }
     paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);

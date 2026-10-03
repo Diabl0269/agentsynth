@@ -262,11 +262,10 @@ public:
     }
 
     void updateThumbColours() {
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour neutral = lf != nullptr ? lf->getTheme().colors.surfaceHi : juce::Colours::darkgrey;
-        const juce::Colour upSelected = lf != nullptr ? lf->getTheme().colors.success : juce::Colours::darkgreen;
-        const juce::Colour downSelected = lf != nullptr ? lf->getTheme().colors.error : juce::Colour(0xFF8B3A3A);
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        const juce::Colour neutral = colors.surfaceHi;
+        const juce::Colour upSelected = colors.success;
+        const juce::Colour downSelected = colors.error;
         thumbsUpButton.setColour(juce::TextButton::buttonColourId,
                                  currentRating == AIChatComponent::PatchRatingUiState::Up ? upSelected : neutral);
         thumbsDownButton.setColour(juce::TextButton::buttonColourId,

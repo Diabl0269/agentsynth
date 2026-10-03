@@ -25,7 +25,7 @@ MixerZonesPane::MixerZonesPane() {
     setWantsKeyboardFocus(true);
 
     addAndMakeVisible(filter_);
-    filter_.setTextToShowWhenEmpty("Filter channels", juce::Colour(0xff8A93A0));
+    filter_.setTextToShowWhenEmpty("Filter channels", synth::theme::themeOf(*this).colors.textMuted);
     filter_.setFont(juce::Font(juce::FontOptions(12.0f)));
     filter_.setSelectAllWhenFocused(true);
     filter_.setTitle("Filter channels");
@@ -60,7 +60,7 @@ MixerZonesPane::MixerZonesPane() {
 
     addAndMakeVisible(hiddenLabel_);
     hiddenLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
-    hiddenLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));
+    hiddenLabel_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
     hiddenLabel_.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(showAll_);
     showAll_.setWantsKeyboardFocus(false);
@@ -245,8 +245,21 @@ void MixerZonesPane::resized() {
     layoutList();
 }
 
+// The constructor runs before the pane sits under the app's look and feel, so the two muted colours
+// are re-applied whenever the look and feel (or the parent it comes from) changes.
+void MixerZonesPane::applyThemeColours() {
+    const auto muted = synth::theme::themeOf(*this).colors.textMuted;
+    filter_.setTextToShowWhenEmpty("Filter channels", muted);
+    hiddenLabel_.setColour(juce::Label::textColourId, muted);
+    filter_.repaint();
+}
+
+void MixerZonesPane::lookAndFeelChanged() { applyThemeColours(); }
+
+void MixerZonesPane::parentHierarchyChanged() { applyThemeColours(); }
+
 void MixerZonesPane::paint(juce::Graphics& g) {
-    const auto& theme = zonesThemeOf(*this);
+    const auto& theme = synth::theme::themeOf(*this);
     g.fillAll(theme.colors.bg0);
 }
 

@@ -71,8 +71,7 @@ void ControllerSurfaceComponent::Content::paint(juce::Graphics& g) {
 void ControllerSurfaceComponent::Content::paintOverChildren(juce::Graphics& g) {
     if (!owner_.marqueeActive_)
         return;
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.12f));
     g.fillRect(owner_.marqueeRect_);
     g.setColour(accent);

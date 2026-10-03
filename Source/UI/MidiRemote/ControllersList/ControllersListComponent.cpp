@@ -327,7 +327,7 @@ void ControllersListComponent::paint(juce::Graphics& g) {
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
     const juce::Colour mutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
     const juce::Colour warningColour = lf != nullptr ? lf->getTheme().colors.warning : juce::Colours::orange;
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
 
     for (int i = 0; i < static_cast<int>(rows_.size()); ++i) {
         const auto& row = rows_[static_cast<size_t>(i)];

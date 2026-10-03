@@ -646,12 +646,6 @@ private:
 
     void applySearchEditorColours();
 
-    /** @param progress 0 = open (pointing down) .. 1 = folded (pointing right). Drawn as the open
-     *  triangle rotated by -90° * progress: for a square area the endpoints are exactly the two
-     *  shapes this used to switch between, so 0 and 1 look identical to the old two-state version
-     *  while everything in between is a real rotation. */
-    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress, juce::Colour colour);
-
 public:
     /** Maps a category header string to its Icon enum value. Public (rather than the private
      *  section every other static paint helper here lives in) so IconLibrary/ModuleLibrary tests

@@ -19,15 +19,11 @@ struct LanePalette {
 };
 
 LanePalette paletteFor(juce::Component& c) {
-    LanePalette p{juce::Colours::black, juce::Colours::darkgrey, juce::Colours::grey, juce::Colours::lightgrey,
-                  juce::Colours::cyan};
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
-        const auto& theme = lf->getTheme();
-        p = {theme.colors.bg1, theme.colors.surface, theme.colors.border, theme.colors.textMuted,
-             theme.colors.noteSelected};
-        p.scaleFontPx = theme.type.micro;
-        p.readoutFontPx = theme.type.value + 1.0f;
-    }
+    const auto& theme = synth::theme::themeOf(c);
+    LanePalette p{theme.colors.bg1, theme.colors.surface, theme.colors.border, theme.colors.textMuted,
+                  theme.colors.noteSelected};
+    p.scaleFontPx = theme.type.micro;
+    p.readoutFontPx = theme.type.value + 1.0f;
     return p;
 }
 

@@ -73,38 +73,35 @@ synth::theme::Icon kindBadgeIcon(synth::TrackKind kind) {
     return synth::theme::Icon::TrackMidi;
 }
 
-// Themed colours with literal fallbacks — the headless test path installs no AppLookAndFeel (same
-// pattern as TimelinePanelComponent::paint()).
+// The theme's colours the header paints with.
 struct HeaderColours {
-    juce::Colour surface{juce::Colour(0xff1B1F26)};
-    juce::Colour surfaceHi{juce::Colour(0xff232833)};
-    juce::Colour border{juce::Colour(0xff2A2F38)};
-    juce::Colour text{juce::Colour(0xffEAEEF3)};
-    juce::Colour textMuted{juce::Colour(0xff8A93A0)};
-    juce::Colour warning{juce::Colour(0xffE0A33D)};
-    juce::Colour accent{juce::Colour(0xff00D1FF)};
-    juce::Colour bg0{juce::Colour(0xff0B0D10)};
-    juce::Colour muteOn{juce::Colour(0xffFFA033)};
-    juce::Colour soloOn{juce::Colour(0xffFFD23D)};
-    juce::Colour armOn{juce::Colour(0xffE5484D)};
+    juce::Colour surface;
+    juce::Colour surfaceHi;
+    juce::Colour border;
+    juce::Colour text;
+    juce::Colour textMuted;
+    juce::Colour warning;
+    juce::Colour accent;
+    juce::Colour bg0;
+    juce::Colour muteOn;
+    juce::Colour soloOn;
+    juce::Colour armOn;
 };
 
 HeaderColours coloursFor(const juce::Component& component) {
+    const auto& c = synth::theme::themeOf(component).colors;
     HeaderColours result;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        result.surface = c.surface;
-        result.surfaceHi = c.surfaceHi;
-        result.border = c.border;
-        result.text = c.textPrimary;
-        result.textMuted = c.textMuted;
-        result.warning = c.warning;
-        result.accent = c.accent;
-        result.bg0 = c.bg0;
-        result.muteOn = c.trackMuteOn;
-        result.soloOn = c.trackSoloOn;
-        result.armOn = c.trackArmOn;
-    }
+    result.surface = c.surface;
+    result.surfaceHi = c.surfaceHi;
+    result.border = c.border;
+    result.text = c.textPrimary;
+    result.textMuted = c.textMuted;
+    result.warning = c.warning;
+    result.accent = c.accent;
+    result.bg0 = c.bg0;
+    result.muteOn = c.trackMuteOn;
+    result.soloOn = c.trackSoloOn;
+    result.armOn = c.trackArmOn;
     return result;
 }
 
@@ -576,8 +573,7 @@ void TimelineTrackHeaderComponent::setLift(float lift) {
 
 void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
     if (lift_ > 0.0f) {
-        const auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const auto accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
         g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
         g.fillRect(getLocalBounds());
         g.setColour(accent.withMultipliedAlpha(lift_));

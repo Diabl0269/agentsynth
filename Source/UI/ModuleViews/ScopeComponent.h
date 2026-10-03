@@ -60,17 +60,11 @@ public:
         for (float s : sampleData)
             rawPeak = std::max(rawPeak, std::abs(s));
 
-        // --- Themed colours (fallback to hardcoded when LnF absent, e.g. tests) ---
-        juce::Colour gridColour = juce::Colour(0xff2A2F38);  // border token default
-        juce::Colour mutedColour = juce::Colour(0xff5C6470); // textDisabled token default
-        juce::Colour waveColour = juce::Colours::limegreen;
-
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            const auto& colors = lf->getTheme().colors;
-            gridColour = colors.border.withAlpha(0.6f);
-            mutedColour = colors.textDisabled;
-            waveColour = colors.accent;
-        }
+        // --- Themed colours ---
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        const auto gridColour = colors.border.withAlpha(0.6f);
+        const auto mutedColour = colors.textDisabled;
+        const auto waveColour = colors.accent;
 
         // --- Horizontal amplitude grid lines at ±0.5 and ±1.0 ---
         // (centre 0.0 line painted separately below)

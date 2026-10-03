@@ -62,9 +62,8 @@ void MixerSectionViewport::visibleAreaChanged(const juce::Rectangle<int>&) { rep
 void MixerSectionViewport::paintOverChildren(juce::Graphics& g) {
     if (!isScrollable() || getHeight() <= 0)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto thumbColour = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
-    const auto surface = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
+    const auto thumbColour = synth::theme::themeOf(*this).colors.textDisabled;
+    const auto surface = synth::theme::themeOf(*this).colors.surface;
 
     const float visible = (float)getHeight();
     const float total = (float)contentHeight_;

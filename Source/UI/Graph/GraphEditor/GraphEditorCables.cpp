@@ -149,15 +149,14 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(collapseBounds, 4.0f);
 
-        // A filled triangle, not a text glyph, for the same reason the card's expand chevron is a
-        // Path (check-nonascii-literals.test.sh rejects a chevron character outright). Points UP
-        // — the expand chevron points down — so the pair reads as opposite ends of one toggle.
-        juce::Path collapseChevron;
-        collapseChevron.addTriangle(collapseBounds.getX() + 2.5f, collapseBounds.getBottom() - 3.5f,
-                                    collapseBounds.getRight() - 2.5f, collapseBounds.getBottom() - 3.5f,
-                                    collapseBounds.getCentreX(), collapseBounds.getY() + 2.5f);
-        g.setColour(juce::Colours::white.withAlpha(0.85f));
-        g.fillPath(collapseChevron);
+        // The hull is the open macro, so this is the shared fold arrow open (points down), the pair of
+        // the folded card's closed one. White on the macro's own colour, not a theme token: the chip
+        // fill is user-chosen, so only a fixed contrast colour reads on every macro colour.
+        constexpr float kCollapseChevronSize = 8.0f;
+        synth::theme::paintDisclosureChevron(
+            g,
+            juce::Rectangle<float>(kCollapseChevronSize, kCollapseChevronSize).withCentre(collapseBounds.getCentre()),
+            1.0f, juce::Colours::white.withAlpha(0.85f));
     }
 }
 } // namespace
@@ -730,7 +729,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     if (editor.getDragDropController().isDragPreviewActive() &&
         !editor.getDragDropController().getDragPreviewGhost().isEmpty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
@@ -773,7 +772,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // view is zoomed. Paint-only — the selection itself is computed in updateMarquee().
     if (editor.marqueeActive && !editor.marqueeRect.isEmpty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
 
         auto bandF = editor.marqueeRect.toFloat();
@@ -866,8 +865,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // GraphContentComponent is a nested class, so this direct access is the same "one-line
     // forwarder" relationship every other block above already has with `editor`.
     if (auto flash = editor.macroCrossingAnim_.flashState()) {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto [bounds, t] = *flash;
         // Settles from a slightly oversized ring down onto the card, fading out as it lands —
         // "flash-or-settle" per the ticket, not a static outline held for the tween's whole

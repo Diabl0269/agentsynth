@@ -26,9 +26,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     const bool selected = owner.getMacroController().isMacroSelected(macroId);
 
-    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    const auto& themeColors = synth::theme::themeOf(*this).colors;
 
     g.setColour(macro->colour.withAlpha(0.22f));
     g.fillRoundedRectangle(bounds, 8.0f);
@@ -126,14 +124,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     paintToggleBadge(getToggleBadgeBounds(true), themeColors.error,
                      owner.getMacroController().macroMuteState(macro->id));
 
-    // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
-    // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
-    // one small affordance.
-    juce::Path chevron;
-    chevron.addTriangle(chevronBounds.getX() + 3.0f, chevronBounds.getY() + 7.0f, chevronBounds.getRight() - 3.0f,
-                        chevronBounds.getY() + 7.0f, chevronBounds.getCentreX(), chevronBounds.getBottom() - 5.0f);
-    g.setColour(themeColors.textPrimary);
-    g.fillPath(chevron);
+    // The card is the folded macro, so its fold arrow is closed (points right); pressing it opens it.
+    constexpr float kChevronSize = 8.0f;
+    synth::theme::paintDisclosureChevron(
+        g, juce::Rectangle<float>(kChevronSize, kChevronSize).withCentre(chevronBounds.getCentre()), 0.0f,
+        synth::theme::themeOf(*this), false);
 }
 
 juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {
