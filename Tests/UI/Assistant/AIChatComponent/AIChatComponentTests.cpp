@@ -1,7 +1,7 @@
 // AIChatComponentTests.cpp
 // Core AIChatComponent tests: construction/resizing, sending a message and rendering the
 // response, patch-vs-conversational classification, refreshModels()/provider install ordering,
-// hosted-mode notices, the account row, quota-error upgrade button, thumbs feedback affordance,
+// hosted-mode notices, the account row, quota-error upgrade button, edit-plan card thumbs feedback,
 // and response-time/timeout display. Shared mocks and the AIChatComponentTest fixture live in
 // AIChatComponentTestFixture.h.
 //
@@ -539,7 +539,7 @@ TEST_F(AIChatComponentTest, UpgradeButtonDoesNotSurviveNewChat) {
         << "New Chat must not resurrect the upgrade button";
 }
 
-TEST_F(AIChatComponentTest, PatchCardShowsThumbsButtons) {
+TEST_F(AIChatComponentTest, EditPlanCardShowsThumbsButtons) {
     AudioEngine engine;
     synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockPatchProvider>());

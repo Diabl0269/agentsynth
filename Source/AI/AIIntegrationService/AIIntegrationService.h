@@ -19,10 +19,11 @@ namespace synth {
 /** The outcome of previewing or applying one edit plan (a patch plus a sibling "timelineOps" list). */
 struct ProjectEditResult {
     bool ok = true;
-    juce::String message;     // on failure the first problem found, worded for the model
-    juce::String previewText; // on success: the patch phase, then the timeline ops, as sentences
-    bool merge = false;       // the mode the patch phase ran in
-    juce::var patchBefore;    // graphToJSON around the patch phase (preview: of the scratch); void without one
+    juce::String message;           // on failure the first problem found, worded for the model
+    juce::String previewText;       // on success: the patch phase, then the timeline ops, as sentences
+    juce::StringArray previewLines; // the same sentences, one per phase, for a UI that lists them
+    bool merge = false;             // the mode the patch phase ran in
+    juce::var patchBefore;          // graphToJSON around the patch phase (preview: of the scratch); void without one
     juce::var patchAfter;
 };
 
@@ -138,7 +139,9 @@ public:
     /** Checks a plan on scratch copies, mutating nothing live. */
     ProjectEditResult previewProjectEdit(const juce::var& root) const;
 
-    /** Previews, then applies the whole plan as ONE undo step through the host; all or nothing. */
+    /** Previews, then applies the whole plan as ONE undo step through the host; all or nothing.
+     *  With no host installed (a plugin build or a test without a timeline), a plan that carries no
+     *  timeline ops still applies: its patch goes through applyPatch() in the mode the preview chose. */
     ProjectEditResult applyProjectEdit(const juce::var& root);
 
     /** Asks for an edit plan: hosted `project.generate`, or the local model with the same fields. */
@@ -333,6 +336,7 @@ private:
     // See its definition in AIIntegrationServiceRequestSending.cpp for what this composes.
     juce::String buildArrangeAugmentedContent(const juce::String& text) const;
     juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
+    ProjectEditResult applyPatchOnlyPlan(const juce::var& root); // applyProjectEdit with no host installed
 
     // The live graph as the model sees it: graphToJSON without the trusted-only node fields.
     juce::var buildStrippedPatchJson() const;

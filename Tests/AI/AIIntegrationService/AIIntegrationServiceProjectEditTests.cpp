@@ -3,9 +3,8 @@
 // and how a plan is asked for (project.generate hosted, sendPrompt locally). The apply order end to
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
 #include "AIIntegrationServiceTestFixture.h"
-#include "AppUndoManager.h"
-#include "MacroSet.h"
 #include "Modules/FilterModule.h"
+#include "PlanFakeHost.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 
 namespace synth {
@@ -17,52 +16,6 @@ juce::var parse(const juce::String& json) {
     EXPECT_FALSE(value.isVoid()) << "test JSON did not parse: " << json;
     return value;
 }
-
-// Builds a track like the app would, minus wiring: the doc track, the instrument and each insert,
-// each with a uuid. `failOnBuild` makes that build (1-based) fail AFTER leaving a stray node behind,
-// breaking the host contract on purpose so the service's backstop is what restores the graph.
-class PlanFakeHost : public TimelineOpsHost {
-public:
-    PlanFakeHost(TimelineDoc& d, juce::AudioProcessorGraph& g)
-        : doc(d)
-        , graph(g) {}
-
-    std::optional<InstrumentTrackBuildResult>
-    addInstrumentTrack(const juce::String& name, const juce::String& type, bool,
-                       const std::vector<InstrumentTrackInsert>& inserts) override {
-        ++builds;
-        if (builds == failOnBuild) {
-            graph.addNode(AIStateMapper::createModule("LFO"));
-            return std::nullopt;
-        }
-        if (!doc.addTrack(TrackKind::Midi, name).isValid())
-            return std::nullopt;
-        InstrumentTrackBuildResult result;
-        result.instrumentUuid = add(type, {});
-        for (const auto& insert : inserts)
-            result.insertUuids.push_back(add(insert.type, insert.params));
-        return result;
-    }
-    bool recordBatch(const std::function<void()>& mutation) override {
-        ++batches;
-        return undo.recordGraphTimelineAndMacroChange(graph, doc, macros, mutation);
-    }
-    TimelineDoc* editableTimelineDoc() override { return &doc; }
-
-    TimelineDoc& doc;
-    juce::AudioProcessorGraph& graph;
-    AppUndoManager undo;
-    MacroSet macros;
-    int builds = 0, batches = 0, failOnBuild = 0;
-
-private:
-    juce::String add(const juce::String& type, const juce::var& params) {
-        auto processor = AIStateMapper::createModule(type);
-        if (auto* p = params.getDynamicObject())
-            AIStateMapper::applyUntrustedParams(processor.get(), p);
-        return AIStateMapper::ensureNodeUuid(graph.addNode(std::move(processor)).get());
-    }
-};
 
 // Records what sendCapabilityRequest / sendPrompt were handed.
 class PlanCapturingProvider : public AIProvider {
@@ -147,6 +100,9 @@ TEST_F(AIIntegrationServiceProjectEditTest, PreviewDescribesEveryPhaseAndMutates
     EXPECT_TRUE(preview.previewText.contains("1 modulation")) << preview.previewText;
     EXPECT_TRUE(preview.previewText.contains("Adds instrument track \"Bass\"")) << preview.previewText;
     EXPECT_TRUE(preview.previewText.contains("writes 2 points to Filter cutoff")) << preview.previewText;
+    ASSERT_EQ(preview.previewLines.size(), 2) << "one line for the patch phase, one for the timeline ops";
+    EXPECT_TRUE(preview.previewLines[0].startsWith("Merges a patch")) << preview.previewLines[0];
+    EXPECT_TRUE(preview.previewLines[1].startsWith("Adds instrument track")) << preview.previewLines[1];
 
     EXPECT_EQ(graphDump(), graphBefore);
     EXPECT_EQ(docDump(), docBefore);
@@ -266,6 +222,18 @@ TEST_F(AIIntegrationServiceProjectEditTest, ApplyWithoutAnEditableDocIsRefused) 
     const auto applied = service->applyProjectEdit(parse(kPlan));
     EXPECT_FALSE(applied.ok);
     EXPECT_EQ(applied.message, "Edit plans cannot be applied from here.");
+}
+
+// A plugin build or a test has no host; a plan that is only a patch still applies, through
+// applyPatch in the mode the preview chose.
+TEST_F(AIIntegrationServiceProjectEditTest, ApplyWithoutAHostStillAppliesAPatchOnlyPlan) {
+    service->setTimelineOpsHost(nullptr);
+    const auto docBefore = docDump();
+    const auto applied = service->applyProjectEdit(parse(kMinimalValidPatch));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_FALSE(applied.merge);
+    EXPECT_EQ(graph->getNumNodes(), 2);
+    EXPECT_EQ(docDump(), docBefore) << "no timeline write";
 }
 
 // -- asking for a plan ---------------------------------------------------------------------------

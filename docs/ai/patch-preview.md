@@ -1,34 +1,31 @@
 # Patch Preview
 
-What a proposed patch's card shows before the user presses Apply or Merge, and why it is computed
+What the chat card shows for a proposed patch before the user presses Apply, and why it is computed
 the way it is.
 
 ## The card
 
-`AIChatComponent::PatchCard`
-(`Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp`) shows a human-readable
-preview as its **default** view, computed once in `attachPatchPreview()` when each message is
-created, not on every `updateChatDisplay()` re-render. What it shows depends on the patch's mode:
+A proposed patch is shown on the chat's one card, `AIChatComponent::EditPlanCard`
+(`Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.cpp`), whatever else the answer
+carries ([chat component](chat-component.md#one-answer-one-card)). Its preview is computed once, when
+the message is created, by `AIIntegrationService::previewProjectEdit`, which runs the patch phase on a
+scratch copy and words it as one line (`describePatchPhase`): a merge as what it changes ("Merges a
+patch that adds 1 module, changes 2 parameters"), from `computeDiff`; a replace as what the new patch
+contains ("Replaces the patch with 3 modules and 2 connections"), from `summarizePatch`.
 
-- **Merge mode** (`isMerge == true`, stable node identity): a change list — "+ Reverb",
-  "Filter: Cutoff 400 -> 800", "+ mod LFO -> Filter Cutoff" — grouped by `PatchChange::Kind` (adds,
-  then param changes, then connection changes, then modulation changes) so adds, removes and changes
-  are not interleaved, and colour-coded: green for node and connection adds, red/orange for removes,
-  amber for param changes and modulation adds/removes. A modulation change is reported as a matched
-  remove-plus-add pair (see `PatchDiff.h`), so it takes a neutral colour rather than fighting for
-  green or red. Rendered into the `TextEditor` line by line via `insertTextAtCaret()` with
-  `textColourId` set per segment, since `setText()` cannot colour per line.
-- **Replace mode** (`isMerge == false`): a plain positive summary of the *new* patch's contents —
-  "New patch: 12 modules" followed by each node's type name, with no `+`/`-` prefix because nothing
-  is being added relative to something the user cares about — plus a connection count if any.
-  **Never a diff against the old graph**; see below.
+The card's **Show details** panel holds the per-change list behind that line, from the same two
+snapshots (`ProjectEditResult::patchBefore`/`patchAfter`):
 
-Raw JSON stays available behind a secondary "View JSON" toggle, pretty-printed
-(`juce::JSON::toString(parsed, allOnOneLine=false)`) so it is not one unbroken line in a narrow chat
-column, falling back to the raw string if it fails to parse. The card's height is derived from the
-preview's line count, capped, with the toggle as the escape hatch for a very long preview; this is a
-count of *logical* lines, not rendered ones, so a long `ParamChanged` line that wraps in a narrow
-column can run short on visible space before the `TextEditor`'s own scrolling engages.
+- **Merge mode** (stable node identity): one line per change, "+ Reverb", "Filter: Cutoff 400 ->
+  800", "+ mod LFO -> Filter Cutoff", grouped by `PatchChange::Kind` (`groupChangesByKind`) so adds,
+  removes and changes are not interleaved.
+- **Replace mode**: "New patch: 12 modules" followed by each node's type name, plus a connection
+  count if any. **Never a diff against the old graph**; see below.
+
+Below the list the panel shows the plan's JSON, pretty-printed (`juce::JSON::toString(parsed,
+allOnOneLine=false)`), falling back to the raw string if it fails to parse. A patch the scratch
+apply rejects never reaches a diff: the card says "This plan was rejected and was not applied:
+<reason>" and offers no Apply.
 
 ## The diff comes from two graph snapshots, never the raw patch JSON
 
@@ -64,9 +61,10 @@ snapshots without touching the live graph:
   Apply attempt still on screen. Guarded by
   `PatchDiffIntegrationTest.ComputePatchPreviewDoesNotClobberLastPatchError`.
 - It returns `false`, with `before` and `after` still populated, if the candidate patch fails
-  validation or application on the scratch graph. `PatchCard` then shows "Preview unavailable"
-  rather than a diff, since `after` would otherwise reflect the unapplied, pre-patch state —
-  misleadingly "everything removed" for a failed replace-mode patch, whose scratch starts empty.
+  validation or application on the scratch graph; a caller must then show no diff, since `after`
+  would otherwise reflect the unapplied, pre-patch state — misleadingly "everything removed" for a
+  failed replace-mode patch, whose scratch starts empty. (The chat card goes through
+  `previewProjectEdit`, which refuses such a plan with the reason instead.)
 
 ## `PatchDiff`
 
@@ -87,7 +85,7 @@ snapshots without touching the live graph:
   over a replace-mode pair reports the entire prior graph removed and the entire new patch added,
   even where a node is conceptually unchanged. That is technically correct — every processor really
   is destroyed and recreated on replace — but useless to someone reviewing a brand-new patch, which
-  is why `PatchCard` calls `summarizePatch()` for replace mode instead. `computeDiff` itself stays
+  is why the edit-plan card uses `summarizePatch()` for replace mode instead. `computeDiff` itself stays
   mode-agnostic and correct for any snapshot pair; this is a note about how the UI uses it, not a
   limitation of the function.
 - **`graphToJSON` already collapses attenuverter chains into a `modulations` array**, scanning

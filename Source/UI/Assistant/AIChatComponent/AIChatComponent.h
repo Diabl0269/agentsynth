@@ -55,49 +55,28 @@ public:
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
-    /**
-     * @brief Syncs the Patch/Arrange mode selector's visibility to its gate: areTimelineToolsEnabled()
-     *        (unconditionally on now that the timeline is GA) AND a live timeline context.
-     *
-     * Deliberately PROVIDER-AGNOSTIC (the local/remote parity rule): arrange mode works on both
-     * transports (see AIIntegrationService::sendArrangeMessage), so the provider never gates the
-     * UI. Called from refreshModels() (a convenient known resync point) — the timeline context is
-     * installed after refreshModels() runs at startup, so MainComponent re-calls this once both are
-     * in place, the same ownership shape as the refreshModels() re-call documented in CLAUDE.md.
-     * Hiding the selector also resets it to Patch: an invisible control must not keep steering
-     * requests.
-     */
-    void refreshModeControls();
-
-    // Testing hooks for the mode selector — mirror simulateCancelClick()'s "drive the real
-    // member synchronously" convention.
-    bool isModeSelectorVisibleForTesting() const { return modeSelector.isVisible(); }
-    void setArrangeModeForTesting(bool arrange) {
-        modeSelector.setSelectedId(arrange ? kModeSelectorArrangeId : kModeSelectorPatchId, juce::dontSendNotification);
-    }
-
-    // Testing hooks: the timeline half of the most recent assistant message ("" when it carries
-    // none). Json is empty-but-preview-populated for an envelope that failed validation — the
-    // rejection is shown, with nothing appliable behind it.
-    juce::String getLastTimelineOpsJsonForTesting() const {
+    // Testing hooks: the edit-plan card of the most recent assistant message. The preview is its
+    // body text, one line per phase, or the reason a rejected plan cannot apply ("" with no plan);
+    // the JSON is the plan the card's Apply hands to AIIntegrationService::applyProjectEdit.
+    juce::String getLastPlanPreviewForTesting() const {
         for (auto it = messages.rbegin(); it != messages.rend(); ++it)
             if (it->role == "assistant")
-                return it->timelineOpsJson;
+                return it->planPreviewLines.joinIntoString("\n");
         return {};
     }
-    juce::String getLastTimelineOpsPreviewForTesting() const {
+    juce::String getLastPlanJsonForTesting() const {
         for (auto it = messages.rbegin(); it != messages.rend(); ++it)
             if (it->role == "assistant")
-                return it->timelineOpsPreview;
+                return it->planJson;
         return {};
     }
 
-    // Decides whether an outgoing message should carry the live patch JSON + structured-output
-    // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
-    // can be unit-tested directly: any message naming a real module/effect type, or using a
-    // generic edit-intent verb, is treated as patch-related. `moduleTypeNames` is normally
-    // AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a
-    // synthetic registry without touching the real module factory.
+    // Decides whether an outgoing message asks for an edit plan (structured output: the live patch,
+    // and with a timeline the arrangement, plus the schema) rather than a free-text answer. Pure and
+    // free-standing (no UI state) so it can be unit-tested directly: any message naming a real
+    // module/effect type, or using a generic edit or arrangement word, is treated as an edit request. `moduleTypeNames`
+    // is normally AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a synthetic
+    // registry without touching the real module factory.
     static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
 
     /**
@@ -159,8 +138,8 @@ public:
     // a juce::GlyphArrangement (the same wrapping primitive drawFittedText()/drawLabel() use
     // under the hood), rounded up so a bounding box that lands exactly on a line boundary still
     // gets the extra line rather than one short. Never less than one line's height. Shared by
-    // every element in this panel whose text length varies at runtime — PatchCard's diff/status
-    // box, hostedModeNotice, downgradeStripLabel — so none of them estimate their own height from
+    // every element in this panel whose text length varies at runtime — EditPlanCard's preview
+    // text, hostedModeNotice, downgradeStripLabel — so none of them estimate their own height from
     // a fixed single-line constant or a naive line count (the bug that clipped the "Preview
     // unavailable..." status line and truncated the downgrade notice). Public + static, mirroring
     // formatResponseTime()'s testable-helper precedent above.
@@ -247,9 +226,8 @@ private:
     void handleUserCancel();
 
     class MessageBubble;
-    class PatchCard;
-    // Sibling of PatchCard — same card conventions, one payload type over.
-    class TimelineCard;
+    // The one card an answer that changes the project renders (AIChatComponentEditPlanCard.h).
+    class EditPlanCard;
 
     // ---- Spinner component -----------------------------------------------
     // A tiny 8×8 dot that pulses (alpha 0.3→1.0→0.3) via AnimationDriver.
@@ -350,20 +328,6 @@ private:
     juce::TextButton historyButton; // opens the history list/restore/clear popup
     juce::ComboBox modelPicker;
 
-    // Patch/Arrange request routing — see refreshModeControls() for the visibility gates and
-    // arrangeModeActive() for how sendButtonClicked() consumes it. Item ids, not indices, so a
-    // future third mode can't silently renumber these two.
-    juce::ComboBox modeSelector;
-    static constexpr int kModeSelectorPatchId = 1;
-    static constexpr int kModeSelectorArrangeId = 2;
-
-    // True when an outgoing send should route to timeline.generate (arrange mode): the selector
-    // is VISIBLE (both gates hold) and set to Arrange. Visibility is part of the condition on
-    // purpose — a hidden selector's stale selection must never steer a request.
-    bool arrangeModeActive() const {
-        return modeSelector.isVisible() && modeSelector.getSelectedId() == kModeSelectorArrangeId;
-    }
-
     // Privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
     // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
     // bottom-chrome stack — see updateHostedModeNotice() and resized().
@@ -426,7 +390,10 @@ private:
     struct MessageData {
         juce::String role;
         juce::String text;
-        juce::String jsonPatch;
+        // The edit plan this answer carries, as JSON: a patch, a sibling "timelineOps" list, or both
+        // (AIIntegrationService::previewProjectEdit). Empty for a plain-text answer. Saved into
+        // history re-fenced as a ```json block, and recorded with a rating.
+        juce::String planJson;
         bool isExpanded = false;
         // True only for a live Quota-error response — renders an "Upgrade to Pro" button on
         // the bubble. Deliberately NOT reconstructed by the history-replay loop in the
@@ -434,61 +401,54 @@ private:
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
 
-        // The TIMELINE half of a suggestion, independent of jsonPatch — a response may carry
-        // a patch, a timelineOps envelope, or both, and each gets its own card and its own Apply.
-        // `timelineOpsJson` is the raw envelope, re-parsed on Apply; EMPTY when there is nothing
-        // appliable, including when the envelope arrived but was rejected by validation (the
-        // rejection is still shown, in timelineOpsPreview, rather than dropped). `timelineOpsPreview`
-        // is what the card displays: the validated summary, or the reason it was refused.
-        juce::String timelineOpsJson;
-        juce::String timelineOpsPreview;
-
         // Session-scoped UI rating state, same "not reconstructed on replay" precedent as
         // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
         PatchRatingUiState ratingState = PatchRatingUiState::None;
         juce::String ratingComment;
 
-        // Server-assigned id for this assistant/patch message, from AIResponse::messageId
+        // Server-assigned id for this assistant message, from AIResponse::messageId
         // (x-message-id header — Pro plan + persistence succeeded only). Only ever set for a live,
-        // same-session assistant message just returned by sendMessage() — NOT reconstructed by the
-        // history-replay loop, same "session-scoped" precedent as ratingState/showUpgradeAction
-        // above. A rating on a restored conversation therefore stays local-only; this is a
-        // deliberate scope limit (ratings on restored history are not synced), not a bug.
+        // same-session assistant message, NOT reconstructed by the history-replay loop, same
+        // "session-scoped" precedent as ratingState/showUpgradeAction above. A rating on a restored
+        // conversation therefore stays local-only; this is a deliberate scope limit, not a bug.
         juce::String serverMessageId;
 
-        // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
-        // created, not on every updateChatDisplay() re-render — see that method's doc comment.
-        // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
-        // the live graph changes while this message is still on screen.
-        //
-        // Only one of patchDiff/patchSummary is ever populated: merge-mode patches get patchDiff
-        // (synth::computeDiff() against the live graph, since a merge has stable node identity to
-        // diff against); replace-mode patches get patchSummary (synth::summarizePatch() of just
-        // the new patch's contents, since replace mode has no stable node identity to diff against
-        // — see PatchDiff.h). Both are empty when patchDiffAvailable is false.
-        bool patchIsMerge = false;
-        bool patchDiffAvailable = false;
-        std::vector<PatchChange> patchDiff;
-        PatchSummary patchSummary;
+        // The plan's preview, computed ONCE (attachPlanPreview()) when this message is created, not
+        // on every updateChatDisplay() re-render: a snapshot of what the plan would do to the
+        // project as it was then. planOk false means the engine refused it, and planPreviewLines
+        // then holds the one line saying why (the card offers no Apply). planDetails is the
+        // per-change list behind the card's details toggle (PatchDiff.h: a merge diffs, a replace
+        // summarises the new patch).
+        bool planOk = false;
+        juce::StringArray planPreviewLines;
+        juce::String planDetails;
 
         // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
-        // (history restore, patch-retry / apply-failure messages).
+        // (history restore, apply-failure messages).
         int responseMs = -1;
     };
     std::vector<MessageData> messages;
 
-    // Computes and caches data.patchIsMerge/patchDiff/patchDiffAvailable ONCE, at the point a
-    // message carrying a patch is created (every messages.push_back() site that can set
-    // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
-    // apply result, retry announcement) and would otherwise rebuild a scratch graph per
-    // patch-bearing message on every single one of those redraws. See
-    // docs/ai/patch-preview.md. Also more correct, not just faster: the diff is a snapshot of the
-    // graph at proposal time and must not silently change if the live graph is edited later
-    // (e.g. an earlier patch in the same conversation gets applied) while this message is still
-    // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
-    // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
-    // `aiService`, so it must be called after data is appended to `messages`.
-    void attachPatchPreview(MessageData& data);
+    // The answer to a sent message, on the message thread: one bubble, plus the edit-plan card when
+    // the answer carries a plan. `wantsPlan` says the request asked for structured output, so a
+    // response that is all JSON is read as a plan rather than shown as text.
+    void handleResponse(const AIProvider::AIResponse& response, bool wantsPlan);
+
+    // Previews `plan` (the parsed planJson) through AIIntegrationService::previewProjectEdit ONCE,
+    // when a message carrying a plan is created (a live answer or a history replay), and caches the
+    // card's text in data. NOT in updateChatDisplay(), which reruns on every redraw and would build a
+    // scratch graph and doc per plan each time. No-op when data.planJson is empty.
+    void attachPlanPreview(MessageData& data, const juce::var& plan);
+
+    // The card's Apply: AIIntegrationService::applyProjectEdit on the plan, once. A failure is
+    // reported as an assistant bubble, never swallowed.
+    void applyEditPlan(const juce::String& planJson);
+
+    // The edit plan a response carries, or a void var. A fenced ```json block is read first; with
+    // no fence, the whole response when `wholeResponseIsJson` (a structured request). A JSON object
+    // counts as a plan only when it carries a patch key or "timelineOps"; anything else stays text.
+    // `prose` receives what the bubble should say: the response minus the plan's block.
+    static juce::var extractEditPlan(const juce::String& response, bool wholeResponseIsJson, juce::String& prose);
 
     // This session's local conversation identity — minted lazily on the first successful
     // exchange (saveCurrentConversationLocally()), not at construction, so a session that never
@@ -527,7 +487,7 @@ private:
     void replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs);
 
     // Reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
-    // consume it back (text, plus a re-fenced ```json block when jsonPatch is non-empty).
+    // consume it back (text, plus a re-fenced ```json block when planJson is non-empty).
     static juce::String reconstructMessageContent(const MessageData& data);
 
     // Builds this session's LocalConversation snapshot from `messages` and writes it via
@@ -535,7 +495,7 @@ private:
     // once per successful exchange, right after the assistant turn is appended to `messages` (see
     // sendButtonClicked()) — deliberately NOT from AIIntegrationService::sendMessage()'s own
     // callback, which can run on a provider worker thread and doesn't have `messages` (the UI's
-    // own copy, split into text/jsonPatch) to hand.
+    // own copy, split into text/planJson) to hand.
     void saveCurrentConversationLocally();
 
     // First user message's text, trimmed/truncated — the title stored alongside a locally

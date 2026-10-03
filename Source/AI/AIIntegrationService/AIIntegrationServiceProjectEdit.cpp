@@ -69,6 +69,8 @@ ProjectEditResult toResult(const projectedit::RunResult& run) {
         sentences.add(run.opsPreview.substring(0, 1).toUpperCase() + run.opsPreview.substring(1));
     sentences.removeEmptyStrings();
     result.previewText = sentences.joinIntoString(". ") + ".";
+    for (const auto& sentence : sentences)
+        result.previewLines.add(sentence + ".");
     return result;
 }
 
@@ -127,7 +129,7 @@ ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root
 ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) {
     TimelineDoc* doc = timelineOpsHost != nullptr ? timelineOpsHost->editableTimelineDoc() : nullptr;
     if (doc == nullptr)
-        return rejected("Edit plans cannot be applied from here.");
+        return applyPatchOnlyPlan(root);
 
     const auto preview = previewProjectEdit(root);
     if (!preview.ok)
@@ -160,6 +162,22 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
     result.message = pushed ? "Applied the edit plan as one undo step."
                             : "The project already matched this edit plan, so nothing changed.";
     return result;
+}
+
+// No host means no timeline to write and no batch to record into (a plugin build, or a test without
+// a timeline). A plan with no timeline ops is then just a patch: preview it the same way, then hand
+// it to applyPatch() in the mode the preview settled on, which is one undo step on the service's own
+// undo manager. A plan that does carry ops is refused, as before.
+ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root) {
+    if (auto* ops = root.getProperty("timelineOps", {}).getArray(); ops != nullptr && !ops->isEmpty())
+        return rejected("Edit plans cannot be applied from here.");
+    auto preview = previewProjectEdit(root);
+    if (!preview.ok)
+        return preview;
+    if (!applyPatch(juce::JSON::toString(root), preview.merge))
+        return rejected(lastPatchError.isNotEmpty() ? lastPatchError : juce::String("The patch could not be applied."));
+    preview.message = "Applied the patch as one undo step.";
+    return preview;
 }
 
 // -- asking for one -----------------------------------------------------------------------------

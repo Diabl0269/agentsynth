@@ -48,9 +48,10 @@ the [patch preview](patch-preview.md).
    ([arrangement context](arrangement-context.md)) and an `## Automation targets` section
    ([timeline ops](timeline-ops.md#the-local-path)).
 4. The installed provider performs the request and delivers an `AIResponse`.
-5. The service extracts the JSON payload from the response, and routes each half to its own gate:
-   a patch through `validatePatch` and `applyJSONToGraph`, a `timelineOps` envelope through
-   `TimelineOps::validate`. Each half gets its own card and its own Apply button.
+5. The chat reads the JSON payload of the response as one [edit plan](timeline-ops.md#one-edit-plan)
+   (a patch, a sibling `timelineOps` list, or both) and previews it with `previewProjectEdit`: each
+   half still passes its own gate (`validatePatch`, `TimelineOps::validate`), and the answer gets
+   ONE card with ONE Apply ([chat component](chat-component.md#one-answer-one-card)).
 6. Applying notifies listeners, which rebuild the editor's module components.
 
 Two more ways to ask, each one intent over two transports: `sendArrangeMessage` (hosted
@@ -61,8 +62,12 @@ body plus `currentPatch`, the same stripped graph JSON the patch path sends, as 
 omitted when the graph is empty. On a local provider the same fields are composed into the message
 in `project.generate`'s own section order (the patch or "Current patch is empty.", the arrangement,
 the tracks, the targets, the prompt), with `getPatchSchemaWithTimelineOps()` as the response
-contract. A plan is checked and applied through `previewProjectEdit` / `applyProjectEdit`; nothing in
-the chat panel calls them yet.
+contract. A plan is checked and applied through `previewProjectEdit` / `applyProjectEdit`; the chat
+sends every edit request through `sendProjectMessage` once a timeline is wired in, and no longer
+calls `sendArrangeMessage` (it stays for the service tests and harnesses). With no host installed
+(a plugin build or a test), `applyProjectEdit` still applies a plan that carries no timeline ops:
+its patch goes through `applyPatch` in the mode the preview chose, one undo step on the service's
+undo manager.
 
 **Why the patch text is wrapped client-side even for the hosted provider.** The hosted
 `patch.generate` capability performs the *exact same* wrapping server-side, from a separate

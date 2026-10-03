@@ -1,18 +1,66 @@
 # Chat Component
 
 `AIChatComponent` (`Source/UI/Assistant/AIChatComponent/`) is the chat UI for AI-assisted patching.
-It wires user prompts to `AIIntegrationService` and displays the conversation history with optional
-JSON patch previews.
+It wires user prompts to `AIIntegrationService` and displays the conversation, where an answer that
+changes the project carries one edit-plan card.
 
 The class is split by concern across that directory:
 
 | Unit | Concern |
 |------|---------|
 | `AIChatComponent.cpp` | Construction and destruction, the cancel/timeout watchdog, painting |
-| `AIChatComponentMessageList.cpp` | Message bubbles, patch and timeline cards, the `resized()` layout loop |
-| `AIChatComponentSending.cpp` | Sending and streaming a request, attaching its patch-diff preview |
+| `AIChatComponentMessageList.cpp` | Message bubbles, the `resized()` layout loop |
+| `AIChatComponentEditPlanCard.h/.cpp` | The edit-plan card and what its Apply does |
+| `AIChatComponentSending.cpp` | Routing a request, reading its answer, previewing the plan once |
 | `AIChatComponentProvider.cpp` | Model and provider selection |
 | `AIChatComponentHistory.cpp` | Local and cloud conversation history, the upsell and downgrade strips |
+
+## One answer, one card
+
+There is one input and no mode selector. `sendButtonClicked()` routes by what the message asks for:
+
+- With a timeline wired in (`AIIntegrationService::hasTimelineContext()`), an edit request goes
+  through `sendProjectMessage()`: hosted `project.generate`, or the local model with the combined
+  schema (`getPatchSchemaWithTimelineOps()`). An edit request is what `shouldUseStructuredOutput()`
+  classifies as one (a module name, or an edit or arrangement word such as add, track, automate,
+  modulate, notes) and, on a hosted provider, every message, since the hosted service has no
+  free-text chat.
+- A local conversational question goes through `sendMessage(text, cb, false)` and gets text back.
+- With no timeline (tests, a host without one) the request is the patch request it always was:
+  `sendMessage(text, cb, useStructuredOutput)`.
+
+Every route shares the waiting state: the spinner, Cancel, the "AI is thinking..." line and the
+timeout watchdog start before the request goes out. A hosted plan takes 20 to 30 seconds (27 s
+measured on gpt-oss-20b), well inside the 4-minute default.
+
+The answer is read once (`handleResponse()` -> `extractEditPlan()`): a fenced ```json block, or the
+whole response when the request was structured. A JSON object is a plan only when it carries a patch
+key (`nodes`, `connections`, `remove`, `modulations`, `removeModulations`) or `timelineOps`; anything
+else, including JSON that is not a plan, is shown as text. A plan is kept as `MessageData::planJson`
+and previewed ONCE by `attachPlanPreview()` through `previewProjectEdit()`, which caches the card's
+lines (`ProjectEditResult::previewLines`: the patch phase, then the timeline ops) and the per-change
+details. History restore reads saved turns the same way, so an old patch-only answer comes back as
+the same card (the engine treats it as a plan with no ops).
+
+`EditPlanCard` (`AIChatComponentEditPlanCard.h/.cpp`), from the top:
+
+- the title **Edit plan** (`accent2`; `warning` when refused);
+- the preview, one line per phase, measured with `computeWrappedTextHeight()` so it never clips;
+- a row with **Show details** on the left and **Apply** on the right. Apply calls
+  `applyEditPlan()` -> `applyProjectEdit()` once: the whole plan as one undo step. A failure is
+  reported as an assistant bubble, never swallowed, and there is no retry loop (the plan was checked
+  against the live project when it arrived). A refused plan's card reads "This plan was rejected and
+  was not applied: <reason>" and has no Apply;
+- the thumbs rating, with the comment row once a rating is picked (recorded with the plan's JSON in
+  `PatchFeedbackStore`, as the patch card's was);
+- the details panel when open: the per-change list (`computeDiff` grouped for a merge,
+  `summarizePatch` for a replace) and the plan's JSON.
+
+The card has no entrance animation, like the patch and timeline cards it replaces:
+`updateChatDisplay()` rebuilds every bubble on each redraw, so a tween would replay on every
+rating or apply.
+
+Tests: `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp`.
 
 ## Response timing marker
 
@@ -56,11 +104,10 @@ via `dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())`, never raw `juce::Colours
 `AIChatComponent::computeWrappedTextHeight(font, text, width)` is the **required pattern** for any
 chat-panel element whose text length varies at runtime. It measures the actual wrapped height via
 `juce::GlyphArrangement` rather than estimating from a fixed line count or a fixed single-line
-height, which is what lets a long wrapped line — a "Preview unavailable" status, a long
+height, which is what lets a long wrapped line — a refused plan's reason, a long
 `hostedModeNotice` or `downgradeStripLabel` — get clipped.
-`PatchCard::getRequiredHeight(width)` and `TimelineCard::getRequiredHeight(width)` take the render
-width as a parameter for the same reason: the height calculation and the actual render width must
-always agree.
+`EditPlanCard::getRequiredHeight(width)` takes the render width as a parameter for the same reason:
+the height calculation and the actual render width must always agree.
 
 ## Debug logger registration
 
@@ -101,11 +148,18 @@ Appends to the debug console are coalesced and the console is length-bounded. Ho
 The message list is a `ChatMessageViewport` (a `juce::Viewport`): a Tab stop with the accent focus
 ring that scrolls with the arrow, Page and Home/End keys, exposed as a **list** titled "Chat messages".
 Each `MessageBubble` is a **list item** whose title is the whole message, "You: ..." or "Assistant: ..."
-with a note when it carries a patch or timeline changes to apply (`ChatMessageAccessibilityText.h`);
+with a note when it carries an edit plan that can be applied (`ChatMessageAccessibilityText.h`);
 the label inside it is hidden from the screen reader so the text is not read twice, while a bubble's
-cards and buttons stay separate controls. The input box, Send, Cancel, New Chat, History, model and
-mode pickers all carry a screen-reader name and a tooltip, checked by the `AIChat` surface of the
-accessibility coverage test ([`docs/development/accessibility.md`](../development/accessibility.md)).
+card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
+preview label carries the text as its description. Its Apply button is a Tab stop with the accent
+focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
+step)"; Show details, the thumbs and the comment field are named and tipped too.
+
+Tab order is the input, Send (or Cancel, in the same slot), the message list, then the cards inside
+it in message order (`setExplicitFocusOrder` 1 to 4 on the input row and the list; the rest of the
+chrome follows by position). The input box, Send, Cancel, New Chat, History and the model picker all
+carry a screen-reader name and a tooltip, checked by the `AIChat` surface of the accessibility
+coverage test ([`docs/development/accessibility.md`](../development/accessibility.md)).
 
 ## Panel visibility persistence
 
@@ -151,8 +205,7 @@ and the picker is left showing stale and fresh entries together for the duration
 Locked by `AIChatComponentTest.RefreshModelsClearsStaleItemsBeforeSecondFetchResolves`.
 
 `refreshModels()` is also the resync point for
-[the hosted-mode privacy notice](providers.md#hosted-mode-disclosure) and for the Patch/Arrange
-selector's gate.
+[the hosted-mode privacy notice](providers.md#hosted-mode-disclosure).
 
 ## Auth token re-push contract
 

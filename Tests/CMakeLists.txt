@@ -290,7 +290,7 @@ add_executable(Tests
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
-    UI/Assistant/AIChatComponent/AIChatComponentArrangeTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp
     UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp

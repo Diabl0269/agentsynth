@@ -205,7 +205,7 @@ private:
 };
 
 // Returns an assistant response containing a single fenced ```json patch, so tests can exercise
-// AIChatComponent's PatchCard (and its thumbs feedback) without a real provider.
+// AIChatComponent's edit-plan card (and its thumbs feedback) without a real provider.
 class MockPatchProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockPatchProvider"; }
@@ -239,10 +239,9 @@ private:
 
 // A fenced ```json block that PARSES fine but names a module type that doesn't exist —
 // AIStateMapper::applyJSONToGraph() (untrusted) rejects it, so AIIntegrationService::
-// computePatchPreview() reports diffAvailable=false and PatchCard falls back to its
-// "Preview unavailable - this patch may be rejected when applied." status line. Used to
-// reproduce the bug where that status line's real (wrapped) height was estimated from a fixed
-// line count rather than measured, and got clipped inside diffDisplay.
+// previewProjectEdit() refuses the plan and the edit-plan card shows the reason instead of an
+// Apply. Used to reproduce the bug where a status line's real (wrapped) height was estimated from
+// a fixed line count rather than measured, and got clipped.
 class MockInvalidPatchProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockInvalidPatchProvider"; }
@@ -309,7 +308,7 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// Like MockPatchProvider (a single fenced ```json patch, so PatchCard/thumbs render), but
+// Like MockPatchProvider (a single fenced ```json patch, so the edit-plan card and thumbs render), but
 // the response also carries a fixed conversationId + messageId, mirroring a Pro-plan hosted
 // backend whose persistence succeeded — the one condition that makes the rating callback's
 // server-sync path fire at all (see MessageData::serverMessageId).

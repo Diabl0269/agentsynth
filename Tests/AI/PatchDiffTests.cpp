@@ -1,4 +1,4 @@
-// Unit coverage for Source/AI/PatchDiff.h: the human-readable diff the chat UI's PatchCard shows
+// Unit coverage for Source/AI/PatchDiff.h: the human-readable diff the chat UI's edit-plan card shows
 // as its default (pre-Apply) view. Two things matter structurally, both exercised below:
 //
 //  1. Node identity is the graphToJSON "uuid" field, not the integer "id" (merge-mode's scratch
@@ -244,7 +244,7 @@ TEST(PatchDiffTest, DescribeRendersHumanReadableLines) {
 }
 
 //==============================================================================
-// summarizePatch() — what replace-mode PatchCards render instead of a computeDiff() diff (see
+// summarizePatch() — what the edit-plan card shows for a replace-mode patch instead of a computeDiff() diff (see
 // PatchDiff.h's doc comment for why a replace-mode diff, while technically correct, isn't useful).
 
 TEST(PatchDiffTest, SummarizePatchListsNodeTypesInSnapshotOrderAndCountsConnections) {
@@ -298,7 +298,7 @@ TEST(PatchDiffTest, SummarizePatchOnEmptyGraphIsEmpty) {
 }
 
 //==============================================================================
-// groupChangesByKind() — used only for merge-mode PatchCard rendering; must not touch
+// groupChangesByKind() — used only for the edit-plan card's merge-mode details; must not touch
 // computeDiff()'s own output order (its tests assert on that directly).
 
 TEST(PatchDiffTest, GroupChangesByKindGroupsWithoutReordering) {

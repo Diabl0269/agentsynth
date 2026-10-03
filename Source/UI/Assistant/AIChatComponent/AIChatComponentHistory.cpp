@@ -62,27 +62,23 @@ void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::Strin
         if (role == "system")
             continue;
 
-        juce::String json;
-        juce::String cleanText = content;
-        int start = content.indexOf("```json");
-        if (start != -1) {
-            int end = content.indexOf(start + 7, "```");
-            if (end != -1) {
-                json = content.substring(start + 7, end).trim();
-                cleanText = content.substring(0, start) + content.substring(end + 3);
-            }
-        }
+        // The same reading a live answer gets: a plan becomes the card (an old patch-only answer is a
+        // plan with no timeline ops), anything else stays the bubble's text. The service's own
+        // history keeps a structured answer as bare JSON, so an assistant turn may be all JSON.
+        juce::String cleanText;
+        const juce::var plan = extractEditPlan(content, /*wholeResponseIsJson=*/role == "assistant", cleanText);
+        const juce::String planJson = plan.isVoid() ? juce::String() : juce::JSON::toString(plan);
         // showUpgradeAction deliberately left at its default false: a replayed turn never
         // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
-        messages.push_back({role, cleanText.trim(), json});
-        attachPatchPreview(messages.back());
+        messages.push_back({role, cleanText.trim(), planJson});
+        attachPlanPreview(messages.back(), plan);
     }
 }
 
 juce::String AIChatComponent::reconstructMessageContent(const MessageData& data) {
-    if (data.jsonPatch.isEmpty())
+    if (data.planJson.isEmpty())
         return data.text;
-    return data.text + "\n```json\n" + data.jsonPatch + "\n```";
+    return data.text + "\n```json\n" + data.planJson + "\n```";
 }
 
 juce::String AIChatComponent::deriveConversationTitle() const {
