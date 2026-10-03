@@ -50,8 +50,10 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         if (e.comp == nullptr || !e.comp->isVisible() || e.comp->getBounds().isEmpty() ||
             e.comp->isMouseButtonDown(true))
             continue;
-        const auto was = std::find_if(before.begin(), before.end(),
-                                      [&e](const Captured& c) { return c.comp.getComponent() == e.comp; });
+        // The same component, or (a restore that rebuilt every card) the card now standing for the same node.
+        const auto was = std::find_if(before.begin(), before.end(), [&e](const Captured& c) {
+            return c.comp.getComponent() == e.comp || (e.nodeUid != 0 && c.comp == nullptr && c.nodeUid == e.nodeUid);
+        });
         if (was == before.end() || was->bounds == e.comp->getBounds())
             continue;
         changed.push_back(&e);
