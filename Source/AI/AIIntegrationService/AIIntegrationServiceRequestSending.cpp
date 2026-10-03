@@ -1,4 +1,4 @@
-// Request building & sending: sendMessage/sendArrangeMessage and the content/body builders they
+// Request building & sending: sendMessage/sendProjectMessage and the content/body builders they
 // share, plus chat-history bookkeeping (trim/clear) that every send path feeds into.
 #include "AIIntegrationService.h"
 #include <algorithm>
@@ -39,7 +39,7 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
 
 // Every outgoing request needs the same success bookkeeping: append the assistant turn to
 // chatHistory (never for a cancelled request — see the comment inside) and capture/re-push a
-// Pro-plan conversation id. Shared by sendMessage() and sendArrangeMessage() so the two paths
+// Pro-plan conversation id. Shared by sendMessage() and sendProjectMessage() so the two paths
 // cannot drift on history or conversation-id behaviour.
 AIProvider::CompletionCallback AIIntegrationService::wrapCompletionForHistory(AIProvider::CompletionCallback callback) {
     auto weakThis = juce::WeakReference<AIIntegrationService>(this);
@@ -276,73 +276,6 @@ juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text
     body->setProperty("availableTracks", availableTracks);
 
     return juce::var(body.get());
-}
-
-// ONE intent, two transports — the local/remote parity rule: the transport difference is absorbed
-// HERE, never surfaced as a behaviour difference. Hosted provider: the `timeline.generate`
-// capability, with the structured request body from buildArrangeRequestBody(). Local provider:
-// sendPrompt() with the SAME fields composed into the outgoing message (buildArrangeAugmentedContent,
-// mirroring the server's own section layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as
-// the response contract. Both providers answer with the identical timelineOps envelope, so the
-// downstream extract -> validate -> card flow cannot tell them apart.
-//
-// No client-side retry on a validation rejection: the server runs its own bounded repair-retry
-// inside the capability, and for the local model the envelope-only grammar plays the same role —
-// an envelope that still fails TimelineOps::validate is surfaced to the user as the card's
-// rejection message. On a hosted provider without a capability endpoint (a test double), the
-// AIProvider::sendCapabilityRequest default delivers a typed Schema error.
-AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::String& text,
-                                                               AIProvider::CompletionCallback callback) {
-    // Same history contract as sendMessage(): the stored history keeps the user's original text;
-    // the structured request fields are ephemeral, built for the wire and never retained.
-    chatHistory.push_back({"user", text});
-    trimHistory();
-
-    if (!provider) {
-        if (callback) {
-            AIProvider::AIResponse response;
-            response.success = false;
-            response.error.kind = AIProvider::AIErrorKind::Schema; // no provider configured — client precondition
-            response.error.message = "Error: No AI provider selected.";
-            callback(response);
-        }
-        return {};
-    }
-
-    if (provider->isHosted())
-        return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
-                                               wrapCompletionForHistory(std::move(callback)));
-
-    // Same splice-into-the-request-copy shape as sendMessage(): chatHistory keeps the user's raw
-    // text; the composed arrange context exists only on the wire.
-    std::vector<AIProvider::Message> request = chatHistory;
-    if (!request.empty())
-        request.back().content = buildArrangeAugmentedContent(text);
-
-    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
-                                AIStateMapper::getTimelineOpsEnvelopeSchema());
-}
-
-juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::String& text) const {
-    // Composed from the SAME fields the hosted request sends (buildArrangeRequestBody), in the
-    // SAME section order the server's buildTimelineUserMessage uses (synth-platform
-    // timeline-generate/capability.ts: arrangement context when non-empty, then tracks, then
-    // targets, then the prompt) — one source of truth for what an arrange request tells the
-    // model, however it travels. The one addition is the trailing instruction: the server swaps
-    // in a dedicated arrange system prompt, which a mid-conversation local request cannot do, so
-    // that steering rides in the message instead (the envelope-only schema enforces the shape
-    // regardless; the line is for answer quality, not for safety).
-    const juce::var body = buildArrangeRequestBody(text);
-
-    juce::String content;
-    const juce::String arrangement = body["arrangementContext"].toString();
-    if (arrangement.trim().isNotEmpty())
-        content << "Arrangement context:\n" << arrangement << "\n\n";
-    content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
-    content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
-    content << text << "\n\n";
-    content << "Respond ONLY with a JSON object containing a \"timelineOps\" array. No patch, no prose.";
-    return content;
 }
 
 // Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs, removing

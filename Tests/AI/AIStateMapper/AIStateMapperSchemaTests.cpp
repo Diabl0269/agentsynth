@@ -47,8 +47,7 @@ TEST(AIStateMapperTest, TimelineOpsTrackFieldIsNotOpenSchema) {
 // addInstrumentTrack's fields must be expressible through a local grammar (a closed item schema
 // would forbid them outright), each with a concrete type -- never `{}`, never anyOf/oneOf.
 TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
-    for (const auto& schema : {synth::AIStateMapper::getPatchSchemaWithTimelineOps(),
-                               synth::AIStateMapper::getTimelineOpsEnvelopeSchema()}) {
+    for (const auto& schema : {synth::AIStateMapper::getPatchSchemaWithTimelineOps()}) {
         auto* rootProperties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
         ASSERT_NE(rootProperties, nullptr);
         auto* opItems =

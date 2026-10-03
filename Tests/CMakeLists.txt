@@ -290,7 +290,7 @@ add_executable(Tests
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
-    UI/Assistant/AIChatComponent/AIChatComponentArrangeTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp
     UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
@@ -300,7 +300,6 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServicePatchApplyTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceSystemPromptTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceTimelineToolsTests.cpp
-    AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp

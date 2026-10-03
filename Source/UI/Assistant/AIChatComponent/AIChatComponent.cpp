@@ -70,7 +70,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
             handleUserCancel();
     };
     inputField.addListener(this);
-    inputField.setTextToShowWhenEmpty("Ask AI to create or modify a patch...", juce::Colours::grey);
+    inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", juce::Colours::grey);
     inputField.setTitle("Message to the AI assistant");
     inputField.setTooltip("Type a message and press Enter or Send");
 
@@ -86,6 +86,14 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     cancelButton.setTooltip("Cancel the in-flight AI request");
     cancelButton.setVisible(false);
     addChildComponent(cancelButton);
+
+    // Tab order: the input, Send (or Cancel, in the same slot), then the message list and the
+    // cards inside it in message order; the rest of the chrome follows by position. Explicit
+    // orders sort ahead of position, so the input row comes first although it sits at the bottom.
+    inputField.setExplicitFocusOrder(1);
+    sendButton.setExplicitFocusOrder(2);
+    cancelButton.setExplicitFocusOrder(3);
+    viewport.setExplicitFocusOrder(4);
 
     // Spinner dot — 8×8 ellipse, hidden until waiting.
     spinnerDot.setSize(8, 8);
@@ -127,20 +135,6 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         appProperties.getUserSettings()->setValue("aiModel", model);
         appProperties.getUserSettings()->saveIfNeeded();
     };
-
-    // Patch/Arrange mode selector — an EXPLICIT routing control (never a keyword heuristic:
-    // shouldUseStructuredOutput() stays a patch-path concern), provider-agnostic per the
-    // local/remote parity rule. Starts invisible; visible only while the timeline feature is
-    // active — see refreshModeControls(), called from refreshModels() below and re-called by
-    // MainComponent when the timeline preference toggles. Selection is session-scoped,
-    // defaulting to Patch.
-    addChildComponent(modeSelector);
-    modeSelector.addItem("Patch", kModeSelectorPatchId);
-    modeSelector.addItem("Arrange", kModeSelectorArrangeId);
-    modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
-    modeSelector.setTitle("Request mode");
-    modeSelector.setTooltip("Patch: create or modify the synth patch. "
-                            "Arrange: add tracks, notes and automation on the timeline.");
 
     // Starts invisible (same contract as accountRow/planBadge) — updateHostedModeNotice(), called
     // from refreshModels() below, sets its real visibility once a provider is known.

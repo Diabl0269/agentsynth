@@ -92,35 +92,32 @@ quota, trial and capacity enforcement byte-identical across capabilities. Locked
 final JSON string on the *enqueuing* thread (`Request::capabilityBodyJson`), so no ref-counted
 `juce::var` ever crosses to the worker.
 
-### Arrange mode: one intent, two transports
+### One plan, two transports
 
-`AIChatComponent` shows a Patch/Arrange selector in the model row while its gate is satisfied:
-`areTimelineToolsEnabled()` plus a live `setTimelineContext()`. The gate is deliberately
-**provider-agnostic** — arrange mode works on both transports, so the provider never gates the UI.
-Routing is the selector's call **alone, never a keyword heuristic**; `shouldUseStructuredOutput()`
-stays a patch-path concern.
+The chat has one input and no mode selector. With a timeline wired in, every edit request goes
+through `AIIntegrationService::sendProjectMessage()`, which asks for one
+[edit plan](timeline-ops.md#one-edit-plan) (a patch plus a sibling `timelineOps` list, either side
+optional) and absorbs the transport difference so it is never a behaviour difference:
 
-The selector's gate re-syncs at
-[`refreshModels()`](chat-component.md#model-discovery-ordering-contract) and at
-`AIChatComponent::refreshModeControls()`, called by `MainComponent::initialiseCommon` once the
-timeline context is installed — the service has no listener mechanism for that, so the owner that
-installs it re-syncs the selector. Hiding the selector resets it to Patch: an invisible control must
-not keep steering requests.
-
-An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which absorbs the
-transport difference so it is never a behaviour difference:
-
-- **Hosted provider** — `sendCapabilityRequest("timeline.generate", ...)` with the structured input
-  body below.
+- **Hosted provider** — `sendCapabilityRequest("project.generate", buildProjectRequestBody(text))`:
+  the `timeline.generate` fields below plus `currentPatch`, the same stripped graph JSON the patch
+  path sends, as an object and omitted when the graph is empty. The hosted service has no free-text
+  chat, so on a hosted provider every message is an edit request.
 - **Local provider** — `sendPrompt()` with the SAME fields composed into the outgoing message
-  (`buildArrangeAugmentedContent()`, section for section the way the server composes them:
-  arrangement context when non-empty, then tracks, then targets, then the prompt, plus one trailing
-  steering line standing in for the dedicated arrange system prompt the server swaps in and a
-  mid-conversation local request cannot), and `AIStateMapper::getTimelineOpsEnvelopeSchema()` as the
-  response contract: an envelope-ONLY grammar sharing the ops item schema with
-  `getPatchSchemaWithTimelineOps` (minus its edit-plan-only `nodeId`), so the two cannot drift, with `timelineOps` **required** — an
-  arrange answer with no ops is not an answer. The history splice matches `sendMessage()`:
-  `chatHistory` keeps the raw user text, and the composed context exists only on the wire.
+  (`buildProjectAugmentedContent()`, in `project.generate`'s own section order: the patch or
+  "Current patch is empty.", the arrangement when non-empty, the tracks, the targets, the prompt,
+  plus one trailing steering line standing in for the dedicated system prompt the server swaps in),
+  and `AIStateMapper::getPatchSchemaWithTimelineOps()` as the response contract. A local message the
+  chat classifies as conversational (`shouldUseStructuredOutput()` false) goes through
+  `sendMessage()` instead and gets text back.
+
+The history splice matches `sendMessage()`: `chatHistory` keeps the raw user text, and the composed
+context exists only on the wire. Without a timeline (tests, a host without one) the chat keeps the
+plain patch request (`sendMessage()`), and its answer is read the same way.
+
+`RemoteProvider` still accepts any capability name, `timeline.generate` included (the hosted server
+offers it), but the app no longer sends it: the arrange-only request path was removed, and
+`buildArrangeRequestBody()` is the base of the project body.
 
 The structured input body is `buildArrangeRequestBody()`, public so tests reproduce the real request:
 
@@ -142,17 +139,17 @@ The structured input body is `buildArrangeRequestBody()`, public so tests reprod
 History and conversation-id bookkeeping are shared with `sendMessage()` via
 `wrapCompletionForHistory()`, one wrapper, so the two send paths cannot drift.
 
-**The response re-enters the existing seam unchanged.** `timeline.generate` answers
-`{"data": {"timelineOps": [...]}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content`
-exactly as for a patch, and the [timeline ops](timeline-ops.md) flow —
-`extractTimelineOps()`, `TimelineOps::validate`, the `TimelineCard` preview, the user's Apply —
-consumes it with **no remote-specific branch**. Arrange mode adds a second way to *ask*, never a
-second way to *apply*; both doors' validators are untouched and
-[the two-door model](timeline-safety.md#the-two-door-model) stands.
+**The response re-enters the existing seam unchanged.** `project.generate` answers
+`{"data": {...plan...}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content` exactly as
+for a patch, and the chat reads it the way it reads a local answer: the plan goes to
+`previewProjectEdit()`, ONE card shows the preview, and the user's single Apply runs
+`applyProjectEdit()` ([chat component](chat-component.md#one-answer-one-card)), with **no
+remote-specific branch**. A new way to *ask*, never a second way to *apply*; both doors' validators
+are untouched and [the two-door model](timeline-safety.md#the-two-door-model) stands.
 
-A response that fails `TimelineOps::validate` shows the rejection in the card with no Apply button,
-and there is **no client retry loop**: the server runs its own bounded repair-retry inside the
-capability, so a rejection here is information for the user, not a trigger for another round trip.
+A plan the engine refuses shows the reason in the card with no Apply button, and there is **no
+client retry loop**: the server runs its own bounded repair-retry inside the capability, so a
+rejection here is information for the user, not a trigger for another round trip.
 
 **Why the client never calls `automation.generate`.** It is a strict subset of `timeline.generate`
 in both directions: its input schema is what the timeline-generate input schema extends (minus
@@ -166,12 +163,10 @@ worth it: `sendCapabilityRequest("automation.generate", ...)` with the same body
 
 Tests: `Tests/AI/RemoteProvider/RemoteProviderCapabilityTests.cpp` (capability URL, body, headers,
 fail-fast validation, entitlement-error pass-through, envelope re-serialization),
-`Tests/AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp` (request-body shape, the
-64-target cap, empty-timeline explicitness, the shared history and conversation-id contract, the
-local transport's composed message plus envelope-only schema plus raw-text history, typed
-no-provider and hosted-without-capability failures), and `Tests/AIChatComponentTests.cpp`
-(provider-agnostic selector gating, explicit routing on both transports, and the card flow for a
-validated and a rejected canned envelope).
+`Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (both `sendProjectMessage`
+request shapes, the structured body, the 64-target cap, empty-timeline explicitness), and
+`Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp` (the chat's routing on both
+transports and the one-card flow).
 
 ## Transport seam and platform support
 

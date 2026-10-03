@@ -1,6 +1,6 @@
 // AIStateMapper — AI-facing schema generation.
 //
-// getPatchSchema/getPatchSchemaWithTimelineOps/getTimelineOpsEnvelopeSchema build the structured-
+// getPatchSchema/getPatchSchemaWithTimelineOps build the structured-
 // output contracts providers are constrained to, generated from the module factory itself so the
 // schema can't silently drift from what createModule actually accepts. The class itself is
 // declared in AIStateMapper.h.
@@ -123,11 +123,9 @@ juce::var AIStateMapper::getPatchSchema() {
 }
 
 namespace {
-// One permissive op shape, shared by BOTH structured-output contracts that can carry ops
-// (getPatchSchemaWithTimelineOps and getTimelineOpsEnvelopeSchema) so the grammar cannot drift
-// between them — this is a grammar, not a validator; TimelineOps::validate is still the real
-// gate. Field names/types mirror TimelineOps.cpp's readers exactly. "track" is `{"type":
-// "string"}`, not `{}` ("anything goes"): an empty-schema subschema is a confirmed Ollama
+// One permissive op shape, used by getPatchSchemaWithTimelineOps — this is a grammar, not a
+// validator; TimelineOps::validate is still the real gate. Field names/types mirror TimelineOps.cpp's readers exactly.
+// "track" is `{"type": "string"}`, not `{}` ("anything goes"): an empty-schema subschema is a confirmed Ollama
 // grammar-compiler bug that mangles output into garbage instead of passing the value
 // through unconstrained (same defect class documented in synth-platform's
 // packages/inference/src/index.ts for the sibling `params` shape; `params` in getPatchSchema()
@@ -141,7 +139,7 @@ namespace {
 // duplicate-name op gets TimelineOps::validate's rejection message instead of succeeding, which
 // the model can act on (e.g. rename) but not resolve via index. Still strictly better than `{}`,
 // which was mangled on essentially every emission, string or object alike.
-juce::var timelineOpsArraySchema(bool withNodeId) {
+juce::var timelineOpsArraySchema() {
     const juce::String opsSchemaJson = R"json({
         "type": "array",
         "items": {
@@ -182,17 +180,14 @@ juce::var timelineOpsArraySchema(bool withNodeId) {
     })json";
     juce::var schema = juce::JSON::parse(opsSchemaJson);
     // "nodeId" (a node the same response creates) is resolved by AIIntegrationService's edit plan,
-    // which rewrites it to "nodeUuid" before TimelineOps sees the op. Only the patch-carrying
-    // contract offers it: an arrange-only answer has no patch to create a node in, and
-    // TimelineOps::validate on its own refuses the field as unknown.
-    if (withNodeId) {
-        juce::DynamicObject::Ptr nodeId = new juce::DynamicObject();
-        nodeId->setProperty("type", "integer");
-        schema.getProperty("items", {})
-            .getProperty("properties", {})
-            .getDynamicObject()
-            ->setProperty("nodeId", juce::var(nodeId.get()));
-    }
+    // which rewrites it to "nodeUuid" before TimelineOps sees the op; TimelineOps::validate on its
+    // own refuses the field as unknown.
+    juce::DynamicObject::Ptr nodeId = new juce::DynamicObject();
+    nodeId->setProperty("type", "integer");
+    schema.getProperty("items", {})
+        .getProperty("properties", {})
+        .getDynamicObject()
+        ->setProperty("nodeId", juce::var(nodeId.get()));
     return schema;
 }
 
@@ -219,25 +214,11 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
     auto* properties = schemaObj->getProperty("properties").getDynamicObject();
     jassert(properties != nullptr);
 
-    properties->setProperty("timelineOps", timelineOpsArraySchema(/*withNodeId=*/true));
+    properties->setProperty("timelineOps", timelineOpsArraySchema());
     allowDestParamOnModulations(*properties);
     // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
     // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
     return schema;
-}
-
-juce::var AIStateMapper::getTimelineOpsEnvelopeSchema() {
-    juce::DynamicObject::Ptr properties = new juce::DynamicObject();
-    properties->setProperty("timelineOps", timelineOpsArraySchema(/*withNodeId=*/false));
-
-    juce::DynamicObject::Ptr schema = new juce::DynamicObject();
-    schema->setProperty("type", "object");
-    schema->setProperty("properties", juce::var(properties.get()));
-    // Required here, unlike getPatchSchemaWithTimelineOps: an arrange-mode answer that carries
-    // no ops is not an answer, and the grammar refusing it beats a prose apology the extraction
-    // step would drop.
-    schema->setProperty("required", juce::Array<juce::var>({"timelineOps"}));
-    return juce::var(schema.get());
 }
 
 } // namespace synth

@@ -379,9 +379,9 @@ on its own):
 
 | File | Covers |
 |------|--------|
-| `AIChatComponentTests.cpp` | Core: init/resize, send-message plus classifier, `refreshModels()`/provider-install ordering, hosted-mode notices, account row, quota-error upgrade button, thumbs feedback, response-time/timeout display |
+| `AIChatComponentTests.cpp` | Core: init/resize, send-message plus classifier, `refreshModels()`/provider-install ordering, hosted-mode notices, account row, quota-error upgrade button, edit-plan card thumbs feedback, response-time/timeout display |
 | `AIChatComponentHistoryTests.cpp` | History: unified history UI, upsell/downgrade strips, per-plan backend selection, clear-history, restoring a saved conversation, local save-on-every-exchange, rating sync, wrapped-height regressions |
-| `AIChatComponentArrangeTests.cpp` | Arrange mode: selector gating on the timeline preference, explicit capability/prompt routing, validated/rejected timeline-card response flow |
+| `AIChatComponentEditPlanTests.cpp` | One input, one card: no mode selector, edit requests through `sendProjectMessage` (hosted `project.generate`, local combined schema), one card with one Apply running `applyProjectEdit`, refused and patch-only plans, plain-text answers, the Apply button's name, tooltip and Tab position |
 
 `MacroAutoPort*Test` is split by topic under `Tests/Macros/MacroAutoPort/`, sharing the test module
 stand-ins and graph/mouse helpers in `Tests/Macros/MacroAutoPort/MacroAutoPortTestHelpers.h`

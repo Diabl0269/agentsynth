@@ -3,9 +3,8 @@
 // and how a plan is asked for (project.generate hosted, sendPrompt locally). The apply order end to
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
 #include "AIIntegrationServiceTestFixture.h"
-#include "AppUndoManager.h"
-#include "MacroSet.h"
 #include "Modules/FilterModule.h"
+#include "PlanFakeHost.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 
 namespace synth {
@@ -17,52 +16,6 @@ juce::var parse(const juce::String& json) {
     EXPECT_FALSE(value.isVoid()) << "test JSON did not parse: " << json;
     return value;
 }
-
-// Builds a track like the app would, minus wiring: the doc track, the instrument and each insert,
-// each with a uuid. `failOnBuild` makes that build (1-based) fail AFTER leaving a stray node behind,
-// breaking the host contract on purpose so the service's backstop is what restores the graph.
-class PlanFakeHost : public TimelineOpsHost {
-public:
-    PlanFakeHost(TimelineDoc& d, juce::AudioProcessorGraph& g)
-        : doc(d)
-        , graph(g) {}
-
-    std::optional<InstrumentTrackBuildResult>
-    addInstrumentTrack(const juce::String& name, const juce::String& type, bool,
-                       const std::vector<InstrumentTrackInsert>& inserts) override {
-        ++builds;
-        if (builds == failOnBuild) {
-            graph.addNode(AIStateMapper::createModule("LFO"));
-            return std::nullopt;
-        }
-        if (!doc.addTrack(TrackKind::Midi, name).isValid())
-            return std::nullopt;
-        InstrumentTrackBuildResult result;
-        result.instrumentUuid = add(type, {});
-        for (const auto& insert : inserts)
-            result.insertUuids.push_back(add(insert.type, insert.params));
-        return result;
-    }
-    bool recordBatch(const std::function<void()>& mutation) override {
-        ++batches;
-        return undo.recordGraphTimelineAndMacroChange(graph, doc, macros, mutation);
-    }
-    TimelineDoc* editableTimelineDoc() override { return &doc; }
-
-    TimelineDoc& doc;
-    juce::AudioProcessorGraph& graph;
-    AppUndoManager undo;
-    MacroSet macros;
-    int builds = 0, batches = 0, failOnBuild = 0;
-
-private:
-    juce::String add(const juce::String& type, const juce::var& params) {
-        auto processor = AIStateMapper::createModule(type);
-        if (auto* p = params.getDynamicObject())
-            AIStateMapper::applyUntrustedParams(processor.get(), p);
-        return AIStateMapper::ensureNodeUuid(graph.addNode(std::move(processor)).get());
-    }
-};
 
 // Records what sendCapabilityRequest / sendPrompt were handed.
 class PlanCapturingProvider : public AIProvider {
@@ -147,6 +100,9 @@ TEST_F(AIIntegrationServiceProjectEditTest, PreviewDescribesEveryPhaseAndMutates
     EXPECT_TRUE(preview.previewText.contains("1 modulation")) << preview.previewText;
     EXPECT_TRUE(preview.previewText.contains("Adds instrument track \"Bass\"")) << preview.previewText;
     EXPECT_TRUE(preview.previewText.contains("writes 2 points to Filter cutoff")) << preview.previewText;
+    ASSERT_EQ(preview.previewLines.size(), 2) << "one line for the patch phase, one for the timeline ops";
+    EXPECT_TRUE(preview.previewLines[0].startsWith("Merges a patch")) << preview.previewLines[0];
+    EXPECT_TRUE(preview.previewLines[1].startsWith("Adds instrument track")) << preview.previewLines[1];
 
     EXPECT_EQ(graphDump(), graphBefore);
     EXPECT_EQ(docDump(), docBefore);
@@ -268,6 +224,18 @@ TEST_F(AIIntegrationServiceProjectEditTest, ApplyWithoutAnEditableDocIsRefused) 
     EXPECT_EQ(applied.message, "Edit plans cannot be applied from here.");
 }
 
+// A plugin build or a test has no host; a plan that is only a patch still applies, through
+// applyPatch in the mode the preview chose.
+TEST_F(AIIntegrationServiceProjectEditTest, ApplyWithoutAHostStillAppliesAPatchOnlyPlan) {
+    service->setTimelineOpsHost(nullptr);
+    const auto docBefore = docDump();
+    const auto applied = service->applyProjectEdit(parse(kMinimalValidPatch));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_FALSE(applied.merge);
+    EXPECT_EQ(graph->getNumNodes(), 2);
+    EXPECT_EQ(docDump(), docBefore) << "no timeline write";
+}
+
 // -- asking for a plan ---------------------------------------------------------------------------
 
 TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTheArrangeFieldsAndCurrentPatch) {
@@ -338,6 +306,88 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsA
         "string");
     EXPECT_FALSE(modulationItem.getProperty("required", {}).getArray()->contains("destPort"));
     EXPECT_FALSE(modulationItem.getProperty("properties", {}).getProperty("destParam", {}).hasProperty("anyOf"));
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestBodyCarriesTracksTargetsAndContextAsStructuredFields) {
+    auto node = graph->addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(node, nullptr);
+    node->properties.set("uuid", "arrange-uuid-1");
+    doc.addTrack(TrackKind::Midi, "Melody");
+    doc.addTrack(TrackKind::Automation, "Sweep");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+
+    const juce::var body = service->buildProjectRequestBody("build a 16 bar arrangement");
+    ASSERT_TRUE(body.isObject());
+
+    // userPrompt is the RAW text: the server composes its own context sections from the fields below.
+    EXPECT_EQ(body["userPrompt"].toString(), juce::String("build a 16 bar arrangement"));
+    EXPECT_TRUE(body["arrangementContext"].toString().isNotEmpty()) << "a non-empty doc summarises to something";
+
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    ASSERT_GT(body["paramTargets"].getArray()->size(), 0) << "the uuid-bearing Oscillator's float params are offered";
+    const juce::var target = (*body["paramTargets"].getArray())[0];
+    EXPECT_EQ(target["nodeUuid"].toString(), juce::String("arrange-uuid-1"));
+    EXPECT_TRUE(target["nodeName"].toString().isNotEmpty());
+    EXPECT_TRUE(target["paramId"].toString().isNotEmpty());
+    EXPECT_TRUE(target["min"].isDouble() || target["min"].isInt());
+    EXPECT_TRUE(target["max"].isDouble() || target["max"].isInt());
+    EXPECT_TRUE(target["default"].isDouble() || target["default"].isInt());
+
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    ASSERT_EQ(body["availableTracks"].getArray()->size(), 2);
+    const juce::var track0 = (*body["availableTracks"].getArray())[0];
+    const juce::var track1 = (*body["availableTracks"].getArray())[1];
+    EXPECT_EQ(track0["name"].toString(), juce::String("Melody"));
+    EXPECT_EQ(track0["kind"].toString(), juce::String("midi"));
+    EXPECT_EQ(static_cast<int>(track0["index"]), 0);
+    EXPECT_EQ(track1["name"].toString(), juce::String("Sweep"));
+    EXPECT_EQ(track1["kind"].toString(), juce::String("automation"));
+    EXPECT_EQ(static_cast<int>(track1["index"]), 1);
+
+    // productName is the PROVIDER's field (RemoteProvider adds it).
+    EXPECT_FALSE(body.hasProperty("productName"));
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestParamTargetsAreCappedAtServerMax) {
+    // Enough uuid-bearing nodes that the flat float-param count exceeds the cap.
+    int paramsPerNode = 0;
+    {
+        auto probe = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(probe, nullptr);
+        probe->properties.set("uuid", "probe-uuid");
+        for (auto* p : probe->getProcessor()->getParameters())
+            if (dynamic_cast<juce::AudioParameterFloat*>(p) != nullptr)
+                ++paramsPerNode;
+    }
+    ASSERT_GT(paramsPerNode, 0);
+
+    const int nodesNeeded = AIIntegrationService::kMaxRemoteParamTargets / paramsPerNode + 1;
+    for (int i = 0; i < nodesNeeded; ++i) {
+        auto node = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(node, nullptr);
+        node->properties.set("uuid", "bulk-uuid-" + juce::String(i));
+    }
+
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildProjectRequestBody("automate everything");
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    EXPECT_EQ(body["paramTargets"].getArray()->size(), AIIntegrationService::kMaxRemoteParamTargets)
+        << "a longer list would be rejected by the server's input schema before any model saw it";
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestOnEmptyTimelineSaysSoExplicitly) {
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildProjectRequestBody("start an arrangement");
+
+    // The schema requires both keys but allows them empty — "a caller with nothing to say should
+    // say so explicitly rather than have the field quietly go missing".
+    ASSERT_TRUE(body.hasProperty("arrangementContext"));
+    EXPECT_EQ(body["arrangementContext"].toString(), juce::String());
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    EXPECT_EQ(body["availableTracks"].getArray()->size(), 0);
 }
 
 } // namespace synth

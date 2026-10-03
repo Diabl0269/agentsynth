@@ -2,16 +2,13 @@
 
 namespace synth {
 
-// Concern: provider/model selection -- refreshing the available-models list and the
-// hosted-mode notice / Patch-Arrange mode selector gates that follow a provider change.
+// Concern: provider/model selection -- refreshing the available-models list and the hosted-mode
+// notice that follows a provider change.
 
 void AIChatComponent::refreshModels() {
     // Provider identity (unlike its model list) is known synchronously right after
-    // setProvider() — no need to wait for the fetch below to resolve. The mode selector's gates
-    // don't read the provider (parity rule), but this is still a convenient known resync point
-    // for owners that call refreshModels() after wiring things up.
+    // setProvider() — no need to wait for the fetch below to resolve.
     updateHostedModeNotice();
-    refreshModeControls();
 
     // refreshModels() is called repeatedly over the component's lifetime (once at
     // construction with no provider yet, again after MainComponent installs one, and
@@ -82,26 +79,6 @@ void AIChatComponent::updateHostedModeNotice() {
             hostedModeNotice.setColour(juce::Label::textColourId, lf->getTheme().colors.textMuted);
     }
     hostedModeNotice.setVisible(hosted);
-    resized();
-}
-
-void AIChatComponent::refreshModeControls() {
-    // PROVIDER-AGNOSTIC on purpose (the local/remote parity rule): arrange mode is served by
-    // whichever transport the active provider has (AIIntegrationService::sendArrangeMessage), so
-    // the selector's gate is the timeline preference alone — never the provider.
-    // hasTimelineContext() rides along with the preference switch: with no live doc installed
-    // there is nothing to summarise, validate against, or apply to, so offering Arrange would
-    // only manufacture the "cannot be checked or applied" failure previewTimelineOps() reports.
-    // In the real app the context is installed whenever the feature is on (MainComponent wires
-    // both), so this is one gate in practice and a safety net in tests.
-    const bool show = aiService.areTimelineToolsEnabled() && aiService.hasTimelineContext();
-
-    if (modeSelector.isVisible() == show)
-        return;
-
-    modeSelector.setVisible(show);
-    if (!show)
-        modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
     resized();
 }
 

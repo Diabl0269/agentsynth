@@ -1,443 +1,38 @@
-#include "AI/PatchDiff.h"
 #include "AIChatComponent.h"
+#include "AIChatComponentEditPlanCard.h"
 #include "Branding.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
 #include <thread>
 
 namespace synth {
 
-// Concern: message list rendering -- chat bubbles, patch/timeline cards, and the panel's
-// resized() layout loop that positions them (resized() dynamic_casts to MessageBubble*, so it
-// has to live alongside its full definition rather than in the general layout code).
-
-namespace {
-
-// Colour for a merge-mode diff line, grouped by PatchChange::Kind (see groupChangesByKind() in
-// PatchDiff.h). "+"-prefixed adds are green, "-"-prefixed removals are red/orange; param changes
-// and modulation add/remove (which are often a matched pair representing one conceptual "change",
-// not an independent add and remove) get a neutral amber rather than fighting for green/red.
-juce::Colour colourForKind(PatchChange::Kind kind) {
-    using Kind = PatchChange::Kind;
-    switch (kind) {
-    case Kind::NodeAdded:
-    case Kind::ConnectionAdded:
-        return juce::Colours::lightgreen;
-    case Kind::NodeRemoved:
-    case Kind::ConnectionRemoved:
-        return juce::Colour(0xFFFF8A65); // orange-red
-    case Kind::ParamChanged:
-    case Kind::ModulationAdded:
-    case Kind::ModulationRemoved:
-        return juce::Colour(0xFFFFC107); // amber
-    }
-    return juce::Colours::white;
-}
-
-// Round-trips `raw` through JUCE's JSON formatter for indentation, so the "View JSON" panel isn't
-// one unbroken line in a ~280px-wide chat column. Falls back to the raw string on parse failure
-// (shouldn't happen — this is a patch that already round-tripped through extractJSONBlocks — but
-// must not blank the view if it ever does).
-juce::String prettyPrintJson(const juce::String& raw) {
-    juce::var parsed = juce::JSON::parse(raw);
-    if (parsed.isVoid())
-        return raw;
-    return juce::JSON::toString(parsed, /*allOnOneLine=*/false);
-}
-
-} // namespace
-
-//==============================================================================
-class AIChatComponent::PatchCard : public juce::Component {
-public:
-    // `changes`/`diffAvailable`/`summary` come from AIIntegrationService::computePatchPreview()'s
-    // before/after AIStateMapper::graphToJSON() snapshots, computed by the caller in
-    // attachPatchPreview() — see docs/ai/patch-preview.md. This IS the preview: it's
-    // the card's default view, rendered before Apply/Merge is ever clicked. The raw JSON stays
-    // available behind the "View JSON" toggle for anyone who wants it.
-    //
-    // `changes` (synth::computeDiff() output) is used for merge-mode cards, which have stable node
-    // identity to diff against. `summary` (synth::summarizePatch() of just the "after" snapshot) is
-    // used for replace-mode cards instead: replace mode has no stable node identity between
-    // snapshots, so a diff would show the entire prior graph removed and the entire new patch
-    // added — technically correct, useless to read. See PatchDiff.h.
-    PatchCard(const juce::String& json, std::function<void()> applyCallback, bool isMerge,
-              const std::vector<PatchChange>& changes, bool diffAvailable, const PatchSummary& summary,
-              AIChatComponent::PatchRatingUiState initialRating, const juce::String& initialComment,
-              std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRateCallback)
-        : patchJson(json)
-        , onApply(applyCallback)
-        , onRate(std::move(onRateCallback))
-        , currentRating(initialRating) {
-
-        // Patch-name accent: success (green) for a brand-new patch, warning (amber) for an
-        // in-place update — theme tokens, not raw hex, so the label stays readable against
-        // BOTH a dark and a light bubble background (the raw lightgreen/lightyellow this
-        // replaced went unreadably low-contrast on a light theme's grey bubble fill). Falls back
-        // to the same literals only if no AppLookAndFeel is attached yet (e.g. constructed before
-        // this component's owner is parented into a themed window).
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour =
-            lf != nullptr ? (isMerge ? lf->getTheme().colors.warning : lf->getTheme().colors.success)
-                          : (isMerge ? juce::Colours::lightyellow : juce::Colours::lightgreen);
-
-        addAndMakeVisible(headerLabel);
-        headerLabel.setText(isMerge ? "Patch Update" : "New Patch", juce::dontSendNotification);
-        headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-        headerLabel.setColour(juce::Label::textColourId, accentColour);
-
-        addAndMakeVisible(expandButton);
-        expandButton.setButtonText("View JSON");
-        expandButton.setToggleable(true);
-        expandButton.onClick = [this]() {
-            isExpanded = !isExpanded;
-            expandButton.setButtonText(isExpanded ? "Hide JSON" : "View JSON");
-            if (auto* parent = getParentComponent())
-                parent->resized();
-        };
-
-        addAndMakeVisible(applyButton);
-        applyButton.setButtonText(isMerge ? "Merge" : "New Patch");
-        applyButton.setColour(juce::TextButton::buttonColourId,
-                              isMerge ? juce::Colour(0xFF8B6914) : juce::Colours::darkgreen);
-        applyButton.onClick = onApply;
-
-        addAndMakeVisible(thumbsUpButton);
-        thumbsUpButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
-        thumbsUpButton.setTooltip("This patch was helpful");
-        thumbsUpButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Up); };
-
-        addAndMakeVisible(thumbsDownButton);
-        thumbsDownButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8E"));
-        thumbsDownButton.setTooltip("This patch missed the mark");
-        thumbsDownButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Down); };
-
-        addAndMakeVisible(commentField);
-        commentField.setComponentID("patchFeedbackComment");
-        commentField.setText(initialComment, juce::dontSendNotification);
-        commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", juce::Colours::grey);
-        commentField.onReturnKey = [this]() { notifyRate(); };
-
-        addAndMakeVisible(commentSaveButton);
-        commentSaveButton.setButtonText("Send");
-        commentSaveButton.setTooltip("Send your feedback comment");
-        commentSaveButton.onClick = [this]() { notifyRate(); };
-
-        updateThumbColours();
-
-        addAndMakeVisible(diffDisplay);
-        diffDisplay.setMultiLine(true);
-        diffDisplay.setReadOnly(true);
-        diffDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
-
-        if (!diffAvailable) {
-            diffDisplay.setText("Preview unavailable - this patch may be rejected when applied.");
-        } else if (isMerge) {
-            // Grouped by Kind (adds, then removes, then param changes, then connection
-            // adds/removes, then modulation adds/removes) so the list doesn't interleave — see
-            // groupChangesByKind()'s doc comment. Rendered line-by-line via insertTextAtCaret with
-            // the TextEditor's textColourId set per segment (setText() can't colour per-line; this
-            // is the same pattern flushDebugLog() uses for insertTextAtCaret, minus the colouring).
-            auto grouped = groupChangesByKind(changes);
-            if (grouped.empty()) {
-                diffDisplay.setText("No changes.");
-            } else {
-                for (size_t i = 0; i < grouped.size(); ++i) {
-                    diffDisplay.setColour(juce::TextEditor::textColourId, colourForKind(grouped[i].kind));
-                    diffDisplay.insertTextAtCaret(grouped[i].describe());
-                    if (i + 1 < grouped.size())
-                        diffDisplay.insertTextAtCaret("\n");
-                }
-            }
-        } else {
-            // Replace mode: a plain positive summary of what the new patch contains, not a diff
-            // against the old graph (see class doc comment above).
-            juce::StringArray lines;
-            lines.add("New patch: " + juce::String((int)summary.nodeTypes.size()) +
-                      (summary.nodeTypes.size() == 1 ? " module" : " modules"));
-            for (const auto& t : summary.nodeTypes)
-                lines.add(t);
-            if (summary.connectionCount > 0)
-                lines.add(juce::String(summary.connectionCount) +
-                          (summary.connectionCount == 1 ? " connection" : " connections"));
-            diffDisplay.setText(lines.joinIntoString("\n"));
-        }
-        // Captured AFTER diffDisplay is populated (getText() ignores the per-segment colouring
-        // above, which is fine — this is only ever used to MEASURE wrapped height, not to
-        // re-render). diffAreaHeight() measures this instead of a diffLineCount*rowHeight
-        // estimate: a single long status/preview line (e.g. "Preview unavailable...") WRAPS
-        // inside diffDisplay's fixed width, and a line-count estimate doesn't know that and
-        // clips it.
-        diffText = diffDisplay.getText();
-
-        addAndMakeVisible(jsonDisplay);
-        jsonDisplay.setMultiLine(true);
-        jsonDisplay.setReadOnly(true);
-        jsonDisplay.setText(prettyPrintJson(patchJson));
-        jsonDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
-        jsonDisplay.setVisible(false);
-    }
-
-    void resized() override {
-        auto b = getLocalBounds().reduced(kCardPadding);
-
-        headerLabel.setBounds(b.removeFromTop(kHeaderLabelHeight));
-        b.removeFromTop(kRowGap);
-
-        // View JSON / Apply get their OWN row rather than sharing the header label's row: at a
-        // narrow bubble width (see AIChatComponent's ~80%-width bubble gutter) squeezing both
-        // buttons alongside the label left "Hide JSON" less than its own text width to render in,
-        // so it showed as "View J...". A full-width row gives each button room regardless of how
-        // narrow the bubble is.
-        auto buttonRow = b.removeFromTop(kButtonRowHeight);
-        expandButton.setBounds(buttonRow.removeFromLeft(kExpandButtonWidth).reduced(2));
-        buttonRow.removeFromLeft(kRowGap);
-        applyButton.setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
-        b.removeFromTop(kRowGap);
-
-        // Feedback rows: thumbs are always visible on a patch card, on their own row now that
-        // they're single glyphs rather than "Good"/"Bad" labels. The comment field/send button
-        // only appear once a rating has been picked, so a patch nobody has judged yet doesn't
-        // invite a comment with nothing to attach it to — that second row lives below the thumbs
-        // rather than sharing their row, so the comment field has full card width to work with.
-        auto thumbsRow = b.removeFromTop(kFeedbackRowHeight);
-        thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
-        thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
-        bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
-        commentSaveButton.setVisible(showComment);
-        commentField.setVisible(showComment);
-        if (showComment) {
-            b.removeFromTop(kRowGap);
-            auto commentRow = b.removeFromTop(kFeedbackRowHeight);
-            commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
-            commentField.setBounds(commentRow.reduced(2));
-        }
-        b.removeFromTop(kRowGap);
-
-        if (isExpanded) {
-            diffDisplay.setBounds(b.removeFromTop(diffAreaHeight(b.getWidth())));
-            b.removeFromTop(kRowGap);
-            jsonDisplay.setVisible(true);
-            jsonDisplay.setBounds(b);
-        } else {
-            diffDisplay.setBounds(b);
-            jsonDisplay.setVisible(false);
-        }
-    }
-
-    // `width` must be the width this card will actually be laid out at (MessageBubble passes the
-    // same contentWidth it uses for its own text measurement) — diffAreaHeight() below measures
-    // the diff/status text's WRAPPED height at that width, so this and resized() must agree on it
-    // or the reserved height drifts from what actually renders.
-    int getRequiredHeight(int width) const {
-        bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
-        int height = kCardPadding * 2 + kHeaderLabelHeight + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight +
-                     (showComment ? kRowGap + kFeedbackRowHeight : 0) + kRowGap +
-                     diffAreaHeight(width - kCardPadding * 2);
-        if (isExpanded)
-            height += kRowGap + kRawJsonHeight;
-        return height;
-    }
-
-    void setRating(AIChatComponent::PatchRatingUiState rating) {
-        currentRating = rating;
-        updateThumbColours();
-        // A rating being set changes the card's total height (the comment row appears below the
-        // thumbs row rather than repurposing it). MessageBubble::resized() repositions this card
-        // within its own bounds but doesn't own that bounds' size — AIChatComponent::resized() is
-        // what computes each bubble's height via bubble->getRequiredHeight(width) and lays out the
-        // whole message list, so that's the level that must relayout, not just the immediate
-        // parent. Fall back to resizing this card directly when there's no such ancestor yet (e.g.
-        // a unit test constructing PatchCard standalone).
-        if (auto* chat = findParentComponentOfClass<AIChatComponent>())
-            chat->resized();
-        else
-            resized();
-        notifyRate();
-    }
-
-    void notifyRate() {
-        if (onRate)
-            onRate(currentRating, commentField.getText());
-    }
-
-    void updateThumbColours() {
-        const auto& colors = synth::theme::themeOf(*this).colors;
-        const juce::Colour neutral = colors.surfaceHi;
-        const juce::Colour upSelected = colors.success;
-        const juce::Colour downSelected = colors.error;
-        thumbsUpButton.setColour(juce::TextButton::buttonColourId,
-                                 currentRating == AIChatComponent::PatchRatingUiState::Up ? upSelected : neutral);
-        thumbsDownButton.setColour(juce::TextButton::buttonColourId,
-                                   currentRating == AIChatComponent::PatchRatingUiState::Down ? downSelected : neutral);
-    }
-
-private:
-    // 8px-grid spacing/padding used throughout this card's layout.
-    static constexpr int kCardPadding = 8;
-    static constexpr int kRowGap = 8;
-    static constexpr int kHeaderLabelHeight = 20;
-    static constexpr int kButtonRowHeight = 28;
-    // Wide enough for "Hide JSON" (the longer of the toggle's two labels) with real breathing
-    // room, at this card's bold-ish default button font — the fixed-180px-shared-with-header-label
-    // math this replaced could squeeze this below its own text width on a narrow bubble.
-    static constexpr int kExpandButtonWidth = 96;
-    static constexpr int kApplyButtonWidth = 88;
-    static constexpr int kMinDiffHeight = 24;
-    // Caps how tall a very long diff can grow the card; the "View JSON" toggle (which also shows
-    // the diff area above the raw JSON, both individually scrollable TextEditors) is the escape
-    // hatch rather than letting the message list grow unbounded.
-    static constexpr int kMaxDiffHeight = 220;
-    // Grew from 160: pretty-printed (indented) JSON runs noticeably taller than the single
-    // unbroken line this used to hold.
-    static constexpr int kRawJsonHeight = 240;
-    static constexpr int kFeedbackRowHeight = 24;
-    // diffDisplay's own left/right internal margins (juce::TextEditor reserves a small inset
-    // beyond whatever it's given via setBounds) — subtracted before measuring wrapped height so
-    // the estimate is never narrower than what the TextEditor actually renders into.
-    static constexpr int kDiffTextInset = 12;
-
-    // Measures diffText's ACTUAL wrapped height at `width` (see AIChatComponent::
-    // computeWrappedTextHeight()) rather than a line-count*rowHeight estimate — a long single
-    // logical line (the "Preview unavailable..." status message) wraps inside diffDisplay's
-    // fixed width, and an estimate that only counts logical lines doesn't see that and clips it.
-    int diffAreaHeight(int width) const {
-        const int measured = AIChatComponent::computeWrappedTextHeight(diffDisplay.getFont(), diffText,
-                                                                       juce::jmax(20, width - kDiffTextInset));
-        return juce::jlimit(kMinDiffHeight, kMaxDiffHeight, measured + 8);
-    }
-
-    std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate;
-    AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
-
-    juce::String patchJson;
-    std::function<void()> onApply;
-    bool isExpanded = false;
-    // The plain text diffDisplay holds, captured once at construction — see its assignment site's
-    // doc comment. Used only to measure diffAreaHeight(); never re-rendered from this.
-    juce::String diffText;
-
-    juce::Label headerLabel;
-    juce::TextButton expandButton;
-    juce::TextButton applyButton;
-    juce::TextButton thumbsUpButton;
-    juce::TextButton thumbsDownButton;
-    juce::TextEditor commentField;
-    juce::TextButton commentSaveButton;
-    juce::TextEditor diffDisplay;
-    juce::TextEditor jsonDisplay;
-};
-
-//==============================================================================
-// PatchCard's sibling, kept to its conventions (header label + a coloured apply button on
-// the header row) with the one honest difference: a timeline suggestion has a validated PREVIEW to
-// show — "Adds midi track "Bass"; places 1 clip (8 notes) at 0-4 on "Bass"" — rather than raw JSON
-// to expand, so the body is that sentence instead of a JSON dump.
-//
-// The apply callback is EMPTY when the envelope failed validation; the card then shows the reason
-// and offers no button, because a suggestion that cannot be applied must still say why (the same
-// rule that stops applyPatch swallowing a rejection) but must not look clickable.
-class AIChatComponent::TimelineCard : public juce::Component {
-public:
-    TimelineCard(const juce::String& preview, std::function<void()> applyCallback)
-        : previewText(preview) {
-
-        // Theme tokens, not raw hex — the previous juce::Colours::white.withAlpha(0.8f) preview
-        // text was near-invisible on a light theme's light bubble fill, the same class of bug
-        // PatchCard's headerLabel had (see its constructor's doc comment).
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour headerColour = lf != nullptr ? lf->getTheme().colors.accent2 : juce::Colours::lightskyblue;
-        const juce::Colour previewColour =
-            lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white.withAlpha(0.8f);
-
-        addAndMakeVisible(headerLabel);
-        headerLabel.setText("Timeline Changes", juce::dontSendNotification);
-        headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-        headerLabel.setColour(juce::Label::textColourId, headerColour);
-
-        if (applyCallback) {
-            applyButton = std::make_unique<juce::TextButton>();
-            applyButton->setButtonText("Apply timeline changes");
-            applyButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1F4E63));
-            applyButton->onClick = std::move(applyCallback);
-            addAndMakeVisible(*applyButton);
-        }
-
-        addAndMakeVisible(previewLabel);
-        previewLabel.setText(previewText, juce::dontSendNotification);
-        previewLabel.setFont(juce::Font(12.0f));
-        previewLabel.setMinimumHorizontalScale(1.0f);
-        previewLabel.setJustificationType(juce::Justification::topLeft);
-        previewLabel.setColour(juce::Label::textColourId, previewColour);
-    }
-
-    void resized() override {
-        auto b = getLocalBounds().reduced(5);
-        auto header = b.removeFromTop(kHeaderHeight);
-        if (applyButton)
-            applyButton->setBounds(header.removeFromRight(kApplyButtonWidth).reduced(2));
-        headerLabel.setBounds(header);
-        previewLabel.setBounds(b);
-    }
-
-    // Measured against the width the card will actually be laid out at, so the sentence never
-    // renders clipped — the same GlyphArrangement measurement MessageBubble does for its own text.
-    int getRequiredHeight(int width) const {
-        juce::GlyphArrangement ga;
-        ga.addJustifiedText(previewLabel.getFont(), previewText, 0.0f, 0.0f,
-                            static_cast<float>(juce::jmax(40, width - 10)), juce::Justification::left);
-        return kHeaderHeight + juce::jmax(16, static_cast<int>(ga.getBoundingBox(0, -1, true).getHeight())) + 10;
-    }
-
-private:
-    static constexpr int kHeaderHeight = 25;
-    static constexpr int kApplyButtonWidth = 160;
-
-    juce::String previewText;
-    juce::Label headerLabel;
-    juce::Label previewLabel;
-    std::unique_ptr<juce::TextButton> applyButton;
-};
+// Concern: message list rendering -- chat bubbles (each with at most one edit-plan card, defined in
+// AIChatComponentEditPlanCard.cpp), and the panel's resized() layout loop that positions them (resized() dynamic_casts
+// to MessageBubble*, so it has to live alongside its full definition rather than in the general layout code).
 
 //==============================================================================
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
-    MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
-                  std::function<void(const juce::URL&)> urlOpener, const std::vector<PatchChange>& patchDiff,
-                  bool patchDiffAvailable, const PatchSummary& patchSummary,
-                  std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate,
-                  std::function<void(const juce::String&)> applyTimelineOps) {
+    MessageBubble(const MessageData& data, std::function<bool()> applyPlan,
+                  std::function<void(const juce::URL&)> urlOpener, EditPlanCard::RateCallback onRate) {
         role = data.role;
         text = data.text;
         responseMs = data.responseMs;
 
         // The bubble itself is the list item and speaks the whole message (see
         // createAccessibilityHandler), so the label inside would only repeat it.
-        setTitle(synth::ui::describeChatMessageForAccessibility(role, text, data.jsonPatch.isNotEmpty(),
-                                                                data.timelineOpsPreview.isNotEmpty()));
+        setTitle(synth::ui::describeChatMessageForAccessibility(role, text, data.planOk && data.planJson.isNotEmpty()));
         addAndMakeVisible(textLabel);
         textLabel.setAccessible(false);
         textLabel.setText(text, juce::dontSendNotification);
         textLabel.setMinimumHorizontalScale(1.0f);
         textLabel.setJustificationType(juce::Justification::topLeft);
 
-        if (data.jsonPatch.isNotEmpty()) {
-            patchCard = std::make_unique<PatchCard>(
-                data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge, patchDiff,
-                patchDiffAvailable, patchSummary, data.ratingState, data.ratingComment, onRate);
-            addAndMakeVisible(*patchCard);
-        }
-
-        // Independent of the patch card above: a response carrying both gets both cards, and
-        // the user applies each on its own terms. No apply callback when the envelope is empty —
-        // that is the rejected case, where the preview holds the reason instead of a summary.
-        if (data.timelineOpsPreview.isNotEmpty()) {
-            std::function<void()> onApply;
-            if (data.timelineOpsJson.isNotEmpty() && applyTimelineOps)
-                onApply = [applyTimelineOps, envelope = data.timelineOpsJson] { applyTimelineOps(envelope); };
-            timelineCard = std::make_unique<TimelineCard>(data.timelineOpsPreview, std::move(onApply));
-            addAndMakeVisible(*timelineCard);
+        // One card per answer that carries a plan, whatever it holds (a patch, timeline ops, or
+        // both); a refused plan still gets its card, showing why, with no Apply.
+        if (data.planJson.isNotEmpty()) {
+            planCard = std::make_unique<EditPlanCard>(data, std::move(applyPlan), std::move(onRate));
+            addAndMakeVisible(*planCard);
         }
 
         if (data.showUpgradeAction) {
@@ -509,13 +104,8 @@ public:
         // textLabel started at the same y the role band paints into and clipped/overlapped it.
         b.removeFromTop(kRoleBandHeight + kRoleContentGap);
 
-        if (patchCard) {
-            patchCard->setBounds(b.removeFromBottom(patchCard->getRequiredHeight(b.getWidth())));
-            b.removeFromBottom(kRoleContentGap);
-        }
-
-        if (timelineCard) {
-            timelineCard->setBounds(b.removeFromBottom(timelineCard->getRequiredHeight(b.getWidth())));
+        if (planCard) {
+            planCard->setBounds(b.removeFromBottom(planCard->getRequiredHeight(b.getWidth())));
             b.removeFromBottom(kRoleContentGap);
         }
 
@@ -539,13 +129,8 @@ public:
         // message text — see resized()'s matching reservation.
         int height = textHeight + kOuterPadding * 2 + kRoleBandHeight + kRoleContentGap;
 
-        if (patchCard) {
-            height += kRoleContentGap + patchCard->getRequiredHeight(contentWidth);
-        }
-
-        if (timelineCard) {
-            height += kRoleContentGap + timelineCard->getRequiredHeight(contentWidth);
-        }
+        if (planCard)
+            height += kRoleContentGap + planCard->getRequiredHeight(contentWidth);
 
         if (upgradeButton) {
             height += kRoleContentGap + kUpgradeButtonHeight;
@@ -566,8 +151,7 @@ private:
     juce::String text;
     int responseMs = -1;
     juce::Label textLabel;
-    std::unique_ptr<PatchCard> patchCard;
-    std::unique_ptr<TimelineCard> timelineCard;
+    std::unique_ptr<EditPlanCard> planCard;
     std::unique_ptr<juce::TextButton> upgradeButton;
 };
 
@@ -659,14 +243,10 @@ void AIChatComponent::resized() {
 
     inputField.setBounds(inputRow);
 
-    // Middle row (above input): Model Picker (+ Patch/Arrange selector while its gates hold)
+    // Middle row (above input): Model Picker
     bottomArea.removeFromBottom(kChromeGap);
     auto modelRow = bottomArea.removeFromBottom(kModelRowHeight);
     modelPicker.setBounds(modelRow.removeFromLeft(200));
-    if (modeSelector.isVisible()) {
-        modelRow.removeFromLeft(kChromeGap);
-        modeSelector.setBounds(modelRow.removeFromLeft(110));
-    }
 #ifndef NDEBUG
     toggleDebugButton.setBounds(modelRow.removeFromRight(60));
 #endif
@@ -743,65 +323,8 @@ void AIChatComponent::updateChatDisplay() {
 
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto& data = messages[i];
-        bool isMerge = data.patchIsMerge;
-
         auto* bubble = new MessageBubble(
-            data,
-            [this, isMerge](const juce::String& json) {
-                juce::Logger::writeToLog("--- Applying patch (merge=" + juce::String(isMerge ? "true" : "false") +
-                                         ") ---");
-                juce::Logger::writeToLog("JSON: " + json);
-
-                // Redraws the conversation without destroying the MessageBubble whose callback we
-                // may still be inside — updateChatDisplay() calls messageList.deleteAllChildren().
-                juce::Component::SafePointer<AIChatComponent> safeThis(this);
-                auto refreshLater = [safeThis] {
-                    juce::MessageManager::callAsync([safeThis] {
-                        if (auto* self = safeThis.getComponent())
-                            self->updateChatDisplay();
-                    });
-                };
-
-                aiService.applyPatchWithRetry(
-                    json, isMerge,
-                    [safeThis, refreshLater](bool success, const juce::String& error) {
-                        auto* self = safeThis.getComponent();
-                        if (self == nullptr)
-                            return;
-
-                        if (success) {
-                            juce::Logger::writeToLog("--- Patch applied ---");
-                            return;
-                        }
-
-                        // Never swallow a rejection: an Apply/Merge that does nothing and says
-                        // nothing is indistinguishable from a broken button.
-                        auto reason = error.isNotEmpty() ? error : self->aiService.getLastPatchError();
-                        if (reason.isEmpty())
-                            reason = "The patch could not be applied.";
-                        juce::Logger::writeToLog("--- Patch rejected: " + reason + " ---");
-                        self->messages.push_back({"assistant",
-                                                  "Could not apply this patch after " +
-                                                      juce::String(AIIntegrationService::kMaxPatchRetries + 1) +
-                                                      " attempts: " + reason,
-                                                  ""});
-                        refreshLater();
-                    },
-                    // Retries are bounded and per user click, so announcing each one keeps the wait
-                    // legible instead of looking like a hang.
-                    [safeThis, refreshLater](const AIIntegrationService::PatchRetryInfo& info) {
-                        auto* self = safeThis.getComponent();
-                        if (self == nullptr)
-                            return;
-                        self->messages.push_back({"assistant",
-                                                  "That patch was rejected (" + info.error + ") - asking for a fix (" +
-                                                      juce::String(info.failedAttempt + 1) + "/" +
-                                                      juce::String(info.totalAttempts) + ")...",
-                                                  ""});
-                        refreshLater();
-                    });
-            },
-            isMerge, urlOpener, data.patchDiff, data.patchDiffAvailable, data.patchSummary,
+            data, [this, i] { return applyEditPlan(i); }, urlOpener,
             [this, i](PatchRatingUiState newRating, const juce::String& comment) {
                 if (i >= messages.size())
                     return;
@@ -817,7 +340,7 @@ void AIChatComponent::updateChatDisplay() {
                                                                                  : PatchFeedbackStore::Rating::Down;
 
                     // Local log: unconditional fallback, regardless of plan/sync outcome.
-                    patchFeedbackStore.record(msg.jsonPatch, storeRating, comment, serverConversationId,
+                    patchFeedbackStore.record(msg.planJson, storeRating, comment, serverConversationId,
                                               msg.serverMessageId);
 
                     // Additionally sync to the server, fire-and-forget, ONLY when this
@@ -855,27 +378,6 @@ void AIChatComponent::updateChatDisplay() {
                         }
                     }
                 }
-            },
-            // Timeline Apply. Deliberately NOT a retry loop like the patch path's: a rejected
-            // envelope never reaches this button (the card offers no button at all in that case),
-            // so the only failures left here are the ones the live doc/graph moved under — worth
-            // reporting, not worth re-asking the model about.
-            [this](const juce::String& envelopeJson) {
-                juce::Component::SafePointer<AIChatComponent> safeThis(this);
-                const auto result = aiService.applyTimelineOps(juce::JSON::parse(envelopeJson));
-                if (result.ok)
-                    return;
-
-                // Same rule as a rejected patch: an Apply that does nothing and says nothing is
-                // indistinguishable from a broken button.
-                messages.push_back({"assistant",
-                                    "Could not apply these timeline changes: " +
-                                        (result.message.isNotEmpty() ? result.message : juce::String("unknown error")),
-                                    ""});
-                juce::MessageManager::callAsync([safeThis] {
-                    if (auto* self = safeThis.getComponent())
-                        self->updateChatDisplay();
-                });
             });
         messageList.addAndMakeVisible(bubble);
     }

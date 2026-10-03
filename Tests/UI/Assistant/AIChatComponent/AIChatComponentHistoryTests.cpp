@@ -755,7 +755,7 @@ TEST_F(AIChatComponentTest, RatingWithNoServerMessageIdDoesNotFireFeedbackPostEv
 // ============================================================================
 
 // Direct, headless coverage of the pure helper every variable-length text element in this panel
-// now shares (PatchCard's diff/status box, hostedModeNotice, downgradeStripLabel) — see its header
+// now shares (EditPlanCard's preview text, hostedModeNotice, downgradeStripLabel) — see its header
 // doc comment. A width wide enough for one line must need roughly one line of height; forcing the
 // same text to wrap at a much narrower width must need several times that. The bug this replaced
 // was a FIXED single-line/line-count estimate that never grew with the actual wrapped height.
@@ -778,11 +778,10 @@ TEST(AIChatComponentLayoutHelperTest, ComputeWrappedTextHeightIsNeverLessThanOne
     EXPECT_GE(synth::AIChatComponent::computeWrappedTextHeight(font, "short", 200), (int)font.getHeight());
 }
 
-// Full-integration regression for the "Preview unavailable..." clipping bug: a real PatchCard
-// (reached only through the private MessageBubble it's nested inside) whose diffAvailable is
-// false must reserve enough height in the rendered TextEditor to show that status line in full,
-// not a fixed single-line box.
-TEST_F(AIChatComponentTest, PatchCardPreviewUnavailableStatusIsNotClipped) {
+// Full-integration regression for the clipped-status bug: a real edit-plan card (reached only
+// through the private MessageBubble it's nested inside) whose plan the engine refuses must reserve
+// enough height to show the whole wrapped reason, not a fixed single-line box.
+TEST_F(AIChatComponentTest, EditPlanCardRejectionReasonIsNotClipped) {
     AudioEngine engine;
     synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockInvalidPatchProvider>());
@@ -790,8 +789,7 @@ TEST_F(AIChatComponentTest, PatchCardPreviewUnavailableStatusIsNotClipped) {
     juce::ApplicationProperties props;
     configureTestAppProperties(props);
     synth::AIChatComponent chatComponent(service, props);
-    // Narrow panel so the status line is forced to wrap across more than one row inside
-    // PatchCard's diff/status TextEditor — the case a line-count estimate used to clip.
+    // Narrow panel so the reason is forced to wrap across more than one row.
     chatComponent.setSize(260, 600);
 
     juce::TextEditor* inputField = nullptr;
@@ -806,31 +804,27 @@ TEST_F(AIChatComponentTest, PatchCardPreviewUnavailableStatusIsNotClipped) {
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
 
-    // findDescendantWithText() only covers Label/TextButton, and the status line renders inside a
-    // juce::TextEditor — walk the tree directly for it.
-    juce::TextEditor* statusEditor = nullptr;
-    std::function<void(juce::Component*)> findStatusEditor = [&](juce::Component* c) {
-        if (c == nullptr || statusEditor != nullptr)
+    juce::Label* reasonLabel = nullptr;
+    std::function<void(juce::Component*)> findReason = [&](juce::Component* c) {
+        if (c == nullptr || reasonLabel != nullptr)
             return;
-        if (auto* editor = dynamic_cast<juce::TextEditor*>(c);
-            editor != nullptr && editor->getText().contains("Preview unavailable")) {
-            statusEditor = editor;
+        if (auto* label = dynamic_cast<juce::Label*>(c);
+            label != nullptr && label->getText().startsWith("This plan was rejected")) {
+            reasonLabel = label;
             return;
         }
         for (auto* child : c->getChildren())
-            findStatusEditor(child);
+            findReason(child);
     };
-    findStatusEditor(messageList);
-    ASSERT_NE(statusEditor, nullptr);
+    findReason(messageList);
+    ASSERT_NE(reasonLabel, nullptr);
 
     const int wrappedHeight = synth::AIChatComponent::computeWrappedTextHeight(
-        statusEditor->getFont(), statusEditor->getText(), statusEditor->getWidth());
-    EXPECT_GE(statusEditor->getHeight(), wrappedHeight)
-        << "the status box must be tall enough to show its full wrapped text, not a fixed "
-           "single-line estimate";
-    // Confirms the width really did force a wrap (otherwise the assertion above would pass
-    // trivially even under the old, buggy line-count estimate).
-    EXPECT_GT(wrappedHeight, (int)std::ceil(statusEditor->getFont().getHeight()) + 4);
+        reasonLabel->getFont(), reasonLabel->getText(), reasonLabel->getWidth());
+    EXPECT_GE(reasonLabel->getHeight(), wrappedHeight)
+        << "the card must be tall enough to show the full wrapped reason, not a fixed single-line estimate";
+    // Confirms the width really did force a wrap (otherwise the assertion above would pass trivially).
+    EXPECT_GT(wrappedHeight, (int)std::ceil(reasonLabel->getFont().getHeight()) + 4);
 }
 
 // Full-integration regression for the bottom-bar hint-reservation bug: downgradeStripLabel's text

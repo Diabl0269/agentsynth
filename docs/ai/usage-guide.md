@@ -1,7 +1,7 @@
 # AI Sound Designer: Usage Guide
 
 Practical instructions for using the AI Sound Designer in Agent Synth to create and modify patches,
-and to arrange, with natural language.
+and to arrange, with natural language, from one chat input.
 
 ## Getting started
 
@@ -39,8 +39,8 @@ Tips:
 - **Iterate.** Refine with follow-ups like "make it brighter" or "reduce the sustain".
 - **Use Agent Synth's own terminology.** Module names (Oscillator, Filter, ADSR) and parameter names
   (Cutoff, Frequency) yield more precise results than paraphrases.
-- **Review the JSON.** Expanding a patch card's JSON view shows exactly how the AI read your
-  request.
+- **Review the details.** **Show details** on the card lists every change and the JSON, which shows
+  exactly how the AI read your request.
 
 Example prompts:
 
@@ -55,45 +55,36 @@ Example prompts:
 - "Give me a sequence that plays C3, E3, G3, C4 in a loop."
 - "I want a percussive sound, similar to a wood block. Use a short decay."
 
-## Timeline changes
+## One message, one card
 
-The AI can arrange, not just patch. Ask it to add a track, place clips or draw automation — "add a
-bass track and put a four-bar riff at the top", "automate the filter cutoff opening across the first
-8 bars" — and it answers with a **Timeline Changes** card instead of, or alongside, the usual patch
-card.
+There is one input and no mode to pick. Ask for anything that changes the project in one message:
+a sound, modules, tracks, notes, automation, modulation, or several at once. For example:
 
-The card shows a plain-English summary of exactly what it would do (`Adds midi track "Bass"
-(unbound - bind it in the timeline panel); places 1 clip (8 notes) at 0-4 on "Bass"`), and nothing
-touches your arrangement until you press **Apply timeline changes**. The whole batch lands as a
-single edit, so one Cmd+Z takes all of it back.
+- "Add a bass track playing a four-bar riff, with a filter whose cutoff opens over the first 8 bars."
+- "Add an LFO that wobbles the bass filter, and a pad track holding a C minor chord for 8 bars."
+- "Make the lead brighter and automate its delay mix up in the last 4 bars."
 
-Two things it deliberately leaves to you: a new track arrives **unbound**, so you pick the module it
-plays through in the timeline panel's track header; and it never imports or records audio, so it
-only ever writes MIDI clips and automation, never audio clips.
+The answer is **one card** with **one Apply** button. The card lists what it would do, one line per
+part: the patch change first ("Merges a patch that adds 1 module, adds 1 modulation"), then the
+timeline change ("Adds instrument track "Bass" ...; writes 2 points to Filter
+cutoff"). Nothing touches the project until you press **Apply**, and the whole answer lands as a
+single edit, so one Cmd+Z takes all of it back: the tracks, the modules, the notes and the lanes
+together.
 
-If a suggestion cannot be applied — it names a track you do not have, or a value outside a
-parameter's range — the card says so and offers no button, rather than failing silently.
+A new instrument track arrives with its instrument already built and wired, and the answer may
+modulate or automate the modules it just created. It never imports or records audio, so it only
+writes MIDI clips and automation, never audio clips. It can also place a ready-made MIDI clip in one
+step by attaching a `.mid` file's notes to its answer.
 
-It can also place a ready-made MIDI clip in one step by attaching a `.mid` file's notes to its
-answer.
+If the answer cannot be applied (it names a track you do not have, a value outside a parameter's
+range, or asks to replace the patch while adding a track), the card says why and offers no button,
+rather than failing silently. **Show details** on the card lists every module change and the JSON
+behind the answer; the thumbs let you rate it.
 
-### The Patch / Arrange selector
-
-A small **Patch / Arrange** selector sits next to the model picker, in hosted and local mode alike,
-once a timeline is open. It decides — explicitly, with no keyword guessing — what your message asks
-for:
-
-- **Patch**, the default: patch creation and editing. With a local model, timeline suggestions can
-  still ride along on a patch answer when the model volunteers them.
-- **Arrange**: the answer is *only* a Timeline Changes card — tracks, clips, notes and automation.
-  Along with your message the model receives a compact summary of your arrangement, your track list,
-  and the list of automatable parameters. In hosted mode that goes to the arrangement service, the
-  same information the hosted-mode privacy notice covers; in local mode it goes to your own Ollama
-  model and nothing leaves your machine.
-
-Everything downstream is identical either way: the card shows the validated summary, nothing is
-applied until you press Apply, and a suggestion that fails validation shows the reason with no
-button. With the timeline closed the selector is hidden, and hiding it resets it to Patch.
+A question that asks for no change ("how does FM differ from subtractive?") gets a plain text
+answer with a local model. In hosted mode every message is answered with a card, since the hosted
+service only edits. A hosted answer that builds tracks can take 20 to 30 seconds; the thinking line
+under the conversation counts the wait.
 
 ## Troubleshooting
 
@@ -109,7 +100,7 @@ button. With the timeline closed the selector is hidden, and hiding it resets it
 - **The AI replies with text but no patch is applied.** The response may not contain a valid JSON
   patch in the expected block format, or the JSON may be malformed. Rephrase the prompt to ask
   explicitly for a JSON patch.
-- **The patch does not sound as expected.** Expand the patch card to review the generated JSON,
+- **The patch does not sound as expected.** Open the card's details to review the generated JSON,
   which shows how the AI interpreted the request, and refine the prompt accordingly.
 - **A request takes longer than expected and times out.** The request timeout defaults to 4 minutes
   and is configurable in Settings → AI → Request Timeout, with presets of 2, 4, 6 and 10 minutes. A

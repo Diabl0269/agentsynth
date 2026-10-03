@@ -7,16 +7,14 @@
 using synth::ui::describeChatMessageForAccessibility;
 
 TEST(ChatMessageAccessibilityTextTest, NamesTheSpeaker) {
-    EXPECT_EQ(describeChatMessageForAccessibility("user", "make it wetter", false, false), "You: make it wetter");
-    EXPECT_EQ(describeChatMessageForAccessibility("assistant", "Done", false, false), "Assistant: Done");
-    EXPECT_EQ(describeChatMessageForAccessibility("system", "Hi", false, false), "Assistant: Hi");
+    EXPECT_EQ(describeChatMessageForAccessibility("user", "make it wetter", false), "You: make it wetter");
+    EXPECT_EQ(describeChatMessageForAccessibility("assistant", "Done", false), "Assistant: Done");
+    EXPECT_EQ(describeChatMessageForAccessibility("system", "Hi", false), "Assistant: Hi");
 }
 
-TEST(ChatMessageAccessibilityTextTest, MentionsWhatTheMessageCanApply) {
-    EXPECT_EQ(describeChatMessageForAccessibility("assistant", "Done", true, false),
-              "Assistant: Done. Includes a patch you can apply");
-    EXPECT_EQ(describeChatMessageForAccessibility("assistant", "Done", false, true),
-              "Assistant: Done. Includes timeline changes you can apply");
+TEST(ChatMessageAccessibilityTextTest, MentionsAnEditPlanItCanApply) {
+    EXPECT_EQ(describeChatMessageForAccessibility("assistant", "Done", true),
+              "Assistant: Done. Includes an edit plan you can apply");
 }
 
 namespace {

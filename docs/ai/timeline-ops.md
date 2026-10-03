@@ -214,7 +214,7 @@ refused, while the same intent as a sibling `timelineOps` key is accepted by bot
 
 `validate()`, then preview, then the user clicks Apply, then `apply()`. Nothing is applied because a
 model asked for it; a person agrees to it first, having read a summary of what it does. This is
-identical to the patch card's posture.
+identical to a patch's posture: both reach the user on the one edit-plan card.
 
 - `validate()` mutates nothing and returns `previewText`, a deterministic sentence:
   `Adds midi track "Bass" (unbound - bind it in the timeline panel); places 1 clip (8 notes) at 0-4
@@ -258,10 +258,14 @@ identical to the patch card's posture.
   and owns no undo manager for it, so the **host** supplies the write path, which is what puts an
   AI-applied batch on the same shared undo stack as the user's own edits.
 
-`AIChatComponent` renders `TimelineCard` beside `PatchCard`, to the same conventions, with an
-"Apply timeline changes" button. A response carrying both gets both cards; a rejected envelope gets
-the card with the reason and **no button**, because a suggestion that cannot be applied must still
-say why but must not look clickable.
+The chat does not call these three. It treats every answer that changes the project as one
+[edit plan](#one-edit-plan): `AIChatComponent` sends an edit request through `sendProjectMessage`
+once a timeline is wired in, previews the answer with `previewProjectEdit` and renders ONE
+`EditPlanCard` whose single **Apply** calls `applyProjectEdit`, whatever the answer holds: a patch,
+`timelineOps`, or both. A refused plan gets the card with the reason and **no button**, because a
+suggestion that cannot be applied must still say why but must not look clickable. The envelope
+methods above remain the seam for the service tests, the eval harness and `TimelineOps`'s own
+round trip. See [chat component](chat-component.md#one-answer-one-card).
 
 Tests: `Tests/Timeline/TimelineOpsTests.cpp` — per-op apply, one-step undo, all-or-nothing with the
 failing op named by index, caps and bounds, the ungrammatical capabilities, pinned preview strings,
