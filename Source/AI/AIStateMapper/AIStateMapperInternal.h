@@ -162,7 +162,9 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
     // The timeline feed. A Track In node's only meaningful state is the identity of the timeline
     // track bound to it, which lives OUTSIDE the patch — so a model authoring one either creates a
     // node that plays nothing, or (worse) one that latches onto a track the user owns. The
-    // timeline's own add-track flow is the only thing that may create these.
+    // timeline's own add-track flow is the only thing that may create these -- reached from the
+    // menu, or from a timelineOps addInstrumentTrack op through the same build, which binds only
+    // the Track In it creates.
     "Track In",
     // The audio-take tap. It names a FILE PATH on disk — a model that could author one could aim
     // a recording anywhere the app can write, which is the same class of authority the Sampler's

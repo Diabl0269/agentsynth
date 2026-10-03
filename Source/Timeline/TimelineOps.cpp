@@ -2,6 +2,7 @@
 
 #include "../AppUndoManager.h"
 #include "AutomationBinding.h"
+#include "InstrumentTrackOpReader.h"
 #include "MidiClipFile.h"
 #include "TimelineValidator.h"
 
@@ -222,6 +223,65 @@ TimelineOpsResult runAddTrack(const juce::String& where, juce::DynamicObject& op
     parts.add("adds " + kindText + " track \"" + name + "\"" +
               (kind == TrackKind::Midi ? juce::String(" (unbound - bind it in the timeline panel)") : juce::String()));
     return {};
+}
+
+// -- addInstrumentTrack -----------------------------------------------------------------------
+// The one op that builds graph-side: the host runs the app's own "+ Track -> Instrument" build
+// (docs/ai/timeline-ops.md#addinstrumenttrack). The model may bind only the Track In this op
+// creates -- there is no bindingUuid and no plugin identity in the grammar, and "Track In" stays
+// non-authorable in patches. validate() cannot dry-run the graph side; on the scratch doc it adds
+// the MIDI track alone, so later ops in the batch can address it by name.
+
+TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
+                                        const TimelineOpsHost* host, TimelineOpsHost* applyHost,
+                                        juce::StringArray& parts) {
+    if (const auto bad = unknownKey(op, {"op", "name", "instrument", "poly", "instrumentId", "inserts"});
+        bad.isNotEmpty())
+        return fail(where + "has an unknown field \"" + bad +
+                    "\". An addInstrumentTrack op accepts only \"name\", \"instrument\", \"poly\", "
+                    "\"instrumentId\" and \"inserts\".");
+
+    juce::String name;
+    if (const auto result = checkName(where, op.getProperty("name"), "name", /*required=*/true, name); !result.ok)
+        return result;
+    // Unique, unlike addTrack's: later ops address this track by name, and the ambiguity rule in
+    // resolveTrack would otherwise make the track this op just built unreachable by name.
+    for (const auto& track : doc.getTracks())
+        if (track.name == name)
+            return fail(where + "names its track \"" + name +
+                        "\", but the timeline already has a track with that name. Pick a new name.");
+
+    InstrumentTrackOpFields fields;
+    if (const auto error = readInstrumentTrackOpFields(op, fields); error.isNotEmpty())
+        return fail(where + error);
+
+    if (static_cast<int>(doc.getTracks().size()) >= TimelineDoc::kMaxTracks)
+        return fail(where + "would take the timeline past its limit of " + juce::String(TimelineDoc::kMaxTracks) +
+                    " tracks.");
+    if (host == nullptr)
+        return fail(where + "This build cannot create instrument tracks from here.");
+
+    if (applyHost != nullptr) {
+        // The host creates the doc track AND the nodes; on false it has removed both.
+        juce::String instrumentUuid;
+        if (!applyHost->addInstrumentTrack(name, fields.instrument, fields.poly, fields.inserts, instrumentUuid))
+            return fail(where + "could not build the instrument track.");
+    } else if (!doc.addTrack(TrackKind::Midi, name).isValid()) {
+        return fail(where + "could not create the track.");
+    }
+
+    parts.add("adds instrument track \"" + name + "\" (" + describeInstrumentTrack(fields) + ")");
+    return {};
+}
+
+bool carriesInstrumentTrackOp(const juce::var& envelope) {
+    if (auto* rootObj = envelope.getDynamicObject())
+        if (auto* ops = rootObj->getProperty("timelineOps").getArray())
+            for (const auto& opVar : *ops)
+                if (auto* opObj = opVar.getDynamicObject())
+                    if (opObj->getProperty("op").toString() == "addInstrumentTrack")
+                        return true;
+    return false;
 }
 
 // -- placeClips -------------------------------------------------------------------------------
@@ -721,9 +781,11 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
  * The ONE implementation of the batch, shared by validate() and apply(): validate() runs it
  * against a throwaway COPY of the document and keeps only the summary, apply() runs it against the
  * real one. Sharing the code is what makes "a preview can never describe an apply that then fails"
- * true by construction, instead of by two lists of rules being kept in step by hand.
+ * true by construction, instead of by two lists of rules being kept in step by hand. `applyHost` is
+ * null during validate() and the host during apply(): only then does addInstrumentTrack build.
  */
-TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const juce::AudioProcessorGraph& graph) {
+TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
+                           const TimelineOpsHost* host, TimelineOpsHost* applyHost) {
     auto* rootObj = envelope.getDynamicObject();
     if (rootObj == nullptr)
         return fail("Timeline operations must be a JSON object carrying a \"timelineOps\" array.");
@@ -756,6 +818,8 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
         TimelineOpsResult result;
         if (opName == "addTrack")
             result = runAddTrack(where, *opObj, doc, parts);
+        else if (opName == "addInstrumentTrack")
+            result = runAddInstrumentTrack(where, *opObj, doc, host, applyHost, parts);
         else if (opName == "placeClips")
             result = runPlaceClips(where, *opObj, doc, parts, totalNotes);
         else if (opName == "writeLane")
@@ -764,7 +828,8 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
             result = runPlaceMidiClip(where, *opObj, doc, parts, totalNotes);
         else
             result = fail(index + " asks for unknown operation \"" + opName +
-                          "\". The operations are \"addTrack\", \"placeClips\", \"writeLane\" and \"placeMidiClip\".");
+                          "\". The operations are \"addTrack\", \"addInstrumentTrack\", \"placeClips\", \"writeLane\" "
+                          "and \"placeMidiClip\".");
 
         if (!result.ok)
             return result;
@@ -781,6 +846,8 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
 
 } // namespace
 
+const std::array<const char*, 3> TimelineOps::kAuthorableInstrumentTypes = {"Oscillator", "Wavetable", "Sampler"};
+
 // Deliberately keyed on PRESENCE, not on well-formedness: a malformed "timelineOps" is surfaced
 // as a rejection the user can see rather than silently dropped, which is the same reason
 // applyPatch() never swallows a validation failure.
@@ -790,7 +857,7 @@ bool TimelineOps::carriesOps(const juce::var& payload) {
 }
 
 TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const TimelineDoc& doc,
-                                        const juce::AudioProcessorGraph& graph) {
+                                        const juce::AudioProcessorGraph& graph, const TimelineOpsHost* host) {
     // The document is copied through its own serialisation and the batch is run against the COPY,
     // which is then thrown away: nothing here touches the live doc, and yet every op sees the
     // effect of the ones before it (a track added by op 0 is targetable by op 1), which a
@@ -801,11 +868,14 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
     if (!scratch.fromVar(doc.toVar()))
         return fail("The timeline could not be copied for validation, so nothing was checked or applied.");
 
-    return runBatch(envelope, scratch, graph);
+    return runBatch(envelope, scratch, graph, host, /*applyHost=*/nullptr);
 }
 
 // Per-op behaviour, each documented in full beside its implementation above:
 //  - addTrack (runAddTrack) creates the DOC track only, unbound.
+//  - addInstrumentTrack (runAddInstrumentTrack) has the host build a bound instrument track; a
+//    batch carrying one runs inside host->recordBatch (graph + timeline + macros) instead of
+//    recordTimelineChange, still ONE undo step.
 //  - placeClips (resolveTrack / runPlaceClips) resolves its target by exact track name or
 //    { "index": N }; an ambiguous name rejects the batch rather than guessing.
 //  - writeLane (runWriteLane) find-or-creates the lane and REPLACES every existing point across
@@ -813,10 +883,11 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
 //  - placeMidiClip (runPlaceMidiClip) imports through the same strict path a user's own
 //    "Import MIDI…" menu item uses.
 TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc,
-                                     const juce::AudioProcessorGraph& graph, AppUndoManager& undo) {
+                                     const juce::AudioProcessorGraph& graph, AppUndoManager& undo,
+                                     TimelineOpsHost* host) {
     // Validate first, on a copy. A rejection here means the live doc was never touched at all —
     // not "was touched and put back" — which is what "all-or-nothing" has to mean for the user.
-    const auto preview = validate(envelope, doc, graph);
+    const auto preview = validate(envelope, doc, graph, host);
     if (!preview.ok)
         return preview;
 
@@ -826,15 +897,20 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
     // ONE undo step for the whole batch, however many tracks, clips, notes and breakpoints it
     // touches — recordTimelineChange snapshots around the entire lambda (the same contract
     // MidiRecorder::stopAndCommit relies on for a take's clip plus its every note).
-    const bool pushed = undo.recordTimelineChange(doc, [&] {
-        applied = runBatch(envelope, doc, graph);
+    const bool buildsGraph = carriesInstrumentTrackOp(envelope);
+    const auto mutation = [&] {
+        applied = runBatch(envelope, doc, graph, host, buildsGraph ? host : nullptr);
 
-        // Unreachable: validate() just proved this exact batch against an identical document. Kept
-        // because the cost of being wrong is a half-applied arrangement, and restoring the
-        // pre-batch serialisation makes recordTimelineChange see no change and push nothing.
+        // Unreachable for a doc-only batch: validate() just proved it against an identical
+        // document. Reachable when the host fails to build a track (its graph side cannot be dry-run);
+        // the host contract is that it already removed what it made. Restoring the pre-batch
+        // serialisation makes the undo manager see no change and push nothing. (A doc-only op
+        // failing AFTER a host build would leave that build's nodes -- unreachable, as above.)
         if (!applied.ok)
             doc.fromVar(before);
-    });
+    };
+    // validate() rejects an addInstrumentTrack op with no host, so `host` is non-null here.
+    const bool pushed = buildsGraph ? host->recordBatch(mutation) : undo.recordTimelineChange(doc, mutation);
 
     if (!applied.ok)
         return applied;

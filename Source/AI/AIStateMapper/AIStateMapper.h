@@ -230,7 +230,7 @@ public:
      *        (AIIntegrationService::setTimelineToolsEnabled).
      *
      * The ops item schema is deliberately PERMISSIVE (one object shape, only "op" required, every
-     * per-op field optional): it is a GRAMMAR that lets the model express any of the four ops, not
+     * per-op field optional): it is a GRAMMAR that lets the model express any of the five ops, not
      * a validator — `TimelineOps::validate` is the gate, and it rejects unknown fields, bad
      * shapes and out-of-range values whole-batch regardless of what the grammar allowed through.
      * A strict discriminated union here would double-maintain the validator's rules in a dialect
@@ -249,13 +249,21 @@ public:
      *        requests in the same shape.
      *
      * Shares getPatchSchemaWithTimelineOps' permissive ops grammar (one item schema, one source),
-     * and the same posture: the grammar lets the model express the four ops,
+     * and the same posture: the grammar lets the model express the five ops,
      * TimelineOps::validate is the gate. Unlike the patch-mode extension, "timelineOps" is
      * required — an arrange answer with no ops is not an answer.
      */
     static juce::var getTimelineOpsEnvelopeSchema();
 
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
+
+    // Validates JSON-provided parameter values for one node against its actual processor
+    // instance. The strict/untrusted path only: validatePatch, and a timelineOps insert's params.
+    static PatchValidationResult validateNodeParams(juce::AudioProcessor* processor,
+                                                    const juce::DynamicObject* paramsObj);
+
+    /** Applies `paramsObj` to a processor not yet in a graph, untrusted (in-[0,1] values rescale). */
+    static void applyUntrustedParams(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj);
 
     /**
      * @brief The factory key graphToJSON writes for a live processor.
@@ -310,11 +318,6 @@ private:
     // Feeds a node's "state" property back into ModuleBase::setExtraState — trusted callers only.
     static void applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                            bool trusted);
-
-    // Validates JSON-provided parameter values for one node against its actual processor
-    // instance. Only used on the strict/untrusted validation path.
-    static PatchValidationResult validateNodeParams(juce::AudioProcessor* processor,
-                                                    const juce::DynamicObject* paramsObj);
 };
 
 } // namespace synth

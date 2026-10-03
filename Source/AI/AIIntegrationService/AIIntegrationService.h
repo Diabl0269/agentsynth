@@ -102,6 +102,9 @@ public:
     using TimelineOpsApplyCallback = std::function<TimelineOpsResult(const juce::var& envelope)>;
     void setTimelineOpsApplyCallback(TimelineOpsApplyCallback callback) { timelineOpsApply = std::move(callback); }
 
+    /** The app's graph-side builder for addInstrumentTrack ops; null (the default) rejects them. Not owned. */
+    void setTimelineOpsHost(TimelineOpsHost* host) { timelineOpsHost = host; }
+
     /** Applies a previously previewed envelope through the host callback. One undo step. */
     TimelineOpsResult applyTimelineOps(const juce::var& envelope);
 
@@ -273,6 +276,7 @@ private:
 
     // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
+    TimelineOpsHost* timelineOpsHost = nullptr; // see setTimelineOpsHost()
 
     // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt
     // section, schema extension and targets context only exist once the app explicitly opts in.

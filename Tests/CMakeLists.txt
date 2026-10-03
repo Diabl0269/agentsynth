@@ -110,6 +110,7 @@ add_executable(Tests
     Timeline/TimelineValidatorTests.cpp
     Timeline/TimelineOpsTests.cpp
     Timeline/TimelineOpsFixtureTests.cpp
+    Timeline/TimelineOpsInstrumentTrackTests.cpp
     Timeline/ArrangementContextTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
@@ -132,6 +133,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/MasterDualIOTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
+    Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
     Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowAutoChannelTests.cpp

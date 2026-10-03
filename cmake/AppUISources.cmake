@@ -8,6 +8,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentInternal.h
     Source/MainComponent/MainComponentRemoteActionInvoker.h
     Source/MainComponent/MainComponentRemoteActionInvoker.cpp
+    Source/MainComponent/MainComponentTimelineOpsHost.h
+    Source/MainComponent/MainComponentTimelineOpsHost.cpp
     Source/MainComponent/MainComponentSetup.cpp
     Source/MainComponent/MainComponentSetupToolbar.cpp
     Source/MainComponent/MainComponentSetupTimeline.cpp

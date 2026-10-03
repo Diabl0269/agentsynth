@@ -6,10 +6,16 @@ one undo step. [Timeline safety](timeline-safety.md) is the gate they go through
 [arrangement context](arrangement-context.md) is the read-only context that lets a model know what
 to ask for in the first place.
 
+**Trust statement for `addInstrumentTrack`:** the model may bind only the `Track In` that op
+creates. There is no `bindingUuid` and no plugin identity in the grammar, and `Track In` stays
+non-authorable in patches (`kNonAuthorableModuleTypes`).
+
 ## The envelope
 
 ```json
 { "timelineOps": [
+  { "op": "addInstrumentTrack", "name": "Lead", "instrument": "Oscillator",
+    "inserts": [ { "type": "Filter", "params": { "cutoff": 800 } } ] },
   { "op": "addTrack",   "kind": "midi", "name": "Bass" },
   { "op": "placeClips", "track": "Bass",
     "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
@@ -29,6 +35,7 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
 | Op | What it does | What it deliberately does not do |
 | --- | --- | --- |
 | `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
+| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int, accepted but inert — reserved for in-response node references); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
 | `placeClips` | Places clips, and their clip-relative notes, on a MIDI track targeted by exact name or `{"index": N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
 | `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track, creating that track if there is none (it has no graph, so it cannot pick the owning track the way `MainComponent::automateParameter` does; the next project open moves the lane), then REPLACES every point in the written span (min to max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
 | `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream`, placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat`. Clip length is `ceil` of its last note's end, floored at 1 beat, reusing `MidiClipFile::importIntoTrack`. | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
@@ -40,7 +47,7 @@ The local (Ollama) path can author this envelope too, behind
 additionally gated on a timeline context being installed (`hasTimelineContext()`). While active,
 three things change and nothing else:
 
-- the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the four ops,
+- the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the five ops,
   swapped into the existing history **in place**, so a mid-conversation toggle never clears the chat
   and off means byte-identical to the pre-timeline prompt;
 - the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
@@ -60,6 +67,40 @@ three things change and nothing else:
 Extraction, validation, preview and Apply are unchanged and provider-agnostic either way: they act
 on what a response actually carries, and the user's Apply click stays the write gate. Pinned by
 `AIIntegrationServiceTest.TimelineToolsToggle*` and `AutomationTargetsSection*`.
+
+## `addInstrumentTrack`
+
+`TimelineOps` is static and only reads the graph, while the instrument-track build lives in the app
+(macros, card placement). So the op goes through a **host seam**, `synth::TimelineOpsHost`
+(`TimelineOps.h`), which `MainComponentTimelineOpsHost` implements and `MainComponentSetup.cpp`
+installs on `AIIntegrationService::setTimelineOpsHost` beside the apply callback:
+
+- `addInstrumentTrack(name, instrumentType, poly, inserts, instrumentUuid)` — the app's own build
+  (`MainComponent::buildInstrumentTrackBody`, shared with the menu), skipping the default track
+  preset so the preview cannot lie, inside the batch's transaction. Returns false having removed
+  anything it created.
+- `recordBatch(mutation)` — runs the whole batch as ONE undo step over graph, timeline and macros
+  (`AppUndoManager::recordGraphTimelineAndMacroChange`), then reconciles the timeline.
+
+`validate(envelope, doc, graph, host)` fails an `addInstrumentTrack` op outright when `host` is null
+("This build cannot create instrument tracks from here."). With a host it checks every field and the
+inserts (no host needed for those), then adds just the MIDI track to the scratch doc so later ops in
+the batch (`placeClips` by name, …) see it. **The graph side cannot be dry-run**: validation never
+calls the host, so a factory failure surfaces at apply, where the host's false return makes
+`apply()` restore the doc and report it, with nothing pushed to undo.
+
+`apply()` keeps the plain `recordTimelineChange` path for a batch with no `addInstrumentTrack` op.
+Otherwise it runs the batch inside `host->recordBatch`, and the op calls `host->addInstrumentTrack`
+(which creates the doc track and the nodes) instead of `doc.addTrack`.
+
+Preview parts, pinned by `TimelineOpsInstrumentTrackTest.PreviewStringsArePinned`:
+`adds instrument track "Bass" (Oscillator with envelope and channel strip)`, `(Sampler with channel
+strip)` for a Sampler, a `poly ` prefix before the type when `poly` is on, and `, inserts: Filter,
+Distortion` appended when the op has inserts.
+
+Tests: `Tests/Timeline/TimelineOpsInstrumentTrackTests.cpp` (a fake host: field and insert checks,
+previews, one undo step, host never called for an invalid batch) and
+`Tests/Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp` (the real host end to end).
 
 ## `placeMidiClip` and the `.mid` blob
 
@@ -116,7 +157,8 @@ identical to the patch card's posture.
   `kMaxOps` (64) and `kMaxNameChars` (128); a third, `kMaxMidBlobBytes` (262144), bounds only
   `placeMidiClip`'s `midBase64`.
 - **Capabilities are absent from the grammar, not refused field by field.** An op has no
-  `assetRef`, no `recordMode`, no `bindingUuid`, and no kind beyond `midi` and `automation`. A
+  `assetRef`, no `recordMode`, no `bindingUuid`, and no kind beyond `midi` and `automation`
+  (`addInstrumentTrack` binds only the `Track In` it creates). A
   `.mid` blob is not an exception to this, because it can only ever decode to notes. Unknown fields
   *inside* an op are **rejected**, so a future field cannot be smuggled past a gate that never
   inspected it — the same reasoning as `validateTimeline`'s unknown-top-level-key refusal. Unknown
@@ -127,7 +169,8 @@ identical to the patch card's posture.
   trusted by definition) and `apply()` runs the *same code* against the real one, so every op sees
   the effect of the ones before it and no preview can describe an apply that then fails. A rejection
   means the live doc was never touched at all.
-- **One undo step.** The whole batch runs inside a single `AppUndoManager::recordTimelineChange`, so
+- **One undo step.** The whole batch runs inside a single `AppUndoManager::recordTimelineChange` (or,
+  with an `addInstrumentTrack` op, the host's graph + timeline + macro transaction), so
   however many tracks, clips, notes and breakpoints it touches, one `Cmd+Z` reverts all of it — the
   contract `MidiRecorder::stopAndCommit` already relies on for a take's clip plus its notes.
 
@@ -162,7 +205,9 @@ function of `TimelineOps::validate` and a fixed graph, so what it measures is a 
 Ollama. The scenario set spans a valid three-op envelope; a valid `placeMidiClip` carrying a real
 base64 `.mid`; notes over `TimelineDoc::kMaxNotesPerClip`; a `writeLane` value outside the live
 parameter's range; an unknown op field; a SMPTE-format `.mid` blob; a `midBase64` over
-`kMaxMidBlobBytes`; and the two-door pin — a timelineOps-shaped payload smuggled under a patch's
+`kMaxMidBlobBytes`; a valid `addInstrumentTrack` with one Filter insert followed by `placeClips` on
+its new track (checked with a validation-only stub host, since the op refuses without one); and the
+two-door pin — a timelineOps-shaped payload smuggled under a patch's
 `"timeline"` key, checked through `AIStateMapper::validatePatch` instead and expected to come back
 `TimelineNotAllowed`.
 

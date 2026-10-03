@@ -3,7 +3,7 @@
 # `bash scripts/check-function-sizes.sh --update` so the entry tightens; once under the cap
 # the entry must be removed (--update does that).
 # Never add a NEW function here -- extract a named step / collaborator instead.
-284 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
+245 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
 407 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
 239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
 260 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch

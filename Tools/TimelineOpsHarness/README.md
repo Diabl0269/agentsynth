@@ -40,7 +40,9 @@ cmake --build build --target TimelineOpsHarness
 }
 ```
 
-- `kind` is `"timelineOps"` (payload is an envelope, checked via `TimelineOps::validate`) or
+- `kind` is `"timelineOps"` (payload is an envelope, checked via `TimelineOps::validate` with a
+  validation-only stub host, so an `addInstrumentTrack` op is checked rather than refused for want
+  of one; the graph side is never built) or
   `"patchSmuggle"` (payload is a patch, checked via `AIStateMapper::validatePatch(trusted=false)` —
   used by the one fixture pinning that a timelineOps-shaped payload placed under a patch's reserved
   `"timeline"` key is refused, never inspected for a legitimate-looking shape inside it).

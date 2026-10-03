@@ -382,6 +382,8 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
+    Source/Timeline/InstrumentTrackOpReader.cpp
+    Source/Timeline/InstrumentTrackOpReader.h
     Source/Timeline/TimelineOps.cpp
     Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp

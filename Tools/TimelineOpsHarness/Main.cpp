@@ -45,6 +45,16 @@ juce::String argValue(const juce::StringArray& args, const juce::String& flag, c
     return fallback;
 }
 
+// A host that only has to EXIST: validate() never builds, it just refuses an addInstrumentTrack op
+// when no host is wired in. TimelineOpsHarness and TimelineOpsFixtureTests each carry one.
+struct ValidationOnlyHost : synth::TimelineOpsHost {
+    bool addInstrumentTrack(const juce::String&, const juce::String&, bool,
+                            const std::vector<synth::InstrumentTrackInsert>&, juce::String&) override {
+        return false;
+    }
+    bool recordBatch(const std::function<void()>&) override { return false; }
+};
+
 // The same fixed graph every fixture is checked against: a Filter and an Oscillator carrying the
 // stable "filter-uuid"/"osc-uuid" properties Tests/Timeline/TimelineOpsTests.cpp's own fixture graph uses,
 // so a writeLane fixture targeting them resolves exactly the way the unit tests' does.
@@ -87,9 +97,10 @@ FixtureOutcome runFixture(const juce::var& fixture) {
     juce::AudioProcessorGraph graph;
     buildFixtureGraph(graph);
     synth::TimelineDoc doc;
+    ValidationOnlyHost host;
 
     if (kind == "timelineOps") {
-        const auto result = synth::TimelineOps::validate(payload, doc, graph);
+        const auto result = synth::TimelineOps::validate(payload, doc, graph, &host);
         outcome.ranOk = true;
         outcome.actualValid = result.ok;
         outcome.actualMessage = result.message;

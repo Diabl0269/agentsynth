@@ -1,0 +1,17 @@
+{
+  "name": "valid-add-instrument-track",
+  "description": "addInstrumentTrack (Oscillator, one Filter insert with a cutoff) then placeClips on the new track by name. Validated with a stub host present, because the op refuses outright without one; the graph side cannot be dry-run, so this pins the doc side and the preview.",
+  "kind": "timelineOps",
+  "expectedValid": true,
+  "expectedMessageContains": "",
+  "expectedPreviewContains": "instrument track \"Bass\" (Oscillator with envelope and channel strip, inserts: Filter)",
+  "payload": {
+    "timelineOps": [
+      { "op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+        "inserts": [ { "type": "Filter", "params": { "cutoff": 800 } } ] },
+      { "op": "placeClips", "track": "Bass", "clips": [
+          { "startBeat": 0, "lengthBeats": 4, "name": "A",
+            "notes": [ { "startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100, "channel": 1 } ] } ] }
+    ]
+  }
+}

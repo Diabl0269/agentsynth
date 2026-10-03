@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_graphics/juce_graphics.h>
+#include <vector>
 
 namespace synth::maincomponent {
 
@@ -41,6 +42,7 @@ struct InstrumentChainBuild {
     juce::String chainSourceType;
     juce::Point<int> chainSourcePosition;
     juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
+    std::vector<juce::String> insertUuids; // effect inserts, in chain order (timelineOps only)
 };
 
 /** Message-thread state of one armed-Audio-track take, from the Record-on click to the commit.
