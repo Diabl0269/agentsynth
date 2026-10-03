@@ -80,4 +80,20 @@ void TimelinePanelComponent::stepTrackHeight(synth::TrackId track, int direction
         mutate();
 }
 
+// Vertical zoom gives every track the same height: clears each track's own height as one undo step.
+// False when every track already had the default, so a run of wheel ticks writes the doc once.
+bool TimelinePanelComponent::clearTrackHeightOverrides() {
+    if (doc_ == nullptr)
+        return false;
+    const auto& tracks = doc_->getTracks();
+    if (std::none_of(tracks.begin(), tracks.end(), [](const synth::Track& t) { return t.heightScale != 1.0; }))
+        return false;
+    auto mutate = [this] { doc_->resetTrackHeightScales(); };
+    if (trackHeaderHost_ != nullptr)
+        trackHeaderHost_->performTrackEdit(mutate);
+    else
+        mutate();
+    return true;
+}
+
 } // namespace synth::ui

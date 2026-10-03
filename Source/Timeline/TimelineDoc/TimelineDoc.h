@@ -362,6 +362,8 @@ public:
     bool setTrackArmed(TrackId id, bool armed);
     // Clamped to [Track::kMinHeightScale, Track::kMaxHeightScale]; non-finite is refused.
     bool setTrackHeightScale(TrackId id, double scale);
+    // Puts every track back at the default height scale as one mutation; false when none differed.
+    bool resetTrackHeightScales();
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
 

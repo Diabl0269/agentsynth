@@ -395,13 +395,17 @@ void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
 // layout to the new one (clip rows and lane rows rescale, the section row does not), and the
 // scroll moves by whatever keeps that y at the same visible position. Read from the actual
 // (rounded, clamped) layouts rather than `factor`, so the clamps can't make the anchor drift.
+// A zoom sets ONE height for every track: any per-track height is cleared first, as one undo step,
+// so the zoom never scales a tall or short track relative to the rest.
 void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
     const auto before = rowLayout();
     const double contentY = anchorLaneY + viewState_.trackScrollY;
+    const bool clearedHeights = clearTrackHeightOverrides();
     viewState_.scaleRowHeight(factor);
     pushAutomationGeometry(); // lane rows follow the same zoom
     const auto after = rowLayout();
-    if (after.trackRowHeight() == before.trackRowHeight() && after.totalHeight() == before.totalHeight())
+    if (!clearedHeights && after.trackRowHeight() == before.trackRowHeight() &&
+        after.totalHeight() == before.totalHeight())
         return;
     viewState_.trackScrollY = TimelineRowLayout::mapContentY(before, after, contentY) - anchorLaneY;
     viewState_.scrollTracksPx(0.0, maxTrackScrollPx()); // clamp into the new range

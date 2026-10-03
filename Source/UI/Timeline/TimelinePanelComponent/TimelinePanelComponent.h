@@ -836,6 +836,8 @@ private:
     void applyWheelScroll(int axis, double amount);
     synth::ui::ScrollTweenRunner wheelTween_;
     void zoomTrackRows(double factor, double anchorLaneY);
+    // Resets every track's own height (one undo step); false when none had one.
+    bool clearTrackHeightOverrides();
     // anchorX is in the ruler's coordinate space (== TimelineViewState's x origin) -- see its
     // definition in TimelinePanelLayout.cpp for why this is the ONE horizontal-zoom writer.
     void zoomHorizontalAroundX(double factor, double anchorX);
