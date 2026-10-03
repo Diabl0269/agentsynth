@@ -166,11 +166,10 @@ int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
 }
 
 void MixerInsertList::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
-    const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
-    const auto disabled = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto text = synth::theme::themeOf(*this).colors.textPrimary;
+    const auto muted = synth::theme::themeOf(*this).colors.textMuted;
+    const auto disabled = synth::theme::themeOf(*this).colors.textDisabled;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
 
     // The empty-state placeholder always occupies row 0 (jmax(1, size) below matches
     // getPreferredHeight()'s own row count), so anchor the "Edit on canvas" link AFTER it rather

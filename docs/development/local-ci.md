@@ -39,7 +39,8 @@ Fast checks first, so a lint failure does not wait on a full build.
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
    `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
-   ([rule](accessibility.md#no-all-caps-ui-text)).
+   ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
+   written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).
 8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
    -DENABLE_AI_HARNESS=ON` and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,

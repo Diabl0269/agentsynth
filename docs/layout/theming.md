@@ -257,7 +257,15 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
-The shared icon button, chip, key toggle, colour swatch and text link, then the stock-widget overrides
+**Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
+test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
+returns the active theme or a default-constructed `Theme`. Never write the colour as a literal in a
+`lf ? theme colour : juce::Colour(0x...)` fallback: that leaves the control on the dark theme's cyan or
+white in a light or custom theme. `scripts/check-ui-caps.sh` rejects the default accent and text
+literals outside `Source/UI/Theme/`; a fixed product colour (not a fallback) opts out with a trailing
+`// not-fallback: <reason>`.
+
+The shared icon button, chip, fold arrow, key toggle, colour swatch and text link, then the stock-widget overrides
 implemented in `AppLookAndFeel`:
 
 - **IconButton** — `synth::ui::IconButton` (`Source/UI/Layout/IconButton.h`) is the one icon-only
@@ -287,6 +295,18 @@ implemented in `AppLookAndFeel`:
   track channel chip, the routing pane's combo buttons and the piano-roll header chips draw their
   background with it and add their own content (meter and name, value and chevron, glyph or word). The
   chevron of a chip combo and of `drawComboBox` is the one `paintComboChevron`.
+- **Fold arrow** — `AppLookAndFeel::drawDisclosureChevron(g, area, openness, highlighted)` (free function
+  `synth::theme::paintDisclosureChevron`, which a call site outside any `AppLookAndFeel` calls with a
+  default `Theme`) is the one arrow every fold uses: the module library's section and format headers, the
+  help popup's sections, the settings and preferences section headers, the macro card and the open macro's
+  collapse button, and the track header's automation fold arrow. It is a filled triangle path filling
+  `area` (an 8 px square, 6 px for a library format sub-header), so it never depends on a font's arrow
+  coverage. `openness` 0 is closed (points right), 1 is open (points down) and values between are the
+  triangle turned through the quarter turn, so a call that animates its fold passes the animation
+  progress and the arrow turns with it. The colour is `textMuted` at rest and `textPrimary` while
+  highlighted; a call site never picks its own, except the macro hull's collapse button, which draws on
+  the macro's own colour and uses a fixed contrast colour. The `FoldAllButton` strip button is a text
+  link, not an arrow, and the combo chevron above is a different control.
 - **Key toggle** — `AppLookAndFeel::drawKeyToggle(g, toggle, isBlackKey, highlighted, down)` paints a
   `juce::ToggleButton` as a piano key (the scale assist panel's custom-scale pitches): `pianoKeyWhite` or
   `pianoKeyBlack` fill, `accent` while on, a `textPrimary` wash at 0.10 (hover) or 0.20 (press), a `border`

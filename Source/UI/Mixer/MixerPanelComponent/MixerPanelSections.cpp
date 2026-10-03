@@ -113,9 +113,9 @@ void MixerPanelComponent::paintDragBubble(juce::Graphics& g) const {
     if (text.isEmpty())
         return;
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto fill = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-    const auto outline = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-    const auto textColour = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
+    const auto fill = synth::theme::themeOf(*this).colors.surfaceHi;
+    const auto outline = synth::theme::themeOf(*this).colors.accent;
+    const auto textColour = synth::theme::themeOf(*this).colors.textPrimary;
     const juce::String mono = laf != nullptr ? laf->getTheme().type.monoFamily : juce::String("JetBrains Mono");
     const float size = laf != nullptr ? laf->getTheme().type.value : 10.0f;
 

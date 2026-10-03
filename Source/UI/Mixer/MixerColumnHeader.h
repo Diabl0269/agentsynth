@@ -220,10 +220,9 @@ public:
     juce::Colour getColour() const noexcept { return colour_; }
 
     void paint(juce::Graphics& g) override {
-        const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-        const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
-        const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
+        const auto text = synth::theme::themeOf(*this).colors.textPrimary;
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
 
         g.setColour(surface);
         g.fillRect(getLocalBounds());

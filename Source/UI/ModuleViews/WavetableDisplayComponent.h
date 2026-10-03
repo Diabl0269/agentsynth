@@ -61,13 +61,11 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-
-        const juce::Colour bg = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
-        const juce::Colour border = lf ? lf->getTheme().colors.border : juce::Colour(0xff2a2a3e);
-        const juce::Colour accent = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00b4d8);
-        const juce::Colour mutedText = lf ? lf->getTheme().colors.textMuted : juce::Colour(0xff6a6a7e);
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        const juce::Colour bg = colors.bg1;
+        const juce::Colour border = colors.border;
+        const juce::Colour accent = colors.accent;
+        const juce::Colour mutedText = colors.textMuted;
 
         const auto bounds = getLocalBounds().toFloat();
         g.setColour(bg);

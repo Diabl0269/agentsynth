@@ -244,11 +244,10 @@ float MixerSendList::rowTop(int rowIndex) const {
 // real child controls are moved to the same place by placeRows(). A lifted row is drawn last, so it
 // sits over the rows gliding past it.
 void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
-    const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-    const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
+    const auto text = synth::theme::themeOf(*this).colors.textPrimary;
+    const auto muted = synth::theme::themeOf(*this).colors.textMuted;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
+    const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
 
     const auto& entry = entries_[(size_t)rowIndex];
     auto row = getLocalBounds().withY((int)std::lround(rowTop(rowIndex))).withHeight(kRowHeight);
@@ -285,8 +284,7 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
 }
 
 void MixerSendList::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
     const int lifted = rowDrag_.isReordering() ? rowDrag_.animator().getDraggedKey() : -1;

@@ -146,12 +146,9 @@ public:
         float w = bounds.getWidth();
         float h = bounds.getHeight();
 
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-
-        juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
-        juce::Colour gridColor = lf ? lf->getTheme().colors.border.withAlpha(0.4f) : juce::Colour(0xff2a2a3e);
-        juce::Colour mutedText = lf ? lf->getTheme().colors.textMuted : juce::Colour(0xff6a6a7e);
+        juce::Colour bgColor = synth::theme::themeOf(*this).colors.bg1;
+        juce::Colour gridColor = synth::theme::themeOf(*this).colors.border.withAlpha(0.4f);
+        juce::Colour mutedText = synth::theme::themeOf(*this).colors.textMuted;
 
         // Dark background
         g.fillAll(bgColor);
@@ -229,7 +226,7 @@ public:
         fillPath.closeSubPath();
 
         // Gradient fill under curve
-        juce::Colour accent = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00b4d8);
+        juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
         juce::ColourGradient gradient(accent.withAlpha(0.375f), 0.0f, 0.0f, // 0x60 == 96/255 ≈ 0.375
                                       accent.withAlpha(0.063f), 0.0f, h,    // 0x10 == 16/255 ≈ 0.063
                                       false);
@@ -296,7 +293,7 @@ public:
             specFill.lineTo(w, h);
             specFill.closeSubPath();
 
-            juce::Colour accent2 = lf ? lf->getTheme().colors.accent2 : juce::Colour(0xff00D1FF);
+            juce::Colour accent2 = synth::theme::themeOf(*this).colors.accent2;
 
             // Semi-transparent green fill
             juce::ColourGradient specGradient(accent2.withAlpha(0.188f), 0.0f, 0.0f, accent2.withAlpha(0.031f), 0.0f, h,

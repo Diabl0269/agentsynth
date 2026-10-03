@@ -11,12 +11,6 @@ namespace {
 constexpr float kGlyphSize = 8.0f;
 constexpr float kBadgeFontSize = 9.5f;
 constexpr int kBadgePadding = 4;
-
-juce::Colour themed(const juce::Component& c, juce::Colour fallback, juce::Colour synth::theme::Colors::* token) {
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().colors.*token;
-    return fallback;
-}
 } // namespace
 
 // Focusable for the keyboard path, but a click must not pull focus off the row: the row's own
@@ -43,19 +37,8 @@ void TrackFoldArrow::setState(bool expanded, const juce::String& trackName, int 
 
 void TrackFoldArrow::paintButton(juce::Graphics& g, bool highlighted, bool) {
     const auto bounds = getLocalBounds().toFloat();
-    auto colour = themed(*this, juce::Colour(0xffEAEEF3), &synth::theme::Colors::textPrimary);
-    if (!highlighted)
-        colour = colour.withMultipliedAlpha(0.85f);
-
-    // A filled triangle rather than a text glyph, so it never depends on a font's arrow coverage.
     const auto glyph = juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre());
-    juce::Path arrow;
-    if (expanded_)
-        arrow.addTriangle(glyph.getTopLeft(), glyph.getTopRight(), {glyph.getCentreX(), glyph.getBottom() - 1.0f});
-    else
-        arrow.addTriangle(glyph.getTopLeft(), glyph.getBottomLeft(), {glyph.getRight() - 1.0f, glyph.getCentreY()});
-    g.setColour(colour);
-    g.fillPath(arrow);
+    synth::theme::paintDisclosureChevron(g, glyph, expanded_ ? 1.0f : 0.0f, synth::theme::themeOf(*this), highlighted);
 
     synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }
@@ -94,8 +77,9 @@ int laneCountBadgeWidth(int laneCount) {
 void paintLaneCountBadge(juce::Graphics& g, juce::Rectangle<int> area, int laneCount, const juce::Component& owner) {
     if (area.isEmpty() || laneCount <= 0)
         return;
-    const auto muted = themed(owner, juce::Colour(0xff8A93A0), &synth::theme::Colors::textMuted);
-    const auto border = themed(owner, juce::Colour(0xff2A2F38), &synth::theme::Colors::border);
+    const auto& colors = synth::theme::themeOf(owner).colors;
+    const auto muted = colors.textMuted;
+    const auto border = colors.border;
     const auto pill = area.toFloat().reduced(0.5f);
     g.setColour(border);
     g.drawRoundedRectangle(pill, 3.0f, 1.0f);

@@ -68,9 +68,8 @@ void MixerMeterReadout::mouseUp(const juce::MouseEvent& event) {
 }
 
 void MixerMeterReadout::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto normalColour = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
-    const auto clipColour = laf != nullptr ? laf->getTheme().colors.meterClip : juce::Colour(0xffFF4D4F);
+    const auto normalColour = synth::theme::themeOf(*this).colors.textMuted;
+    const auto clipColour = synth::theme::themeOf(*this).colors.meterClip;
     g.setColour(clipped_ ? clipColour : normalColour);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText(displayText_, getLocalBounds(), juce::Justification::centred, false);

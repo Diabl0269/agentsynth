@@ -23,10 +23,6 @@ struct MixerZoneChannel {
     bool hidden = false;
 };
 
-inline const synth::theme::Theme& zonesThemeOf(const juce::Component& component) {
-    return synth::theme::themeOf(component);
-}
-
 /** An eye that is open while the channel is shown and struck through while it is hidden. A plain click
  *  toggles; an Alt-click asks to show only this channel. */
 class MixerZonesEye : public IconButton {

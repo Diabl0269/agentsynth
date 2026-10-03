@@ -11,13 +11,9 @@ struct DividerColours {
     juce::Colour accent;
 };
 
-// Literal fallbacks: a headless test has no themed LookAndFeel installed.
 DividerColours dividerColoursFor(const juce::Component& c) {
-    if (const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
-        const auto& colors = laf->getTheme().colors;
-        return {colors.border, colors.accent};
-    }
-    return {juce::Colour(0xff2A2F38), juce::Colour(0xff00D1FF)};
+    const auto& colors = synth::theme::themeOf(c).colors;
+    return {colors.border, colors.accent};
 }
 } // namespace
 
@@ -121,8 +117,7 @@ void MixerCollapsedSection::setSummary(const juce::String& summary) {
 void MixerCollapsedSection::paint(juce::Graphics& g) {
     if (summary_.isEmpty())
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    g.setColour(laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470));
+    g.setColour(synth::theme::themeOf(*this).colors.textDisabled);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText(summary_, getLocalBounds().reduced(4, 0), juce::Justification::centredLeft, true);
 }

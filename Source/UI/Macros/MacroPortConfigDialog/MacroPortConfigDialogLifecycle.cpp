@@ -197,7 +197,7 @@ void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
 void MacroPortConfigDialog::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 
-    const auto& c = liveThemeColours(*this);
+    const auto& c = synth::theme::themeOf(*this).colors;
 
     // "Add a port" panel — a faintly bordered, rounded group so the row of controls above the Add
     // button reads as one tied-together block rather than floating loose

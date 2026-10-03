@@ -75,18 +75,10 @@ void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
 }
 
 // The lane background paintGridBackdrop() fills, which the curve colour has to read against.
-static juce::Colour laneBackground(const juce::Component& c) {
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().colors.bg1;
-    return juce::Colours::darkgrey.darker(0.6f);
-}
+static juce::Colour laneBackground(const juce::Component& c) { return synth::theme::themeOf(c).colors.bg1; }
 
 juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
-    juce::Colour colour = juce::Colours::cyan;
-    if (curveColour_.has_value())
-        colour = *curveColour_;
-    else if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        colour = lf->getTheme().colors.modWire;
+    const juce::Colour colour = curveColour_.value_or(synth::theme::themeOf(*this).colors.modWire);
     return readableOn(colour, laneBackground(*this));
 }
 

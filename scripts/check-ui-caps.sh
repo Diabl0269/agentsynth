@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 #
-# Guard: UI text is never written in ALL CAPS.
+# Guard: UI text is never written in ALL CAPS, and no file paints from a copy of the default theme.
 #
 # Fails on, under Source/UI/ (or the paths given):
-#   (a) any call to toUpperCase() / toupper() in code, and
+#   (a) any call to toUpperCase() / toupper() in code,
 #   (b) any string literal containing a word of 4+ consecutive capital letters that is not a known
-#       abbreviation (the list below; add to it deliberately).
+#       abbreviation (the list below; add to it deliberately), and
+#   (c) outside Source/UI/Theme/, the default theme's accent (0xff00D1FF) or primary text colour
+#       (0xffEAEEF3) written as a literal: the "no look-and-feel installed" fallback of a theme lookup.
+#       Read the colour through synth::theme::themeOf(component) instead, so a light or custom theme
+#       never leaves a control stuck on the dark theme's cyan or white.
 # Comments are not checked. A line that is not UI text (a hex colour code, a card title awaiting its
-# own change) opts out with a trailing marker that states why:
+# own change) opts out of (a) and (b) with a trailing marker that states why:
 #
 #     auto hex = s.toUpperCase(); // not-ui-text: hex colour code
+#
+# A literal that is a real product colour, not a fallback, opts out of (c) the same way:
+#
+#     juce::Colour kRecord{0xff00D1FF}; // not-fallback: <why this colour is fixed>
 #
 # Usage: bash scripts/check-ui-caps.sh [<file-or-dir> ...]     (default: Source/UI)
 # Exit status 1 when anything is flagged. Runs in the Lint job; no compiler, ~1 s.
@@ -38,6 +46,9 @@ ABBREVIATIONS = {
 CAPS_WORD = re.compile(r"(?<![A-Za-z])[A-Z]{4,}(?![a-z])")
 UPPER_CALL = re.compile(r"\b(?:toUpperCase|toupper)\s*\(")
 MARKER = re.compile(r"//\s*not-ui-text:\s*\S")
+FALLBACK_MARKER = re.compile(r"//\s*not-fallback:\s*\S")
+FALLBACK_COLOUR = re.compile(r"\b0x[fF][fF](?:00[dD]1[fF][fF]|[eE][aA][eE][eE][fF]3)\b")
+THEME_DIR = os.sep.join(["Source", "UI", "Theme"]) + os.sep
 
 
 def scan_line(line, in_block):
@@ -107,8 +118,12 @@ def scan_file(path):
     with open(path, encoding="utf-8", errors="replace") as handle:
         lines = handle.read().split("\n")
     in_block = False
+    theme_file = THEME_DIR in os.path.abspath(path)
     for number, line in enumerate(lines, 1):
         code, literals, in_block = scan_line(line, in_block)
+        if not theme_file and FALLBACK_COLOUR.search(code) and not FALLBACK_MARKER.search(line):
+            hits.append((number, "default-theme colour literal (use synth::theme::themeOf)", line.strip()))
+            continue
         if MARKER.search(line) or 'R"' in line:  # raw string literals have their own quoting
             continue
         if UPPER_CALL.search(code):
@@ -144,5 +159,7 @@ if total:
     print("UI text is never all caps: write it in normal case (Title Case for titles, sentence case for")
     print("buttons) and drop toUpperCase(). See docs/development/accessibility.md#no-all-caps-ui-text.")
     print("Not UI text (hex code, identifier)? End the line with: // not-ui-text: <reason>")
+    print("Colour literal that is a fixed product colour, not a fallback? End it with: // not-fallback: <reason>")
+    print("A theme colour is read with synth::theme::themeOf(component).colors.<token>, never a literal.")
     sys.exit(1)
 PY

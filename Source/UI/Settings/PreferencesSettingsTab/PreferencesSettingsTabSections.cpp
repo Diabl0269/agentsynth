@@ -1,6 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // Concern: the "All" category view. Every category sits under a clickable header (chevron + name)
 // that folds its rows, and the one fold-all button acts on every header at once. The rows
@@ -48,10 +49,11 @@ void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool 
     const auto textColour = findColour(juce::Label::textColourId);
     const auto colour = textColour.withAlpha(hot || hasKeyboardFocus(false) ? kHeaderHoverTextAlpha : kHeaderTextAlpha);
     const auto bounds = getLocalBounds();
-    ShortcutsSettingsTab::drawChevron(g,
-                                      juce::Rectangle<float>(6.0f, (float)(bounds.getHeight() - kChevronSize) * 0.5f,
-                                                             (float)kChevronSize, (float)kChevronSize),
-                                      owner.isSectionCollapsed(category), colour);
+    synth::theme::paintDisclosureChevron(g,
+                                         juce::Rectangle<float>(6.0f, (float)(bounds.getHeight() - kChevronSize) * 0.5f,
+                                                                (float)kChevronSize, (float)kChevronSize),
+                                         owner.isSectionCollapsed(category) ? 0.0f : 1.0f, synth::theme::themeOf(*this),
+                                         hot || hasKeyboardFocus(false));
     g.setColour(colour);
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
     g.drawText(categoryName(category), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);

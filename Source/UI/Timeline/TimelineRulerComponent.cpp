@@ -626,19 +626,11 @@ void TimelineRulerComponent::reArmLoopIfClickOnInactiveBrace(const juce::MouseEv
 void TimelineRulerComponent::paint(juce::Graphics& g) {
     using namespace synth::theme;
 
-    juce::Colour bg, border, textMuted, accent;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        bg = c.surface;
-        border = c.border;
-        textMuted = c.textMuted;
-        accent = c.accent;
-    } else {
-        bg = juce::Colours::darkgrey.darker(0.3f);
-        border = juce::Colours::grey;
-        textMuted = juce::Colours::lightgrey;
-        accent = juce::Colours::cyan;
-    }
+    const auto& c = themeOf(*this).colors;
+    const auto bg = c.surface;
+    const auto border = c.border;
+    const auto textMuted = c.textMuted;
+    const auto accent = c.accent;
 
     const auto bounds = getLocalBounds();
     g.setColour(bg);

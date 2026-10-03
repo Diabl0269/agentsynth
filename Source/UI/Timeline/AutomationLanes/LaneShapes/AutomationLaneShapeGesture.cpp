@@ -26,12 +26,8 @@ struct Palette {
 };
 
 Palette paletteFor(const juce::Component& c) {
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
-        const auto& t = lf->getTheme().colors;
-        return {t.accent, t.textPrimary, t.error, t.bg1, t.textPrimary};
-    }
-    return {juce::Colour(0xff00D1FF), juce::Colours::white, juce::Colours::red, juce::Colours::black,
-            juce::Colours::white};
+    const auto& t = synth::theme::themeOf(c).colors;
+    return {t.accent, t.textPrimary, t.error, t.bg1, t.textPrimary};
 }
 
 // "4", "2.5", "0.25": up to two decimals, trailing zeros dropped.

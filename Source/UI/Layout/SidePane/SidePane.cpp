@@ -6,13 +6,6 @@
 
 namespace synth::ui {
 
-namespace {
-const synth::theme::Theme* themeOf(const juce::Component& c) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel());
-    return laf != nullptr ? &laf->getTheme() : nullptr;
-}
-} // namespace
-
 SidePane::GrabEdge::GrabEdge(SidePane& owner)
     : owner_(owner) {
     setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
@@ -22,8 +15,7 @@ SidePane::GrabEdge::GrabEdge(SidePane& owner)
 void SidePane::GrabEdge::paint(juce::Graphics& g) {
     if (!hovered_ && !isMouseButtonDown())
         return;
-    const auto* theme = themeOf(*this);
-    g.setColour(theme != nullptr ? theme->colors.accent : juce::Colour(0xff00D1FF));
+    g.setColour(synth::theme::themeOf(*this).colors.accent);
     g.fillRect(getWidth() - 2, 0, 2, getHeight());
 }
 
@@ -180,9 +172,9 @@ void SidePane::resized() {
 }
 
 void SidePane::paint(juce::Graphics& g) {
-    const auto* theme = themeOf(*this);
-    g.fillAll(theme != nullptr ? theme->colors.bg0 : juce::Colour(0xff0B0D10));
-    g.setColour(theme != nullptr ? theme->colors.border : juce::Colour(0xff2A2F38));
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    g.fillAll(colors.bg0);
+    g.setColour(colors.border);
     g.fillRect(getWidth() - 1, 0, 1, getHeight());
 }
 

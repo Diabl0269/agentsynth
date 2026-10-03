@@ -87,20 +87,12 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        juce::Colour bgColour = juce::Colours::black;
-        juce::Colour waveColour = juce::Colours::limegreen;
-        juce::Colour gridColour = juce::Colour(0xff2A2F38);
-        juce::Colour mutedColour = juce::Colour(0xff5C6470);
-        juce::Colour playheadColour = juce::Colours::white;
-
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            const auto& colors = lf->getTheme().colors;
-            bgColour = colors.bg1;
-            waveColour = colors.accent;
-            gridColour = colors.border.withAlpha(0.6f);
-            mutedColour = colors.textDisabled;
-            playheadColour = colors.textPrimary;
-        }
+        const auto& colors = synth::theme::themeOf(*this).colors;
+        const auto bgColour = colors.bg1;
+        const auto waveColour = colors.accent;
+        const auto gridColour = colors.border.withAlpha(0.6f);
+        const auto mutedColour = colors.textDisabled;
+        const auto playheadColour = colors.textPrimary;
 
         auto bounds = getLocalBounds().toFloat();
         g.fillAll(bgColour);

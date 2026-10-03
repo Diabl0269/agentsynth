@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Theme/Theme.h"
 #include <juce_graphics/juce_graphics.h>
 
 namespace synth::ui {
@@ -8,15 +9,15 @@ namespace synth::ui {
 // is never stored in the timeline doc, so a lane's modulator rows are re-derived from these every
 // time the graph changes. Every node is named by uuid (a node id does not survive an undo restore).
 struct ModulatorInfo {
-    juce::String sourceUuid;         // the module driving the jack (an LFO, an envelope, a macro port...)
-    juce::String sourceTitle;        // its card title
-    int sourceChannel = 0;           // raw output channel of the source
-    bool isLfo = false;              // an LFO gets the full row; anything else is read-only
-    juce::String attenuverterUuid;   // the hidden depth node; empty for a direct cable (no depth control)
-    juce::String targetUuid;         // the lane's node
-    juce::String paramId;            // the lane's parameter
-    int targetChannel = 0;           // raw CV channel on the target
-    juce::Colour colour{0xff00D1FF}; // the modulation wire's resolved colour
+    juce::String sourceUuid;       // the module driving the jack (an LFO, an envelope, a macro port...)
+    juce::String sourceTitle;      // its card title
+    int sourceChannel = 0;         // raw output channel of the source
+    bool isLfo = false;            // an LFO gets the full row; anything else is read-only
+    juce::String attenuverterUuid; // the hidden depth node; empty for a direct cable (no depth control)
+    juce::String targetUuid;       // the lane's node
+    juce::String paramId;          // the lane's parameter
+    int targetChannel = 0;         // raw CV channel on the target
+    juce::Colour colour = synth::theme::Theme{}.colors.modWire; // the modulation wire's resolved colour
 
     /** What identifies the routing across refreshes (values and titles may change, this may not). */
     juce::String key() const {

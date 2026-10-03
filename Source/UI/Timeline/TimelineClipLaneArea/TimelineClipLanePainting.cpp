@@ -121,9 +121,7 @@ void TimelineClipLaneArea::paintDrawGhost(juce::Graphics& g) {
     // ghost that has no clip/track of its own to borrow a colour from (see this section's header
     // comment) borrows the theme's accent instead — previously a flat white literal, which stayed
     // legible on Obsidian's dark bg0 by accident but would wash out on a light theme.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent.withAlpha(0.18f));
     g.fillRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f);
@@ -141,9 +139,7 @@ void TimelineClipLaneArea::paintSplitPreview(juce::Graphics& g) {
     // Themed the same way PianoRollComponent::paintSplitPreview is: the split line has no clip of
     // its own to borrow a colour from, so — like paintDrawGhost above — it borrows the theme's
     // accent instead of a flat white literal.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     const float x = (float)bounds.getCentreX();
     g.setColour(accent.withAlpha(0.9f));
@@ -223,9 +219,7 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
 
     // Theme-token colours via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses;
     // a hardcoded fallback (Theme::Colors::error's own default) when headless.
-    juce::Colour hatchColour(0xffE5484D);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        hatchColour = lf->getTheme().colors.error;
+    const juce::Colour hatchColour = synth::theme::themeOf(*this).colors.error;
 
     // Dimmed fill first, so a missing clip visually recedes rather than reading as "just another
     // audio clip" — paintClip's own base fill/border are already drawn beneath this.
@@ -370,9 +364,7 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
     // deliberately NOT the destination track's colour (kept distinct from a committed clip's
     // fill, as the comment below always said), but no longer a flat white literal that could wash
     // out against a light theme's background.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     const auto bodyBounds = liveStripRect_.toFloat().reduced(1.0f);
     g.setColour(accent.withAlpha(0.12f)); // translucent — visibly "in progress", distinct from a

@@ -38,8 +38,7 @@ void MixerMasterColumn::paintAutomatedMarkers(juce::Graphics& g) {
     const float level = faderAutomated_.fade.level(synth::ui::AutomatedMarkerFade::nowMs());
     if (level <= 0.0f)
         return;
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour textPrimary = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colour(0xffE8E8F0);
+    const juce::Colour textPrimary = synth::theme::themeOf(*this).colors.textPrimary;
     // The slider sits two levels down (column -> fader_ -> slider), so walk up with getLocalArea.
     synth::ui::paintAutomatedMarker(g, getLocalArea(&fader_.getSlider(), fader_.getSlider().getLocalBounds()),
                                     synth::ui::automatedMarkerColour(textPrimary, level));

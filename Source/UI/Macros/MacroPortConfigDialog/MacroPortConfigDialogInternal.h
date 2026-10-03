@@ -1,8 +1,7 @@
 #pragma once
 
 // Shared between the split MacroPortConfigDialog*.cpp units: the "Add a port" combo-box item ids
-// (constructed in Lifecycle.cpp, read back in TestSeams.cpp), liveThemeColours (used by the row
-// widgets below and by MacroPortConfigDialog::paint in Lifecycle.cpp), and — because it is a
+// (constructed in Lifecycle.cpp, read back in TestSeams.cpp), and — because it is a
 // private nested class of MacroPortConfigDialog whose members Lifecycle.cpp (rebuildRowComponents),
 // RowOrdering.cpp (drag/keyboard nav), and TestSeams.cpp all need the complete type for — the row
 // widgets (GlyphButton, PortColourSwatch, DragHandle) and PortRowComponent itself.
@@ -26,19 +25,6 @@ constexpr int kDirectionOutputId = 2;
 constexpr int kKindAudioCVId = 1;
 constexpr int kKindMidiId = 2;
 } // namespace
-
-// Resolves the live theme's colour tokens, evaluated fresh at every call site (never cached) so a
-// theme switch or this dialog being reparented mid-life is never stale — the same reasoning
-// PreferencesSettingsTab's popup content and MidiDestinationPicker give for the identical
-// dynamic_cast, and why it is done here at PAINT time rather than once at construction (a
-// juce::DialogWindow's content component is not guaranteed to already sit under
-// synth::theme::AppLookAndFeel the moment its constructor runs).
-inline const synth::theme::Colors& liveThemeColours(const juce::Component& c) {
-    static const synth::theme::Colors fallback{};
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().colors;
-    return fallback;
-}
 
 namespace {
 // Up/Down on a control that opts in (the row's colour swatch and Delete glyph button — see
@@ -145,7 +131,7 @@ public:
     DragHandle() { setMouseCursor(dragGrabCursor()); } // the grab hand on hover and while dragging
 
     void paint(juce::Graphics& g) override {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         const juce::Colour grip = dragging_ ? c.accent : (isMouseOver() ? c.textPrimary.withAlpha(0.85f) : c.textMuted);
         g.setColour(grip);
         auto bounds = getLocalBounds().toFloat();
@@ -329,7 +315,7 @@ public:
     }
 
     juce::Colour kindTintColour() const {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         return isMidi ? c.audioWire : c.accent;
     }
 
@@ -515,7 +501,7 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         auto bounds = getLocalBounds().toFloat();
 
         paintReorderLift(g, bounds, lift_, c.surfaceHi, c.accent);

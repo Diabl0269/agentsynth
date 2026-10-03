@@ -626,8 +626,7 @@ void MixerPanelComponent::resized() {
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
     // time this panel lays out, the same staleness window MixerColumnHeader accepts for its own
     // theme-derived text colours.
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
+    const auto muted = synth::theme::themeOf(*this).colors.textMuted;
     emptyHint_.setColour(juce::Label::textColourId, muted);
     emptyHint_.setFont(juce::Font(juce::FontOptions(13.0f)));
     // The toolbar sits outside the scrolling viewport, so it stays put while columns scroll; the side pane

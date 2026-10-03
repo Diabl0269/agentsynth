@@ -242,9 +242,7 @@ void TimelineAutomationLanes::refreshPooled() {
 }
 
 juce::Colour TimelineAutomationLanes::unassignedColour() const {
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&headerParent_.getLookAndFeel()))
-        return lf->getTheme().colors.textMuted;
-    return juce::Colour(0xff8A93A0);
+    return synth::theme::themeOf(headerParent_).colors.textMuted;
 }
 
 AutomationLaneEditor* TimelineAutomationLanes::editorFor(synth::LaneId lane) const {

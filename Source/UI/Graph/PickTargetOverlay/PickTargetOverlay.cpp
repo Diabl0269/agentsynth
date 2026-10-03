@@ -121,8 +121,7 @@ const PickCandidate* PickTargetOverlay::findCandidateAt(juce::Point<int> point) 
 }
 
 void PickTargetOverlay::paint(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
     for (const auto& o : outlines_) {
         g.setColour(accent.withAlpha(0.10f));
         g.fillRect(o.bounds);

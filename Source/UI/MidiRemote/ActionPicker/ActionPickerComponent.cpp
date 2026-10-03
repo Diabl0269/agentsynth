@@ -144,7 +144,7 @@ void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour mutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
     const auto& r = rows_[static_cast<size_t>(row)];
 
     if (r.isHeader) {

@@ -65,9 +65,8 @@ void MixerDirectColumn::setKeyboardFocused(bool focused) {
 }
 
 void MixerDirectColumn::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
+    const auto bg = synth::theme::themeOf(*this).colors.surface;
+    const auto border = synth::theme::themeOf(*this).colors.border;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(border);
@@ -77,8 +76,7 @@ void MixerDirectColumn::paint(juce::Graphics& g) {
 void MixerDirectColumn::paintOverChildren(juce::Graphics& g) {
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }

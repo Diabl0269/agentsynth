@@ -96,10 +96,9 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
     if (w <= 0.0f || h <= 0.0f || cachedMagnitudesDb_.empty())
         return;
 
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto surface = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-    const auto disabled = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
+    const auto surface = synth::theme::themeOf(*this).colors.surface;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
+    const auto disabled = synth::theme::themeOf(*this).colors.textDisabled;
 
     g.setColour(surface);
     g.fillRect(getLocalBounds());

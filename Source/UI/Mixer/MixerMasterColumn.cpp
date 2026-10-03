@@ -360,7 +360,6 @@ void MixerMasterColumn::repaintArmedMidiLearnOutline() {
 }
 
 void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     // The slider is nested inside fader_ (a MixerFader, itself a direct child of this
     // column), so its bounds must be walked up TWO levels into this column's own coordinate frame
     // -- getLocalArea(&slider, slider's own local bounds) does that regardless of depth; the
@@ -371,21 +370,20 @@ void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
     const auto bounds = getLocalArea(&fader_.getSlider(), fader_.getSlider().getLocalBounds());
 
     if (midiLearnBadgeMapped_) {
-        const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
+        const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
         synth::ui::midilearn::paintMidiMappedBadge(g, bounds, badgeColour);
     }
 
     if (midiLearnArmedParamId_.isEmpty() || midiLearnableFaderParam_ == nullptr ||
         midiLearnableFaderParam_->paramID != midiLearnArmedParamId_)
         return;
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
     synth::ui::midilearn::paintMidiLearnArmedOutline(g, bounds, armedColour, midiLearnArmedSinceMs_);
 }
 
 void MixerMasterColumn::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
+    const auto bg = synth::theme::themeOf(*this).colors.surfaceHi;
+    const auto border = synth::theme::themeOf(*this).colors.border;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(border);
@@ -398,8 +396,7 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
 
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }

@@ -11,22 +11,15 @@ constexpr int kSwatchWidth = 8;
 constexpr int kBadgePadding = 5;
 
 struct PaneColours {
-    juce::Colour text{0xffEAEEF3};
-    juce::Colour muted{0xff8A93A0};
-    juce::Colour border{0xff2A2F38};
-    juce::Colour warning{0xffE0A33D};
+    juce::Colour text;
+    juce::Colour muted;
+    juce::Colour border;
+    juce::Colour warning;
 };
 
 PaneColours coloursOf(const juce::Component& component) {
-    PaneColours colours;
-    if (const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel())) {
-        const auto& c = laf->getTheme().colors;
-        colours.text = c.textPrimary;
-        colours.muted = c.textMuted;
-        colours.border = c.border;
-        colours.warning = c.warning;
-    }
-    return colours;
+    const auto& c = synth::theme::themeOf(component).colors;
+    return {c.textPrimary, c.textMuted, c.border, c.warning};
 }
 
 // Small sentence-case heading, like the Mixer pane's group headings but without the capitals.

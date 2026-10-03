@@ -32,7 +32,6 @@ void MixerColourDot::setColour(juce::Colour colour) {
 // target) without the swatch itself growing. A disabled dot (a column with nothing to recolour) paints the same
 // swatch with no hover wash, so the column's colour still reads.
 void MixerColourDot::paintButton(juce::Graphics& g, bool highlighted, bool down) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto area = getLocalBounds().toFloat();
     const auto dot =
         area.withSizeKeepingCentre(kDotWidth, juce::jmax(0.0f, area.getHeight() - 2.0f * kDotVerticalInset));
@@ -41,7 +40,7 @@ void MixerColourDot::paintButton(juce::Graphics& g, bool highlighted, bool down)
     g.setColour(down ? colour_.darker(0.15f) : (hot ? colour_.brighter(0.2f) : colour_));
     g.fillRoundedRectangle(dot, kDotRadius);
     if (hot) {
-        const auto edge = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
+        const auto edge = synth::theme::themeOf(*this).colors.textPrimary;
         g.setColour(edge.withAlpha(0.55f));
         g.drawRoundedRectangle(dot.expanded(1.5f), kDotRadius + 1.0f, 1.0f);
     }

@@ -11,15 +11,13 @@ constexpr float kFontSize = 10.0f;
 constexpr double kFadeMs = 130.0;
 
 struct ReadoutColours {
-    juce::Colour muted{0xff8A93A0};
-    juce::Colour accent{0xff00D1FF};
+    juce::Colour muted;
+    juce::Colour accent;
 };
 
 ReadoutColours coloursFor(const juce::Component& c) {
-    ReadoutColours result;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        result = {lf->getTheme().colors.textMuted, lf->getTheme().colors.accent};
-    return result;
+    const auto& t = synth::theme::themeOf(c).colors;
+    return {t.textMuted, t.accent};
 }
 } // namespace
 

@@ -158,8 +158,8 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
     const juce::Colour warningColour = lf != nullptr ? lf->getTheme().colors.warning : juce::Colours::orange;
-    const juce::Colour selectedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
+    const juce::Colour selectedColour = synth::theme::themeOf(*this).colors.accent;
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
 
     if (selected_) {
         g.setColour(selectedColour.withAlpha(0.15f));
@@ -197,8 +197,7 @@ void ControllerSurfaceCell::paintOverChildren(juce::Graphics& g) {
 
     if (pulseSinceMs_ == 0.0 && flashUntilMs_ == 0.0)
         return;
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
     const auto now = juce::Time::getMillisecondCounterHiRes();
     if (flashUntilMs_ != 0.0 && now < flashUntilMs_) {
         g.setColour(accent);

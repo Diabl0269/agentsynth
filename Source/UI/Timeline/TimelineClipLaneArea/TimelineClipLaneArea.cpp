@@ -524,9 +524,7 @@ void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Tra
 
     // Theme token via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with
     // Theme::Colors::textMuted's own default when headless.
-    juce::Colour colour(0xff8A93A0);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        colour = lf->getTheme().colors.textMuted;
+    const juce::Colour colour = synth::theme::themeOf(*this).colors.textMuted;
 
     g.setColour(colour.withAlpha(0.75f));
     g.setFont(font);
@@ -534,9 +532,7 @@ void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Tra
 }
 
 void TimelineClipLaneArea::paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds) {
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent.withAlpha(0.15f));
     g.fillRect(bounds);
@@ -556,7 +552,7 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
     // light theme. Keeping all three on one recipe means a theme change (or a user accent
     // override) moves all three marquees together rather than leaving one behind.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
     const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
 
     const auto bandF = marqueeRect_.toFloat();
