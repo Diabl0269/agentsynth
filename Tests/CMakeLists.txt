@@ -747,6 +747,7 @@ add_executable(Tests
     UI/Chrome/ToolbarTitlesTests.cpp
     UI/Chrome/StatusBarAccessibilityTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
+    UI/Layout/SearchMatchTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
     UI/Graph/CardBody/CardBodyConditionsTests.cpp

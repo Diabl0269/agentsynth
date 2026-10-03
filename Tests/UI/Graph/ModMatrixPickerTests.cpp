@@ -8,6 +8,7 @@
 
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Layout/SearchMatch.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -243,11 +244,11 @@ TEST(ModMatrixPicker, SpaceOpensThePickerAndArrowsNeverRepointTheRouting) {
 }
 
 TEST(ModMatrixPicker, SearchMatchesWordByWordInAnyOrder) {
-    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Oscillator 8", "osc 8"));
-    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Oscillator 8 - Cutoff", "cut  OSC"));
-    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Anything", "   "));
-    EXPECT_FALSE(ModMatrixPicker::textMatchesQuery("Oscillator 7", "osc 8"));
-    EXPECT_FALSE(ModMatrixPicker::textMatchesQuery("Filter 1", "osc"));
+    EXPECT_TRUE(synth::ui::searchMatches("Oscillator 8", "osc 8"));
+    EXPECT_TRUE(synth::ui::searchMatches("Oscillator 8 - Cutoff", "cut  OSC"));
+    EXPECT_TRUE(synth::ui::searchMatches("Anything", "   "));
+    EXPECT_FALSE(synth::ui::searchMatches("Oscillator 7", "osc 8"));
+    EXPECT_FALSE(synth::ui::searchMatches("Filter 1", "osc"));
 
     PickerFixture f;
     f.dest->setSearchTextForTest("cut filterin");
@@ -281,4 +282,35 @@ TEST(ModMatrixPicker, AReusedPickerCanBeRenamedForScreenReaders) {
     picker.setAccessibleNames("Add automation to Bass", "Search Bass parameters");
     EXPECT_EQ(picker.getTitle(), "Add automation to Bass");
     EXPECT_EQ(picker.getSearchEditorForTest().getTitle(), "Search Bass parameters");
+}
+
+// A typed query highlights the matched letters of every visible row's text, like the module library does.
+TEST(ModMatrixPicker, TypedQueryHighlightsTheMatchedLettersOfTheVisibleRows) {
+    ModMatrixPicker picker("source",
+                           {{1, "Sources", "Oscillator 7", "", "", true},
+                            {2, "Sources", "Oscillator 8", "", "", true},
+                            {3, "Sources", "Filter 1", "", "", true}},
+                           0, [](int) {});
+
+    for (const auto& spans : picker.getVisibleItemHighlightSpansForTest())
+        EXPECT_TRUE(spans.empty()) << "no query, no highlight";
+
+    picker.setSearchTextForTest("osc 8");
+    const auto spans = picker.getVisibleItemHighlightSpansForTest();
+    ASSERT_EQ(spans.size(), 1u);
+    ASSERT_EQ(spans[0].size(), 2u) << "'osc' and '8'";
+    EXPECT_EQ(spans[0][0].start, 0);
+    EXPECT_EQ(spans[0][0].length, 3);
+    EXPECT_EQ(spans[0][1].start, 11);
+}
+
+// On a query the highlighted row is the best match (prefix before word start before mid-word), not just the first.
+TEST(ModMatrixPicker, QueryHighlightsTheBestMatchingRow) {
+    ModMatrixPicker picker(
+        "source",
+        {{1, "", "Subtle Rod", "", "", true}, {2, "", "Pro Rod", "", "", true}, {3, "", "Rod Bank", "", "", true}}, 0,
+        [](int) {});
+    picker.setSearchTextForTest("rod");
+    ASSERT_EQ(picker.getVisibleItemTextsForTest().size(), 3u);
+    EXPECT_EQ(picker.getHighlightedItemIndexForTest(), 2) << "'Rod Bank' starts with the word";
 }

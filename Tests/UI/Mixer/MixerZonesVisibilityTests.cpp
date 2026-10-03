@@ -139,6 +139,9 @@ TEST(MixerZonesVisibilityTests, TheFilterAndChipsNarrowOnlyTheList) {
     EXPECT_EQ(pane.getRowCountForTest(), 1);
     ASSERT_NE(pane.getRowForTest(0), nullptr);
     EXPECT_EQ(pane.getRowForTest(0)->getChannel().kind, MixerZoneChannelKind::Master);
+    pane.getFilterForTest().setText("ter mas", false);
+    pane.getFilterForTest().onTextChange();
+    EXPECT_EQ(pane.getRowCountForTest(), 1) << "every word must appear, in any order";
     pane.getFilterForTest().setText("", false);
     pane.getFilterForTest().onTextChange();
     EXPECT_EQ(pane.getRowCountForTest(), rows);

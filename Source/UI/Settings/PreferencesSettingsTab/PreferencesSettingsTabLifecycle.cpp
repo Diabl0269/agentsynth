@@ -1,6 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
@@ -403,8 +404,8 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
 
     // ---- Live filter -----------------------------------------------------------------------
     //
-    // Each of the groups below is a row for filtering purposes: a group matches when ANY of its
-    // components button/label/tooltip text contains the query (case-insensitive). A query searches
+    // Each of the groups below is a row for filtering purposes: a group matches when every word of the
+    // query occurs in its components' button/label/tooltip text (synth::ui::searchMatches). A query searches
     // EVERY category; an empty query shows only the selected category's groups (each layout unit
     // sets layoutCategory before its groups, so groupMatches can tell whose turn it is).
     const juce::String query = searchQuery;
@@ -426,10 +427,11 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
     auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
         if (query.isEmpty())
             return categoryShown(layoutCategory);
+        // One haystack per group, so every word of a multi-word query may land on a different control.
+        juce::String haystack;
         for (auto* c : comps)
-            if (textOf(*c).containsIgnoreCase(query))
-                return true;
-        return false;
+            haystack << textOf(*c) << " ";
+        return synth::ui::searchMatches(haystack, query);
     };
     auto setGroupVisible = [](std::initializer_list<juce::Component*> comps, bool visible) {
         for (auto* c : comps)

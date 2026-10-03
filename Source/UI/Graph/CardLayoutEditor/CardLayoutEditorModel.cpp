@@ -1,6 +1,7 @@
 // CardLayoutEditorModel.cpp -- the editor's working layout: normalising what the card draws, the rows
 // the list shows, and every edit. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutEditorModel.h"
+#include "UI/Layout/SearchMatch.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -15,9 +16,7 @@ juce::String keyOf(const CardItem& item) {
     return cardLayoutViewKey(std::get<CardViewItem>(item).view);
 }
 
-bool matches(const juce::String& name, const juce::String& search) {
-    return search.isEmpty() || name.toLowerCase().contains(search);
-}
+bool matches(const juce::String& name, const juce::String& search) { return searchMatches(name, search); }
 
 } // namespace
 

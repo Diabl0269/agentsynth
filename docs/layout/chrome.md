@@ -363,6 +363,26 @@ window size through a `ComponentListener` (no line in `resized()`), raises itsel
 when it appears, and takes no clicks, so its z-order never matters at rest. Rules and placement:
 [control/shortcuts.md](../control/shortcuts.md#shortcut-hints).
 
+## Shared search
+
+Every search or filter box matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
+(namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
+(`ModMatrixPicker`), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
+Mixer zones channel filter, the MIDI destination picker and the card layout editor's control search.
+
+- `searchMatches(text, query)`: the query is split on whitespace; every word must appear in the text,
+  ignoring case, in any order (`"osc 8"` finds `"Oscillator 8"`). A blank query matches everything, so a box
+  that must treat a blank query differently (the library hides no section for it) guards at its call site.
+- `searchScore(text, query)`: `-1` no match, else lower is better. Per word the best occurrence counts: `0`
+  the text starts with it, `1` it starts a word, `2` it sits inside a word; the worst word sets the score.
+  Pickers use it to pre-highlight the best row.
+- `searchHighlightSpans` + `drawSearchHighlightedText`: every hit of every word, sorted and overlap-merged,
+  drawn as a rounded accent fill behind accent-coloured letters. Static, so Reduce Motion needs nothing. A
+  box that paints its own rows (library, pickers, action picker, mixer rows) uses the painter; one that only
+  hides components (Preferences, Shortcuts) shares just the matcher.
+
+A new search box must use these; do not call `containsIgnoreCase` on the query.
+
 ## Mod matrix panel
 
 `Source/UI/Graph/ModMatrixComponent.h/.cpp` is an untransformed sibling overlay on `GraphEditor`,
@@ -404,13 +424,13 @@ Its rows paint under these rules:
   `showPopup()`, and only the stock menu lowers it, so `PickerComboBox::showPopup()` lowers it itself
   (`hidePopup()`) before opening the picker: left raised, the combo ignores every later click and the
   panel stops refreshing. A search field at the top takes focus and filters word by word
-  (`ModMatrixPicker::textMatchesQuery`): every space-separated word of the query must appear in the row
+  (the shared `synth::ui::searchMatches`, [below](#shared-search)): every space-separated word of the query must appear in the row
   text (module title plus output or target label, e.g. "Filter - Cutoff"), ignoring case and order, so
-  "osc 8" finds "Oscillator 8"; rows sit under the same category headers the menu
+  "osc 8" finds "Oscillator 8", and the matched letters are highlighted in the row text and detail line; rows sit under the same category headers the menu
   had (Envelopes, LFOs, Oscillators, Sequencers, Filters, Effects, Other), and a header hides when none
   of its rows match. "Flat Sources" drops the headers. The popup's height comes from the full list, so it
-  does not resize while typing. Up/Down move the highlight, Return picks the highlighted row (the first
-  match until moved), Escape closes, a click picks. A pick selects the combo's id with a synchronous
+  does not resize while typing. Up/Down move the highlight, Return picks the highlighted row (the best match
+  by `searchScore`, the first among equals, until moved), Escape closes, a click picks. A pick selects the combo's id with a synchronous
   notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
   choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
   not inherit the LookAndFeel), outlines itself with `paintFocusRegionOutline` while it holds focus, and

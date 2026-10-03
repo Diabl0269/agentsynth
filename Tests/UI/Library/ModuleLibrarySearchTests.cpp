@@ -2,7 +2,6 @@
 // Tests for the library sidebar search field:
 //   • filter        — non-matching module/snippet rows disappear; empty sections drop out
 //   • sections      — matching categories stay visible and open even when they were collapsed
-//   • highlight     — highlightSpansFor reports each case-insensitive hit used when painting
 //   • chrome        — the search editor is pinned above Collapse all; filtering does not persist
 //                     a collapse the user never asked for
 //   • theme         — the searchEditor's cached colours must not go stale between construction
@@ -64,38 +63,10 @@ juce::TextEditor* findSearchEditor(ModuleLibraryComponent& comp) {
 TEST(ModuleLibrarySearchMatch, BlankAndWhitespaceQueriesAreInactive) {
     EXPECT_TRUE(ModuleLibraryComponent::normalisedSearchQuery({}).isEmpty());
     EXPECT_TRUE(ModuleLibraryComponent::normalisedSearchQuery("   ").isEmpty());
-    EXPECT_FALSE(ModuleLibraryComponent::textMatchesQuery("Oscillator", {}));
-    EXPECT_FALSE(ModuleLibraryComponent::textMatchesQuery("Oscillator", "   "));
 }
 
-TEST(ModuleLibrarySearchMatch, MatchingIsCaseInsensitiveAndSubstring) {
-    EXPECT_TRUE(ModuleLibraryComponent::textMatchesQuery("Oscillator", "osc"));
-    EXPECT_TRUE(ModuleLibraryComponent::textMatchesQuery("Oscillator", "OSC"));
-    EXPECT_TRUE(ModuleLibraryComponent::textMatchesQuery("Parametric EQ", "eq"));
-    EXPECT_FALSE(ModuleLibraryComponent::textMatchesQuery("Filter", "reverb"));
-}
-
-TEST(ModuleLibrarySearchHighlight, SpansAreEmptyWhenTheQueryIsBlank) {
-    EXPECT_TRUE(ModuleLibraryComponent::highlightSpansFor("Oscillator", {}).empty());
-    EXPECT_TRUE(ModuleLibraryComponent::highlightSpansFor("Oscillator", "   ").empty());
-}
-
-TEST(ModuleLibrarySearchHighlight, SpansCoverEachNonOverlappingHit) {
-    const auto spans = ModuleLibraryComponent::highlightSpansFor("Oscillator", "osc");
-    ASSERT_EQ(spans.size(), 1u);
-    EXPECT_EQ(spans[0].start, 0);
-    EXPECT_EQ(spans[0].length, 3);
-
-    const auto mid = ModuleLibraryComponent::highlightSpansFor("Parametric EQ", "eq");
-    ASSERT_EQ(mid.size(), 1u);
-    EXPECT_EQ(mid[0].start, 11);
-    EXPECT_EQ(mid[0].length, 2);
-
-    const auto repeated = ModuleLibraryComponent::highlightSpansFor("Midi MIDI", "midi");
-    ASSERT_EQ(repeated.size(), 2u);
-    EXPECT_EQ(repeated[0].start, 0);
-    EXPECT_EQ(repeated[1].start, 5);
-}
+// Matching and highlight spans are the shared synth::ui::searchMatches / searchHighlightSpans
+// (Tests/UI/Layout/SearchMatchTests.cpp).
 
 // ============================================================================
 // Filter behaviour
@@ -123,6 +94,17 @@ TEST(ModuleLibrarySearchFilter, QueryHidesNonMatchingModules) {
     EXPECT_TRUE(modules.contains("Oscillator"));
     EXPECT_FALSE(modules.contains("Reverb"));
     EXPECT_FALSE(modules.contains("Filter"));
+    EXPECT_EQ(modules.size(), 1);
+}
+
+// Every word must appear, in any order: the library matches like every other search box.
+TEST(ModuleLibrarySearchFilter, MultiWordQueryMatchesInAnyOrder) {
+    ModuleLibraryComponent comp;
+    comp.setSize(200, 1600);
+    comp.setSearchText("eq para");
+
+    const auto modules = visibleModules(comp);
+    EXPECT_TRUE(modules.contains("Parametric EQ"));
     EXPECT_EQ(modules.size(), 1);
 }
 

@@ -105,7 +105,7 @@ tooltip read "Add automation to <Track>", and a click does not take focus off th
 field over rows grouped under their module's title, Up/Down/Return/Escape, a `juce::CallOutBox` anchored
 on the row or header. Two small generalisations: an item may carry `searchText` the row does not show (the
 module title, so typing "filter cut" finds Cutoff under "Filter 1"), and a query now matches word by word,
-every word anywhere in the row or its search text (a superset of the old substring match); and
+every word anywhere in the row or its search text (the shared `synth::ui::searchMatches`); and
 `setAccessibleNames` re-words its screen-reader names. A third, for the [add-modulator picker](#modulators): an item may carry a muted second line (`detail`, also searched) and be `enabled = false` (greyed, never highlighted or picked). `collectAddAutomationChoices` turns the host's
 parameters into its items, regrouped so a module's rows are adjacent, and drops any parameter that already
 has a lane.

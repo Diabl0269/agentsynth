@@ -14,6 +14,10 @@ TEST(ShortcutsSettingsFilterTest, RowMatchesDescriptionAndBindingTextCaseInsensi
 
     // Description, either case, and as a substring.
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("undo", "Undo", "Cmd + Z"));
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("semitone transpose", "Transpose Up a Semitone", "Up"))
+        << "words in any order";
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("cmd undo", "Undo", "Cmd + Z"))
+        << "across description and binding";
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("UND", "Undo", "Cmd + Z"));
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("ose up", "Transpose Up a Semitone", "Up"));
 

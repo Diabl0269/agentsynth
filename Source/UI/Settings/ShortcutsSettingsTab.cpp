@@ -1,5 +1,6 @@
 #include "ShortcutsSettingsTab.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/SearchMatch.h"
 
 namespace {
 // Divider alpha under a section header. GENTLE on purpose: the row list is already visually grouped
@@ -180,7 +181,8 @@ bool ShortcutsSettingsTab::rowMatchesQuery(const juce::String& query, const juce
     const auto q = normalisedQuery(query);
     if (q.isEmpty())
         return true;
-    return description.containsIgnoreCase(q) || bindingText.containsIgnoreCase(q);
+    // One haystack, so "undo cmd" matches across the description and the binding.
+    return synth::ui::searchMatches(description + " " + bindingText, q);
 }
 
 //==============================================================================
@@ -237,7 +239,8 @@ void ShortcutsSettingsTab::rebuildLayout() {
         const auto category = categoryOrder[categoryIndex];
         // The ids of this category, and which of them survive the filter. Header text counts as a
         // match too, so typing "piano" reveals the whole Piano Roll block rather than nothing.
-        const bool headerMatches = filtering && ShortcutManager::getCategoryName(category).containsIgnoreCase(query);
+        const bool headerMatches =
+            filtering && synth::ui::searchMatches(ShortcutManager::getCategoryName(category), query);
         std::vector<int> visibleRows;
         for (int i = 0; i < actionIds.size(); ++i) {
             if (ShortcutManager::getCategory(actionIds[i]) != category)
