@@ -456,9 +456,39 @@ While either side of that correlation is hovered, a small chip appears just unde
 box: `"<source module name> · <signed percent>"`, e.g. `"LFO · +63%"` or `"Env 2 · -40%"`. The
 percent is the attenuverter's `amount` (`ModulationDisplayInfo::amount`) rounded to the nearest
 whole number; the source name is the routing's source node's `getName()` (the same identity the mod
-matrix labels a source with). Formatted by the free function `synth::ui::formatModHoverChipText`
+matrix labels a source with, looking through macro ports: `synth::ui::knobModSources`, `UI/Graph/ModDot/KnobModSources.h`).
+When several sources land on the knob the chip names the one the dot drag adjusts (the
+[last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot)). Formatted by the free function `synth::ui::formatModHoverChipText`
 (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is), drawn in
 the knob-value-box mono font on a `surfaceHi` chip, clipped to the card.
+
+### The mod dot: drag an amount from the landing dot
+
+The small dot where a modulation cable lands on a knob or fader is a handle. Press it and drag up or
+down: the amount of the source chosen last changes live (up is more, down is less, one pixel is one
+percent, from where the press started, clamped to -100..+100 percent) and the ring and depth band
+follow. A small tooltip, `"LFO 1 · +42%"` with a colour swatch (`modRingPositive` or `modRingNegative` by
+sign), sits above-right of the knob, outside the knob's cell, and fades out when you let go. The value
+stays; the whole drag is **one** undo step ("Change modulation amount", Cmd+Z). Esc during the drag
+puts the starting amount back and leaves no undo step. A press that moves under 3 px is a click, which
+hands off to `ModDotController::onModDotClicked` (unset: nothing happens; a menu is planned there).
+
+* **Last-chosen source.** Session-only, never saved in the project, per (card, destination channel).
+  The default is the first attenuverter routing on the knob; `ModDotController::setLastChosen` changes
+  it, and a stored choice that no longer exists falls back to the default.
+* **Cmd-drag re-routes.** Cmd+press on the dot keeps the old behaviour of picking the cable up to
+  re-drag it. A dot with no attenuverter routing (nothing to adjust, or a direct/poly cable) also still
+  starts a cable drag on a plain press.
+* **Keyboard.** The dot has its own Tab stop right after its knob (`ModDotButton`, named "Cutoff
+  modulation, 2 sources", tooltip "Modulation sources for Cutoff"). Up and Down change the last-chosen
+  source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
+  and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
+  call `onModDotClicked`.
+* **Where it lives.** The tooltip is painted on the canvas above the cards
+  (`GraphContentComponent::paintOverChildren`, `ModDotTooltip`), so no card clips it. The gesture is a
+  third claim on `CardControlGestures` (`wantsModDotGesture`/`onModDotGesture`), asked after the
+  ring-amount drag and before the cable pickup, wired in `ModuleComponent::wireCardControlGestures`;
+  the behaviour is `ModDotController` (`Source/UI/Graph/ModDot/`), owned by `GraphEditor`.
 
 ## Drag-to-knob modulation
 

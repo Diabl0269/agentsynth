@@ -483,6 +483,19 @@ automated") for as long as the lane exists. The glyph and fade live in `Source/U
 mixer uses the same ones ([`mixer/panel.md#automation-markers`](../mixer/panel.md#automation-markers)). Tests:
 `AutomatedMarkerTests.cpp`, `ModuleComponentAutomationMarkerTests.cpp`, `AutomationMarkerMainTests.cpp`.
 
+## Modulation dot
+
+A knob or fader a modulation cable lands on also carries a transparent `synth::ui::ModDotButton`
+(`UI/Graph/ModDot/ModDotButton.h`), centred on the landing dot (about 16 px square). It is the dot's
+keyboard and screen-reader face: its own Tab stop right after its knob (`getKeyboardControls` sorts it
+with the knob it belongs to), named "<Param> modulation, N sources" with the tooltip "Modulation
+sources for <Param>", the solid accent focus ring around the dot, Up/Down for the last-chosen
+source's amount (Shift: ten times the step) and Return/Space for the dot's click hook. It exists only
+while the knob has an attenuverter routing and is shown, so it is hidden with a knob on another tab
+page or one the layout hides; `ModuleComponent::syncModDotButtons` rebuilds it on every layout and
+whenever the GraphEditor tick sees the routing set change. The mouse passes through it to the knob. See
+[`modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot`](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot).
+
 ## Custom card titles
 
 Double-clicking a card's **header band** (`ModuleComponent::kHeaderHeight`, 24 px) opens an inline

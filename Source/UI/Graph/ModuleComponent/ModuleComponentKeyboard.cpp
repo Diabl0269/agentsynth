@@ -41,9 +41,15 @@ std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
     if (titleEditor != nullptr)
         stops.erase(std::remove(stops.begin(), stops.end(), titleEditor.get()), stops.end());
 
+    // A mod dot sorts as its knob, just after it, so Tab visits the dot right after the control it modulates.
     auto key = [this](juce::Component* c) {
+        int afterOwner = 0;
+        if (auto* dot = dynamic_cast<synth::ui::ModDotButton*>(c); dot != nullptr && dot->getKnob() != nullptr) {
+            c = dot->getKnob();
+            afterOwner = 1;
+        }
         const auto area = getLocalArea(c->getParentComponent(), c->getBounds());
-        return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, area.getY(), area.getX());
+        return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, area.getY(), area.getX(), afterOwner);
     };
     std::stable_sort(stops.begin(), stops.end(),
                      [&key](juce::Component* a, juce::Component* b) { return key(a) < key(b); });

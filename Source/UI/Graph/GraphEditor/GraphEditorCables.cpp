@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/CableCurve.h"
 
 #include "Modules/AttenuverterModule.h"
@@ -720,6 +721,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
                       cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       ModuleComponent::kKnobLandingDotDiameter, ModuleComponent::kKnobLandingDotDiameter);
     }
+
+    // ---- Mod-dot tooltip: above the cards, so no card's clip cuts it ----
+    editor.getModDot().paintTooltip(g);
 
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.

@@ -57,7 +57,9 @@ public:
     /** Cmd-click / double-click: the parameter's default as one change gesture. */
     void resetToDefault();
 
-    bool keyPressed(const juce::KeyPress& key) override { return applyValueKey(*this, key); }
+    bool keyPressed(const juce::KeyPress& key) override {
+        return cancelModDotOnEscape(key) || applyValueKey(*this, key);
+    }
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
