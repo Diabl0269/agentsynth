@@ -231,6 +231,7 @@ add_executable(Tests
     App/MainComponent/MainComponentCommandTableTests.cpp
     App/MainComponent/MainComponentCollectArchiveTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
+    App/MainComponent/KnobStyleSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintLayoutTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintTextTests.cpp
@@ -440,6 +441,7 @@ add_executable(Tests
     UI/Theme/ModuleCardTitleTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/FaderRenderTests.cpp
+    UI/Theme/KnobStyleTests.cpp
     UI/Theme/MenuCornerTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
@@ -692,6 +694,7 @@ add_executable(Tests
     UI/Mixer/MeterColourStopsPersistenceTests.cpp
     UI/Mixer/MeterColourStopsLiveApplyTests.cpp
     UI/Settings/MeterColourStopsEditorTests.cpp
+    UI/Settings/KnobStylePickerTests.cpp
     UI/Mixer/MixerMeterPaintTests.cpp
     UI/Mixer/MixerMeterBallisticsTests.cpp
     UI/Mixer/MixerMeterReadoutTests.cpp

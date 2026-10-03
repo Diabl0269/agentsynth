@@ -2,6 +2,7 @@
 
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Theme/IconLibrary.h"
+#include "UI/Theme/KnobStyle.h"
 #include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -104,6 +105,16 @@ public:
     void setMeterColourStopsOverride(std::optional<synth::ui::MeterColourStops> override_);
     bool hasMeterColourStopsOverride() const noexcept { return meterColourStopsOverride.has_value(); }
     const synth::ui::MeterColourStops& getMeterColourStops() const noexcept { return meterColourStops; }
+
+    // ---------- Knob appearance ----------
+    // The user's knob style and colour-by-family switch (Settings > Appearance > Knobs). Same
+    // contract as setMeterColourStopsOverride(): no persistence, no repaint -- the caller does both.
+    void setKnobAppearance(synth::theme::KnobAppearance appearance) { knobAppearance = appearance; }
+    const synth::theme::KnobAppearance& getKnobAppearance() const noexcept { return knobAppearance; }
+    // Component property a card sets (int ModuleCategory) so its knobs take the family colour.
+    static constexpr const char* kKnobFamilyProperty = synth::theme::kKnobFamilyProperty;
+    // The value-arc colour for `knob`: its card's family hue when colour-by-family is on, else accent.
+    juce::Colour knobValueColour(const juce::Component& knob) const;
 
     // ---------- icon registry ----------
     // Re-tint every Icon from the active theme tokens. Called at the end of applyTheme()
@@ -301,6 +312,7 @@ private:
     // result recomputeMeterColourStops() derives from it -- see the public accessors above.
     std::optional<synth::ui::MeterColourStops> meterColourStopsOverride;
     synth::ui::MeterColourStops meterColourStops;
+    synth::theme::KnobAppearance knobAppearance;
 
     // SVG icon registry, re-tinted from theme tokens by retintIcons() inside applyTheme().
     IconLibrary iconLibrary_;

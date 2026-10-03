@@ -5,6 +5,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/PianoRoll/NoteColour.h"
+#include "UI/Settings/KnobStylePicker.h"
 #include "UI/Settings/MeterColourStopsEditor.h"
 #include "UI/Theme/ThemeManager.h"
 #include <cmath>
@@ -145,6 +146,7 @@ private:
                           // .cpp is added it MUST be added to BOTH CMakeLists (app + tests).
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void nameControlsForAccessibility();
+    void buildKnobsSection(const juce::Font& sectionHeaderFont);
 
     // The scrolled content: a bare host whose paint delegates back to the tab so the section
     // dividers are drawn in the same coordinate space the controls are laid out in — same idiom as
@@ -224,6 +226,10 @@ private:
     // Hairline rules between sections, painted in paint() from these bounds — same pattern as
     // PreferencesSettingsTab::dividerBounds.
     std::vector<juce::Rectangle<int>> dividerBounds;
+
+    // ---- Knob style ----
+    juce::Label knobsTitleLabel;
+    std::unique_ptr<synth::ui::KnobStylePicker> knobStylePicker;
 
     // ---- Cable colour controls ----
     juce::Label cablesTitleLabel;

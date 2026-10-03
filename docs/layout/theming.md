@@ -53,6 +53,14 @@ are also accepted.
 | `error` | `#FFE5484D` | Error / muted state |
 | `knobBody` | `#FF13161B` | Knob body gradient inner stop |
 | `knobPointer` | `#FFEAEEF3` | Knob pointer line |
+| `knobSkirt` | `#FF0E1014` | Hardware knob style: the skirt disc under the cap (Daylight `#FFADB5BD`) |
+| `knobCapHighlight` | `#2EFFFFFF` | Hardware knob style: the soft highlight on top of the cap (alpha varies per theme, `#B3FFFFFF` on Daylight) |
+| `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour knobs by module family" is on (Daylight `#FF946200`) |
+| `hueGreen` | `#FF4ADE80` | Knob family colour for Sequencing and Envelopes |
+| `hueRose` | `#FFFF6FA8` | Knob family colour for Modulation FX, Time FX and Dynamics |
+| `hueViolet` | `#FFB48EF5` | Violet family hue for toolbar icons; knobs do not use it |
+| `iconInk` | `#FF0B0D10` | Dark glyph ink for icons on a light fill |
+| `iconPaper` | `#FFF4F6F8` | Light glyph paper for icons on a dark fill |
 | `meterFill` | `#FF00D1FF` | Meter LOW zone fill, below -18 dBFS — kept under this name for back-compat with themes saved before the zone model. Consumers: `synth::ui::MixerMeter` and `ChannelChipComponent` |
 | `meterMid` | `#FFFFD43B` | Meter MID zone fill, -18 to -6 dBFS (`Source/UI/Mixer/MeterColourStops.h`) |
 | `meterHigh` | `#FFFF922B` | Meter HIGH zone fill, -6 to 0 dBFS |
@@ -337,6 +345,20 @@ implemented in `AppLookAndFeel`:
   rounded shape; the theme therefore sets that colour to the surface at alpha 0.99, so the
   window is non-opaque and the corners stay transparent in all four themes. (Platforms without
   semi-transparent windows still get an opaque window; JUCE decides that.)
+- **Rotary sliders (the knob)** — `drawRotarySlider` (`AppLookAndFeelSliders.cpp`) keeps the disabled/dimmed
+  transparency layer and the focus ring and hands the drawing to `paintKnob` (`AppLookAndFeelKnobStyles.cpp`,
+  `KnobPainter.h`), one painter per `KnobStyle`: Classic (the original look), Polished (the default: tick dots,
+  inner shadow, gradient value arc), Hardware (skirt, knurling, cap highlight, notch), Neon (bloom under the
+  arc, glowing tip), Ring (no body, rider dot on the arc) and Soft (tinted body, round dot). Every style
+  shares one geometry (arc radius `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
+  sweep) so the modulation ring and its anchors never move. The value colour is `accent`, or, when
+  "Colour knobs by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
+  `ModuleComponent` sets the `knobFamily` component property (its `ModuleCategory` as an int) on itself and
+  `AppLookAndFeel::knobValueColour` walks the parent chain for it. The choice is `KnobAppearance`
+  (`KnobStyle.h`), stored under the settings keys `knobStyle` and `knobColourByFamily`, picked in
+  Settings > Appearance > Knobs (`KnobStylePicker`, whose previews call the same `paintKnob`), and pushed
+  into the shared `AppLookAndFeel` by `MainComponent` at startup and on every settings write (a change
+  re-skins the whole tree, as a card's knobs are painted into its cached image).
 - **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
   `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
   route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel

@@ -13,6 +13,7 @@
 #include "Modules/PolySequencerModule.h"
 #include "Modules/SequencerModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CableColour.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -21,6 +22,7 @@
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/Theme.h"
 #include <cmath>
 
 using namespace detail;
@@ -50,6 +52,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     }
 
     showContextMenuHook_ = [this](juce::PopupMenu& menu) { showRealContextMenu(menu); };
+    // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
+    getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {

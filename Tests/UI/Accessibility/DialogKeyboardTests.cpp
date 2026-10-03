@@ -397,11 +397,27 @@ TEST_F(AccessibilitySettingsTest, FeedbackTabTabOrderIncludesSendOnceThereIsText
 TEST_F(AccessibilitySettingsTest, AppearanceTabTabOrder) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
-    expectTabOrder(
-        tabContent(window, tabIndex(window, "Appearance")),
-        names({"Theme mode", "Default dark theme", "Default light theme", "Theme gallery", "Open Themes Folder",
-               "Reload Themes", "Colour cables by", "Cable colours", "Reset Cable Colours", "Piano roll note colours",
-               "Reset Note Colours", "Meter colour stops", "Remove", "Reset to Theme"}));
+    expectTabOrder(tabContent(window, tabIndex(window, "Appearance")), names({"Theme mode",
+                                                                              "Default dark theme",
+                                                                              "Default light theme",
+                                                                              "Theme gallery",
+                                                                              "Open Themes Folder",
+                                                                              "Reload Themes",
+                                                                              "Classic knob style",
+                                                                              "Polished knob style",
+                                                                              "Hardware knob style",
+                                                                              "Neon knob style",
+                                                                              "Ring knob style",
+                                                                              "Soft knob style",
+                                                                              "Colour knobs by module family",
+                                                                              "Colour cables by",
+                                                                              "Cable colours",
+                                                                              "Reset Cable Colours",
+                                                                              "Piano roll note colours",
+                                                                              "Reset Note Colours",
+                                                                              "Meter colour stops",
+                                                                              "Remove",
+                                                                              "Reset to Theme"}));
 }
 
 TEST_F(AccessibilitySettingsTest, KeyboardShortcutsTabTabOrderFollowsTheSectionsAndRows) {

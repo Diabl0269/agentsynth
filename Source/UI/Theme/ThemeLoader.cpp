@@ -164,6 +164,14 @@ struct OptionalColourKey {
     juce::Colour Colors::* member;
 };
 static constexpr OptionalColourKey kOptionalColourKeys[] = {
+    {"knobSkirt", &Colors::knobSkirt},
+    {"knobCapHighlight", &Colors::knobCapHighlight},
+    {"hueAmber", &Colors::hueAmber},
+    {"hueGreen", &Colors::hueGreen},
+    {"hueRose", &Colors::hueRose},
+    {"hueViolet", &Colors::hueViolet},
+    {"iconInk", &Colors::iconInk},
+    {"iconPaper", &Colors::iconPaper},
     {"meterFill", &Colors::meterFill},
     {"meterMid", &Colors::meterMid},
     {"meterHigh", &Colors::meterHigh},
@@ -518,6 +526,14 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("error", colourToHex(c.error));
         colors->setProperty("knobBody", colourToHex(c.knobBody));
         colors->setProperty("knobPointer", colourToHex(c.knobPointer));
+        colors->setProperty("knobSkirt", colourToHex(c.knobSkirt));
+        colors->setProperty("knobCapHighlight", colourToHex(c.knobCapHighlight));
+        colors->setProperty("hueAmber", colourToHex(c.hueAmber));
+        colors->setProperty("hueGreen", colourToHex(c.hueGreen));
+        colors->setProperty("hueRose", colourToHex(c.hueRose));
+        colors->setProperty("hueViolet", colourToHex(c.hueViolet));
+        colors->setProperty("iconInk", colourToHex(c.iconInk));
+        colors->setProperty("iconPaper", colourToHex(c.iconPaper));
         colors->setProperty("meterFill", colourToHex(c.meterFill));
         colors->setProperty("meterMid", colourToHex(c.meterMid));
         colors->setProperty("meterHigh", colourToHex(c.meterHigh));
