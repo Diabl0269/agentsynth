@@ -8,6 +8,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Layout/PopupMotion.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -212,7 +213,7 @@ void ModDotPopover::dismiss() {
         return;
     }
     if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-        box->dismiss();
+        synth::ui::PopupMotion::dismissCallOut(*box);
 }
 
 bool ModDotPopover::keyPressed(const juce::KeyPress& key) {

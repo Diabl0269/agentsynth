@@ -730,7 +730,7 @@ void MainComponent::promptExportAudio() {
 
     dialog->onRequestClose = [window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
     };
     dialog->onCancelRender = [this] {
         if (bounceRunner_ != nullptr)
@@ -810,7 +810,7 @@ void MainComponent::promptExportStems() {
 
     dialog->onRequestClose = [window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
     };
     dialog->onCancelRender = [this] {
         if (stemRunner_ != nullptr)

@@ -396,6 +396,7 @@ add_executable(Tests
     Modules/OscillatorCVModulationTests.cpp
     Modules/OscillatorUnisonDetuneCVAliasingTests.cpp
     UI/Settings/SettingsWindowTests.cpp
+    UI/Settings/SettingsWindowEscapeFadeTests.cpp
     UI/Settings/SettingsWindowTabKeysTests.cpp
     UI/Settings/SettingsWindowTabStripTests.cpp
     UI/Settings/SettingsWindowShortcutHintsTests.cpp

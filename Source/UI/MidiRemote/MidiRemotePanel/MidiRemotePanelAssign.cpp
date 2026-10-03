@@ -3,6 +3,7 @@
 // Learn target menu, the pick-target overlay entry and the action picker.
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 
 namespace synth::ui {
@@ -48,7 +49,7 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToAction(actionId);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         // The picker's "Continuous" group
         // (see docs/control/midi-remote.md#continuous-targets).
@@ -56,14 +57,14 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToContinuous(kind);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         // The picker's "Pages" group.
         content->onPageChosen = [safePanel, safeBox](synth::PageCommand command, int page) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToPage(command, page);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
     }
 }

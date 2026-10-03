@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/PopupMotion.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -16,15 +17,18 @@ inline void removeHiddenTabStops(juce::Component& editor) {
 }
 
 // Closes the juce::CallOutBox or juce::DialogWindow that hosts `content` the way its own close
-// affordance does. Returns false when `content` has no such host (a headless test, an embedded
-// panel), in which case nothing happens.
+// affordance does, fading it out first (PopupMotion::dismiss). Returns false when `content` has no such host (a
+// headless test, an embedded panel), in which case nothing happens.
 inline bool closeHostingWindow(juce::Component& content) {
     if (auto* box = content.findParentComponentOfClass<juce::CallOutBox>()) {
-        box->dismiss();
+        PopupMotion::dismissCallOut(*box);
         return true;
     }
     if (auto* dialog = content.findParentComponentOfClass<juce::DialogWindow>()) {
-        dialog->closeButtonPressed();
+        PopupMotion::dismiss(*dialog, [safe = juce::Component::SafePointer<juce::DialogWindow>(dialog)] {
+            if (auto* d = safe.getComponent())
+                d->closeButtonPressed();
+        });
         return true;
     }
     return false;

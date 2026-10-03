@@ -2,6 +2,8 @@
 
 #include "UI/Layout/ReducedMotion.h"
 
+#include <unordered_map>
+
 namespace synth::ui {
 
 #if JUCE_MAC
@@ -17,12 +19,25 @@ using popup_motion::Phase;
 constexpr const char* kAttachedProperty = "synthPopupMotion";
 constexpr int kWatchdogSlackMs = 250;
 
+bool& offscreenForTestFlag() {
+    static bool animate = false;
+    return animate;
+}
+
 bool& enabledFlag() {
     static bool enabled = true;
     return enabled;
 }
 
 int roundToInt(float v) { return (int)std::lround(v); }
+
+class Impl;
+
+// Attached window -> its engine, so dismiss() can find it.
+std::unordered_map<const juce::Component*, Impl*>& registry() {
+    static std::unordered_map<const juce::Component*, Impl*> map;
+    return map;
+}
 
 // ----------------------------------------------------------------------------------------------
 // Ghost: JUCE hides (or deletes) a popup window the instant it is dismissed, so the leaving
@@ -103,6 +118,7 @@ public:
         : window_(&window)
         , updater_(&window)
         , snapshotTask_(*this) {
+        registry()[&window] = this;
         window.addComponentListener(this);
         if (window.isVisible())
             startIn();
@@ -121,11 +137,53 @@ public:
             onHidden();
     }
 
+    bool isDismissing() const { return leaving_; }
+
+    // The live window fades out, then `reallyClose` runs (see PopupMotion::dismiss).
+    void dismiss(std::function<void()> reallyClose) {
+        if (leaving_)
+            return;
+        const bool offscreenOk = offscreenForTestFlag();
+        if (!PopupMotion::isEnabled() || !window_->isVisible() || (!window_->isOnDesktop() && !offscreenOk)) {
+            reallyClose();
+            return;
+        }
+        const float startAlpha = animating_ ? window_->getAlpha() : 1.0f;
+        if (animating_) {
+            driver_.stop(updater_);
+            stopTimer();
+        } else {
+            restPos_ = window_->getPosition();
+        }
+        animating_ = false;
+        leaving_ = true;
+        ghosted_ = true; // the live window is what fades: no leaving picture on top of it
+        pendingClose_ = std::move(reallyClose);
+        reduce_ = prefersReducedMotion();
+        dir_ = popup_motion::slideDirection(window_->getScreenBounds(), juce::Desktop::getMousePosition());
+        window_->setInterceptsMouseClicks(false, false);
+
+        driver_.start(
+            updater_, popup_motion::durationMs(Phase::Out, reduce_),
+            [](float t) { return popup_motion::ease(Phase::Out, t); },
+            [this, startAlpha](float e) {
+                if (!leaving_)
+                    return;
+                const auto f = popup_motion::frameAt(Phase::Out, e, dir_, reduce_);
+                window_->setAlpha(startAlpha * f.alpha);
+                window_->setTopLeftPosition(restPos_ +
+                                            juce::Point<int>(roundToInt(f.offset.x), roundToInt(f.offset.y)));
+            },
+            [this] { finishOut(); });
+        startTimer((int)popup_motion::durationMs(Phase::Out, reduce_) + kWatchdogSlackMs);
+    }
+
     void componentBeingDeleted(juce::Component&) override {
         // Dismissed menus, alerts and dialogs are usually deleted while still flagged visible, with
         // nothing left to draw: the picture taken while they were open is all there is.
         if (window_->isVisible() && !ghosted_ && PopupMotion::isEnabled())
             startOut(/*fresh=*/false);
+        registry().erase(window_);
         window_ = nullptr;
         delete this;
     }
@@ -193,7 +251,48 @@ private:
             capture();
     }
 
-    void timerCallback() override { finishIn(); }
+    void timerCallback() override {
+        if (leaving_)
+            finishOut();
+        else
+            finishIn();
+    }
+
+    // The leaving tween is over: close for real one turn later (never from inside the animator's
+    // own callback), then put back whatever the fade changed in case the window lives on.
+    void finishOut() {
+        if (!leaving_ || closeScheduled_)
+            return;
+        closeScheduled_ = true;
+        stopTimer();
+        window_->setAlpha(0.0f);
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<juce::Component>(window_)] {
+            auto* window = safe.getComponent();
+            if (window == nullptr)
+                return;
+            const auto it = registry().find(window);
+            if (it != registry().end())
+                it->second->runPendingClose();
+        });
+    }
+
+    void runPendingClose() {
+        auto close = std::move(pendingClose_);
+        pendingClose_ = nullptr;
+        juce::Component::SafePointer<juce::Component> safe(window_);
+        if (close)
+            close();
+        if (safe == nullptr)
+            return; // closed and gone
+        leaving_ = false;
+        closeScheduled_ = false;
+        driver_.stop(updater_);
+        window_->setInterceptsMouseClicks(true, true);
+        if (window_->isVisible() || !window_->isOnDesktop()) { // closing was vetoed or only hid it
+            window_->setAlpha(1.0f);
+            window_->setTopLeftPosition(restPos_);
+        }
+    }
 
     void onHidden() {
         if (!canAnimate()) {
@@ -272,6 +371,9 @@ private:
     bool reduce_ = false;
     bool animating_ = false;
     bool ghosted_ = false;
+    bool leaving_ = false;
+    bool closeScheduled_ = false;
+    std::function<void()> pendingClose_;
     juce::Image cache_;
     juce::Rectangle<int> cacheBounds_;
 };
@@ -288,5 +390,35 @@ void PopupMotion::attach(juce::Component& window) {
 void PopupMotion::setEnabled(bool enabled) { enabledFlag() = enabled; }
 
 bool PopupMotion::isEnabled() { return enabledFlag(); }
+
+void PopupMotion::setAnimateOffScreenForTest(bool animate) { offscreenForTestFlag() = animate; }
+
+void PopupMotion::dismiss(juce::Component& window, std::function<void()> reallyClose) {
+    const auto it = registry().find(&window);
+    if (it == registry().end()) {
+        reallyClose();
+        return;
+    }
+    it->second->dismiss(std::move(reallyClose));
+}
+
+void PopupMotion::dismissModal(juce::Component& window) {
+    dismiss(window, [safe = juce::Component::SafePointer<juce::Component>(&window)] {
+        if (auto* w = safe.getComponent())
+            w->exitModalState(0);
+    });
+}
+
+void PopupMotion::dismissCallOut(juce::CallOutBox& box) {
+    dismiss(box, [safe = juce::Component::SafePointer<juce::CallOutBox>(&box)] {
+        if (auto* b = safe.getComponent())
+            b->dismiss();
+    });
+}
+
+bool PopupMotion::isDismissing(const juce::Component& window) {
+    const auto it = registry().find(&window);
+    return it != registry().end() && it->second->isDismissing();
+}
 
 } // namespace synth::ui
