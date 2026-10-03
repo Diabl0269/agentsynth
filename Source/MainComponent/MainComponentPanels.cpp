@@ -493,11 +493,13 @@ void MainComponent::resized() {
 }
 
 // ---- Toolbar icon + text application ----
-// Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
-// status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
-// dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
+// Give every toolbar button its glyph and colour group (the button rebuilds its art from the active
+// theme, so this also re-colours the bar on a theme switch), push the status-bar master-mute glyph,
+// and manage icon-only vs icon+text text per narrow mode. Headless (no AppLookAndFeel) the buttons
+// simply have no art.
 void MainComponent::applyToolbarIcons() {
     using synth::theme::Icon;
+    using Group = synth::ui::ToolbarGroup;
 
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
@@ -505,57 +507,27 @@ void MainComponent::applyToolbarIcons() {
     // toggle buttons carry stateful text; the rest carry a static label.
     const bool iconOnly = toolbarNarrowMode_;
 
-    // Uniform edge indent so every toolbar icon renders at the SAME optical size (~18 px)
-    // regardless of the button's width — DrawableButton::getImageBounds() is height-bound here
-    // (button height is fixed at Theme::Metrics::toolbarHeight for every slot), so one indent
-    // value is all that's needed for icon-size consistency across the whole strip.
-    static constexpr int kToolbarIconEdgeIndent = 8;
-
-    // setImages no-ops (leaves the button blank) when the icon is absent (headless LnF null).
-    // Builds three tinted clones from the SAME cached (muted) base — see retintIcons() — so the
-    // icon glyph steps through the identical rest -> hover -> toggled-on ladder as the label text
-    // AppLookAndFeel::drawDrawableButton draws (muted -> textPrimary -> accent). DrawableButton's
-    // own over/down/on state resolution (getCurrentImage() et al.) picks the right clone per state.
-    auto setIcon = [&](juce::DrawableButton& b, Icon id) {
-        if (lf == nullptr)
-            return;
-        auto base = lf->getIcon(id); // fresh clone at its cached rest (muted) tint
-        if (base == nullptr)
-            return;
-
-        const auto& colors = lf->getTheme().colors;
-        auto hoverIcon = base->createCopy();
-        hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
-        auto onIcon = base->createCopy();
-        onIcon->replaceColour(colors.textMuted, colors.accent);
-
-        b.setEdgeIndent(kToolbarIconEdgeIndent);
-        b.setImages(base.get(), hoverIcon.get(), hoverIcon.get(), nullptr, onIcon.get(), onIcon.get(), onIcon.get());
-    };
-
-    setIcon(toggleLibraryButton, Icon::ToggleLibrary);
-    setIcon(newButton, Icon::ActionNew);
-    setIcon(saveButton, Icon::ActionSave);
-    setIcon(loadButton, Icon::ActionLoad);
-    setIcon(settingsButton, Icon::ActionSettings);
-    setIcon(feedbackButton, Icon::ActionFeedback);
-    setIcon(undoButton, Icon::ActionUndo);
-    setIcon(redoButton, Icon::ActionRedo);
-    setIcon(autoArrangeButton, Icon::ActionAutoArrange);
-    setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
-    setIcon(toggleMinimapButton, Icon::ToggleMinimap);
-    setIcon(toggleAiPanelButton, Icon::ToggleAI);
-    // No dedicated bottom-panel glyph exists yet — reuse TransportPlay, otherwise unused this
-    // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
-    setIcon(toggleBottomPanelButton, Icon::TransportPlay);
-    setIcon(themeToggleButton, Icon::ThemeToggle);
+    toggleLibraryButton.setIcon(Icon::ToggleLibrary, Group::View);
+    newButton.setIcon(Icon::ActionNew, Group::File);
+    saveButton.setIcon(Icon::ActionSave, Group::File);
+    loadButton.setIcon(Icon::ActionLoad, Group::File);
+    settingsButton.setIcon(Icon::ActionSettings, Group::Housekeeping);
+    feedbackButton.setIcon(Icon::ActionFeedback, Group::Housekeeping);
+    undoButton.setIcon(Icon::ActionUndo, Group::Edit);
+    redoButton.setIcon(Icon::ActionRedo, Group::Edit);
+    autoArrangeButton.setIcon(Icon::ActionAutoArrange, Group::Edit);
+    toggleModMatrixButton.setIcon(Icon::ToggleMatrix, Group::View);
+    toggleMinimapButton.setIcon(Icon::ToggleMinimap, Group::View);
+    toggleAiPanelButton.setIcon(Icon::ToggleAI, Group::AI);
+    toggleBottomPanelButton.setIcon(Icon::TogglePanel, Group::View);
+    themeToggleButton.setIcon(Icon::ThemeToggle, Group::Housekeeping);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
     if (lf != nullptr)
         if (auto d = lf->getIcon(Icon::TransportStop))
             statusBar.getMasterMuteButton().setImages(d.get());
 
-    // Toggle-pill state for AppLookAndFeel::drawDrawableButton (hover/press/toggled-on fill).
+    // The lit (solid chip) state AppLookAndFeel::drawToolbarButton paints.
     // dontSendNotification: onClick already flips the visibility flag by hand; sendNotification
     // would re-fire the button's own listener and double-toggle.
     toggleLibraryButton.setToggleState(isLibraryVisible, juce::dontSendNotification);

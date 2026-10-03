@@ -37,8 +37,8 @@ canvas content must go through `repaintCanvas()`, never `content.repaint()` dire
   `sendLookAndFeelChangeMessage()` into one `repaint()`. No timer is started and no continuous
   repaint is added during or after a theme switch.
 - **`applyToolbarIcons()` is gated** to narrow-mode transitions in `MainComponent::resized()`, not
-  run on every resize frame, because cloning `Drawable` objects is expensive — see
-  [chrome](chrome.md#toolbar).
+  run on every resize frame, because rebuilding each button's recoloured `Drawable` art is
+  expensive — see [chrome](chrome.md#toolbar-buttons).
 - **The status bar polls at 5 Hz** and repaints only itself. There are zero `writeToLog` calls in
   the status-polling path.
 - **Automation-to-UI reflection adds no new timer.** `GraphEditor::timerCallback()`'s existing 30 Hz

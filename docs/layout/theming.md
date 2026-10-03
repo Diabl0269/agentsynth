@@ -146,7 +146,7 @@ rather than repeating it.
 | `guideAlpha` | `0.7` | Alignment guide line opacity (0.0-1.0) |
 | `guideLineWidth` | `1.5` | Alignment guide stroke width (px) |
 | `cornerRadiusSmall` | `4.0` | Pill / small element corner radius (px) |
-| `toolbarHeight` | `44` | Toolbar strip height (px) — sized so an 18 px icon and an 11 px label both fit; at 36 `DrawableButton`'s built-in `min(16, 25% of height)` split starved the label to 7-9 px |
+| `toolbarHeight` | `44` | Toolbar strip height (px) — fits a button's 30 x 24 icon chip 4 px from the top and its 10.5 px caption 2 px below ([toolbar buttons](chrome.md#toolbar-buttons)) |
 | `statusBarHeight` | `24` | Status bar strip height (px) |
 | `controlPadding` | `4` | Inset around toolbar buttons (px) |
 | `minWindowWidth` | `480` | Narrow-mode breakpoint, and the minimum window width (px) |
@@ -282,7 +282,7 @@ implemented in `AppLookAndFeel`:
   holding a `synth::theme::Glyph`, with four styles: `Framed` (surface fill and border), `Bare`
   (nothing until hovered, then a faint wash), `Round` (circular accent wash) and `Danger` (error wash
   and glyph on hover). `AppLookAndFeel::drawIconButton` paints all of them with ONE colour ladder,
-  the same one `drawDrawableButton` uses for toolbar icons: disabled `textDisabled`, on
+  the same one `drawDrawableButton` uses for its icons: disabled `textDisabled`, on
   `setOnColour(...)` or `accent`, hover/press `textPrimary` (`error` for `Danger`), rest `textMuted`;
   `IconButton::glyphColour()` exposes it. `setGlyphWhenOn` swaps the glyph with the toggle state
   (play to stop, eye hidden to open, pin to pinned). The glyphs are paths in
@@ -291,6 +291,10 @@ implemented in `AppLookAndFeel`:
   for these drawn ones. The button never sets its own title, tooltip or description, and outside any
   `AppLookAndFeel` it paints with a default `Theme`. It lives in `Core` (not `AppUI`) because
   `StatusBarComponent` uses it.
+- **Toolbar button** — `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`) is the top
+  bar's button: a group-coloured chip, a multi-role glyph and a caption, painted by
+  `AppLookAndFeel::drawToolbarButton` (free function `paintToolbarButton` outside any
+  `AppLookAndFeel`). See [toolbar buttons](chrome.md#toolbar-buttons).
 - **Side-pane toggle** — `SidePaneToggleButton` is a `Bare` `IconButton` whose glyph is
   `Glyph::SidePane` (a window with a divider after its left strip) while the pane is closed and
   `Glyph::SidePaneOpen` (the strip filled) while it is open, via `setGlyphWhenOn`. It keeps its tooltip,

@@ -75,7 +75,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         112.0f, // Save
         116.0f, // Load
         96.0f,  // Settings
-        40.0f,  // Feedback — always icon-only, never grows a text label
+        84.0f,  // Feedback — wide enough for its caption at full size
         72.0f,  // Undo
         72.0f,  // Redo
         120.0f, // AutoArrange

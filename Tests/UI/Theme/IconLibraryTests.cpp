@@ -6,6 +6,7 @@
 #include "UI/Theme/IconLibrary.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 #ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
@@ -256,7 +257,7 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
 // 11. WaveformIconEnumCountCoversNewIcons
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
-    // kCount's own value is asserted by ActionDetachWindowIconEnumCountAndOrdinal below (the count is 43). The
+    // kCount's own value is asserted by ActionDetachWindowIconEnumCountAndOrdinal below. The
     // static_assert in IconLibrary.cpp enforces kTable alignment at compile time regardless; this test only spot-
     // checks that appending later entries never shifted the waveform ordinals below.
     // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6
@@ -302,8 +303,8 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
-    // ToolRange and MixerSources were appended after it later, so kCount is 45 now (see ToolRangeIconEnumOrdinal).
-    EXPECT_EQ((int)Icon::kCount, 45);
+    // ToolRange, MixerSources and TogglePanel were appended after it later, so kCount is 46 now.
+    EXPECT_EQ((int)Icon::kCount, 46);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -358,5 +359,95 @@ TEST(IconLibraryTest, MixerSourcesIconEnumOrdinalAndBinaryData) {
         EXPECT_NE(d, nullptr) << "MixerSources icon returned null with assets present";
 #ifdef HAS_FONT_ASSETS
     EXPECT_GT(BinaryData::mixersources_svgSize, 0);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Multi-role recolour (the toolbar's glyphs)
+// ---------------------------------------------------------------------------
+namespace {
+
+// Every fill and stroke colour in `d`, recursively.
+void collectColours(const juce::Drawable& d, std::vector<juce::Colour>& out) {
+    if (auto* shape = dynamic_cast<const juce::DrawableShape*>(&d)) {
+        if (shape->getFill().isColour() && !shape->getFill().colour.isTransparent())
+            out.push_back(shape->getFill().colour);
+        if (shape->getStrokeFill().isColour() && !shape->getStrokeFill().colour.isTransparent())
+            out.push_back(shape->getStrokeFill().colour);
+    }
+    for (auto* child : d.getChildren())
+        if (auto* cd = dynamic_cast<const juce::Drawable*>(child))
+            collectColours(*cd, out);
+}
+
+bool isPlaceholder(juce::Colour c) {
+    const auto rgb = c.getARGB() | 0xff000000u;
+    return rgb == synth::theme::kRoleHue || rgb == synth::theme::kRoleInk || rgb == synth::theme::kRolePaper;
+}
+
+const Icon kToolbarIcons[] = {Icon::ToggleLibrary,     Icon::ActionNew,      Icon::ActionSave,   Icon::ActionLoad,
+                              Icon::ActionSettings,    Icon::ActionFeedback, Icon::ActionUndo,   Icon::ActionRedo,
+                              Icon::ActionAutoArrange, Icon::ToggleMinimap,  Icon::ToggleMatrix, Icon::ToggleAI,
+                              Icon::TogglePanel,       Icon::ThemeToggle};
+
+} // namespace
+
+TEST(IconLibraryTest, RoleRecolourMapsEveryPlaceholder) {
+    if (!kAssetsPresent)
+        GTEST_SKIP() << "Requires embedded assets";
+    IconLibrary lib;
+    const synth::theme::IconRoleColours roles{juce::Colour(0xffe05020), juce::Colour(0xffe05020).withAlpha(0.45f),
+                                              juce::Colour(0xff102030), juce::Colour(0xfff0f0e0)};
+    for (const auto icon : kToolbarIcons) {
+        auto d = lib.createRecoloured(icon, roles);
+        ASSERT_NE(d, nullptr) << (int)icon;
+        std::vector<juce::Colour> colours;
+        collectColours(*d, colours);
+        ASSERT_FALSE(colours.empty()) << (int)icon;
+        bool hasHue = false;
+        for (const auto c : colours) {
+            EXPECT_FALSE(isPlaceholder(c)) << "icon " << (int)icon << " kept " << c.toDisplayString(true);
+            hasHue |= (c.getARGB() | 0xff000000u) == (roles.hue.getARGB() | 0xff000000u);
+        }
+        EXPECT_TRUE(hasHue) << "icon " << (int)icon << " has no colour-role shape";
+    }
+}
+
+TEST(IconLibraryTest, RoleRecolourAlwaysStartsFromTheOriginal) {
+    if (!kAssetsPresent)
+        GTEST_SKIP() << "Requires embedded assets";
+    IconLibrary lib;
+    // Roles that are themselves placeholder colours: a recolour of a recoloured glyph would map them again.
+    const synth::theme::IconRoleColours swapped{
+        juce::Colour(synth::theme::kRoleInk), juce::Colour(synth::theme::kRoleInk).withAlpha(0.45f),
+        juce::Colour(synth::theme::kRolePaper), juce::Colour(synth::theme::kRoleHue)};
+    const synth::theme::IconRoleColours plain{juce::Colours::red, juce::Colours::red.withAlpha(0.45f),
+                                              juce::Colours::blue, juce::Colours::lime};
+    auto first = lib.createRecoloured(Icon::ActionSettings, swapped);
+    auto second = lib.createRecoloured(Icon::ActionSettings, plain);
+    std::vector<juce::Colour> colours;
+    collectColours(*second, colours);
+    for (const auto c : colours)
+        EXPECT_FALSE(isPlaceholder(c)) << c.toDisplayString(true);
+
+    // Classify-then-write in one pass: the cog (hue) took the ink placeholder colour and its hole (ink)
+    // the paper one, with neither re-mapped.
+    std::vector<juce::Colour> firstColours;
+    collectColours(*first, firstColours);
+    int inkCount = 0;
+    for (const auto c : firstColours)
+        inkCount += (c.getARGB() | 0xff000000u) == synth::theme::kRoleInk ? 1 : 0;
+    EXPECT_EQ(inkCount, 1) << "only the cog takes the swapped hue";
+}
+
+TEST(IconLibraryTest, TogglePanelIconEnumOrdinalAndBinaryData) {
+    // Appended immediately before kCount, after MixerSources, so no existing ordinal moved.
+    EXPECT_EQ((int)Icon::TogglePanel, 45);
+    EXPECT_EQ((int)Icon::MixerSources, 44);
+    IconLibrary lib;
+    if (kAssetsPresent)
+        EXPECT_NE(lib.getDrawable(Icon::TogglePanel), nullptr);
+#ifdef HAS_FONT_ASSETS
+    EXPECT_GT(BinaryData::togglepanel_svgSize, 0);
 #endif
 }

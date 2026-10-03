@@ -7,8 +7,8 @@ CoreText runtime font-family swap corruption described in
 
 ## The icon enum
 
-`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 45 icons, `TransportPlay = 0`
-through `MixerSources`, followed by `kCount`:
+`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 46 icons, `TransportPlay = 0`
+through `TogglePanel`, followed by `kCount`:
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -23,6 +23,7 @@ ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
 CatIO            ActionDetachWindow ToolRange        MixerSources
+TogglePanel
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
@@ -33,11 +34,12 @@ likewise sits after them rather than beside the other `Tool*` glyphs.
 
 Notes on individual entries:
 
-- **`TransportPlay`** (0) has no dedicated glyph of its own. It is reused as the ToggleTimeline
-  toolbar button's icon.
+- **`TransportPlay`** (0) is scaffolding: no button shows it.
 - **`TransportStop`** (1) is the status bar's master-mute button glyph.
-- **`ActionFeedback`** (9) is the toolbar button that opens Settings pre-selected to the Feedback
-  tab, a speech-bubble glyph.
+- **The toolbar set** (`ActionUndo` … `ToggleLibrary`, `ThemeToggle`, `ToggleMinimap`,
+  `TogglePanel`) are [multi-role icons](#multi-role-icons) drawn only by the top bar's
+  `ToolbarButton`; no other surface uses them. `ActionFeedback` (9) opens Settings pre-selected to
+  the Feedback tab.
 - The four **waveform icons** (25-28) are rendered in the Oscillator waveform combo via
   `AppLookAndFeel::drawPopupMenuItem` (a 14x14 glyph left of the item text) and `drawComboBox` (the
   selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when
@@ -81,7 +83,9 @@ Notes on individual entries:
   cursor use it exactly like the other `Tool*` glyphs above.
 - **`MixerSources`** (44) is the mixer column header's sources badge: an arrow running into a bracket,
   "plays into this channel". It is a muted base the badge (`MixerIconButton`) clones hover and on variants
-  from, the same ladder the toolbar set uses.
+  from (muted, `textPrimary` on hover, accent when on).
+- **`TogglePanel`** (45) is the toolbar's Hide/Show panel glyph: a window with its bottom panel
+  filled.
 
 ## Token to tint map
 
@@ -93,7 +97,8 @@ Notes on individual entries:
 | `ModuleBypass`, `ModuleDualIO` | `textMuted` |
 | `ModuleMute` | `warning` |
 | `ModuleDelete` | `error` |
-| Toolbar actions and panel toggles (`ActionNew` … `ActionFeedback`, `ToggleAI`, `ToggleMatrix`, `ToggleLibrary`, `ThemeToggle`, `ToggleMinimap`), plus `TransportPlay` | `textMuted` |
+| `TransportPlay` | `textMuted` |
+| The toolbar set | not tinted here: recoloured per group by `ToolbarButton` ([multi-role icons](#multi-role-icons)) |
 | `TransportStop` | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` — the same as the combo text colour, so they stay legible across all themes |
@@ -102,12 +107,38 @@ Notes on individual entries:
 | `FollowPlayhead` | `textPrimary` |
 | `ActionDetachWindow`, `MixerSources` | `textMuted` |
 
-**The muted tint on the toolbar set is a base, not the drawn colour.**
-`MainComponent::applyToolbarIcons()` clones that base and re-tints it via `Drawable::replaceColour`
-into the hover (`textPrimary`) and toggled-on (`accent`) variants it hands to
-`DrawableButton::setImages()`. **Do not tint those icons `textPrimary` in `retintIcons()`:**
-`applyToolbarIcons()`'s `replaceColour(textMuted, ...)` calls assume this exact starting colour.
-`DetachablePanelHost` clones its own hover variant from `ActionDetachWindow` the same way.
+**A muted tint can be a base, not the drawn colour.** `MixerIconButton` clones the muted
+`MixerSources` base and re-tints it via `Drawable::replaceColour` into the hover (`textPrimary`) and
+toggled-on (`accent`) variants it hands to `DrawableButton::setImages()`, and `DetachablePanelHost`
+clones its hover variant from `ActionDetachWindow` the same way, so those bases must stay
+`textMuted` in `retintIcons()`.
+
+## Multi-role icons
+
+The top bar's glyphs are drawn in four colour roles instead of one white tint. Each SVG paints a
+role in a fixed placeholder colour, which `IconLibrary::createRecoloured(id, IconRoleColours)`
+(through `AppLookAndFeel::getRoleIcon`) maps to real colours:
+
+| Role | Placeholder | Toolbar colour |
+|---|---|---|
+| colour | `#FF00FF` (`kRoleHue`) | the button's group colour |
+| soft | `#FF00FF` at `fill-opacity=".45"` (`kRoleSoftAlpha`) | the group colour at 45 percent |
+| ink | `#00FFFF` (`kRoleInk`) | `iconInk` |
+| paper | `#FFFF00` (`kRolePaper`) | `iconPaper` |
+
+The recolour is one pass over every fill and stroke that classifies a colour before writing it, so
+a role colour that equals another placeholder is never mapped twice, and any extra opacity a shape
+has (Save's shutter is paper at 70 percent) carries over. It always starts from the untinted
+original, like `setTintColour`. `setTintColour` on such an icon gives a one-colour version (colour
+and soft take the tint, ink and paper are cut out), so the white-tint path still draws something
+sensible.
+
+A group with `id="mv"` (and `id="mv2"`) is the part that moves on hover. `splitToolbarIconArt`
+takes it out of the drawable tree and draws it as its own `Drawable` through the same icon-to-screen
+transform, with its motion applied first (moving a child in place with `Component::setTransform`
+makes its parent composite re-fit its origin and drift the pivot). The SVG parser bakes group
+transforms into the paths, so a nested part (Redo's, inside its mirror group) still draws in icon
+coordinates.
 
 ## The null-fallback contract
 
@@ -156,12 +187,13 @@ accidental underscore collisions.
 
 ## Adding an icon
 
-1. Create `assets/icons/<category>-<name>.svg` — a 24x24 viewBox, `fill="#FFFFFF"` or
-   `stroke="#FFFFFF" fill="none"`, with no gradients, CSS, `<use>` or `<defs>`.
+1. Create `assets/icons/<category>-<name>.svg` — a 24x24 viewBox with `width="24" height="24"`,
+   `fill="#FFFFFF"` or `stroke="#FFFFFF" fill="none"` (or, for a toolbar glyph, the
+   [role placeholders](#multi-role-icons)), with no gradients, CSS classes, `<use>` or `<defs>`.
 2. Add the enum value to `Icon` in `IconLibrary.h`, immediately before `kCount`.
 3. Add the `binaryDataForIcon` entry in `IconLibrary.cpp`'s `kTable` array, in the same order as the
    enum. The symbol name is the filename with hyphens stripped plus an `_svg` suffix.
-4. Add a tint assignment in `AppLookAndFeel::retintIcons()`.
+4. Add a tint assignment in `AppLookAndFeel::retintIcons()` (a multi-role toolbar glyph needs none).
 5. Rebuild `Assets` to regenerate `BinaryData.h`.
 
 `static_assert(std::size(kTable) == (size_t)Icon::kCount, ...)` guards the count: it fails to

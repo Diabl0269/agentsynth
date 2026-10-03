@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <path d="M4,6 L4,20 L20,20 L20,8 L14,8 L11,6 Z" stroke="#FFFFFF" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
-  <path d="M12,10 L12,17 M9,14 L12,17 L15,14" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Toolbar icon, file group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
+  <path d="M3 7a1.5 1.5 0 0 1 1.5-1.5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" fill="#FF00FF" fill-opacity=".45" />
+  <path d="M3 11h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" fill="#FF00FF" />
+  <g id="mv">
+    <path d="M12 9.6v6.6M9.3 13.6 12 16.3l2.7-2.7" stroke-width="2" fill="none" stroke="#00FFFF" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
 </svg>

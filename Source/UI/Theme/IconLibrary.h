@@ -8,9 +8,9 @@
 namespace synth::theme {
 
 // The canonical icon set. White-filled SVG glyphs, tinted programmatically at
-// theme-apply time. Backed by Assets BinaryData (see CMakeLists.txt) when
-// HAS_FONT_ASSETS is defined; otherwise every entry is a null fallback so
-// headless tests (no asset library) still link and run.
+// theme-apply time; the toolbar's glyphs are multi-role instead (see IconRoleColours). Backed by Assets BinaryData (see
+// CMakeLists.txt) when HAS_FONT_ASSETS is defined; otherwise every entry is a null fallback so headless tests (no asset
+// library) still link and run.
 //
 // IMPORTANT: this is a juce::Drawable (SVG) registry, NOT an icon/glyph font. A runtime
 // font-family swap corrupts text globally on JUCE 8 + CoreText, so chrome glyphs live here
@@ -78,8 +78,24 @@ enum class Icon : int {
     ToolRange,
     // The mixer column header's sources badge ("plays into this channel") -- appended, as above.
     MixerSources,
+    // The toolbar's Hide/Show panel glyph -- appended, as above.
+    TogglePanel,
     kCount
 };
+
+// The colours of a multi-role icon. Such an SVG paints each role in a fixed placeholder colour
+// (kRoleHue, kRoleInk, kRolePaper; the soft role is kRoleHue at kRoleSoftAlpha), and a recolour
+// maps each placeholder to its role colour, keeping any extra opacity the SVG gives a shape.
+struct IconRoleColours {
+    juce::Colour hue;   // the main shapes
+    juce::Colour soft;  // back shapes (usually the hue at kRoleSoftAlpha)
+    juce::Colour ink;   // dark details drawn on the colour
+    juce::Colour paper; // light details
+};
+inline constexpr juce::uint32 kRoleHue = 0xffff00ff;
+inline constexpr juce::uint32 kRoleInk = 0xff00ffff;
+inline constexpr juce::uint32 kRolePaper = 0xffffff00;
+inline constexpr float kRoleSoftAlpha = 0.45f;
 
 class IconLibrary {
 public:
@@ -89,6 +105,15 @@ public:
     // theme switches produce correct results (does NOT accumulate tint). No-op if the icon
     // is absent (headless / missing assets).
     void setTintColour(Icon id, juce::Colour c);
+
+    // createRecoloured: a fresh clone of the UNTINTED original with its placeholder roles mapped to
+    // `roles` (caller owns). Nullptr if the icon is absent.
+    std::unique_ptr<juce::Drawable> createRecoloured(Icon id, const IconRoleColours& roles) const;
+
+    // Maps the placeholder roles of `drawable` (fills and strokes, recursively) to `roles`, in one
+    // pass: a colour is classified before it is written, so a role colour that happens to equal a
+    // placeholder is never mapped twice.
+    static void recolourRoles(juce::Drawable& drawable, const IconRoleColours& roles);
 
     // getDrawable: returns a fresh clone (caller owns). Returns nullptr if the icon is absent.
     std::unique_ptr<juce::Drawable> getDrawable(Icon id) const;

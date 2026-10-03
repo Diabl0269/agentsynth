@@ -82,6 +82,9 @@ juce_add_binary_data(Assets SOURCES
     # The mixer header's "plays into this channel" badge (arrow into a bracket). BinaryData symbol:
     # mixersources_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-sources.svg
+    # The toolbar's Hide/Show panel glyph (a window with its bottom panel filled). BinaryData
+    # symbol: togglepanel_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toggle-panel.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

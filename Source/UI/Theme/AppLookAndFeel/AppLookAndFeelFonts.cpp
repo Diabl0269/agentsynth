@@ -75,19 +75,24 @@ namespace {
 class EmbeddedUiTypeface : private juce::DeletedAtShutdown {
 public:
     /** Message thread only (fonts are measured and painted there). */
-    static juce::Typeface::Ptr get() {
-        if (instance == nullptr)
-            instance = new EmbeddedUiTypeface();
-        return instance->face;
-    }
+    static juce::Typeface::Ptr get() { return instance().face; }
+    /** The semi-bold cut, for the toolbar's captions. Message thread only. */
+    static juce::Typeface::Ptr getSemiBold() { return instance().semiBold; }
 
 private:
+    static EmbeddedUiTypeface& instance() {
+        if (instance_ == nullptr)
+            instance_ = new EmbeddedUiTypeface();
+        return *instance_;
+    }
     EmbeddedUiTypeface()
-        : face(loadEmbeddedTypeface("Inter", false, false)) {}
-    ~EmbeddedUiTypeface() override { instance = nullptr; }
+        : face(loadEmbeddedTypeface("Inter", false, false))
+        , semiBold(loadEmbeddedTypeface("Inter", false, true)) {}
+    ~EmbeddedUiTypeface() override { instance_ = nullptr; }
 
-    static inline EmbeddedUiTypeface* instance = nullptr;
+    static inline EmbeddedUiTypeface* instance_ = nullptr;
     juce::Typeface::Ptr face;
+    juce::Typeface::Ptr semiBold;
 };
 
 } // namespace
@@ -96,6 +101,12 @@ juce::Font AppLookAndFeel::uiFont(float height) {
     if (auto face = EmbeddedUiTypeface::get())
         return juce::Font(juce::FontOptions(face).withHeight(height));
     return juce::Font(juce::FontOptions(height));
+}
+
+juce::Font AppLookAndFeel::uiSemiBoldFont(float height) {
+    if (auto face = EmbeddedUiTypeface::getSemiBold())
+        return juce::Font(juce::FontOptions(face).withHeight(height));
+    return juce::Font(juce::FontOptions(height).withStyle("Bold"));
 }
 
 int AppLookAndFeel::uiTextWidth(const juce::String& text, float height) {
