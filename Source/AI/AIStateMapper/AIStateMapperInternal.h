@@ -57,6 +57,8 @@
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
+#include <map>
+#include <optional>
 #include <set>
 #include <unordered_map> // For the factory map
 
@@ -310,6 +312,28 @@ inline void restoreNodePresentation(juce::AudioProcessorGraph::Node* node, const
     applyDisplayNameToNode(node, nObj);
     restoreCardLayoutOnNode(node, nObj);
 }
+
+// -- Plan-scoped ids and modulation destinations (AIStateMapperModulations.cpp) ----------------
+
+using NodeIdMap = std::map<int, juce::AudioProcessorGraph::NodeID>;
+
+// True when `scope` keeps `nodeId` out of the patch's raw-uid namespace (hidden, or bound to a plan id).
+bool scopeHidesNode(const PatchIdScope* scope, juce::AudioProcessorGraph::NodeID nodeId);
+
+// Merge mode: every live node a patch may address by raw uid, then the scope's plan ids on top.
+void seedMergeIdMap(const juce::AudioProcessorGraph& graph, const PatchIdScope* scope, NodeIdMap& idMap);
+
+// The node a "remove" entry denotes, or nullopt for one the scope hides.
+std::optional<juce::AudioProcessorGraph::NodeID> removalTarget(const NodeIdMap& idMap, const PatchIdScope* scope,
+                                                               int patchId);
+
+// The destination channel a modulation entry names: "destParam" resolved on `destProcessor`, else
+// "destPort" (0 when absent). nullopt when "destParam" does not resolve.
+std::optional<int> modulationDestPort(const juce::DynamicObject& modulation, juce::AudioProcessor* destProcessor);
+
+// The "modulations" step of applyJSONToGraph: one attenuverter per entry, skipping an existing routing.
+void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
+                            NodeIdMap& idMap);
 
 } // namespace detail
 } // namespace synth

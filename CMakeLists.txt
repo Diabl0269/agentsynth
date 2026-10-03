@@ -480,6 +480,8 @@ add_library(Core STATIC
     Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp
     Source/AI/AIIntegrationService/AIIntegrationServicePatchApply.cpp
     Source/AI/AIIntegrationService/AIIntegrationServiceTimelineOps.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEdit.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEditRun.cpp
     Source/AI/OllamaProvider.cpp
     Source/AI/RemoteProvider.cpp
     Source/AI/AIIntegrationService/AIIntegrationService.h
@@ -488,6 +490,7 @@ add_library(Core STATIC
     Source/AI/AIStateMapper/AIStateMapperValidation.cpp
     Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp
     Source/AI/AIStateMapper/AIStateMapperSchema.cpp
+    Source/AI/AIStateMapper/AIStateMapperModulations.cpp
     Source/AI/AIProviderRegistry.h
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h

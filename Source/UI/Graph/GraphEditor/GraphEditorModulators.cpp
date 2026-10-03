@@ -62,22 +62,12 @@ void settleNewRouting(AudioEngine& engine, NodeID lfoId, NodeID targetId, int ra
 }
 } // namespace
 
-// A module names each CV jack by the parameter it drives. A target declared without a paramId is
-// matched by its name against the parameter's display name instead (the knob-binding fallback).
+// The rule itself (paramId match, or the display-name fallback for a jack with no paramId) lives
+// in ModuleBase::modulationChannelForParam, shared with a patch modulation's "destParam".
 int GraphEditor::modulationChannelFor(NodeID nodeId, const juce::String& paramId) const {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
-    if (module == nullptr || paramId.isEmpty())
-        return -1;
-    const auto* param = findParameterByID(module, paramId);
-    const juce::String displayName = param != nullptr ? param->getName(64) : juce::String();
-    for (const auto& target : module->getModulationTargets()) {
-        if (target.paramId == paramId)
-            return target.channelIndex;
-        if (target.paramId.isEmpty() && displayName.isNotEmpty() && target.name == displayName)
-            return target.channelIndex;
-    }
-    return -1;
+    return module != nullptr ? module->modulationChannelForParam(paramId) : -1;
 }
 
 // Everything is ONE undo step: the node, its uuid, its placement (and any room made for it), the cable

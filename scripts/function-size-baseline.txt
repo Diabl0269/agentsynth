@@ -4,9 +4,9 @@
 # the entry must be removed (--update does that).
 # Never add a NEW function here -- extract a named step / collaborator instead.
 245 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
-407 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
+349 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
 239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
-260 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
+225 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
 380 Source/PresetManager.cpp::PresetManager::getPresetJSON
 320 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
