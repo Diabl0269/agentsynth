@@ -35,6 +35,9 @@ public:
     void sync(bool fresh = true);
     /** Marks `attenuverterId`'s row as the chosen one (and tells the controller). */
     void select(juce::AudioProcessorGraph::NodeID attenuverterId);
+    /** Highlights every row's remove button (rows that grow in later join); cleared with the panel. */
+    void setRemoveHighlighted(bool on);
+    bool isRemoveHighlighted() const noexcept { return removeHighlighted_; }
 
     std::function<void()> onAddSourceRequested;
 
@@ -77,6 +80,7 @@ private:
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver anim_;
     int dividerY_ = 0;
+    bool removeHighlighted_ = false;
 };
 
 } // namespace synth::ui

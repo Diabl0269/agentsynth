@@ -109,6 +109,12 @@ void ModDotSourcesPage::applyAmount(ModDotSourceRow& row, float amount) {
     editor_.adjustModAmount(row.attenuverterId(), amount - current);
 }
 
+void ModDotSourcesPage::setRemoveHighlighted(bool on) {
+    removeHighlighted_ = on;
+    for (auto& e : entries_)
+        e.row->setRemoveHighlighted(on && !e.leaving);
+}
+
 void ModDotSourcesPage::select(juce::AudioProcessorGraph::NodeID attenuverterId) {
     controller_.setLastChosen(card_, destChannel_, attenuverterId);
     for (auto& e : entries_)
@@ -134,6 +140,7 @@ void ModDotSourcesPage::sync(bool fresh) {
         Entry entry;
         entry.row = std::make_unique<ModDotSourceRow>(source, target_.paramName);
         wireRow(*entry.row);
+        entry.row->setRemoveHighlighted(removeHighlighted_);
         addAndMakeVisible(*entry.row);
         entries_.push_back(std::move(entry));
     }

@@ -121,10 +121,10 @@ void CardFader::reanchor(juce::Point<float> mouse) {
 void CardFader::mouseDown(const juce::MouseEvent& e) {
     if (!isEnabled() || e.mods.isPopupMenu())
         return; // a right click is the card's control menu
-    if (e.getNumberOfClicks() > 1)
-        return; // a double-click's second press: mouseDoubleClick resets, no drag may nest inside it
     if (claimMouseDown(e))
         return;
+    if (e.getNumberOfClicks() > 1)
+        return; // a double-click's second press: mouseDoubleClick resets, no drag may nest inside it
     if (e.mods.isCommandDown()) {
         resetToDefault();
         return;
@@ -159,7 +159,7 @@ void CardFader::mouseUp(const juce::MouseEvent& e) {
 }
 
 void CardFader::mouseDoubleClick(const juce::MouseEvent& e) {
-    if (isEnabled() && !e.mods.isPopupMenu())
+    if (isEnabled() && !e.mods.isPopupMenu() && !modDotClaimedLastPress())
         resetToDefault();
 }
 

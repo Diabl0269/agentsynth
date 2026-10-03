@@ -33,6 +33,13 @@ public:
     juce::AudioProcessorGraph::NodeID card() const noexcept { return card_; }
     int destChannel() const noexcept { return destChannel_; }
     Page page() const noexcept { return page_; }
+    juce::Component* anchor() const noexcept { return anchor_.getComponent(); }
+    /** Milliseconds since the panel was made (a callout ignores a click on its dot for its first 200 ms). */
+    juce::uint32 ageMs() const noexcept { return juce::Time::getMillisecondCounter() - createdMs_; }
+    /** Highlight mode: every remove button drawn in the negative colour with a pulse, and "Choose a source to
+     *  remove" announced. Cleared by closing the panel. */
+    void setRemoveHighlighted(bool on);
+    bool isRemoveHighlighted() const noexcept { return sourcesPage_.isRemoveHighlighted(); }
 
     /** Follows the graph while open (called from the editor's tick): rows grow, shrink and re-read amounts. */
     void syncFromGraph();
@@ -91,6 +98,7 @@ private:
     AnimationDriver pageAnim_;
     ModDotController* controllerForClose_;
     int focusTries_ = 0;
+    juce::uint32 createdMs_ = juce::Time::getMillisecondCounter();
 };
 
 } // namespace synth::ui

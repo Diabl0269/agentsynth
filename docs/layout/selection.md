@@ -170,7 +170,7 @@ habit changes. The rest of this doc is the full contract.
 | Click empty canvas | Clear the selection |
 | Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
 | Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Go to Output (see [Locate Master](../control/shortcuts.md#locate-master); greyed out with neither Master nor Audio Output) |
-| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
+| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`); on a CV jack that drives a modulated knob, remove its one source or, with several, pick which |
 
 Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
 on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste

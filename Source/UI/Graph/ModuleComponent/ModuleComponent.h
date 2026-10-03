@@ -258,6 +258,9 @@ public:
     void syncModDotButtons();
     /** The mod-dot button for raw `destChannel`, or null when that knob has none right now. */
     synth::ui::ModDotButton* getModDotButton(int destChannel) const;
+    /** A double-click on visible CV jack `visibleInputIndex`: handled by the knob's mod dot when it drives a
+     *  modulated knob (true), else false and the caller disconnects. */
+    bool handleModJackDoubleClick(int visibleInputIndex);
 
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;

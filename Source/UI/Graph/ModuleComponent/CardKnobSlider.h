@@ -49,6 +49,11 @@ public:
             juce::Slider::mouseUp(e);
     }
 
+    void mouseDoubleClick(const juce::MouseEvent& e) override {
+        if (!modDotClaimedLastPress())
+            juce::Slider::mouseDoubleClick(e);
+    }
+
     void mouseEnter(const juce::MouseEvent& e) override {
         notifyHover(true);
         juce::Slider::mouseEnter(e);

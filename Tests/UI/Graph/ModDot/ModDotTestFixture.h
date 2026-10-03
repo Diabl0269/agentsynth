@@ -58,6 +58,15 @@ void showGainAsKnob(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph:
     synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
 }
 
+// A card with no knob at all: its modulation targets keep their visible CV jacks.
+void hideCardKnobs(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
+    synth::CardSection section;
+    section.id = "main";
+    synth::CardLayout layout;
+    layout.sections = {section};
+    synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
+}
+
 const auto kPlain = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
 const auto kCmd = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
 
@@ -72,7 +81,7 @@ struct Fixture {
     // The panel a click on the dot opened: a real callout needs a display, so the launcher keeps it instead.
     std::unique_ptr<juce::Component> held;
 
-    explicit Fixture(bool modulated = true) {
+    explicit Fixture(bool modulated = true, bool gainAsKnob = true) {
         engine.initialise();
         engine.getGraph().clear();
         editor = std::make_unique<GraphEditor>(engine, &undo);
@@ -82,7 +91,10 @@ struct Fixture {
         auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
         lfoId = lfoNode->nodeID;
         vcaId = vcaNode->nodeID;
-        showGainAsKnob(graph, vcaId);
+        if (gainAsKnob)
+            showGainAsKnob(graph, vcaId);
+        else
+            hideCardKnobs(graph, vcaId);
         for (const auto& t : dynamic_cast<ModuleBase*>(vcaNode->getProcessor())->getModulationTargets())
             if (t.paramId == "gain")
                 gainChannel = t.channelIndex;

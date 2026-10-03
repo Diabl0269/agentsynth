@@ -23,6 +23,8 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     : editor_(editor)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
+    doubleClickListener_.owner = this;
+    juce::Desktop::getInstance().addGlobalMouseListener(&doubleClickListener_);
     onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
         openPopover(card, destChannel, anchor);
     };
@@ -78,11 +80,16 @@ void ModDotController::pressed(juce::AudioProcessorGraph::NodeID card, int destC
     g.anchor = &anchor;
     g.startPos = e.position;
     g.startAmount = attenuverterAmount(editor_.getAudioEngine().getGraph(), g.attenuverter);
+    g.doubleClick = e.getNumberOfClicks() >= 2 && editor_.getDoubleClickPortDisconnectEnabled();
     gesture_ = g;
+    if (g.doubleClick && e.eventTime != lastDoubleClickTime_) {
+        lastDoubleClickTime_ = e.eventTime;
+        dotDoubleClicked(card, destChannel, anchor);
+    }
 }
 
 void ModDotController::dragged(const juce::MouseEvent& e) {
-    if (!gesture_.has_value() || cancelled_ || gesture_->attenuverter.uid == 0)
+    if (!gesture_.has_value() || cancelled_ || gesture_->doubleClick || gesture_->attenuverter.uid == 0)
         return;
     auto& g = *gesture_;
     if (!g.started) {
@@ -105,6 +112,8 @@ void ModDotController::released(const juce::MouseEvent&) {
         cancelled_ = false;
         return;
     }
+    if (g.doubleClick)
+        return;
     if (g.started) {
         editor_.commitModAmountGesture();
         tooltip_.hide();

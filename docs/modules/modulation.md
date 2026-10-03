@@ -480,7 +480,7 @@ opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::on
   re-drag it. A dot with no attenuverter routing (nothing to adjust, or a direct/poly cable) also still
   starts a cable drag on a plain press.
 * **Keyboard.** The dot has its own Tab stop right after its knob (`ModDotButton`, named "Cutoff
-  modulation, 2 sources", tooltip "Modulation sources for Cutoff"). Up and Down change the last-chosen
+  modulation, 2 sources", tooltip "Modulation sources for Cutoff. Double-click to remove"). Up and Down change the last-chosen
   source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
   and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
   open the dot's panel like a click.
@@ -529,6 +529,16 @@ keep working.
   set by `MainComponent` to `removeModulator`): the routing and its amount lane go in one undo step, the ports it
   crossed are swept, and removing an LFO's last destination asks first. With no host set (a canvas test) it falls back
   to `GraphEditor::removeModulationChain`.
+* **Double-click the dot to remove.** With ONE source on the knob, a double-click on its dot removes that connection
+  as one undo step: the cable animates out and the attenuverter and any macro-port hop it used go with it, the source
+  module stays (`GraphEditor::removeModulationChain`, via `ModDotController::dotDoubleClicked`); Cmd+Z brings it all
+  back. With SEVERAL sources it opens this panel (or keeps it open) with every remove button drawn in the negative
+  colour at full strength, with one short pulse (none under reduced motion) and "Choose a source to remove"
+  announced; removing one there is the normal Remove above. The same applies to a double-click on a visible CV jack
+  that drives a knob's modulation (`ModuleComponent::handleModJackDoubleClick`; the panel then points at the card).
+  Gated by the preference "Double-click port to disconnect" (on by default); off, a double-click is two clicks. The
+  open panel is a modal call-out that swallows the second press, so `ModDotController` also listens globally for it
+  (deduped by event time). The knob's own double-click-to-reset is skipped when the dot claimed the press.
 * **Show in timeline** (`host.revealModulator` -> `MainComponent::revealModulatorInTimeline`) opens the Timeline tab and
   shows the lane of the knob's parameter, where its modulator rows sit. A parameter with no lane gets one the way
   "Automate" makes it (`automateParameter`, one undo step); the view scrolls to the lane row, not to the single

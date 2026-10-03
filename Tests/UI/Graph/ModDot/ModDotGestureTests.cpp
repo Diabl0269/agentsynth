@@ -146,7 +146,7 @@ TEST_F(ModuleComponentTest, TheDotButtonExistsOnlyWithARoutingAndIsNamedAndTippe
     auto* button = f.vcaCard->getModDotButton(f.gainChannel);
     ASSERT_NE(button, nullptr);
     EXPECT_EQ(button->getTitle(), "Gain modulation, 1 source");
-    EXPECT_EQ(button->getTooltip(), "Modulation sources for Gain");
+    EXPECT_EQ(button->getTooltip(), "Modulation sources for Gain. Double-click to remove");
     EXPECT_TRUE(button->getWantsKeyboardFocus());
 
     f.addSecondLfo();

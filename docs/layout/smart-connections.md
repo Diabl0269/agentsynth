@@ -272,6 +272,11 @@ a visible jack owns). An unconnected jack is a no-op. The first click of a doubl
 (and immediately ends) a cable drag; the second click is intercepted in
 `ModuleComponent::mouseDown` (`getNumberOfClicks() >= 2`) so it does not start another drag.
 
+A visible CV jack that drives a knob's modulation is the exception: with one modulation source on that knob the
+double-click removes just that source's chain (one undo step); with several it opens the knob's mod dot menu with the
+remove buttons highlighted instead of disconnecting them all
+([the mod dot](../modules/modulation.md#the-mod-dot-menu)).
+
 `Settings -> Preferences -> Double-click port to disconnect`, persisted as
 `doubleClickPortDisconnect` in `juce::ApplicationProperties`. Default: **on**. Restored in
 `MainComponent::initialiseCommon()`, so the canvas honours it without opening Settings. When off,
