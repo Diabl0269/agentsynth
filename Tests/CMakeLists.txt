@@ -134,6 +134,7 @@ add_executable(Tests
     Mixer/MasterDualIOTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
+    Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp
     Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowAutoChannelTests.cpp
@@ -185,6 +186,8 @@ add_executable(Tests
     UI/Graph/CardBody/ModuleCardLayoutResolverTests.cpp
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperValidationTests.cpp
+    AI/AIStateMapper/AIStateMapperDestParamTests.cpp
+    AI/AIStateMapper/AIStateMapperIdScopeTests.cpp
     AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp
     AI/AIStateMapper/AIStateMapperPatchFormatTests.cpp
     AI/AIPatchValidationTests.cpp
@@ -298,6 +301,7 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServiceSystemPromptTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceTimelineToolsTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
     UI/Graph/ModMatrixMacroRoutingTests.cpp

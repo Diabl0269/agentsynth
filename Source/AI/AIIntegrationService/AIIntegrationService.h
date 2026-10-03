@@ -16,6 +16,16 @@ class AppUndoManager; // Forward declaration — the service only holds a non-ow
 
 namespace synth {
 
+/** The outcome of previewing or applying one edit plan (a patch plus a sibling "timelineOps" list). */
+struct ProjectEditResult {
+    bool ok = true;
+    juce::String message;     // on failure the first problem found, worded for the model
+    juce::String previewText; // on success: the patch phase, then the timeline ops, as sentences
+    bool merge = false;       // the mode the patch phase ran in
+    juce::var patchBefore;    // graphToJSON around the patch phase (preview: of the scratch); void without one
+    juce::var patchAfter;
+};
+
 /**
  * @class AIIntegrationService
  * @brief Orchestrates AI interactions and bridges them with the synth engine.
@@ -122,6 +132,20 @@ public:
      *  composed arrange context exists only on the wire). Fails synchronously, like sendMessage(),
      *  with no provider installed. */
     AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+
+    // -- Edit plans (AIIntegrationServiceProjectEdit.cpp) ---------------------------------------
+
+    /** Checks a plan on scratch copies, mutating nothing live. */
+    ProjectEditResult previewProjectEdit(const juce::var& root) const;
+
+    /** Previews, then applies the whole plan as ONE undo step through the host; all or nothing. */
+    ProjectEditResult applyProjectEdit(const juce::var& root);
+
+    /** Asks for an edit plan: hosted `project.generate`, or the local model with the same fields. */
+    AIProvider::RequestId sendProjectMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+
+    /** The `project.generate` request body for `text`; public so tests reproduce the real request. */
+    juce::var buildProjectRequestBody(const juce::String& text) const;
 
     /** Builds the `timeline.generate` request body for `text`. Public for the same reason
      *  extractTimelineOps() is: tests and harnesses reproduce the real request rather than
@@ -308,6 +332,10 @@ private:
 
     // See its definition in AIIntegrationServiceRequestSending.cpp for what this composes.
     juce::String buildArrangeAugmentedContent(const juce::String& text) const;
+    juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
+
+    // The live graph as the model sees it: graphToJSON without the trusted-only node fields.
+    juce::var buildStrippedPatchJson() const;
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
     // a timeline context is installed.

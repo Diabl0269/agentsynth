@@ -25,6 +25,32 @@ model, and presets, snippets and undo snapshots all persist it.
   - `type`: the module's factory type name (`"Oscillator"`, `"Filter"`, `"ADSR"`).
   - `params`: optional key/value pairs for the module's parameters.
 - **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index.
+- **`modulations`** — optional control routings, each created as an attenuverter between source and
+  destination: `source`, optional `sourcePort` (default 0), `dest`, optional `amount` (-1 to 1,
+  default 1) and `bypass`, and the destination channel named by **`destPort` or `destParam`** (see
+  below).
+
+### A modulation's destination: `destPort` or `destParam`
+
+`destPort` is the destination module's raw CV input channel. `destParam` is a parameter id
+(`"cutoff"`) resolved to that channel by `ModuleBase::modulationChannelForParam`, the same rule the
+canvas modulator picker uses (`GraphEditor::modulationChannelFor` calls it): the first of the
+module's `getModulationTargets()` whose `paramId` equals it, or which declares no `paramId` and
+whose jack name equals that parameter's display name.
+
+On the untrusted path `validatePatch` requires **at least one of the two**; when both are present
+they must name the same channel. Neither present is `ModulationInvalidPort` ("One of \"destParam\" ...
+or \"destPort\" is required") - a missing `destPort` used to be read as port 0, usually the audio
+input, so a model that forgot it silently modulated the wrong thing. A `destParam` that resolves to
+no jack is rejected with the destination's modulatable parameter ids, and a `destPort` that
+disagrees with `destParam` is rejected too. The destination is resolved on the live processor for a
+node that exists (an existing node in merge mode, or one an earlier step of an
+[edit plan](timeline-ops.md#one-edit-plan) built) and on a factory instance with the patch's own
+`params` applied for a node only the patch creates, so a poly Filter's cutoff jack is found where
+it really is. The trusted path is unchanged: our own snapshots always write `destPort`, and an
+absent one there still reads as 0. `getPatchSchema()` keeps the shipped modulation shape
+(`destPort` required); `getPatchSchemaWithTimelineOps()` adds `destParam` and drops `destPort` from
+`required`. Tests: `Tests/AI/AIStateMapper/AIStateMapperDestParamTests.cpp`.
 
 Parameter ids are the exact lowercase `paramID` strings from `getModuleSchema()` (`waveform`, not
 `Waveform`), and values are raw and unnormalized within each parameter's declared range — `cutoff`
@@ -60,8 +86,10 @@ integer `id`, which merge-mode apply renumbers — is what long-lived references
 
 **Trusted-path only**, like `state`: `applyJSONToGraph` adopts an incoming `uuid` when
 `trusted == true` and ignores it otherwise, so a provider cannot hand two nodes the same identity
-or claim one that something else already points at. Untrusted nodes get a fresh uuid on the next
-`graphToJSON`.
+or claim one that something else already points at. Every node `applyJSONToGraph` creates without
+an adopted uuid is given a fresh one at creation (`ensureNodeUuid`, mirrored into the processor), so
+a caller can address it by uuid as soon as the apply returns - an edit plan's `writeLane` by
+`nodeId` relies on that.
 
 That uuid is also what makes undo and redo node-preserving.
 `AIStateMapper::applySnapshotPreservingNodes` — the third apply path, used **only** by

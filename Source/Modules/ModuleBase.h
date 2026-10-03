@@ -677,6 +677,30 @@ public:
     /** The parameter a modulation target's knob is attached to: the one whose `paramID` equals
         `target.paramId` when that is set, else the one whose display name equals `target.name`.
         Null for a target with no knob of its own (a bare CV jack such as Oscillator's Pitch). */
+    /** The raw CV channel that modulates parameter `paramId`, or -1 when no jack drives it. One pass
+        over getModulationTargets(): a target matches when its `paramId` equals `paramId`, or when it
+        declares no `paramId` and its `name` equals that parameter's display name (the knob-binding
+        fallback). The ONE rule the canvas modulator picker and a patch's "destParam" both use. */
+    int modulationChannelForParam(const juce::String& paramId) const {
+        if (paramId.isEmpty())
+            return -1;
+        juce::String displayName;
+        for (auto* param : getParameters()) {
+            if (auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param);
+                ranged != nullptr && ranged->paramID == paramId) {
+                displayName = ranged->getName(64);
+                break;
+            }
+        }
+        for (const auto& target : getModulationTargets()) {
+            if (target.paramId == paramId)
+                return target.channelIndex;
+            if (target.paramId.isEmpty() && displayName.isNotEmpty() && target.name == displayName)
+                return target.channelIndex;
+        }
+        return -1;
+    }
+
     const juce::RangedAudioParameter* parameterForModTarget(const ModulationTarget& target) const {
         for (auto* param : getParameters()) {
             auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param);

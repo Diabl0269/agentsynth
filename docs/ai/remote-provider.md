@@ -118,7 +118,7 @@ transport difference so it is never a behaviour difference:
   steering line standing in for the dedicated arrange system prompt the server swaps in and a
   mid-conversation local request cannot), and `AIStateMapper::getTimelineOpsEnvelopeSchema()` as the
   response contract: an envelope-ONLY grammar sharing the ops item schema with
-  `getPatchSchemaWithTimelineOps`, so the two cannot drift, with `timelineOps` **required** — an
+  `getPatchSchemaWithTimelineOps` (minus its edit-plan-only `nodeId`), so the two cannot drift, with `timelineOps` **required** — an
   arrange answer with no ops is not an answer. The history splice matches `sendMessage()`:
   `chatHistory` keeps the raw user text, and the composed context exists only on the wire.
 

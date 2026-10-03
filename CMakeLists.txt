@@ -102,7 +102,6 @@ set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentif
 # The public keys are deliberately empty by default: both update managers stay inert without one,
 # so a dev/local build never shows an "app is misconfigured" alert. CI supplies the real keys via
 # -DSYNTH_SPARKLE_PUBLIC_KEY / -DSYNTH_WINSPARKLE_PUBLIC_KEY (separate, independent EdDSA pairs).
-#
 # One cache var for the feed URL, platform-conditional default: mac and Windows publish separate
 # appcast files under the same agentsynth.app/updates/ path.
 if(APPLE)
@@ -480,6 +479,8 @@ add_library(Core STATIC
     Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp
     Source/AI/AIIntegrationService/AIIntegrationServicePatchApply.cpp
     Source/AI/AIIntegrationService/AIIntegrationServiceTimelineOps.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEdit.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEditRun.cpp
     Source/AI/OllamaProvider.cpp
     Source/AI/RemoteProvider.cpp
     Source/AI/AIIntegrationService/AIIntegrationService.h
@@ -488,6 +489,7 @@ add_library(Core STATIC
     Source/AI/AIStateMapper/AIStateMapperValidation.cpp
     Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp
     Source/AI/AIStateMapper/AIStateMapperSchema.cpp
+    Source/AI/AIStateMapper/AIStateMapperModulations.cpp
     Source/AI/AIProviderRegistry.h
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
@@ -826,7 +828,6 @@ endif()
 
 # ----------------------------------------------------------------------------------------------
 # Audio plugin (VST3 everywhere, + AU on macOS)
-#
 # Wraps the SAME AudioEngine and MainComponent the standalone app runs (via the AppUI library
 # above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
 # opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
@@ -945,7 +946,6 @@ if(ENABLE_PLUGIN)
     # source/linking AgentSynth gets, purely to satisfy the linker — the plugin's own build never
     # gets SUFeedURL/SUPublicEDKey-equivalent compile definitions (only AgentSynth does, above), so
     # UpdateManager::isAvailable() reads empty values and stays inert here.
-    #
     # Delay-loaded (/DELAYLOAD, not a normal import-lib link) rather than linked hard: on macOS the
     # equivalent hazard is that juce_vst3_helper dlopens the freshly-linked plugin bundle right
     # after linking (to write moduleinfo.json), before this target's own POST_BUILD DLL-copy step

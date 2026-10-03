@@ -114,8 +114,9 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (out.poly && out.instrument == "Sampler")
         return "asks for a poly Sampler. Only \"Oscillator\" and \"Wavetable\" have a poly mode.";
 
-    // Reserved for in-response node references (a later op naming this instrument); accepted and
-    // type-checked now, inert until then.
+    // An in-response node reference: inert here, resolved by AIIntegrationService's edit plan
+    // (which also requires it, like an insert's "id", to be a non-negative id distinct from every
+    // other id in the response).
     if (!isOptionalInt(op.getProperty("instrumentId")))
         return "has a non-integer \"instrumentId\".";
 

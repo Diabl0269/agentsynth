@@ -49,6 +49,8 @@ struct TimelineOpsHost {
                        const std::vector<InstrumentTrackInsert>& inserts) = 0;
     /** Runs `mutation` as ONE undo step over graph, timeline and macros; returns the pushed flag. */
     virtual bool recordBatch(const std::function<void()>& mutation) = 0;
+    /** The live doc an edit plan applies to inside recordBatch; null (the default) = cannot apply one. */
+    virtual TimelineDoc* editableTimelineDoc() { return nullptr; }
 };
 
 /**
@@ -126,6 +128,10 @@ struct TimelineOps {
      */
     static TimelineOpsResult apply(const juce::var& envelope, TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
                                    AppUndoManager& undo, TimelineOpsHost* host = nullptr);
+
+    /** Runs an already-validated batch inside the CALLER's open transaction; on failure the caller restores `doc`. */
+    static TimelineOpsResult applyInsideTransaction(const juce::var& envelope, TimelineDoc& doc,
+                                                    const juce::AudioProcessorGraph& graph, TimelineOpsHost* host);
 };
 
 } // namespace synth

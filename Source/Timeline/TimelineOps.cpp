@@ -263,8 +263,9 @@ TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::Dynamic
 
     if (applyHost != nullptr) {
         // The host creates the doc track AND the nodes; on nullopt it has removed both. The returned
-        // uuids are not used yet: they are what in-response references (an insert's "id", the
-        // op's "instrumentId") will resolve against.
+        // uuids are what an edit plan's in-response references (an insert's "id", the op's
+        // "instrumentId") resolve against; the plan reads them through a recording host, so this
+        // batch runner itself never needs them.
         if (!applyHost->addInstrumentTrack(name, fields.instrument, fields.poly, fields.inserts).has_value())
             return fail(where + "could not build the instrument track.");
     } else if (!doc.addTrack(TrackKind::Midi, name).isValid()) {
@@ -900,7 +901,7 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
     // MidiRecorder::stopAndCommit relies on for a take's clip plus its every note).
     const bool buildsGraph = carriesInstrumentTrackOp(envelope);
     const auto mutation = [&] {
-        applied = runBatch(envelope, doc, graph, host, buildsGraph ? host : nullptr);
+        applied = applyInsideTransaction(envelope, doc, graph, host);
 
         // Unreachable for a doc-only batch: validate() just proved it against an identical
         // document. Reachable when the host fails to build a track (its graph side cannot be dry-run);
@@ -926,6 +927,19 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
 
     return {true, "Applied " + countText(opCount, "timeline operation", "timeline operations") + " as one undo step.",
             preview.previewText};
+}
+
+// The batch runner apply() wraps in its transaction, exposed for a caller that owns a BIGGER
+// transaction (AIIntegrationService's edit plan runs track ops, a patch and the remaining ops as one
+// undo step). Contract: the caller has already validated this exact envelope against this exact
+// doc and graph state (validate() mutates nothing, so it can be run right before), and the caller
+// holds the transaction, so nothing here opens one or pushes undo. An addInstrumentTrack op builds
+// through `host` exactly as in apply(). On failure the doc may be partly written: the caller
+// restores it (apply() does so from its pre-batch toVar()). Every writeLane op addresses its node by
+// "nodeUuid" only; a caller with in-response node references rewrites them to uuids first.
+TimelineOpsResult TimelineOps::applyInsideTransaction(const juce::var& envelope, TimelineDoc& doc,
+                                                      const juce::AudioProcessorGraph& graph, TimelineOpsHost* host) {
+    return runBatch(envelope, doc, graph, host, carriesInstrumentTrackOp(envelope) ? host : nullptr);
 }
 
 } // namespace synth

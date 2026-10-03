@@ -98,6 +98,14 @@ the same patch that meant the original node would silently re-point at the new o
 patch also `remove` are exempt: removals run first, so re-using such an id names a genuinely new
 node. The trusted path is unaffected by design.
 
+**An edit plan widens the namespace without loosening it.** A merge patch inside an [edit
+plan](timeline-ops.md#one-edit-plan) is validated with a `PatchIdScope`: the `instrumentId` and
+insert ids an earlier step built become addressable, the uids of every node that step created
+become unaddressable, and a patch node reusing a bound id is `DuplicateNodeId`. Every check above
+still runs; the scope only changes which ids exist. A modulation's destination is likewise
+`destPort` or `destParam`, at least one and agreeing when both are given
+([patch format](patch-format.md#a-modulations-destination-destport-or-destparam)).
+
 ### Repair, one rule only
 
 A patch that states no `"mode"` and is rejected as a *replace* is re-validated as a *merge*, and

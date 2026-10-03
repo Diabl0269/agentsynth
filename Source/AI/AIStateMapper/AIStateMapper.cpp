@@ -556,7 +556,8 @@ void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, 
 
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,
                                      bool trusted, bool autoConnectNewNodes,
-                                     std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap) {
+                                     std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap,
+                                     const PatchIdScope* scope) {
     if (!json.isObject()) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON is not an object.");
         return false;
@@ -569,7 +570,11 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
     // Validate the entire patch before making any changes — a rejected patch must never be
     // partially applied.
-    auto validation = validatePatch(json, graph, clearExisting, trusted);
+    // A scope only ever widens a MERGE patch's namespace (see PatchIdScope); replace mode clears the
+    // nodes it would name.
+    if (clearExisting)
+        scope = nullptr;
+    auto validation = validatePatch(json, graph, clearExisting, trusted, /*allowInternalModuleTypes=*/false, scope);
     if (!validation.ok) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON patch validation failed: " + validation.message);
         return false;
@@ -584,12 +589,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
     std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
     std::set<juce::AudioProcessorGraph::NodeID> newlyCreatedNodes;
 
-    // Pre-populate idMap with existing nodes when merging
-    if (!clearExisting) {
-        for (auto* node : graph.getNodes()) {
-            idMap[(int)node->nodeID.uid] = node->nodeID;
-        }
-    }
+    // Pre-populate idMap with existing nodes when merging (and the scope's plan ids, if any)
+    if (!clearExisting)
+        detail::seedMergeIdMap(graph, scope, idMap);
 
     // Process removals before adding new nodes
     if (rootObj->hasProperty("remove")) {
@@ -597,8 +599,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (removeList) {
             for (const auto& idVar : *removeList) {
                 int nodeIdToRemove = (int)idVar;
-                auto juceNodeId = juce::AudioProcessorGraph::NodeID((juce::uint32)nodeIdToRemove);
-                if (removePatchNode(graph, juceNodeId))
+                const auto juceNodeId = detail::removalTarget(idMap, scope, nodeIdToRemove);
+                if (juceNodeId.has_value() && removePatchNode(graph, *juceNodeId))
                     idMap.erase(nodeIdToRemove);
             }
         }
@@ -730,6 +732,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
                             adoptUuidIfTrusted(node.get(), nObj, trusted);
+                            // Minted at creation rather than at the next graphToJSON, so a caller
+                            // can address the node by uuid the moment the apply returns.
+                            ensureNodeUuid(node.get());
                             detail::applyNodePresentation(node.get(), nObj, trusted);
                             if (nObj->hasProperty("position")) {
                                 if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -798,72 +803,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
-    // 3. Modulations
-    if (rootObj->hasProperty("modulations")) {
-        auto* modList = rootObj->getProperty("modulations").getArray();
-        if (modList) {
-            for (const auto& modVar : *modList) {
-                if (auto* modObj = modVar.getDynamicObject()) {
-                    int sourceId = (int)modObj->getProperty("source");
-                    int destId = (int)modObj->getProperty("dest");
-                    int sourcePort = modObj->hasProperty("sourcePort") ? (int)modObj->getProperty("sourcePort") : 0;
-                    int destPort = (int)modObj->getProperty("destPort");
-                    float amount = modObj->hasProperty("amount") ? (float)modObj->getProperty("amount") : 1.0f;
-                    bool bypass = modObj->hasProperty("bypass") ? (bool)modObj->getProperty("bypass") : false;
-
-                    // Get mapped node IDs
-                    if (idMap.count(sourceId) && idMap.count(destId)) {
-                        auto mappedSource = idMap[sourceId];
-                        auto mappedDest = idMap[destId];
-
-                        // Skip if an attenuverter already exists for this routing
-                        // (e.g., from nodes/connections arrays in the same JSON)
-                        bool alreadyExists = false;
-                        for (auto* existingNode : graph.getNodes()) {
-                            if (dynamic_cast<AttenuverterModule*>(existingNode->getProcessor()) == nullptr)
-                                continue;
-                            bool srcMatch = false, dstMatch = false;
-                            for (const auto& conn : graph.getConnections()) {
-                                if (conn.destination.nodeID == existingNode->nodeID &&
-                                    conn.destination.channelIndex == 0 && conn.source.nodeID == mappedSource &&
-                                    conn.source.channelIndex == sourcePort)
-                                    srcMatch = true;
-                                if (conn.source.nodeID == existingNode->nodeID && conn.source.channelIndex == 0 &&
-                                    conn.destination.nodeID == mappedDest && conn.destination.channelIndex == destPort)
-                                    dstMatch = true;
-                            }
-                            if (srcMatch && dstMatch) {
-                                alreadyExists = true;
-                                break;
-                            }
-                        }
-                        if (alreadyExists)
-                            continue;
-
-                        // Create attenuverter node
-                        auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
-                        if (attenNode) {
-                            if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
-                                    findParameterByID(attenNode->getProcessor(), "amount"))) {
-                                param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(amount));
-                            }
-
-                            if (bypass) {
-                                if (auto* bp = dynamic_cast<juce::AudioParameterBool*>(
-                                        findParameterByID(attenNode->getProcessor(), "bypassed"))) {
-                                    bp->setValueNotifyingHost(1.0f);
-                                }
-                            }
-
-                            // Add connections
-                            graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}});
-                            graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, destPort}});
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // 3. Modulations (AIStateMapperModulations.cpp)
+    if (auto* modList = rootObj->getProperty("modulations").getArray())
+        detail::applyModulationEntries(*modList, graph, idMap);
 
     // 4. Auto-connect: in merge mode, connect new unconnected audio nodes to Audio Output.
     //

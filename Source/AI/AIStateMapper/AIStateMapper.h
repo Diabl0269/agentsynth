@@ -5,6 +5,7 @@
 #include <juce_core/juce_core.h>
 #include <map>
 #include <memory>
+#include <set>
 
 namespace synth {
 
@@ -75,6 +76,12 @@ struct PatchValidationResult {
  * line or a harness histogram can be read straight against this header.
  */
 juce::String patchValidationErrorName(PatchValidationError error);
+
+/** Node ids an earlier step of the same edit plan created, for a MERGE patch that refers to them. */
+struct PatchIdScope {
+    std::map<juce::uint32, juce::AudioProcessorGraph::NodeID> boundIds; // plan id -> the node it denotes
+    std::set<juce::AudioProcessorGraph::NodeID> hiddenNodes; // never addressable by raw uid (bound ones neither)
+};
 
 /**
  * @class AIStateMapper
@@ -147,9 +154,11 @@ public:
      *
      * @return true if the patch was applied successfully.
      */
+    /** @param scope null (the default) keeps the plain patch namespace; merge mode only otherwise. */
     static bool applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting = true,
                                  bool trusted = false, bool autoConnectNewNodes = true,
-                                 std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap = nullptr);
+                                 std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap = nullptr,
+                                 const PatchIdScope* scope = nullptr);
 
     /**
      * @brief Restores one of OUR OWN graphToJSON snapshots by diffing it against the live graph.
@@ -211,8 +220,10 @@ public:
      *              ranges and tampering, just not authorship. Defaults to false so a new
      *              model-facing caller is protected without having to know this exists.
      */
+    /** @param scope null (the default) keeps the plain patch namespace; ignored in replace mode. */
     static PatchValidationResult validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                               bool clearExisting, bool trusted, bool allowInternalModuleTypes = false);
+                                               bool clearExisting, bool trusted, bool allowInternalModuleTypes = false,
+                                               const PatchIdScope* scope = nullptr);
 
     /**
      * @brief Gets a Markdown-formatted string of all available modules and their parameters.

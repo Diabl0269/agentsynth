@@ -141,7 +141,7 @@ namespace {
 // duplicate-name op gets TimelineOps::validate's rejection message instead of succeeding, which
 // the model can act on (e.g. rename) but not resolve via index. Still strictly better than `{}`,
 // which was mangled on essentially every emission, string or object alike.
-juce::var timelineOpsArraySchema() {
+juce::var timelineOpsArraySchema(bool withNodeId) {
     const juce::String opsSchemaJson = R"json({
         "type": "array",
         "items": {
@@ -180,7 +180,35 @@ juce::var timelineOpsArraySchema() {
             "required": ["op"]
         }
     })json";
-    return juce::JSON::parse(opsSchemaJson);
+    juce::var schema = juce::JSON::parse(opsSchemaJson);
+    // "nodeId" (a node the same response creates) is resolved by AIIntegrationService's edit plan,
+    // which rewrites it to "nodeUuid" before TimelineOps sees the op. Only the patch-carrying
+    // contract offers it: an arrange-only answer has no patch to create a node in, and
+    // TimelineOps::validate on its own refuses the field as unknown.
+    if (withNodeId) {
+        juce::DynamicObject::Ptr nodeId = new juce::DynamicObject();
+        nodeId->setProperty("type", "integer");
+        schema.getProperty("items", {})
+            .getProperty("properties", {})
+            .getDynamicObject()
+            ->setProperty("nodeId", juce::var(nodeId.get()));
+    }
+    return schema;
+}
+
+// The patch's modulation item, widened for the edit plan's "destParam": a modulation may name its
+// target by parameter id instead of port, so "destPort" leaves "required" (validatePatch requires
+// one of the two, and that both agree when both are given). getPatchSchema() itself keeps the
+// shipped shape.
+void allowDestParamOnModulations(juce::DynamicObject& properties) {
+    auto* items = properties.getProperty("modulations").getProperty("items", {}).getDynamicObject();
+    jassert(items != nullptr);
+    if (items == nullptr)
+        return;
+    juce::DynamicObject::Ptr destParam = new juce::DynamicObject();
+    destParam->setProperty("type", "string");
+    items->getProperty("properties").getDynamicObject()->setProperty("destParam", juce::var(destParam.get()));
+    items->setProperty("required", juce::Array<juce::var>({"source", "dest"}));
 }
 } // namespace
 
@@ -191,7 +219,8 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
     auto* properties = schemaObj->getProperty("properties").getDynamicObject();
     jassert(properties != nullptr);
 
-    properties->setProperty("timelineOps", timelineOpsArraySchema());
+    properties->setProperty("timelineOps", timelineOpsArraySchema(/*withNodeId=*/true));
+    allowDestParamOnModulations(*properties);
     // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
     // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
     return schema;
@@ -199,7 +228,7 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
 
 juce::var AIStateMapper::getTimelineOpsEnvelopeSchema() {
     juce::DynamicObject::Ptr properties = new juce::DynamicObject();
-    properties->setProperty("timelineOps", timelineOpsArraySchema());
+    properties->setProperty("timelineOps", timelineOpsArraySchema(/*withNodeId=*/false));
 
     juce::DynamicObject::Ptr schema = new juce::DynamicObject();
     schema->setProperty("type", "object");

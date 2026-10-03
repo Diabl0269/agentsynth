@@ -17,6 +17,7 @@ public:
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
                        const std::vector<synth::InstrumentTrackInsert>& inserts) override;
     bool recordBatch(const std::function<void()>& mutation) override;
+    synth::TimelineDoc* editableTimelineDoc() override;
 
 private:
     MainComponent& owner_;

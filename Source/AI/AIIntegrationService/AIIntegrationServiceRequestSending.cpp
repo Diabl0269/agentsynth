@@ -83,27 +83,30 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
         provider->cancel(requestId);
 }
 
-juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
-    // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph
-    // or any other caller), so stripping "state" from these nodes in place cannot mutate anything
-    // else. "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) —
-    // the model can never author it, so it is pure leakage and token waste over the wire.
+// graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph or
+// any other caller), so stripping "state" from these nodes in place cannot mutate anything else.
+// "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) — the model
+// can never author it, so it is pure leakage and token waste over the wire. Shared by the patch
+// path's "Current patch state" section and project.generate's "currentPatch".
+juce::var AIIntegrationService::buildStrippedPatchJson() const {
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
-    juce::String patchSection;
-    if (auto* obj = graphJson.getDynamicObject()) {
-        if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
-            for (auto& nodeVar : *nodeArr) {
-                if (auto* nodeObj = nodeVar.getDynamicObject()) {
-                    nodeObj->removeProperty("state");
-                    nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
-                    nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
-                }
-            }
-            if (!nodeArr->isEmpty()) {
-                patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
+    if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray()) {
+        for (auto& nodeVar : *nodeArr) {
+            if (auto* nodeObj = nodeVar.getDynamicObject()) {
+                nodeObj->removeProperty("state");
+                nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
+                nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
             }
         }
     }
+    return graphJson;
+}
+
+juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
+    const juce::var graphJson = buildStrippedPatchJson();
+    juce::String patchSection;
+    if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray(); nodeArr != nullptr && !nodeArr->isEmpty())
+        patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
 
     // The timeline sibling of the patch section above, added only when there is an arrangement to
     // report. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the

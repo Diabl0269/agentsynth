@@ -33,6 +33,7 @@ the [patch preview](patch-preview.md).
   | `AIStateMapperValidation.cpp` | `validatePatch`/`validateNodeParams` — the untrusted-input security boundary |
   | `AIStateMapperSnapshots.cpp` | Undo/redo snapshot restore (`applySnapshotPreservingNodes`) |
   | `AIStateMapperSchema.cpp` | AI-facing schema generation (`getPatchSchema`, `getPatchSchemaWithTimelineOps`, `getTimelineOpsEnvelopeSchema`) |
+  | `AIStateMapperModulations.cpp` | The apply side of a modulation's destination (`destPort` or `destParam`) and of an edit plan's `PatchIdScope` |
   | `AIStateMapperInternal.h` | Private helpers shared by two or more units above (the module factory map, `kNonAuthorableModuleTypes`, `mirrorUuidIntoProcessor`) — not part of the public API, never included outside this directory |
 
 ## Request flow
@@ -51,6 +52,17 @@ the [patch preview](patch-preview.md).
    a patch through `validatePatch` and `applyJSONToGraph`, a `timelineOps` envelope through
    `TimelineOps::validate`. Each half gets its own card and its own Apply button.
 6. Applying notifies listeners, which rebuild the editor's module components.
+
+Two more ways to ask, each one intent over two transports: `sendArrangeMessage` (hosted
+`timeline.generate`, answered with a `timelineOps` envelope) and `sendProjectMessage` (hosted
+`project.generate`, answered with an [edit plan](timeline-ops.md#one-edit-plan): a patch plus a
+sibling `timelineOps` list). `sendProjectMessage`'s body (`buildProjectRequestBody`) is the arrange
+body plus `currentPatch`, the same stripped graph JSON the patch path sends, as an object and
+omitted when the graph is empty. On a local provider the same fields are composed into the message
+in `project.generate`'s own section order (the patch or "Current patch is empty.", the arrangement,
+the tracks, the targets, the prompt), with `getPatchSchemaWithTimelineOps()` as the response
+contract. A plan is checked and applied through `previewProjectEdit` / `applyProjectEdit`; nothing in
+the chat panel calls them yet.
 
 **Why the patch text is wrapped client-side even for the hosted provider.** The hosted
 `patch.generate` capability performs the *exact same* wrapping server-side, from a separate

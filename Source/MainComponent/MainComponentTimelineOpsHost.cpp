@@ -31,3 +31,7 @@ bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& muta
     owner_.reconcileTimelineAfterGraphChange();
     return pushed;
 }
+
+// The doc an AIIntegrationService edit plan writes to from inside recordBatch: the app's one live
+// timeline, the same one recordBatch snapshots.
+synth::TimelineDoc* MainComponentTimelineOpsHost::editableTimelineDoc() { return &owner_.timelineDoc; }
