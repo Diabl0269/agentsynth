@@ -146,6 +146,13 @@ struct CardLayoutParseResult {
  */
 CardLayout upgradeV1(const CardLayout& layout, const juce::StringArray& allParamIds);
 
+/**
+ * The name a section goes by in the layout editor: its title, else a name from its id ("Footer" for the
+ * footer, "Controls" for a "main" or id-less one, "Group 2" for "group-2"/"section-2", and "Trigger meter"
+ * for "trigger-meter"). Never empty. Only the editor uses it: an untitled section still draws no header row.
+ */
+juce::String cardSectionDisplayName(const CardSection& section);
+
 /** Node property that carries a built-in module's per-instance layout JSON. */
 constexpr const char* kCardLayoutNodeProperty = "cardLayout";
 

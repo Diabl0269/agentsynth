@@ -185,6 +185,9 @@ void CardLayoutEditorModel::addRowsInPlace(std::vector<Row>& out, const juce::St
             header.section = s;
             header.key = headerKey(s);
             header.name = sections_[(size_t)s].title.value_or(juce::String());
+            auto untitled = sections_[(size_t)s];
+            untitled.title.reset();
+            header.fallbackName = cardSectionDisplayName(untitled);
             header.tab = sections_[(size_t)s].presentation == CardPresentation::Tab;
             out.push_back(header);
         }

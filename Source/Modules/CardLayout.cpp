@@ -179,6 +179,21 @@ CardLayout upgradeV1(const CardLayout& layout, const juce::StringArray& allParam
     return upgraded;
 }
 
+juce::String cardSectionDisplayName(const CardSection& section) {
+    if (section.title.has_value() && section.title->trim().isNotEmpty())
+        return section.title->trim();
+    const auto id = section.id.trim();
+    if (id == CardSection::kFooterId)
+        return "Footer";
+    if (id.isEmpty() || id == "main")
+        return "Controls";
+    for (const auto* prefix : {"group-", "section-"})
+        if (id.startsWith(prefix) && id.fromFirstOccurrenceOf(prefix, false, false).containsOnly("0123456789"))
+            return "Group " + id.fromFirstOccurrenceOf(prefix, false, false);
+    const auto words = id.replaceCharacters("-_", "  ").trim();
+    return words.substring(0, 1).toUpperCase() + words.substring(1);
+}
+
 CardSlotKind deriveSlotKind(const juce::AudioProcessorParameter& param) {
     if (param.isBoolean())
         return CardSlotKind::Toggle;

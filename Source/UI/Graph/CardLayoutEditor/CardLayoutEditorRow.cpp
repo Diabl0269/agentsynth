@@ -15,7 +15,6 @@ constexpr int kTickWidth = 22;
 constexpr int kGripWidth = 18;
 constexpr int kWidgetWidth = 116;
 constexpr int kGap = 4;
-constexpr const char* kUntitledGroup = "Untitled group";
 } // namespace
 
 CardLayoutEditorGrip::CardLayoutEditorGrip() { setMouseCursor(dragGrabCursor()); }
@@ -56,6 +55,7 @@ CardLayoutEditorRow::CardLayoutEditorRow(const CardLayoutEditorModel::Row& row, 
     , tab_(header_ && row.tab)
     , draggable_(draggable && !header_)
     , name_(row.name)
+    , fallbackName_(row.fallbackName)
     , labelOverride_(row.label) {
     setWantsKeyboardFocus(true);
     if (tab_) {
@@ -155,16 +155,17 @@ void CardLayoutEditorRow::buildGrip() {
 
 juce::String CardLayoutEditorRow::shownName() const {
     if (header_)
-        return name_.isEmpty() ? juce::String(kUntitledGroup) : name_;
+        return name_.isEmpty() ? fallbackName_ : name_;
     return labelOverride_.value_or(name_);
 }
 
-// The row shows what the model will store: a header's title, or a control's override (cleared by an
-// empty name or the control's own name, which then shows again).
+// The row shows what the model will store: a header's title (cleared by an empty name or the group's
+// fallback name, which then shows again), or a control's override (cleared the same way by the control's
+// own name).
 void CardLayoutEditorRow::commitName(const juce::String& text) {
     auto trimmed = text.trim();
     if (header_) {
-        if (trimmed == kUntitledGroup)
+        if (trimmed == fallbackName_)
             trimmed = {};
         name_ = trimmed;
     } else {

@@ -550,3 +550,21 @@ TEST(CardLayoutV2Test, UsesV2FeaturesNamesEachFeature) {
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::FaderH; }).usesV2Features());
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::KnobLarge; }).usesV2Features());
 }
+
+TEST(CardLayoutTest, EveryUntitledSectionHasADisplayNameFromItsId) {
+    const auto named = [](const char* id, std::optional<juce::String> title = std::nullopt) {
+        synth::CardSection section;
+        section.id = id;
+        section.title = std::move(title);
+        return synth::cardSectionDisplayName(section);
+    };
+    EXPECT_EQ(named("tone", juce::String("Tone colour")), "Tone colour") << "a title wins";
+    EXPECT_EQ(named("tone", juce::String("  ")), "Tone") << "a blank title counts as none";
+    EXPECT_EQ(named("footer"), "Footer");
+    EXPECT_EQ(named("main"), "Controls");
+    EXPECT_EQ(named(""), "Controls");
+    EXPECT_EQ(named("group-3"), "Group 3");
+    EXPECT_EQ(named("section-2"), "Group 2");
+    EXPECT_EQ(named("trigger-meter"), "Trigger meter");
+    EXPECT_EQ(named("envelope"), "Envelope");
+}
