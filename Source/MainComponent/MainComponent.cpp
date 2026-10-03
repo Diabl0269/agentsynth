@@ -215,6 +215,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // theme-default stops are in place; this only pins a user override on top, before the first
     // mixer column/channel chip ever paints.
     lookAndFeel->setMeterColourStopsOverride(synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
+    lookAndFeel->setKnobAppearance(synth::theme::loadKnobAppearance(*appProperties.getUserSettings()));
     restorePanelPreferences();       // ORDER: flags read before any addAndMakeVisible/setVisible
     restoreGraphEditorPreferences(); // ORDER: settings change listener registered here
     configureAiProvider(std::move(provider), std::move(registry)); // ORDER: nothing earlier may write appProperties

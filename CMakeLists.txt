@@ -568,7 +568,7 @@ include(cmake/JuceModules.cmake)
 target_link_libraries(Core PUBLIC JuceModules)
 synth_enable_pch(Core)
 include(cmake/PopupMotionSources.cmake)
-
+include(cmake/KnobStyleSources.cmake)
 # TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
 # which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions

@@ -155,6 +155,18 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
             synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
         bottomDock.getMixerPanel().repaint();
         timelinePanel.repaint();
+        // Knob style: re-read on every write, but only re-skin when it really changed (a knob is
+        // painted into each card's cached image, so a plain repaint of the window is not enough --
+        // sendLookAndFeelChange() re-rasters them, and also reaches a mixer / MIDI Remote panel that
+        // lives in a detached window).
+        const auto knobAppearance = synth::theme::loadKnobAppearance(*appProperties.getUserSettings());
+        if (!(knobAppearance == lookAndFeel->getKnobAppearance())) {
+            lookAndFeel->setKnobAppearance(knobAppearance);
+            if (auto* top = getTopLevelComponent())
+                top->sendLookAndFeelChange();
+            bottomDock.getMixerPanel().sendLookAndFeelChange();
+            bottomDock.getMidiRemotePanel().sendLookAndFeelChange();
+        }
         return;
     }
 

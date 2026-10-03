@@ -581,6 +581,8 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginCardLayout.h
     Source/UI/Settings/AppearanceSettingsTab.cpp
     Source/UI/Settings/AppearanceSettingsTab.h
+    Source/UI/Settings/KnobStylePicker.cpp
+    Source/UI/Settings/KnobStylePicker.h
     Source/UI/Settings/MeterColourStopsEditor.cpp
     Source/UI/Settings/MeterColourStopsEditor.h
     Source/UI/Settings/FeedbackSettingsTab.cpp

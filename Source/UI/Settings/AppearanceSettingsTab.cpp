@@ -443,6 +443,8 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     contentHost.addAndMakeVisible(resetNoteColoursButton);
     resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
 
+    buildKnobsSection(sectionHeaderFont);
+
     // ---- Meter colours -------------
     meterColourStopsOverride = synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings());
 
@@ -479,6 +481,23 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     nameControlsForAccessibility();
 
     themeManager.addChangeListener(this);
+}
+
+// The Knobs section: the six style previews and the colour-by-family switch. A change is written back
+// here; MainComponent's settings listener re-reads the keys and re-skins every knob.
+void AppearanceSettingsTab::buildKnobsSection(const juce::Font& sectionHeaderFont) {
+    contentHost.addAndMakeVisible(knobsTitleLabel);
+    knobsTitleLabel.setText("Knobs", juce::dontSendNotification);
+    knobsTitleLabel.setFont(sectionHeaderFont);
+    knobStylePicker = std::make_unique<synth::ui::KnobStylePicker>();
+    contentHost.addAndMakeVisible(*knobStylePicker);
+    knobStylePicker->setTheme(themeManager.getActiveTheme());
+    knobStylePicker->setAppearance(synth::theme::loadKnobAppearance(*appProperties.getUserSettings()));
+    knobStylePicker->onChanged = [this](const synth::theme::KnobAppearance& appearance) {
+        // MainComponent's settings listener re-reads these keys and re-skins every knob.
+        synth::theme::writeKnobAppearance(*appProperties.getUserSettings(), appearance);
+        appProperties.getUserSettings()->saveIfNeeded();
+    };
 }
 
 // Screen-reader titles and tooltips for every control without visible text of its own (the combos, the
@@ -595,6 +614,12 @@ void AppearanceSettingsTab::resized() {
     reloadButton.setBounds(buttonRow.removeFromLeft(130));
     addDivider();
 
+    // ---- 3b. Knobs ----
+    knobsTitleLabel.setBounds(bounds.removeFromTop(20));
+    bounds.removeFromTop(6);
+    knobStylePicker->setBounds(bounds.removeFromTop(synth::ui::KnobStylePicker::kPreferredHeight));
+    addDivider();
+
     // ---- 4. Cables ----
     cablesTitleLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(6);
@@ -704,6 +729,8 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     themeList.repaint();
 
     // Un-overridden swatches follow the theme, so they have to be redrawn too.
+    if (knobStylePicker)
+        knobStylePicker->setTheme(themeManager.getActiveTheme());
     if (cableSwatchRow)
         cableSwatchRow->repaint();
     if (noteSwatchRow)
