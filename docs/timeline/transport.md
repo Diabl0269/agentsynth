@@ -211,8 +211,11 @@ With the timeline focused, **holding Cmd+Left / Cmd+Right** glides the cursor (t
 thing the cursor nudge actions move) back or forward. Two rebindable Timeline actions, `timelineGlideBack`
 and `timelineGlideForward`, resolved by `TimelinePanelComponent::keyPressed` like the panel's other keys.
 
-- **Motion.** A hold starts at about one beat per second and eases in (cubic) to a cap of eight bars per
-  second, reached two seconds after the glide starts. The position is the exact integral of that speed
+- **Motion.** With snap on, a hold starts at four grid steps per second, so a coarse grid (1/1) sets off
+  quickly and a fine one (1/32) gently (1/16 starts at one beat per second; snap off also
+  starts at one beat per second). It then eases in (cubic) to a cap of eight bars per second, reached two
+  seconds after the glide starts; a grid so coarse that its start speed passes the cap simply starts at the cap.
+  The grid is read when the key goes down. The position is the exact integral of that speed
   (`synth::CursorGlide`, `Source/Transport/CursorGlide.h`, clock-free), so it does not depend on the frame
   rate.
 - **Tap versus hold.** Nothing moves for the first 150 ms. A key released inside that window is a tap: one grid

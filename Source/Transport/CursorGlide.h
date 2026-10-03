@@ -14,8 +14,11 @@ enum class GlideDirection { Back = -1, Forward = 1 };
 namespace cursor_glide {
 /** A key held for less than this is a tap: no motion at all, one step on release. */
 inline constexpr double kTapMs = 150.0;
-/** Speed when the glide starts, in beats (quarter notes) per second. */
+/** Speed when the glide starts with snap off, in beats (quarter notes) per second. */
 inline constexpr double kStartBeatsPerSecond = 1.0;
+/** Speed when the glide starts with snap on, in grid steps per second: a coarse grid starts fast, a
+ *  fine one gently. Four steps a second is one beat a second on the default sixteenth grid. */
+inline constexpr double kStartGridStepsPerSecond = 4.0;
 /** Speed cap, in bars per second, reached kRampMs after the glide starts. */
 inline constexpr double kMaxBarsPerSecond = 8.0;
 inline constexpr double kRampMs = 2000.0;
@@ -28,8 +31,10 @@ inline constexpr double kTapStepBeatsWithoutSnap = 1.0;
 class CursorGlide {
 public:
     /** Starts a hold at `startBeat`. Returns false and changes nothing while a hold is already in
-     *  progress: OS key repeat delivers further key-downs, and none of them may restart the ramp. */
-    bool press(GlideDirection direction, double nowMs, double startBeat, double beatsPerBar) noexcept {
+     *  progress: OS key repeat delivers further key-downs, and none of them may restart the ramp.
+     *  `gridBeats` is the snap step (0 with snap off); it sets the speed the glide starts at. */
+    bool press(GlideDirection direction, double nowMs, double startBeat, double beatsPerBar,
+               double gridBeats = 0.0) noexcept {
         if (held_)
             return false;
         held_ = true;
@@ -37,7 +42,9 @@ public:
         pressedAtMs_ = nowMs;
         startBeat_ = std::max(0.0, startBeat);
         const double vMax = cursor_glide::kMaxBarsPerSecond * (beatsPerBar > 0.0 ? beatsPerBar : 4.0);
-        maxVelocity_ = std::max(vMax, cursor_glide::kStartBeatsPerSecond);
+        startVelocity_ =
+            gridBeats > 0.0 ? gridBeats * cursor_glide::kStartGridStepsPerSecond : cursor_glide::kStartBeatsPerSecond;
+        maxVelocity_ = std::max(vMax, startVelocity_);
         return true;
     }
 
@@ -48,12 +55,12 @@ public:
     bool isGliding(double nowMs) const noexcept { return held_ && nowMs - pressedAtMs_ >= cursor_glide::kTapMs; }
 
     /** Speed in beats per second (always >= 0): 0 before the glide starts, then an ease-in (cubic)
-     *  from kStartBeatsPerSecond up to the cap, flat after kRampMs. */
+     *  from the start speed (proportional to the grid step) up to the cap, flat after kRampMs. */
     double velocityAt(double nowMs) const noexcept {
         if (!isGliding(nowMs))
             return 0.0;
         const double u = std::min(1.0, glideMs(nowMs) / cursor_glide::kRampMs);
-        return cursor_glide::kStartBeatsPerSecond + (maxVelocity_ - cursor_glide::kStartBeatsPerSecond) * u * u * u;
+        return startVelocity_ + (maxVelocity_ - startVelocity_) * u * u * u;
     }
 
     /** The cursor position the hold has reached by `nowMs`: the exact integral of velocityAt, so
@@ -63,7 +70,7 @@ public:
             return startBeat_;
         const double t = glideMs(nowMs) / 1000.0;
         const double ramp = cursor_glide::kRampMs / 1000.0;
-        const double v0 = cursor_glide::kStartBeatsPerSecond;
+        const double v0 = startVelocity_;
         const double rise = maxVelocity_ - v0;
         const double distance = t <= ramp ? v0 * t + rise * ramp * std::pow(t / ramp, 4.0) / 4.0
                                           : v0 * ramp + rise * ramp / 4.0 + maxVelocity_ * (t - ramp);
@@ -119,6 +126,7 @@ private:
     GlideDirection direction_ = GlideDirection::Forward;
     double pressedAtMs_ = 0.0;
     double startBeat_ = 0.0;
+    double startVelocity_ = cursor_glide::kStartBeatsPerSecond;
     double maxVelocity_ = cursor_glide::kStartBeatsPerSecond;
 };
 
