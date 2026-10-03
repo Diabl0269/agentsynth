@@ -3,7 +3,8 @@
 
 namespace synth::theme {
 
-// Concern: the fader (linear slider) look -- slot + fill, cap, state overlays.
+// Concern: the fader (linear slider) look -- slot + fill, cap, state overlays; one draw path per knob style
+// (a fader follows the knob style) sharing the slot / cap helpers.
 
 namespace fader {
 
@@ -16,26 +17,139 @@ constexpr float kFocusRingWidth = 2.0f;
 // Fits a nominal length inside `available` (never below 4 px so the cap stays visible).
 float fit(float nominal, int available) { return juce::jmax(4.0f, juce::jmin(nominal, (float)available)); }
 
-void drawSlotAndFill(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos,
-                     bool vertical, const Metrics& m, bool enabled) {
-    const auto& c = theme.colors;
+juce::Rectangle<float> slotRect(juce::Rectangle<float> travel, bool vertical, float thickness) {
     const auto centre = travel.getCentre();
-    juce::Rectangle<float> slot =
-        vertical
-            ? juce::Rectangle<float>(m.slot, travel.getHeight() + 2 * kSlotOverhang).withCentre({centre.x, centre.y})
-            : juce::Rectangle<float>(travel.getWidth() + 2 * kSlotOverhang, m.slot).withCentre({centre.x, centre.y});
-    g.setColour(c.bg0);
-    g.fillRoundedRectangle(slot, m.slot * 0.5f);
-    g.setColour(c.border);
-    g.drawRoundedRectangle(slot.reduced(0.5f), m.slot * 0.5f - 0.5f, 1.0f);
+    return vertical ? juce::Rectangle<float>(thickness, travel.getHeight() + 2 * kSlotOverhang).withCentre(centre)
+                    : juce::Rectangle<float>(travel.getWidth() + 2 * kSlotOverhang, thickness).withCentre(centre);
+}
 
+// The part of `slot` (1 px inset) from the travel's start up to the cap centre.
+juce::Rectangle<float> fillRect(juce::Rectangle<float> slot, float sliderPos, bool vertical) {
     auto fill = slot.reduced(1.0f);
     if (vertical)
         fill.setTop(juce::jlimit(fill.getY(), fill.getBottom(), sliderPos));
     else
         fill.setRight(juce::jlimit(fill.getX(), fill.getRight(), sliderPos));
-    g.setColour(enabled ? c.accent : c.textDisabled);
+    return fill;
+}
+
+void drawSlot(juce::Graphics& g, juce::Colour body, juce::Colour outline, juce::Rectangle<float> slot) {
+    const float r = juce::jmin(slot.getWidth(), slot.getHeight()) * 0.5f;
+    g.setColour(body);
+    g.fillRoundedRectangle(slot, r);
+    g.setColour(outline);
+    g.drawRoundedRectangle(slot.reduced(0.5f), r - 0.5f, 1.0f);
+}
+
+void drawSolidFill(juce::Graphics& g, juce::Colour colour, juce::Rectangle<float> slot, float sliderPos,
+                   bool vertical) {
+    const auto fill = fillRect(slot, sliderPos, vertical);
+    g.setColour(colour);
+    g.fillRoundedRectangle(fill, (juce::jmin(slot.getWidth(), slot.getHeight()) - 2.0f) * 0.5f);
+}
+
+// Polished: 11 dots beside the slot, lit in the fader's colour up to the value.
+void drawTickDots(juce::Graphics& g, const Theme& theme, juce::Colour colour, juce::Rectangle<float> travel,
+                  float sliderPos, bool vertical, const Metrics& m) {
+    constexpr int kDots = 11;
+    const auto centre = travel.getCentre();
+    const float off = m.slot * 0.5f + 3.5f;
+    for (int i = 0; i < kDots; ++i) {
+        const float t = (float)i / (float)(kDots - 1);
+        const float along =
+            vertical ? travel.getBottom() - t * travel.getHeight() : travel.getX() + t * travel.getWidth();
+        const bool lit = vertical ? along >= sliderPos - 0.5f : along <= sliderPos + 0.5f;
+        g.setColour(lit ? colour : theme.colors.textDisabled.withAlpha(0.6f));
+        const juce::Point<float> at =
+            vertical ? juce::Point<float>(centre.x + off, along) : juce::Point<float>(along, centre.y + off);
+        g.fillEllipse(juce::Rectangle<float>(2.0f, 2.0f).withCentre(at));
+    }
+}
+
+void drawPolishedSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos,
+                      bool vertical, const Metrics& m, juce::Colour colour) {
+    const auto& c = theme.colors;
+    const auto slot = slotRect(travel, vertical, m.slot);
+    drawSlot(g, c.bg0, c.border, slot);
+    // Soft inner shadow down the slot's leading side.
+    const auto inner = slot.reduced(1.0f);
+    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow)));
+    g.fillRoundedRectangle(vertical ? inner.withWidth(1.5f) : inner.withHeight(1.5f), 0.75f);
+    drawTickDots(g, theme, colour, travel, sliderPos, vertical, m);
+    const auto fill = fillRect(slot, sliderPos, vertical);
+    // 60% at the fill's start, full at the cap.
+    const auto from = vertical ? fill.getBottomLeft() : fill.getTopLeft();
+    const auto to = vertical ? fill.getTopLeft() : fill.getTopRight();
+    if (from.getDistanceFrom(to) > 1.0f)
+        g.setGradientFill(juce::ColourGradient(colour.withAlpha(0.6f), from, colour, to, false));
+    else
+        g.setColour(colour);
     g.fillRoundedRectangle(fill, (m.slot - 2.0f) * 0.5f);
+}
+
+void drawNeonSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos, bool vertical,
+                  const Metrics& m, juce::Colour colour) {
+    const auto slot = slotRect(travel, vertical, m.slot);
+    drawSlot(g, theme.colors.bg0, theme.colors.border, slot);
+    const float glow = juce::jmax(theme.treatment.glow, 0.0f);
+    if (glow > 0.0f) {
+        const auto fill = fillRect(slot, sliderPos, vertical);
+        const float radius = (m.slot - 2.0f) * 0.5f;
+        const float alphas[] = {0.18f, 0.32f, 0.55f};
+        const float grows[] = {4.0f, 2.5f, 1.0f};
+        for (int i = 0; i < 3; ++i) {
+            g.setColour(colour.withAlpha(0.55f * glow * alphas[i]));
+            g.fillRoundedRectangle(fill.expanded(grows[i]), radius + grows[i]);
+        }
+    }
+    drawSolidFill(g, colour, slot, sliderPos, vertical);
+}
+
+void drawRingSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos, bool vertical,
+                  juce::Colour colour) {
+    const auto slot = slotRect(travel, vertical, 2.0f);
+    g.setColour(theme.colors.border);
+    g.fillRoundedRectangle(slot, 1.0f);
+    auto fill = slot;
+    if (vertical)
+        fill.setTop(juce::jlimit(slot.getY(), slot.getBottom(), sliderPos));
+    else
+        fill.setRight(juce::jlimit(slot.getX(), slot.getRight(), sliderPos));
+    g.setColour(colour);
+    g.fillRoundedRectangle(fill, 1.0f);
+}
+
+void drawSlotAndFill(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos,
+                     bool vertical, const Metrics& m, KnobStyle style, juce::Colour colour) {
+    const auto& c = theme.colors;
+    switch (style) {
+    case KnobStyle::Polished:
+        drawPolishedSlot(g, theme, travel, sliderPos, vertical, m, colour);
+        return;
+    case KnobStyle::Neon:
+        drawNeonSlot(g, theme, travel, sliderPos, vertical, m, colour);
+        return;
+    case KnobStyle::Ring:
+        drawRingSlot(g, theme, travel, sliderPos, vertical, colour);
+        return;
+    case KnobStyle::Hardware: {
+        const auto slot = slotRect(travel, vertical, m.slot);
+        drawSlot(g, c.knobSkirt, c.border, slot);
+        drawSolidFill(g, colour, slot, sliderPos, vertical);
+        return;
+    }
+    case KnobStyle::Soft: {
+        const auto slot = slotRect(travel, vertical, m.slot * 1.5f); // 50 percent wider
+        drawSlot(g, c.bg0, c.border, slot);
+        drawSolidFill(g, colour, slot, sliderPos, vertical);
+        return;
+    }
+    case KnobStyle::Classic:
+        break;
+    }
+    const auto slot = slotRect(travel, vertical, m.slot);
+    drawSlot(g, c.bg0, c.border, slot);
+    drawSolidFill(g, colour, slot, sliderPos, vertical);
 }
 
 juce::Rectangle<float> capBounds(juce::Rectangle<float> travel, float sliderPos, bool vertical, const Metrics& m) {
@@ -45,34 +159,80 @@ juce::Rectangle<float> capBounds(juce::Rectangle<float> travel, float sliderPos,
     return juce::Rectangle<float>(m.capW, m.capH).withCentre(at);
 }
 
+juce::Colour capOutline(const Theme& theme, const State& state, juce::Colour restColour) {
+    return state.dragging ? theme.colors.accent : state.hover ? theme.colors.textMuted : restColour;
+}
+
+// A line across the cap, centred `shift` px off its centre along the travel.
+void drawCapLine(juce::Graphics& g, juce::Rectangle<float> cap, bool vertical, float half, float shift,
+                 juce::Colour colour, float width) {
+    const auto centre = cap.getCentre();
+    juce::Path line;
+    if (vertical)
+        line.addLineSegment({centre.x - half, centre.y + shift, centre.x + half, centre.y + shift}, 0.0f);
+    else
+        line.addLineSegment({centre.x + shift, centre.y - half, centre.x + shift, centre.y + half}, 0.0f);
+    g.setColour(colour);
+    g.strokePath(line, juce::PathStrokeType(width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+// Ring style: a round pointer dot instead of the pill (the pill rectangle stays the hit area).
+void drawRingCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, const State& state) {
+    const float d = juce::jmin(cap.getWidth(), cap.getHeight());
+    const auto dot = juce::Rectangle<float>(d, d).withCentre(cap.getCentre());
+    g.setColour(theme.colors.knobPointer);
+    g.fillEllipse(dot);
+    if (state.dragging || state.hover) {
+        g.setColour(capOutline(theme, state, theme.colors.textDisabled));
+        g.drawEllipse(dot.reduced(0.5f), 1.0f);
+    }
+}
+
 void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, bool vertical, const Metrics& m,
-             const State& state) {
+             const State& state, juce::Colour colour) {
     const auto& c = theme.colors;
+    if (state.style == KnobStyle::Ring) {
+        drawRingCap(g, theme, cap, state);
+        return;
+    }
 
     // Cheap drop shadow: an offset translucent copy of the cap, no blur.
     g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow)));
     g.fillRoundedRectangle(cap.translated(0.0f, 1.0f), m.radius);
 
-    const auto from = cap.getTopLeft();
-    const auto to = vertical ? cap.getBottomLeft() : cap.getTopRight();
-    g.setGradientFill(juce::ColourGradient(c.surfaceHi, from, c.knobBody, to, false));
+    if (state.style == KnobStyle::Neon) {
+        g.setColour(c.knobBody);
+    } else {
+        const auto from = cap.getTopLeft();
+        const auto to = vertical ? cap.getBottomLeft() : cap.getTopRight();
+        g.setGradientFill(juce::ColourGradient(c.surfaceHi, from, c.knobBody, to, false));
+    }
     g.fillRoundedRectangle(cap, m.radius);
 
+    if (state.style == KnobStyle::Soft) {
+        g.setColour(colour.withAlpha(0.22f));
+        g.fillRoundedRectangle(cap, m.radius);
+    } else if (state.style == KnobStyle::Hardware) {
+        g.setColour(c.knobCapHighlight);
+        const auto inner = cap.reduced(1.0f);
+        g.fillRoundedRectangle(vertical ? inner.withHeight(cap.getHeight() * 0.45f)
+                                        : inner.withWidth(cap.getWidth() * 0.45f),
+                               juce::jmax(0.0f, m.radius - 1.0f));
+    }
+
     // Rest outline in textDisabled: border is too close to the cap fill on dark themes.
-    const juce::Colour outline = state.dragging ? c.accent : state.hover ? c.textMuted : c.textDisabled;
-    g.setColour(outline);
+    const juce::Colour rest = state.style == KnobStyle::Soft ? colour.withAlpha(0.6f) : c.textDisabled;
+    g.setColour(capOutline(theme, state, rest));
     g.drawRoundedRectangle(cap.reduced(0.5f), juce::jmax(0.0f, m.radius - 0.5f), 1.0f);
 
     // Centre line: the exact value position, like the rotary knob's pointer.
-    const auto centre = cap.getCentre();
     const float half = vertical ? m.groove * 0.5f : m.groove * 0.5f - 2.0f;
-    juce::Path line;
-    if (vertical)
-        line.addLineSegment({centre.x - half, centre.y, centre.x + half, centre.y}, 0.0f);
-    else
-        line.addLineSegment({centre.x, centre.y - half, centre.x, centre.y + half}, 0.0f);
-    g.setColour(c.knobPointer);
-    g.strokePath(line, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (state.style == KnobStyle::Hardware) {
+        drawCapLine(g, cap, vertical, half, -2.5f, c.knobPointer.withAlpha(0.8f), 1.0f);
+        drawCapLine(g, cap, vertical, half, 2.5f, c.knobPointer.withAlpha(0.8f), 1.0f);
+    } else {
+        drawCapLine(g, cap, vertical, half, 0.0f, state.style == KnobStyle::Neon ? colour : c.knobPointer, 1.5f);
+    }
 }
 
 void drawFocusRing(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, const Metrics& m) {
@@ -105,8 +265,11 @@ void paint(juce::Graphics& g, const Theme& theme, juce::Rectangle<int> travelBou
     const bool greyed = !state.enabled || state.dimmed;
     if (greyed)
         g.beginTransparencyLayer(AppLookAndFeel::kDisabledControlAlpha);
-    drawSlotAndFill(g, theme, travel, sliderPos, vertical, m, state.enabled);
-    drawCap(g, theme, cap, vertical, m, state);
+    const juce::Colour colour = !state.enabled                      ? theme.colors.textDisabled
+                                : state.valueColour.isTransparent() ? theme.colors.accent
+                                                                    : state.valueColour;
+    drawSlotAndFill(g, theme, travel, sliderPos, vertical, m, state.style, colour);
+    drawCap(g, theme, cap, vertical, m, state, colour);
     if (greyed)
         g.endTransparencyLayer();
 
@@ -132,6 +295,8 @@ void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width
     state.dragging = slider.isMouseButtonDown();
     state.hover = slider.isMouseOverOrDragging() && !state.dragging;
     state.focused = slider.hasKeyboardFocus(true);
+    state.style = knobAppearance.style;
+    state.valueColour = knobValueColour(slider);
     fader::paint(g, theme, {x, y, width, height}, {slider.getWidth(), slider.getHeight()}, sliderPos, vertical, state);
 }
 

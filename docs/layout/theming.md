@@ -358,7 +358,10 @@ implemented in `AppLookAndFeel`:
   (`KnobStyle.h`), stored under the settings keys `knobStyle` and `knobColourByFamily`, picked in
   Settings > Appearance > Knobs (`KnobStylePicker`, whose previews call the same `paintKnob`), and pushed
   into the shared `AppLookAndFeel` by `MainComponent` at startup and on every settings write (a change
-  re-skins the whole tree, as a card's knobs are painted into its cached image).
+  re-skins the whole tree, as a card's knobs are painted into its cached image). Faders follow the same
+  choice (there is no separate fader setting): `drawLinearSlider` passes `KnobAppearance::style` and
+  `knobValueColour(slider)` into `fader::paint`, so a card fader takes its module's family hue and the
+  mixer and controller surfaces keep `accent` (see the Linear sliders entry below).
 - **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
   `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
   route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel
@@ -371,7 +374,15 @@ implemented in `AppLookAndFeel`:
   56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap
   shrinking when the bounds are shorter. `getSliderThumbRadius` insets the travel by half the cap plus
   2 px so the cap is never clipped, and `MixerFaderSlider`'s drag maths reads the same inset through
-  `getSliderLayout`. States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
+  `getSliderLayout`. The six knob styles each have a draw path (`fader::State::style`, the fill
+  colour in `fader::State::valueColour`; Classic is the look described here): Polished adds a soft
+  inner shadow, eleven tick dots beside the slot lit up to the value, and a fill brightening from 60%
+  to full at the cap; Hardware a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
+  grip lines; Neon a `treatment.glow` bloom round the fill and a flat `knobBody` cap with a centre
+  line in the fader's colour; Ring 2 px lines for slot and fill and a round `knobPointer` dot for the
+  cap; Soft a 50% wider slot and a cap tinted with the fader's colour. Travel, slot length, cap
+  rectangle and `getSliderThumbRadius` are identical in every style, so hit-testing never moves.
+  States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
   keyboard focus adds a 2 px `accent` ring 3 px outside the cap, disabled dims everything to 45% with a
   `textDisabled` fill. No colour token is specific to it, so every theme gets a matching fader. There
   is no readout bubble, tick marks or "automated" marker: the mixer has its own dB readout label and

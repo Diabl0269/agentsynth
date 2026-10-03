@@ -4,6 +4,7 @@
 // module-card horizontal sliders). Split out of AppLookAndFeel so the geometry and the state
 // handling can be exercised without a live Slider (docs/layout/theming.md, "Linear sliders").
 
+#include "UI/Theme/KnobStyle.h"
 #include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -26,6 +27,10 @@ struct State {
     bool focused = false;  // keyboard focus
     bool enabled = true;
     bool dimmed = false; // greyed out but operable (a layout's dim)
+    // The look: the user's knob style (faders always match the knobs) and the fill colour (a card's
+    // module-family hue, else accent). A transparent colour means accent.
+    KnobStyle style = KnobStyle::Classic;
+    juce::Colour valueColour{};
 };
 
 // Size choice from the slider's real bounds. A vertical slider at least kLargeMinWidth wide and
