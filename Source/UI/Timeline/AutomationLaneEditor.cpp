@@ -88,7 +88,9 @@ juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
 juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
     if (const auto resize = stretchCursor())
         return *resize;
-    if (tool_ == Tool::Pointer && (hoveredBeat_.has_value() || dragMode_ == DragMode::MoveHandle))
+    // The hand is for a drag that has started, never for hovering a point
+    // (docs/layout/animation.md#drag-and-drop-cursor).
+    if (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::TensionScrub || dragMode_ == DragMode::LaneConstant)
         return dragGrabCursor();
     const bool drawing =
         editTool_.has_value() ? *editTool_ == EditTool::Draw : (tool_ == Tool::Pencil || tool_ == Tool::Line);
@@ -143,7 +145,14 @@ double AutomationLaneEditor::valueToY(double value) const {
         }
     const double range = maxV - minV;
     const double t = range > 0.0 ? juce::jlimit(0.0, 1.0, (value - minV) / range) : 0.5;
-    return (1.0 - t) * (double)getHeight();
+    const double pad = plotPadPx();
+    return pad + (1.0 - t) * ((double)getHeight() - 2.0 * pad);
+}
+
+// The lane's min and max sit this far inside its top and bottom edge, so a point or the line at either limit is
+// drawn whole (never half or fully outside the lane); a very short lane gets a smaller margin.
+double AutomationLaneEditor::plotPadPx() const {
+    return std::min((double)kPlotPadPx, std::max(0.0, (double)getHeight() / 4.0));
 }
 
 double AutomationLaneEditor::yToValue(double y) const {
@@ -153,8 +162,9 @@ double AutomationLaneEditor::yToValue(double y) const {
             minV = lane->range.minValue;
             maxV = lane->range.maxValue;
         }
-    const double h = (double)getHeight();
-    const double t = h > 0.0 ? 1.0 - (y / h) : 0.5;
+    const double pad = plotPadPx();
+    const double h = (double)getHeight() - 2.0 * pad;
+    const double t = h > 0.0 ? 1.0 - ((y - pad) / h) : 0.5;
     return minV + t * (maxV - minV);
 }
 
@@ -558,6 +568,8 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
             } else {
                 grabPoint(*hit);
             }
+        } else if (beginBoxMove(pos)) {
+            // dragging inside the stretch box moves the whole selection
         } else if (onFlatLine(pos)) {
             dragMode_ = DragMode::LaneConstant;
             dragOriginalValue_ = (double)doc_->getLane(laneId_)->range.defaultValue;
@@ -594,6 +606,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
         break;
     }
 
+    updateMouseCursor();
     repaint();
 }
 
@@ -771,6 +784,7 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
     }
 
     dragMode_ = DragMode::None;
+    updateMouseCursor();
     updateHover(e.getPosition());
     repaint();
 }

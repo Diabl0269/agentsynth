@@ -112,7 +112,7 @@ TEST(TimelineRowLayoutIntegrationTest, HeadersAndClipRowsShiftTogetherPastAnExtr
     ExtrasPanel f;
     auto& lane = f.panel.getClipLaneArea();
     const int rowHeight = lane.getRowHeight();
-    EXPECT_EQ(f.extra, 40 + 24) << "one lane row at the default height, unzoomed, plus the 24 px add row";
+    EXPECT_EQ(f.extra, 40) << "one lane row at the default height, unzoomed; the add button sits in its gutter";
     EXPECT_EQ(f.panel.getTrackHeaderAt(0)->getY(), 0);
     EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), rowHeight + f.extra);
     EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getHeight(), rowHeight) << "a header is only the clip-row part";

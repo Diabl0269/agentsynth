@@ -93,19 +93,27 @@ struct AddFixture : LanesPanel {
 
 } // namespace
 
-TEST(AutomationLanesAddRowTest, TheRowExistsOnlyUnderAnOpenTrackAndSitsAtTheLayoutsY) {
+TEST(AutomationLanesAddRowTest, TheButtonExistsOnlyUnderAnOpenTrackAndSitsInTheLastLanesGutter) {
     AddFixture f;
     f.addLane(f.lead, "other");
     ASSERT_NE(f.row(), nullptr);
     EXPECT_EQ(f.panel.addAutomationRowForTest(f.lead), nullptr) << "Lead is folded";
 
     const auto layout = f.panel.getClipLaneArea().getRowLayout();
-    EXPECT_EQ(layout.trackExtraHeight(0), 40 + AddAutomationRow::kBaseHeight) << "one lane row plus the add row";
+    EXPECT_EQ(layout.trackExtraHeight(0), 40) << "a track with a lane adds no row for the button";
     const int firstLaneTop = layout.trackTop(0) + layout.trackRowHeight(0);
-    EXPECT_EQ(f.row()->getY(), firstLaneTop + 40) << "right under the last lane, in the header column";
-    EXPECT_EQ(f.row()->getHeight(), AddAutomationRow::kBaseHeight);
-    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), layout.trackTop(1)) << "Lead starts after the add row";
-    EXPECT_EQ(layout.trackTop(1), layout.trackTop(0) + layout.trackRowHeight(0) + 40 + AddAutomationRow::kBaseHeight);
+    ASSERT_TRUE(f.row()->isCompact());
+    const auto* header = f.panel.laneHeaderForTest(f.bassLane);
+    ASSERT_NE(header, nullptr);
+    EXPECT_GE(f.row()->getY(), firstLaneTop) << "inside the last lane's own row";
+    EXPECT_LE(f.row()->getBottom(), firstLaneTop + 40);
+    EXPECT_LE(f.row()->getRight(), synth::ui::AutomationLaneHeaderComponent::kIndent)
+        << "in the empty gutter left of the lane's colour stripe";
+    EXPECT_EQ(f.row()->getHeight(), AddAutomationRow::kCompactSize);
+    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), layout.trackTop(1)) << "Lead starts right after the lane";
+    EXPECT_EQ(layout.trackTop(1), layout.trackTop(0) + layout.trackRowHeight(0) + 40);
+    EXPECT_EQ(f.componentAt(f.panel.addAutomationRowBoundsForTest(f.bass).getCentre()), f.row())
+        << "a real click on the button lands on it, not on the lane header under it";
 
     f.panel.setTrackAutomationExpanded(f.lead, true);
     ASSERT_NE(f.panel.addAutomationRowForTest(f.lead), nullptr);
@@ -125,6 +133,7 @@ TEST(AutomationLanesAddRowTest, ATrackWithNoLanesOpensToJustTheAddRow) {
     ASSERT_TRUE(f.panel.isTrackAutomationExpandedForTest(f.lead));
     auto* row = f.panel.addAutomationRowForTest(f.lead);
     ASSERT_NE(row, nullptr);
+    EXPECT_FALSE(row->isCompact()) << "with no lane yet the button is a whole row";
     const auto layout = f.panel.getClipLaneArea().getRowLayout();
     EXPECT_EQ(layout.trackExtraHeight(1), AddAutomationRow::kBaseHeight) << "the add row is the whole fold-out";
     EXPECT_EQ(row->getY(), layout.trackTop(1) + layout.trackRowHeight(1));
@@ -151,8 +160,9 @@ TEST(AutomationLanesAddRowTest, ReturnAndSpaceOnAnEmptyTracksArrowFoldIt) {
     EXPECT_EQ(f.panel.addAutomationRowForTest(f.lead), nullptr);
 }
 
-TEST(AutomationLanesAddRowTest, TheRowScalesWithRowZoom) {
+TEST(AutomationLanesAddRowTest, AnEmptyTracksRowScalesWithRowZoom) {
     AddFixture f;
+    f.panel.setTrackAutomationExpanded(f.lead, true);
     auto& clips = f.panel.getClipLaneArea();
     const juce::Point<float> anchor((float)clips.getX() + 100.0f, (float)clips.getY() + 20.0f);
     f.panel.mouseMagnify(
@@ -160,15 +170,19 @@ TEST(AutomationLanesAddRowTest, TheRowScalesWithRowZoom) {
         1.5f);
     const double scale = f.panel.getViewState().rowHeightScale;
     ASSERT_GT(scale, 1.0);
-    EXPECT_EQ(f.row()->getHeight(), (int)std::llround(AddAutomationRow::kBaseHeight * scale));
+    auto* leadRow = f.panel.addAutomationRowForTest(f.lead);
+    ASSERT_NE(leadRow, nullptr);
+    EXPECT_EQ(leadRow->getHeight(), (int)std::llround(AddAutomationRow::kBaseHeight * scale));
+    EXPECT_EQ(f.panel.getClipLaneArea().getRowLayout().trackExtraHeight(1), leadRow->getHeight());
     EXPECT_EQ(f.panel.getClipLaneArea().getRowLayout().trackExtraHeight(0),
-              f.panel.laneRowBoundsForTest(f.bassLane).getHeight() + f.row()->getHeight());
+              f.panel.laneRowBoundsForTest(f.bassLane).getHeight())
+        << "a track with a lane adds only its lane rows";
 }
 
-TEST(AutomationLanesAddRowTest, AClickAtTheRowsYOpensThePickerOfThatTracksParameters) {
+TEST(AutomationLanesAddRowTest, AClickOnTheButtonOpensThePickerOfThatTracksParameters) {
     AddFixture f;
     const auto bounds = f.panel.addAutomationRowBoundsForTest(f.bass);
-    ASSERT_EQ(f.componentAt({bounds.getX() + 60, bounds.getCentreY()}), f.row()) << "a real click lands on the row";
+    ASSERT_EQ(f.componentAt(bounds.getCentre()), f.row()) << "a real click lands on the button";
 
     clickButton(*f.row());
 
@@ -212,7 +226,9 @@ TEST(AutomationLanesAddRowTest, PickingCreatesTheLaneOnThatTrackInOneUndoStepAnd
     EXPECT_EQ(f.panel.getSelectedAutomationLane(), lane.id) << "shown and selected";
     EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(f.bass));
     EXPECT_NE(f.panel.laneEditorForTest(lane.id), nullptr);
-    EXPECT_EQ(f.row()->getY(), f.panel.laneHeaderForTest(lane.id)->getBottom()) << "the row moved below the new lane";
+    const auto* newHeader = f.panel.laneHeaderForTest(lane.id);
+    EXPECT_GE(f.row()->getY(), newHeader->getY()) << "the button moved to the new last lane's gutter";
+    EXPECT_LE(f.row()->getBottom(), newHeader->getBottom());
 
     ASSERT_TRUE(f.undo.undo());
     EXPECT_EQ(f.doc.getTrack(f.bass)->lanes.size(), 1u) << "ONE undo step removes it";
@@ -264,4 +280,28 @@ TEST(AutomationLanesAddRowTest, TheHeaderMenuEntryIsDisabledWhenTheTrackOffersNo
     const auto* item = findMenuItem(menu, "Add automation...");
     ASSERT_NE(item, nullptr);
     EXPECT_FALSE(item->isEnabled);
+}
+
+TEST(AutomationLanesAddRowTest, EveryHeaderRowSitsAtTheSameYAndHeightAsItsLaneRow) {
+    AddFixture f;
+    f.panel.setSize(1200, 600);
+    const auto inPanel = [&](juce::Component* c) {
+        return f.panel.getLocalArea(c->getParentComponent(), c->getBounds());
+    };
+    const auto* header = f.panel.laneHeaderForTest(f.bassLane);
+    const auto* editor = f.panel.laneEditorForTest(f.bassLane);
+    ASSERT_NE(header, nullptr);
+    ASSERT_NE(editor, nullptr);
+    EXPECT_EQ(inPanel(const_cast<juce::Component*>(static_cast<const juce::Component*>(header))).getY(),
+              inPanel(const_cast<juce::Component*>(static_cast<const juce::Component*>(editor))).getY())
+        << "the lane header and its curve start at one y";
+    EXPECT_EQ(header->getHeight(), editor->getHeight());
+
+    auto* trackHeader = f.panel.getTrackHeaderAt(0);
+    ASSERT_NE(trackHeader, nullptr);
+    EXPECT_EQ(inPanel(trackHeader).getY(), f.panel.getClipLaneArea().getY())
+        << "the first track row starts at the clips";
+    auto* second = f.panel.getTrackHeaderAt(1);
+    EXPECT_EQ(inPanel(second).getY(),
+              f.panel.getClipLaneArea().getY() + f.panel.getClipLaneArea().getRowLayout().trackTop(1));
 }

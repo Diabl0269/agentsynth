@@ -66,6 +66,11 @@ public:
     int laneRowHeight() const;
     /** The "+ Add automation..." row closing an open track's lanes (zoom-scaled like a lane row), px. */
     int addRowHeight() const;
+    /** True when `track` has a lane block, so its add button is the small "+" in the last lane header's gutter instead
+     *  of a row of its own. */
+    bool addRowIsCompact(const synth::Track& track) const;
+    /** The height the add button adds to `track`'s fold-out: a row's, or 0 when it is the compact "+". */
+    int addRowHeightFor(const synth::Track& track) const;
 
     /** Places the lane headers of `track` with their first row at content y `firstRowY`. */
     void placeHeadersFor(synth::TrackId track, int firstRowY, int width);
@@ -73,7 +78,7 @@ public:
     void placeBodies(const TimelineRowLayout& layout);
     /** The lane's row in content coordinates (before scroll); empty when it is not visible. */
     juce::Rectangle<int> laneRowContentBounds(synth::LaneId lane, const TimelineRowLayout& layout) const;
-    /** The track's "+ Add automation..." row in content coordinates; empty when it has none. */
+    /** The track's "+ Add automation..." row in content coordinates; empty when it has none (or is the compact "+"). */
     juce::Rectangle<int> addRowContentBounds(synth::TrackId track, const TimelineRowLayout& layout) const;
 
     // ---- Lane access ----

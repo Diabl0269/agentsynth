@@ -39,7 +39,8 @@ juce::Rectangle<float> AutomationLaneEditor::stretchBox() const {
     const auto map = pointMapper();
     const auto around =
         stretch_.isActive() ? pointsBounds(stretch_.result().moved, map) : selection_.boundingBox(*lanePoints(), map);
-    return stretchBoxAround(around);
+    // Kept inside the lane: a point at the far left or the top of the lane must not push the box's edge out of view.
+    return stretchBoxAround(around).getIntersection(getLocalBounds().toFloat().reduced(0.5f));
 }
 
 StretchHandle AutomationLaneEditor::stretchHandleAt(juce::Point<int> pos) const {

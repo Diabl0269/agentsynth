@@ -441,13 +441,6 @@ void TimelinePanelComponent::resized() {
                                       trackHeaderBounds_.getY(), kTrackHeaderWidthHandleWidth,
                                       trackHeaderBounds_.getHeight());
 
-    // The "+ MIDI Track" strip is pinned at the top of the header column, the scrolling header list
-    // below it. Both live INSIDE trackHeaderBounds_, so the panel's three regions still tile.
-    auto headerColumn = trackHeaderBounds_;
-    addTrackButton_.setBounds(headerColumn.removeFromTop(kAddTrackButtonHeight).reduced(2, 1));
-    trackHeaderViewport_.setBounds(headerColumn);
-    layoutTrackHeaders();
-
     auto lanes = lanesBounds_;
     // While the piano roll is OPEN its chip toolbar is the top row of the lanes region — ABOVE the
     // ruler, so the roll's chrome sits over the whole unit instead of being sandwiched between the
@@ -462,6 +455,17 @@ void TimelinePanelComponent::resized() {
         lanes.removeFromTop(synth::ui::PianoRollComponent::kToolbarHeight);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
+
+    // The "+ Track" strip is pinned at the top of the header column, the scrolling header list below it. Both live
+    // INSIDE trackHeaderBounds_, so the panel's three regions still tile. The strip is exactly as tall as what sits
+    // above the clip rows (the ruler, plus the roll's toolbar while it is open), so every header row starts at the
+    // same y as its clip row and its lane rows: a taller ruler than strip left the headers a few px above the lanes.
+    auto headerColumn = trackHeaderBounds_;
+    const auto strip = headerColumn.removeFromTop(
+        std::max(kAddTrackButtonHeight, gridLanesBounds_.getY() - trackHeaderBounds_.getY()));
+    addTrackButton_.setBounds(strip.withSizeKeepingCentre(strip.getWidth() - 4, kAddTrackButtonHeight - 2));
+    trackHeaderViewport_.setBounds(headerColumn);
+    layoutTrackHeaders();
 
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.

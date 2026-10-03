@@ -26,9 +26,13 @@ in-flight gesture and keyboard focus survive the notification); only a lane that
 loses them. The editors live in one click-through container over the lanes region (above the clip
 lanes and the piano roll, below the playhead), placed at their row's y minus the vertical scroll and
 clipped by it; the container hides while the piano roll is open.
+The header column's "+ Track" strip is exactly as tall as what sits above the clip rows (the ruler, plus the roll's
+toolbar while it is open), so a track header, its lane headers and their rows all start at the same y and have the same
+height as the rows they label.
 
-Under the last lane of an open track (the Unassigned section too) sits a 24 px "+ Add automation..."
-row (an open track with no lanes shows only that row), zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
+An open track with no lanes shows a 24 px "+ Add automation..." row, zoom-scaled like a lane row; once it has a
+lane, that button shrinks to a small "+" in the empty gutter left of the last lane header's colour stripe, so no
+empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 
 ### The lane header
 
@@ -96,16 +100,16 @@ a background thread mutates. Test hooks: `isTrackAutomationExpandedForTest`,
 Right-clicking a knob is not the only way to put a lane on a track. Two entry points open the same
 picker of **that track's** parameters:
 
-- the **"+ Add automation..." row** that closes an open track's lane rows (`AddAutomationRow`,
-  `Source/UI/Timeline/AutomationLanes/AddAutomation/`): `AddAutomationRow::kBaseHeight` (24 px) times the same vertical zoom, text-muted 10 px,
-  indented like the lane headers, in the header column. It is one more row of the track's extra area
-  (`TimelineAutomationLanes::extraHeights()`), so it moves with the lanes in the one row layout and
-  with the track in a reorder drag. The lanes region behind it is the clip lanes' backdrop and takes no
-  click. It exists exactly while the track is open: any open ordinary track, lanes or not (on an empty
-  track it is the whole fold-out, so its fold arrow is how the timeline starts automation), and the
-  Unassigned section while it holds lanes.
+- the **"+ Add automation..." button** (`AddAutomationRow`,
+  `Source/UI/Timeline/AutomationLanes/AddAutomation/`). On an open track with no lane it is a row:
+  `AddAutomationRow::kBaseHeight` (24 px) times the same vertical zoom, text-muted 10 px, indented like the lane
+  headers, in the header column; it is the track's whole fold-out (`TimelineAutomationLanes::extraHeights()`), so its
+  fold arrow is how the timeline starts automation, and the lanes region behind it takes no click. Once the track has a
+  lane the button is compact (`setCompact`): a `kCompactSize` (14 px) "+" in the gutter left of the last lane header's
+  stripe, centred on that lane's row, adding no height; it moves with the lanes in the reorder drag. It exists exactly
+  while the track is open: any open ordinary track, and the Unassigned section while it holds lanes.
 - the track header's right-click **"Add automation..."** ([tracks](tracks.md#row-context-menu)).  Once the
-  lane lands the track opens and shows it above the row.
+  lane lands the track opens and shows it, and the "+" moves to the new last lane.
 
 The row is a Tab stop with the accent focus ring; Return and Space press it in the same event
 (`juce::Button` posts its own Return click to the message queue and has no Space handling), its name and
@@ -347,7 +351,8 @@ the Draw tool the lane shows the pen cursor ([edit-tools](edit-tools.md#tool-cur
 X is the SAME shared `TimelineViewState` the clip lanes use, so it lines up with the playhead
 pixel-for-pixel; the piano roll is the one surface that maps beats through its own zoom and scroll
 instead ([piano-roll](piano-roll.md#horizontal-mapping)). Y maps the lane's own `RangeSnapshot
-[min..max]` linearly onto the component's height, top = max (`valueToY` / `yToValue`).
+[min..max]` linearly onto the component's height, top = max (`valueToY` / `yToValue`). The range sits `kPlotPadPx` (8 px, less on a very short lane) inside the top and
+bottom edges, so a point or the line at the maximum or minimum is drawn whole instead of half or fully outside the lane.
 
 The curve is sampled every ~2 px by building a local `TimelineSnapshot::Point[]` from the lane's
 breakpoints and calling `AutomationKernel::evaluate` with a fresh `AutomationCursor`.
@@ -369,8 +374,10 @@ sets to `laneValueText`, the lane header's path through `TrackHeaderHost::getPar
 back to the plain number. Later per-point features (header readout) extend
 `PointValueBubble` and the editor's `updateHover()`.
 
-Under the Pointer tool a point shows the grab hand on hover and while it is dragged (`dragGrabCursor()`, see
-[the drag cursor rule](../layout/animation.md#drag-and-drop-cursor)); the Draw tool keeps its pen.
+Under the Pointer tool the grab hand (`dragGrabCursor()`, see
+[the drag cursor rule](../layout/animation.md#drag-and-drop-cursor)) shows only once a drag has started: moving a point
+or the selection, scrubbing the curve, or dragging an empty lane's flat line. Hovering a point, the curve or the box shows
+the plain arrow. The Draw tool keeps its pen.
 
 A lane with NO points plays its constant value (the range default). Pressing within a handle's reach of that
 flat line and dragging vertically moves the value by the pointer's travel, clamped to the range, with the
@@ -482,8 +489,10 @@ The drag previews in the editor's preview state like a move (curve and dots redr
 commits on mouse-up as ONE `editBreakpoints` through `commitPointEdit`, pushed points included, so one Cmd+Z restores
 everything; a drag that ends where it began commits nothing. The selection afterwards is the same points at their new
 beats. The value bubble is hidden for the whole stretch. A handle takes the press before any point, segment or box
-select under it (reach 6 px); the inside of the box takes no clicks, so a point inside still selects and drags
-normally. Handles show the horizontal or vertical resize cursor on hover and for the whole drag, and the editor's
+select under it (reach 6 px). A press on a point inside the box selects and drags it as usual; a press anywhere else inside the box
+(over the curve too) drags the whole selection like grabbing one of its points: the delta is the pointer's travel since
+the press with the beat snapped at both ends, one `editBreakpoints`, one undo step, the same points stay selected. The
+box is kept inside the lane, so a point at the far left or top does not cut an edge off. Handles show the horizontal or vertical resize cursor on hover and for the whole drag, and the editor's
 tooltip reads "Drag to stretch the selected points in time" / "Drag to scale their values" over them. The math
 (`stretchBeats`, `scaleValues`) is pure; the editor glue is `AutomationLaneEditorStretch.cpp`.
 

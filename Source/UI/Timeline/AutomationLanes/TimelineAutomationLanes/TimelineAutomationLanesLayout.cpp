@@ -4,6 +4,7 @@
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -36,15 +37,26 @@ int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) 
     return laneRowHeight() + modulatorCount(lane.id) * modulatorRowHeight();
 }
 
+// A track with lanes gets its "+" in the gutter of its last lane header; only a track with none needs a whole row.
+bool TimelineAutomationLanes::addRowIsCompact(const synth::Track& track) const {
+    for (const auto& lane : track.lanes)
+        if (!isAmountLane(lane.id))
+            return true;
+    return false;
+}
+
+int TimelineAutomationLanes::addRowHeightFor(const synth::Track& track) const {
+    return addRowIsCompact(track) ? 0 : addRowHeight();
+}
+
 std::vector<int> TimelineAutomationLanes::extraHeights() const {
     std::vector<int> extras;
     if (doc_ == nullptr)
         return extras;
-    const int addHeight = addRowHeight();
     for (const auto& track : doc_->getTracks()) {
         int extra = 0;
         if (isVisibleLane(track)) {
-            extra = addHeight;
+            extra = addRowHeightFor(track);
             for (const auto& lane : track.lanes)
                 extra += laneBlockHeight(lane);
         }
@@ -72,15 +84,29 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
     const int rowHeight = laneRowHeight();
     const int modHeight = modulatorRowHeight();
     int y = firstRowY;
+    int lastLaneY = -1;
     for (const auto& lane : t->lanes) {
-        if (auto* header = headerFor(lane.id))
+        if (auto* header = headerFor(lane.id)) {
             header->setBounds(0, y, width, rowHeight);
+            lastLaneY = y;
+        }
         for (int i = 0; i < modulatorCount(lane.id); ++i)
             modulatorRowFor(lane.id, i)->setBounds(0, y + rowHeight + i * modHeight, width, modHeight);
         y += laneBlockHeight(lane);
     }
-    if (auto* row = addRowFor(track))
-        row->setBounds(0, y, width, addRowHeight());
+    if (auto* row = addRowFor(track)) {
+        const bool compact = addRowIsCompact(*t) && lastLaneY >= 0;
+        row->setCompact(compact);
+        if (compact) {
+            // The empty gutter left of the last lane's colour stripe, centred on that lane's own row.
+            const int size = std::min(AddAutomationRow::kCompactSize, rowHeight);
+            row->setBounds(AutomationLaneHeaderComponent::kIndent - size - 1, lastLaneY + (rowHeight - size) / 2, size,
+                           size);
+            row->toFront(false);
+        } else {
+            row->setBounds(0, y, width, addRowHeight());
+        }
+    }
 }
 
 juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId lane,
@@ -124,6 +150,8 @@ juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId
         const auto& candidate = tracks[(size_t)i];
         if (candidate.id != track || !isVisibleLane(candidate))
             continue;
+        if (addRowIsCompact(candidate))
+            return {};
         int y = layout.trackTop(i) + layout.trackRowHeight(i);
         for (const auto& lane : candidate.lanes)
             y += laneBlockHeight(lane);
