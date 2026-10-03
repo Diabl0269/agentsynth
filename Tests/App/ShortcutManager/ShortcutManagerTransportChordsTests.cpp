@@ -27,7 +27,12 @@ juce::KeyPress asPlatform(const juce::KeyPress& key, Platform platform) {
 
 class TransportChordsTest : public ::testing::TestWithParam<Platform> {
 protected:
-    void SetUp() override { manager.setDefaultsPlatform(GetParam()); }
+    void SetUp() override {
+        // Off the Mac JUCE folds Cmd onto Ctrl, so the Mac table's Cmd chords collide with Ctrl here.
+        if (GetParam() == Platform::Mac && ShortcutManager::hostDefaultsPlatform() != Platform::Mac)
+            GTEST_SKIP() << "the Mac chord table needs Cmd and Ctrl to be distinct keys";
+        manager.setDefaultsPlatform(GetParam());
+    }
     ShortcutManager manager;
 };
 
@@ -116,6 +121,12 @@ void load(ShortcutManager& manager, Platform platform) {
 class TransportChordsMigrationTest : public ::testing::TestWithParam<Platform> {
 protected:
     synth::test::PersistedKeysGuard guard_{kKeys};
+
+    void SetUp() override {
+        // Off the Mac JUCE folds Cmd onto Ctrl, so the Mac table's Cmd chords collide with Ctrl here.
+        if (GetParam() == Platform::Mac && ShortcutManager::hostDefaultsPlatform() != Platform::Mac)
+            GTEST_SKIP() << "the Mac chord table needs Cmd and Ctrl to be distinct keys";
+    }
 };
 
 } // namespace

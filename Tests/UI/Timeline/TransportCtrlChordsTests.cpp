@@ -51,6 +51,9 @@ protected:
     BottomDockActiveTabResetGuardMDT tabGuard_;
 
     void SetUp() override {
+        // Off the Mac JUCE folds Cmd onto Ctrl, so the Mac table's Cmd chords collide with Ctrl here.
+        if (GetParam() == Platform::Mac && ShortcutManager::hostDefaultsPlatform() != Platform::Mac)
+            GTEST_SKIP() << "the Mac chord table needs Cmd and Ctrl to be distinct keys";
         mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
         mc_->setSize(1600, 900);
         mc_->newPatchForTest();
