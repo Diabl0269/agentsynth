@@ -1,4 +1,4 @@
-# Patch Preview
+#Patch Preview
 
 What the chat card shows for a proposed patch before the user presses Apply, and why it is computed
 the way it is.
@@ -35,9 +35,10 @@ would misreport three things the patch itself never states:
 - merge mode auto-connects a new audio node with no outgoing wire to Audio Output, and a new
   MIDI-accepting node to an existing MIDI source (`applyJSONToGraph`'s `autoConnectNewNodes`);
 - replace mode deletes every node the patch does not restate;
-- the untrusted apply path rescales any value in `[0,1]` against a wider parameter range
-  (`AIStateMapper::applyParamsToProcessor`'s normalized-value heuristic), so the value that lands is
-  not the value the patch states.
+- the untrusted apply path rescales a value in `[0,1]` that is not a legal value of a wider parameter
+  range (`AIStateMapper::applyParamsToProcessor`'s normalized-value heuristic: a cutoff of 0.5 on
+  20..20000 Hz becomes 10010 Hz), so the value that lands is not the value the patch states. A value
+  the range can hold (an ADSR decay of 0.2 s on 0..5, a drive of 1.0 on 1..10) lands exactly.
 
 `AIIntegrationService::computePatchPreview(jsonString, mergeMode, before, after)` produces the two
 snapshots without touching the live graph:
@@ -86,34 +87,47 @@ snapshots without touching the live graph:
   even where a node is conceptually unchanged. That is technically correct — every processor really
   is destroyed and recreated on replace — but useless to someone reviewing a brand-new patch, which
   is why the edit-plan card uses `summarizePatch()` for replace mode instead. `computeDiff` itself stays
-  mode-agnostic and correct for any snapshot pair; this is a note about how the UI uses it, not a
-  limitation of the function.
-- **`graphToJSON` already collapses attenuverter chains into a `modulations` array**, scanning
-  `AttenuverterModule` nodes and their wires, so `computeDiff` diffs `modulations` directly rather
-  than pattern-matching attenuverter plumbing itself. It excludes `type == "Attenuverter"` nodes
-  from the node diff and any connection with an Attenuverter endpoint from the connection diff, so a
-  modulation change is reported exactly once rather than also as raw node and connection noise. One
-  known omission: an attenuverter wired on only one side produces no `modulations` entry in
-  `graphToJSON` at all, so it is silently dropped from the diff instead of shown as add/remove
-  noise — deliberate, since a half-wired attenuverter only arises from a malformed patch.
-- Only a node's `params` object is diffed, never `position`, `state`, `id` or `uuid`, so a
-  merge-mode patch that repositions or re-lists an unrelated existing node does not read as moved or
-  changed noise. A parameter's display name comes from a throwaway, never-processed instance of its
-  module type (`AIStateMapper::createModule`), falling back to the raw param id when not found;
-  numeric values render at roughly 3 significant figures, with no units, because no per-module
-  unit-formatting table exists in this codebase.
+  mode-agnostic and correct for any snapshot pair;
+this is a note about how the UI uses it,
+    not a limitation of the function.-
+        **`graphToJSON` already collapses attenuverter chains into a `modulations` array **,
+    scanning
+  `AttenuverterModule` nodes and their wires,
+    so `computeDiff` diffs `modulations` directly rather than pattern -
+            matching attenuverter plumbing itself.It excludes `type ==
+        "Attenuverter"` nodes from the node diff and any connection with an Attenuverter endpoint from the connection
+            diff,
+    so a modulation change is reported exactly once rather than also as raw node and connection noise.One known omission
+    : an attenuverter wired on only one side produces no `modulations` entry in
+  `graphToJSON` at all
+    , so it is silently dropped from the diff instead of shown as add / remove noise — deliberate
+    , since a half - wired attenuverter only arises from a malformed patch.-
+              Only a node's `params` object is diffed, never `position`, `state`, `id` or `uuid`, so a merge -
+              mode patch that repositions or
+          re - lists an unrelated existing node does not read as moved or
+          changed noise.A parameter's display name comes from a throwaway, never-processed instance of its module
+              type(`AIStateMapper::createModule`)
+    , falling back to the raw param id when not found;
+numeric values render at roughly 3 significant figures, with no units,
+    because no per - module unit -
+        formatting table exists in this codebase.
 
-Two smaller pure helpers in the same header are used only by the UI:
+        Two smaller pure helpers in the same header are used only by the UI
+    :
 
-- **`summarizePatch(after)`** returns a `PatchSummary` — the node type list in snapshot node order,
-  plus a non-attenuverter connection count — read from a single snapshot. This is what replace-mode
-  cards render.
-- **`groupChangesByKind(changes)`** stable-sorts a `computeDiff` result by `PatchChange::Kind`,
-  whose declaration order already matches the desired grouping, so changes sharing a kind keep
-  `computeDiff`'s original relative order. Used only for merge-mode rendering; `computeDiff`'s own
-  output order is untouched and is still what its tests assert on.
+    -**`summarizePatch(after)`**returns a `PatchSummary` — the node type list in snapshot node order
+    , plus a non - attenuverter connection count — read from a single snapshot.This is what replace
+          - mode cards render.- **`groupChangesByKind(changes)`**stable
+          - sorts a `computeDiff` result by `PatchChange::Kind`
+    , whose declaration order already matches the desired grouping
+    , so changes sharing a kind keep
+  `computeDiff`'s original relative order. Used only for merge-mode rendering; `computeDiff`' s own output order is
+          untouched and is still what its tests assert on.
 
-Tests: `Tests/AI/PatchDiffTests.cpp` — pure `computeDiff` cases, `summarizePatch` and
-`groupChangesByKind` coverage, plus two regression tests (`MergeModeAutoWireAppearsInDiff`,
-`UntrustedRescaleShowsLandedValueNotRawPatchValue`) proving the snapshot diff catches what a
-raw-patch-versus-live-graph diff would miss.
+          Tests : `Tests
+          / AI / PatchDiffTests.cpp` — pure `computeDiff` cases
+    , `summarizePatch` and
+`groupChangesByKind` coverage
+    , plus two regression tests(`MergeModeAutoWireAppearsInDiff`,
+`UntrustedRescaleShowsLandedValueNotRawPatchValue`) proving the snapshot diff catches what a raw - patch - versus
+          - live - graph diff would miss.

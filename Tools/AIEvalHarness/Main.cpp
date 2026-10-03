@@ -22,7 +22,7 @@
 
         ./build/Tools/AIEvalHarness/AIEvalHarness [--provider ollama|remote] [--model M]
                                                    [--runs N] [--host URL] [--json OUT]
-                                                   [--mode patch|timeline]
+                                                   [--mode patch|timeline|project]
                                                    [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
@@ -38,6 +38,12 @@
     (OllamaProvider::processRequest -> `format` field), just the extended schema. This exists to
     verify structured-output corruption fixes (P6-13) against BOTH schemas the client actually
     sends locally, not just the plain patch one — they are not separate decoding surfaces.
+
+    --mode project asks the edit-plan path (sendProjectMessage) for four sound-design requests
+    ("a plucky lead track", "a bass track with a filter envelope", "add a filter envelope" to an
+    existing patch, "an acid bassline track") and scores two things per answer: does the plan preview
+    as valid, and does it have the right SHAPE (an envelope that plucks, an envelope on a filter's
+    cutoff, an acid filter). See ProjectMode.h and Source/AI/SoundShapeChecks.h.
 
     --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
     --provider remote) and are for REPRODUCIBILITY of a corruption investigation, not production
@@ -55,6 +61,7 @@
 #include "AI/OllamaProvider.h"
 #include "AI/PatchEval.h"
 #include "AI/RemoteProvider.h"
+#include "ProjectMode.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -328,8 +335,9 @@ int main(int argc, char* argv[]) {
     const juce::String jsonOut = argValue(args, "--json", "");
 
     const juce::String modeFlag = argValue(args, "--mode", "patch");
-    if (modeFlag != "patch" && modeFlag != "timeline") {
-        std::fprintf(stderr, "unknown --mode \"%s\" (expected \"patch\" or \"timeline\")\n", modeFlag.toRawUTF8());
+    if (modeFlag != "patch" && modeFlag != "timeline" && modeFlag != "project") {
+        std::fprintf(stderr, "unknown --mode \"%s\" (expected \"patch\", \"timeline\" or \"project\")\n",
+                     modeFlag.toRawUTF8());
         return 1;
     }
     const bool timelineMode = modeFlag == "timeline";
@@ -351,6 +359,19 @@ int main(int argc, char* argv[]) {
         sampling.seed = seedFlag.getIntValue();
     if (providerKind == ProviderKind::remote && (sampling.think || sampling.temperature || sampling.seed))
         std::fprintf(stderr, "warning: --think/--temperature/--seed are --provider ollama only; ignored here\n");
+
+    if (modeFlag == "project") {
+        std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=project  scenarios=%d\n",
+                    providerFlag.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs,
+                    (int)project_mode::scenarios().size());
+        juce::DynamicObject::Ptr header = new juce::DynamicObject();
+        header->setProperty("provider", providerFlag);
+        header->setProperty("model", model);
+        header->setProperty("runs", runs);
+        header->setProperty("mode", modeFlag);
+        return project_mode::runAll(
+            runs, [&] { return makeProvider(providerKind, host, model, sampling); }, jsonOut, header);
+    }
 
     const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
 

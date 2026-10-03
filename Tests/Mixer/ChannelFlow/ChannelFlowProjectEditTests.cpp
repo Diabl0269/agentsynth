@@ -36,6 +36,38 @@ constexpr const char* kPlanJson = R"({"mode": "merge",
         {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
             {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})";
 
+// Two tracks, each reusing its own envelope (7010 mono, 7020 poly) as the source of a modulation onto
+// its Filter insert's cutoff (7011, 7021). Typical pluck times: they land exactly as written.
+constexpr const char* kEnvelopePlanJson = R"({"mode": "merge", "nodes": [], "connections": [],
+    "modulations": [{"source": 7010, "dest": 7011, "destParam": "cutoff", "amount": 0.5},
+                    {"source": 7020, "dest": 7021, "destParam": "cutoff", "amount": 0.5}],
+    "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+         "inserts": [{"type": "Filter", "id": 7011, "params": {"cutoff": 400}}],
+         "envelope": {"id": 7010, "params": {"sustain": 0.0, "decay": 0.2, "release": 0.15}}},
+        {"op": "addInstrumentTrack", "name": "Pad", "instrument": "Wavetable", "poly": true,
+         "inserts": [{"type": "Filter", "id": 7021}],
+         "envelope": {"id": 7020, "params": {"sustain": 0.25, "decay": 0.2}}}]})";
+
+double rawParamPE(juce::AudioProcessor* processor, const juce::String& paramId) {
+    for (auto* param : processor->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+            ranged != nullptr && ranged->paramID == paramId)
+            return ranged->convertFrom0to1(ranged->getValue());
+    return -1.0;
+}
+
+bool cutoffIsModulatedBy(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node* source,
+                         juce::AudioProcessorGraph::Node* filter) {
+    const int cutoffChannel = dynamic_cast<ModuleBase*>(filter->getProcessor())->modulationChannelForParam("cutoff");
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr &&
+            graph.isConnected({{source->nodeID, 0}, {node->nodeID, 0}}) &&
+            graph.isConnected({{node->nodeID, 0}, {filter->nodeID, cutoffChannel}}))
+            return true;
+    return false;
+}
+
 const synth::Macro* findMacroNamedPE(MainComponent& mc, const juce::String& name) {
     for (const auto& macro : mc.getGraphEditor().getMacros().getAll())
         if (macro.name == name)
@@ -114,4 +146,45 @@ TEST_F(ChannelFlowTest, ProjectEditAppliesTrackOpsThenPatchThenLanesAsOneUndoSte
     ASSERT_TRUE(mc.getUndoManager().undo());
     expectSameSnapshotCFT(snapshotCFT(mc), before);
     EXPECT_EQ(findMacroNamedPE(mc, "Bass"), nullptr);
+}
+
+// The envelope params land on the ADSR the build made, on the mono and on the poly path, and the
+// envelope's id is a modulation source that reaches the Filter insert's cutoff through the real apply.
+TEST_F(ChannelFlowTest, ProjectEditEnvelopeParamsLandOnTheBuiltAdsrAndItsIdModulatesTheInsertCutoff) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& aiService = mc.getAiServiceForTest();
+    const auto before = snapshotCFT(mc);
+
+    const juce::var plan = juce::JSON::parse(kEnvelopePlanJson);
+    const auto preview = aiService.previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+    const auto applied = aiService.applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+
+    struct Expected {
+        const char* track;
+        double sustain;
+        double decay;
+        double release; // < 0: not set by the plan, left at the module default
+    };
+    for (const auto& expected : {Expected{"Bass", 0.0, 0.2, 0.15}, Expected{"Pad", 0.25, 0.2, -1.0}}) {
+        SCOPED_TRACE(expected.track);
+        const auto* macro = findMacroNamedPE(mc, expected.track);
+        ASSERT_NE(macro, nullptr);
+        auto* adsr = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ADSR);
+        auto* filter = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Filter);
+        ASSERT_NE(adsr, nullptr);
+        ASSERT_NE(filter, nullptr);
+        EXPECT_NEAR(rawParamPE(adsr->getProcessor(), "sustain"), expected.sustain, 1.0e-3);
+        EXPECT_NEAR(rawParamPE(adsr->getProcessor(), "decay"), expected.decay, 1.0e-3);
+        if (expected.release >= 0.0)
+            EXPECT_NEAR(rawParamPE(adsr->getProcessor(), "release"), expected.release, 1.0e-3);
+        EXPECT_TRUE(cutoffIsModulatedBy(graph, adsr, filter)) << "envelope -> attenuverter -> Filter cutoff CV";
+    }
+
+    expectOneUndoStepCFT(mc, before);
 }

@@ -12,13 +12,21 @@ namespace {
 // string (Branding.h's bundle id + ".refreshtoken"), with a ".test" suffix appended so this can
 // never collide with — or clobber — a real user's stored token on the machine running these
 // tests, and so a future bundle-id rename can't silently decouple this from production naming.
-const juce::String kTestService = juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test";
+//
+// Each test gets its own item (the test's name is appended): CI runs the suite as concurrent shards
+// sharing one login keychain, and with one shared item another shard's save or clear landed between
+// a test's two saves and made "updated in place" read as "re-created".
+juce::String testService() {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." +
+           (info != nullptr ? juce::String(info->name()) : juce::String("none"));
+}
 } // namespace
 
 namespace {
 // The Keychain item's creation date, as seconds since 1970, or -1 when no item matches.
 double storedItemCreationSeconds() {
-    CFStringRef service = kTestService.toCFString();
+    CFStringRef service = testService().toCFString();
     CFMutableDictionaryRef query = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
                                                              &kCFTypeDictionaryValueCallBacks);
     CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
@@ -44,26 +52,26 @@ protected:
     void TearDown() override {
         // Always clears, even after a failed assertion, so a broken test run never leaves a
         // stray Keychain item behind on the dev machine.
-        synth::KeychainTokenStore store{kTestService};
+        synth::KeychainTokenStore store{testService()};
         store.clear();
     }
 };
 
 TEST_F(KeychainTokenStoreTest, LoadWithNothingStoredReturnsEmptyString) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
     store.clear(); // in case a previous crashed run left something behind
     EXPECT_TRUE(store.load().isEmpty());
 }
 
 TEST_F(KeychainTokenStoreTest, SaveThenLoadRoundTrips) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
 
     ASSERT_TRUE(store.save("test-refresh-token-abc123"));
     EXPECT_EQ(store.load(), juce::String("test-refresh-token-abc123"));
 }
 
 TEST_F(KeychainTokenStoreTest, SaveTwiceReplacesThePreviousValue) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
 
     ASSERT_TRUE(store.save("first-token"));
     ASSERT_TRUE(store.save("second-token"));
@@ -71,7 +79,7 @@ TEST_F(KeychainTokenStoreTest, SaveTwiceReplacesThePreviousValue) {
 }
 
 TEST_F(KeychainTokenStoreTest, ClearRemovesTheStoredValue) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
 
     ASSERT_TRUE(store.save("to-be-cleared"));
     ASSERT_FALSE(store.load().isEmpty());
@@ -83,7 +91,7 @@ TEST_F(KeychainTokenStoreTest, ClearRemovesTheStoredValue) {
 // Saving must update the one item in place. Delete + add re-created it on every save, and a build
 // whose code signature differs from the item's creator is prompted for (or refused) that delete.
 TEST_F(KeychainTokenStoreTest, SavingAgainUpdatesTheSameItemInsteadOfReplacingIt) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
     ASSERT_TRUE(store.save("first-token"));
     const double created = storedItemCreationSeconds();
     ASSERT_GT(created, 0.0);
@@ -96,28 +104,28 @@ TEST_F(KeychainTokenStoreTest, SavingAgainUpdatesTheSameItemInsteadOfReplacingIt
 
 TEST_F(KeychainTokenStoreTest, AFreshStoreSeesWhatAnotherStoreSaved) {
     {
-        synth::KeychainTokenStore writer{kTestService};
+        synth::KeychainTokenStore writer{testService()};
         ASSERT_TRUE(writer.save("persisted-token"));
     }
-    synth::KeychainTokenStore reader{kTestService};
+    synth::KeychainTokenStore reader{testService()};
     EXPECT_EQ(reader.load(), juce::String("persisted-token"));
 }
 
 // load() reads the Keychain once per process: every read can raise a permission prompt, so a value
 // changed behind the store's back is deliberately not re-read.
 TEST_F(KeychainTokenStoreTest, LoadReadsTheKeychainOnlyOncePerStore) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
     store.clear();
     ASSERT_TRUE(store.save("cached-token"));
 
-    synth::KeychainTokenStore other{kTestService};
+    synth::KeychainTokenStore other{testService()};
     ASSERT_TRUE(other.save("changed-behind-back"));
 
     EXPECT_EQ(store.load(), juce::String("cached-token"));
 }
 
 TEST_F(KeychainTokenStoreTest, SavingAnUnchangedTokenSucceeds) {
-    synth::KeychainTokenStore store{kTestService};
+    synth::KeychainTokenStore store{testService()};
     ASSERT_TRUE(store.save("same-token"));
     EXPECT_TRUE(store.save("same-token"));
     EXPECT_EQ(store.load(), juce::String("same-token"));

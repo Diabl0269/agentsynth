@@ -7,9 +7,10 @@ namespace synth {
 
 namespace {
 
-// The TIMELINE & AUTOMATION OPERATIONS section buildSystemPrompt appends while the timeline tools
-// are active: the five timelineOps ops, in the same terse style as the patch rules above.
-const char* timelineOpsPromptSection() {
+// The first half of the TIMELINE & AUTOMATION OPERATIONS section buildSystemPrompt appends while the
+// timeline tools are active: the five timelineOps ops, in the same terse style as the patch rules
+// above. The sound-design words and their worked examples follow in the two functions below.
+const char* timelineOpsOpsText() {
     return "\n\n### TIMELINE & AUTOMATION OPERATIONS (timelineOps):\n"
            "The user also has a TIMELINE: tracks, MIDI clips with notes, and parameter-automation lanes. "
            "When they ask for arrangement content - notes/melodies/chords on a track, a new track, or a "
@@ -35,12 +36,18 @@ const char* timelineOpsPromptSection() {
            "checkable.\n"
            "5. `{\"op\": \"addInstrumentTrack\", \"name\": \"<new track name>\", \"instrument\": "
            "\"Oscillator\"|\"Wavetable\"|\"Sampler\", \"poly\": false, \"inserts\": [{\"type\": \"Filter\", "
-           "\"params\": {\"cutoff\": 800}}]}` - a MIDI track that PLAYS the instrument immediately: the app "
-           "builds its Track In, instrument, envelope (Oscillator/Wavetable), channel strip and Master routing "
-           "itself, so never add a Track In or Audio Output node for it. The name must be NEW (not an existing "
-           "track's); later ops in the same batch address the track by that name. `poly` (Oscillator/Wavetable "
-           "only) and `inserts` (up to 8 audio effect modules placed before the channel strip, in order) are "
-           "optional. Prefer this over addTrack when the user wants a new part to hear.\n"
+           "\"params\": {\"cutoff\": 800}}], \"envelope\": {\"params\": {\"decay\": 0.3, \"sustain\": 0}}, "
+           "\"instrumentParams\": {\"waveform\": \"Saw\"}}` - a MIDI "
+           "track that PLAYS the instrument immediately: the app builds its Track In, instrument, envelope "
+           "(Oscillator/Wavetable), channel strip and Master routing itself, so never add a Track In or Audio "
+           "Output node for it. The name must be NEW (not an existing track's); later ops in the same batch "
+           "address the track by that name. `poly` (Oscillator/Wavetable only), `inserts` (up to 8 audio effect "
+           "modules placed before the channel strip, in order) and `envelope` are optional. `envelope` shapes the "
+           "track's OWN ADSR with raw params (attack, decay, sustain, release; times in seconds, sustain 0-1) and "
+           "exists for Oscillator/Wavetable only - a Sampler has none. Give `envelope` (and an insert) an integer "
+           "`id` that no other node uses when `modulations` must refer to it. `instrumentParams` sets the "
+           "instrument's own params (an Oscillator's `waveform` is Sine, Square, Saw or Triangle and starts as "
+           "Sine). Prefer this over addTrack when the user wants a new part to hear.\n"
            "The user always sees a preview and must click Apply before anything changes.\n"
            "\nAutomation example - \"sweep the filter cutoff up over 8 beats\" (Filter uuid \"abc-123\"):\n"
            "```json\n"
@@ -56,6 +63,78 @@ const char* timelineOpsPromptSection() {
            "\"lengthBeats\": 1, \"pitch\": 63, \"velocity\": 100}, {\"startBeat\": 2, \"lengthBeats\": 2, "
            "\"pitch\": 67, \"velocity\": 100}]}]}]}\n"
            "```";
+}
+
+// The second half: what the sound-design words ask of an envelope and a filter. A model that reads
+// "plucky" or "filter envelope" literally still leaves the envelope at its drone-friendly default
+// (sustain 1) or adds an ADSR nothing triggers, so each word is spelled out as parameter values.
+// Tools/AIEvalHarness --mode project scores the result (Source/AI/SoundShapeChecks.h).
+const char* soundDesignWordsText() {
+    return "\n\n### SOUND-DESIGN WORDS (timelineOps):\n"
+           "When the request uses one of these words, shape the envelope like this. On a NEW track set "
+           "`envelope.params` of addInstrumentTrack; on an EXISTING patch change the params of its ADSR node. "
+           "Times are raw seconds.\n"
+           "- pluck, plucky, stab, staccato, percussive: sustain 0, decay 0.1-0.4, attack under 0.01, release at "
+           "most 0.3.\n"
+           "- pad, swell: attack at least 0.5, sustain at least 0.6, release at least 1.\n"
+           "- \"filter envelope\", an envelope on the filter, wah, squelch: a Filter with a LOW cutoff (300-1200 "
+           "Hz) AND an envelope that modulates its cutoff. On a NEW track give the Filter insert an `id` and the "
+           "track's `envelope` an `id`, then add the modulation {\"source\": <envelope id>, \"dest\": <filter "
+           "insert id>, \"destParam\": \"cutoff\", \"amount\": 0.3-0.8} - the track's own envelope is reused, no "
+           "other node is added. A Filter on a track this response creates is moved ONLY by that track's own "
+           "envelope id - never by an ADSR already in the patch, which belongs to another track and follows that "
+           "track's notes. Only for a Filter ALREADY in the patch use the existing ADSR of that same chain as "
+           "`source` and the Filter node's id as `dest`. NEVER add a new free ADSR node for this: nothing "
+           "triggers it, so it would do nothing.\n"
+           "- acid: a Saw oscillator (on a new track `instrumentParams` {\"waveform\": \"Saw\"}), a Filter with "
+           "`filterType` \"LPF24\" (the 24 dB low-pass), `resonance` "
+           "0.7-0.9, a low `cutoff` (300-800), the envelope reused onto the cutoff as above with a short decay "
+           "(0.15-0.3) and sustain 0-0.2, and 16th-note (0.25 beat) notes in the clip. On an existing patch set "
+           "`waveform` \"Saw\" on its Oscillator node instead.\n"
+           "`id`s are integers that no other node, insert or envelope in the response uses and that differ from "
+           "every id in the current patch.";
+}
+
+// Three worked responses, one per word group, each a complete response root that the edit-plan
+// preview accepts (pinned by AIIntegrationServiceProjectEditTest.SoundDesignExamplesInThePromptPreviewAndScore).
+const char* soundDesignExamplesText() {
+    return "\n\nPluck example - \"make a plucky lead track\":\n"
+           "```json\n"
+           "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"addInstrumentTrack\", \"name\": "
+           "\"Pluck Lead\", \"instrument\": \"Oscillator\", \"envelope\": {\"params\": {\"attack\": 0.005, "
+           "\"decay\": 0.2, \"sustain\": 0, \"release\": 0.15}}}, {\"op\": \"placeClips\", \"track\": \"Pluck "
+           "Lead\", \"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"Riff\", \"notes\": ["
+           "{\"startBeat\": 0, \"lengthBeats\": 0.5, \"pitch\": 72, \"velocity\": 100}, {\"startBeat\": 1, "
+           "\"lengthBeats\": 0.5, \"pitch\": 75, \"velocity\": 100}, {\"startBeat\": 2, \"lengthBeats\": 0.5, "
+           "\"pitch\": 79, \"velocity\": 100}]}]}]}\n"
+           "```\n"
+           "Filter envelope example - \"add a filter envelope\" (existing patch: Filter 1003, ADSR 1004):\n"
+           "```json\n"
+           "{\"mode\": \"merge\", \"nodes\": [{\"id\": 1003, \"type\": \"Filter\", \"params\": {\"cutoff\": 600}}], "
+           "\"connections\": [], \"modulations\": [{\"source\": 1004, \"dest\": 1003, \"destParam\": \"cutoff\", "
+           "\"amount\": 0.6}]}\n"
+           "```\n"
+           "Acid example - \"make an acid bassline track\":\n"
+           "```json\n"
+           "{\"mode\": \"merge\", \"nodes\": [], \"connections\": [], \"modulations\": [{\"source\": 7010, "
+           "\"dest\": 7011, \"destParam\": \"cutoff\", \"amount\": 0.7}], \"timelineOps\": [{\"op\": "
+           "\"addInstrumentTrack\", \"name\": \"Acid Bass\", \"instrument\": \"Oscillator\", \"instrumentParams\": "
+           "{\"waveform\": \"Saw\"}, "
+           "\"inserts\": ["
+           "{\"type\": \"Filter\", \"id\": 7011, \"params\": {\"filterType\": \"LPF24\", \"cutoff\": 400, "
+           "\"resonance\": 0.8}}], \"envelope\": {\"id\": 7010, \"params\": {\"attack\": 0.005, \"decay\": 0.25, "
+           "\"sustain\": 0.1, \"release\": 0.1}}}, {\"op\": \"placeClips\", \"track\": \"Acid Bass\", \"clips\": "
+           "[{\"startBeat\": 0, \"lengthBeats\": 2, \"name\": \"Acid\", \"notes\": ["
+           "{\"startBeat\": 0, \"lengthBeats\": 0.25, \"pitch\": 36, \"velocity\": 100}, {\"startBeat\": 0.25, "
+           "\"lengthBeats\": 0.25, \"pitch\": 36, \"velocity\": 80}, {\"startBeat\": 0.5, \"lengthBeats\": 0.25, "
+           "\"pitch\": 48, \"velocity\": 110}, {\"startBeat\": 0.75, \"lengthBeats\": 0.25, \"pitch\": 36, "
+           "\"velocity\": 80}]}]}]}\n"
+           "```";
+}
+
+// The whole section; only appended while the timeline tools are active (see buildSystemPrompt).
+juce::String timelineOpsPromptSection() {
+    return juce::String(timelineOpsOpsText()) + soundDesignWordsText() + soundDesignExamplesText();
 }
 
 } // namespace

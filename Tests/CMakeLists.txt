@@ -199,6 +199,7 @@ add_executable(Tests
     AI/AIPatchFixtureReplayTests.cpp
     AI/RequestBudgetTests.cpp
     AI/PatchEvalTests.cpp
+    AI/SoundShapeChecksTests.cpp
     AI/PatchDiffTests.cpp
     AI/AIProviderRegistryTests.cpp
     AI/OllamaProvider/OllamaProviderRequestTests.cpp

@@ -11,8 +11,8 @@
 
 namespace synth {
 
-// Builds a track like the app would, minus wiring: the doc track, the instrument and each insert,
-// each with a uuid. `failOnBuild` makes that build (1-based) fail AFTER leaving a stray node behind,
+// Builds a track like the app would, minus wiring: the doc track, the instrument, its envelope and
+// each insert, each with a uuid. `failOnBuild` makes that build (1-based) fail AFTER leaving a stray node behind,
 // breaking the host contract on purpose so the service's backstop is what restores the graph.
 class PlanFakeHost : public TimelineOpsHost {
 public:
@@ -20,9 +20,11 @@ public:
         : doc(d)
         , graph(g) {}
 
-    std::optional<InstrumentTrackBuildResult>
-    addInstrumentTrack(const juce::String& name, const juce::String& type, bool,
-                       const std::vector<InstrumentTrackInsert>& inserts) override {
+    std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name, const juce::String& type,
+                                                                 bool,
+                                                                 const std::vector<InstrumentTrackInsert>& inserts,
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override {
         ++builds;
         if (builds == failOnBuild) {
             graph.addNode(AIStateMapper::createModule("LFO"));
@@ -31,7 +33,9 @@ public:
         if (!doc.addTrack(TrackKind::Midi, name).isValid())
             return std::nullopt;
         InstrumentTrackBuildResult result;
-        result.instrumentUuid = add(type, {});
+        result.instrumentUuid = add(type, instrumentParams);
+        if (type != "Sampler" && !withoutEnvelope)
+            result.envelopeUuid = add("ADSR", envelopeParams);
         for (const auto& insert : inserts)
             result.insertUuids.push_back(add(insert.type, insert.params));
         return result;
@@ -47,6 +51,7 @@ public:
     AppUndoManager undo;
     MacroSet macros;
     int builds = 0, batches = 0, failOnBuild = 0;
+    bool withoutEnvelope = false; // builds report no envelope node, as a host that could not make one would
 
 private:
     juce::String add(const juce::String& type, const juce::var& params) {

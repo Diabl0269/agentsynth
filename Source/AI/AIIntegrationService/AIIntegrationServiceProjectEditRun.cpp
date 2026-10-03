@@ -47,15 +47,16 @@ juce::var envelopeOf(const juce::Array<juce::var>& ops) {
     return juce::var(envelope.get());
 }
 
-// Every id the response introduces shares ONE namespace: patch node ids, each instrumentId and each
-// insert id. A model reusing one would leave a connection, modulation or writeLane silently
+// Every id the response introduces shares ONE namespace: patch node ids, each instrumentId, each
+// envelope id and each insert id. A model reusing one would leave a connection, modulation or writeLane silently
 // pointing at whichever node the resolver happened to pick, so a repeat rejects the whole plan.
 class IdNamespace {
 public:
     juce::String claim(juce::uint32 id, const juce::String& what) {
         if (auto it = owners_.find(id); it != owners_.end())
             return "Id " + juce::String(id) + " is used twice: as " + it->second + " and as " + what +
-                   ". Every id in the response (patch node ids, instrumentId and insert ids) must be distinct.";
+                   ". Every id in the response (patch node ids, instrumentId, insert ids and envelope ids) must be "
+                   "distinct.";
         owners_[id] = what;
         return {};
     }
@@ -64,7 +65,7 @@ private:
     std::map<juce::uint32, juce::String> owners_;
 };
 
-// Reads one addInstrumentTrack op's instrumentId and insert ids into the namespace. TimelineOps
+// Reads one addInstrumentTrack op's instrumentId, envelope id and insert ids into the namespace. TimelineOps
 // checks every other field of the op; this only adds what the plan needs on top: each id is a
 // usable node id, distinct from every other one, and not already the uid of a live node (a merge
 // patch addresses live nodes by uid, so such an id would name two nodes at once).
@@ -87,7 +88,12 @@ juce::String reserveBuildIds(int opIndex, juce::DynamicObject& op, int buildInde
         return {};
     };
 
-    if (const auto error = reserve(op.getProperty("instrumentId"), -1, "instrumentId"); error.isNotEmpty())
+    if (const auto error = reserve(op.getProperty("instrumentId"), Reservation::kInstrument, "instrumentId");
+        error.isNotEmpty())
+        return error;
+    if (const auto error =
+            reserve(op.getProperty("envelope").getProperty("id", {}), Reservation::kEnvelope, "envelope id");
+        error.isNotEmpty())
         return error;
     if (auto* inserts = op.getProperty("inserts").getArray())
         for (int i = 0; i < inserts->size(); ++i)
@@ -118,7 +124,8 @@ juce::String checkLaneAddress(int opIndex, juce::DynamicObject& op, const Plan& 
         created = created || reservation.id == id;
     if (!created)
         return where + "\"nodeId\" " + juce::String(id) +
-               " is not a node this response creates. Use a patch node id, an instrumentId or an insert id, or "
+               " is not a node this response creates. Use a patch node id, an instrumentId, an envelope id or an "
+               "insert id, or "
                "address an existing node by \"nodeUuid\".";
     return {};
 }
@@ -239,10 +246,12 @@ class RecordingHost final : public TimelineOpsHost {
 public:
     explicit RecordingHost(TimelineOpsHost& inner)
         : inner_(inner) {}
-    std::optional<InstrumentTrackBuildResult>
-    addInstrumentTrack(const juce::String& name, const juce::String& type, bool poly,
-                       const std::vector<InstrumentTrackInsert>& inserts) override {
-        auto result = inner_.addInstrumentTrack(name, type, poly, inserts);
+    std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name, const juce::String& type,
+                                                                 bool poly,
+                                                                 const std::vector<InstrumentTrackInsert>& inserts,
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override {
+        auto result = inner_.addInstrumentTrack(name, type, poly, inserts, envelopeParams, instrumentParams);
         if (result.has_value())
             results.push_back(*result);
         return result;
@@ -286,7 +295,11 @@ juce::String bindReservations(const Plan& plan, const RecordingHost& recorder, j
         if (reservation.buildIndex >= (int)recorder.results.size())
             return "An instrument track was not built, so id " + juce::String(reservation.id) + " names nothing.";
         const auto& built = recorder.results[(size_t)reservation.buildIndex];
-        const juce::String uuid = reservation.insertIndex < 0 ? built.instrumentUuid
+        if (reservation.insertIndex == Reservation::kEnvelope && built.envelopeUuid.isEmpty())
+            return "The instrument track built for envelope id " + juce::String(reservation.id) +
+                   " has no envelope, so the id names nothing.";
+        const juce::String uuid = reservation.insertIndex == Reservation::kInstrument ? built.instrumentUuid
+                                  : reservation.insertIndex == Reservation::kEnvelope ? built.envelopeUuid
                                   : reservation.insertIndex < (int)built.insertUuids.size()
                                       ? built.insertUuids[(size_t)reservation.insertIndex]
                                       : juce::String();
@@ -416,11 +429,14 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
 // narrower - nodes of the right TYPES, with the inserts' params applied, carrying uuids - so that a
 // patch's "destParam" onto an insert and a writeLane's range check resolve against real
 // processors. These stand-ins are exactly that, on the scratch graph only: unwired, no Track In,
-// no envelope or channel strip, no macro. The doc side is the real thing (the MIDI track the build
+// no channel strip, no macro. The envelope is an unwired ADSR carrying the op's envelope params, so a
+// modulation that names the envelope's id resolves its source and its range-checks run on the
+// real module. The doc side is the real thing (the MIDI track the build
 // would add), so later ops in the plan can address the track by name.
 std::optional<InstrumentTrackBuildResult>
 StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                                const std::vector<InstrumentTrackInsert>& inserts) {
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams) {
     juce::ignoreUnused(poly);
     if (!doc_.addTrack(TrackKind::Midi, name).isValid())
         return std::nullopt;
@@ -434,7 +450,9 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
         return node != nullptr ? AIStateMapper::ensureNodeUuid(node.get()) : juce::String();
     };
     InstrumentTrackBuildResult result;
-    result.instrumentUuid = addStandIn(instrumentType, {});
+    result.instrumentUuid = addStandIn(instrumentType, instrumentParams);
+    if (instrumentType != "Sampler")
+        result.envelopeUuid = addStandIn("ADSR", envelopeParams);
     for (const auto& insert : inserts)
         result.insertUuids.push_back(addStandIn(insert.type, insert.params));
     return result;

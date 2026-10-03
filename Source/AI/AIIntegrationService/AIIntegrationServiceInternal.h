@@ -15,11 +15,13 @@
 
 namespace synth::projectedit {
 
-/** One id an addInstrumentTrack op reserves: its instrument (insertIndex -1) or one insert. */
+/** One id an addInstrumentTrack op reserves: its instrument, its envelope or one insert. */
 struct Reservation {
+    static constexpr int kInstrument = -1;
+    static constexpr int kEnvelope = -2;
     juce::uint32 id = 0;
-    int buildIndex = 0;   // which addInstrumentTrack op of the plan, counting only those
-    int insertIndex = -1; // -1 = the instrument
+    int buildIndex = 0;            // which addInstrumentTrack op of the plan, counting only those
+    int insertIndex = kInstrument; // kInstrument, kEnvelope, or the insert's index in op order
 };
 
 /** A response root split into the three phases it applies in, with its id namespace checked. */
@@ -59,9 +61,11 @@ public:
     StandInHost(TimelineDoc& doc, juce::AudioProcessorGraph& graph)
         : doc_(doc)
         , graph_(graph) {}
-    std::optional<InstrumentTrackBuildResult>
-    addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                       const std::vector<InstrumentTrackInsert>& inserts) override;
+    std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name,
+                                                                 const juce::String& instrumentType, bool poly,
+                                                                 const std::vector<InstrumentTrackInsert>& inserts,
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     TimelineDoc* editableTimelineDoc() override { return &doc_; }
 

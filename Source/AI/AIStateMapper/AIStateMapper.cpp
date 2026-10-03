@@ -518,13 +518,16 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                     auto range = p->getNormalisableRange();
 
                     // Detect likely normalized 0-1 values from AI models that ignore range instructions.
-                    // If the actual range extends beyond [0,1] but the value is within [0,1],
-                    // the AI probably sent a normalized value — convert it to the actual range.
+                    // Only a value the range cannot hold counts as a mistake: a cutoff of 0.5 on
+                    // 20..20000 Hz is not a legal cutoff, so it is read as "halfway" and converted.
+                    // A value the range CAN hold (an ADSR decay of 0.2 s on 0..5, an LFO rate of
+                    // 0.5 Hz on 0..N) is what the model meant, and stays exactly as written.
                     // Skip this heuristic for integer params — small values like 0 or 1 are
                     // almost always valid denormalized values, not normalized.
                     bool isIntParam = (dynamic_cast<juce::AudioParameterInt*>(p) != nullptr);
                     bool rangeIsUnitInterval = (range.start >= 0.0f && range.end <= 1.0f);
-                    if (!trusted && !isIntParam && !rangeIsUnitInterval && val >= 0.0f && val <= 1.0f) {
+                    if (!trusted && !isIntParam && !rangeIsUnitInterval && val >= 0.0f && val <= 1.0f &&
+                        val < range.start) {
                         val = range.convertFrom0to1(val);
                     }
 

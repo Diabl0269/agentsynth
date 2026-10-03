@@ -265,7 +265,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
             }
 
             trackName = trackNamePrefix + " " + juce::String(index + 1);
-            buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{});
+            buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{}, /*envelopeParams=*/{});
         });
 
     reconcileTimelineAfterGraphChange();
@@ -281,11 +281,11 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 // contract, and it keeps the menu flow from leaving a half-built chain behind too. Edges it
 // already moved on pre-existing nodes (a reused Master) are not rewound; the enclosing
 // transaction's snapshot still covers them for undo. On success it hands back the uuids it minted
-// for the Track In, the instrument and each insert (in op order), for in-response references.
-std::optional<synth::InstrumentTrackBuildResult>
-MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
-                                        const juce::String& trackName, bool poly,
-                                        const std::vector<synth::InstrumentTrackInsert>& inserts) {
+// for the Track In, the instrument, each insert (in op order) and the envelope's ADSR (empty for a
+// Sampler), for in-response references.
+std::optional<synth::InstrumentTrackBuildResult> MainComponent::buildInstrumentTrackBody(
+    std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument, const juce::String& trackName, bool poly,
+    const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) {
     auto& graph = audioEngine.getGraph();
     const int index = (int)timelineDoc.getTracks().size();
     std::set<juce::AudioProcessorGraph::NodeID> nodesBefore;
@@ -297,6 +297,7 @@ MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::Au
                  adoptInstrumentNodeForChain(stagedInstrument, index, poly, build);
     if (built) {
         buildInstrumentEnvelopeChain(build);
+        applyInstrumentEnvelopeParams(envelopeParams, build);
         built = buildInstrumentInserts(inserts, build) && buildInstrumentChannelAndMacro(trackName, build);
     }
 
@@ -314,7 +315,22 @@ MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::Au
     // Inside the caller's mutation, not after: MacroSet::retainOnly() (run by updateComponents())
     // must see every node above still alive to keep the macro's membership.
     graphEditor.updateComponents();
-    return synth::InstrumentTrackBuildResult{build.trackInUuid, build.instrumentUuid, build.insertUuids};
+    return synth::InstrumentTrackBuildResult{build.trackInUuid, build.instrumentUuid, build.insertUuids,
+                                             build.adsrUuid};
+}
+
+// buildInstrumentTrackBody step 3a: the op's "envelope" params onto the ADSR step 3 built (poly or
+// mono -- both record adsrUuid). Through the patch path's untrusted apply, like an insert's params
+// (they were checked by AIStateMapper::validateNodeParams at validation).
+void MainComponent::applyInstrumentEnvelopeParams(const juce::var& envelopeParams, const InstrumentChainBuild& build) {
+    auto* paramsObj = envelopeParams.getDynamicObject();
+    if (paramsObj == nullptr || build.adsrUuid.isEmpty())
+        return;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == build.adsrUuid) {
+            synth::AIStateMapper::applyUntrustedParams(node->getProcessor(), paramsObj);
+            return;
+        }
 }
 
 // buildInstrumentTrackBody step 3b: each effect insert a timelineOps op asked for, in order, after

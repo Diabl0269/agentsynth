@@ -173,7 +173,11 @@ juce::var timelineOpsArraySchema() {
                 "inserts": {"type": "array", "items": {"type": "object", "properties": {
                     "type": {"type": "string"}, "id": {"type": "integer"},
                     "params": {"type": "object", "additionalProperties": true}},
-                    "required": ["type"]}}
+                    "required": ["type"]}},
+                "instrumentParams": {"type": "object", "additionalProperties": true},
+                "envelope": {"type": "object", "properties": {
+                    "id": {"type": "integer"},
+                    "params": {"type": "object", "additionalProperties": true}}}
             },
             "required": ["op"]
         }

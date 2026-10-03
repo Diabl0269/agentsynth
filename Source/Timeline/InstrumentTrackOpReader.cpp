@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 
 namespace synth {
@@ -95,6 +96,98 @@ juce::String readInsert(int index, const juce::var& insertVar, InstrumentTrackIn
     return {};
 }
 
+// Three decimals at most, trailing zeros trimmed ("0.2", "0", "1.5"): the preview line is pinned by tests.
+juce::String formatNumber(double value) {
+    juce::String text(value, 3);
+    if (text.containsChar('.')) {
+        text = text.trimCharactersAtEnd("0");
+        text = text.trimCharactersAtEnd(".");
+    }
+    return text == "-0" ? juce::String("0") : text;
+}
+
+juce::String formatParamValue(const juce::var& value) {
+    if (value.isString())
+        return value.toString();
+    if (value.isBool())
+        return static_cast<bool>(value) ? "on" : "off";
+    return formatNumber(static_cast<double>(value));
+}
+
+/** The track's own envelope: a closed object `{ "id", "params" }` whose params pass the SAME untrusted
+ *  per-node check an insert's do, against the ADSR module the build adds. */
+juce::String readEnvelope(const juce::var& envelopeVar, juce::var& paramsOut) {
+    auto* envelopeObj = envelopeVar.getDynamicObject();
+    if (envelopeObj == nullptr)
+        return "has an \"envelope\" that is not an object.";
+    for (int i = 0; i < envelopeObj->getProperties().size(); ++i) {
+        const juce::String key = envelopeObj->getProperties().getName(i).toString();
+        if (key != "id" && key != "params")
+            return "envelope has an unknown field \"" + key + "\". An envelope accepts only \"id\" and \"params\".";
+    }
+    if (!isOptionalInt(envelopeObj->getProperty("id")))
+        return "envelope has a non-integer \"id\".";
+
+    const juce::var params = envelopeObj->getProperty("params");
+    if (params.isVoid())
+        return {};
+    auto* paramsObj = params.getDynamicObject();
+    if (paramsObj == nullptr)
+        return "envelope has a \"params\" that is not an object.";
+    // The track's poly setting decides whether its envelope is per-voice; a "poly" here could only
+    // break that pairing.
+    if (paramsObj->hasProperty("poly"))
+        return "envelope params include \"poly\", which the track's own \"poly\" decides. Leave it out.";
+    auto probe = AIStateMapper::createModule("ADSR");
+    if (probe == nullptr)
+        return "envelope cannot be checked in this build.";
+    if (const auto result = AIStateMapper::validateNodeParams(probe.get(), paramsObj); !result.ok)
+        return "envelope (ADSR): " + result.message;
+    paramsOut = params;
+    return {};
+}
+
+/** The instrument's own params: an object checked like an insert's, against the instrument type's real
+ *  params. "poly" is the op's own field, so it is refused here. */
+juce::String readInstrumentParams(const juce::String& instrument, const juce::var& params, juce::var& paramsOut) {
+    auto* paramsObj = params.getDynamicObject();
+    if (paramsObj == nullptr)
+        return "has an \"instrumentParams\" that is not an object.";
+    if (paramsObj->hasProperty("poly"))
+        return "instrumentParams include \"poly\", which the op's own \"poly\" sets. Leave it out.";
+    auto probe = AIStateMapper::createModule(instrument);
+    if (probe == nullptr)
+        return "instrumentParams cannot be checked in this build.";
+    if (const auto result = AIStateMapper::validateNodeParams(probe.get(), paramsObj); !result.ok)
+        return "instrumentParams (" + instrument + "): " + result.message;
+    paramsOut = params;
+    return {};
+}
+
+// A preview list of the params an op set: `preferred` first in that order, then any other by name.
+juce::String describeParams(const juce::var& params, std::initializer_list<const char*> preferred) {
+    auto* paramsObj = params.getDynamicObject();
+    if (paramsObj == nullptr || paramsObj->getProperties().size() == 0)
+        return {};
+    juce::StringArray parts;
+    for (const char* key : preferred)
+        if (paramsObj->hasProperty(key))
+            parts.add(juce::String(key) + " " + formatParamValue(paramsObj->getProperty(key)));
+    juce::StringArray others;
+    for (int i = 0; i < paramsObj->getProperties().size(); ++i) {
+        const juce::String key = paramsObj->getProperties().getName(i).toString();
+        bool listed = false;
+        for (const char* p : preferred)
+            listed = listed || key == p;
+        if (!listed)
+            others.add(key);
+    }
+    others.sort(false);
+    for (const auto& key : others)
+        parts.add(key + " " + formatParamValue(paramsObj->getProperty(key)));
+    return parts.joinIntoString(", ");
+}
+
 } // namespace
 
 juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrackOpFields& out) {
@@ -120,6 +213,19 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (!isOptionalInt(op.getProperty("instrumentId")))
         return "has a non-integer \"instrumentId\".";
 
+    if (const juce::var paramsVar = op.getProperty("instrumentParams"); !paramsVar.isVoid())
+        if (const auto error = readInstrumentParams(out.instrument, paramsVar, out.instrumentParams);
+            error.isNotEmpty())
+            return error;
+
+    // Checked before the early return below: an op with an envelope and no inserts still has one.
+    if (const juce::var envelopeVar = op.getProperty("envelope"); !envelopeVar.isVoid()) {
+        if (out.instrument == "Sampler")
+            return "Sampler tracks have no envelope; leave \"envelope\" out.";
+        if (const auto error = readEnvelope(envelopeVar, out.envelopeParams); error.isNotEmpty())
+            return error;
+    }
+
     const juce::var insertsVar = op.getProperty("inserts");
     if (insertsVar.isVoid())
         return {};
@@ -144,12 +250,17 @@ juce::String describeInstrumentTrack(const InstrumentTrackOpFields& fields) {
     const bool addsEnvelope = fields.instrument != "Sampler";
     juce::String text = (fields.poly ? "poly " : "") + fields.instrument +
                         (addsEnvelope ? " with envelope and channel strip" : " with channel strip");
+    if (const auto own = describeParams(fields.instrumentParams, {}); own.isNotEmpty())
+        text << ", instrument: " << own;
     if (!fields.inserts.empty()) {
         juce::StringArray types;
         for (const auto& insert : fields.inserts)
             types.add(insert.type);
         text << ", inserts: " << types.joinIntoString(", ");
     }
+    if (const auto envelope = describeParams(fields.envelopeParams, {"attack", "decay", "sustain", "release"});
+        envelope.isNotEmpty())
+        text << ", envelope: " << envelope;
     return text;
 }
 

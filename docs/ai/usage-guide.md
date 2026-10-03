@@ -11,7 +11,8 @@ and to arrange, with natural language, from one chat input.
    tracks, clips and lanes are sent to Agent Synth's servers for processing. A notice next to the
    model picker says so whenever hosted mode is active, and Settings → AI carries the same
    disclosure on the toggle itself. Switch to **Ollama (local)** in Settings → AI to keep everything
-   on this machine instead; that requires your own Ollama server running and reachable.
+   on this machine instead; that requires your own Ollama server (version 0.34.4 or newer)
+   running and reachable.
 3. **Select a model.** In local mode, use the model picker to choose an available model. In hosted
    mode the picker shows "Model chosen automatically" — the service selects its own model
    server-side, so there is nothing to pick.
@@ -89,7 +90,7 @@ under the conversation counts the wait.
 ## Troubleshooting
 
 - **"Error: No AI provider selected."** In local mode, make sure a model is selected in the
-  dropdown. If no models appear, check that your Ollama server is running and reachable at
+  dropdown. If no models appear, check that your Ollama server (0.34.4 or newer) is running and reachable at
   `http://localhost:11434`. In hosted mode the picker shows "Model chosen automatically" instead —
   that is expected, not an error.
 - **"Error fetching models"** appears only in local mode and means Agent Synth could not connect to

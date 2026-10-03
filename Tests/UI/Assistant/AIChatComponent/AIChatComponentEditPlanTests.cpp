@@ -198,6 +198,24 @@ TEST_F(AIChatComponentTest, APatchWithTimelineOpsRendersOneCardWithOneApply) {
     EXPECT_EQ(rig.host.builds, 0) << "rendering the card previews; it builds nothing";
 }
 
+// The card's preview is sized from the text at the label's full width; a label border would wrap
+// it narrower than measured and clip the last line under the buttons.
+TEST_F(AIChatComponentTest, ThePlanPreviewIsNeverClipped) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const auto found = rig.findTitled("What this plan changes");
+    ASSERT_EQ(found.size(), 1u);
+    auto* label = dynamic_cast<juce::Label*>(found.front());
+    ASSERT_NE(label, nullptr);
+    EXPECT_EQ(label->getBorderSize().getLeftAndRight(), 0);
+    EXPECT_EQ(label->getBorderSize().getTopAndBottom(), 0);
+    juce::GlyphArrangement ga;
+    ga.addJustifiedText(label->getFont(), label->getText(), 0.0f, 0.0f, (float)label->getWidth(),
+                        juce::Justification::left);
+    EXPECT_GE(label->getHeight(), (int)std::floor(ga.getBoundingBox(0, -1, true).getHeight()));
+}
+
 TEST_F(AIChatComponentTest, ApplyRunsTheWholePlanOnceAsOneUndoStep) {
     PlanRig rig;
     rig.provider->answer = kPlan;

@@ -537,8 +537,8 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             if (scope != nullptr && scope->boundIds.count(nodeId) > 0)
                 return {false, PatchValidationError::DuplicateNodeId,
                         "Node id " + juce::String(nodeId) +
-                            " is already the instrumentId or an insert id of an addInstrumentTrack operation. Every "
-                            "id in the response must be distinct."};
+                            " is already an instrumentId, envelope id or insert id of an addInstrumentTrack op. "
+                            "Every id in the response must be distinct."};
             patchNodeIds.insert(nodeId);
 
             // Internal-only types are refused here, on the validator itself, rather than being

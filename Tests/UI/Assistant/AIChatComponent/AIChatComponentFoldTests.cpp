@@ -156,6 +156,16 @@ TEST_F(AIChatComponentTest, ScreenReaderHearsTheWholeFoldedMessage) {
     EXPECT_TRUE(title.contains("line 20"));
 }
 
+// RemoteProvider's HTTP failures already start with "Error: "; the bubble must not say it twice.
+TEST_F(AIChatComponentTest, AnErrorThatAlreadySaysErrorIsNotPrefixedTwice) {
+    const juce::String error = "Error: Remote provider at http://localhost:8787 failed the request (HTTP 502).";
+    FoldRig rig(error);
+    rig.send("hi");
+    auto* label = rig.label();
+    ASSERT_NE(label, nullptr);
+    EXPECT_EQ(label->getText(), error);
+}
+
 TEST_F(AIChatComponentTest, FailedSendNeverClipsALongErrorWithAnEllipsis) {
     const juce::String error =
         "Could not reach the Remote provider at http://localhost:11434/v1/chat/completions. "
