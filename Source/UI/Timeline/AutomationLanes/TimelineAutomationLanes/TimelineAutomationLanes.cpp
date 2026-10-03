@@ -188,6 +188,7 @@ void TimelineAutomationLanes::syncPools() {
                 const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
                 return lane != nullptr ? laneParameterName(*lane, host_) : juce::String();
             };
+            editor->onSelectionChanged = [this, id] { updateSelectedReadout(id); };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)
                     onLaneFocused(id);
@@ -236,6 +237,8 @@ void TimelineAutomationLanes::refreshPooled() {
         editor->setCurveColour(laneColourFor(*doc_, id, unassigned));
         editor->laneDocChanged();
     }
+    for (const auto& [id, header] : headers_)
+        updateSelectedReadout(id);
 }
 
 juce::Colour TimelineAutomationLanes::unassignedColour() const {

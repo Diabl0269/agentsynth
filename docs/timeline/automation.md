@@ -43,7 +43,17 @@ row (an open track with no lanes shows only that row), zoom-scaled like a lane r
   `AutomationUiFeed`, which has a single reader), shown as the parameter's own text when
   `TrackHeaderHost::getParameterValueText` can give it, else the number. It refreshes from the
   panel's existing transport poll (`updateFromTransport`), only when the beat changed, only for
-  headers on screen, and repaints only when the text changed;
+  headers on screen, and repaints only when the text changed.
+  The slot is `LaneValueReadout`, and it is the only readout: while the lane has a selected point it
+  shows that point's value (read from the doc, so a drag shows it on release) in the theme accent colour,
+  and goes back to the playhead value in muted when the selection clears (click on empty space, Escape,
+  the point deleted). With several points selected it shows the keyboard-cursor point if that one is
+  selected, else the first selected point. `TimelineAutomationLanes::updateSelectedReadout` feeds it from
+  each editor's `onSelectionChanged` and after every doc refresh; a selection that empties and refills
+  inside one doc notification (a move) changes nothing. The colour cross-fades in 130 ms with an
+  `AnimationDriver` and lands at once under Reduce Motion or off screen; nothing repaints once settled.
+  Its accessible name says which value it is ("Cutoff value at playhead" / "Cutoff selected point value"),
+  with the text as its description, and its tooltip likewise;
 - a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
