@@ -128,6 +128,18 @@ bool TimelineDoc::setTrackHeightScale(TrackId id, double scale) {
     });
 }
 
+bool TimelineDoc::resetTrackHeightScales() {
+    const bool anyDiffers =
+        std::any_of(tracks.begin(), tracks.end(), [](const Track& t) { return t.heightScale != 1.0; });
+    if (!anyDiffers)
+        return false;
+    return applyMutation([&] {
+        for (auto& track : tracks)
+            track.heightScale = 1.0;
+        return true;
+    });
+}
+
 bool TimelineDoc::setTrackMuted(TrackId id, bool muted) {
     auto* track = findTrack(id);
     if (track == nullptr)

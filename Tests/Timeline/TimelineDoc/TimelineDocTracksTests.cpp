@@ -165,6 +165,22 @@ TEST_F(TimelineDocTest, AudioTrackKindIsFullyUsable) {
     EXPECT_TRUE(doc.setTrackBinding(track, "uuid-audio-1"));
 }
 
+TEST_F(TimelineDocTest, ResetTrackHeightScalesIsOneNotificationAndNoneWhenAllDefault) {
+    const auto a = doc.addTrack(TrackKind::Midi, "A");
+    const auto b = doc.addTrack(TrackKind::Midi, "B");
+    CountingListener listener;
+    doc.addListener(&listener);
+    EXPECT_FALSE(doc.resetTrackHeightScales());
+    EXPECT_EQ(listener.calls, 0);
+    ASSERT_TRUE(doc.setTrackHeightScale(a, 2.0));
+    ASSERT_TRUE(doc.setTrackHeightScale(b, 0.6));
+    const int before = listener.calls;
+    EXPECT_TRUE(doc.resetTrackHeightScales());
+    EXPECT_EQ(listener.calls, before + 1);
+    EXPECT_EQ(doc.getTrack(a)->heightScale, 1.0);
+    EXPECT_EQ(doc.getTrack(b)->heightScale, 1.0);
+}
+
 // A track's own row height: display data saved with the project, clamped, and left out of the file
 // at the default so older projects and fixtures stay byte-identical.
 TEST_F(TimelineDocTest, SetTrackHeightScaleClampsAndNotifiesOnlyOnAChange) {

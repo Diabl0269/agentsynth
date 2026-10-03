@@ -23,7 +23,7 @@ No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes i
 - `scrollBeats(delta)`
 - `snapBeat(beat, beatsPerBar)`
 - `trackScrollY` — vertical scroll of the track rows, shared with the header column
-- `rowHeightScale` — vertical zoom, within `[0.5, 3.0]`
+- `rowHeightScale` — vertical zoom, within `[0.5, 3.0]`; zooming also resets every track's own height, so all tracks end up equal ([`tracks.md`](tracks.md#one-tracks-height))
 
 ## Snap divisions
 

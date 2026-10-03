@@ -219,7 +219,7 @@ specifically to pin it.
 
 Each track has its own `Track::heightScale` (default 1, clamped to `[0.5, 4]`), saved with the project
 (`heightScale` in the track's JSON, left out at the default) and applied on top of the shared vertical
-zoom: `TimelineClipLaneArea::getRowLayout()` makes it that track's row-height override, so the header,
+zoom (a vertical zoom itself gives every track one height, see below): `TimelineClipLaneArea::getRowLayout()` makes it that track's row-height override, so the header,
 its clips, its lanes and the scroll all follow. A fixed override (the Unassigned section row) wins.
 
 - **Drag:** an `EdgeResizeHandle` along the bottom 5 px of each header row (`UpDownResizeCursor`). The
@@ -227,6 +227,12 @@ its clips, its lanes and the scroll all follow. A fixed override (the Unassigned
   release commits `TimelineDoc::setTrackHeightScale()` once through `TrackHeaderHost::performTrackEdit`,
   so one drag is one undo step. A double-click resets the track to the default height. The seam between
   two rows belongs to the row above it.
+- **Vertical zoom:** zooming the tracks in or out (wheel, pinch or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
+  for all of them. `TimelinePanelComponent::zoomTrackRows()` first clears every track's own height with
+  `TimelineDoc::resetTrackHeightScales()` through `performTrackEdit` (one undo step that brings the mixed heights
+  back; a run of zoom ticks writes it once, as the heights are then equal), then scales the shared
+  `rowHeightScale`. It does not scale a tall or short track relative to the others, and it equalises them even
+  when the zoom is already at its limit.
 - **Keys and menu:** the rebindable Increase Track Height, Decrease Track Height and Reset Track Height
   actions (`timelineIncreaseTrackHeight` Option+=, `timelineDecreaseTrackHeight` Option+-,
   `timelineResetTrackHeight` Option+0) act on the focused header row, a step being ×1.25; the row's

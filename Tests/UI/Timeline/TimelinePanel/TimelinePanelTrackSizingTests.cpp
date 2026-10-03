@@ -126,13 +126,63 @@ TEST(TimelineTrackHeightTest, TheHeightRidesOnTopOfTheVerticalZoomAndClipsFillTh
     ASSERT_TRUE(f.doc.setTrackHeightScale(f.bass, 2.0));
     const int base = f.layout().trackRowHeight(1);
     EXPECT_EQ(f.layout().trackRowHeight(0), 2 * base);
-    f.panel.zoomTimelineVertical(1.5);
-    const int zoomed = f.layout().trackRowHeight(1);
-    ASSERT_GT(zoomed, base);
-    EXPECT_EQ(f.layout().trackRowHeight(0), (int)std::llround(zoomed * 2.0)) << "twice the zoomed row";
 
     const auto rect = synth::ui::TimelineClipLaneArea::computeClipRect(f.panel.getViewState(), f.layout(), 0, 0.0, 4.0);
     EXPECT_EQ(rect.getHeight(), f.layout().trackRowHeight(0)) << "a clip fills its own track's row";
+}
+
+TEST(TimelineTrackHeightTest, ZoomingTheTracksGivesEveryTrackTheSameHeight) {
+    for (const double factor : {1.5, 0.5}) {
+        SizingPanel f;
+        ASSERT_TRUE(f.doc.setTrackHeightScale(f.lead, 2.5));
+        ASSERT_TRUE(f.doc.setTrackHeightScale(f.pad, 0.6));
+        ASSERT_NE(f.layout().trackRowHeight(0), f.layout().trackRowHeight(1));
+
+        f.panel.zoomTimelineVertical(factor);
+
+        const int height = f.layout().trackRowHeight(0);
+        EXPECT_EQ(f.layout().trackRowHeight(1), height) << "factor " << factor;
+        EXPECT_EQ(f.layout().trackRowHeight(2), height) << "factor " << factor;
+        EXPECT_EQ(f.header(1).getHeight(), height) << "the header rows follow";
+        for (const auto id : {f.bass, f.lead, f.pad})
+            EXPECT_EQ(f.doc.getTrack(id)->heightScale, 1.0) << "no per-track height is left";
+    }
+}
+
+TEST(TimelineTrackHeightTest, TheZoomStaysEqualAtTheClampsAndWhenRepeated) {
+    using View = synth::ui::TimelineViewState;
+    SizingPanel f;
+    auto& state = f.panel.getViewState();
+    for (const double factor : {10.0, 0.01}) {
+        ASSERT_TRUE(f.doc.setTrackHeightScale(f.lead, 3.0));
+        for (int i = 0; i < 20; ++i)
+            f.panel.zoomTimelineVertical(factor);
+        EXPECT_DOUBLE_EQ(state.rowHeightScale, factor > 1.0 ? View::kMaxRowHeightScale : View::kMinRowHeightScale);
+        EXPECT_EQ(f.layout().trackRowHeight(0), f.layout().trackRowHeight(1));
+        EXPECT_EQ(f.layout().trackRowHeight(2), f.layout().trackRowHeight(1));
+    }
+
+    // Already at the clamp: a mixed height is still made equal, though the zoom itself moves nothing.
+    ASSERT_TRUE(f.doc.setTrackHeightScale(f.lead, 3.0));
+    f.panel.zoomTimelineVertical(0.5);
+    EXPECT_EQ(f.layout().trackRowHeight(1), f.layout().trackRowHeight(0));
+}
+
+TEST(TimelineTrackHeightTest, ZoomingTheTracksIsOneUndoStepThatRestoresTheMixedHeights) {
+    SizingPanel f;
+    SizingPanel::dragHandle(f.header(1).getHeightHandle(), 40); // Lead taller, its own undo step
+    const double lead = f.doc.getTrack(f.lead)->heightScale;
+    ASSERT_GT(lead, 1.0);
+    ASSERT_TRUE(f.doc.setTrackHeightScale(f.pad, 0.7)); // not recorded
+
+    f.panel.zoomTimelineVertical(0.5);
+    f.panel.zoomTimelineVertical(0.5); // heights already equal: no second write
+    EXPECT_EQ(f.doc.getTrack(f.lead)->heightScale, 1.0);
+
+    ASSERT_TRUE(f.undo.undo());
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(f.lead)->heightScale, lead) << "one undo brings the mixed heights back";
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(f.pad)->heightScale, 0.7);
+    EXPECT_EQ(f.doc.getTrack(f.bass)->heightScale, 1.0);
 }
 
 TEST(TimelineTrackHeightTest, KeysOnTheFocusedRowAndTheMenuItemsStepTheHeight) {
