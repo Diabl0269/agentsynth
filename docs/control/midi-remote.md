@@ -677,7 +677,10 @@ playback, undo, or a project load, not just a hardware turn.
   echo, and a profile with `hasOutput == false` (the default) is silent. The output device is picked
   per controller, from the Controllers list's own
   right-click (see [midi-remote-ui.md](midi-remote-ui.md#controllers-list-left)), never the dead
-  Audio-tab MIDI-output selector.
+  Audio-tab MIDI-output selector. **Exception (FRO343):** a profile with a device handshake and no
+  explicit output sends to the output its handshake resolved (the Launch Control XL 3's DAW In), so
+  its endless encoders start in sync with the parameter — see
+  [midi-remote-device-handshake.md](midi-remote-device-handshake.md#feedback-rides-the-handshakes-output-fro343).
 - **The plugin build never sends feedback.** `MainComponent` only calls
   `RemoteEngine::setFeedbackSink()` outside `HostMode::Hosted` — a hosted plugin has no MIDI output
   of its own to send through, so `RemoteEngine`'s `feedbackSink_` stays null there and the whole

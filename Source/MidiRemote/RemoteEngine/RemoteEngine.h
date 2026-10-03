@@ -177,6 +177,8 @@ public:
      *  parameter's current value, even one that hasn't changed -- for a feedback sink that just
      *  reopened (a device list change) or a controller whose LEDs need resyncing from scratch. */
     void resendFeedback();
+    /** Message thread. Contract: RemoteEngineFeedback.cpp. */
+    void setHandshakeFeedbackOutputs(std::map<juce::String, ControllerProfile::Input> outputs);
 
     /** Returns true while something *other* than this engine holds the parameter — a real mouse
      *  drag, via AutomationRecorder's gesture claim. The engine then yields exactly as a second
@@ -337,6 +339,7 @@ private:
         double lastHardwareMs = 0.0;
     };
     std::map<juce::String, FeedbackState> feedback_;
+    std::map<juce::String, ControllerProfile::Input> handshakeOutputs_; // message thread only
 
     /** 0 == disarmed. The only learn state the MIDI path reads, and it is one word. */
     std::atomic<std::uint32_t> learnToken_{0};

@@ -49,12 +49,22 @@ float inverseMapThroughRange(float paramValue, double rangeMin, double rangeMax)
     return juce::jlimit(0.0f, 1.0f, static_cast<float>(x));
 }
 
-const ControllerProfile* findProfileWithOutput(const std::vector<ControllerProfile>& profiles,
-                                               const juce::String& profileId) {
+// The device feedback for `profileId` goes to: the profile's own explicitly chosen output when it has
+// one, else the output its device handshake resolved (`handshakeOutputs`, see
+// RemoteEngine::setHandshakeFeedbackOutputs) -- so a template like the Launch Control XL 3, whose
+// DAW In port only exists once the handshake resolved it, needs no manual output pick. nullptr
+// means "no feedback for this profile".
+const ControllerProfile::Input*
+findFeedbackOutput(const std::vector<ControllerProfile>& profiles,
+                   const std::map<juce::String, ControllerProfile::Input>& handshakeOutputs,
+                   const juce::String& profileId) {
     for (const auto& profile : profiles) {
         if (profile.id != profileId)
             continue;
-        return profile.hasOutput ? &profile : nullptr;
+        if (profile.hasOutput)
+            return &profile.output;
+        const auto it = handshakeOutputs.find(profileId);
+        return it == handshakeOutputs.end() ? nullptr : &it->second;
     }
     return nullptr;
 }
@@ -99,6 +109,24 @@ juce::MidiMessage buildFeedbackMessage(const RemoteMappingSnapshot::Slot& slot, 
 
 } // namespace
 
+// Message thread. Called by the app layer whenever the set of open handshakes (or where they were
+// sent) changes. Re-announces every mapped value when the map really changed: a device that just
+// entered DAW mode (Launch Control XL 3, manual p.10: an encoder "picks up" the position the DAW
+// sends it) has an internal position unrelated to the parameter until it is told, and pick-up
+// takeover would otherwise wait for a crossing that never comes.
+void RemoteEngine::setHandshakeFeedbackOutputs(std::map<juce::String, ControllerProfile::Input> outputs) {
+    const auto same = [](const auto& a, const auto& b) {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const auto& x, const auto& y) {
+                   return x.first == y.first && x.second.identifier == y.second.identifier &&
+                          x.second.name == y.second.name;
+               });
+    };
+    if (same(outputs, handshakeOutputs_))
+        return;
+    handshakeOutputs_ = std::move(outputs);
+    resendFeedback();
+}
+
 void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
     if (feedbackSink_ == nullptr)
         return;
@@ -120,8 +148,8 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
             slot.spec.type != MessageType::pitchBend)
             continue;
 
-        const ControllerProfile* profile = findProfileWithOutput(profiles_, slot.profileId);
-        if (profile == nullptr)
+        const ControllerProfile::Input* output = findFeedbackOutput(profiles_, handshakeOutputs_, slot.profileId);
+        if (output == nullptr)
             continue;
 
         FeedbackState& fb = feedback_[slot.assignmentId];
@@ -139,10 +167,10 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
             const auto lsb =
                 juce::MidiMessage::controllerEvent(channel, slot.spec.number + kPairedLsbOffset, encoded & 0x7f);
             const bool lsbFirst = slot.encoding == Encoding::abs14LsbFirst;
-            feedbackSink_->sendFeedback(profile->output, lsbFirst ? lsb : msb);
-            feedbackSink_->sendFeedback(profile->output, lsbFirst ? msb : lsb);
+            feedbackSink_->sendFeedback(*output, lsbFirst ? lsb : msb);
+            feedbackSink_->sendFeedback(*output, lsbFirst ? msb : lsb);
         } else {
-            feedbackSink_->sendFeedback(profile->output, buildFeedbackMessage(slot, channel, encoded));
+            feedbackSink_->sendFeedback(*output, buildFeedbackMessage(slot, channel, encoded));
         }
         fb.lastSent = encoded;
     }
