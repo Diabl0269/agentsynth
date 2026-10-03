@@ -37,16 +37,17 @@ struct InstrumentTrackBuildResult {
     juce::String trackInUuid;
     juce::String instrumentUuid;
     std::vector<juce::String> insertUuids; // one per insert, in op order
+    juce::String envelopeUuid;             // the track's own ADSR; empty for a Sampler (it has none)
 };
 
 /** What the app supplies so a batch can build graph-side tracks. */
 struct TimelineOpsHost {
     virtual ~TimelineOpsHost() = default;
     /** Builds a bound instrument track like the "+ Track -> Instrument" menu, inside the batch's transaction;
-     * nullopt = nothing left behind. */
+     * nullopt = nothing left behind. `envelopeParams` (an object or void) is applied to the built ADSR. */
     virtual std::optional<InstrumentTrackBuildResult>
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                       const std::vector<InstrumentTrackInsert>& inserts) = 0;
+                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) = 0;
     /** Runs `mutation` as ONE undo step over graph, timeline and macros; returns the pushed flag. */
     virtual bool recordBatch(const std::function<void()>& mutation) = 0;
     /** The live doc an edit plan applies to inside recordBatch; null (the default) = cannot apply one. */

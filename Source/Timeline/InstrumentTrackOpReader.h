@@ -16,9 +16,10 @@ struct InstrumentTrackOpFields {
     juce::String instrument; // one of TimelineOps::kAuthorableInstrumentTypes
     bool poly = false;
     std::vector<InstrumentTrackInsert> inserts; // at most TimelineOps::kMaxInstrumentInserts
+    juce::var envelopeParams;                   // the envelope's params object, or void for the module defaults
 };
 
-/** Reads `op`'s instrument/poly/instrumentId/inserts. Empty on success, else the failure text. */
+/** Reads `op`'s instrument/poly/instrumentId/inserts/envelope. Empty on success, else the failure text. */
 juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrackOpFields& out);
 
 /** The preview's parenthetical, e.g. "Oscillator with envelope and channel strip, inserts: Filter". */

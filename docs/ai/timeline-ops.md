@@ -15,7 +15,8 @@ non-authorable in patches (`kNonAuthorableModuleTypes`).
 ```json
 { "timelineOps": [
   { "op": "addInstrumentTrack", "name": "Lead", "instrument": "Oscillator",
-    "inserts": [ { "type": "Filter", "params": { "cutoff": 800 } } ] },
+    "inserts": [ { "type": "Filter", "params": { "cutoff": 800 } } ],
+    "envelope": { "params": { "decay": 0.3, "sustain": 0 } } },
   { "op": "addTrack",   "kind": "midi", "name": "Bass" },
   { "op": "placeClips", "track": "Bass",
     "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
@@ -35,7 +36,7 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
 | Op | What it does | What it deliberately does not do |
 | --- | --- | --- |
 | `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
-| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
+| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path); `envelope` (optional object `{id?, params?}`, Oscillator/Wavetable only - see [the track's own envelope](#the-tracks-own-envelope)). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
 | `placeClips` | Places clips, and their clip-relative notes, on a MIDI track targeted by exact name or `{"index": N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
 | `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track, creating that track if there is none (it has no graph, so it cannot pick the owning track the way `MainComponent::automateParameter` does; the next project open moves the lane), then REPLACES every point in the written span (min to max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
 | `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream`, placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat`. Clip length is `ceil` of its last note's end, floored at 1 beat, reusing `MidiClipFile::importIntoTrack`. | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
@@ -76,12 +77,13 @@ on what a response actually carries, and the user's Apply click stays the write 
 (`TimelineOps.h`), which `MainComponentTimelineOpsHost` implements and `MainComponentSetup.cpp`
 installs on `AIIntegrationService::setTimelineOpsHost` beside the apply callback:
 
-- `addInstrumentTrack(name, instrumentType, poly, inserts)` — the app's own build
+- `addInstrumentTrack(name, instrumentType, poly, inserts, envelopeParams)` — the app's own build
   (`MainComponent::buildInstrumentTrackBody`, shared with the menu), skipping the default track
   preset so the preview cannot lie, inside the batch's transaction. Returns an
-  `InstrumentTrackBuildResult` — the uuids of the Track In, the instrument and each insert (in op
-  order) — which an [edit plan](#one-edit-plan)'s in-response references (an insert's `id`, the
-  op's `instrumentId`) resolve against. `TimelineOps` on its own never reads them. Returns `nullopt`
+  `InstrumentTrackBuildResult` — the uuids of the Track In, the instrument, each insert (in op
+  order) and the envelope's ADSR (`envelopeUuid`, empty for a Sampler) — which an [edit
+  plan](#one-edit-plan)'s in-response references (an insert's `id`, the op's `instrumentId`, the
+  envelope's `id`) resolve against. `TimelineOps` on its own never reads them. Returns `nullopt`
   having removed anything it created.
 - `editableTimelineDoc()` — the live doc an edit plan writes to inside `recordBatch` (default null:
   that host cannot apply a plan).
@@ -101,8 +103,35 @@ Otherwise it runs the batch inside `host->recordBatch`, and the op calls `host->
 
 Preview parts, pinned by `TimelineOpsInstrumentTrackTest.PreviewStringsArePinned`:
 `adds instrument track "Bass" (Oscillator with envelope and channel strip)`, `(Sampler with channel
-strip)` for a Sampler, a `poly ` prefix before the type when `poly` is on, and `, inserts: Filter,
-Distortion` appended when the op has inserts.
+strip)` for a Sampler, a `poly ` prefix before the type when `poly` is on, `, inserts: Filter,
+Distortion` appended when the op has inserts, and `, envelope: attack 0.005, decay 0.2, sustain 0,
+release 0.15` after that listing only the envelope params the op set (attack, decay, sustain,
+release in that order, then any other by name; no suffix when it set none).
+
+### The track's own envelope
+
+An Oscillator or Wavetable track gets an ADSR and a VCA from the build; nothing else could reach that
+ADSR, so a model could not make a pluck or pad on a new track. `envelope` is `{ "id": <int>?,
+"params": { <ADSR param id>: <raw value> }? }`, closed to those two keys:
+
+- `params` are checked by `validateNodeParams` against a real ADSR (the helper an insert's `params`
+  use), then handed to the host, which applies them with `applyUntrustedParams` to the ADSR it built
+  (`MainComponent::applyInstrumentEnvelopeParams`, the poly and the mono path alike). `poly` is
+  rejected in them: the track's own `poly` decides whether the envelope is per-voice.
+- A Sampler plays through its own one-shot envelope, so `envelope` on a Sampler is rejected with
+  `Sampler tracks have no envelope; leave "envelope" out.`
+- `id` is inert to `TimelineOps`; in an [edit plan](#one-edit-plan) it names the ADSR, so a
+  modulation can use it as `source`, a `writeLane` as `nodeId`, and `remove` can delete it. That is
+  how "plucky" (sustain 0, short decay) and "filter envelope" (the track's envelope onto a Filter
+  insert's cutoff) are expressed without a free ADSR node that nothing triggers.
+- The untrusted apply path rescales a value in `[0,1]` against a wider range
+  ([patch-preview](patch-preview.md)): an ADSR time (range 0-5 s) given as 0.2 lands as 1.0 s. Sustain
+  (range 0-1) is exact. The preview text shows the values as asked.
+
+The same field exists server-side in the hosted `project.generate` contract. The local prompt teaches
+it with the sound-design words (pluck, pad, filter envelope, acid -> parameter values) and three
+worked responses, only while the timeline tools are on; `Tools/AIEvalHarness --mode project` scores
+whether an answer has the right shape ([harness](#measuring-sound-shape)).
 
 Tests: `Tests/Timeline/TimelineOpsInstrumentTrackTests.cpp` (a fake host: field and insert checks,
 previews, one undo step, host never called for an invalid batch) and
@@ -119,10 +148,10 @@ onto an insert the same response builds, a `writeLane` on a node the patch creat
 the hosted `project.generate` capability (`ProjectEditEnvelopeSchema` server-side). Each half still
 passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds these rules on top:
 
-- **One id namespace.** Patch node ids, every `instrumentId` and every insert `id` must be distinct,
-  and each must be a non-negative integer id; a repeat rejects the whole plan with a message naming
-  the id and both uses. An `instrumentId` or insert `id` that is already the uid of a live node is
-  rejected too (a merge patch addresses live nodes by uid, so it would name two nodes).
+- **One id namespace.** Patch node ids, every `instrumentId`, every `envelope.id` and every insert
+  `id` must be distinct, and each must be a non-negative integer id; a repeat rejects the whole plan
+  with a message naming the id and both uses. An `instrumentId`, `envelope.id` or insert `id` that is
+  already the uid of a live node is rejected too (a merge patch addresses live nodes by uid, so it would name two nodes).
 - **Mode.** With a track-creating op (`addTrack`, `addInstrumentTrack`) the patch runs as a merge
   (an absent `mode` counts as `merge`); `"replace"` rejects, since it would delete the instruments
   step 1 built. Without one, `merge`/`replace` mean what they say and an absent `mode` is a replace
@@ -131,14 +160,15 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
 - **Fixed apply order**, whatever order the list is in:
   1. track-creating ops, in list order;
   2. the patch, through `validatePatch` / `applyJSONToGraph` with a `PatchIdScope`: each
-     `instrumentId` and insert `id` is **bound** to the node its build returned
-     (`InstrumentTrackBuildResult`, captured by a recording host), so connections, modulations and
-     `remove` may name it, and every node step 1 created is **hidden** from the raw-uid namespace
+     `instrumentId`, `envelope.id` and insert `id` is **bound** to the node its build returned
+     (`InstrumentTrackBuildResult`, captured by a recording host), so connections, modulations (as
+     `source` or `dest`) and `remove` may name it; an `envelope.id` on a build that returned no
+     `envelopeUuid` fails the plan, and every node step 1 created is **hidden** from the raw-uid namespace
      (the model never saw those uids; letting `57` address one would make it an edit at apply but a
      new node in the preview). A patch node reusing a bound id is `DuplicateNodeId`;
   3. every other op (`placeClips`, `writeLane`, `placeMidiClip`), in list order.
 - **`writeLane` addressing.** Exactly one of `nodeUuid` (a node that already exists) or `nodeId` (a
-  patch node id, `instrumentId` or insert `id` from this response) - both or neither rejects. A
+  patch node id, `instrumentId`, `envelope.id` or insert `id` from this response) - both or neither rejects. A
   `nodeId` is rewritten to the `nodeUuid` of the node that id denotes after step 2, on a fresh copy
   of the ops in every run, so **`TimelineOps` only ever sees uuids** (on its own it still refuses
   `nodeId` as an unknown field). `applyJSONToGraph` mints a uuid for every node it creates, which is
@@ -146,8 +176,9 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
 - **Preview mutates nothing.** The live graph is trusted-replayed into a scratch, the doc copied
   through `toVar`/`fromVar`, and the SAME `runPlan` the apply uses runs all three phases on the
   copies. Track builds go to a stand-in host: the doc track for real, and on the scratch graph only
-  unwired nodes of the instrument and insert types (insert params applied) carrying uuids, so a
-  `destParam` onto an insert and a lane's range check resolve against real processors. **The graph
+  unwired nodes of the instrument and insert types (insert params applied) carrying uuids, plus an
+  unwired ADSR carrying the envelope params for an Oscillator/Wavetable, so a `destParam` onto an
+  insert, a modulation from an envelope id and a lane's range check resolve against real processors. **The graph
   side of a track build is still not dry-run** - the stand-ins have no Track In binding, envelope,
   channel strip or macro. The preview text is the patch phase as a sentence (what a merge changes,
   from `computeDiff`; what a replace contains, from `summarizePatch`) followed by `TimelineOps`'s
@@ -305,6 +336,21 @@ round trip. See [chat component](chat-component.md#one-answer-one-card).
 Tests: `Tests/Timeline/TimelineOpsTests.cpp` — per-op apply, one-step undo, all-or-nothing with the
 failing op named by index, caps and bounds, the ungrammatical capabilities, pinned preview strings,
 the patch-grammar pin, and the service seam end to end.
+
+## Measuring sound shape
+
+Valid is not the same as right: a plan can preview fine and still leave the envelope at its default
+(sustain 1, a drone) or add an ADSR nothing triggers. `Source/AI/SoundShapeChecks.h` holds three pure
+checks over a parsed response root: `checkPluck` (some envelope with sustain <= 0.01, decay <= 0.5,
+attack <= 0.02), `checkFilterEnvelope` (a modulation whose source is an envelope - an
+`envelope.id` of the response, or an ADSR node of the response or the existing patch - and whose dest
+is a Filter, by `destParam` `cutoff` or the Filter's cutoff port) and `checkAcid` (that, with the
+`LPF24` filter type, resonance >= 60% of its range and envelope sustain <= 0.3). A param the response
+leaves out is judged at the module's own default. Tests: `Tests/AI/SoundShapeChecksTests.cpp`; the
+prompt's three worked responses are previewed and scored in
+`AIIntegrationServiceProjectEditTests.cpp`. `Tools/AIEvalHarness --mode project` sends four requests
+through `sendProjectMessage` and prints per scenario whether the plan was valid and whether its shape
+is right ([README](../../Tools/AIEvalHarness/README.md)).
 
 ## Measuring validity
 

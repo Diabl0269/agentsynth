@@ -15,7 +15,8 @@ public:
 
     std::optional<synth::InstrumentTrackBuildResult>
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                       const std::vector<synth::InstrumentTrackInsert>& inserts) override;
+                       const std::vector<synth::InstrumentTrackInsert>& inserts,
+                       const juce::var& envelopeParams) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     synth::TimelineDoc* editableTimelineDoc() override;
     void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override;

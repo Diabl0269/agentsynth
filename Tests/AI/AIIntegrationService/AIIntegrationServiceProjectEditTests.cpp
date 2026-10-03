@@ -2,8 +2,12 @@
 // how a writeLane names its node), a preview that mutates nothing, the all-or-nothing backstop,
 // and how a plan is asked for (project.generate hosted, sendPrompt locally). The apply order end to
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
+#include "AI/SoundShapeChecks.h"
 #include "AIIntegrationServiceTestFixture.h"
+#include "Modules/ADSRModule.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/FilterModule.h"
+#include "Modules/ModuleBase.h"
 #include "PlanFakeHost.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 
@@ -71,6 +75,32 @@ constexpr const char* kPlan = R"({"mode": "merge",
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001,
          "inserts": [{"type": "Filter", "id": 7002, "params": {"cutoff": 600}}]}]})";
 
+// The track's own envelope (7010) is reused as a modulation source onto the Filter insert's cutoff
+// (7011), and a lane on the envelope is addressed by its id.
+constexpr const char* kEnvelopePlan = R"({"mode": "merge", "nodes": [], "connections": [],
+    "modulations": [{"source": 7010, "dest": 7011, "destParam": "cutoff", "amount": 0.5}],
+    "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+         "inserts": [{"type": "Filter", "id": 7011}],
+         "envelope": {"id": 7010, "params": {"sustain": 0.0, "release": 2.5}}},
+        {"op": "writeLane", "nodeId": 7010, "paramId": "attack",
+         "points": [{"beat": 0, "value": 0.5}, {"beat": 4, "value": 1.5}]}]})";
+
+juce::AudioProcessorGraph::Node* firstNodeOfFactoryType(juce::AudioProcessorGraph& graph, const juce::String& type) {
+    for (auto* node : graph.getNodes())
+        if (AIStateMapper::getFactoryTypeName(node->getProcessor()) == type)
+            return node;
+    return nullptr;
+}
+
+double rawParamValue(juce::AudioProcessor* processor, const juce::String& paramId) {
+    for (auto* param : processor->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+            ranged != nullptr && ranged->paramID == paramId)
+            return ranged->convertFrom0to1(ranged->getValue());
+    return -1.0;
+}
+
 } // namespace
 
 class AIIntegrationServiceProjectEditTest : public AIIntegrationServiceTest {
@@ -127,6 +157,54 @@ TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchAndInsertIdIsR
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("Id 5 is used twice")) << result.message;
     EXPECT_TRUE(result.message.contains("insert 0 id")) << result.message;
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInstrumentIdIsRejected) {
+    const auto result = service->previewProjectEdit(parse(R"({"timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 5,
+         "envelope": {"id": 5}}]})"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.contains("Id 5 is used twice")) << result.message;
+    EXPECT_TRUE(result.message.contains("instrumentId")) << result.message;
+    EXPECT_TRUE(result.message.contains("envelope id")) << result.message;
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossEnvelopeAndInsertIdIsRejected) {
+    const auto result = service->previewProjectEdit(parse(R"({"timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+         "inserts": [{"type": "Filter", "id": 6}], "envelope": {"id": 6}}]})"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.contains("Id 6 is used twice")) << result.message;
+    EXPECT_TRUE(result.message.contains("insert 0 id")) << result.message;
+    EXPECT_TRUE(result.message.contains("envelope id")) << result.message;
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, DuplicateIdAcrossPatchNodeAndEnvelopeIsRejected) {
+    const auto result = service->previewProjectEdit(parse(R"({"mode": "merge",
+        "nodes": [{"id": 7, "type": "LFO"}], "connections": [],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+                         "envelope": {"id": 7}}]})"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.contains("Id 7 is used twice")) << result.message;
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdThatIsALiveUidIsRejected) {
+    const auto live = graph->addNode(std::make_unique<OscillatorModule>())->nodeID.uid;
+    const auto result = service->previewProjectEdit(
+        parse("{\"timelineOps\": [{\"op\": \"addInstrumentTrack\", \"name\": \"Bass\", \"instrument\": "
+              "\"Oscillator\", \"envelope\": {\"id\": " +
+              juce::String((int)live) + "}}]}"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.contains("\"envelope id\" " + juce::String((int)live))) << result.message;
+    EXPECT_TRUE(result.message.contains("already the id of a node in the current patch")) << result.message;
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeOnASamplerTrackIsRejectedWithItsId) {
+    const auto result = service->previewProjectEdit(parse(R"({"timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Keys", "instrument": "Sampler", "envelope": {"id": 9}}]})"));
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.startsWith("timelineOps[0] (addInstrumentTrack): Sampler tracks have no envelope"))
+        << result.message;
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, ReservedIdThatIsALiveUidIsRejected) {
@@ -236,6 +314,100 @@ TEST_F(AIIntegrationServiceProjectEditTest, ApplyWithoutAHostStillAppliesAPatchO
     EXPECT_EQ(docDump(), docBefore) << "no timeline write";
 }
 
+// -- the track's own envelope -----------------------------------------------------------------------
+
+// The preview resolves the envelope id (a stand-in ADSR with the op's params) without building through
+// the host and mutates nothing; the apply binds the same id to the host-built ADSR, so the modulation
+// lands on the Filter insert's cutoff and the lane on the envelope.
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdBindsAModulationSourceAndALaneNode) {
+    const auto graphBefore = graphDump();
+    const auto docBefore = docDump();
+    const auto preview = service->previewProjectEdit(parse(kEnvelopePlan));
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.previewText.contains("envelope: sustain 0, release 2.5")) << preview.previewText;
+    EXPECT_EQ(host->builds, 0);
+    EXPECT_EQ(graphDump(), graphBefore);
+    EXPECT_EQ(docDump(), docBefore);
+
+    const auto applied = service->applyProjectEdit(parse(kEnvelopePlan));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(host->builds, 1);
+
+    auto* adsr = firstNodeOfFactoryType(*graph, "ADSR");
+    auto* filter = firstNodeOfFactoryType(*graph, "Filter");
+    ASSERT_NE(adsr, nullptr);
+    ASSERT_NE(filter, nullptr);
+    EXPECT_NEAR(rawParamValue(adsr->getProcessor(), "sustain"), 0.0, 1.0e-4) << "the envelope params were applied";
+    EXPECT_NEAR(rawParamValue(adsr->getProcessor(), "release"), 2.5, 1.0e-3);
+
+    const int cutoffChannel = dynamic_cast<ModuleBase*>(filter->getProcessor())->modulationChannelForParam("cutoff");
+    ASSERT_GE(cutoffChannel, 0);
+    bool modulated = false;
+    for (auto* node : graph->getNodes())
+        modulated = modulated || (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr &&
+                                  graph->isConnected({{adsr->nodeID, 0}, {node->nodeID, 0}}) &&
+                                  graph->isConnected({{node->nodeID, 0}, {filter->nodeID, cutoffChannel}}));
+    EXPECT_TRUE(modulated) << "envelope -> attenuverter -> Filter cutoff CV";
+
+    EXPECT_NE(doc.getLaneForParam(AIStateMapper::ensureNodeUuid(adsr), "attack"), nullptr)
+        << "the lane named the envelope by its id";
+}
+
+// "remove" names the envelope by its id too (the bound node is gone afterwards).
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdCanBeRemovedByThePatch) {
+    const auto applied = service->applyProjectEdit(parse(R"({"mode": "merge", "nodes": [], "connections": [],
+        "remove": [7010],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+                         "envelope": {"id": 7010}}]})"));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(firstNodeOfFactoryType(*graph, "ADSR"), nullptr);
+    EXPECT_NE(firstNodeOfFactoryType(*graph, "Oscillator"), nullptr);
+}
+
+// A host whose build reports no envelope (impossible for the real one on an Oscillator/Wavetable)
+// leaves an envelope id naming nothing: the plan fails and the graph and doc are restored.
+TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdOnABuildWithoutAnEnvelopeFailsClearly) {
+    graph->addNode(std::make_unique<OscillatorModule>());
+    const auto graphBefore = graphDump();
+    const auto docBefore = docDump();
+    host->withoutEnvelope = true;
+
+    const auto applied = service->applyProjectEdit(parse(kEnvelopePlan));
+    EXPECT_FALSE(applied.ok);
+    EXPECT_TRUE(applied.message.contains("has no envelope, so the id names nothing")) << applied.message;
+    EXPECT_EQ(graphDump(), graphBefore);
+    EXPECT_EQ(docDump(), docBefore);
+}
+
+// The three worked responses in the local prompt's sound-design section are real plans: each previews
+// ok against the project it describes and is scored as what its words ask for.
+TEST_F(AIIntegrationServiceProjectEditTest, SoundDesignExamplesInThePromptPreviewAndScore) {
+    service->setTimelineToolsEnabled(true);
+    graph->addNode(std::make_unique<FilterModule>(), juce::AudioProcessorGraph::NodeID(1003));
+    graph->addNode(std::make_unique<ADSRModule>("ADSR"), juce::AudioProcessorGraph::NodeID(1004));
+    const juce::var existing = AIStateMapper::graphToJSON(*graph);
+
+    const juce::String prompt = service->getHistory().front().content;
+    std::vector<juce::var> examples;
+    for (int from = prompt.indexOf("```json\n"); from >= 0; from = prompt.indexOf(from + 1, "```json\n")) {
+        const int start = from + 8;
+        const juce::var parsed = juce::JSON::parse(prompt.substring(start, prompt.indexOf(start, "```")));
+        if (parsed.isObject() &&
+            (juce::JSON::toString(parsed).contains("Pluck Lead") ||
+             juce::JSON::toString(parsed).contains("Acid Bass") || juce::JSON::toString(parsed).contains("1004")))
+            examples.push_back(parsed);
+    }
+    ASSERT_EQ(examples.size(), 3u) << "pluck, filter envelope and acid examples";
+
+    for (const auto& example : examples) {
+        const auto preview = service->previewProjectEdit(example);
+        EXPECT_TRUE(preview.ok) << preview.message << "\n" << juce::JSON::toString(example);
+    }
+    EXPECT_TRUE(soundshape::checkPluck(examples[0]).pass) << soundshape::checkPluck(examples[0]).reason;
+    EXPECT_TRUE(soundshape::checkFilterEnvelope(examples[1], existing).pass);
+    EXPECT_TRUE(soundshape::checkAcid(examples[2]).pass) << soundshape::checkAcid(examples[2]).reason;
+}
+
 // -- asking for a plan ---------------------------------------------------------------------------
 
 TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTheArrangeFieldsAndCurrentPatch) {
@@ -300,6 +472,7 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsA
     EXPECT_EQ(opProperties->getProperty("nodeId").getProperty("type", {}).toString(), "integer");
     EXPECT_EQ(opProperties->getProperty("instrumentId").getProperty("type", {}).toString(), "integer");
     EXPECT_EQ(opProperties->getProperty("inserts").getProperty("type", {}).toString(), "array");
+    EXPECT_EQ(opProperties->getProperty("envelope").getProperty("type", {}).toString(), "object");
     const juce::var modulationItem = properties->getProperty("modulations").getProperty("items", {});
     EXPECT_EQ(
         modulationItem.getProperty("properties", {}).getProperty("destParam", {}).getProperty("type", {}).toString(),

@@ -57,8 +57,11 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
         ASSERT_NE(opProperties, nullptr);
 
         EXPECT_TRUE(opProperties->getProperty("op").getProperty("enum", {}).getArray()->contains("addInstrumentTrack"));
-        const std::pair<const char*, const char*> expected[] = {
-            {"instrument", "string"}, {"poly", "boolean"}, {"instrumentId", "integer"}, {"inserts", "array"}};
+        const std::pair<const char*, const char*> expected[] = {{"instrument", "string"},
+                                                                {"poly", "boolean"},
+                                                                {"instrumentId", "integer"},
+                                                                {"inserts", "array"},
+                                                                {"envelope", "object"}};
         for (const auto& [field, type] : expected) {
             auto* def = opProperties->getProperty(field).getDynamicObject();
             ASSERT_NE(def, nullptr) << field;
@@ -66,5 +69,12 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
             EXPECT_FALSE(def->hasProperty("anyOf")) << field;
             EXPECT_FALSE(def->hasProperty("oneOf")) << field;
         }
+        // The envelope is a closed pair of concrete types: its id binds in the plan, its params are open.
+        const juce::var envelope = opProperties->getProperty("envelope");
+        EXPECT_EQ(envelope.getProperty("properties", {}).getProperty("id", {}).getProperty("type", {}).toString(),
+                  "integer");
+        const juce::var envelopeParams = envelope.getProperty("properties", {}).getProperty("params", {});
+        EXPECT_EQ(envelopeParams.getProperty("type", {}).toString(), "object");
+        EXPECT_TRUE(static_cast<bool>(envelopeParams.getProperty("additionalProperties", {})));
     }
 }

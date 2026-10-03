@@ -391,11 +391,13 @@ private:
     std::optional<synth::InstrumentTrackBuildResult>
     buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
                              const juce::String& trackName, bool poly,
-                             const std::vector<synth::InstrumentTrackInsert>& inserts);
+                             const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams);
 
     using InstrumentChainBuild = synth::maincomponent::InstrumentChainBuild;
     bool createTrackInForInstrumentChain(const juce::String& trackName, InstrumentChainBuild& build);
     bool buildInstrumentInserts(const std::vector<synth::InstrumentTrackInsert>& inserts, InstrumentChainBuild& build);
+    /** Applies the op's envelope params to the ADSR the envelope stage built; a no-op without both. */
+    void applyInstrumentEnvelopeParams(const juce::var& envelopeParams, const InstrumentChainBuild& build);
     bool adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument, int index,
                                      bool poly, InstrumentChainBuild& build);
     void buildInstrumentEnvelopeChain(InstrumentChainBuild& build);

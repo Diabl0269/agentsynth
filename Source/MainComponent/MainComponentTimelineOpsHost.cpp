@@ -16,12 +16,13 @@
 // nothing but the Track In this creates -- "Track In" itself stays non-authorable in patches.
 std::optional<synth::InstrumentTrackBuildResult>
 MainComponentTimelineOpsHost::addInstrumentTrack(const juce::String& name, const juce::String& instrumentType,
-                                                 bool poly, const std::vector<synth::InstrumentTrackInsert>& inserts) {
+                                                 bool poly, const std::vector<synth::InstrumentTrackInsert>& inserts,
+                                                 const juce::var& envelopeParams) {
     auto instrument = synth::AIStateMapper::createModule(instrumentType);
     if (instrument == nullptr)
         return std::nullopt; // nothing created yet, so nothing to remove
     auto staged = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(instrument));
-    return owner_.buildInstrumentTrackBody(staged, name, poly, inserts);
+    return owner_.buildInstrumentTrackBody(staged, name, poly, inserts, envelopeParams);
 }
 
 // ONE undo step over graph, timeline and macros -- the transaction addInstrumentTrack's own menu

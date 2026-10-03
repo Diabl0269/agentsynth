@@ -23,7 +23,7 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
-| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. `project` sends four sound-design requests through the edit-plan path and scores their SHAPE - see Scoring sound shape below. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
@@ -51,6 +51,33 @@ corrupted choice value shows up there as `"Invalid value for choice parameter �
 # same comparison against the timelineOps-extended schema
 ./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --mode timeline --json eval-results/baseline-timeline.json
 ```
+
+## Scoring sound shape (`--mode project`)
+
+`validatePatch` and the plan validator say a response is *legal*; they cannot say it is a pluck.
+`--mode project` sends four requests through `AIIntegrationService::sendProjectMessage` (the path the
+chat takes: the local model with the timeline prompt and the widened schema, or the hosted
+`project.generate` capability with `--provider remote`), previews each answer with
+`previewProjectEdit`, and scores it with `Source/AI/SoundShapeChecks.h`:
+
+| Scenario | Prompt | Starting project | Shape check |
+| :--- | :--- | :--- | :--- |
+| `plucky` | make a plucky lead track | empty | some envelope with sustain 0 (<= 0.01), decay <= 0.5 s, attack <= 0.02 s |
+| `filter-env-new` | add a bass track with a filter envelope | empty | a modulation from an envelope (the new track's `envelope.id`) onto a Filter's cutoff |
+| `filter-env-existing` | add a filter envelope | Poly MIDI, Oscillator, Filter, VCA, an ADSR modulating the VCA, Audio Output | the same, from the patch's existing ADSR |
+| `acid` | make an acid bassline track | empty | that, plus the 24 dB low-pass (`LPF24`), resonance >= 60% of its range, envelope sustain <= 0.3 |
+
+```bash
+./build/Tools/AIEvalHarness/AIEvalHarness --mode project --model gpt-oss:20b --runs 3 --json out.json
+./build/Tools/AIEvalHarness/AIEvalHarness --mode project --provider remote --model gpt-oss:20b
+```
+
+Each line reports `valid`/`INVALID` (the plan previews) and `shape-ok`/`shape-wrong` with the reason
+for the shape verdict; the summary counts both over the responses received. The two are independent:
+a plan that previews fine but leaves the envelope at its default (a drone) is `valid` and
+`shape-wrong`, which is exactly the failure this mode is for. The scenario table and the runner are in
+`Tools/AIEvalHarness/ProjectMode.h`; the checks are unit-tested without a model in
+`Tests/AI/SoundShapeChecksTests.cpp`. Local models need Ollama 0.34.4 or newer.
 
 ## Scoring a model through the service (`--provider remote`)
 
