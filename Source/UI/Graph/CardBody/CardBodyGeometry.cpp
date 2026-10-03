@@ -69,6 +69,10 @@ int layoutToggleRun(const std::vector<juce::Component*>& toggles, int y, const B
     return y;
 }
 
+int gridCellWidth(int columns, const BodyGeometry& g) {
+    return g.contentW / (g.isDoubleWidth() ? columns * 2 : columns);
+}
+
 int layoutKnobRun(const std::vector<CaptionedWidget>& knobs, int columns, int y, const BodyGeometry& g, bool apply) {
     return layoutGridRun(knobs, columns, kKnobHeight, 0, y, g, apply);
 }
@@ -76,7 +80,7 @@ int layoutKnobRun(const std::vector<CaptionedWidget>& knobs, int columns, int y,
 int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int cellHeight, int widgetWidth, int y,
                   const BodyGeometry& g, bool apply) {
     const int gridColumns = g.isDoubleWidth() ? columns * 2 : columns;
-    const int cellWidth = g.contentW / gridColumns;
+    const int cellWidth = gridCellWidth(columns, g);
     const int width = widgetWidth > 0 ? std::min(widgetWidth, cellWidth) : cellWidth;
     const int count = (int)cells.size();
     for (int i = 0; i < count; ++i) {

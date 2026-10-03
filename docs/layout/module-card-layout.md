@@ -124,6 +124,8 @@ ParamItem
   label    : string | null
   span     : 1..6               // grid cells taken
   when     : Condition | null   // dim or swap, never resize (see below)
+  x, y     : 0..4000 | null     // free position of the item's cell, both or neither (see Rendering)
+  min, max : number | null      // narrows a knob or fader, in the parameter's own units; both or neither, min < max
 ViewItem
   view     : scope | response | spectrum | envelope | lfoShape | lfoCurve | waveform
            | wavetable | eqCurve | threshold | gainReduction
@@ -160,8 +162,8 @@ reader keeps reading v1 (a v1 layout is one untitled grid section plus the v1 "a
 applied once on read and written back as v2). Hosted-plugin cards keep **writing** v1 unless a layout
 uses a v2-only feature, so a project opened in an older build keeps its plugin cards. The writer picks
 the version from `usesV2Features()`: one untitled grid section at the default width, holding only plain
-parameters with the Auto, Knob, Toggle or Choice widget, and no `hidden`, view, condition, span, `node`
-or `basedOn`, writes v1. Choice
+parameters with the Auto, Knob, Toggle or Choice widget, and no `hidden`, view, condition, span, position,
+range, `node` or `basedOn`, writes v1. Choice
 conditions match value strings, not indices, so appending a choice value never breaks a layout.
 
 **Section titles.** A code default's titles are plain English strings in code (the app has no string
@@ -215,6 +217,12 @@ envelope, LFO curve and threshold components plug in unchanged.
   widget and where. Widgets are looked up by `paramId` (`CardBody::findWidget`, and a modulation
   target resolves its knob through its bound parameter), not by display-name component ID; the
   component ID stays the display name for the bespoke cards and tests that read it.
+- **Free sections.** A section with an item that has `x`/`y` is placed by position, not in runs:
+  each cell (caption and widget) sits at that offset from the content edge and the section's top,
+  kept inside the content width, and the section is as tall as its lowest cell. Items without a
+  position flow after the positioned ones, left to right in rows below them. `min`/`max` narrow the
+  widget only (the parameter keeps its full range), applied after the slider's attachment so the range
+  survives. Both ride the same measure-and-apply function, so the measured card size matches the card.
 - **Hidden parameters stay whole.** They keep their value, stay in the patch `params` map, stay
   automatable, MIDI-learnable and model-authorable. A cable dragged over the folded More row opens
   it, so a hidden parameter can still take a new cable.

@@ -21,6 +21,8 @@ struct CardBodyItem {
     juce::Component* label = nullptr;            ///< The caption above a knob or choice; null otherwise.
     std::optional<juce::String> caption;         ///< The layout's label override; nullopt = the parameter's name.
     std::optional<CardCondition> when;           ///< The layout item's condition; nullopt = none.
+    std::optional<juce::Point<int>> at;          ///< The layout item's free position; nullopt = flows.
+    std::optional<juce::Range<double>> range;    ///< The layout item's narrowed range; nullopt = the full one.
     int section = -1;                            ///< Index into CardBodyPlan::sections; -1 = More or unplaced.
     int swapGroup = -1;                          ///< Index into CardBodyPlan::swapGroups; -1 = none.
     bool shown = true;                           ///< A `show` condition's current result.
@@ -45,9 +47,10 @@ struct CardBodyPlan {
         std::optional<juce::String> title; ///< Drawn as a header row above the items; nullopt = none.
         juce::Component* header = nullptr; ///< The header row; null until built, and without a title.
         std::optional<CardCondition> visibleWhen;
-        bool visible = true; ///< visibleWhen's current result.
-        bool footer = false; ///< The footer row (CardSection::kFooterId), always laid out last.
-        int tabGroup = -1;   ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
+        bool visible = true;   ///< visibleWhen's current result.
+        bool footer = false;   ///< The footer row (CardSection::kFooterId), always laid out last.
+        bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
+        int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
 
         /** True when the section draws a header row: a non-empty title over at least one item. A tab's
          *  title is its tab, never a header row. */

@@ -131,7 +131,7 @@ bool CardLayout::usesV2Features() const {
         return true;
     for (const auto& item : section.items) {
         const auto* param = std::get_if<CardParamItem>(&item);
-        if (param == nullptr || param->node || param->when || param->span != 1)
+        if (param == nullptr || param->node || param->when || param->span != 1 || param->at || param->range)
             return true;
         if (param->widget != CardWidget::Auto && param->widget != CardWidget::Knob &&
             param->widget != CardWidget::Toggle && param->widget != CardWidget::Choice)

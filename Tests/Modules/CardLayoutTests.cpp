@@ -387,6 +387,8 @@ CardLayout richLayout() {
     detune.span = 2;
     detune.indexHint = 4;
     detune.when = dim;
+    detune.at = juce::Point<int>(100, 40);
+    detune.range = juce::Range<double>(-12.5, 12.5);
     CardParamItem member = paramItem("cutoff", CardWidget::FaderV);
     member.node = "uuid-1";
 
@@ -549,6 +551,30 @@ TEST(CardLayoutV2Test, UsesV2FeaturesNamesEachFeature) {
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).when = CardCondition{"m", {"x"}, {}}; }).usesV2Features());
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::FaderH; }).usesV2Features());
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::KnobLarge; }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).at = juce::Point<int>(0, 0); }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).range = juce::Range<double>(0.0, 1.0); }).usesV2Features());
+}
+
+TEST(CardLayoutV2Test, PositionAndRangeAreWrittenOnlyWhenSetAndReadBothOrNeither) {
+    const auto item = [](const juce::String& body) {
+        return CardLayout::fromVar(
+            juce::JSON::parse(R"({"version":2,"sections":[{"id":"s","items":[{"paramId":"a",)" + body + "}]}]}"));
+    };
+    const auto ok = item(R"("x":10,"y":20,"min":-1.5,"max":3)");
+    ASSERT_EQ(ok.status, CardLayout::ParseStatus::Ok);
+    const auto& read = std::get<CardParamItem>(ok.layout.sections[0].items[0]);
+    EXPECT_EQ(read.at, juce::Point<int>(10, 20));
+    EXPECT_EQ(read.range, juce::Range<double>(-1.5, 3.0));
+
+    const auto plain = item(R"("span":1)");
+    ASSERT_EQ(plain.status, CardLayout::ParseStatus::Ok);
+    const auto text = juce::JSON::toString(plain.layout.toVar());
+    EXPECT_FALSE(text.contains("\"x\"") || text.contains("\"min\""));
+
+    for (const char* bad :
+         {R"("x":10)", R"("y":10)", R"("x":4001,"y":0)", R"("x":-1,"y":0)", R"("x":1.5,"y":0)", R"("x":"a","y":0)",
+          R"("min":1)", R"("max":1)", R"("min":2,"max":2)", R"("min":3,"max":2)", R"("min":"a","max":2)"})
+        EXPECT_EQ(item(bad).status, CardLayout::ParseStatus::Malformed) << bad;
 }
 
 TEST(CardLayoutTest, EveryUntitledSectionHasADisplayNameFromItsId) {

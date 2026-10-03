@@ -52,6 +52,8 @@ struct BodyGeometry {
 /** A widget and the caption above it; either may be null (measure only). */
 using CaptionedWidget = std::pair<juce::Component*, juce::Component*>;
 
+/** The width of one knob/fader grid cell: the content width over `columns` (doubled on a double-width card). */
+int gridCellWidth(int columns, const BodyGeometry& g);
 /** Combos with their labels: one per row, or two per row on a double-width card. */
 int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const BodyGeometry& g, bool apply);
 /** Toggles, one full-width row each. */
