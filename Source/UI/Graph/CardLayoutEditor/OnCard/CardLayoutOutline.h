@@ -15,8 +15,9 @@ class CardLayoutOutline final : public juce::Button {
 public:
     /** The component reaches this far past the control's cell, room for the lifted shadow. */
     static constexpr int kPad = 6;
-    /** The outline is drawn this far inside the cell, so abutting cells' outlines never touch. */
-    static constexpr int kInset = 3;
+    /** The outline is drawn this far inside the cell: abutting cells' outlines never touch, and it stays clear of the
+     * caption text. */
+    static constexpr int kInset = 1;
     static constexpr int kGripSize = 10;
 
     CardLayoutOutline(juce::String paramId, juce::String caption);
