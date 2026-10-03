@@ -169,6 +169,50 @@ TEST(TimelineFollowPlayheadTest, AttachingUnderAnAncestorThatAlreadyHasAThemedLo
     parent.setLookAndFeel(nullptr);
 }
 
+namespace {
+// True when the snapshot holds an opaque-ish pixel within `tol` of `target` per channel.
+bool snapshotHasColour(const juce::Image& img, juce::Colour target, int tol = 12) {
+    for (int y = 0; y < img.getHeight(); ++y)
+        for (int x = 0; x < img.getWidth(); ++x) {
+            const auto p = img.getPixelAt(x, y);
+            if (p.getAlpha() >= 200 && std::abs((int)p.getRed() - (int)target.getRed()) <= tol &&
+                std::abs((int)p.getGreen() - (int)target.getGreen()) <= tol &&
+                std::abs((int)p.getBlue() - (int)target.getBlue()) <= tol)
+                return true;
+        }
+    return false;
+}
+} // namespace
+
+// The glyph itself carries the on/off state: it paints in the muted ink at rest and in the accent
+// while following, and in both states it actually draws pixels.
+TEST(TimelineFollowPlayheadTest, IconPaintsMutedWhenOffAndAccentWhenOn) {
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    const auto theme = synth::theme::makeObsidian();
+    lf.applyTheme(theme);
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true);
+    panel.setSize(1200, 320);
+
+    auto& button = panel.getFollowPlayheadButtonForTest();
+    ASSERT_FALSE(button.getLocalBounds().isEmpty());
+
+    panel.setFollowPlayheadEnabled(false);
+    const auto off = button.createComponentSnapshot(button.getLocalBounds(), false, 2.0f);
+    panel.setFollowPlayheadEnabled(true);
+    const auto on = button.createComponentSnapshot(button.getLocalBounds(), false, 2.0f);
+
+#ifdef HAS_FONT_ASSETS
+    EXPECT_TRUE(snapshotHasColour(off, theme.colors.textMuted)) << "off: glyph in the muted ink";
+    EXPECT_FALSE(snapshotHasColour(off, theme.colors.accent)) << "off: no accent anywhere";
+    EXPECT_TRUE(snapshotHasColour(on, theme.colors.accent)) << "on: glyph in the accent";
+    EXPECT_FALSE(snapshotHasColour(on, theme.colors.textMuted)) << "on: the muted ink is gone";
+#endif
+
+    panel.setLookAndFeel(nullptr);
+}
+
 // The three explicit checks the bug report asked for: real (non-empty, in-panel, non-overlapping)
 // bounds at a realistic launch size, and visibility all the way up to the panel. Arithmetic-only
 // coverage — TimelinePanelComponentTest.PanelRegionsTile-style — for resized()'s transport-bar

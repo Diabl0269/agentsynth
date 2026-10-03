@@ -211,12 +211,12 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ToolRange, c.textPrimary);
 
     // Track-header kind glyphs (MIDI/Audio/Automation) are quiet chrome, same convention as the
-    // library category headers above. FollowPlayhead is a toolbar-style toggle, so it follows
-    // the toolbar action set's textPrimary base instead.
+    // library category headers above. FollowPlayhead is a toggle whose glyph colour carries its
+    // state, so it shares their muted rest tint; the timeline panel clones hover and on variants.
     iconLibrary_.setTintColour(Icon::TrackMidi, c.textMuted);
     iconLibrary_.setTintColour(Icon::TrackAudio, c.textMuted);
     iconLibrary_.setTintColour(Icon::TrackAutomation, c.textMuted);
-    iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textMuted);
 
     // DetachablePanelHost's icon-only detach/dock-back control -- muted base, same
     // convention as the toolbar action set above (DetachablePanelHost clones its own hover variant

@@ -92,8 +92,17 @@ void TimelinePanelComponent::applyToolStripTheme() {
     // LnF in a headless build; getIcon returns nullptr when the asset library isn't linked in), so
     // the button stays imageless but fully functional either way.
     if (lf != nullptr) {
-        if (auto icon = lf->getIcon(synth::theme::Icon::FollowPlayhead))
-            followPlayheadButton_.setImages(icon.get());
+        // Unlike the edit tools, this glyph's colour carries the on/off state (the button has no
+        // label to fall back on): muted at rest, full ink on hover, accent while following.
+        if (auto base = lf->getIcon(synth::theme::Icon::FollowPlayhead)) {
+            const auto& colours = lf->getTheme().colors;
+            auto hover = base->createCopy();
+            hover->replaceColour(colours.textMuted, colours.textPrimary);
+            auto on = base->createCopy();
+            on->replaceColour(colours.textMuted, colours.accent);
+            followPlayheadButton_.setImages(base.get(), hover.get(), hover.get(), nullptr, on.get(), on.get(),
+                                            on.get());
+        }
         followPlayheadButton_.setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
     }
 }
