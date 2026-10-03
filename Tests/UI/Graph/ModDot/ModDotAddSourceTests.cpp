@@ -64,42 +64,6 @@ struct AddFixture : Fixture {
 
 } // namespace
 
-// TEMPORARY Windows crash bisect (PR #703): prints a checkpoint before each step, flushed, so the CI log shows
-// the last step that ran before an access violation. Removed once the crash is found.
-#include <cstdio>
-#define WIN_CKPT(n) (std::fprintf(stderr, "WINCKPT %s\n", n), std::fflush(stderr))
-TEST_F(ModuleComponentTest, AAAModDotWindowsCrashBisect) {
-    NoMotion motion;
-    WIN_CKPT("fixture");
-    Fixture f;
-    WIN_CKPT("clickDot plain");
-    auto* p = f.clickDot();
-    WIN_CKPT(p != nullptr ? "popover ok" : "popover null");
-    f.held.reset();
-    WIN_CKPT("held reset");
-    auto& graph = f.engine.getGraph();
-    addNode(graph, std::make_unique<LFOModule>());
-    WIN_CKPT("lfo2 added");
-    addNode(graph, std::make_unique<ADSRModule>());
-    WIN_CKPT("adsr added");
-    f.refresh();
-    WIN_CKPT("refresh 1");
-    addNode(graph, std::make_unique<MacroControlModule>());
-    WIN_CKPT("macros added");
-    f.refresh();
-    WIN_CKPT("refresh 2");
-    auto* panel = f.clickDot();
-    WIN_CKPT(panel != nullptr ? "popover 2 ok" : "popover 2 null");
-    if (panel == nullptr)
-        return;
-    clickNow(panel->sourcesPage().addButton());
-    WIN_CKPT("add page open");
-    panel->addSourcePage().visibleGroupNames();
-    WIN_CKPT("groups read");
-    f.held.reset();
-    WIN_CKPT("done");
-}
-
 TEST_F(ModuleComponentTest, AddSourceOffersTheGroupsWithSourcesAndGreysWhatIsAlreadyOnTheKnob) {
     NoMotion motion;
     AddFixture f;

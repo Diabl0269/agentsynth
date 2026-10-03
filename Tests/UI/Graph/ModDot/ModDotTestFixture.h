@@ -98,8 +98,11 @@ struct Fixture {
         gainKnob = vcaCard != nullptr ? findKnob(*vcaCard, "Gain") : nullptr;
     }
 
+    // Cards go before the engine frees their processors: an ADSR card's parameter attachment unhooks itself
+    // from its parameter on destruction (a use-after-free on Windows and under ASAN otherwise).
     ~Fixture() {
         held.reset();
+        editor.reset();
         engine.shutdown();
     }
 
