@@ -207,11 +207,17 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // availableTracks) plus "currentPatch": the same stripped graph JSON the patch path sends the model,
 // as an object, omitted when the graph has no nodes (project.generate then says "Current patch is
 // empty."). productName is the provider's to add, as for every capability.
+static constexpr int kProjectGeneratePromptVersion = 2;
+
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
     const juce::var patch = buildStrippedPatchJson();
     if (auto* nodes = patch.getProperty("nodes", {}).getArray(); nodes != nullptr && !nodes->isEmpty())
         body.getDynamicObject()->setProperty("currentPatch", patch);
+    // Pins the server prompt that teaches addInstrumentTrack's "envelope" and "instrumentParams".
+    // A build that does not understand those fields sends no version and keeps getting version 1,
+    // so a server deploy can never hand an older app a field it would reject.
+    body.getDynamicObject()->setProperty("promptVersion", kProjectGeneratePromptVersion);
     return body;
 }
 
