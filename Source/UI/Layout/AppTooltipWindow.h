@@ -8,7 +8,7 @@
 // AppTooltipWindow.h (docs/layout/animation.md#tooltips): the ONE tooltip window every app window uses (the main
 // window and each detached panel window own one). A juce::TooltipWindow that
 //   * fades in when a tip appears (160 ms, easeOutCubic) and out when it goes (110 ms, easeInCubic), the numbers every
-//     popup shares (popup_motion in PopupMotion.h); under Reduce Motion it lands and leaves at once;
+//     popup shares (popup_motion in PopupMotion.h); under Reduce Motion it is the popups' plain 80 ms fade;
 //   * hides ordinary (info) tooltips when Preferences > "Show info tooltips" is off, but still shows helper tips
 //     (HelperTooltip.h).
 // The window is a child of its app window, so it cannot use PopupMotion::attach (desktop windows only): it drives its

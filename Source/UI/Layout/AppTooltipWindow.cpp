@@ -29,7 +29,8 @@ public:
         parent.addAndMakeVisible(this);
         toFront(false);
         driver_.start(
-            updater_, pm::durationMs(pm::Phase::Out, false), [](float t) { return pm::ease(pm::Phase::Out, t); },
+            updater_, pm::durationMs(pm::Phase::Out, prefersReducedMotion()),
+            [](float t) { return pm::ease(pm::Phase::Out, t); },
             [this](float e) { setAlpha(startAlpha_ * pm::frameAt(pm::Phase::Out, e, {0, 0}, true).alpha); },
             [this] { finish(); });
         leaving_ = true;
@@ -100,9 +101,7 @@ bool AppTooltipWindow::isFading() const noexcept { return fadingIn_ || hasLeavin
 
 bool AppTooltipWindow::hasLeavingGhostForTest() const noexcept { return ghost_ != nullptr && ghost_->isLeaving(); }
 
-bool AppTooltipWindow::shouldAnimate() const {
-    return !prefersReducedMotion() && PopupMotion::isEnabled() && (animateOffScreen_ || isShowing());
-}
+bool AppTooltipWindow::shouldAnimate() const { return PopupMotion::isEnabled() && (animateOffScreen_ || isShowing()); }
 
 void AppTooltipWindow::visibilityChanged() {
     if (destroying_)
@@ -129,7 +128,8 @@ void AppTooltipWindow::beginFadeIn() {
     fadingIn_ = true;
     setAlpha(0.0f); // frame 0 before the first VBlank can show the tip whole
     driver_.start(
-        updater_, pm::durationMs(pm::Phase::In, false), [](float t) { return pm::ease(pm::Phase::In, t); },
+        updater_, pm::durationMs(pm::Phase::In, prefersReducedMotion()),
+        [](float t) { return pm::ease(pm::Phase::In, t); },
         [this](float e) { setAlpha(pm::frameAt(pm::Phase::In, e, {0, 0}, true).alpha); },
         [this] {
             setAlpha(1.0f);

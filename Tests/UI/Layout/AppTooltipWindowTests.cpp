@@ -1,8 +1,9 @@
-// AppTooltipWindowTests.cpp (docs/layout/animation.md#tooltips): the one tooltip window fades a tip in and out, lands
-// at once under Reduce Motion, and hides info tooltips (but never helper tips) when "Show info tooltips" is off. The
-// window is a child of a plain parent component (no native window), so no VBlank frame ever arrives: the fade is driven
-// by hand through the test seams, the way a VBlank would.
+// AppTooltipWindowTests.cpp (docs/layout/animation.md#tooltips): the one tooltip window fades a tip in and out (the
+// popups' plain 80 ms fade under Reduce Motion), and hides info tooltips (but never helper tips) when "Show info
+// tooltips" is off. The window is a child of a plain parent component (no native window), so no VBlank frame ever
+// arrives: the fade is driven by hand through the test seams, the way a VBlank would.
 #include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 
@@ -79,15 +80,18 @@ TEST(AppTooltipWindowTest, ATipThatGoesFadesOutOnAGhostThenIsGone) {
     EXPECT_EQ(h.childCount(), before);
 }
 
-TEST(AppTooltipWindowTest, ReduceMotionShowsTheTipWholeAtOnce) {
+TEST(AppTooltipWindowTest, ReduceMotionKeepsThePopupsPlainShortFade) {
     ReducedMotionGuard motion(true);
     Hosted h;
     h.window->displayTip({100, 100}, "Send level: drag to change");
-    EXPECT_EQ(h.window->getAlpha(), 1.0f);
-    EXPECT_FALSE(h.window->isFading());
+    EXPECT_LT(h.window->getAlpha(), 1.0f) << "Reduce Motion still fades, like every popup (80 ms, no slide)";
+    EXPECT_TRUE(h.window->isFading());
+    EXPECT_EQ(synth::ui::popup_motion::durationMs(synth::ui::popup_motion::Phase::In, true), 80.0);
 
+    h.window->applyFadeInFrameForTest(1.0f);
+    h.window->setLastTipForTest("Send level: drag to change");
     h.window->hideTip();
-    EXPECT_FALSE(h.window->hasLeavingGhostForTest()) << "and it leaves at once too";
+    EXPECT_TRUE(h.window->hasLeavingGhostForTest()) << "and it fades out too";
 }
 
 TEST(AppTooltipWindowTest, InfoTooltipsAreSuppressedWhenThePreferenceIsOffButHelperTipsStillShow) {

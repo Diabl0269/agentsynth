@@ -356,8 +356,8 @@ One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWi
 window: `MainComponent` owns one and each `DetachedPanelWindow` owns one. It is a `juce::TooltipWindow` that fades
 a tip in over 160 ms (`easeOutCubic`) and out over 110 ms (`easeInCubic`), the numbers from `popup_motion`, with no
 slide. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling that paints the same text.
-Under Reduce Motion (`prefersReducedMotion()`) a tip appears and disappears at once, with no fade, and a window that
-is not on screen never animates. Never create a bare `juce::TooltipWindow`.
+Under Reduce Motion (`prefersReducedMotion()`) a tip uses the popups' plain 80 ms fade in and out (no slide was ever
+there), and a window that is not on screen never animates. Never create a bare `juce::TooltipWindow`.
 
 **Info and helper tips.** Preferences > Panels & Windows > "Show info tooltips" (user setting `showInfoTooltips`,
 default on) hides the *info* tooltips, the ones that explain a control. A *helper* tip tells you something the screen
