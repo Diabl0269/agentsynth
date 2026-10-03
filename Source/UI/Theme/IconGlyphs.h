@@ -21,7 +21,9 @@ enum class Glyph {
     Delete,
     MenuDots,
     EyeOpen,
-    EyeHidden
+    EyeHidden,
+    SidePane,    // a window with a divider after its left strip: a side pane that is closed
+    SidePaneOpen // the same window with the left strip filled: a side pane that is open
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.

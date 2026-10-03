@@ -4,6 +4,17 @@ namespace synth::theme {
 
 // Concern: combo boxes and popup menus.
 
+// A 2-segment "v" stroked in `colour`; the combo box's own chevron and the routing pane's chip combos share it.
+void paintComboChevron(juce::Graphics& g, juce::Point<float> centre, juce::Colour colour) {
+    constexpr float kArrowSize = 5.0f; // half-width
+    juce::Path chevron;
+    chevron.startNewSubPath(centre.x - kArrowSize, centre.y - kArrowSize * 0.4f);
+    chevron.lineTo(centre.x, centre.y + kArrowSize * 0.6f);
+    chevron.lineTo(centre.x + kArrowSize, centre.y - kArrowSize * 0.4f);
+    g.setColour(colour);
+    g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
                                   int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
@@ -25,17 +36,10 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
     g.setColour(box.hasKeyboardFocus(false) ? c.accent : box.findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 
-    // Chevron: a 2-segment "v" path stroked in the muted arrow colour (dimmed when disabled).
-    const float cx = (float)width - 14.0f;
-    const float cy = (float)height * 0.5f;
-    juce::Path chevron;
-    chevron.startNewSubPath(cx - kComboArrowSize, cy - kComboArrowSize * 0.4f);
-    chevron.lineTo(cx, cy + kComboArrowSize * 0.6f);
-    chevron.lineTo(cx + kComboArrowSize, cy - kComboArrowSize * 0.4f);
-
+    // Chevron: dimmed when disabled.
     auto arrowCol = box.findColour(juce::ComboBox::arrowColourId);
-    g.setColour(enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
-    g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    paintComboChevron(g, {(float)width - 14.0f, (float)height * 0.5f},
+                      enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
 
     // Waveform icon: if the selected item carries a Drawable icon, render it inside the closed
     // combo box to the left of the text label (which positionComboBoxText positions at x=8).

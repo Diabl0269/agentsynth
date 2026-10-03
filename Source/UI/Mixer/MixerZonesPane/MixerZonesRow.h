@@ -7,8 +7,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // MixerZonesRow.h (docs/mixer/panel.md#side-pane-zones-and-visibility): the small components the Zones pane's list is
-// built from -- a channel row (swatch, name, eye toggle), a group header, the eye toggle itself and the "Show all"
-// link.
+// built from -- a channel row (swatch, name, eye toggle), a group header and the eye toggle itself.
 namespace synth::ui {
 
 /** The kinds of channel the list tells apart (the Tracks / Buses chips filter on them). */
@@ -24,9 +23,8 @@ struct MixerZoneChannel {
     bool hidden = false;
 };
 
-inline const synth::theme::Theme* zonesThemeOf(const juce::Component& component) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel());
-    return laf != nullptr ? &laf->getTheme() : nullptr;
+inline const synth::theme::Theme& zonesThemeOf(const juce::Component& component) {
+    return synth::theme::themeOf(component);
 }
 
 /** An eye that is open while the channel is shown and struck through while it is hidden. A plain click
@@ -39,13 +37,6 @@ public:
     std::function<void()> onSoloShow;
 
     void clicked(const juce::ModifierKeys& mods) override;
-};
-
-/** "Show all", drawn as an underlined accent link. */
-class MixerZonesLink : public juce::Button {
-public:
-    explicit MixerZonesLink(const juce::String& text);
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
 };
 
 /** One channel in the list. Presses anywhere except the eye belong to the pane's row drag. */

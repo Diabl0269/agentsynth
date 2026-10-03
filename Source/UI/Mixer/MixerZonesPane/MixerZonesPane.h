@@ -4,6 +4,7 @@
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/Layout/SidePane/SidePane.h"
+#include "UI/Layout/TextLinkButton.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
 #include <array>
 #include <map>
@@ -121,7 +122,7 @@ private:
     std::array<juce::TextButton, 3> chips_;
     Chip chip_ = Chip::All;
     juce::Label hiddenLabel_;
-    MixerZonesLink showAll_{"Show all"};
+    TextLinkButton showAll_{"Show all", juce::Justification::centredRight};
     juce::Viewport viewport_;
     ListContent listContent_;
 

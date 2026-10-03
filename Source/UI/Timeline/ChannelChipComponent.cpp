@@ -13,33 +13,15 @@ namespace {
 
 constexpr int kMeterWidth = 26;
 constexpr int kMeterGap = 4;
-constexpr float kCornerRadius = 2.0f;
 
-// Themed colours with literal fallbacks -- the headless test path installs no AppLookAndFeel, the
-// same pattern TimelineTrackHeaderComponent's own coloursFor() uses.
-struct ChipColours {
-    juce::Colour surface{juce::Colour(0xff1B1F26)};
-    juce::Colour border{juce::Colour(0xff2A2F38)};
-    juce::Colour text{juce::Colour(0xffEAEEF3)};
-    // The meter's colour now steps through MeterColourStops' four zones (same scale/zones
-    // as MixerMeter) instead of a single fixed accent -- default-constructed from
-    // synth::theme::Colors{}'s own field defaults, which already equal Obsidian's values.
-    synth::ui::MeterColourStops meterStops = synth::ui::MeterColourStops::fromTheme(synth::theme::Colors{});
-};
-
-ChipColours coloursFor(const juce::Component& component) {
-    ChipColours result;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        result.surface = c.surface;
-        result.border = c.border;
-        result.text = c.textPrimary;
-        // The SAME cached effective stops MixerMeter reads (the user's pinned override, or
-        // the theme's own tokens) -- not a fresh fromTheme() rebuild, so this chip and the mixer's
-        // own meters can never show two different colour sets for the same channel.
-        result.meterStops = lf->getMeterColourStops();
-    }
-    return result;
+// The meter's colour steps through MeterColourStops' four zones (same scale/zones as MixerMeter): the
+// SAME cached effective stops MixerMeter reads (the user's pinned override, or the theme's own tokens),
+// not a fresh fromTheme() rebuild, so this chip and the mixer's own meters can never show two different
+// colour sets for the same channel. Outside any AppLookAndFeel (a headless test) it follows a default Theme.
+synth::ui::MeterColourStops meterStopsFor(const juce::Component& component) {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel()))
+        return lf->getMeterColourStops();
+    return synth::ui::MeterColourStops::fromTheme(synth::theme::Colors{});
 }
 
 } // namespace
@@ -77,20 +59,19 @@ bool ChannelChipComponent::setMeterLevel(float peakLinear) {
     return true;
 }
 
-void ChannelChipComponent::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto colours = coloursFor(*this);
-    auto bounds = getLocalBounds().toFloat();
-
-    g.setColour(highlighted ? colours.surface.brighter(0.15f) : colours.surface);
-    g.fillRoundedRectangle(bounds, kCornerRadius);
-    g.setColour(colours.border);
-    g.drawRoundedRectangle(bounds.reduced(0.5f), kCornerRadius, 1.0f);
+void ChannelChipComponent::paintButton(juce::Graphics& g, bool highlighted, bool down) {
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto& colours = theme.colors;
+    synth::theme::ChipState state;
+    state.hovered = highlighted;
+    state.down = down;
+    synth::theme::paintChip(g, getLocalBounds().toFloat(), theme, state);
 
     auto content = getLocalBounds().reduced(4, 1);
     auto meterArea = content.removeFromRight(kMeterWidth);
     content.removeFromRight(kMeterGap);
 
-    g.setColour(colours.text);
+    g.setColour(colours.textPrimary);
     g.setFont(juce::Font(juce::FontOptions((float)std::min(11, std::max(8, content.getHeight() - 2)))));
     g.drawText(channelName_, content, juce::Justification::centredLeft, true);
 
@@ -108,7 +89,7 @@ void ChannelChipComponent::paintButton(juce::Graphics& g, bool highlighted, bool
         juce::Path clipPath;
         clipPath.addRoundedRectangle(meterBounds, 1.0f);
         g.reduceClipRegion(clipPath);
-        colours.meterStops.forEachBand(
+        meterStopsFor(*this).forEachBand(
             synth::ui::kMeterMinDb, meterDb_, [&](float bandFromDb, float bandToDb, juce::Colour colour) {
                 const float xFrom =
                     meterBounds.getX() + meterBounds.getWidth() * synth::ui::meterDbToFraction(bandFromDb);

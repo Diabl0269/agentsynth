@@ -8,7 +8,8 @@
 
 namespace synth::ui {
 class IconButton;
-}
+class ColourSwatchButton;
+} // namespace synth::ui
 
 namespace synth::theme {
 
@@ -20,6 +21,40 @@ void paintIconButton(juce::Graphics& g, const synth::ui::IconButton& button, con
 // The colour the glyph is painted in: disabled, lit (the on-colour or accent), hot, then rest.
 juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
                                    bool down);
+
+// The theme `comp` paints with: its AppLookAndFeel's, or a default-constructed Theme when it sits
+// outside any (a bare test fixture). The shared controls below never fall back to colour literals.
+const Theme& themeOf(const juce::Component& comp);
+
+// What a chip is painted for. `raised` fills with surfaceHi instead of surface (a chip on a surface-
+// coloured strip would vanish); `active` is the lit state (toolActive); `warning` outlines in the
+// warning colour.
+struct ChipState {
+    bool hovered = false;
+    bool down = false;
+    bool warning = false;
+    bool active = false;
+    bool raised = false;
+};
+
+// The one chip: fill (brighter on hover and press), 1 px border, theme corner radius, and no content.
+// Returns the fill it painted so a caller can pick a label colour that contrasts with it.
+juce::Colour paintChip(juce::Graphics& g, juce::Rectangle<float> bounds, const Theme& theme, const ChipState& state);
+
+// The "v" of a closed combo, stroked in `colour` around `centre`; shared by combo boxes and chip combos.
+void paintComboChevron(juce::Graphics& g, juce::Point<float> centre, juce::Colour colour);
+
+// A piano key drawn as a toggle (pianoKeyBlack/pianoKeyWhite base, accent when on, wash on hover/press).
+void paintKeyToggle(juce::Graphics& g, juce::ToggleButton& button, const Theme& theme, bool isBlackKey,
+                    bool highlighted, bool down);
+
+// A filled colour swatch with a border, hover ring and focus ring.
+void paintColourSwatch(juce::Graphics& g, const synth::ui::ColourSwatchButton& button, const Theme& theme,
+                       bool highlighted, bool down);
+
+// A text link: accent text, brighter and underlined on hover, dim when disabled.
+void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, juce::Justification justification,
+                   bool highlighted);
 
 // Single source of all theming-aware drawing. Holds a COPY of the active Theme (cheap,
 // ~few hundred bytes) updated via applyTheme() on every theme change. Owned by Main.cpp /
@@ -126,6 +161,14 @@ public:
     // The one icon button (Source/UI/Layout/IconButton.h): not a JUCE override, called by IconButton::paintButton.
     void drawIconButton(juce::Graphics&, synth::ui::IconButton&, bool shouldDrawButtonAsHighlighted,
                         bool shouldDrawButtonAsDown);
+    // The shared chip, piano-key toggle, colour swatch and text link (AppLookAndFeelSharedControls.cpp):
+    // not JUCE overrides, called by the controls that own the content.
+    juce::Colour drawChip(juce::Graphics&, juce::Rectangle<float> bounds, const ChipState&);
+    void drawKeyToggle(juce::Graphics&, juce::ToggleButton&, bool isBlackKey, bool shouldDrawButtonAsHighlighted,
+                       bool shouldDrawButtonAsDown);
+    void drawColourSwatch(juce::Graphics&, synth::ui::ColourSwatchButton&, bool shouldDrawButtonAsHighlighted,
+                          bool shouldDrawButtonAsDown);
+    void drawTextLink(juce::Graphics&, juce::Button&, juce::Justification, bool shouldDrawButtonAsHighlighted);
 
     // Resolve a font's family name to an embedded typeface (cached). Falls back to the JUCE
     // default sans/mono if the family is unavailable (tests / missing BinaryData — section 8.4).
@@ -236,7 +279,6 @@ private:
     // Themed-widget geometry constants (section 5).
     static constexpr int kScrollbarWidth = 6;       // slim scrollbar (was JUCE default 14)
     static constexpr int kTabBarDepth = 30;         // tab bar strip height
-    static constexpr float kComboArrowSize = 5.0f;  // combo chevron half-width
     static constexpr int kComboTextLeftInset = 8;   // closed combo: text label's left edge
     static constexpr int kComboTextRightInset = 22; // closed combo: room kept for the chevron
 

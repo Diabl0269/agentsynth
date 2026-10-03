@@ -8,6 +8,7 @@
 // widgets (GlyphButton, PortColourSwatch, DragHandle) and PortRowComponent itself.
 
 #include "MacroPortConfigDialog.h"
+#include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
@@ -100,35 +101,14 @@ public:
 
 // The row's kind-tinted left-edge swatch — left-click opens a synth::ui::ColourPickerPopup (the
 // same favourites-shelf picker TimelineTrackHeaderComponent's track colour swatch and
-// AppearanceSettingsTab's note swatches already use), right-click resets to the kind-tint default.
+// AppearanceSettingsTab's note swatches already use), right-click resets to the kind-tint default. The shared
+// ColourSwatchButton paints and handles the right-click; this adds the row's arrow-key navigation.
 // `colour` is what actually PAINTS (custom colour, or the kind tint fallback); PortRowComponent is
 // the one that decides which of those it currently is.
-class PortColourSwatch : public juce::Button {
+class PortColourSwatch : public ColourSwatchButton {
 public:
     PortColourSwatch()
-        : juce::Button("portColourSwatch") {}
-
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
-        auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-        g.setColour(colour);
-        g.fillRoundedRectangle(bounds, 3.0f);
-        const auto& c = liveThemeColours(*this);
-        g.setColour(c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
-        g.drawRoundedRectangle(bounds, 3.0f, highlighted || down ? 1.4f : 1.0f);
-        // Same focus-state gap as GlyphButton (see its own comment): the accent ring goes around the chip.
-        (forceFocusRingForTest ? paintFocusRingAlways : paintFocusRing)(g, getLocalBounds().toFloat(), *this, 3.0f);
-    }
-
-    // Mirrors ColourPickerPopup::FavouriteSwatchButton's own override exactly (see its comment):
-    // a right-click must reset to default, not ALSO fire onClick the way a plain Button would.
-    void mouseDown(const juce::MouseEvent& e) override {
-        if (e.mods.isPopupMenu()) {
-            if (onRightClick)
-                onRightClick();
-            return;
-        }
-        juce::Button::mouseDown(e);
-    }
+        : ColourSwatchButton("portColourSwatch") {}
 
     // Cmd+Up/Cmd+Down is checked first and fires onReorderChord (keyboard-accessible reordering); a
     // bare arrow only moves focus via onVerticalArrow — see GlyphButton's identical override for
@@ -146,14 +126,11 @@ public:
                 return true;
             }
         }
-        return juce::Button::keyPressed(key);
+        return ColourSwatchButton::keyPressed(key);
     }
 
-    juce::Colour colour{juce::Colours::grey};
-    std::function<void()> onRightClick;
     std::function<void(bool moveDown)> onVerticalArrow;
     std::function<void(bool moveDown)> onReorderChord; // Cmd+Up/Cmd+Down
-    bool forceFocusRingForTest = false;                // test seam
 };
 
 // The drag-to-reorder handle — a small grip icon to the left of the name editor. Deliberately a

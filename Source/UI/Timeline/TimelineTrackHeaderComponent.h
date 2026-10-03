@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
@@ -611,18 +612,16 @@ public:
     std::unique_ptr<synth::ui::MidiDestinationPicker> createMidiDestinationPickerForTest();
 
 private:
-    // A plain filled swatch: a juce::TextButton would route through the LookAndFeel, which the
-    // headless test path doesn't install, and this needs no text at all.
-    class SwatchButton : public juce::Button {
+    // The row's colour swatch: the shared ColourSwatchButton plus the row's press-drag reorder.
+    class SwatchButton : public synth::ui::ColourSwatchButton {
     public:
         explicit SwatchButton(TimelineTrackHeaderComponent& owner)
-            : juce::Button("trackColourSwatch")
+            : synth::ui::ColourSwatchButton("trackColourSwatch")
             , owner_(owner) {}
-        void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override;
         // A press-drag on the swatch reorders the row like a press anywhere else; a plain click
         // still opens the colour picker.
         void mouseDown(const juce::MouseEvent& e) override {
-            juce::Button::mouseDown(e);
+            synth::ui::ColourSwatchButton::mouseDown(e);
             if (!e.mods.isPopupMenu())
                 owner_.mouseDown(e);
         }
@@ -634,7 +633,6 @@ private:
             juce::Button::mouseUp(e);
             owner_.mouseUp(e); // may destroy the row, and this swatch with it: nothing may follow
         }
-        juce::Colour colour{juce::Colours::grey};
 
     private:
         TimelineTrackHeaderComponent& owner_;

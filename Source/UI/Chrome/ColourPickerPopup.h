@@ -1,8 +1,8 @@
 #pragma once
 
 #include "UI/Layout/CalloutReveal.h"
+#include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
-#include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <functional>
@@ -302,7 +302,8 @@ private:
         favouriteButtons_.clear();
         for (int i = 0; i < (int)favourites_.size(); ++i) {
             const juce::Colour colour = favourites_[(size_t)i];
-            auto button = std::make_unique<FavouriteSwatchButton>(colour);
+            auto button = std::make_unique<synth::ui::ColourSwatchButton>("favouriteSwatch");
+            button->colour = colour;
             button->setTitle("Favourite colour " + colour.toDisplayString(false));
             button->setTooltip("Use this colour (right-click to remove it from favourites)");
             button->onClick = [this, colour] {
@@ -333,41 +334,9 @@ private:
         }
     }
 
-    // A plain colour swatch that is a real Button (so onClick / hit-testing / focus work exactly
-    // like every other control here) but reports a right-click through its own callback instead
-    // of also firing onClick for it — a juce::ShapeButton/TextButton would trigger onClick on
-    // either mouse button, which would fire preview AND remove from a single right-click.
-    class FavouriteSwatchButton : public juce::Button {
-    public:
-        explicit FavouriteSwatchButton(juce::Colour c)
-            : juce::Button("favouriteSwatch")
-            , colour(c) {}
-
-        void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
-            auto bounds = getLocalBounds().toFloat().reduced(1.0f);
-            g.setColour(down ? colour.darker(0.15f) : (highlighted ? colour.brighter(0.2f) : colour));
-            g.fillRoundedRectangle(bounds, 3.0f);
-            g.setColour(juce::Colours::black.withAlpha(0.4f));
-            g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
-            synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
-        }
-
-        void mouseDown(const juce::MouseEvent& e) override {
-            if (e.mods.isPopupMenu()) {
-                if (onRightClick)
-                    onRightClick();
-                return; // do not forward to Button::mouseDown — a right-click is not a click
-            }
-            juce::Button::mouseDown(e);
-        }
-
-        std::function<void()> onRightClick;
-        juce::Colour colour;
-    };
-
     juce::PropertiesFile* props_;
     std::vector<juce::Colour> favourites_;
-    std::vector<std::unique_ptr<FavouriteSwatchButton>> favouriteButtons_;
+    std::vector<std::unique_ptr<synth::ui::ColourSwatchButton>> favouriteButtons_;
     std::function<void(juce::Colour)> onPreview_;
     std::function<void(juce::Colour)> onCommit_;
     juce::Colour lastColour_;

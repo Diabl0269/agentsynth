@@ -63,6 +63,7 @@ MixerZonesPane::MixerZonesPane() {
     hiddenLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));
     hiddenLabel_.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(showAll_);
+    showAll_.setWantsKeyboardFocus(false);
     showAll_.setDescription("Shows every hidden channel in the mixer again");
     showAll_.setTooltip("Show every hidden channel in the mixer again");
     showAll_.onClick = [this] {
@@ -245,8 +246,8 @@ void MixerZonesPane::resized() {
 }
 
 void MixerZonesPane::paint(juce::Graphics& g) {
-    const auto* theme = zonesThemeOf(*this);
-    g.fillAll(theme != nullptr ? theme->colors.bg0 : juce::Colour(0xff0B0D10));
+    const auto& theme = zonesThemeOf(*this);
+    g.fillAll(theme.colors.bg0);
 }
 
 MixerZonesRow* MixerZonesPane::getRowForTest(int index) const {
