@@ -34,9 +34,17 @@ std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoic
                                                          const juce::String& parameterName,
                                                          std::function<void(const AddModulatorPick&)> onPick);
 
+/** The rows of a modulator row's "Change source..." picker: every LFO but the current source `currentSourceUuid`,
+ *  and no "New LFO" (this re-points a routing at an existing LFO). `choices.lfos[n]` is item id n + 2 as above. */
+AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
+                                               const juce::String& currentSourceUuid,
+                                               const juce::String& parameterName);
+
 namespace test_hooks {
 /** When set, a lane header hands its picker here instead of opening a call-out. */
 std::function<void(std::unique_ptr<ModMatrixPicker>)>& addModulatorPickerHookForTest();
+/** Same for a modulator row's "Change source..." picker. */
+std::function<void(std::unique_ptr<ModMatrixPicker>)>& changeSourcePickerHookForTest();
 } // namespace test_hooks
 
 } // namespace synth::ui

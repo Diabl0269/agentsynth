@@ -42,6 +42,17 @@ juce::String destinationName(juce::AudioProcessorGraph& graph, const synth::ui::
                 return title + " " + t.name;
     return title;
 }
+// The routing a row stands for, looked up again in the live graph by its Attenuverter's uuid (a copy: the engine's
+// list is rebuilt by the edits that follow).
+std::optional<AudioEngine::ModulationRouting> findAttenuverterRouting(AudioEngine& engine,
+                                                                      const synth::ui::ModulatorInfo& modulator) {
+    auto& graph = engine.getGraph();
+    for (const auto& r : engine.getModulationRoutings())
+        if (r.kind == AudioEngine::RoutingKind::AttenuverterChain &&
+            uuidOf(graph.getNodeForId(r.attenuverterNodeID)) == modulator.attenuverterUuid)
+            return r;
+    return std::nullopt;
+}
 } // namespace
 
 // Every routing whose destination is the lane's node and whose destination channel is the parameter's
@@ -134,6 +145,48 @@ bool MainComponent::connectModulator(const juce::String& lfoUuid, const juce::St
     auto* target = findNodeByUuid(nodeUuid);
     return lfo != nullptr && target != nullptr &&
            graphEditor.connectExistingLfoModulator(lfo->nodeID, target->nodeID, paramId);
+}
+
+// Only an LFO routed through an Attenuverter can be re-pointed: that Attenuverter is what the amount lane is keyed by,
+// and a hand-patched direct cable has neither.
+bool MainComponent::canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) {
+    return modulator.isLfo && modulator.attenuverterUuid.isNotEmpty() &&
+           findNodeByUuid(modulator.targetUuid) != nullptr && findNodeByUuid(modulator.sourceUuid) != nullptr;
+}
+
+// "Change source...": the new LFO is cabled in at the old routing's depth, the amount lane (keyed by the routing's
+// hidden Attenuverter) is re-keyed to the new routing's Attenuverter with its points untouched, and the old routing
+// is cut -- all in ONE graph + timeline undo step, with no confirm dialog. The old LFO stays on the canvas, whatever
+// else it drives (or nothing): nothing a person built is deleted by a re-point.
+bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) {
+    auto* target = findNodeByUuid(modulator.targetUuid);
+    auto* lfo = findNodeByUuid(lfoUuid);
+    const auto old = findAttenuverterRouting(audioEngine, modulator);
+    if (!canChangeModulatorSource(modulator) || target == nullptr || lfo == nullptr || !old.has_value() ||
+        lfoUuid == modulator.sourceUuid || dynamic_cast<LFOModule*>(lfo->getProcessor()) == nullptr)
+        return false;
+    auto& graph = audioEngine.getGraph();
+    float depth = 0.5f;
+    if (auto* oldAtten = graph.getNodeForId(old->attenuverterNodeID))
+        if (auto* amount = findParameterByID(oldAtten->getProcessor(), synth::ui::kAmountParamId))
+            depth = amount->convertFrom0to1(amount->getValue());
+    const auto* amountLane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid);
+    const bool hasLane = amountLane != nullptr;
+    const auto laneId = hasLane ? amountLane->id : synth::LaneId{};
+    const auto oldRouting = *old;
+    bool changed = false;
+    undoManager.recordGraphTimelineAndMacroChange(graph, timelineDoc, graphEditor.getMacros(), [&, this] {
+        const auto created = graphEditor.connectModulationSource(lfo->nodeID, /*sourceChannel=*/0, target->nodeID,
+                                                                 modulator.targetChannel, depth,
+                                                                 /*recordUndo=*/false);
+        if (created.uid == 0)
+            return;
+        if (hasLane)
+            timelineDoc.rebindLane(laneId, uuidOf(graph.getNodeForId(created)));
+        graphEditor.removeModulator(oldRouting, /*removeLonelySource=*/false, /*recordUndo=*/false);
+        changed = true;
+    });
+    return changed;
 }
 
 // The row names its routing by uuids (node ids do not survive an undo restore), so it is looked up

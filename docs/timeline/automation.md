@@ -186,7 +186,7 @@ A right-click opens the lane's own menu with its top-left at the pointer
 (`contextMenuOptionsAtPoint`, see [layout](../layout/layout.md)) on: the lane header (the value readout forwards its
 clicks to it), the lane's curve editor wherever it is not a handle or the curve itself (those keep Delete point and
 Hold/Linear), a [modulator row](#modulators) and a modulator's band (its curve editor included), where it opens the
-row's menu (Show on canvas, Remove modulator). The editor asks its owner through `onLaneMenuRequested`, the band through
+row's menu (Show on canvas, Change source..., Remove modulator). The editor asks its owner through `onLaneMenuRequested`, the band through
 `onMenuRequested`; neither builds a menu itself. Shift+F10 (`openContextMenu`) opens the same menu from a focused header,
 editor, modulator row or band (`KeyboardContextMenuProvider`). A direct-cable modulator band is decoration that takes no
 clicks, so a right-click there still falls through to the clip lanes; its row in the header column has the menu.
@@ -210,9 +210,7 @@ no parameter is free.
   below its source on the same track with the same points (rescaled like above) and record mode, in one undo step.
   Dismissing the picker changes nothing, so there is never a transient lane without a parameter.
 
-`TrackHeaderHost::canChangeModulatorSource` / `changeModulatorSource` are the seam for a "Change source..." item on a
-modulator row; the default host says no and the app does not implement it yet (it needs the remove, the connect and the
-amount lane's re-key in one graph + timeline undo step).
+A modulator row's **Change source...** (see [Modulators](#modulators)) is the same idea for the source of a routing.
 
 ## Modulators
 
@@ -271,7 +269,7 @@ rate; sync and amount):
   curve with dots for custom; the glyphs are `Glyph::ShapeSine` .. `ShapeCustom`). The picture is display only, named
   and tooltipped "Sine shape" and so on, and cross-fades over 160 ms when the shape changes (at once while the row
   is not showing). The row has no "..." button: its menu, **Show on canvas** (select the card and centre the canvas on
-  it) and **Remove modulator**, opens on a right-click anywhere on the row (the picture included), Shift+F10 and
+  it), **Change source...** and **Remove modulator**, opens on a right-click anywhere on the row (the picture included), Shift+F10 and
   Return on the focused row. A **Sync** toggle sits on the third line;
 - the **shape** (Sine/Triangle/Sawtooth/Square/S&H/Custom) and the **rate** (a 1/1..1/32 combo while synced,
   a Hz bar while free-running);
@@ -297,6 +295,18 @@ between them: `MainComponent::getModulators` follows each end of the routing thr
 after the port and however many macros deep. **Remove modulator** follows the cable the same way and removes
 every port the removal leaves with nothing on one side, even when the "delete ports on last cable" preference
 is off (the person asked for the removal), all in the one undo step.
+
+**Change source...** (`TrackHeaderHost::canChangeModulatorSource` / `changeModulatorSource`, implemented by
+`MainComponent`) points the routing at a different LFO and keeps the drawn [amount lane](#amount-lane). The host says
+yes only for an LFO routed through an Attenuverter (the amount lane is keyed by that Attenuverter; a hand-patched
+direct cable has neither). The item opens the "Add modulator..." picker without "New LFO" and without the current
+source (an LFO that already moves the parameter is listed greyed out); with no other LFO it is disabled and says
+"(no other LFO)". On a pick, ONE `recordGraphTimelineAndMacroChange` step cables the new LFO in at the old routing's
+depth (`GraphEditor::connectModulationSource` with `recordUndo=false`, macro ports crossed as for "Add modulator..."),
+re-keys the amount lane to the new routing's Attenuverter with `TimelineDoc::rebindLane` (same lane id, track and
+points), and cuts the old routing (`removeModulator(..., removeLonelySource=false, recordUndo=false)`). There is no
+confirm dialog because nothing is deleted: the old LFO stays on the canvas, even when this was its last cable.
+Cmd+Z restores the old source and the lane's old key together.
 
 **Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
 whole, or a direct cable's edges), sweeps the macro ports the cable leaves empty, and removes the LFO too when
@@ -778,7 +788,7 @@ or its editor: the first stroke creating the lane in one undo step, the knob dra
 double-click, editing and erasing the last point, the bipolar picture, names and the accessible value) and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with
-sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; the
+sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices, the real re-key and the one undo step); the
 applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
 partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from

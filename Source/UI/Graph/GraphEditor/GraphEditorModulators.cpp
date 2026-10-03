@@ -141,7 +141,7 @@ bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, con
 // channel a Mod Matrix source entry names. Returns the new routing's hidden attenuverter; invalid (nothing changed)
 // when a node or the jack is missing, the source is the target, or it already drives that jack from that channel.
 NodeID GraphEditor::connectModulationSource(NodeID sourceId, int sourceChannel, NodeID targetId, int destChannel,
-                                            float depth) {
+                                            float depth, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
     auto* src = moduleOf(graph, sourceId);
     auto* dst = moduleOf(graph, targetId);
@@ -171,7 +171,7 @@ NodeID GraphEditor::connectModulationSource(NodeID sourceId, int sourceChannel, 
         macroController_.applyProgrammaticConnectionChange(autoCreateMacroPortsOnDragEnabled, mutation);
         updateComponents();
     };
-    if (undoManager != nullptr)
+    if (recordUndo && undoManager != nullptr)
         undoManager->recordGraphAndMacroChange(graph, macros, step);
     else
         step();

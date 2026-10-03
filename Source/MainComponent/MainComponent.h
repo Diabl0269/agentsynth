@@ -253,6 +253,10 @@ public:
                                            const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
         return addAutomationLane(track, parameter);
     }
+    /** The row's "Change source..." host call (TrackHeaderHost is a private base). */
+    bool changeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) {
+        return changeModulatorSource(modulator, lfoUuid);
+    }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
     void setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect);
@@ -480,6 +484,8 @@ private:
                                                                      const juce::String& paramId) override;
     bool connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
                           const juce::String& paramId) override;
+    bool canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) override;
+    bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) override;
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
     /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
