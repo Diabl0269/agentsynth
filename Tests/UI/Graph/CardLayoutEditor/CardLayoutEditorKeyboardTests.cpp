@@ -25,7 +25,7 @@ const juce::KeyPress kCmdUp(juce::KeyPress::upKey, juce::ModifierKeys::commandMo
 TEST(CardLayoutEditorKeyboard, AKeyboardOnlySessionHidesMovesAndRenames) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     // Down walks the rows one at a time, clamped at the end.
@@ -68,7 +68,7 @@ TEST(CardLayoutEditorKeyboard, TheEditorKeysAreRebindableLayoutEditorActions) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     rig.canvas.editor.getCardKeyboard().setShortcutManager(&shortcuts);
-    auto* editor = rig.openFromControl(id, "drive");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
 
     const int drive = rowOf(*editor, "drive");
@@ -84,7 +84,7 @@ TEST(CardLayoutEditorKeyboard, TheEditorKeysAreRebindableLayoutEditorActions) {
 TEST(CardLayoutEditorKeyboard, EscapeIsLeftForTheCallOutBoxToClose) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
     EXPECT_FALSE(editor->pressKeyOnRowForTest(0, juce::KeyPress(juce::KeyPress::escapeKey)));
 }
@@ -92,7 +92,7 @@ TEST(CardLayoutEditorKeyboard, EscapeIsLeftForTheCallOutBoxToClose) {
 TEST(CardLayoutEditorKeyboard, EveryRowIsAFocusStopWithAFocusRingNameAndTooltip) {
     EditorCanvas rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    auto* editor = rig.openFromControl(id, "cutoff");
+    auto* editor = rig.openList(id);
     ASSERT_NE(editor, nullptr);
     editor->triggerAddGroupForTest();
     for (int i = 0; i < editor->getVisibleRowCountForTest(); ++i) {

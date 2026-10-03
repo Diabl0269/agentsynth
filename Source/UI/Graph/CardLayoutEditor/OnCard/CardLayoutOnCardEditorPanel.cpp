@@ -2,6 +2,7 @@
 // beside the control, keeping it anchored to the control's outline as the card rebuilds, and the writes
 // its fields make. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "OnCardControlOptions.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
@@ -49,19 +50,22 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
     juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
     panel->onShowAs = [self, paramId](CardWidget widget) {
         if (auto* e = self.getComponent())
-            e->editControl([paramId, widget](CardLayout l) { return withShowAs(std::move(l), paramId, widget); });
+            e->editControl(paramId,
+                           [paramId, widget](CardLayout l) { return withShowAs(std::move(l), paramId, widget); });
     };
     panel->onLabel = [self, paramId](const juce::String& text) {
         auto* e = self.getComponent();
         if (e == nullptr || e->panel_ == nullptr)
             return;
         const auto name = e->panel_->getOptions().displayName;
-        e->editControl(
-            [paramId, name, text](CardLayout l) { return withControlLabel(std::move(l), paramId, name, text); });
+        e->editControl(paramId, [paramId, name, text](CardLayout l) {
+            return withControlLabel(std::move(l), paramId, name, text);
+        });
     };
     panel->onRange = [self, paramId](std::optional<juce::Range<double>> range) {
         if (auto* e = self.getComponent())
-            e->editControl([paramId, range](CardLayout l) { return withControlRange(std::move(l), paramId, range); });
+            e->editControl(paramId,
+                           [paramId, range](CardLayout l) { return withControlRange(std::move(l), paramId, range); });
     };
     panel->onHide = [self, paramId] {
         if (auto* e = self.getComponent())
@@ -74,19 +78,27 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
     panel->setOptions(*options);
     panel_ = panel.get();
     panelParamId_ = paramId;
+    launchPanel(std::move(panel), screenAreaOf(*outline));
+}
+
+// A call-out pointing at `screenArea`; a test takes the panel instead.
+void CardLayoutOnCardEditor::launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(panel));
-    juce::CallOutBox::launchAsynchronously(std::move(panel), screenAreaOf(*outline), nullptr);
+    juce::CallOutBox::launchAsynchronously(std::move(panel), screenArea, nullptr);
 }
 
 // The call-out deletes its content once it has gone; the editor lets go of it at once, so nothing it
-// does afterwards reaches the panel. A panel with no call-out (a test's) is only hidden.
+// does afterwards reaches the panel. A panel with no call-out (a test's) is only hidden. The control panel
+// and the Add control panel never stand together, so closing one closes whichever is open.
 void CardLayoutOnCardEditor::closePanel() {
-    auto* panel = panel_.getComponent();
+    juce::Component* open[] = {panel_.getComponent(), addPanel_.getComponent()};
     panel_ = nullptr;
+    addPanel_ = nullptr;
     panelParamId_ = {};
-    if (panel != nullptr && !closeHostingWindow(*panel))
-        panel->setVisible(false);
+    for (auto* panel : open)
+        if (panel != nullptr && !closeHostingWindow(*panel))
+            panel->setVisible(false);
 }
 
 // After a rebuild: the panel takes the control's new state and its call-out points at the control's new
@@ -111,12 +123,13 @@ void CardLayoutOnCardEditor::refreshPanel() {
 }
 
 // A field's change: written at once, from the layout the card draws now, changing only that control.
-void CardLayoutOnCardEditor::editControl(const std::function<CardLayout(CardLayout)>& edit) {
+void CardLayoutOnCardEditor::editControl(const juce::String& paramId,
+                                         const std::function<CardLayout(CardLayout)>& edit) {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (closed_ || source_ == nullptr || body == nullptr)
         return;
     flushNudge();
-    const auto before = body->explicitLayout();
+    const auto before = withPlacedItem(body->explicitLayout(), paramId, *body);
     auto after = edit(before);
     if (after != before)
         writeLayout(after);
@@ -126,7 +139,8 @@ void CardLayoutOnCardEditor::editControl(const std::function<CardLayout(CardLayo
 // first outline left.
 void CardLayoutOnCardEditor::hideControl(const juce::String& paramId) {
     closePanel();
-    editControl([paramId](CardLayout l) { return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide); });
+    editControl(paramId,
+                [paramId](CardLayout l) { return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide); });
     if (auto* first = outlines_.getFirst())
         first->grabKeyboardFocus();
 }

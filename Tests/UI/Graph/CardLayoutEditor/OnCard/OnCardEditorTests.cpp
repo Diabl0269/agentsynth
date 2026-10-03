@@ -11,13 +11,12 @@ using namespace oncard_test;
 
 namespace {
 
-// What the Filter card draws as controls outside a footer or tab: every item with a visible widget.
+// What the Filter card draws as controls: every item with a visible widget, the footer's included.
 juce::StringArray visibleControls(ModuleComponent& card) {
     juce::StringArray ids;
     const auto& plan = card.getCardBody()->getPlan();
     for (const auto& item : plan.items)
-        if (item.param != nullptr && item.widget != nullptr && item.widget->isVisible() && item.section >= 0 &&
-            !plan.sections[(size_t)item.section].footer)
+        if (item.param != nullptr && item.widget != nullptr && item.widget->isVisible() && item.section >= 0)
             ids.add(item.param->paramID);
     return ids;
 }
@@ -34,20 +33,27 @@ TEST(OnCardEditor, EditLayoutFromTheModuleMenuOpensOverTheCardWithAnOutlinePerCo
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     EXPECT_EQ(editor->getParentComponent(), card->getParentComponent()) << "a sibling of the card, not its child";
-    EXPECT_EQ(editor->getBounds(), card->getBounds());
+    EXPECT_EQ(editor->getBounds().withHeight(card->getHeight()), card->getBounds())
+        << "over the card, and the strip with its Add control under it";
     EXPECT_EQ(editor->getOutlineCountForTest(), expected.size());
     for (const auto& paramId : expected) {
         SCOPED_TRACE(paramId.toStdString());
         auto* outline = editor->getOutlineForTest(paramId);
         ASSERT_NE(outline, nullptr);
+        const bool panelOnly = outline->isPanelOnly();
         EXPECT_EQ(outline->getTitle(),
-                  cardlayouteditor_test::captionOf(*card, paramId) + ", layout: drag to move, Return for options");
-        EXPECT_EQ(outline->getTooltip(), "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
+                  cardlayouteditor_test::captionOf(*card, paramId) +
+                      (panelOnly ? ", layout: Return for options" : ", layout: drag to move, Return for options"));
+        EXPECT_EQ(outline->getTooltip(),
+                  panelOnly ? "Right-click for options"
+                            : "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
         EXPECT_TRUE(outline->getWantsKeyboardFocus());
     }
     for (const auto* id2 : {"cutoff", "resonance", "drive", "outputLevel"})
         EXPECT_NE(editor->getOutlineForTest(id2), nullptr) << id2;
-    EXPECT_EQ(editor->getOutlineForTest("poly"), nullptr) << "the footer's controls get none";
+    ASSERT_NE(editor->getOutlineForTest("poly"), nullptr) << "the footer's controls get one too";
+    EXPECT_TRUE(editor->getOutlineForTest("poly")->isPanelOnly());
+    EXPECT_FALSE(editor->getOutlineForTest("cutoff")->isPanelOnly());
 }
 
 TEST(OnCardEditor, EditLayoutFromAControlsMenuOpensTheSameEditor) {
@@ -81,7 +87,8 @@ TEST(OnCardEditor, FreePlacementOfAFlowingSectionLeavesEveryControlWhereItWas) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* card = rig.card(id);
-    const auto before = synth::ui::collectCells(*card);
+    auto before = synth::ui::collectCells(*card);
+    std::erase_if(before, [](const synth::ui::OnCardCell& cell) { return cell.panelOnly; });
     ASSERT_GE(before.size(), 5u);
     const auto g = synth::cardbody::BodyGeometry::forCardWidth(card->getWidth());
 
@@ -102,7 +109,8 @@ TEST(OnCardEditor, FreePlacementOfAFlowingSectionLeavesEveryControlWhereItWas) {
 
     auto* after = rig.card(id);
     ASSERT_NE(after, nullptr);
-    const auto placed = synth::ui::collectCells(*after);
+    auto placed = synth::ui::collectCells(*after);
+    std::erase_if(placed, [](const synth::ui::OnCardCell& cell) { return cell.panelOnly; });
     ASSERT_EQ(placed.size(), before.size());
     for (size_t i = 0; i < before.size(); ++i) {
         SCOPED_TRACE(before[i].key.toStdString());
@@ -133,7 +141,7 @@ TEST(OnCardEditor, AfterAWriteTheOverlayFollowsTheRebuiltCardAndKeepsItsOutlines
     auto* cardAfter = rig.card(id);
     ASSERT_NE(cardAfter, nullptr);
     EXPECT_NE(cardAfter, cardBefore) << "the write rebuilt the card";
-    EXPECT_EQ(editor->getBounds(), cardAfter->getBounds());
+    EXPECT_EQ(editor->getBounds().withHeight(cardAfter->getHeight()), cardAfter->getBounds());
     EXPECT_EQ(editor->getOutlineCountForTest(), count);
     EXPECT_EQ(editor->getOutlineForTest("cutoff"), outlineBefore) << "an outline survives a write";
     EXPECT_EQ(editor->getParentComponent(), cardAfter->getParentComponent());

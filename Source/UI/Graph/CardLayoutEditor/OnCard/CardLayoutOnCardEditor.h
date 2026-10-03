@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CardLayoutAddPanel.h"
 #include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
 #include "CardLayoutOutline.h"
@@ -9,6 +10,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class AppUndoManager;
@@ -28,7 +30,8 @@ class BuiltInCardLayoutSource;
  * node's layout through a BuiltInCardLayoutSource, which rebuilds the card; the overlay then re-syncs
  * to the new card, so it holds the GraphEditor and the node id and never the card it covers. Done
  * keeps the result, Cancel or Esc restores the layout the card opened with; the whole session is one
- * undo step, recorded when the source is destroyed.
+ * undo step, recorded when the source is destroyed. The bar's Preset and Apply to menus, and the "+ Add control"
+ * strip the overlay adds under the card, are the other things it hosts.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -36,6 +39,9 @@ class CardLayoutOnCardEditor final
     , private juce::AsyncUpdater
     , private juce::Timer {
 public:
+    /** The strip under the card that holds "+ Add control": the overlay reaches this far past the card. */
+    static constexpr int kAddStripHeight = 30;
+
     /** Opens an editor over node `nodeId`'s card and adds it to the card's parent; null when the card
      *  is not drawn from layout data. `shortcuts` may be null (the default keys apply). */
     static std::unique_ptr<CardLayoutOnCardEditor> open(GraphEditor& editor, ::AppUndoManager* undo,
@@ -70,6 +76,17 @@ public:
     /** The open control panel, or null once it is closed. */
     CardLayoutControlPanel* getControlPanelForTest() const { return panel_.getComponent(); }
     CardLayoutEditBar& getEditBarForTest() noexcept { return editBar_; }
+    juce::TextButton& getAddButtonForTest() noexcept { return addControl_; }
+    /** The open Add control panel, or null once it is closed. */
+    CardLayoutAddPanel* getAddPanelForTest() const { return addPanel_.getComponent(); }
+    /** The Apply to and Preset menus as the bar's buttons would show them. */
+    juce::PopupMenu buildApplyToMenuForTest() const { return buildApplyToMenu(); }
+    juce::PopupMenu buildPresetMenuForTest() const { return buildPresetMenu(); }
+    bool isApplyToAllForTest() const noexcept { return applyToAll_; }
+    /** What the Save as window does once a name is typed. */
+    void savePresetForTest(const juce::String& name) { savePreset(name); }
+    /** The control's cell as the Add drag's ghost shows it now (overlay pixels); empty with no add drag. */
+    juce::Rectangle<int> getAddGhostForTest() const noexcept { return addDrag_.ghost; }
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
@@ -102,6 +119,7 @@ private:
     void attachTo(ModuleComponent& card);
     void syncToCard();
     void reconcileOutlines();
+    void watchTabs(ModuleComponent& card);
     void wireOutline(CardLayoutOutline& outline);
     void close(bool keep);
     void finishClose();
@@ -134,13 +152,42 @@ private:
     void startGlide(std::vector<Move> moves);
 
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
+    void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
     void openControlPanel(const juce::String& paramId);
     void closePanel();
     void refreshPanel();
     void writeLayout(const CardLayout& layout);
-    void editControl(const std::function<CardLayout(CardLayout)>& edit);
+    void editControl(const juce::String& paramId, const std::function<CardLayout(CardLayout)>& edit);
     void hideControl(const juce::String& paramId);
     juce::Rectangle<int> screenAreaOf(const CardLayoutOutline& outline) const;
+
+    // ---- Add control (CardLayoutOnCardEditorAdd.cpp, ...AddDrop.cpp) -----------------------------
+    /** An Add control drag in flight: the control and where its cell would land now (overlay pixels). */
+    struct AddDrag {
+        juce::String paramId;
+        juce::Rectangle<int> ghost;
+    };
+    void openAddPanel();
+    void refreshAddPanel();
+    void addControl(const juce::String& paramId);
+    juce::Point<int> freeSpotIn(int planSection, const juce::String& paramId) const;
+    void dragAdded(const juce::String& paramId, CardLayoutAddRow::DragPhase phase, juce::Point<int> screenPosition);
+    void dropAdded(const juce::String& paramId, juce::Point<int> at);
+    void finishAdded(const juce::String& paramId, const juce::String& name);
+    void fadeInControl(const juce::String& paramId);
+    int editableSectionAt(int y) const;
+    juce::Point<int> addedCellSize(int planSection, const juce::String& paramId) const;
+    std::vector<juce::Rectangle<int>> occupiedIn(int planSection) const;
+    juce::Rectangle<int> cardArea() const { return getLocalBounds().withTrimmedBottom(kAddStripHeight); }
+
+    // ---- Preset and Apply to (CardLayoutOnCardEditorScope.cpp) -----------------------------------
+    juce::PopupMenu buildApplyToMenu() const;
+    juce::PopupMenu buildPresetMenu() const;
+    void chooseScope(bool allOfType);
+    int cardsOfType() const;
+    void loadPreset(const juce::String& name);
+    void savePreset(const juce::String& name);
+    void resetLayout();
 
     // ---- Keyboard (CardLayoutOnCardEditorKeyboard.cpp) -----------------------------------------
     bool handleKey(const juce::String& key, const juce::KeyPress& press);
@@ -162,6 +209,10 @@ private:
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
     juce::String panelParamId_;
+    juce::Component::SafePointer<CardLayoutAddPanel> addPanel_;
+    juce::TextButton addControl_{"+ Add control"};
+    AddDrag addDrag_;
+    bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.
 
     CardLayoutEditBar editBar_;
     juce::OwnedArray<CardLayoutOutline> outlines_;
@@ -177,6 +228,8 @@ private:
     ReorderFramePump fadePump_{*this};
     ReorderFramePump glidePump_{*this};
     std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
+    ReorderFramePump addFadePump_{*this};
+    std::function<void()> finishAddFade_; ///< Lands the added control's fade-in at once; empty when none.
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CardLayoutOnCardEditor)
 };

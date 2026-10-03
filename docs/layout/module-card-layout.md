@@ -65,8 +65,10 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The widgets: `CardFader`, `CardSegmentedSwitch`, `CardStepper`, and `CardControlGestures` (the gestures a knob and a fader share) | `Source/UI/Graph/CardWidgets/` |
 | The right-click quick path (the explicit layout, the edits, the undoable write and rebuild, the menu items) | `CardLayoutQuickEdit.*`; the stale-card rebuild in `GraphEditorCanvas.cpp` (`CardBody::isStaleFor`) |
 | The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
-| The layout list ("Layout List..."): the panel, its rows, its working model, and the two sources (built-in module, hosted plugin) | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentLayoutEditor.cpp` opens it |
-| The on-card editor ("Edit Layout..."): the overlay, one outline and grip per control, the edit bar, the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
+| The layout list: the panel, its rows, its working model, and the two sources (built-in module, hosted plugin). Only a hosted plugin's "Edit Layout..." opens it now | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentHostedPluginCard.cpp` opens it |
+| The on-card editor ("Edit Layout...", the editor of every built-in card): the overlay, one outline per control (a grip on the movable ones), the edit bar (Preset, Apply to, Cancel, Done), the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
+| Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
+| "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
 | Snapping to guides and pushing a crowded neighbour aside, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
@@ -413,16 +415,16 @@ envelope view out draws no graph and no toggle.
 ## Editing a layout
 
 - **Quick path, on any control:** the right-click menu gains **Hide from card**, **Show as
-  fader / Show as knob** (for a continuous parameter), **Edit Layout...** and **Layout List...**. On a
+  fader / Show as knob** (for a continuous parameter) and **Edit Layout...**. On a
   control in the More row, **Show on card** puts it back where the default had it. Built: each click edits the layout the
   card draws now (the automatic layout written out as explicit items when the node has none), and Show
   as fader picks `faderV` ([module-card.md](module-card.md#hide-or-show-from-the-right-click-menu)).
-- **Edit Layout... (built): the card is the editor.** From a control's menu or the module menu (in the
-  block after Bypass Module), the card gets an accent outline and an edit bar in its header (**Cancel**,
-  **Done**, with room to their left for the Preset and Apply to controls a later step adds). Every control
+- **Edit Layout... (built): the card is the editor, and the only editor of a built-in card.** From a control's menu or the module menu (in the
+  block after Bypass Module), the card gets an accent outline and an edit bar in its header (**Preset**,
+  **Apply to**, **Cancel**, **Done**), and a **+ Add control** button under it. Every control
   of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
   outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
-  outline, and the footer row and tab groups get none yet. A swap group is one outline, on its shown
+  outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
   member. The outlines are an overlay (`CardLayoutOnCardEditor`) that sits over the card as a sibling in
   the canvas, never a child of it: every write rebuilds the card, so the overlay holds the GraphEditor and
   the node id, and after each write re-finds the card and re-syncs its bounds and outlines.
@@ -471,10 +473,66 @@ envelope view out draws no graph and no toggle.
     stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
     the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it
     when the session ends or the control leaves the card; all of it stays inside the session's one undo step.
-  - *Not built yet:* Preset and Apply to in the edit bar, Add control, outlines on footer and tab controls, and moving a control to another
-    group by dragging.
-- **Layout List... (built, kept for now): the list editor.** Opens `CardLayoutEditorComponent` in a
-  `juce::CallOutBox` beside the card. It lists
+  - *Apply to (built).* The bar's **Apply to** opens a menu: **This module** and **All <Type> modules**, the
+    one in force ticked, and a disabled note under them saying how many cards a write changes now ("Changes
+    1 card", "Changes 2 cards": the GraphEditor's cards of that module type). Choosing **All** writes the
+    layout being edited as the type's default and clears this module's own override at once
+    (`BuiltInCardLayoutSource::apply(layout, true)`), and every later write of the session (a drop, a
+    nudge, a panel field, a preset, an added control) goes the same way, so the other cards of the type
+    re-lay out live. Choosing **This module** again writes the layout to this module's own override and
+    leaves the default as written. Cancel puts the type's default back as it was at open, as well as this
+    module's own layout; Done keeps it, and undo gives this module its own layout back while the per-type
+    file stays (it is a setting, see Undo below).
+  - *Preset (built).* The bar's **Preset** opens a menu: **Save as...** (a small window asks for a name,
+    the same one the hosted list uses; the card's layout as it is now is saved in the type's
+    `ModuleCardLayouts/<Type>/` folder), **Reset to default** (removes the scope's layout, so the card goes
+    back to the type's default or the code default; with **All** chosen the stored default goes too), then
+    the saved presets, a tick on the one whose layout equals the card's now. Choosing a preset writes it to
+    the scope in force and the overlay re-syncs to the rebuilt card. A name the store refuses (the reserved
+    "default") is announced and saves nothing. Deleting a preset is not offered here.
+  - *+ Add control (built).* A full-width **+ Add control** button sits in a 30 px strip under the card: the
+    overlay reaches that far past the card's bottom edge, so no neighbouring card moves and the card keeps
+    its size. It is off while every control is on the card. It opens a call-out panel (the same kind as the
+    per-control panel) with a search field, a count line ("3 hidden controls"; "2 of 3 hidden controls"
+    while searching; "No control matches"), one row per control the card does not show (the More row's: hidden
+    ones, which keep their settings, and parameters the layout never placed; `CardBodyPlan::more`), and the
+    hint "Click to add, or drag onto the card". A row shows the control's name with the letters the search
+    matched in the accent colour and semi-bold (matching is the app's one `searchMatches`, best match
+    first); Up and Down choose a row, Return adds it, typing searches, Esc closes the panel.
+    - *Click or Return.* The control moves to the end of the last grid group that is not the footer (it keeps
+      its widget, label and range, leaves `hidden` and its old place). If that group has free positions
+      the control gets one: the highest, then leftmost, place inside the group that overlaps nothing and
+      keeps the 8 px gap (`findFreeSpot`, sized by the cell size the group's own layout gives that kind,
+      `cardBodyCellSize`); a flowing group just takes it at the end of its flow. The write is the session's
+      source's, so the card rebuilds and the overlay re-syncs; the panel stays open for the next control
+      and closes when nothing is left.
+    - *Drag out.* Pressing a row and dragging past 3 px lifts a ghost of the control's cell onto the card
+      (the panel fades back so the card shows through); on release over the card the control lands there,
+      centred on the pointer, in the group under it, and the group is written as positioned (the
+      neighbours the drop crowds are pushed aside and glide, as a drop of a control on the card does).
+      Released outside the card or over the panel, nothing is added.
+    - *Motion and speech.* The added control fades in at its spot over 160 ms (80 ms under Reduce Motion);
+      "Drive added" is announced. The panel eases in and out like every call-out.
+    - *Keys.* Tab order in the bar is Preset, Apply to, Cancel, Done; the Add control button comes after the
+      outlines. Each has the accent focus ring, an accessible name ("Preset", "Apply to", "Add control") and a
+      tooltip ("Save, load or reset this card's layout", "Choose which cards this layout changes", "Add a
+      hidden control"). The panel's rows are named buttons but not Tab stops: the search field keeps focus and
+      Up and Down announce the chosen row ("Drive, 1 of 2").
+  - *Footer and tab controls (built, panel only).* The footer's controls and the selected tab's controls get
+    an outline too, with the same dashed look and focus ring, but no grip: they cannot be dragged or nudged
+    (a press does nothing, the arrow keys are left alone), so the tooltip is "Right-click for options" and
+    the accessible title is "<name>, layout: Return for options". Right-click, double-click or Return opens
+    the same per-control panel (Show as, Label, Range, Hide from card), and Hide, Label and the rest write
+    through the same layout edit; a control the footer draws by itself (the Poly toggle) is listed in the
+    footer section the first time one of its fields is changed. A tab section stays a tab section. Switching
+    the tab strip while editing re-reads the outlines (`CardBody::onTabSelected`): the old tab's outlines go and the
+    new tab's appear. The tab strip itself, the group headers and the chrome pills (Show Scope and the like)
+    get no outline, and a tab's controls cannot be moved, nor tabs added, renamed, reordered or removed.
+  - *Not built yet:* adding or removing groups, moving a control to another group by dragging, and renaming
+    or reordering tabs.
+- **The list editor (built, hosted plugins only).** A hosted plugin's **Edit Layout...** opens
+  `CardLayoutEditorComponent` in a
+  `juce::CallOutBox` beside the card; built-in cards no longer have a list, the on-card editor replaced it. It lists
   every control the card can show, grouped by section under a header row per group: a tick (shown, or
   hidden in the More row; a hidden row keeps its place), a grab handle to drag it (the shared reorder
   drag; a row dropped under a group's header joins that group), its name (click to rename; an empty
@@ -490,7 +548,7 @@ envelope view out draws no graph and no toggle.
   every edit keeps the section a tab. Not built: adding or removing a tab, reordering tabs, turning a
   group into a tab or back, and choosing which tab a new card opens on (+ Add group always adds a grid
   group at the end).
-- **Two sources, one list.** What the list edits comes from a `CardLayoutEditorSource`:
+- **Two sources.** What the list (hosted) and the on-card editor (built-in) edit comes from a `CardLayoutEditorSource`:
   `BuiltInCardLayoutSource` (the card's own parameters, the node's `cardLayout`, the type's default
   in the bound store) and `HostedCardLayoutSource` (a hosted instance's parameters, its extra-state
   layout, written as the flat v1 slot list). The hosted plugin's **Edit Layout...** is this list
@@ -498,8 +556,7 @@ envelope view out draws no graph and no toggle.
   too. The hosted source has no groups and no widget choice, and an unticked row leaves its layout
   (it lists after the ticked ones), as before. The on-card editor writes through the built-in source too
   (it adds `restoreOpeningLayout()` for Cancel).
-- **Undo:** one step per quick-path click, and one per editor session on a built-in card, for the list and
-  the on-card editor alike: the
+- **Undo:** one step per quick-path click, and one per on-card editor session on a built-in card (adds, scope changes and presets included): the
   session takes a graph snapshot when it opens and records the difference when it closes
   (`AppUndoManager::recordGraphChangeSince`), so the layout, its label and widget edits and the
   neighbours a taller card pushed aside undo together. **Apply to all** writes the per-type file and
@@ -507,8 +564,8 @@ envelope view out draws no graph and no toggle.
   file is a setting, not part of the project, and stays. A session that changes nothing records
   nothing, and a cancelled on-card session leaves the layout as it opened, so it records nothing.
   The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
-- **Later:** the list editor goes once the on-card editor has taken over what only the list does (Presets,
-  Apply to, Add control, the per-control panel).
+- **Later:** the list's built-in-only parts (groups, widget choice, tab rows, unticked rows staying in place) have no
+  entry point now and can go once nothing needs them.
 
 ---
 

@@ -91,6 +91,8 @@ public:
     /** Shows tab `tab` of `group` and re-lays the card out (its size never changes). Out-of-range
      *  indices and the tab already shown are ignored. */
     void selectTab(int group, int tab);
+    /** Runs after a tab switch has re-laid the card out (the on-card layout editor re-reads its outlines). */
+    std::function<void()> onTabSelected;
     /** True for a widget in a tab section, selected or not: its CV jack stays in the card's gutter. */
     bool isTabbed(const juce::Component& widget) const;
 

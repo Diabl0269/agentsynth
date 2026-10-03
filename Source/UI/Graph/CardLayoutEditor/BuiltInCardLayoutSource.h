@@ -28,6 +28,8 @@ public:
     ~BuiltInCardLayoutSource() override;
 
     bool isAlive() const override;
+    /** The module's factory type name ("Filter"), the key of its per-type default and presets. */
+    const juce::String& moduleType() const noexcept { return moduleType_; }
     juce::String title() const override;
     juce::String thisScopeText() const override { return "This module"; }
     juce::String allScopeText() const override;
@@ -41,7 +43,8 @@ public:
     void apply(const CardLayout& layout, bool allOfType) override;
     CardLayout reset(bool allOfType) override;
     /** Writes back the node's override as it stood when this source was made (or clears it, when it had
-     *  none) and rebuilds the card: a cancelled session leaves the layout as it opened. */
+     *  none), puts back the type's default if an Apply to all or Reset changed it, and rebuilds the card:
+     *  a cancelled session leaves the layout as it opened. */
     void restoreOpeningLayout();
 
     bool hasPresets() const override { return store() != nullptr; }
@@ -63,7 +66,9 @@ private:
     juce::AudioProcessor* openedOn_ = nullptr; ///< Identity only, never dereferenced unless the node still holds it.
     juce::String moduleType_;
     juce::var sessionBefore_;
-    juce::var openingOverride_; ///< The node's "cardLayout" JSON at construction; void = none.
+    juce::var openingOverride_;                ///< The node's "cardLayout" JSON at construction; void = none.
+    std::optional<CardLayout> openingDefault_; ///< The type's stored default at construction; none = no file.
+    bool defaultTouched_ = false;              ///< An Apply to all or Reset wrote or cleared the type's default.
 };
 
 } // namespace synth::ui

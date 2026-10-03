@@ -181,7 +181,7 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
         const auto* edit = menuItem(menu, "Edit Layout...");
         ASSERT_NE(edit, nullptr);
         EXPECT_TRUE(edit->isEnabled);
-        EXPECT_NE(menuItem(menu, "Layout List..."), nullptr);
+        EXPECT_EQ(menuItem(menu, "Layout List..."), nullptr) << "the on-card editor is the only editor";
         EXPECT_EQ(menuItem(menu, "Show as fader") != nullptr, synth::isContinuousKind(item.kind));
     }
 
@@ -189,7 +189,7 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
     const auto* edit = menuItem(moduleMenu, "Edit Layout...");
     ASSERT_NE(edit, nullptr);
     EXPECT_TRUE(edit->isEnabled);
-    EXPECT_NE(menuItem(moduleMenu, "Layout List..."), nullptr);
+    EXPECT_EQ(menuItem(moduleMenu, "Layout List..."), nullptr);
 }
 
 TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {

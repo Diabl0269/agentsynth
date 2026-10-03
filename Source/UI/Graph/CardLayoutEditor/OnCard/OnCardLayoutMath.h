@@ -57,6 +57,12 @@ juce::Rectangle<int> clampToLimits(juce::Rectangle<int> rect, const Limits& limi
 std::vector<juce::Rectangle<int>> pushAside(juce::Rectangle<int> dropped, juce::Rectangle<int> start,
                                             const std::vector<juce::Rectangle<int>>& others, const Limits& limits);
 
+/** The top-left for a new control of `size` in a group whose cells stand at `occupied`: inside `limits`,
+ *  kControlGap clear of every one of them, the highest such place and then the leftmost. Always found:
+ *  with no room beside or among them it lands below them all. */
+juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,
+                              const Limits& limits);
+
 /** What a screen reader hears after a move: "Cutoff moved right 8", or "Cutoff moved right 60, down 12". */
 juce::String describeMove(const juce::String& caption, int dx, int dy);
 

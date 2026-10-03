@@ -1,5 +1,5 @@
-// OnCardLayoutMath.cpp -- snapping a dragged control to its neighbours' lines and pushing crowded
-// neighbours aside. Pure: rectangles in, rectangles out.
+// OnCardLayoutMath.cpp -- snapping a dragged control to its neighbours' lines, pushing crowded neighbours
+// aside and finding a free place for a new control. Pure: rectangles in, rectangles out.
 #include "OnCardLayoutMath.h"
 #include <algorithm>
 #include <cstdlib>
@@ -139,6 +139,29 @@ std::vector<juce::Rectangle<int>> pushAside(juce::Rectangle<int> dropped, juce::
         first = false;
     }
     return result;
+}
+
+// The candidate corners are the limits' own and every occupied rectangle's right and bottom edge plus the
+// gap: any free place can slide up and left until it rests on one of them.
+juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,
+                              const Limits& limits) {
+    std::vector<int> xs{limits.minX};
+    std::vector<int> ys{limits.top};
+    for (const auto& r : occupied) {
+        xs.push_back(r.getRight() + kControlGap);
+        ys.push_back(r.getBottom() + kControlGap);
+    }
+    std::sort(ys.begin(), ys.end());
+    std::sort(xs.begin(), xs.end());
+    for (int y : ys)
+        for (int x : xs) {
+            const juce::Rectangle<int> rect(x, y, size.x, size.y);
+            const bool fits = x == limits.minX || rect.getRight() <= limits.maxX;
+            if (fits &&
+                std::none_of(occupied.begin(), occupied.end(), [&](const auto& r) { return tooClose(rect, r); }))
+                return {x, y};
+        }
+    return {limits.minX, ys.back()};
 }
 
 } // namespace synth::ui::oncard

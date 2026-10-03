@@ -18,6 +18,12 @@ constexpr double kFadeInMs = 160.0;
 constexpr double kFadeOutMs = 110.0;
 constexpr double kReducedFadeMs = 80.0;
 constexpr int kBarMargin = 8;
+constexpr int kAddGap = 4;
+
+// The overlay is the card and the strip under it that holds "+ Add control".
+juce::Rectangle<int> overlayBoundsFor(juce::Rectangle<int> card) {
+    return card.withHeight(card.getHeight() + CardLayoutOnCardEditor::kAddStripHeight);
+}
 
 } // namespace
 
@@ -32,7 +38,17 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
     editBar_.onCancel = [this] { cancel(); };
     editBar_.onDone = [this] { done(); };
+    editBar_.onPreset = [this] {
+        buildPresetMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editBar_.getPresetButton()));
+    };
+    editBar_.onApplyTo = [this] {
+        buildApplyToMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editBar_.getApplyToButton()));
+    };
     addAndMakeVisible(editBar_);
+    addControl_.setTitle("Add control");
+    addControl_.setTooltip("Add a hidden control");
+    addControl_.onClick = [this] { openAddPanel(); };
+    addAndMakeVisible(addControl_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -104,12 +120,24 @@ void CardLayoutOnCardEditor::syncToCard() {
         attachTo(*card);
     drag_ = {};
     guides_.clear();
-    setBounds(card->getBounds());
+    setBounds(overlayBoundsFor(card->getBounds()));
     cells_ = collectCells(*card);
+    watchTabs(*card);
     reconcileOutlines();
     toFront(false);
     repaint();
     refreshPanel();
+    refreshAddPanel();
+}
+
+// A tab switch changes which controls are on the card without resizing it: the card says so, and the
+// outlines are read again.
+void CardLayoutOnCardEditor::watchTabs(ModuleComponent& card) {
+    if (auto* body = card.getCardBody())
+        body->onTabSelected = [self = juce::Component::SafePointer<CardLayoutOnCardEditor>(this)] {
+            if (self != nullptr)
+                self->triggerAsyncUpdate();
+        };
 }
 
 int CardLayoutOnCardEditor::indexOfCell(const juce::String& key) const {
@@ -132,6 +160,7 @@ void CardLayoutOnCardEditor::reconcileOutlines() {
             wireOutline(*outline);
             addAndMakeVisible(outline);
         }
+        outline->setPanelOnly(cell.panelOnly);
         outline->setCaption(cell.caption);
         outline->setCell(cell.rect);
     }
@@ -173,6 +202,8 @@ void CardLayoutOnCardEditor::close(bool keep) {
     fadePump_.stop();
     if (finishGlide_)
         std::exchange(finishGlide_, nullptr)();
+    if (finishAddFade_)
+        std::exchange(finishAddFade_, nullptr)();
     cancelPendingUpdate();
     escapeKey_.disarm();
     drag_ = {};
@@ -225,7 +256,7 @@ void CardLayoutOnCardEditor::fadeTo(float target, std::function<void()> done) {
 void CardLayoutOnCardEditor::componentMovedOrResized(juce::Component& component, bool, bool wasResized) {
     if (&component != cardIdentity_ || writing_ || closed_)
         return;
-    setBounds(component.getBounds());
+    setBounds(overlayBoundsFor(component.getBounds()));
     if (wasResized && !drag_.pressed && !finishGlide_)
         triggerAsyncUpdate();
 }
@@ -248,7 +279,7 @@ void CardLayoutOnCardEditor::handleAsyncUpdate() {
 void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.setColour(theme.colors.accent);
-    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
+    g.drawRoundedRectangle(cardArea().toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
     g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha));
     for (const auto& guide : guides_) {
         const auto p = (float)guide.position;
@@ -256,12 +287,19 @@ void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
                                          : juce::Line<float>((float)guide.from, p, (float)guide.to, p);
         g.drawLine(line, theme.metrics.guideLineWidth);
     }
+    if (!addDrag_.ghost.isEmpty()) {
+        g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha));
+        g.fillRoundedRectangle(addDrag_.ghost.toFloat(), theme.metrics.cornerRadius);
+        g.setColour(theme.colors.accent);
+        g.drawRoundedRectangle(addDrag_.ghost.toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
+    }
 }
 
 void CardLayoutOnCardEditor::resized() {
     const int width = std::min(getWidth() - 2 * kBarMargin, CardLayoutEditBar::kMinWidth);
     const int y = (ModuleComponent::kHeaderHeight - CardLayoutEditBar::kHeight) / 2;
     editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::kHeight);
+    addControl_.setBounds(0, getHeight() - kAddStripHeight + kAddGap, getWidth(), kAddStripHeight - kAddGap);
 }
 
 } // namespace synth::ui

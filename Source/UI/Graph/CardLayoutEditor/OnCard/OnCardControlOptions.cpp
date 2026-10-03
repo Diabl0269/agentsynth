@@ -1,6 +1,7 @@
 // OnCardControlOptions.cpp -- reading a control's options off the card and the pure edits the panel's
 // fields make to a layout.
 #include "OnCardControlOptions.h"
+#include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include <cmath>
@@ -46,10 +47,12 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
                                                  const CardLayout& layout, const juce::String& paramId) {
     const auto& plan = body.getPlan();
     const int index = plan.findParam(paramId);
-    const auto* item = findItem(layout, paramId);
+    const CardParamItem unlisted;
+    const auto* listed = findItem(layout, paramId);
+    const auto* item = listed != nullptr ? listed : &unlisted;
     const auto found = std::find_if(params.begin(), params.end(),
                                     [&](const CardLayoutEditorParam& p) { return p.paramId == paramId; });
-    if (index < 0 || item == nullptr || found == params.end())
+    if (index < 0 || found == params.end())
         return std::nullopt;
     const auto& planned = plan.items[(size_t)index];
     ControlOptions options;
@@ -67,6 +70,25 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
         options.fullRange = juce::Range<double>((double)full.start, (double)full.end);
     }
     return options;
+}
+
+CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const synth::CardBody& body) {
+    const auto& plan = body.getPlan();
+    const int index = plan.findParam(paramId);
+    const int section = index >= 0 ? plan.items[(size_t)index].section : -1;
+    if (section < 0 || findItem(layout, paramId) != nullptr)
+        return layout;
+    int target = layoutSectionIndexOfPlan(layout, section);
+    if (plan.sections[(size_t)section].footer)
+        for (int i = 0; i < (int)layout.sections.size(); ++i)
+            if (layout.sections[(size_t)i].id == CardSection::kFooterId)
+                target = i;
+    if (target < 0)
+        return layout;
+    CardParamItem item;
+    item.paramId = paramId;
+    layout.sections[(size_t)target].items.emplace_back(item);
+    return layout;
 }
 
 CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget) {

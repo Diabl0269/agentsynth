@@ -657,18 +657,29 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentRows.cpp
     Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentScope.cpp
     Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentTestSeams.cpp
+    Source/UI/Graph/CardLayoutEditor/PresetNamePrompt.cpp
+    Source/UI/Graph/CardLayoutEditor/PresetNamePrompt.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddRow.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddRow.h
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutEditBar.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutEditBar.h
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAdd.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAddDrop.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorDrag.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorScope.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTestSeams.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.h
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardCells.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.cpp

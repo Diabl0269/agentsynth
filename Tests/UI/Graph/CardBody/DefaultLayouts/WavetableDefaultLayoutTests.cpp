@@ -3,12 +3,11 @@
 // The Wavetable's designed default card layout, drawn by a real card on a canvas with no override: five
 // `tab` sections drawn as one tab strip in order, Position and Warp pinned above it, Pan on Tune and
 // Sync In on Phase, a tab switch that moves nothing on the card, the size estimate against the real
-// card, the strip's keys and accessibility, the tab kept per card and never saved, and the tabs listed,
-// hidden from, reordered and renamed in the layout editor.
+// card, the strip's keys and accessibility, and the tab kept per card and never saved.
 // Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp, Source/UI/Graph/CardBody/CardBodyTabs.cpp.
 
 #include "../../../Accessibility/AccessibilityAudit.h"
-#include "../../CardLayoutEditor/CardLayoutEditorTestHelpers.h"
+#include "../CardBodyTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
@@ -255,45 +254,4 @@ TEST(WavetableDefaultLayout, TheSelectedTabIsPerCardAndNeverSaved) {
     EXPECT_TRUE(synth::getCardLayoutOverride(canvas.engine.getGraph(), first.id).isVoid());
     auto* module = dynamic_cast<ModuleBase*>(canvas.processor(first.id));
     EXPECT_TRUE(module->getCardViewState().isDefault());
-}
-
-// The layout editor lists each tab as a group headed "Tab: <title>"; a control can be hidden from a
-// tab, moved within it, and the tab renamed, and the card keeps one strip throughout.
-TEST(WavetableDefaultLayout, TheLayoutEditorListsTheTabsAndHidesMovesAndRenamesWithinThem) {
-    cardlayouteditor_test::EditorCanvas rig;
-    const auto id = rig.add(synth::AIStateMapper::createModule("Wavetable"));
-    auto* editor = rig.openFromModuleMenu(id);
-    ASSERT_NE(editor, nullptr);
-    for (int tab = 0; tab < kTabs.size(); ++tab) {
-        const int row = cardlayouteditor_test::rowOf(*editor, "#" + juce::String(tab + 1));
-        EXPECT_EQ(editor->getRowForTest(row)->getTitle(), "Tab: " + kTabs[tab]);
-    }
-    EXPECT_EQ(editor->getRowForTest(cardlayouteditor_test::rowOf(*editor, "#0"))
-                  ->getTitle()
-                  .upToFirstOccurrenceOf(":", false, false),
-              "Group");
-
-    editor->triggerRowToggleForTest(cardlayouteditor_test::rowOf(*editor, "pan"));
-    EXPECT_TRUE(rig.storedLayout(id)->hidden.contains("pan"));
-    EXPECT_TRUE(rig.card(id)->getCardBody()->hasMoreRow()) << "a hidden control goes to the More row";
-
-    const juce::KeyPress cmdDown(juce::KeyPress::downKey, juce::ModifierKeys::commandModifier, 0);
-    ASSERT_TRUE(editor->pressKeyOnRowForTest(cardlayouteditor_test::rowOf(*editor, "octave"), cmdDown));
-    const auto stored = rig.storedLayout(id);
-    ASSERT_TRUE(stored.has_value());
-    const auto& tune = stored->sections[1];
-    ASSERT_GE(tune.items.size(), 2u);
-    EXPECT_EQ(std::get<synth::CardParamItem>(tune.items[0]).paramId, "coarse");
-    EXPECT_EQ(std::get<synth::CardParamItem>(tune.items[1]).paramId, "octave");
-    EXPECT_EQ(tune.presentation, synth::CardPresentation::Tab) << "an edit keeps the section a tab";
-
-    const int header = cardlayouteditor_test::rowOf(*editor, "#1");
-    editor->setRowLabelForTest(header, "Pitch");
-    editor->commitRowLabelForTest(header);
-    auto* card = rig.card(id);
-    ASSERT_EQ(card->getCardBody()->getPlan().tabGroups.size(), 1u);
-    auto* strip = dynamic_cast<CardSegmentedSwitch*>(card->getCardBody()->getTabStrip(0));
-    ASSERT_NE(strip, nullptr);
-    EXPECT_EQ(strip->getSegment(0)->getButtonText(), "Pitch");
-    EXPECT_LT(card->getCardBody()->findWidget("coarse")->getX(), card->getCardBody()->findWidget("octave")->getX());
 }

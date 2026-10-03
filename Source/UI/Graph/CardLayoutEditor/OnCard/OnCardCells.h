@@ -23,6 +23,7 @@ struct OnCardCell {
     juce::String caption;
     int section = -1;                   ///< Index into the plan's sections.
     std::vector<juce::String> paramIds; ///< Every member of the cell, shown or not.
+    bool panelOnly = false;             ///< In the footer or a tab: opens the options panel, never moves.
     juce::Rectangle<int> rect;          ///< Caption and widget together, in card pixels.
     juce::Rectangle<int> widgetRel;     ///< The widget's bounds relative to rect's top-left.
     juce::Rectangle<int> labelRel;      ///< The caption's, empty without one.
@@ -30,8 +31,8 @@ struct OnCardCell {
     juce::Component::SafePointer<juce::Component> label;
 };
 
-/** Every outlined cell of `card`, section by section in card order: shown controls of a visible grid
- *  section that is not the footer or a tab. */
+/** Every outlined cell of `card`, section by section in card order: shown controls of a visible section.
+ *  The footer's and the selected tab's cells are `panelOnly`. */
 std::vector<OnCardCell> collectCells(const ModuleComponent& card);
 
 /** A view a grid section shows (its bounds on the card); views are not outlined, but keep their place. */
