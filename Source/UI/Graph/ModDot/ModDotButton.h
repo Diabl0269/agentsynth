@@ -57,11 +57,17 @@ public:
             return true;
         }
         if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
-            if (onActivate)
-                onActivate();
+            clicked();
             return true;
         }
         return false;
+    }
+
+    // A screen reader's press (VoiceOver's VO-Space is AXPress -> triggerClick) opens the menu the same
+    // way Return does; the mouse never reaches this button, it passes through to the knob.
+    void clicked() override {
+        if (onActivate)
+            onActivate();
     }
 
     void paintButton(juce::Graphics& g, bool, bool) override {

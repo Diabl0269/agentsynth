@@ -190,6 +190,19 @@ TEST_F(ModuleComponentTest, ReturnOnTheDotButtonCallsTheClickHook) {
     EXPECT_EQ(clicks, 1);
 }
 
+TEST_F(ModuleComponentTest, AScreenReaderPressOnTheDotButtonCallsTheClickHook) {
+    Fixture f;
+    int clicks = 0;
+    f.editor->getModDot().onModDotClicked = [&](auto, int, juce::Component&) { ++clicks; };
+    auto* button = f.vcaCard->getModDotButton(f.gainChannel);
+    ASSERT_NE(button, nullptr);
+    auto handler = static_cast<juce::Component*>(button)->createAccessibilityHandler();
+    ASSERT_NE(handler, nullptr);
+    EXPECT_TRUE(handler->getActions().invoke(juce::AccessibilityActionType::press));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // a Button press is delivered async
+    EXPECT_EQ(clicks, 1) << "VoiceOver's press must open the menu like Return does";
+}
+
 TEST_F(ModuleComponentTest, TabVisitsTheDotRightAfterItsKnob) {
     Fixture f;
     auto* button = f.vcaCard->getModDotButton(f.gainChannel);
