@@ -79,6 +79,8 @@ a plan that previews fine but leaves the envelope at its default (a drone) is `v
 `Tools/AIEvalHarness/ProjectMode.h`; the checks are unit-tested without a model in
 `Tests/AI/SoundShapeChecksTests.cpp`. Local models need Ollama 0.34.4 or newer.
 
+Each `--json` record carries the model's raw `response`, so a failed scenario can be read back.
+
 ## Scoring a model through the service (`--provider remote`)
 
 `--provider ollama` measures a model reached directly, bypassing the `synth-platform` service

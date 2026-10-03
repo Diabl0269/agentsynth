@@ -87,6 +87,7 @@ struct Outcome {
     juce::String error; // provider error, or why the plan was not valid
     bool shapeOk = false;
     juce::String shapeReason;
+    juce::String response; // the model's raw answer, so a failure can be read back from --json
 };
 
 inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& plan, const juce::var& existingPatch) {
@@ -144,6 +145,7 @@ inline Outcome runScenario(const Scenario& scenario,
         return outcome;
     }
     outcome.responded = true;
+    outcome.response = responseText;
 
     const juce::var plan = juce::JSON::parse(synth::AIIntegrationService::extractJsonFromResponse(responseText));
     if (!plan.isObject()) {
@@ -193,6 +195,7 @@ inline int runAll(int runs, const std::function<std::unique_ptr<synth::AIProvide
             rec->setProperty("shapeOk", outcome.shapeOk);
             rec->setProperty("shapeReason", outcome.shapeReason);
             rec->setProperty("error", outcome.error);
+            rec->setProperty("response", outcome.response);
             records.add(juce::var(rec.get()));
         }
     }
