@@ -308,4 +308,86 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsA
     EXPECT_FALSE(modulationItem.getProperty("properties", {}).getProperty("destParam", {}).hasProperty("anyOf"));
 }
 
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestBodyCarriesTracksTargetsAndContextAsStructuredFields) {
+    auto node = graph->addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(node, nullptr);
+    node->properties.set("uuid", "arrange-uuid-1");
+    doc.addTrack(TrackKind::Midi, "Melody");
+    doc.addTrack(TrackKind::Automation, "Sweep");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+
+    const juce::var body = service->buildProjectRequestBody("build a 16 bar arrangement");
+    ASSERT_TRUE(body.isObject());
+
+    // userPrompt is the RAW text: the server composes its own context sections from the fields below.
+    EXPECT_EQ(body["userPrompt"].toString(), juce::String("build a 16 bar arrangement"));
+    EXPECT_TRUE(body["arrangementContext"].toString().isNotEmpty()) << "a non-empty doc summarises to something";
+
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    ASSERT_GT(body["paramTargets"].getArray()->size(), 0) << "the uuid-bearing Oscillator's float params are offered";
+    const juce::var target = (*body["paramTargets"].getArray())[0];
+    EXPECT_EQ(target["nodeUuid"].toString(), juce::String("arrange-uuid-1"));
+    EXPECT_TRUE(target["nodeName"].toString().isNotEmpty());
+    EXPECT_TRUE(target["paramId"].toString().isNotEmpty());
+    EXPECT_TRUE(target["min"].isDouble() || target["min"].isInt());
+    EXPECT_TRUE(target["max"].isDouble() || target["max"].isInt());
+    EXPECT_TRUE(target["default"].isDouble() || target["default"].isInt());
+
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    ASSERT_EQ(body["availableTracks"].getArray()->size(), 2);
+    const juce::var track0 = (*body["availableTracks"].getArray())[0];
+    const juce::var track1 = (*body["availableTracks"].getArray())[1];
+    EXPECT_EQ(track0["name"].toString(), juce::String("Melody"));
+    EXPECT_EQ(track0["kind"].toString(), juce::String("midi"));
+    EXPECT_EQ(static_cast<int>(track0["index"]), 0);
+    EXPECT_EQ(track1["name"].toString(), juce::String("Sweep"));
+    EXPECT_EQ(track1["kind"].toString(), juce::String("automation"));
+    EXPECT_EQ(static_cast<int>(track1["index"]), 1);
+
+    // productName is the PROVIDER's field (RemoteProvider adds it).
+    EXPECT_FALSE(body.hasProperty("productName"));
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestParamTargetsAreCappedAtServerMax) {
+    // Enough uuid-bearing nodes that the flat float-param count exceeds the cap.
+    int paramsPerNode = 0;
+    {
+        auto probe = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(probe, nullptr);
+        probe->properties.set("uuid", "probe-uuid");
+        for (auto* p : probe->getProcessor()->getParameters())
+            if (dynamic_cast<juce::AudioParameterFloat*>(p) != nullptr)
+                ++paramsPerNode;
+    }
+    ASSERT_GT(paramsPerNode, 0);
+
+    const int nodesNeeded = AIIntegrationService::kMaxRemoteParamTargets / paramsPerNode + 1;
+    for (int i = 0; i < nodesNeeded; ++i) {
+        auto node = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(node, nullptr);
+        node->properties.set("uuid", "bulk-uuid-" + juce::String(i));
+    }
+
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildProjectRequestBody("automate everything");
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    EXPECT_EQ(body["paramTargets"].getArray()->size(), AIIntegrationService::kMaxRemoteParamTargets)
+        << "a longer list would be rejected by the server's input schema before any model saw it";
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestOnEmptyTimelineSaysSoExplicitly) {
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildProjectRequestBody("start an arrangement");
+
+    // The schema requires both keys but allows them empty — "a caller with nothing to say should
+    // say so explicitly rather than have the field quietly go missing".
+    ASSERT_TRUE(body.hasProperty("arrangementContext"));
+    EXPECT_EQ(body["arrangementContext"].toString(), juce::String());
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    EXPECT_EQ(body["availableTracks"].getArray()->size(), 0);
+}
+
 } // namespace synth

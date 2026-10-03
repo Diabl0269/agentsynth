@@ -13,7 +13,7 @@ namespace synth {
 //==============================================================================
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
-    MessageBubble(const MessageData& data, std::function<void()> applyPlan,
+    MessageBubble(const MessageData& data, std::function<bool()> applyPlan,
                   std::function<void(const juce::URL&)> urlOpener, EditPlanCard::RateCallback onRate) {
         role = data.role;
         text = data.text;
@@ -324,7 +324,7 @@ void AIChatComponent::updateChatDisplay() {
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto& data = messages[i];
         auto* bubble = new MessageBubble(
-            data, [this, planJson = data.planJson] { applyEditPlan(planJson); }, urlOpener,
+            data, [this, i] { return applyEditPlan(i); }, urlOpener,
             [this, i](PatchRatingUiState newRating, const juce::String& comment) {
                 if (i >= messages.size())
                     return;

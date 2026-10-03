@@ -88,8 +88,9 @@ struct PlanRig {
         options.storageFormat = juce::PropertiesFile::storeAsXML;
         props.setStorageParameters(options);
         chat = std::make_unique<synth::AIChatComponent>(service, props);
-        chat->setLocalHistoryDirectoryForTesting(juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                                     .getChildFile("chat-plan-" + juce::Uuid().toString()));
+        historyDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                         .getChildFile("chat-plan-" + juce::Uuid().toString());
+        chat->setLocalHistoryDirectoryForTesting(historyDir);
         chat->setSize(400, 700);
         chat->refreshModels();
     }
@@ -127,6 +128,7 @@ struct PlanRig {
     synth::TransportService transport;
     synth::PlanFakeHost host{doc, engine.getGraph()};
     juce::ApplicationProperties props;
+    juce::File historyDir;
     PlanProvider* provider = nullptr;
     std::unique_ptr<synth::AIChatComponent> chat;
 };
@@ -287,4 +289,63 @@ TEST_F(AIChatComponentTest, ApplyIsNamedTippedAndReachedByTabAfterTheInputRow) {
     const int applyIndex = names.indexOf("Apply edit plan");
     EXPECT_GT(applyIndex, 2) << names.joinIntoString(" | ").toStdString();
     EXPECT_GT(applyIndex, names.indexOf("Show details")) << "inside the card, in reading order";
+}
+
+TEST_F(AIChatComponentTest, ApplyOnceThenTheCardReadsAppliedAndSecondClickDoesNothing) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    apply->onClick();
+    EXPECT_EQ(rig.host.batches, 1);
+
+    EXPECT_FALSE(apply->isEnabled());
+    EXPECT_EQ(apply->getButtonText(), "Applied");
+    EXPECT_EQ(apply->getTitle(), "Edit plan applied");
+    EXPECT_EQ(apply->getTooltip(), "This plan was applied; undo with Cmd+Z");
+    EXPECT_TRUE(rig.findTitled("Apply edit plan").empty());
+
+    apply->onClick();
+    EXPECT_EQ(rig.host.batches, 1) << "an applied plan is never applied twice";
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "LFO"), 1);
+
+    // A redraw rebuilds every bubble; the card must come back applied.
+    rig.provider->answer = "plain answer";
+    rig.send("thanks");
+    const auto rebuilt = rig.findTitled("Edit plan applied");
+    ASSERT_EQ(rebuilt.size(), 1u);
+    EXPECT_FALSE(rebuilt.front()->isEnabled());
+    EXPECT_TRUE(rig.findTitled("Apply edit plan").empty());
+}
+
+TEST_F(AIChatComponentTest, AppliedStateSurvivesTheSavedHistoryRoundTrip) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    ASSERT_NE(rig.applyButton(), nullptr);
+    rig.applyButton()->onClick();
+
+    const auto saved = synth::LocalHistoryStore::list(rig.historyDir);
+    ASSERT_EQ(saved.size(), 1u);
+    synth::LocalConversation conversation;
+    ASSERT_TRUE(synth::LocalHistoryStore::get(rig.historyDir, saved[0].id, conversation));
+    ASSERT_EQ(conversation.messages.size(), 2u);
+    EXPECT_TRUE(conversation.messages[1].content.contains("edit-plan-applied"));
+
+    // A fresh chat restoring that conversation shows the card applied, not offering Apply again.
+    PlanRig restored;
+    restored.chat->setLocalHistoryDirectoryForTesting(rig.historyDir);
+    restored.chat->simulateRestoreConversationForTesting(saved[0].id, /*isCloud=*/false);
+    for (int i = 0; i < 40 && restored.findTitled("Edit plan").empty(); ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    EXPECT_EQ(restored.findTitled("Edit plan").size(), 1u);
+    EXPECT_TRUE(restored.findTitled("Apply edit plan").empty());
+    const auto appliedButtons = restored.findTitled("Edit plan applied");
+    ASSERT_EQ(appliedButtons.size(), 1u);
+    EXPECT_FALSE(appliedButtons.front()->isEnabled());
+    EXPECT_TRUE(restored.chat->getLastPlanJsonForTesting().isNotEmpty());
+    EXPECT_EQ(restored.host.batches, 0) << "restoring applies nothing";
 }

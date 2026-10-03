@@ -217,7 +217,7 @@ juce::String AIIntegrationService::buildProjectAugmentedContent(const juce::Stri
     return content;
 }
 
-// ONE intent, two transports, like sendArrangeMessage: hosted -> the project.generate capability
+// ONE intent, two transports: hosted -> the project.generate capability
 // with buildProjectRequestBody; local -> sendPrompt with the same fields composed into the message
 // and getPatchSchemaWithTimelineOps() (which offers "nodeId" and "destParam") as the contract. Both
 // answer with a root that previewProjectEdit/applyProjectEdit consume. Same history contract as

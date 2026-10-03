@@ -115,9 +115,9 @@ The history splice matches `sendMessage()`: `chatHistory` keeps the raw user tex
 context exists only on the wire. Without a timeline (tests, a host without one) the chat keeps the
 plain patch request (`sendMessage()`), and its answer is read the same way.
 
-`sendArrangeMessage()` (hosted `timeline.generate`, local `getTimelineOpsEnvelopeSchema()`) is the
-envelope-only version of the same idea. The chat no longer calls it; it stays for the service tests
-and harnesses, and `buildArrangeRequestBody()` is still the base of the project body.
+`RemoteProvider` still accepts any capability name, `timeline.generate` included (the hosted server
+offers it), but the app no longer sends it: the arrange-only request path was removed, and
+`buildArrangeRequestBody()` is the base of the project body.
 
 The structured input body is `buildArrangeRequestBody()`, public so tests reproduce the real request:
 
@@ -164,9 +164,7 @@ worth it: `sendCapabilityRequest("automation.generate", ...)` with the same body
 Tests: `Tests/AI/RemoteProvider/RemoteProviderCapabilityTests.cpp` (capability URL, body, headers,
 fail-fast validation, entitlement-error pass-through, envelope re-serialization),
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (both `sendProjectMessage`
-request shapes), `Tests/AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp` (the
-arrange body, the 64-target cap, empty-timeline explicitness, the shared history and
-conversation-id contract), and
+request shapes, the structured body, the 64-target cap, empty-timeline explicitness), and
 `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp` (the chat's routing on both
 transports and the one-card flow).
 

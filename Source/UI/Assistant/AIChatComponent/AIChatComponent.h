@@ -426,7 +426,11 @@ private:
         // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
         // (history restore, apply-failure messages).
         int responseMs = -1;
+
+        // True once the card's Apply succeeded; saved with the history (kPlanAppliedMarker).
+        bool planApplied = false;
     };
+    static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
     std::vector<MessageData> messages;
 
     // The answer to a sent message, on the message thread: one bubble, plus the edit-plan card when
@@ -440,9 +444,8 @@ private:
     // scratch graph and doc per plan each time. No-op when data.planJson is empty.
     void attachPlanPreview(MessageData& data, const juce::var& plan);
 
-    // The card's Apply: AIIntegrationService::applyProjectEdit on the plan, once. A failure is
-    // reported as an assistant bubble, never swallowed.
-    void applyEditPlan(const juce::String& planJson);
+    // The card's Apply for messages[index]; false when nothing was applied.
+    bool applyEditPlan(size_t index);
 
     // The edit plan a response carries, or a void var. A fenced ```json block is read first; with
     // no fence, the whole response when `wholeResponseIsJson` (a structured request). A JSON object

@@ -17,8 +17,10 @@ class AIChatComponent::EditPlanCard : public juce::Component {
 public:
     using RateCallback = std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)>;
 
-    // `onApply` is ignored for a refused plan (data.planOk false), which gets no Apply button.
-    EditPlanCard(const MessageData& data, std::function<void()> onApply, RateCallback onRate);
+    // `onApply` is ignored for a refused plan (data.planOk false), which gets no Apply button. It
+    // returns whether the plan was applied: on true the card turns Apply into a disabled "Applied"
+    // (data.planApplied starts a card in that state); on false Apply stays available.
+    EditPlanCard(const MessageData& data, std::function<bool()> onApply, RateCallback onRate);
 
     void resized() override;
     void parentHierarchyChanged() override { applyThemeColours(); }
@@ -33,6 +35,7 @@ private:
     void setRating(AIChatComponent::PatchRatingUiState rating);
     void notifyRate();
     void applyThemeColours();
+    void showApplied();
     int previewHeight(int width) const;
 
     static constexpr int kPadding = 8;
@@ -45,6 +48,7 @@ private:
     static constexpr int kDetailsHeight = 240;
 
     const bool planOk;
+    bool applied = false;
     juce::StringArray previewLines;
     bool isExpanded = false;
     AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;

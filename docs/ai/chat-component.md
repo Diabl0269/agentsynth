@@ -48,9 +48,18 @@ the same card (the engine treats it as a plan with no ops).
 - the preview, one line per phase, measured with `computeWrappedTextHeight()` so it never clips;
 - a row with **Show details** on the left and **Apply** on the right. Apply calls
   `applyEditPlan()` -> `applyProjectEdit()` once: the whole plan as one undo step. A failure is
-  reported as an assistant bubble, never swallowed, and there is no retry loop (the plan was checked
-  against the live project when it arrived). A refused plan's card reads "This plan was rejected and
+  reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
+  (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
   was not applied: <reason>" and has no Apply;
+- **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
+  applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
+  `surfaceHi` fill, no accent), and a second click does nothing. The state is
+  `MessageData::planApplied`, next to `planJson`, so `updateChatDisplay()` rebuilding the bubbles
+  keeps it. It is saved in the history: `reconstructMessageContent()` writes
+  `kPlanAppliedMarker` (an HTML comment line) after the plan's fenced block and
+  `replayMessagesFrom()` strips it, so a restored chat does not offer Apply again for a plan that
+  was applied. (The service's in-memory history that seeds a new chat at construction has no marker,
+  as it never leaves the session);
 - the thumbs rating, with the comment row once a rating is picked (recorded with the plan's JSON in
   `PatchFeedbackStore`, as the patch card's was);
 - the details panel when open: the per-change list (`computeDiff` grouped for a merge,

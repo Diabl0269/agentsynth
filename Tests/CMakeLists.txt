@@ -300,7 +300,6 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServicePatchApplyTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceSystemPromptTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceTimelineToolsTests.cpp
-    AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp

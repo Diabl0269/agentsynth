@@ -16,7 +16,7 @@ juce::String prettyPrintJson(const juce::String& raw) {
 
 } // namespace
 
-AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::function<void()> onApply,
+AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::function<bool()> onApply,
                                             RateCallback rateCallback)
     : planOk(data.planOk)
     , previewLines(data.planPreviewLines)
@@ -54,8 +54,14 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
         applyButton = std::make_unique<juce::TextButton>("Apply");
         applyButton->setTitle("Apply edit plan");
         applyButton->setTooltip("Apply this answer to the project (one undo step)");
-        applyButton->onClick = std::move(onApply);
+        // onClick can be invoked on a disabled button (a test, a script), so the guard is here.
+        applyButton->onClick = [this, apply = std::move(onApply)] {
+            if (!applied && apply())
+                showApplied();
+        };
         addAndMakeVisible(*applyButton);
+        if (data.planApplied)
+            showApplied();
     }
 
     addAndMakeVisible(thumbsUpButton);
@@ -103,8 +109,10 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     const auto colours = lf != nullptr ? lf->getTheme().colors : synth::theme::Theme{}.colors;
     headerLabel.setColour(juce::Label::textColourId, planOk ? colours.accent2 : colours.warning);
     previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
-    if (applyButton)
-        applyButton->setColour(juce::TextButton::buttonColourId, colours.accent);
+    if (applyButton) {
+        applyButton->setColour(juce::TextButton::buttonColourId, applied ? colours.surfaceHi : colours.accent);
+        applyButton->setColour(juce::TextButton::textColourOffId, applied ? colours.textMuted : colours.textPrimary);
+    }
     thumbsUpButton.setColour(juce::TextButton::buttonColourId, currentRating == AIChatComponent::PatchRatingUiState::Up
                                                                    ? colours.success
                                                                    : colours.surfaceHi);
@@ -112,6 +120,19 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
                                currentRating == AIChatComponent::PatchRatingUiState::Down ? colours.error
                                                                                           : colours.surfaceHi);
     detailsDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
+}
+
+// After a successful Apply the plan is in the project: the button stays as a disabled "Applied" so
+// the card shows what happened, and undo is the project's own (one step).
+void AIChatComponent::EditPlanCard::showApplied() {
+    applied = true;
+    if (!applyButton)
+        return;
+    applyButton->setButtonText("Applied");
+    applyButton->setTitle("Edit plan applied");
+    applyButton->setTooltip("This plan was applied; undo with Cmd+Z");
+    applyButton->setEnabled(false);
+    applyThemeColours();
 }
 
 int AIChatComponent::EditPlanCard::previewHeight(int width) const {
@@ -191,11 +212,16 @@ void AIChatComponent::EditPlanCard::notifyRate() {
 // Deliberately no retry loop: the plan was previewed against the live project when it arrived, so
 // what can fail here is the project having moved since (or a host build failing). That is worth
 // reporting, not worth re-asking the model about.
-void AIChatComponent::applyEditPlan(const juce::String& planJson) {
-    const auto result = aiService.applyProjectEdit(juce::JSON::parse(planJson));
+bool AIChatComponent::applyEditPlan(size_t index) {
+    if (index >= messages.size() || messages[index].planApplied)
+        return false;
+    const auto result = aiService.applyProjectEdit(juce::JSON::parse(messages[index].planJson));
     juce::Logger::writeToLog("Edit plan apply: " + (result.ok ? juce::String("applied") : result.message));
-    if (result.ok)
-        return;
+    if (result.ok) {
+        messages[index].planApplied = true;
+        saveCurrentConversationLocally();
+        return true;
+    }
 
     // An Apply that does nothing and says nothing is indistinguishable from a broken button. The
     // redraw is deferred: this runs inside the card's own click, and updateChatDisplay() deletes it.
@@ -208,6 +234,7 @@ void AIChatComponent::applyEditPlan(const juce::String& planJson) {
         if (auto* self = safeThis.getComponent())
             self->updateChatDisplay();
     });
+    return false;
 }
 
 } // namespace synth

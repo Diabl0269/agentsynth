@@ -126,14 +126,6 @@ public:
      *  buildAutomationTargetsSection()'s character cap. */
     static constexpr int kMaxRemoteParamTargets = 64;
 
-    /** Sends an arrange-mode request; the answer is a `{"timelineOps": [...]}` envelope consumed by
-     *  the same extractTimelineOps() -> previewTimelineOps() -> user-gated Apply flow as any other
-     *  timelineOps response — this method adds a way to ASK, never a second way to APPLY. Same
-     *  history contract as sendMessage(): the user's raw text is recorded as the user turn (the
-     *  composed arrange context exists only on the wire). Fails synchronously, like sendMessage(),
-     *  with no provider installed. */
-    AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
-
     // -- Edit plans (AIIntegrationServiceProjectEdit.cpp) ---------------------------------------
 
     /** Checks a plan on scratch copies, mutating nothing live. */
@@ -333,8 +325,6 @@ private:
     // AIIntegrationServiceRequestSending.cpp's definition for what's included/excluded.
     std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
 
-    // See its definition in AIIntegrationServiceRequestSending.cpp for what this composes.
-    juce::String buildArrangeAugmentedContent(const juce::String& text) const;
     juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
     ProjectEditResult applyPatchOnlyPlan(const juce::var& root); // applyProjectEdit with no host installed
 
@@ -356,7 +346,7 @@ private:
     juce::String buildPatchAugmentedContent(const juce::String& text);
 
     // Wraps a caller's completion callback with shared success bookkeeping (assistant-turn
-    // history, conversation-id re-push). Shared by sendMessage() and sendArrangeMessage().
+    // history, conversation-id re-push). Shared by sendMessage() and sendProjectMessage().
     AIProvider::CompletionCallback wrapCompletionForHistory(AIProvider::CompletionCallback callback);
 
     // Keeps chatHistory bounded to kMaxHistoryTurns pairs; see its definition for the invariant it
