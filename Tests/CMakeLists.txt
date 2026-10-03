@@ -810,6 +810,7 @@ add_executable(Tests
     UI/Graph/CardBody/CardBodyLoadTests.cpp
     UI/Graph/CardBody/CardBodyWidgetKindTests.cpp
     UI/Graph/CardBody/CardLayoutQuickEditTests.cpp
+    UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempoTests.cpp
     UI/Graph/CardBody/DefaultLayouts/EnvelopesDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp
     UI/Graph/CardBody/DefaultLayouts/WavetableDefaultLayoutTests.cpp
@@ -831,6 +832,7 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardScopeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardPanelOnlyTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardTimeTempoTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

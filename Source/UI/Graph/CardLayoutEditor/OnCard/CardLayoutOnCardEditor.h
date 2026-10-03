@@ -31,7 +31,8 @@ class BuiltInCardLayoutSource;
  * to the new card, so it holds the GraphEditor and the node id and never the card it covers. Done
  * keeps the result, Cancel or Esc restores the layout the card opened with; the whole session is one
  * undo step, recorded when the source is destroyed. The bar's Preset and Apply to menus, and the "+ Add control"
- * strip the overlay adds under the card, are the other things it hosts.
+ * strip the overlay adds under the card, are the other things it hosts, and on an ADSR card the bar's "Time and tempo"
+ * switch rewrites the stages' group.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -188,6 +189,10 @@ private:
     void loadPreset(const juce::String& name);
     void savePreset(const juce::String& name);
     void resetLayout();
+
+    // ---- Time and tempo (CardLayoutOnCardEditorTimeTempo.cpp) ------------------------------------
+    void refreshTimeTempo();
+    void chooseTimeTempo(int index);
 
     // ---- Keyboard (CardLayoutOnCardEditorKeyboard.cpp) -----------------------------------------
     bool handleKey(const juce::String& key, const juce::KeyPress& press);

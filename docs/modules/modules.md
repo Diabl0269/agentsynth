@@ -412,7 +412,8 @@ Loads an audio file from disk and plays it back one of two ways.
   layout in `DefaultCardLayoutsEnvelopes.cpp` (one entry each for ADSR, Amp Env and Filter Env;
   [`module-card-layout.md`](../layout/module-card-layout.md#default-layouts)): the envelope view open,
   the Time/Tempo switch, Attack/Hold/Decay/Sustain/Release as vertical faders in one row (readout-boxed
-  like the generic auto-UI — see below), Velocity, the Threshold view and a footer. The graph is the
+  like the generic auto-UI — see below), Velocity, the Threshold view and a footer. The edit bar's "Time and tempo" switch can show the
+  stages as separate Time and Tempo groups instead. The graph is the
   card body's `envelope` view (`CardBodyViews.cpp`, the `CurveEditorComponent` unchanged), which the
   card wires to the parameters. `attackCurve`/`decayCurve`/`releaseCurve` are no longer sliders at all — they're edited only via
   the breakpoint curve editor's bend handles (`Source/UI/ModuleViews/CurveEditor/`, FRO111), on a

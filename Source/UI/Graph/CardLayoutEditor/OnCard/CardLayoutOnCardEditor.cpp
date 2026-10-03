@@ -38,6 +38,7 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
     editBar_.onCancel = [this] { cancel(); };
     editBar_.onDone = [this] { done(); };
+    editBar_.onTimeTempo = [this](int index) { chooseTimeTempo(index); };
     editBar_.onPreset = [this] {
         buildPresetMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editBar_.getPresetButton()));
     };
@@ -120,6 +121,7 @@ void CardLayoutOnCardEditor::syncToCard() {
         attachTo(*card);
     drag_ = {};
     guides_.clear();
+    refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
     cells_ = collectCells(*card);
     watchTabs(*card);
@@ -296,9 +298,13 @@ void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
 }
 
 void CardLayoutOnCardEditor::resized() {
-    const int width = std::min(getWidth() - 2 * kBarMargin, CardLayoutEditBar::kMinWidth);
+    const int available = getWidth() - 2 * kBarMargin;
+    const bool twoRows = editBar_.hasTimeTempo() && CardLayoutEditBar::needsTwoRows(available);
+    editBar_.setTwoRows(twoRows);
+    const int width = std::min(available, twoRows ? CardLayoutEditBar::kMinWidth
+                                                  : CardLayoutEditBar::preferredWidth(editBar_.hasTimeTempo()));
     const int y = (ModuleComponent::kHeaderHeight - CardLayoutEditBar::kHeight) / 2;
-    editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::kHeight);
+    editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::heightFor(twoRows));
     addControl_.setBounds(0, getHeight() - kAddStripHeight + kAddGap, getWidth(), kAddStripHeight - kAddGap);
 }
 
