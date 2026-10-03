@@ -555,6 +555,27 @@ TEST(CardLayoutV2Test, UsesV2FeaturesNamesEachFeature) {
     EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).range = juce::Range<double>(0.0, 1.0); }).usesV2Features());
 }
 
+TEST(CardLayoutV2Test, AViewsPositionRoundTripsAsBothOrNeitherAndFlowsWithout) {
+    const auto view = [](const juce::String& body) {
+        return CardLayout::fromVar(
+            juce::JSON::parse(R"({"version":2,"sections":[{"id":"s","items":[{"view":"threshold")" + body + "}]}]}"));
+    };
+    const auto ok = view(R"(,"x":0,"y":30)");
+    ASSERT_EQ(ok.status, CardLayout::ParseStatus::Ok);
+    const auto& read = std::get<CardViewItem>(ok.layout.sections[0].items[0]);
+    EXPECT_EQ(read.at, juce::Point<int>(0, 30));
+    EXPECT_NE(read, CardViewItem{});
+    EXPECT_TRUE(juce::JSON::toString(ok.layout.toVar()).contains("\"y\""));
+    EXPECT_EQ(CardLayout::fromVar(ok.layout.toVar()).layout, ok.layout);
+
+    const auto plain = view("");
+    ASSERT_EQ(plain.status, CardLayout::ParseStatus::Ok);
+    EXPECT_FALSE(std::get<CardViewItem>(plain.layout.sections[0].items[0]).at.has_value());
+    EXPECT_FALSE(juce::JSON::toString(plain.layout.toVar()).contains("\"x\""));
+    for (const char* bad : {R"(,"x":10)", R"(,"y":10)", R"(,"x":4001,"y":0)", R"(,"x":-1,"y":0)", R"(,"x":"a","y":0)"})
+        EXPECT_EQ(view(bad).status, CardLayout::ParseStatus::Malformed) << bad;
+}
+
 TEST(CardLayoutV2Test, PositionAndRangeAreWrittenOnlyWhenSetAndReadBothOrNeither) {
     const auto item = [](const juce::String& body) {
         return CardLayout::fromVar(

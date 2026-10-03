@@ -40,11 +40,19 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerEnterRows",
         "mixerOpenEq",
         "mixerToggleRowBypass",
-        // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp)
+        // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp) and the on-card nudge keys
         "layoutEditorToggleShown",
         "layoutEditorMoveUp",
         "layoutEditorMoveDown",
         "layoutEditorRename",
+        "layoutEditorNudgeLeft",
+        "layoutEditorNudgeRight",
+        "layoutEditorNudgeUp",
+        "layoutEditorNudgeDown",
+        "layoutEditorNudgeLeftBig",
+        "layoutEditorNudgeRightBig",
+        "layoutEditorNudgeUpBig",
+        "layoutEditorNudgeDownBig",
         // CanvasCardKeyboard::keyPressed
         "canvasSelectCardLeft",
         "canvasSelectCardRight",

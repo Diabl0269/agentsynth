@@ -426,14 +426,18 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // "Edit Layout..." opens the card layout editor: a built-in card's own (showCardLayoutEditor), or,
-    // for a hosted plugin, the card's "Edit Layout..." button's editor over the plugin's parameters
-    // (docs/layout/module-card-layout.md#editing-a-layout).
+    // "Edit Layout..." edits a built-in card on the card itself (showCardLayoutEditor) and "Layout List..."
+    // opens its list editor; for a hosted plugin "Edit Layout..." is the card's button's editor over the
+    // plugin's parameters (docs/layout/module-card-layout.md#editing-a-layout).
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
     if (cardBody_ != nullptr && cardBody_->drawsFromLayout()) {
         synth::appendEditLayoutMenuItem(m, [safeThis] {
             if (safeThis != nullptr)
                 safeThis->showCardLayoutEditor();
+        });
+        synth::appendLayoutListMenuItem(m, [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->showCardLayoutList();
         });
         m.addSeparator();
     } else if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {

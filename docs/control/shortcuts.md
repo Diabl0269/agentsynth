@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **127 actions** across six categories —
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **135 actions** across six categories —
 **General** (55, app-wide or routed per focused editor), **Graph** (15), **Timeline** (34),
-**Piano Roll** (14), **Mixer** (5) and **Layout Editor** (4) — every one of them rebindable, including keys that used to be hardcoded:
+**Piano Roll** (14), **Mixer** (5) and **Layout Editor** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -788,9 +788,11 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 ## Layout Editor
 
 The card layout editor's list ([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout))
-resolves these itself (`CardLayoutEditorComponent`'s row keys) while one of its rows has focus; the panel is
-the only thing focused while it is open, so they share keys freely with every other category. Up/Down
-between rows are fixed list keys, and Escape is left to the panel's CallOutBox, which closes it.
+resolves the first four itself (`CardLayoutEditorComponent`'s row keys) while one of its rows has focus,
+and the on-card editor resolves the arrow-key actions (`CardLayoutOnCardEditor`) while a control's outline
+has focus; the editor is the only thing focused while it is open, so they share keys freely with every
+other category. Up/Down between rows are fixed list keys, and Escape is left to the panel's CallOutBox,
+which closes it; in the on-card editor Escape ends a drag, else cancels the session (not an action).
 
 | Shortcut (macOS) | Windows / Linux | Action |
 |------------------|-----------------|--------|
@@ -798,10 +800,12 @@ between rows are fixed list keys, and Escape is left to the panel's CallOutBox, 
 | Cmd+Up | Ctrl+Up | Move the Control Up (`layoutEditorMoveUp`), into the group above at a group's top |
 | Cmd+Down | Ctrl+Down | Move the Control Down (`layoutEditorMoveDown`), into the group below at a group's end |
 | Return | Return | Rename the Control (`layoutEditorRename`), or the focused group's title |
+| Left / Right / Up / Down | Left / Right / Up / Down | Nudge the Control 1 pixel on the card (`layoutEditorNudgeLeft`, `layoutEditorNudgeRight`, `layoutEditorNudgeUp`, `layoutEditorNudgeDown`) |
+| Shift+Left / Right / Up / Down | Shift+Left / Right / Up / Down | Nudge the Control 8 pixels (`layoutEditorNudgeLeftBig`, `layoutEditorNudgeRightBig`, `layoutEditorNudgeUpBig`, `layoutEditorNudgeDownBig`) |
 
 ## Command vs surface actions
 
-The 127 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 135 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (71 actions) — every General action (including the transport family
@@ -810,12 +814,12 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (56 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
+- **Surface-resolved** (64 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
   `canvasEnterCard`, resolved by `CanvasCardKeyboard::keyPressed`), the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven
-  clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the four `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the twelve `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

@@ -288,9 +288,9 @@ out as its own run, by the same measure-and-apply walk:
 
 Every control on a card drawn from layout data adds to its right-click menu, after Automate and the
 MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
-fader** / **Show as knob** for a float or int on the card, and **Edit Layout...**, which opens the
-layout editor beside the card ([module-card-layout.md](module-card-layout.md#editing-a-layout)); the
-module menu carries the same item. The bespoke cards offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
+fader** / **Show as knob** for a float or int on the card, **Edit Layout...**, which turns the card itself
+into the layout editor, and **Layout List...**, the list editor beside the card
+([module-card-layout.md](module-card-layout.md#editing-a-layout)); the module menu carries the same items. The bespoke cards offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
 starting from the layout the card draws now (the automatic layout written out as explicit items,
 which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
 Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the

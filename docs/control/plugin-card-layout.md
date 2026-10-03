@@ -418,8 +418,9 @@ Nothing special — that is the point of binding real hosted parameters rather t
 
 ## Future: editing any module's layout (built)
 
-Built since: right-click → **Edit Layout...** on any card drawn from layout data opens the same editor
-([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)). The rest of this section is
+Built since: right-click → **Layout List...** on any card drawn from layout data opens the same list editor
+(**Edit Layout...** edits such a card on the card itself;
+[module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)). The rest of this section is
 the reasoning it started from. Right-click → **Edit layout…** on *any* module was parked as its
 own epic because a built-in card's controls are created by type-specific code, not from data,
 and turning that into a data-driven layout is a larger refactor of `ModuleComponent` than this

@@ -349,6 +349,8 @@ public:
     /** Opens the card layout editor beside this card; the hosted plugin's picker on a hosted card,
      *  nothing on a bespoke card. See ModuleComponentLayoutEditor.cpp. */
     void showCardLayoutEditor();
+    /** The list editor of a data-driven card, in a call-out beside it. */
+    void showCardLayoutList();
     /** Test seam: while set (non-null), every card hands its layout editor here instead of opening a
      *  window. Message thread only. */
     static void setCardLayoutEditorLauncherForTest(std::function<void(std::unique_ptr<juce::Component>)> launcher);

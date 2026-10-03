@@ -40,6 +40,9 @@ public:
     CardLayout currentLayout() const override;
     void apply(const CardLayout& layout, bool allOfType) override;
     CardLayout reset(bool allOfType) override;
+    /** Writes back the node's override as it stood when this source was made (or clears it, when it had
+     *  none) and rebuilds the card: a cancelled session leaves the layout as it opened. */
+    void restoreOpeningLayout();
 
     bool hasPresets() const override { return store() != nullptr; }
     juce::StringArray listPresets() const override;
@@ -60,6 +63,7 @@ private:
     juce::AudioProcessor* openedOn_ = nullptr; ///< Identity only, never dereferenced unless the node still holds it.
     juce::String moduleType_;
     juce::var sessionBefore_;
+    juce::var openingOverride_; ///< The node's "cardLayout" JSON at construction; void = none.
 };
 
 } // namespace synth::ui

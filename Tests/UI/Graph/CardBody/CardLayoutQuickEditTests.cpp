@@ -181,6 +181,7 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
         const auto* edit = menuItem(menu, "Edit Layout...");
         ASSERT_NE(edit, nullptr);
         EXPECT_TRUE(edit->isEnabled);
+        EXPECT_NE(menuItem(menu, "Layout List..."), nullptr);
         EXPECT_EQ(menuItem(menu, "Show as fader") != nullptr, synth::isContinuousKind(item.kind));
     }
 
@@ -188,6 +189,7 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
     const auto* edit = menuItem(moduleMenu, "Edit Layout...");
     ASSERT_NE(edit, nullptr);
     EXPECT_TRUE(edit->isEnabled);
+    EXPECT_NE(menuItem(moduleMenu, "Layout List..."), nullptr);
 }
 
 TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {
@@ -202,6 +204,7 @@ TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {
             break;
         }
     EXPECT_EQ(menuItem(card->buildModuleContextMenu(), "Edit Layout..."), nullptr);
+    EXPECT_EQ(menuItem(card->buildModuleContextMenu(), "Layout List..."), nullptr);
 }
 
 // A layout stored in the v1 form hides, on read, every id its slots did not name (the header buttons,

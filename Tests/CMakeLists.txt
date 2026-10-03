@@ -818,6 +818,11 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/CardLayoutEditorBuiltInTests.cpp
     UI/Graph/CardLayoutEditor/CardLayoutEditorKeyboardTests.cpp
     UI/Graph/CardLayoutEditor/CardLayoutEditorE2ETests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMathTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardEditorTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardEditorDragTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardEditorKeyboardTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardEditorSessionTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

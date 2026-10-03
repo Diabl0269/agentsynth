@@ -2,7 +2,8 @@
 
 // Shared fixtures for Tests/UI/Graph/CardLayoutEditor/*Tests.cpp: a canvas whose cards resolve against
 // a temp-dir ModuleCardLayoutStore (bound the way MainComponent binds the app's), and the editor a real
-// "Edit Layout..." menu click opens, taken through ModuleComponent's launcher seam instead of a window.
+// menu click opens ("Layout List..." the list, "Edit Layout..." the on-card editor), taken through
+// ModuleComponent's launcher seam instead of a window.
 // Header-only; not registered in Tests/CMakeLists.txt.
 
 #include "../CardBody/CardBodyTestHelpers.h"
@@ -45,8 +46,8 @@ struct EditorCanvas {
 
     ModuleComponent* card(NodeID id) { return canvas.card(id); }
 
-    /** Right-clicks `paramId`'s control on the node's card and picks "Edit Layout..." from the menu the
-     *  card built; returns the editor it opened, or null. */
+    /** Right-clicks `paramId`'s control on the node's card and picks "Layout List..." from the menu the
+     *  card built; returns the list editor it opened, or null. */
     CardLayoutEditorComponent* openFromControl(NodeID id, const juce::String& paramId) {
         auto* c = card(id);
         if (c == nullptr || c->getCardBody() == nullptr)
@@ -58,7 +59,7 @@ struct EditorCanvas {
         return pick(menu);
     }
 
-    /** The module (header) menu's "Edit Layout...". */
+    /** The module (header) menu's "Layout List...". */
     CardLayoutEditorComponent* openFromModuleMenu(NodeID id) {
         auto* c = card(id);
         return c != nullptr ? pick(c->buildModuleContextMenu()) : nullptr;
@@ -68,7 +69,7 @@ struct EditorCanvas {
     void close() { launched.reset(); }
 
     CardLayoutEditorComponent* pick(const juce::PopupMenu& menu) {
-        const auto* item = cardbody_test::menuItem(menu, "Edit Layout...");
+        const auto* item = cardbody_test::menuItem(menu, "Layout List...");
         if (item == nullptr || !item->isEnabled || !item->action)
             return nullptr;
         item->action();

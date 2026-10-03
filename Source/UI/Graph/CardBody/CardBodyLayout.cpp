@@ -211,14 +211,15 @@ std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell&
 }
 
 // One cell placed exactly as its run layout would place a run of one, in a geometry that is the cell's
-// own box (not a double-width card, so a combo stays one column).
-void placeFreeCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const FreeCell& free, int columns,
+// own box (not a double-width card, so a combo stays one column; one column, so a knob fills the box
+// instead of a third of it).
+void placeFreeCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const FreeCell& free,
                    juce::Point<int> topLeft, const cardbody::BodyGeometry& g) {
     auto cellGeometry = g;
     cellGeometry.width = 0;
     cellGeometry.contentX = cellGeometry.narrowX = topLeft.x;
     cellGeometry.contentW = cellGeometry.narrowW = free.size.getWidth();
-    layoutRun(plan, module, {free.cell}, columns, topLeft.y, cellGeometry, true);
+    layoutRun(plan, module, {free.cell}, 1, topLeft.y, cellGeometry, true);
 }
 
 // A freeform section: cells with a position sit at it (relative to the content origin and the section's
@@ -237,7 +238,7 @@ int layoutFreeSection(const CardBodyPlan& plan, juce::AudioProcessor& module, co
     int bottom = top;
     const auto place = [&](const FreeCell& free, juce::Point<int> topLeft) {
         if (apply)
-            placeFreeCell(plan, module, free, section.columns, topLeft, g);
+            placeFreeCell(plan, module, free, topLeft, g);
         bottom = std::max(bottom, topLeft.y + free.size.getHeight());
     };
     for (const auto& free : positioned) {
@@ -317,7 +318,11 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
                 section.header->setBounds(g.contentX, y, g.contentW, cardbody::kSectionHeaderHeight);
             y += cardbody::kSectionHeaderHeight;
         }
+        if (apply)
+            section.cellTop = y;
         y = layoutSectionCells(plan, module, section, y, g, apply);
+        if (apply)
+            section.cellBottom = y;
     }
     return y;
 }

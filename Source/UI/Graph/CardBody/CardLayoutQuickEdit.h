@@ -32,14 +32,17 @@ bool performCardQuickEdit(GraphEditor& editor, ::AppUndoManager* undo, juce::Aud
 
 /**
  * Appends a separator and the layout items for `paramId`'s control on `body`'s card ("Hide from card"
- * or "Show on card", "Show as fader" or "Show as knob", "Edit Layout..."). Nothing when `body` is
+ * or "Show on card", "Show as fader" or "Show as knob", "Edit Layout...", "Layout List..."). Nothing when `body` is
  * null, its card is not drawn from layout data, or it shows no control for `paramId`.
  */
 void appendCardLayoutMenuItems(juce::PopupMenu& menu, GraphEditor& editor, ::AppUndoManager* undo,
                                juce::AudioProcessorGraph::NodeID nodeId, const CardBody* body,
                                const juce::String& paramId);
 
-/** The card layout editor's entry; `open` runs after the menu closes. */
+/** The card layout editor's entry ("Edit Layout..."); `open` runs after the menu closes. */
 void appendEditLayoutMenuItem(juce::PopupMenu& menu, std::function<void()> open);
+
+/** The layout list's entry ("Layout List..."), the list editor beside the card. */
+void appendLayoutListMenuItem(juce::PopupMenu& menu, std::function<void()> open);
 
 } // namespace synth

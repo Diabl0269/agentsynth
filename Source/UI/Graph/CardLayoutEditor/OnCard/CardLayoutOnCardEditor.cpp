@@ -1,0 +1,263 @@
+// CardLayoutOnCardEditor.cpp -- the on-card layout editor's session: opening over a card, keeping one
+// outline per control in step with the card the source rebuilds, and ending with Done or Cancel.
+// docs/layout/module-card-layout.md#editing-a-layout.
+#include "CardLayoutOnCardEditor.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <utility>
+
+namespace synth::ui {
+
+namespace {
+
+constexpr double kFadeInMs = 160.0;
+constexpr double kFadeOutMs = 110.0;
+constexpr double kReducedFadeMs = 80.0;
+constexpr int kBarMargin = 8;
+
+} // namespace
+
+CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoManager* undo,
+                                               juce::AudioProcessorGraph::NodeID nodeId,
+                                               const ShortcutManager* shortcuts)
+    : graphEditor_(&editor)
+    , nodeId_(nodeId)
+    , shortcuts_(shortcuts)
+    , source_(std::make_unique<BuiltInCardLayoutSource>(editor, undo, nodeId)) {
+    setTitle("Layout editing");
+    setFocusContainerType(FocusContainerType::keyboardFocusContainer);
+    editBar_.onCancel = [this] { cancel(); };
+    editBar_.onDone = [this] { done(); };
+    addAndMakeVisible(editBar_);
+}
+
+// Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
+CardLayoutOnCardEditor::~CardLayoutOnCardEditor() {
+    stopTimer();
+    cancelPendingUpdate();
+    if (card_ != nullptr)
+        card_->removeComponentListener(this);
+    source_.reset();
+}
+
+ModuleComponent* CardLayoutOnCardEditor::findCard() const {
+    auto* editor = graphEditor_.getComponent();
+    if (editor == nullptr)
+        return nullptr;
+    for (auto* comp : editor->getModuleComponents())
+        if (comp != nullptr && comp->getNodeId() == nodeId_)
+            return comp;
+    return nullptr;
+}
+
+std::unique_ptr<CardLayoutOnCardEditor> CardLayoutOnCardEditor::open(GraphEditor& editor, ::AppUndoManager* undo,
+                                                                     juce::AudioProcessorGraph::NodeID nodeId,
+                                                                     const ShortcutManager* shortcuts) {
+    for (auto* comp : editor.getModuleComponents()) {
+        if (comp == nullptr || comp->getNodeId() != nodeId)
+            continue;
+        const auto* body = comp->getCardBody();
+        if (body == nullptr || !body->drawsFromLayout() || comp->getParentComponent() == nullptr)
+            return nullptr;
+        std::unique_ptr<CardLayoutOnCardEditor> opened(new CardLayoutOnCardEditor(editor, undo, nodeId, shortcuts));
+        opened->attachTo(*comp);
+        opened->syncToCard();
+        if (opened->isShowing()) {
+            opened->setAlpha(0.0f);
+            opened->fadeTo(1.0f);
+            if (auto* first = opened->outlines_.getFirst())
+                first->grabKeyboardFocus();
+        }
+        return opened;
+    }
+    return nullptr;
+}
+
+// The overlay is a sibling of the card, above it: a child of the card could not outlive the rebuild
+// every write causes. It follows the card's bounds and rejoins whichever card the node has next.
+void CardLayoutOnCardEditor::attachTo(ModuleComponent& card) {
+    if (card_ != nullptr && card_ != &card)
+        card_->removeComponentListener(this);
+    card_ = &card;
+    cardIdentity_ = &card;
+    card.addComponentListener(this);
+    if (auto* parent = card.getParentComponent(); parent != nullptr && getParentComponent() != parent)
+        parent->addChildComponent(this);
+    setVisible(true);
+}
+
+// Reads the card as it is now: its bounds, one cell per outlined control, one outline per cell.
+void CardLayoutOnCardEditor::syncToCard() {
+    if (closed_)
+        return;
+    auto* card = findCard();
+    if (card == nullptr || !source_->isAlive()) {
+        close(true);
+        return;
+    }
+    if (card != card_.getComponent())
+        attachTo(*card);
+    drag_ = {};
+    guides_.clear();
+    setBounds(card->getBounds());
+    cells_ = collectCells(*card);
+    reconcileOutlines();
+    toFront(false);
+    repaint();
+}
+
+int CardLayoutOnCardEditor::indexOfCell(const juce::String& key) const {
+    for (int i = 0; i < (int)cells_.size(); ++i)
+        if (cells_[(size_t)i].key == key)
+            return i;
+    return -1;
+}
+
+// An outline that survives a write is kept, not rebuilt: the press that started a drop is still being
+// delivered to it, and keyboard focus stays where it was.
+void CardLayoutOnCardEditor::reconcileOutlines() {
+    for (int i = outlines_.size(); --i >= 0;)
+        if (indexOfCell(outlines_[i]->getParamId()) < 0)
+            outlines_.remove(i);
+    for (const auto& cell : cells_) {
+        auto* outline = getOutlineForTest(cell.key);
+        if (outline == nullptr) {
+            outline = outlines_.add(new CardLayoutOutline(cell.key, cell.caption));
+            wireOutline(*outline);
+            addAndMakeVisible(outline);
+        }
+        outline->setCaption(cell.caption);
+        outline->setCell(cell.rect);
+    }
+}
+
+void CardLayoutOnCardEditor::wireOutline(CardLayoutOutline& outline) {
+    const auto key = outline.getParamId();
+    outline.onPress = [this, key](const juce::MouseEvent& e) { pressOn(key, e); };
+    outline.onDrag = [this](const juce::MouseEvent& e) { dragTo(e); };
+    outline.onRelease = [this](const juce::MouseEvent& e) { releaseOn(e); };
+    outline.onKey = [this, key](const juce::KeyPress& press) { return handleKey(key, press); };
+    outline.onClick = [this, key] {
+        if (onControlOptions)
+            onControlOptions(key);
+    };
+}
+
+CardLayoutOutline* CardLayoutOnCardEditor::getOutlineForTest(const juce::String& paramId) const {
+    for (auto* outline : outlines_)
+        if (outline->getParamId() == paramId)
+            return outline;
+    return nullptr;
+}
+
+void CardLayoutOnCardEditor::done() { close(true); }
+
+void CardLayoutOnCardEditor::cancel() { close(false); }
+
+// Done keeps the layout the writes made; Cancel puts the opening one back. Either way the source goes:
+// that is where the session's one undo step is recorded (none when the layout is as it opened).
+void CardLayoutOnCardEditor::close(bool keep) {
+    if (closed_ || closing_)
+        return;
+    closing_ = true;
+    stopTimer();
+    glidePump_.stop();
+    fadePump_.stop();
+    if (finishGlide_)
+        std::exchange(finishGlide_, nullptr)();
+    cancelPendingUpdate();
+    escapeKey_.disarm();
+    drag_ = {};
+    guides_.clear();
+    if (keep) {
+        flushNudge();
+    } else {
+        nudgeKey_ = {};
+        source_->restoreOpeningLayout();
+    }
+    if (card_ != nullptr)
+        card_->removeComponentListener(this);
+    source_.reset();
+    closed_ = true;
+    setInterceptsMouseClicks(false, false);
+    fadeTo(0.0f, [this] { finishClose(); });
+}
+
+void CardLayoutOnCardEditor::finishClose() {
+    setVisible(false);
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent(this);
+    if (onClosed)
+        onClosed();
+}
+
+// The whole overlay (outlines, grips, bar) fades together: 160 ms out of nothing, 110 ms back into it,
+// 80 ms either way under Reduce Motion; with nothing on screen it is simply there or gone.
+void CardLayoutOnCardEditor::fadeTo(float target, std::function<void()> done) {
+    fadePump_.stop();
+    const float from = getAlpha();
+    const double ms = prefersReducedMotion() ? kReducedFadeMs : (target > from ? kFadeInMs : kFadeOutMs);
+    if (!isShowing()) {
+        setAlpha(target);
+        if (done)
+            done();
+        return;
+    }
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    const auto ease = target > from ? easeOutCubic : easeInCubic;
+    fadePump_.run(
+        ms,
+        [this, from, target, start, ms, ease] {
+            const auto t = (float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / ms);
+            setAlpha(from + (target - from) * ease(t));
+        },
+        std::move(done));
+}
+
+void CardLayoutOnCardEditor::componentMovedOrResized(juce::Component& component, bool, bool wasResized) {
+    if (&component != cardIdentity_ || writing_ || closed_)
+        return;
+    setBounds(component.getBounds());
+    if (wasResized && !drag_.pressed && !finishGlide_)
+        triggerAsyncUpdate();
+}
+
+// The card is rebuilt or gone for a reason that is not ours (an undo, a conditional section flipping,
+// the module removed): look for the node's card again once the dust settles.
+void CardLayoutOnCardEditor::componentBeingDeleted(juce::Component& component) {
+    if (&component != cardIdentity_)
+        return;
+    cardIdentity_ = nullptr;
+    if (!writing_ && !closed_)
+        triggerAsyncUpdate();
+}
+
+void CardLayoutOnCardEditor::handleAsyncUpdate() {
+    if (!closed_ && !writing_ && !drag_.moving)
+        syncToCard();
+}
+
+void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
+    const auto& theme = synth::theme::themeOf(*this);
+    g.setColour(theme.colors.accent);
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
+    g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha));
+    for (const auto& guide : guides_) {
+        const auto p = (float)guide.position;
+        const auto line = guide.vertical ? juce::Line<float>(p, (float)guide.from, p, (float)guide.to)
+                                         : juce::Line<float>((float)guide.from, p, (float)guide.to, p);
+        g.drawLine(line, theme.metrics.guideLineWidth);
+    }
+}
+
+void CardLayoutOnCardEditor::resized() {
+    const int width = std::min(getWidth() - 2 * kBarMargin, CardLayoutEditBar::kMinWidth);
+    const int y = (ModuleComponent::kHeaderHeight - CardLayoutEditBar::kHeight) / 2;
+    editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::kHeight);
+}
+
+} // namespace synth::ui

@@ -261,6 +261,9 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         placer.openGroupParam.clear();
         if (const int view = addViewItem(module, v->view, plan); view >= 0) {
             plan.items[(size_t)view].open = v->open;
+            plan.items[(size_t)view].at = v->at;
+            if (v->at && !placer.section.footer)
+                placer.section.freeform = true;
             plan.items[(size_t)view].section = placer.sectionIndex;
             placer.section.items.push_back(view);
         }

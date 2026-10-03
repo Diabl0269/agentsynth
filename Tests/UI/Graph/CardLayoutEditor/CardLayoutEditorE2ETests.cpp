@@ -1,6 +1,6 @@
 // CardLayoutEditorE2ETests.cpp
 //
-// One story end to end through the real handlers: add a Filter, open Edit Layout... from a control's
+// One story end to end through the real handlers: add a Filter, open Layout List... from a control's
 // right-click menu, hide Drive, rename Cutoff to Freq, make Level a fader, close the editor, save the
 // project (graphToJSON), load it into a fresh canvas (applyJSONToGraph, trusted, as a project load
 // does) and find the same card there.

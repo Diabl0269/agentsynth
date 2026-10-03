@@ -134,6 +134,10 @@ juce::var itemToVar(const CardItem& item) {
     if (const auto* view = std::get_if<CardViewItem>(&item)) {
         object->setProperty("view", kViews.nameOf(view->view));
         object->setProperty("open", view->open);
+        if (view->at) {
+            object->setProperty("x", view->at->x);
+            object->setProperty("y", view->at->y);
+        }
         return juce::var(object);
     }
     const auto& param = std::get<CardParamItem>(item);
@@ -192,6 +196,8 @@ bool readItem(const juce::var& json, CardItem& out) {
         if (object->hasProperty("open") && !object->getProperty("open").isBool())
             return false;
         item.open = !object->hasProperty("open") || static_cast<bool>(object->getProperty("open"));
+        if (!readPosition(*object, item.at))
+            return false;
         out = item;
         return true;
     }

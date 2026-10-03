@@ -51,6 +51,11 @@ struct CardBodyPlan {
         bool footer = false;   ///< The footer row (CardSection::kFooterId), always laid out last.
         bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
+        /** Where the last applied layout put this section's cells: the y below its header and the y
+         *  below its last cell, in card pixels. Written by a live layout pass only (a free position is
+         *  relative to cellTop); stale for a tab section, which the on-card editor does not edit. */
+        mutable int cellTop = 0;
+        mutable int cellBottom = 0;
 
         /** True when the section draws a header row: a non-empty title over at least one item. A tab's
          *  title is its tab, never a header row. */
