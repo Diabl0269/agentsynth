@@ -555,6 +555,7 @@ add_executable(Tests
     UI/Timeline/MidiDestinationPickerTests.cpp
     Modules/ModuleMidiFlagsTests.cpp
     App/FocusArbitration/FocusArbitrationClipboardTests.cpp
+    App/FocusArbitration/FocusArbitrationAutomationLaneTests.cpp
     App/FocusArbitration/FocusArbitrationSelectionTests.cpp
     App/FocusArbitration/FocusArbitrationSelectionStepTests.cpp
     App/FocusArbitration/FocusArbitrationPlaybackDeleteTests.cpp
@@ -577,6 +578,8 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesPointBubbleTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesPointSelectionTests.cpp
+    UI/Timeline/AutomationLanes/LanePointMathTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapePaintTests.cpp
     UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp

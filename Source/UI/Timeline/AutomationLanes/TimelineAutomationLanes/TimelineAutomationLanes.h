@@ -78,6 +78,8 @@ public:
 
     // ---- Lane access ----
     AutomationLaneEditor* editorFor(synth::LaneId lane) const;
+    /** The lane editor that holds keyboard focus, or nullptr; the edit commands (Cmd+A/C/X/V) act on it. */
+    AutomationLaneEditor* focusedEditor() const;
     AutomationLaneHeaderComponent* headerFor(synth::LaneId lane) const;
     /** The track's "+ Add automation..." row while its lanes are open, else nullptr. */
     AddAutomationRow* addRowFor(synth::TrackId track) const;
@@ -165,6 +167,7 @@ private:
     EditTool editTool_ = EditTool::Select;
     DrawShape drawShape_ = DrawShape::Free;
     LaneRangeSelection laneRange_;
+    LanePointClipboard pointClipboard_; // Cmd+C/X/V across every lane editor
 
     std::set<synth::TrackId> expanded_;            // MIDI/Audio tracks the user opened
     std::set<synth::TrackId> collapsedUnassigned_; // Automation tracks the user closed

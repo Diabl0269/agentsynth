@@ -173,6 +173,7 @@ void TimelineAutomationLanes::syncPools() {
             editor->setEditTool(editTool_);
             editor->setDrawShape(drawShape_);
             editor->setLaneRange(&laneRange_);
+            editor->setClipboard(&pointClipboard_);
             editor->setActiveLane(id);
             // host_ is read at call time: the host can be set after the editor exists.
             editor->valueToText = [this, id](double value) {
@@ -225,7 +226,7 @@ void TimelineAutomationLanes::refreshPooled() {
     }
     for (auto& [id, editor] : editors_) {
         editor->setCurveColour(laneColourFor(*doc_, id, unassigned));
-        editor->repaint();
+        editor->laneDocChanged();
     }
 }
 
@@ -238,6 +239,13 @@ juce::Colour TimelineAutomationLanes::unassignedColour() const {
 AutomationLaneEditor* TimelineAutomationLanes::editorFor(synth::LaneId lane) const {
     const auto it = editors_.find(lane);
     return it != editors_.end() ? it->second.get() : nullptr;
+}
+
+AutomationLaneEditor* TimelineAutomationLanes::focusedEditor() const {
+    for (const auto& [id, editor] : editors_)
+        if (editor->hasKeyboardFocus(true))
+            return editor.get();
+    return nullptr;
 }
 
 AutomationLaneHeaderComponent* TimelineAutomationLanes::headerFor(synth::LaneId lane) const {

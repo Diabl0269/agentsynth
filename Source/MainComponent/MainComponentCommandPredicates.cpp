@@ -20,6 +20,19 @@ bool MainComponent::touchesAnyMacro() const {
     return false;
 }
 
+// The lane editor the point commands act on: the one holding focus, else the lane last shown or focused.
+synth::ui::AutomationLaneEditor* MainComponent::activeLaneEditor() const {
+    if (auto* focused = timelinePanel.getAutomationLanes().focusedEditor())
+        return focused;
+    return timelinePanel.getAutomationLanes().editorFor(timelinePanel.getSelectedAutomationLane());
+}
+
+// True while the active lane editor has a point selected.
+bool MainComponent::hasPointSelection() const {
+    const auto* editor = activeLaneEditor();
+    return editor != nullptr && !editor->getPointSelection().isEmpty();
+}
+
 // The Copy/Paste/Duplicate/Cut/Repeat block: each routes by resolveEditSurface(), but the exact
 // per-surface predicate differs by command (see each case) -- moved verbatim out of the former
 // per-command switches in MainComponent::getCommandInfo, now selected by id in one place.
@@ -38,6 +51,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.hasClipSelection() || timelinePanel.hasRangeSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
+        case EditSurface::AutomationLane:
+            return hasPointSelection();
         case EditSurface::Graph:
             return graphEditor.getSelectionCount() > 0;
         case EditSurface::Mixer:
@@ -53,6 +68,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             // with nothing open has nowhere to put the block, so the row greys out rather than
             // silently discarding a paste.
             return timelinePanel.getPianoRoll().canPasteNotes();
+        case EditSurface::AutomationLane:
+            return activeLaneEditor() != nullptr && activeLaneEditor()->canPastePoints();
         case EditSurface::Graph:
             return graphEditor.canPaste();
         case EditSurface::Mixer:
@@ -66,6 +83,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.hasClipSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
+        case EditSurface::AutomationLane:
+            return false; // a point has no "next to itself" to duplicate into
         case EditSurface::Graph:
             return graphEditor.getSelectionCount() > 0;
         case EditSurface::Mixer:
@@ -78,6 +97,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             return timelinePanel.canCutClips() || timelinePanel.hasRangeSelection();
+        case EditSurface::AutomationLane:
+            return hasPointSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:
@@ -96,6 +117,7 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:
         case EditSurface::Mixer:
+        case EditSurface::AutomationLane:
             return false; // no clipboard model on the mixer
         }
         break;
@@ -115,6 +137,7 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
         return !vertical;
     case EditSurface::TimelineClips:
     case EditSurface::PianoRoll:
+    case EditSurface::AutomationLane:
         return isBottomDockVisible;
     case EditSurface::Mixer:
         return false; // no zoom concept at all -- inactive on both axes, unlike Graph above

@@ -12,7 +12,7 @@ namespace synth::maincomponent {
 
 /** Which surface Copy/Paste/Duplicate/Cut/Repeat act on. Enumerators are only ever appended, so no
  *  existing value moves (same convention as AppCommands::CommandIDs). */
-enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane };
 
 /** The three sliding panels MainComponent docks. */
 enum class SlidingPanel { Library, AiChat, Timeline };

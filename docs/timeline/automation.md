@@ -368,7 +368,55 @@ bubble showing it live; nothing is written until mouse-up, which commits through
 `TimelineDoc::setLaneConstantValue` as one undo step. Once the lane has a point the line is a curve and this
 drag does not apply.
 
-The editor has a screen-reader name, description and tooltip as a whole; points are mouse-only for now.
+### Selecting points
+
+Points select the way clips and notes do (same modifiers, same Escape), through `LanePointSelection`
+(`AutomationLanes/PointSelection/`, owned by the editor; `NoteSelectionModel`'s shape keyed on the point's
+beat, since a lane has one point per beat). The selection is runtime view state, never saved. A SELECTED point is
+a filled accent dot; unselected points keep the curve's colour.
+
+| Gesture | Result |
+|---|---|
+| Click a point | Select just it; a click on an already selected point keeps the group so it can be dragged |
+| Shift, Cmd or Ctrl + click a point | Toggle it in the selection (never starts a drag) |
+| Drag a selected point | Move every selected point by the same beat delta (snapped like one point, the block stops with its first point at beat 0) and the same value delta (each value clamped on its own); one undo step |
+| Plain drag on empty space | Box select, replacing the selection; Shift/Cmd/Ctrl + drag adds to it |
+| Click empty space (no drag) | Clear the selection; double-click still adds a point |
+| Escape | Clear the selection (the key is consumed only when something was selected) |
+| Delete / Backspace | Remove the selected points, one undo step |
+| Cmd+A, Cmd+C, Cmd+X, Cmd+V | The app's Select All / Copy / Cut / Paste commands, routed to the focused lane editor through `EditSurface::AutomationLane`; Duplicate and Repeat are inactive there |
+| Left / Right | Nudge the selection one grid step (a sixteenth with snap off) as a block; with nothing selected the first press selects the first or last point |
+| Up / Down | Nudge every selected value by 1% of the lane's range (Shift: 10%) |
+| Alt + Left / Right | Move the keyboard cursor to the previous or next point and select only it |
+
+"On empty space" means away from every point, from the flat line of an empty lane and from the curve itself:
+a press within a handle's reach of the curve still scrubs that segment's tension, so tension scrub and box select
+do not overlap. A move, nudge, delete or paste is one `TimelineDoc::editBreakpoints` call under one
+`recordTimelineChange` (`LanePointEdits.cpp`); the notification it fires prunes the selection to the points that
+still exist, so the editor selects the moved or pasted beats after the edit returns. Paste lands at the transport
+position, snapped, with the earliest copied point there and each value clamped to the lane's range; the pasted
+points become the selection. The clipboard (`LanePointClipboard`) lives on `TimelineAutomationLanes`, so a copy
+survives its editor being folded away and pastes into any lane. The selection survives a doc notification that keeps
+the lane and the point, and clears when a point disappears or the editor is pointed at another lane
+(`setActiveLane`, or the editor leaving the pool when its track folds).
+
+Removal and return animate (`LanePointGlide`): when a doc change only removes points (a delete, a cut, a redo) they
+shrink and fade out over 110 ms `easeInCubic` while the old curve cross-fades into the re-formed one; when it only
+brings points back (an undo, a paste, an added point) they fade in over 160 ms `easeOutCubic` the same way. A move
+is both a removal and an addition, so it lands at once, as does everything under Reduce Motion or off screen. The
+editor follows the doc through `laneDocChanged()` (from `TimelineAutomationLanes::refreshPooled`) and lazily from
+paint and the input entry points by `TimelineDoc::getRevision()`.
+
+Each point is reachable from the keyboard: Tab into the editor, Alt+Left/Right walk the points, Delete removes the
+one the cursor is on. The focus ring (`paintFocusRing`) sits on the cursor point, or around the lane when there is
+none. The editor's screen-reader description is rewritten on every selection change (point count, how many are
+selected, and for a single point its bar and beat and its value in the parameter's own text) and announced as a
+title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
+existing rebindable commands. Return stays free.
+
+For later per-point features: `getPointSelection()` is the selection (`getSelected()` beats, `selectedPoints(lane)`
+the breakpoints, `boundingBox(lane, mapper)` the box around them in editor coordinates, `getCursor()`), and the
+editor's `onSelectionChanged` fires after the selection or cursor changed.
 
 ## Tools
 
@@ -382,7 +430,7 @@ lane range are taken before the tool mapping is consulted ([Draw shapes](#draw-s
 
 | Tool | Gesture |
 |---|---|
-| Pointer | Drag a HANDLE moves it — beat snapped via the shared view-state snap, value clamped to the lane's range; tension and curve carry over untouched. Drag a SEGMENT (not a handle — hit-tested first) scrubs the segment's LEFT point's tension, ±0.01 per vertical pixel, clamped to `[-1, 1]`, following `AutomationKernel`'s own "shape comes from the LEFT point" contract. Double-click empty space adds a point at that (beat, value), Linear, tension 0 |
+| Pointer | Drag a HANDLE moves it (the whole selection when it is selected, [below](#selecting-points)) — beat snapped via the shared view-state snap, value clamped to the lane's range; tension and curve carry over untouched. Drag a SEGMENT (on the curve, not a handle — hit-tested first) scrubs the segment's LEFT point's tension, ±0.01 per vertical pixel, clamped to `[-1, 1]`, following `AutomationKernel`'s own "shape comes from the LEFT point" contract. Double-click empty space adds a point at that (beat, value), Linear, tension 0 |
 | Pencil | Freehand drag collects raw (beat, value) samples — no snapping, that is the point of freehand. On mouse-up they are thinned by `synth::AutomationRecorder::thinPoints` (reused, not re-implemented — its RDP helper is `public static` precisely so a second caller can reach it) at the SAME `kThinningEpsilonFraction` scaled to the lane's own range, and replace whatever existed inside the dragged beat span |
 | Line | Drag previews a straight line from press to release; mouse-up replaces the dragged span with exactly the two snapped endpoints, Linear |
 | Eraser | Drag removes every handle it touches — collected into a set as the pointer passes over them (dimmed in the preview), deleted on mouse-up |
@@ -390,8 +438,8 @@ lane range are taken before the tool mapping is consulted ([Draw shapes](#draw-s
 Right-click a SEGMENT shows Hold/Linear, ticking the current one, routed through the headless
 `applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`.
 
-Escape clears in-flight tool-drag state and returns `true`; when idle it returns `false` so the key
-falls through to the panel.
+Escape clears in-flight tool-drag state (a box included) and returns `true`; when idle it clears a point selection
+and returns `true`, and returns `false` when there is nothing to clear so the key falls through to the panel.
 
 ## Draw shapes and the lane range
 
@@ -569,6 +617,11 @@ partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview
 rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
 `AutomationLanesPointBubbleTests.cpp` (the value bubble on hover and drag with its text and fallback, the grab
 cursor, the flat-line drag as one undo step, its clamp, and the editor's accessible name),
+`AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
+undo step, Delete/Backspace, nudge, the keyboard cursor, copy/cut/paste, the selection following the doc, the accent
+dot read back from pixels, the description) and `LanePointMathTests.cpp` (the selection set, rigid-block move,
+replace, box test, clipboard and the glide's state machine); the surface routing of Cmd+A/C/X/V is in
+`FocusArbitrationAutomationLaneTests.cpp`,
 `AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
 cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key

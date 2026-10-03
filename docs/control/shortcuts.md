@@ -194,12 +194,15 @@ panel or the mixer is open — the clip lanes, the piano roll and the mixer are 
 surface's clipboard and selection these verbs act on:
 
 ```cpp
-enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane };
 ```
 
 - **TimelineClips** — the timeline panel is visible AND real keyboard focus
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
+- **AutomationLane** — same, but focus sits on an automation lane editor: Select All takes every point of the
+  lane, Copy/Cut/Paste move points ([timeline/automation.md](../timeline/automation.md#selecting-points)),
+  Duplicate and Repeat are inactive, and zoom is the timeline's.
 - **Mixer** — the mixer panel is actually showing (docked-and-active on the tab strip, an "Own
   panel" strip, or detached into its own window — `BottomDockComponent::isMixerShowing()` /
   `MixerPlacementController::isOwnPanelShowing()`) AND real keyboard focus sits inside
