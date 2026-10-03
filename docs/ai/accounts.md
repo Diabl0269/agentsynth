@@ -25,6 +25,20 @@ revokes the whole token family if a consumed one reappears; a crash between "use
 would leave a dead token in the keychain and silently sign the user out on the next launch. A failed
 save publishes a SignedOut snapshot with an error rather than continuing.
 
+### Keychain access and permission prompts
+
+macOS pins a Keychain item to the code signature of the build that created it, so a build signed
+differently (every ad-hoc build, a different identity) can be asked for permission on each access.
+`KeychainTokenStore` therefore touches the Keychain as little as it can: it reads the item once per
+process and serves later `load()` calls from memory, skips a `save()` of an unchanged token, and
+updates the one item in place instead of deleting and re-adding it (a refused delete used to leave
+the old item behind, so the add failed as a duplicate and sign-in could not persist its token). A
+refused delete on sign-out falls back to blanking the stored value, which `load()` reads as signed
+out. The data-protection Keychain would avoid prompts entirely but needs a provisioned entitlement
+that ad-hoc and Apple Development builds do not have (`errSecMissingEntitlement`, -34018); stable
+signing, `scripts/dev-sign-app.sh` locally and Developer ID for releases, is what stops the prompt
+after the first Always Allow.
+
 `completeSignIn()` also re-checks for cancellation before persisting. Without that check, a
 `cancelSignIn()` or `signOut()` landing in the window between "the round trip completed" and "the
 tokens are persisted and published" would be silently overwritten, signing the user back in a moment

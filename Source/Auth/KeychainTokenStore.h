@@ -32,6 +32,13 @@ public:
 private:
     juce::String service;
 
+#if JUCE_MAC
+    // Read once per process (see load()); guarded because save() runs on the worker thread.
+    mutable juce::CriticalSection lock;
+    mutable juce::String cached;
+    mutable bool cacheValid = false;
+#endif
+
 #if !JUCE_MAC
     InMemoryTokenStore fallback;
 #endif
