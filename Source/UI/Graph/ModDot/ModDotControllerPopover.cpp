@@ -47,6 +47,7 @@ ModulatorInfo modulatorInfoFor(GraphEditor& editor, juce::AudioProcessorGraph::N
 } // namespace
 
 ModDotController::~ModDotController() {
+    juce::Desktop::getInstance().removeGlobalMouseListener(&doubleClickListener_);
     if (auto* open = getPopover()) {
         open->orphan(); // its callout is deleted a turn later, by when this is gone
         open->dismiss();
@@ -71,6 +72,48 @@ void ModDotController::closePopover() {
     if (auto* open = getPopover())
         open->dismiss();
     popover_ = nullptr;
+}
+
+namespace {
+// A callout ignores a click on its own dot for its first 200 ms and dismisses itself after that, so a panel older
+// than this is already on its way out when a double-click lands.
+constexpr juce::uint32 kReusablePanelMs = 180;
+} // namespace
+
+void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                                        juce::Component& anchor) {
+    const auto sources = knobModSources(editor_, card, destChannel, true);
+    if (sources.empty())
+        return;
+    if (sources.size() == 1) {
+        closePopover();
+        editor_.removeModulationChain(sources.front().attenuverterId);
+        return;
+    }
+    auto* open = getPopover();
+    const bool reusable = open != nullptr && open->card() == card && open->destChannel() == destChannel &&
+                          open->ageMs() < kReusablePanelMs &&
+                          (open->getParentComponent() == nullptr || open->isShowing());
+    if (!reusable) {
+        openPopover(card, destChannel, anchor);
+        open = getPopover();
+    }
+    if (open != nullptr)
+        open->setRemoveHighlighted(true);
+}
+
+// The second press of a double-click on the open panel's own dot: the modal callout blocks the dot, so the press
+// never reaches the card; this sees it first. Presses the dot did receive were handled in pressed() (same event time).
+void ModDotController::globalMouseDown(const juce::MouseEvent& e) {
+    if (e.getNumberOfClicks() < 2 || !e.mods.isLeftButtonDown() || e.mods.isCommandDown() ||
+        !editor_.getDoubleClickPortDisconnectEnabled() || e.eventTime == lastDoubleClickTime_)
+        return;
+    auto* open = getPopover();
+    auto* anchor = open != nullptr ? open->anchor() : nullptr;
+    if (anchor == nullptr || !anchor->isShowing() || !anchor->getScreenBounds().contains(e.getScreenPosition()))
+        return;
+    lastDoubleClickTime_ = e.eventTime;
+    dotDoubleClicked(open->card(), open->destChannel(), *anchor);
 }
 
 void ModDotController::tickPopover() {

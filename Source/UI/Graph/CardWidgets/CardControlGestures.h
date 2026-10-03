@@ -109,6 +109,10 @@ public:
     static constexpr double kCoarseStep = 0.1; // Page Up / Page Down
 
 protected:
+    /** True when the last press was the mod-dot gesture: its double-click is the dot's (remove), not "reset to
+     *  default", so the control skips its mouseDoubleClick then. */
+    bool modDotClaimedLastPress() const noexcept { return modDotClaimedLastPress_; }
+
     /** True when a card gesture took this press; the control skips its own handling then. */
     bool claimMouseDown(const juce::MouseEvent& e) {
         modAmountActive_ = wantsModAmountGesture && wantsModAmountGesture(e);
@@ -118,6 +122,7 @@ protected:
             return true;
         }
         modDotActive_ = wantsModDotGesture && wantsModDotGesture(e);
+        modDotClaimedLastPress_ = modDotActive_;
         if (modDotActive_) {
             modDotCancelled_ = false;
             if (onModDotGesture)
@@ -168,6 +173,7 @@ private:
     bool modAmountActive_ = false;
     bool modDotActive_ = false;
     bool modDotCancelled_ = false;
+    bool modDotClaimedLastPress_ = false;
     bool pickupActive_ = false;
 };
 

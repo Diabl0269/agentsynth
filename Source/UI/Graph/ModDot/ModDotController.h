@@ -10,6 +10,10 @@
 //    snapshot, lazily, and commits it on release. Esc restores the amount the press started from and
 //    pushes no undo step.
 //  * A key step (the dot's own Tab stop) is one undo step per press.
+//  * A double-click on the dot (or on a visible CV jack bound to the knob) removes the knob's only source, chain
+//    and all, as one undo step; with several it opens the panel with every remove button highlighted. It is
+//    gated by GraphEditor::getDoubleClickPortDisconnectEnabled(). The callout is modal and swallows the second
+//    press of a quick double-click, so a global mouse listener also catches it while the panel is open.
 //  * A click opens the dot's panel (ModDotPopover) under the dot; the panel's edits go through the controller's
 //    host hooks (remove and "show in timeline" belong to the app window) with editor-only fallbacks.
 //
@@ -67,6 +71,10 @@ public:
     /** The open panel, or null. */
     ModDotPopover* getPopover() const;
     void closePopover();
+    /** A double-click on the knob's dot (`anchor` is its button, or the card for a jack without one): with one
+     *  source, closes the panel and removes that chain (GraphEditor::removeModulationChain, one undo step); with
+     *  several, opens the panel, or reuses it, in remove-highlight mode. Nothing without a source. */
+    void dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor);
     /** The editor's 30 Hz tick: the open panel follows the graph. */
     void tickPopover();
     /** Called by the panel as it goes away. */
@@ -117,6 +125,7 @@ private:
         juce::Point<float> startPos;
         float startAmount = 0.0f;
         bool started = false;
+        bool doubleClick = false; // handled on the press; the rest of the press does nothing
     };
 
     void setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target);
@@ -124,6 +133,15 @@ private:
                      juce::AudioProcessorGraph::NodeID attenuverter, juce::Slider& knob);
     void announce(const juce::String& name, float amount);
     void scheduleKeyHide();
+
+    void globalMouseDown(const juce::MouseEvent& e);
+
+    // Sees the second press of a double-click on the dot even when the open (modal) panel blocks the dot.
+    struct DoubleClickListener final : juce::MouseListener {
+        ModDotController* owner = nullptr;
+        void mouseDown(const juce::MouseEvent& e) override { owner->globalMouseDown(e); }
+    } doubleClickListener_;
+    juce::Time lastDoubleClickTime_;
 
     GraphEditor& editor_;
     juce::Component::SafePointer<juce::Component> popover_;

@@ -606,7 +606,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
         } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
             // Intercept the second click so it does not start another cable drag.
-            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
+            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi) &&
+                !(port->isInput && !port->isMidi && handleModJackDoubleClick(port->index)))
                 owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
             return;
         } else {

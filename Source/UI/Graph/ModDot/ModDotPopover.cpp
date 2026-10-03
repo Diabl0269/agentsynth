@@ -44,6 +44,10 @@ ModDotPopover::~ModDotPopover() {
     pageAnim_.stop(updater_);
     if (controllerForClose_ != nullptr)
         controllerForClose_->popoverClosed(this);
+    // A panel reopened on the same dot (a double-click) is already up by the time this one is deleted: leave the
+    // dot's ring and the focus to it.
+    if (controllerForClose_ != nullptr && controllerForClose_->getPopover() != nullptr)
+        return;
     if (auto* dot = dynamic_cast<ModDotButton*>(anchor_.getComponent()))
         dot->setMenuOpen(false);
     // Focus goes back to the dot once the callout is gone.
@@ -52,6 +56,15 @@ ModDotPopover::~ModDotPopover() {
         if (anchor != nullptr && anchor->isShowing())
             anchor->grabKeyboardFocus();
     });
+}
+
+void ModDotPopover::setRemoveHighlighted(bool on) {
+    if (sourcesPage_.isRemoveHighlighted() == on)
+        return;
+    sourcesPage_.setRemoveHighlighted(on);
+    if (on)
+        juce::AccessibilityHandler::postAnnouncement("Choose a source to remove",
+                                                     juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
 ModDotPage& ModDotPopover::pageComponent(Page page) {

@@ -26,6 +26,8 @@ public:
     /** Re-reads name and amount from the graph; a bar mid-drag is left alone. */
     void update(const KnobModSource& source);
 
+    /** The remove button in the negative colour with a pulse: the user double-clicked the dot and must pick one. */
+    void setRemoveHighlighted(bool on) { removeButton_.setDanger(on); }
     void setSelected(bool selected);
     bool isSelected() const noexcept { return selected_; }
 

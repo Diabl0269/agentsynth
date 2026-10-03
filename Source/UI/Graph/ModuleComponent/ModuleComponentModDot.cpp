@@ -87,7 +87,9 @@ void ModuleComponent::syncModDotButtons() {
         const auto title = knobName + " modulation, " + juce::String(count) + (count == 1 ? " source" : " sources");
         if (button->getTitle() != title)
             button->setTitle(title);
-        const auto tip = "Modulation sources for " + knobName;
+        auto tip = "Modulation sources for " + knobName;
+        if (owner.getDoubleClickPortDisconnectEnabled())
+            tip += ". Double-click to remove";
         if (button->getTooltip() != tip)
             button->setTooltip(tip);
         button->setBounds(juce::Rectangle<int>(synth::ui::ModDotButton::kSize, synth::ui::ModDotButton::kSize)
@@ -97,4 +99,23 @@ void ModuleComponent::syncModDotButtons() {
     for (auto* button : modDotButtons_)
         if (live.count(button->getDestChannel()) == 0 && button->isVisible())
             button->setVisible(false);
+}
+
+// A double-click on a visible CV jack that drives a knob: the knob's own dot menu logic instead of disconnecting
+// everything on the jack. False when the jack drives no modulated knob, so the plain disconnect applies.
+bool ModuleComponent::handleModJackDoubleClick(int visibleInputIndex) {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return false;
+    for (const auto& target : mb->getModulationTargets()) {
+        if (mb->mapInputChannel(target.channelIndex).visibleJackIndex != visibleInputIndex)
+            continue;
+        if (synth::ui::knobModSources(owner, nodeId, target.channelIndex).empty())
+            return false;
+        auto* button = getModDotButton(target.channelIndex);
+        owner.getModDot().dotDoubleClicked(nodeId, target.channelIndex,
+                                           button != nullptr ? static_cast<juce::Component&>(*button) : *this);
+        return true;
+    }
+    return false;
 }
