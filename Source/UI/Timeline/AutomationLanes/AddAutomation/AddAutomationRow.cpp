@@ -44,9 +44,34 @@ void AddAutomationRow::setTrackName(const juce::String& trackName) {
     setTooltip(text);
 }
 
+void AddAutomationRow::setCompact(bool compact) {
+    if (compact_ == compact)
+        return;
+    compact_ = compact;
+    repaint();
+}
+
+// The "+" is a circle outline and a cross, muted until hovered or focused like the row's text.
+void AddAutomationRow::paintCompact(juce::Graphics& g, bool highlighted) {
+    const auto colours = coloursFor(*this);
+    const bool lit = highlighted || hasKeyboardFocus(false);
+    const auto area = getLocalBounds().toFloat().reduced(1.0f);
+    g.setColour(lit ? colours.text : colours.textMuted);
+    g.drawEllipse(area, 1.0f);
+    const auto c = area.getCentre();
+    const float arm = area.getWidth() * 0.22f;
+    g.drawLine(c.x - arm, c.y, c.x + arm, c.y, 1.0f);
+    g.drawLine(c.x, c.y - arm, c.x, c.y + arm, 1.0f);
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, getWidth() / 2.0f);
+}
+
 // Muted until hovered or focused, like the lane header's "..." button, so a stack of rows under a long
 // list of tracks stays quiet.
 void AddAutomationRow::paintButton(juce::Graphics& g, bool highlighted, bool) {
+    if (compact_) {
+        paintCompact(g, highlighted);
+        return;
+    }
     const auto colours = coloursFor(*this);
     const auto bounds = getLocalBounds();
     g.fillAll(colours.surface);

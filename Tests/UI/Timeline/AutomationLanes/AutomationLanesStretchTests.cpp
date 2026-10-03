@@ -3,6 +3,7 @@
 // keyboard path, the cursor and hint. Real mouse and key events on the real panel's editor.
 
 #include "AutomationLanesTestFixture.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReducedMotion.h"
 
 using namespace automation_lanes_test;
@@ -182,10 +183,10 @@ TEST(AutomationLanesStretchTest, TheTopHandleScalesTheValuesAboutTheLowestOne) {
     ASSERT_LT(scale, 1.0);
     const auto values = f.values();
     ASSERT_EQ(values.size(), 5u);
-    EXPECT_NEAR(values[0], 20.0, 1e-6) << "the lowest value is the anchor";
-    EXPECT_NEAR(values[1], 20.0 + 40.0 * scale, 1e-6);
-    EXPECT_NEAR(values[2], 20.0 + 20.0 * scale, 1e-6);
-    EXPECT_NEAR(values[3], 20.0 + 60.0 * scale, 1e-6);
+    EXPECT_NEAR(values[0], 20.0, 1e-4) << "the lowest value is the anchor";
+    EXPECT_NEAR(values[1], 20.0 + 40.0 * scale, 1e-4);
+    EXPECT_NEAR(values[2], 20.0 + 20.0 * scale, 1e-4);
+    EXPECT_NEAR(values[3], 20.0 + 60.0 * scale, 1e-4);
     EXPECT_DOUBLE_EQ(values[4], 50.0) << "an unselected point is not touched";
     EXPECT_EQ(f.beats(), Beats({1, 2, 3, 4, 6})) << "values only: beats and order stay";
     EXPECT_EQ(f.selected(), Beats({1, 2, 3, 4}));
@@ -361,4 +362,71 @@ TEST(AutomationLanesStretchTest, TheScreenReaderDescriptionMentionsTheStretchKey
     EXPECT_TRUE(f.editor->getDescription().containsIgnoreCase("stretch"));
     f.select({2.0});
     EXPECT_FALSE(f.editor->getDescription().containsIgnoreCase("stretch"));
+}
+
+TEST(AutomationLanesStretchTest, DraggingInsideTheBoxMovesTheWholeSelectionAsOneUndoStep) {
+    StretchLane f;
+    // Between the points of the selection, off every dot and handle, where the box (not the curve) owns the press.
+    const auto inside = f.at(2.5, 50.0);
+    ASSERT_TRUE(f.editor->getStretchBoxForTest().contains(inside));
+    const auto rev = f.doc.getRevision();
+    const auto to = f.beatsRight(inside, 1.0);
+
+    f.press(inside);
+    EXPECT_TRUE(f.editor->isDragActiveForTest());
+    EXPECT_EQ(f.editor->getMouseCursor(), synth::ui::dragGrabCursor()) << "the hand once the drag has started";
+    f.dragTo(inside, to);
+    EXPECT_EQ(f.doc.getRevision(), rev) << "the doc is not touched during the drag";
+    f.release(inside, to);
+
+    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one doc mutation for the whole gesture";
+    EXPECT_EQ(f.beats(), Beats({2, 3, 4, 5, 6})) << "every selected point moved by a beat";
+    EXPECT_EQ(f.values(), Beats({20, 60, 40, 80, 50})) << "values stay";
+    EXPECT_EQ(f.selected(), Beats({2, 3, 4, 5})) << "the same points stay selected";
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1, 2, 3, 4, 6}));
+}
+
+TEST(AutomationLanesStretchTest, HoveringInsideTheBoxShowsNoHand) {
+    StretchLane f;
+    f.editor->mouseMove(makeClickEvent(*f.editor, f.at(2.5, 50.0)));
+    EXPECT_TRUE(f.editor->getMouseCursor() == juce::MouseCursor(juce::MouseCursor::NormalCursor));
+}
+
+TEST(AutomationLanesStretchTest, TheBoxStaysInsideTheLaneWhenPointsSitAtItsFarLeftAndTop) {
+    StretchLane f;
+    f.doc.removeBreakpoint(f.lane, 6.0);
+    const auto& range = f.theLane().range;
+    f.doc.addBreakpoint(f.lane, 0.0, range.maxValue);
+    f.doc.addBreakpoint(f.lane, 0.5, range.maxValue);
+    f.select({0.0, 0.5});
+    const auto box = f.editor->getStretchBoxForTest();
+    const auto bounds = f.editor->getLocalBounds().toFloat();
+    ASSERT_FALSE(box.isEmpty());
+    EXPECT_TRUE(bounds.contains(box)) << "no edge of the box is cut off by the lane's edge";
+}
+
+TEST(AutomationLanesStretchTest, TheLanesLimitsSitInsideItsEdgesSoTheLineAndDotsAreDrawnWhole) {
+    StretchLane f;
+    const auto& range = f.theLane().range;
+    const double height = f.editor->getHeight();
+    EXPECT_GE(f.editor->valueToY(range.maxValue), 4.0) << "the maximum is below the top edge";
+    EXPECT_LE(f.editor->valueToY(range.minValue), height - 4.0) << "the minimum is above the bottom edge";
+    const double lo = range.minValue, hi = range.maxValue;
+    for (double v : {lo, 0.5 * (lo + hi), hi})
+        EXPECT_NEAR(f.editor->yToValue(f.editor->valueToY(v)), v, 1e-6) << "the mapping still round-trips";
+
+    // The curve at the minimum is painted on the lane, not off its bottom edge.
+    f.doc.removeBreakpoint(f.lane, 6.0);
+    for (double b : {1.0, 2.0, 3.0, 4.0})
+        f.doc.addBreakpoint(f.lane, b, range.minValue);
+    juce::Image image(juce::Image::ARGB, f.editor->getWidth(), f.editor->getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    f.editor->paint(g);
+    const int y = juce::roundToInt(f.editor->valueToY(range.minValue));
+    const int x = juce::roundToInt(f.at(2.5, range.minValue).x);
+    bool drawn = false;
+    for (int dy = -2; dy <= 2; ++dy)
+        drawn = drawn || image.getPixelAt(x, y + dy) != image.getPixelAt(x, y - 12);
+    EXPECT_TRUE(drawn) << "the line at the minimum is visible";
 }

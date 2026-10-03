@@ -90,7 +90,7 @@ TEST(AutomationLanesModulatorRowTest, ModulatorRowsSitUnderTheirLaneAndCountInTh
 
     const int laneHeight = 40;
     const int modHeight = synth::ui::ModulatorRow::kBaseHeight;
-    const int addRowHeight = 24;
+    const int addRowHeight = 0; // the "+" button sits in the last lane header's gutter
     const auto layout = f.panel.getClipLaneArea().getRowLayout();
     EXPECT_EQ(layout.trackExtraHeight(0), 2 * (laneHeight + 2 * modHeight) + addRowHeight);
 

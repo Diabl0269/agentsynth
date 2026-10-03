@@ -430,10 +430,9 @@ void TimelinePanelComponent::layoutTrackHeaders() {
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
-    // The header viewport is taller than the lanes region (the ruler is taller than the "+ Track"
-    // strip), so the list carries that difference as slack below the last row: without it the
-    // viewport clamps the shared scroll short of maxTrackScrollPx() and the last lane row can never
-    // be scrolled fully into the lanes.
+    // Any height the header viewport has over the lanes region is carried as slack below the last row: without it the
+    // viewport clamps the shared scroll short of maxTrackScrollPx() and the last lane row can never be scrolled fully
+    // into the lanes.
     const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
     const int slack = std::max(0, viewHeight - gridLanesBounds_.getHeight());
     trackHeaderList_.setSize(width, std::max(layout.trackTop(count) + slack, viewHeight));

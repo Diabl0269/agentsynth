@@ -27,7 +27,7 @@ TEST(AutomationLanesFoldTest, FoldArrowClickOpensTheLaneRowsWhereTheLayoutPutsTh
     EXPECT_TRUE(header->getFoldArrow().isExpanded());
     const auto layout = f.panel.getClipLaneArea().getRowLayout();
     const int laneHeight = 40;
-    const int addRowHeight = 24; // the "+ Add automation..." row closing the lanes
+    const int addRowHeight = 0; // the "+" button sits in the last lane header's gutter, so adds no row
     EXPECT_EQ(layout.trackExtraHeight(0), 2 * laneHeight + addRowHeight);
     const int firstLaneTop = layout.trackTop(0) + layout.trackRowHeight(0);
     const int lanesTop = f.panel.getClipLaneArea().getY();

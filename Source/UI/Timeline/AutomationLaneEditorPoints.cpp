@@ -138,6 +138,24 @@ void AutomationLaneEditor::grabPoint(const HandleHit& hit) {
     updateMouseCursor();
 }
 
+// Pressing inside the stretch box moves the selection like grabbing one of its points: the drag's delta is how far the
+// pointer has gone from where it was pressed, with the beat snapped on both ends so the block stays on the grid.
+bool AutomationLaneEditor::beginBoxMove(juce::Point<int> pos) {
+    const auto* points = lanePoints();
+    if (points == nullptr || !stretchBoxVisible() || !stretchBox().contains(pos.toFloat()))
+        return false;
+    dragMode_ = DragMode::MoveHandle;
+    dragPoints_ = selection_.selectedPoints(*points);
+    dragOriginalBeat_ = snappedBeatAt(viewState_.xToBeat((double)pos.x));
+    dragOriginalValue_ = clampValue(yToValue((double)pos.y));
+    previewBeat_ = dragOriginalBeat_;
+    previewValue_ = dragOriginalValue_;
+    hoveredBeat_.reset();
+    bubble_.hide();
+    updateMouseCursor();
+    return true;
+}
+
 std::vector<LaneBreakpoint> AutomationLaneEditor::dragMovedPoints() const {
     double minValue = 0.0, maxValue = 1.0;
     if (doc_ != nullptr && laneId_.isValid())
@@ -158,7 +176,7 @@ void AutomationLaneEditor::commitPointMove() {
     const auto moved = dragMovedPoints();
     std::optional<double> cursor;
     for (std::size_t i = 0; i < dragPoints_.size(); ++i)
-        if (dragPoints_[i].beat == dragOriginalBeat_)
+        if (selection_.getCursor() == dragPoints_[i].beat)
             cursor = moved[i].beat;
     commitPointEdit(editTarget(), beatsOf(dragPoints_), moved);
     selection_.setSelection(beatsOf(moved));

@@ -42,19 +42,18 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // drag, thinned via synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
 // as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation).
 // Pointer tool: the point under the pointer, or being dragged, shows a value bubble above it (text from
-// valueToText); a point shows the grab cursor; pressing the flat line of a lane with NO points and dragging
-// vertically sets the lane's constant value, committed once on mouse-up.
-// Points select like clips and notes (LanePointSelection): click selects, Shift/Cmd-click toggles, a plain drag on
-// empty space draws a box, Escape clears; dragging a selected point moves the whole selection, Delete/Backspace
-// removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step. Cmd+A/C/X/V reach
-// it as the app's edit commands (MainComponent routes them to the focused lane editor).
-// With two or more points selected a stretch box with four edge handles (LanePointStretch) surrounds them: the side
-// handles scale the selection's beats about the opposite edge (the edge pushes the next unselected points along), the
-// top and bottom ones scale its values; Alt+Shift+Left/Right/Up/Down do the same from the keyboard. The drag previews
-// and commits once on mouse-up, Escape cancels.
-// Double-clicking a point (or Return with the keyboard cursor on one) opens a PointValueField beside it: type a value,
-// Return sets that one point's value (clamped to the lane's range, one undo step), Escape cancels.
-// Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
+// valueToText); the grab cursor shows only while a drag is under way (a point, the selection, the curve, an empty
+// lane's line); pressing the flat line of a lane with NO points and dragging vertically sets the lane's constant value,
+// committed once on mouse-up. Points select like clips and notes (LanePointSelection): click selects, Shift/Cmd-click
+// toggles, a plain drag on empty space draws a box, Escape clears; dragging a selected point moves the whole selection,
+// Delete/Backspace removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step.
+// Cmd+A/C/X/V reach it as the app's edit commands (MainComponent routes them to the focused lane editor). With two or
+// more points selected a stretch box with four edge handles (LanePointStretch) surrounds them: the side handles scale
+// the selection's beats about the opposite edge (the edge pushes the next unselected points along), the top and bottom
+// ones scale its values; Alt+Shift+Left/Right/Up/Down do the same from the keyboard. The drag previews and commits once
+// on mouse-up, Escape cancels. Double-clicking a point (or Return with the keyboard cursor on one) opens a
+// PointValueField beside it: type a value, Return sets that one point's value (clamped to the lane's range, one undo
+// step), Escape cancels. Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
 
@@ -126,8 +125,8 @@ public:
     // The colour the curve and points are painted in right now (see setCurveColour).
     juce::Colour getResolvedCurveColour() const;
 
-    // The grab hand over a point (Pointer tool), the pen while the Draw tool is the active tool (the plain arrow
-    // otherwise), like the piano roll's velocity strip.
+    // The grab hand while a point, the selection, the curve or an empty lane's line is being dragged (never on hover),
+    // the pen while the Draw tool is the active tool (the plain arrow otherwise), like the piano roll's velocity strip.
     juce::MouseCursor getMouseCursor() override;
     void lookAndFeelChanged() override;
     // The stretch handles' hint while the pointer is over one, the editor's own hint elsewhere.
@@ -206,6 +205,9 @@ private:
 
     static constexpr float kHandleRadiusPx = 5.0f;
     static constexpr float kHandleHitRadiusPx = 7.0f;
+    static constexpr float kPlotPadPx = kHandleRadiusPx + 3.0f; // the lane's min/max sit this far inside its edges
+
+    double plotPadPx() const;
 
     std::optional<HandleHit> hitTestHandle(juce::Point<int> pos) const;
     // True when `pos` is within a handle radius of the curve itself (where a press scrubs a segment's tension).
@@ -244,6 +246,8 @@ private:
     LanePointMapper pointMapper() const;
     LaneEditTarget editTarget() const;
     void grabPoint(const HandleHit& hit);
+    // A press inside the stretch box (not on a handle or a point) drags the whole selection.
+    bool beginBoxMove(juce::Point<int> pos);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
     void commitPointMove();
     double gridStepBeats() const;

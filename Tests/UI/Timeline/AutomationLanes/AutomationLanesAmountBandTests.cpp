@@ -180,7 +180,7 @@ TEST_F(TimelinePanelIntegrationTest, TheBandIsOneNamedTabStopWithAValueAndAToolt
     s.doubleClick({s.x(16.0), s.yFor(0.3)});
     s.tick(20.0);
     EXPECT_TRUE(value->isReadOnly()) << "the lane decides now";
-    EXPECT_EQ(value->getCurrentValueAsString(), "+30%");
+    EXPECT_NEAR((double)value->getCurrentValue(), 0.3, 0.06) << "drawn by pixel, so within a pixel of 0.3";
     EXPECT_TRUE(band->getTooltip().startsWith("Draw to change how much"));
 }
 
