@@ -424,6 +424,8 @@ private:
     juce::String getNodeDisplayName(const juce::String& uuid) override;
     juce::String getParameterDisplayName(const juce::String& uuid, const juce::String& paramId) override;
     juce::String getParameterValueText(const juce::String& uuid, const juce::String& paramId, double value) override;
+    std::optional<double> getParameterValueFromText(const juce::String& uuid, const juce::String& paramId,
+                                                    const juce::String& text) override;
     void bindTrackTo(synth::TrackId track, const juce::String& uuid) override;
     void createAndBindTrackInNode(synth::TrackId track) override;
     void selectNodeInGraph(const juce::String& uuid) override;

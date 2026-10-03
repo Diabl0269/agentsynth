@@ -4,6 +4,7 @@
 #include "AppUndoManager.h"
 #include "Timeline/AutomationKernel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
+#include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <cmath>
@@ -129,6 +130,21 @@ juce::String laneValueText(const synth::AutomationLane& lane, double value, Trac
     const double magnitude = std::abs(value);
     const int decimals = magnitude >= 100.0 ? 0 : (magnitude >= 10.0 ? 1 : 2);
     return juce::String(value, decimals);
+}
+
+std::optional<double> laneTextToValue(const synth::AutomationLane& lane, const juce::String& text,
+                                      TrackHeaderHost* host) {
+    if (host != nullptr)
+        if (auto value = host->getParameterValueFromText(lane.nodeUuid, lane.paramId, text); value.has_value())
+            return value;
+    return PointValueField::parseNumber(text);
+}
+
+juce::String laneParameterName(const synth::AutomationLane& lane, TrackHeaderHost* host) {
+    if (host != nullptr)
+        if (auto name = host->getParameterDisplayName(lane.nodeUuid, lane.paramId); name.isNotEmpty())
+            return name;
+    return lane.paramId;
 }
 
 } // namespace synth::ui

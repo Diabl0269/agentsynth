@@ -5,6 +5,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
+#include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h"
@@ -46,6 +47,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // empty space draws a box, Escape clears; dragging a selected point moves the whole selection, Delete/Backspace
 // removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step. Cmd+A/C/X/V reach
 // it as the app's edit commands (MainComponent routes them to the focused lane editor).
+// Double-clicking a point (or Return with the keyboard cursor on one) opens a PointValueField beside it: type a value,
+// Return sets that one point's value (clamped to the lane's range, one undo step), Escape cancels.
 // Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
@@ -75,6 +78,12 @@ public:
     /** Text for a lane value in the parameter's own units ("-6.0 dB"); may be null or return empty, which falls
      *  back to the plain number. */
     std::function<juce::String(double)> valueToText;
+
+    /** The lane value a typed text stands for, in the lane's own units, or nullopt when it is not a value; may be
+     *  null, which parses a plain number. */
+    std::function<std::optional<double>(const juce::String&)> textToValue;
+    /** The lane's parameter name for the value field's accessible title; may be null or return empty. */
+    std::function<juce::String()> laneLabel;
 
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
@@ -144,6 +153,9 @@ public:
     void applySegmentCurveChoice(double leftBeat, int curve);
 
     // ---- Test hooks ----
+
+    // The typed-value field beside a point.
+    PointValueField& getValueFieldForTest() noexcept { return valueField_; }
 
     // The value bubble over the hovered or dragged point.
     PointValueBubble& getPointBubbleForTest() noexcept { return bubble_; }
@@ -230,6 +242,13 @@ private:
     juce::String describePoints() const;
     void refreshDescription();
 
+    // ---- Typed value (AutomationLaneEditorValueField.cpp) ----
+    bool openValueField(double beat);
+    bool openValueFieldOnCursor();
+    std::optional<double> parseTypedValue(const juce::String& text) const;
+    void commitTypedValue(double beat, double value);
+    void closeValueFieldIfPointGone();
+
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
 
@@ -275,6 +294,8 @@ private:
 
     AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
     PointValueBubble bubble_{*this};
+    PointValueField valueField_{*this};
+    std::optional<double> valueFieldBeat_; // the point the field is editing
     LanePointSelection selection_{*this};
     LanePointGlide glide_{*this};
     LanePointClipboard* clipboard_ = nullptr;

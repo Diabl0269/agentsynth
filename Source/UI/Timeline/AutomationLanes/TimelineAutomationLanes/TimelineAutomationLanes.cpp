@@ -180,6 +180,14 @@ void TimelineAutomationLanes::syncPools() {
                 const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
                 return lane != nullptr ? laneValueText(*lane, value, host_) : juce::String();
             };
+            editor->textToValue = [this, id](const juce::String& text) -> std::optional<double> {
+                const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
+                return lane != nullptr ? laneTextToValue(*lane, text, host_) : std::nullopt;
+            };
+            editor->laneLabel = [this, id] {
+                const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
+                return lane != nullptr ? laneParameterName(*lane, host_) : juce::String();
+            };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)
                     onLaneFocused(id);
