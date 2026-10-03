@@ -263,6 +263,77 @@ TEST(TimelineCursorGlide, GlidingBackStopsAtTheStart) {
     EXPECT_DOUBLE_EQ(rig.cursor, 0.0);
 }
 
+// ---- the start speed follows the grid ---------------------------------------------------------
+
+/** Beats per second of the first moving frame of a hold on `grid`. */
+double firstFrameSpeed(double grid) {
+    Rig rig;
+    rig.grid = grid;
+    rig.cursor = 0.0;
+    rig.press();
+    rig.holdFor(cg::kTapMs + 40.0);
+    EXPECT_GE(rig.writes.size(), 2u);
+    return (rig.writes[1] - rig.writes[0]) / 0.016;
+}
+
+TEST(TimelineCursorGlide, TheStartSpeedIsProportionalToTheGridStep) {
+    const double whole = firstFrameSpeed(4.0);          // 1/1
+    const double sixteenth = firstFrameSpeed(0.25);     // 1/16
+    const double thirtySecond = firstFrameSpeed(0.125); // 1/32
+    EXPECT_NEAR(whole, 4.0 * cg::kStartGridStepsPerSecond, 1.0);
+    EXPECT_NEAR(thirtySecond, 0.125 * cg::kStartGridStepsPerSecond, 0.1);
+    EXPECT_GT(whole, 10.0 * thirtySecond) << "a coarse grid starts far faster than a fine one";
+    EXPECT_NEAR(sixteenth, cg::kStartBeatsPerSecond, 0.3) << "a sixteenth grid starts at the old fixed speed";
+}
+
+TEST(CursorGlideModel, EveryGridAcceleratesTheSameWayFromItsOwnStartToTheCap) {
+    for (const double grid : {4.0, 1.0, 0.125}) {
+        synth::CursorGlide glide;
+        glide.press(GlideDirection::Forward, 0.0, 0.0, kBar, grid);
+        const double v0 = grid * cg::kStartGridStepsPerSecond;
+        const double t0 = cg::kTapMs;
+        EXPECT_NEAR(glide.velocityAt(t0), v0, 1e-9);
+        for (const double u : {0.25, 0.5, 0.75})
+            EXPECT_NEAR(glide.velocityAt(t0 + u * cg::kRampMs), v0 + (kCap - v0) * u * u * u, 1e-9) << grid;
+        EXPECT_NEAR(glide.velocityAt(t0 + cg::kRampMs), kCap, 1e-9);
+    }
+}
+
+TEST(CursorGlideModel, AGridTooCoarseForTheCapStartsAtTheCap) {
+    synth::CursorGlide glide;
+    glide.press(GlideDirection::Forward, 0.0, 0.0, kBar, 16.0); // 4 bars: 64 beats/s would exceed the cap
+    EXPECT_NEAR(glide.velocityAt(cg::kTapMs), glide.velocityAt(cg::kTapMs + cg::kRampMs), 1e-9);
+}
+
+TEST(TimelineCursorGlide, ReleasingResetsTheSpeedToTheStartOfTheGrid) {
+    Rig rig;
+    rig.grid = 4.0;
+    rig.cursor = 0.0;
+    rig.press();
+    rig.holdFor(2500.0); // up to the cap
+    rig.glide.release();
+
+    rig.grid = 0.125; // a new hold on a fine grid starts gently, not where the last one ended
+    rig.writes.clear();
+    rig.now += 500.0;
+    rig.press();
+    rig.holdFor(cg::kTapMs + 40.0);
+    ASSERT_GE(rig.writes.size(), 2u);
+    EXPECT_NEAR((rig.writes[1] - rig.writes[0]) / 0.016, 0.125 * cg::kStartGridStepsPerSecond, 0.1);
+}
+
+TEST(TimelineCursorGlide, ATapMovesExactlyOneGridStepOnAnyGrid) {
+    for (const double grid : {4.0, 0.125}) {
+        Rig rig;
+        rig.grid = grid;
+        rig.cursor = 8.0;
+        rig.press();
+        rig.now += 100.0;
+        rig.glide.release();
+        EXPECT_DOUBLE_EQ(rig.cursor, 8.0 + grid);
+    }
+}
+
 // ---- the panel ------------------------------------------------------------------------------
 
 TEST(TimelinePanelCursorGlide, CmdRightIsConsumedAndATapNudgesTheSharedState) {

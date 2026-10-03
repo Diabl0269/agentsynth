@@ -36,7 +36,7 @@ bool TimelineCursorGlide::press(synth::GlideDirection direction, const juce::Key
     }
 
     heldKey_ = key;
-    glide_.press(direction, host_.nowMs(), start, host_.beatsPerBar());
+    glide_.press(direction, host_.nowMs(), start, host_.beatsPerBar(), host_.gridBeats());
     lastBeat_ = start;
     holdFramesRunning_ = true;
     holdPump_.run(kHoldRunMs, [this] { tick(); });
