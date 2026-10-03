@@ -214,6 +214,10 @@ struct SectionPlacer {
         auto& planned = plan.items[(size_t)index];
         planned.section = sectionIndex;
         planned.when = source.when;
+        planned.at = source.at;
+        planned.range = source.range;
+        if (source.at && !section.footer)
+            section.freeform = true;
         if (section.footer)
             applyFooterKind(planned);
         section.items.push_back(index);

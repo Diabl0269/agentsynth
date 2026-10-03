@@ -63,10 +63,15 @@ struct CardParamItem {
     std::optional<juce::String> label;
     int span = 1; ///< Grid cells taken, 1..6.
     std::optional<CardCondition> when;
+    /** Top-left of the item's cell (caption and widget) from the section's content origin, in card pixels. */
+    std::optional<juce::Point<int>> at;
+    /** Narrows a knob or fader to this min..max, in the parameter's own units. */
+    std::optional<juce::Range<double>> range;
 
     bool operator==(const CardParamItem& other) const noexcept {
         return paramId == other.paramId && indexHint == other.indexHint && node == other.node &&
-               widget == other.widget && label == other.label && span == other.span && when == other.when;
+               widget == other.widget && label == other.label && span == other.span && when == other.when &&
+               at == other.at && range == other.range;
     }
 };
 

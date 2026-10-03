@@ -163,8 +163,106 @@ int layoutCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const st
     return y;
 }
 
+// A freeform section's cell: its size, and the free position of its item (a swap group's first member
+// that has one), nullopt = flows after the positioned cells.
+struct FreeCell {
+    Cell cell;
+    juce::Rectangle<int> size; // width and height only
+    std::optional<juce::Point<int>> at;
+};
+
+// The cell's natural size, by the widths and heights the run layouts give a cell of its kind.
+juce::Rectangle<int> naturalCellSize(const CardBodyPlan& plan, juce::AudioProcessor& module, const Cell& cell,
+                                     int columns, const cardbody::BodyGeometry& g) {
+    using namespace cardbody;
+    const int gridW = gridCellWidth(columns, g);
+    switch (cell.runKind) {
+    case Kind::Knob:
+        return {gridW, kLabelHeight + kKnobHeight};
+    case Kind::KnobLarge:
+        return {gridW, kLabelHeight + kKnobLargeHeight};
+    case Kind::FaderV:
+        return {gridW, kLabelHeight + kFaderVHeight};
+    case Kind::FaderH:
+        return {g.contentW, kLabelHeight + kFaderHHeight};
+    case Kind::Segmented:
+        return {g.contentW, kLabelHeight + kRowHeight};
+    case Kind::Stepper:
+    case Kind::Choice:
+        return {g.narrowW, kLabelHeight + kRowHeight};
+    case Kind::Toggle:
+        return {g.contentW, kRowHeight};
+    case Kind::View: {
+        const auto& view = plan.items[(size_t)cell.item];
+        const auto* factory = findCardViewFactory(view.view);
+        return {g.contentW, factory != nullptr && view.open ? factory->preferredHeight(module) : 0};
+    }
+    }
+    return {};
+}
+
+std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell) {
+    if (cell.group < 0)
+        return cell.item >= 0 ? plan.items[(size_t)cell.item].at : std::nullopt;
+    for (int member : plan.swapGroups[(size_t)cell.group].members)
+        if (plan.items[(size_t)member].at.has_value())
+            return plan.items[(size_t)member].at;
+    return std::nullopt;
+}
+
+// One cell placed exactly as its run layout would place a run of one, in a geometry that is the cell's
+// own box (not a double-width card, so a combo stays one column).
+void placeFreeCell(const CardBodyPlan& plan, juce::AudioProcessor& module, const FreeCell& free, int columns,
+                   juce::Point<int> topLeft, const cardbody::BodyGeometry& g) {
+    auto cellGeometry = g;
+    cellGeometry.width = 0;
+    cellGeometry.contentX = cellGeometry.narrowX = topLeft.x;
+    cellGeometry.contentW = cellGeometry.narrowW = free.size.getWidth();
+    layoutRun(plan, module, {free.cell}, columns, topLeft.y, cellGeometry, true);
+}
+
+// A freeform section: cells with a position sit at it (relative to the content origin and the section's
+// top, kept inside the content width); the rest flow after them, left to right in rows below the lowest
+// positioned cell. Measuring and placing share the walk, so the height cannot drift.
+int layoutFreeSection(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::Section& section,
+                      int top, const cardbody::BodyGeometry& g, bool apply) {
+    std::vector<FreeCell> positioned;
+    std::vector<FreeCell> flowing;
+    for (const auto& cell : cellsOf(plan, section.items, true)) {
+        FreeCell free{cell, naturalCellSize(plan, module, cell, section.columns, g), positionOf(plan, cell)};
+        if (free.size.isEmpty())
+            continue;
+        (free.at ? positioned : flowing).push_back(free);
+    }
+    int bottom = top;
+    const auto place = [&](const FreeCell& free, juce::Point<int> topLeft) {
+        if (apply)
+            placeFreeCell(plan, module, free, section.columns, topLeft, g);
+        bottom = std::max(bottom, topLeft.y + free.size.getHeight());
+    };
+    for (const auto& free : positioned) {
+        const int maxX = std::max(g.contentX, g.contentX + g.contentW - free.size.getWidth());
+        place(free, {juce::jlimit(g.contentX, maxX, g.contentX + free.at->x), std::max(top, top + free.at->y)});
+    }
+    int x = g.contentX;
+    int rowY = bottom;
+    int rowBottom = bottom;
+    for (const auto& free : flowing) {
+        if (x > g.contentX && x + free.size.getWidth() > g.contentX + g.contentW) {
+            x = g.contentX;
+            rowY = rowBottom;
+        }
+        place(free, {x, rowY});
+        rowBottom = std::max(rowBottom, rowY + free.size.getHeight());
+        x += free.size.getWidth();
+    }
+    return bottom > top ? bottom + 6 : top;
+}
+
 int layoutSectionCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::Section& section,
                        int y, const cardbody::BodyGeometry& g, bool apply) {
+    if (section.freeform)
+        return layoutFreeSection(plan, module, section, y, g, apply);
     return layoutCells(plan, module, cellsOf(plan, section.items, true), section.columns, y, g, apply);
 }
 

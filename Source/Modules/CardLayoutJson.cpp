@@ -1,6 +1,7 @@
 // CardLayoutJson.cpp -- the version-2 JSON reader and writer for CardLayout (sections, items,
 // conditions, hidden). The v1 slot format and the version dispatch live in CardLayout.cpp.
 #include "CardLayoutJson.h"
+#include <cmath>
 
 namespace synth::detail {
 
@@ -8,6 +9,7 @@ namespace {
 
 constexpr int kMinSpan = 1;
 constexpr int kMaxSpan = 6;
+constexpr int kMaxPosition = 4000;
 
 template <typename Enum, std::size_t N>
 struct NameTable {
@@ -44,6 +46,43 @@ bool readBoundedInt(const juce::DynamicObject& object, const char* key, int lo, 
     if (number < lo || number > hi || number != static_cast<double>(static_cast<int>(number)))
         return false;
     out = static_cast<int>(number);
+    return true;
+}
+
+// A present number that is finite; a non-number or NaN/inf is a failure.
+bool readFinite(const juce::DynamicObject& object, const char* key, double& out) {
+    const auto& value = object.getProperty(key);
+    if (!isNumber(value))
+        return false;
+    out = static_cast<double>(value);
+    return std::isfinite(out);
+}
+
+bool readPosition(const juce::DynamicObject& object, std::optional<juce::Point<int>>& out) {
+    const bool hasX = object.hasProperty("x");
+    if (hasX != object.hasProperty("y"))
+        return false;
+    if (!hasX)
+        return true;
+    int x = 0;
+    int y = 0;
+    if (!readBoundedInt(object, "x", 0, kMaxPosition, 0, x) || !readBoundedInt(object, "y", 0, kMaxPosition, 0, y))
+        return false;
+    out = juce::Point<int>(x, y);
+    return true;
+}
+
+bool readRange(const juce::DynamicObject& object, std::optional<juce::Range<double>>& out) {
+    const bool hasMin = object.hasProperty("min");
+    if (hasMin != object.hasProperty("max"))
+        return false;
+    if (!hasMin)
+        return true;
+    double lo = 0.0;
+    double hi = 0.0;
+    if (!readFinite(object, "min", lo) || !readFinite(object, "max", hi) || lo >= hi)
+        return false;
+    out = juce::Range<double>(lo, hi);
     return true;
 }
 
@@ -109,6 +148,14 @@ juce::var itemToVar(const CardItem& item) {
     object->setProperty("span", param.span);
     if (param.when)
         object->setProperty("when", conditionToVar(*param.when));
+    if (param.at) {
+        object->setProperty("x", param.at->x);
+        object->setProperty("y", param.at->y);
+    }
+    if (param.range) {
+        object->setProperty("min", param.range->getStart());
+        object->setProperty("max", param.range->getEnd());
+    }
     return juce::var(object);
 }
 
@@ -128,7 +175,8 @@ bool readParamItem(const juce::DynamicObject& object, CardParamItem& out) {
             return false;
         out.widget = *widget;
     }
-    return readBoundedInt(object, "span", kMinSpan, kMaxSpan, 1, out.span) && readCondition(object, "when", out.when);
+    return readBoundedInt(object, "span", kMinSpan, kMaxSpan, 1, out.span) && readCondition(object, "when", out.when) &&
+           readPosition(object, out.at) && readRange(object, out.range);
 }
 
 bool readItem(const juce::var& json, CardItem& out) {

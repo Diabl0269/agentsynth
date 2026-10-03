@@ -795,6 +795,7 @@ add_executable(Tests
     UI/Layout/SearchMatchTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
+    UI/Graph/CardBody/CardBodyFreeformTests.cpp
     UI/Graph/CardBody/CardBodyConditionsTests.cpp
     UI/Graph/CardBody/CardBodyFooterTests.cpp
     UI/Graph/CardBody/CardBodyBindingTests.cpp

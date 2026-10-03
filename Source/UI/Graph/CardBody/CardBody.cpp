@@ -52,6 +52,22 @@ void applyAdsrTimeSkew(juce::Slider& slider, const juce::RangedAudioParameter& p
         juce::NormalisableRange<double>((double)r.start, (double)r.end, (double)r.interval, 0.3));
 }
 
+// Narrows a slider to the layout's range within the parameter's own. Like applyAdsrTimeSkew it MUST run
+// after the SliderParameterAttachment (and after that skew), which would otherwise replace the range; it
+// keeps the slider's current skew so the ADSR times stay skewed. A range that misses the parameter's
+// leaves the full one. The slider only clamps its display: the parameter keeps any value it is given.
+void applyLayoutRange(juce::Slider& slider, const juce::RangedAudioParameter& param,
+                      const std::optional<juce::Range<double>>& range) {
+    if (!range.has_value() || dynamic_cast<const juce::AudioParameterFloat*>(&param) == nullptr)
+        return;
+    const auto& full = param.getNormalisableRange();
+    const auto narrowed = range->getIntersectionWith(juce::Range<double>((double)full.start, (double)full.end));
+    if (narrowed.isEmpty())
+        return;
+    slider.setNormalisableRange(juce::NormalisableRange<double>(
+        narrowed.getStart(), narrowed.getEnd(), (double)full.interval, slider.getNormalisableRange().skew));
+}
+
 // The Oscillator waveform choice {"Sine", "Square", "Saw", "Triangle"} (in that order) gets a glyph per
 // item; ModuleComponent::refreshWaveformComboIcons re-tints them on a theme switch, finding the combo by
 // this same item set.
@@ -243,6 +259,7 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
     sliderAttachments_.add(new juce::SliderParameterAttachment(param, *knob));
     if (isFloat)
         applyAdsrTimeSkew(*knob, param);
+    applyLayoutRange(*knob, param, item.range);
     card_.sliderParams.add(&param);
 
     auto* label = new juce::Label(param.getName(100), item.captionText());
@@ -302,6 +319,7 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
     sliderAttachments_.add(new juce::SliderParameterAttachment(param, *fader));
     if (dynamic_cast<juce::AudioParameterFloat*>(&param) != nullptr)
         applyAdsrTimeSkew(*fader, param);
+    applyLayoutRange(*fader, param, item.range);
     if (vertical) // 40 px wide: "1.00 s" would truncate, "1.00s" fits
         fader->useCompactValueText(param);
     fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));
