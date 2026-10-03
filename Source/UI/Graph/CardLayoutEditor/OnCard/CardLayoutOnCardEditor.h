@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
@@ -44,7 +45,7 @@ public:
 
     /** Runs once the session has ended and the overlay is off the canvas, for the owner to destroy it. */
     std::function<void()> onClosed;
-    /** Return on a control (later steps open its options here). */
+    /** Told when a control's options are asked for (Return, double-click, right-click), as the panel opens. */
     std::function<void(const juce::String& paramId)> onControlOptions;
 
     /** Keeps the layout and ends the session. */
@@ -57,11 +58,17 @@ public:
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
+    /** Test seam: takes each control panel instead of a call-out, as ModuleComponent's launcher takes the
+     *  editor. The panel is the test's to keep; the editor only points at it while it is open. */
+    static void setControlPanelLauncherForTest(std::function<void(std::unique_ptr<juce::Component>)> launcher);
+
     // ---- Test seams: read back or drive the real state -------------------------------------------
     int getOutlineCountForTest() const { return outlines_.size(); }
     CardLayoutOutline* getOutlineForTest(const juce::String& paramId) const;
     /** The control's cell on the card now (card pixels); empty when it has none. */
     juce::Rectangle<int> getCellRectForTest(const juce::String& paramId) const;
+    /** The open control panel, or null once it is closed. */
+    CardLayoutControlPanel* getControlPanelForTest() const { return panel_.getComponent(); }
     CardLayoutEditBar& getEditBarForTest() noexcept { return editBar_; }
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
@@ -126,6 +133,15 @@ private:
     };
     void startGlide(std::vector<Move> moves);
 
+    // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
+    void openControlPanel(const juce::String& paramId);
+    void closePanel();
+    void refreshPanel();
+    void writeLayout(const CardLayout& layout);
+    void editControl(const std::function<CardLayout(CardLayout)>& edit);
+    void hideControl(const juce::String& paramId);
+    juce::Rectangle<int> screenAreaOf(const CardLayoutOutline& outline) const;
+
     // ---- Keyboard (CardLayoutOnCardEditorKeyboard.cpp) -----------------------------------------
     bool handleKey(const juce::String& key, const juce::KeyPress& press);
     bool matchesAction(const juce::KeyPress& press, const char* actionId, const juce::KeyPress& fallback) const;
@@ -143,6 +159,9 @@ private:
     bool closing_ = false;                          ///< close() is running: no write may glide.
     bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool writing_ = false;
+
+    juce::Component::SafePointer<CardLayoutControlPanel> panel_;
+    juce::String panelParamId_;
 
     CardLayoutEditBar editBar_;
     juce::OwnedArray<CardLayoutOutline> outlines_;

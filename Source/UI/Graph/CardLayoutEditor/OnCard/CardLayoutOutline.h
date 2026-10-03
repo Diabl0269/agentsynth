@@ -2,8 +2,8 @@
 
 // One control's outline in the on-card layout editor: a dashed accent outline with a grip in its
 // bottom-right corner, solid with a faint wash on hover and keyboard focus, shadowed while lifted. It
-// is an accessible button (Return asks for the control's options); the drag itself is the editor's, fed
-// through the callbacks. docs/layout/module-card-layout.md#editing-a-layout.
+// is an accessible button (Return, a double-click or a right-click ask for the control's options through onClick); the
+// drag itself is the editor's, fed through the callbacks. docs/layout/module-card-layout.md#editing-a-layout.
 
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -43,6 +43,7 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
     bool keyPressed(const juce::KeyPress&) override;
     void focusGained(FocusChangeType) override { repaint(); }
     void focusLost(FocusChangeType) override { repaint(); }

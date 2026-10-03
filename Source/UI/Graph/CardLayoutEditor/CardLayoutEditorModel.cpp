@@ -295,16 +295,19 @@ void CardLayoutEditorModel::setShown(const juce::String& paramId, bool shown) {
     insert(item, (int)sections_.size() - 1, (int)sections_.back().items.size());
 }
 
+std::optional<juce::String> labelOverrideFor(const juce::String& text, const juce::String& displayName) {
+    const auto trimmed = text.trim();
+    if (trimmed.isEmpty() || trimmed == displayName)
+        return std::nullopt;
+    return trimmed;
+}
+
 void CardLayoutEditorModel::setLabel(const juce::String& paramId, const juce::String& text) {
     auto* item = findItem(paramId);
     const auto* param = findParam(paramId);
     if (item == nullptr || param == nullptr)
         return;
-    const auto trimmed = text.trim();
-    if (trimmed.isEmpty() || trimmed == param->displayName)
-        item->label.reset();
-    else
-        item->label = trimmed;
+    item->label = labelOverrideFor(text, param->displayName);
 }
 
 void CardLayoutEditorModel::setWidget(const juce::String& paramId, CardWidget widget) {

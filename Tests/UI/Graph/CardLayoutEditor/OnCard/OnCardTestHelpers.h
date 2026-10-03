@@ -19,8 +19,19 @@ using synth::ui::CardLayoutOutline;
 
 /** The canvas with motion off (nothing glides, so every drop has landed when the handler returns). */
 struct OnCardRig : EditorCanvas {
-    OnCardRig() { synth::ui::setReducedMotionForTest(true); }
-    ~OnCardRig() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    OnCardRig() {
+        synth::ui::setReducedMotionForTest(true);
+        CardLayoutOnCardEditor::setControlPanelLauncherForTest(
+            [this](std::unique_ptr<juce::Component> panel) { panelLaunched = std::move(panel); });
+    }
+    ~OnCardRig() {
+        panelLaunched.reset();
+        CardLayoutOnCardEditor::setControlPanelLauncherForTest(nullptr);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+
+    /** The control panel the editor last launched (the rig keeps it; the editor points at it while open). */
+    std::unique_ptr<juce::Component> panelLaunched;
 
     /** Picks "Edit Layout..." from the card's module menu; the editor it opened, or null. */
     CardLayoutOnCardEditor* openOnCard(NodeID id) {

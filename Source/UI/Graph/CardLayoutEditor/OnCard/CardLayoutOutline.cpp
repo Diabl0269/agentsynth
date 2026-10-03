@@ -123,6 +123,11 @@ void CardLayoutOutline::mouseExit(const juce::MouseEvent& e) {
 
 void CardLayoutOutline::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
+    if (e.mods.isPopupMenu()) {
+        if (onClick)
+            onClick();
+        return;
+    }
     if (e.mods.isLeftButtonDown() && onPress)
         onPress(e);
 }
@@ -135,6 +140,11 @@ void CardLayoutOutline::mouseDrag(const juce::MouseEvent& e) {
 void CardLayoutOutline::mouseUp(const juce::MouseEvent& e) {
     if (onRelease)
         onRelease(e);
+}
+
+void CardLayoutOutline::mouseDoubleClick(const juce::MouseEvent& e) {
+    if (!e.mods.isPopupMenu() && onClick)
+        onClick();
 }
 
 // Return asks for the control's options (the button's own click would be posted, not run, so the hook
