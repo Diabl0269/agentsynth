@@ -6,6 +6,7 @@
 #include "ShortcutManager.h"
 
 void ShortcutManager::addGeneralDefaultBindings() {
+    const bool isMac = defaultsPlatform == DefaultsPlatform::Mac;
     // ---- General ----
     bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
     bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
@@ -32,7 +33,10 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
     bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
     bindings["redo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-    bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+M on the Mac. Off the Mac Cmd IS Ctrl, and Ctrl+M belongs to Toggle Metronome (below), so
+    // the matrix takes Ctrl+Alt+M there.
+    bindings["toggleModMatrix"] = isMac ? juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0)
+                                        : juce::KeyPress('m', otherPlatformModMatrixModifiers(), 0);
     // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
     // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle.
     bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
@@ -42,12 +46,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // IS the Ctrl key, so Ctrl+A and Cmd+A would be the SAME chord (and would trip
     // EveryDefaultBindingIsUnique in Linux CI); those platforms take Cmd+Shift+A instead. One
     // of the very few per-platform defaults in this table — rebindable like everything else.
-#if JUCE_MAC
-    bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0);
-#else
     bindings["toggleAiPanel"] =
-        juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-#endif
+        isMac ? juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)
+              : juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
     // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
     // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the ONE bottom-dock
@@ -77,7 +78,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // Cmd+R for Repeat, Cubase/Logic's own binding for the same verb. Also free on both
     // counts — nothing in this table uses 'r', and no keyPressed() override matches an 'r'
     // (checked against the panel's Q/L/P, the roll's Q and the lane area's P).
-    bindings["repeatSelection"] = juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0);
+    // Off the Mac Cmd IS Ctrl and Ctrl+R belongs to Record (below), so Repeat takes Ctrl+Shift+R there.
+    bindings["repeatSelection"] = isMac ? juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0)
+                                        : juce::KeyPress('r', otherPlatformRepeatModifiers(), 0);
     // Bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
     // claim app-wide for the same reason Cmd+C/V is: a focused juce::TextEditor consumes the
     // spacebar itself (types a space character) before it ever reaches MainComponent::
@@ -138,18 +141,12 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["transportPlay"] = juce::KeyPress();
     bindings["transportStop"] = juce::KeyPress();
     bindings["transportToggleLoop"] = juce::KeyPress();
-    // Record and Metronome are the two exceptions. On macOS they take a REAL Ctrl+R / Ctrl+M:
-    // Cmd+R is Repeat and Cmd+M is the mod-matrix toggle, but Ctrl is a distinct physical
-    // modifier there, so the chords are free. On Windows/Linux juce's commandModifier IS the Ctrl
-    // key, so Ctrl+R / Ctrl+M would be the SAME chord as those two (and trip
-    // EveryDefaultBindingIsUnique); those platforms keep both unbound, rebindable like any other.
-#if JUCE_MAC
+    // Record and Metronome are the two exceptions: a literal Ctrl+R / Ctrl+M on every platform (Option
+    // types characters in text fields on the Mac, and Alt+letter is menu-mnemonic territory on
+    // Windows). On the Mac Ctrl is a distinct physical key, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix
+    // are untouched. Off the Mac Ctrl is also Cmd, so those two moved (see their bindings above).
     bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
     bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
-#else
-    bindings["transportRecord"] = juce::KeyPress();
-    bindings["transportToggleMetronome"] = juce::KeyPress();
-#endif
     bindings["transportReturnToStart"] = juce::KeyPress();
     // Cursor moves and loop jumps -- same unbound-by-default reasoning as above.
     bindings["transportNudgeBackBeat"] = juce::KeyPress();
@@ -407,24 +404,20 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["pianoRollToggleScalePanel"] = juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0);
     // Show / hide the velocity strip: a REAL Ctrl+V on macOS (Cmd+V is Paste), Cmd+Shift+V on
     // Windows/Linux, where Cmd IS Ctrl — the same per-platform split as "toggleAiPanel" above.
-#if JUCE_MAC
-    bindings["pianoRollToggleVelocityLane"] = juce::KeyPress('v', juce::ModifierKeys::ctrlModifier, 0);
-#else
     bindings["pianoRollToggleVelocityLane"] =
-        juce::KeyPress('v', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-#endif
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::KeyPress('v', juce::ModifierKeys::ctrlModifier, 0)
+            : juce::KeyPress('v', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
     // Show / hide the mixer's Inserts, Sends and EQ rows while the mixer has focus -- the keyboard
     // twins of its toolbar toggles. On macOS a REAL Ctrl+letter, like "pianoRollToggleScalePanel":
     // Cmd+S is Save and Cmd+I/E are taken, while Ctrl is a distinct physical key there. On
     // Windows/Linux Cmd IS Ctrl, so Ctrl+S would shadow Save whenever the mixer is focused; those
     // platforms take Ctrl+Alt+letter instead.
-#if JUCE_MAC
-    const auto mixerSectionMods = juce::ModifierKeys(juce::ModifierKeys::ctrlModifier);
-#else
     const auto mixerSectionMods =
-        juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
-#endif
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::ModifierKeys(juce::ModifierKeys::ctrlModifier)
+            : juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
     bindings["mixerToggleInserts"] = juce::KeyPress('i', mixerSectionMods, 0);
     bindings["mixerToggleSends"] = juce::KeyPress('s', mixerSectionMods, 0);
     bindings["mixerToggleEq"] = juce::KeyPress('e', mixerSectionMods, 0);

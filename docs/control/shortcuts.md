@@ -38,7 +38,7 @@ when reasoning about a key that "does nothing."
 | (menu only) | Contribute to Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. |
 | Cmd+Z | Undo — the project history, or the controller edit history while the Controllers panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
 | Cmd+Shift+Z | Redo — routed the same way as Undo |
-| Cmd+M | Toggle Mod Matrix |
+| Cmd+M (macOS) / Ctrl+Alt+M (Windows, Linux) | Toggle Mod Matrix — off the Mac Cmd is Ctrl, and Ctrl+M belongs to Toggle Metronome |
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
@@ -51,10 +51,10 @@ when reasoning about a key that "does nothing."
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
 | Cmd+D | Duplicate (Selected Modules, the selected clips/notes, or the focused automation lane: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
-| Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
+| Cmd+R (macOS) / Ctrl+Shift+R (Windows, Linux) | Repeat — off the Mac Cmd is Ctrl, and Ctrl+R belongs to Record. Prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |
-| Ctrl+M (macOS) | Toggle Metronome (`transportToggleMetronome`) — a REAL Control, since Cmd+M stays Toggle Mod Matrix. Unbound on Windows/Linux, where Cmd IS Ctrl and Ctrl+M would be Mod Matrix — see [**Transport family**](#transport-family) |
-| Ctrl+R (macOS) | Record (`transportRecord`) — a REAL Control, since Cmd+R stays Repeat. Unbound on Windows/Linux for the same reason — see [**Transport family**](#transport-family) |
+| Ctrl+M | Toggle Metronome (`transportToggleMetronome`) on every platform. On macOS a REAL Control, so Cmd+M stays Toggle Mod Matrix; on Windows/Linux Mod Matrix moved to Ctrl+Alt+M — see [**Transport family**](#transport-family) |
+| Ctrl+R | Record (`transportRecord`) on every platform. On macOS a REAL Control, so Cmd+R stays Repeat; on Windows/Linux Repeat moved to Ctrl+Shift+R — see [**Transport family**](#transport-family) |
 | *(unbound)* | Play / Stop / Toggle Looping / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
 | *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
@@ -282,12 +282,16 @@ Every transport verb is promoted to a command-dispatched `AppCommands` action �
 one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
 still bind one from Settings like any other action. The two exceptions are **Record** and **Toggle
-Metronome**: on macOS they default to a real **Ctrl+R** and **Ctrl+M** (Control is a distinct physical key
-there, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix are untouched); on Windows/Linux, where Cmd is Ctrl, the
-same chords would collide with those two and the pair stays unbound. An install that saved its settings
-before the chords existed holds both as unbound, so a one-shot migration
-(`ShortcutManager::migrateTransportCtrlChords`) gives them the new chords once and leaves any key the user
-chose alone:
+Metronome**: they default to a literal **Ctrl+R** and **Ctrl+M** on every platform (Option+letter types
+characters in text fields on the Mac, and Alt+letter is menu-mnemonic territory on Windows). On macOS Control is
+a distinct physical key, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix are untouched; on Windows/Linux, where Cmd
+is Ctrl, those two moved to Ctrl+Shift+R and Ctrl+Alt+M to free the chords. Holding Ctrl (Cmd on Windows/Linux)
+labels both transport buttons with their keys. An install that saved its settings before the chords existed holds
+both as unbound (and, off the Mac, holds Ctrl+R / Ctrl+M on Repeat and the matrix), so a one-shot migration
+(`ShortcutManager::migrateTransportCtrlChords`) moves Repeat / the matrix off the old chords when they still hold
+them, gives Record / Metronome the new chords unless another action already uses one, and leaves any key the
+user chose alone. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the
+Windows/Linux defaults are tested from a Mac host:
 
 | Action id | Display name | Behaviour |
 |---|---|---|

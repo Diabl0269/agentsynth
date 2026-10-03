@@ -118,10 +118,6 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "transportPlay",
         "transportStop",
         "transportToggleLoop",
-        // Record and Metronome are bound on macOS only (real Ctrl+R / Ctrl+M); see
-        // ShortcutManagerTransportActionsTests.cpp.
-        "transportRecord",
-        "transportToggleMetronome",
         "transportReturnToStart",
         // Cursor moves and loop-locator jumps.
         "transportNudgeBackBeat",

@@ -78,16 +78,11 @@ void resetMetronomeKeys() {
 // ============================================================================
 
 TEST_F(ShortcutManagerTest, TransportActionIdsExistAndHaveNoDefaultBinding) {
-#if JUCE_MAC
-    constexpr bool isMac = true;
-#else
-    constexpr bool isMac = false;
-#endif
     for (const auto& actionId : transportActionIds()) {
         EXPECT_TRUE(manager.getActionIds().contains(actionId)) << actionId << " is not a registered action";
-        // Record and Metronome are the exception on macOS (real Ctrl+R / Ctrl+M, tested below).
-        const bool hasMacChord = actionId == "transportRecord" || actionId == "transportToggleMetronome";
-        if (isMac && hasMacChord)
+        // Record and Metronome are the exception on every platform (Ctrl+R / Ctrl+M, tested in
+        // ShortcutManagerTransportChordsTests.cpp).
+        if (actionId == "transportRecord" || actionId == "transportToggleMetronome")
             continue;
         EXPECT_FALSE(manager.getBinding(actionId).isValid()) << actionId << " should ship unbound by default";
     }
@@ -118,33 +113,6 @@ TEST_F(ShortcutManagerTest, TransportActionIdsHaveDisplayNamesAndAreFiledUnderGe
 TEST_F(ShortcutManagerTest, TransportTogglePlayStopHasADisplayName) {
     EXPECT_NE(ShortcutManager::getActionDescription("transportTogglePlayStop"),
               juce::String("transportTogglePlayStop"));
-}
-
-// Record and Metronome take a REAL Ctrl chord on macOS, where Cmd+R is Repeat and Cmd+M is the
-// mod-matrix toggle; Windows/Linux fold Cmd onto Ctrl, so there they ship unbound.
-TEST_F(ShortcutManagerTest, RecordAndMetronomeDefaultToTheLiteralCtrlChordsOnMac) {
-#if JUCE_MAC
-    EXPECT_EQ(manager.getBinding("transportRecord"), juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0));
-    EXPECT_EQ(manager.getBinding("transportToggleMetronome"), juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0));
-    EXPECT_TRUE(manager.getBinding("transportRecord").getModifiers().isCtrlDown());
-    EXPECT_FALSE(manager.getBinding("transportRecord").getModifiers().isCommandDown());
-    EXPECT_FALSE(manager.getBinding("transportToggleMetronome").getModifiers().isCommandDown());
-    // Cmd+M stays the matrix toggle and Cmd+R stays Repeat; the Ctrl chords resolve to their own action.
-    EXPECT_EQ(manager.getBinding("toggleModMatrix"), juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
-    EXPECT_EQ(manager.getBinding("repeatSelection"), juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0));
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0)),
-              "transportToggleMetronome");
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0)),
-              "transportRecord");
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0)),
-              "toggleModMatrix");
-#else
-    EXPECT_FALSE(manager.getBinding("transportRecord").isValid());
-    EXPECT_FALSE(manager.getBinding("transportToggleMetronome").isValid());
-#endif
-    // Either way the two defaults collide with nothing in their category.
-    for (const char* id : {"transportRecord", "transportToggleMetronome"})
-        EXPECT_TRUE(manager.getConflictingAction(id, manager.getBinding(id)).isEmpty()) << id;
 }
 
 // ============================================================================
@@ -249,45 +217,6 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleMetronomeFlipsM
     EXPECT_EQ(metronome.isEnabled(), !enabledBefore);
     EXPECT_EQ(mc.getTimelinePanel().getTransportBar().getMetronomeButton().getToggleState(), !enabledBefore);
 }
-
-// Mac only: off the Mac Ctrl IS the command modifier, so these chords are Cmd+M / Cmd+R there.
-#if JUCE_MAC
-// The real key path: MainComponent::keyPressed resolves the chord through the live ShortcutManager and
-// dispatches the command, exactly what a physical Ctrl+M does when nothing else claims the key.
-TEST_F(ShortcutManagerTransportActionsInvokeTest, CtrlMTogglesTheMetronomeThroughTheKeyHandler) {
-    MainComponent mc(std::make_unique<TransportTestProvider>());
-    auto& metronome = mc.getAudioEngine().getMetronome();
-    auto& shortcuts = mc.getShortcutManager();
-    const auto original = shortcuts.getBinding("transportToggleMetronome");
-    const juce::KeyPress chord('m', juce::ModifierKeys::ctrlModifier, 0);
-    shortcuts.setBinding("transportToggleMetronome", chord); // already the default on macOS
-    const bool enabledBefore = metronome.isEnabled();
-
-    EXPECT_TRUE(mc.keyPressed(chord));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    EXPECT_EQ(metronome.isEnabled(), !enabledBefore);
-    EXPECT_EQ(mc.getTimelinePanel().getTransportBar().getMetronomeButton().getToggleState(), !enabledBefore);
-    shortcuts.setBinding("transportToggleMetronome", original); // the settings file outlives this test
-}
-
-TEST_F(ShortcutManagerTransportActionsInvokeTest, CtrlRTogglesTransportRecordThroughTheKeyHandler) {
-    MainComponent mc(std::make_unique<TransportTestProvider>());
-    auto& shortcuts = mc.getShortcutManager();
-    const auto original = shortcuts.getBinding("transportRecord");
-    const juce::KeyPress chord('r', juce::ModifierKeys::ctrlModifier, 0);
-    shortcuts.setBinding("transportRecord", chord);
-    ASSERT_FALSE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
-
-    EXPECT_TRUE(mc.keyPressed(chord));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    EXPECT_TRUE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
-
-    EXPECT_TRUE(mc.keyPressed(chord));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    EXPECT_FALSE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
-    shortcuts.setBinding("transportRecord", original);
-}
-#endif
 
 // The buttons name their keys in their tooltips and follow a rebind.
 TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportBarTooltipsNameTheirShortcutsAndFollowARebind) {
