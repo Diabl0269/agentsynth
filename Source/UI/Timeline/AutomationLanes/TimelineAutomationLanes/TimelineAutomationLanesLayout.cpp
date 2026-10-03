@@ -1,8 +1,9 @@
 // Concern: TimelineAutomationLanes' geometry -- what the lane rows add to the track layout, where
-// each lane header and editor sits, and the playhead value readouts.
+// each lane header and editor sits, and the value readouts (the playhead's, and the selected point's).
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -157,6 +158,31 @@ void TimelineAutomationLanes::tickReadouts(double beat, int visibleTop, int visi
         if (b.getBottom() > visibleTop && b.getY() < visibleBottom)
             header->setReadoutBeat(beat);
     }
+}
+
+// The header's slot shows the keyboard-cursor point's value when that point is selected, else the
+// first selected point's. Read from the doc (a drag commits on release), when the selection or the
+// doc changed; a selection that empties and refills within one doc notification repaints nothing.
+void TimelineAutomationLanes::updateSelectedReadout(synth::LaneId lane) {
+    auto* header = headerFor(lane);
+    if (header == nullptr)
+        return;
+    std::optional<juce::String> text;
+    const auto* editor = editorFor(lane);
+    const auto* data = doc_ != nullptr ? doc_->getLane(lane) : nullptr;
+    if (editor != nullptr && data != nullptr) {
+        const auto& selection = editor->getPointSelection();
+        const auto cursor = selection.getCursor();
+        const auto chosen =
+            cursor.has_value() && selection.contains(*cursor)
+                ? cursor
+                : (selection.isEmpty() ? std::nullopt : std::optional<double>(selection.getSelected().front()));
+        if (chosen.has_value())
+            for (const auto& p : data->points)
+                if (p.beat == *chosen)
+                    text = laneValueText(*data, p.value, host_);
+    }
+    header->setSelectedPointValue(text);
 }
 
 } // namespace synth::ui

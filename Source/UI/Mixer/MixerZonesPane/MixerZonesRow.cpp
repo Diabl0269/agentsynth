@@ -15,7 +15,9 @@ constexpr int kInset = 6;
 } // namespace
 
 MixerZonesEye::MixerZonesEye()
-    : juce::Button("Visibility") {
+    : IconButton("Visibility", synth::theme::Glyph::EyeHidden, Style::Bare) {
+    setGlyphWhenOn(synth::theme::Glyph::EyeOpen); // the toggle state is "shown"
+    setOnTone(OnTone::Plain);                     // a shown channel is the normal case, not a lit one
     setClickingTogglesState(false);
     setWantsKeyboardFocus(false);
     setDescription("Shows or hides this channel in the mixer. Alt-click shows only this channel.");
@@ -26,28 +28,6 @@ void MixerZonesEye::clicked(const juce::ModifierKeys& mods) {
         onSoloShow();
     else if (onToggle)
         onToggle();
-}
-
-// The Button's toggle state is "shown"; a disabled eye (Master) is drawn dim and never reacts.
-void MixerZonesEye::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto* theme = zonesThemeOf(*this);
-    const auto text = theme != nullptr ? theme->colors.textPrimary : juce::Colour(0xffEAEEF3);
-    const auto accent = theme != nullptr ? theme->colors.accent : juce::Colour(0xff00D1FF);
-    float alpha = getToggleState() ? 0.9f : 0.45f;
-    if (!isEnabled())
-        alpha = 0.3f;
-    const auto colour = (highlighted && isEnabled()) ? accent : text.withAlpha(alpha);
-
-    const auto area = juce::Rectangle<float>(14.0f, 9.0f).withCentre(getLocalBounds().toFloat().getCentre());
-    juce::Path lid;
-    lid.startNewSubPath(area.getX(), area.getCentreY());
-    lid.quadraticTo(area.getCentreX(), area.getY() - 4.0f, area.getRight(), area.getCentreY());
-    lid.quadraticTo(area.getCentreX(), area.getBottom() + 4.0f, area.getX(), area.getCentreY());
-    g.setColour(colour);
-    g.strokePath(lid, juce::PathStrokeType(1.2f));
-    g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(area.getCentre()));
-    if (!getToggleState())
-        g.drawLine(area.getX() + 1.0f, area.getBottom() + 1.5f, area.getRight() - 1.0f, area.getY() - 1.5f, 1.4f);
 }
 
 MixerZonesLink::MixerZonesLink(const juce::String& text)

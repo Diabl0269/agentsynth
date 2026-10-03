@@ -3,8 +3,10 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/AutomatedMarker.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -19,6 +21,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 class AudioEngine;
@@ -250,6 +253,12 @@ public:
     /** `si` when that slider is a rotary a ring may be drawn on right now, else -1. */
     int shownRingSliderIndex(int si) const;
 
+    /** Creates, places, names and shows/hides the mod-dot Tab-stop buttons from the live routings; cheap
+     *  and idempotent (GraphEditor calls it every tick and the card on every layout). */
+    void syncModDotButtons();
+    /** The mod-dot button for raw `destChannel`, or null when that knob has none right now. */
+    synth::ui::ModDotButton* getModDotButton(int destChannel) const;
+
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
 
@@ -427,10 +436,19 @@ private:
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
     bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
+    /** The shared hit zone of the landing dot (mod dot and cable pickup). */
+    bool pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                             const juce::MouseEvent& e) const;
     void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 
     /** The RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
+
+    // The mod dot: ModuleComponentModDot.cpp. One transparent Tab-stop button per knob/fader with an
+    // attenuverter routing; the pointer gesture itself lives in synth::ui::ModDotController.
+    juce::OwnedArray<synth::ui::ModDotButton> modDotButtons_;
+    void wireModDotGesture(juce::Slider& control, synth::ui::CardControlGestures& gestures,
+                           juce::RangedAudioParameter* param);
 
     // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
     // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
@@ -480,8 +498,11 @@ private:
             juce::String paramId;                           // ranged: param->paramID; hosted: the slot's stable paramId
             bool hosted = false;                            // true for a plugin-card knob/toggle/choice
             bool mapped = false;                            // badge cache, written only by refreshBadges() below
-            juce::String tooltip;     // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
-            juce::String baseTooltip; // component's own tooltip at registration (e.g. "Bypass")
+            juce::String tooltip;                    // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
+            juce::String baseTooltip;                // component's own tooltip at registration (e.g. "Bypass")
+            synth::ui::AutomatedMarkerFade marker;   // the "has an automation lane" glyph's fade
+            juce::String automatedName;              // what the tooltip says is automated; set with the marker
+            juce::String descriptionBeforeAutomated; // restored when the lane goes
         };
 
         void add(juce::Component& component, juce::RangedAudioParameter* param);
@@ -497,6 +518,13 @@ private:
         /** Mapped display label for `paramId` ("Knob 1 on Launchkey Mini"), or empty if unmapped.
          *  Refreshes every entry's badge/tooltip cache; returns whether anything changed. */
         bool refreshBadges(const std::function<juce::String(const juce::String&)>& mappingLabelFor);
+
+        /** Moves every entry's automated marker towards its parameter's state, and rewrites the control's tooltip
+         *  and screen-reader description to match. Returns whether any entry changed target. */
+        bool refreshAutomated(const std::set<juce::String>& automatedParamIds, double nowMs, bool reducedMotion);
+        /** The control's tooltip: its own text, then the MIDI mapping, then the "Automated: ..." line. */
+        static void applyTooltip(Entry& entry);
+        std::vector<Entry>& mutableEntries() { return entries_; }
 
     private:
         std::vector<Entry> entries_;
@@ -744,7 +772,24 @@ private:
      *  repaints only if something changed. Called from the existing gated 15 Hz timerCallback. */
     void refreshMidiLearnBadges();
 
+    /** The automation-lane marker (ModuleComponentAutomationMarker.cpp): one query per module on the same gated tick,
+     *  a repaint only while a marker fades or changes. */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
+
 public:
+    /** Test/inspection: whether `component`'s parameter was automated as of the last tick, and its marker's level now.
+     */
+    bool isAutomatedMarkerShownForTest(const juce::Component* component) const {
+        const auto* e = midiLearnableRegistry_.find(component);
+        return e != nullptr && e->marker.isAutomated();
+    }
+    float automatedMarkerLevelForTest(const juce::Component* component) const {
+        const auto* e = midiLearnableRegistry_.find(component);
+        return e != nullptr ? e->marker.level(synth::ui::AutomatedMarkerFade::nowMs()) : 0.0f;
+    }
+
     // ---- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ----
     // Public so a menu item and a test call the same code as each other.
     void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step

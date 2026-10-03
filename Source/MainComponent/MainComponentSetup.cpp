@@ -303,6 +303,12 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         return midiLearnController_.queryMappings(nodeId);
     };
+    // The marker beside a knob whose parameter has an automation lane: the card asks once per tick.
+    graphEditor.onQueryAutomatedParamsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+        return node != nullptr ? timelineDoc.automatedParamIds(node->properties["uuid"].toString())
+                               : std::set<juce::String>();
+    };
     graphEditor.onMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.arm(nodeId, paramId);
     };

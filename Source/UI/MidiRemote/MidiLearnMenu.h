@@ -56,6 +56,10 @@ void paintMidiMappedBadge(juce::Graphics& g, juce::Rectangle<int> controlBounds,
  *  where the dot is part of the panel's content rather than a decoration on someone else's control. */
 void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour);
 
+/** The box paintMidiMappedDot fills: 6 px, the cell's top-right corner. The automated marker
+ *  (UI/Layout/AutomatedMarker.h) takes the top-left, and a test holds the two apart. */
+juce::Rectangle<int> midiMappedDotRect(juce::Rectangle<int> controlBounds);
+
 /** Caller gates on "is this the armed control"; always paints when called, and must be repainted
  *  only by an existing gated timer/poll (Source/UI/CLAUDE.md's animation rule). */
 void paintMidiLearnArmedOutline(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour armedColour,

@@ -265,6 +265,10 @@ add_executable(Tests
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentAutomationMarkerTests.cpp
+    UI/Layout/AutomatedMarkerTests.cpp
+    UI/Mixer/MixerAutomationMarkerTests.cpp
+    UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKeyboardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentReadoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
@@ -273,6 +277,9 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentModBandTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModAmountGestureTests.cpp
+    UI/Graph/ModDot/ModDotGestureTests.cpp
+    UI/Graph/ModDot/ModDotTooltipGeometryTests.cpp
+    UI/Graph/ModDot/KnobModSourcesTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
@@ -567,6 +574,7 @@ add_executable(Tests
     UI/Layout/FocusRegionTests.cpp
     UI/Layout/ArrowKeyNavigationTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
+    UI/Layout/IconButtonTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
     UI/Layout/TabStripKeysTests.cpp
     UI/Layout/TextFieldKeysTests.cpp
@@ -579,9 +587,13 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesAddRowTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesHeaderReadoutTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesPointBubbleTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesPointSelectionTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesPointValueFieldTests.cpp
     UI/Timeline/AutomationLanes/LanePointMathTests.cpp
+    UI/Timeline/AutomationLanes/LanePointStretchTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesStretchTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesShapePaintTests.cpp
     UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp

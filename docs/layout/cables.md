@@ -127,6 +127,11 @@ begin/drag/endConnectionDrag gesture a real input jack starts — see
 `ModuleComponent::wantsCablePickupGestureFor`/`handleCablePickupGesture`, wired onto the knob itself
 (`CardKnobSlider::wantsCablePickupGesture`/`onCablePickupGesture`) rather than into
 `getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob.
+When the knob has at least one attenuverter routing, a plain press on the dot is NOT a pickup any
+more: it is the [mod-dot drag](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot)
+(the amount of the last-chosen source), and **Cmd+press** keeps the cable pickup. A dot with no
+attenuverter routing (a direct or poly cable, or a bare knob's drop spot) still starts the cable drag
+on a plain press.
 
 **Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
 moved/resized card automatically (both already call `repaintCanvas()`). A Wavetable tab-page switch

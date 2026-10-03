@@ -64,6 +64,7 @@ void AutomationLaneEditor::syncToDoc() {
     else
         glide_.pointsChanged(std::move(now));
     refreshDescription();
+    closeValueFieldIfPointGone();
 }
 
 void AutomationLaneEditor::laneDocChanged() {
@@ -72,6 +73,7 @@ void AutomationLaneEditor::laneDocChanged() {
 }
 
 void AutomationLaneEditor::selectionChanged() {
+    refreshStretchBox();
     refreshDescription();
     repaint();
     if (onSelectionChanged)
@@ -99,7 +101,11 @@ juce::String AutomationLaneEditor::describePoints() const {
     } else {
         text += juce::String(selected) + " selected.";
     }
-    return text + " Arrow keys nudge the selection, Alt with Left or Right picks another point, Delete removes it.";
+    text += " Arrow keys nudge the selection, Alt with Left or Right picks another point, Delete removes it.";
+    if (selected >= 2)
+        text += " Alt and Shift with Left or Right stretch or squeeze the selection in time, with Up or Down they "
+                "scale its values.";
+    return text;
 }
 
 void AutomationLaneEditor::refreshDescription() {
@@ -172,6 +178,8 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     }
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
         return deleteSelectedPoints();
+    if (stretchKey(key))
+        return true;
 
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
@@ -195,6 +203,12 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     return false;
 }
 
+// One grid step, a sixteenth with snap off.
+double AutomationLaneEditor::gridStepBeats() const {
+    const double grid = viewState_.divisionBeats(currentBeatsPerBar());
+    return grid > 0.0 ? grid : kFreeBeatStep;
+}
+
 // One grid step (a sixteenth with snap off) for the whole block, stopping at beat 0 as a unit; Up/Down move every value
 // by a fraction of the lane's range, each clamped on its own. Consumed whenever something is selected, even when a
 // limit left nothing to do.
@@ -207,8 +221,7 @@ bool AutomationLaneEditor::nudgePoints(double beatDirection, double valueDirecti
         return false;
 
     const auto& range = doc_->getLane(laneId_)->range;
-    const double grid = viewState_.divisionBeats(currentBeatsPerBar());
-    const double beatDelta = clampBeatDelta(picked, beatDirection * (grid > 0.0 ? grid : kFreeBeatStep));
+    const double beatDelta = clampBeatDelta(picked, beatDirection * gridStepBeats());
     const double valueDelta =
         valueDirection * (coarse ? kCoarseValueStep : kFineValueStep) * (double)(range.maxValue - range.minValue);
     const auto moved = movePoints(picked, beatDelta, valueDelta, range.minValue, range.maxValue);

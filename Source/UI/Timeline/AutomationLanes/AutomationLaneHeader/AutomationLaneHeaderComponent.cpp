@@ -15,7 +15,6 @@ constexpr int kMenuButtonWidth = 18;
 constexpr float kStripeAlpha = 0.45f;
 constexpr float kNameFontSize = 11.0f;
 constexpr float kModuleFontSize = 9.5f;
-constexpr float kReadoutFontSize = 10.0f;
 
 struct LaneHeaderColours {
     juce::Colour surface{0xff1B1F26};
@@ -54,6 +53,7 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     recordMode_.setMouseClickGrabsKeyboardFocus(false);
     recordMode_.onChange = [this] { applyRecordModeChoice(recordMode_.getSelectedId()); };
 
+    addAndMakeVisible(readout_);
     addAndMakeVisible(menuButton_);
     menuButton_.onClick = [this] { showMenu(); };
 
@@ -61,22 +61,10 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
 }
 
 AutomationLaneHeaderComponent::MenuButton::MenuButton()
-    : juce::Button("automationLaneMenu") {
+    : IconButton("automationLaneMenu", synth::theme::Glyph::MenuDots, Style::Bare) {
     setComponentID("automationLaneMenu");
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
-}
-
-// Three dots drawn rather than a text ellipsis glyph, so the button never depends on font coverage.
-void AutomationLaneHeaderComponent::MenuButton::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto colours = coloursFor(*this);
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour(highlighted ? colours.text : colours.textMuted);
-    constexpr float dot = 2.5f;
-    for (int i = -1; i <= 1; ++i)
-        g.fillEllipse(
-            juce::Rectangle<float>(dot, dot).withCentre(bounds.getCentre().translated((float)i * 4.5f, 0.0f)));
-    synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }
 
 // Names, colour and record mode are document state, so every doc notification re-reads them; the
@@ -88,6 +76,7 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     const auto labels = laneLabelsFor(*lane, host_);
     parameterName_ = labels.parameter;
     moduleName_ = labels.module;
+    readout_.setParameterName(parameterName_);
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
 
     recordMode_.setSelectedId(lane->recordMode + 1, juce::dontSendNotification);
@@ -121,7 +110,11 @@ void AutomationLaneHeaderComponent::setReadoutBeat(double beat) {
     if (text == valueText_)
         return;
     valueText_ = text;
-    repaint(readoutArea_);
+    readout_.setPlayheadText(text);
+}
+
+void AutomationLaneHeaderComponent::setSelectedPointValue(const std::optional<juce::String>& text) {
+    readout_.setSelectedText(text);
 }
 
 void AutomationLaneHeaderComponent::resized() {
@@ -131,7 +124,7 @@ void AutomationLaneHeaderComponent::resized() {
     auto top = bounds.removeFromTop(bounds.getHeight() / 2);
     auto bottom = bounds;
     menuButton_.setBounds(top.removeFromRight(kMenuButtonWidth).reduced(0, 1));
-    readoutArea_ = top.removeFromRight(kReadoutWidth);
+    readout_.setBounds(top.removeFromRight(kReadoutWidth));
     recordMode_.setBounds(bottom.removeFromRight(kComboWidth).reduced(0, 1));
     nameArea_ = top.getUnion(bottom.withTrimmedRight(kPadding));
 }
@@ -152,10 +145,6 @@ void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
     g.setColour(colours.textMuted);
     g.setFont(juce::Font(juce::FontOptions(kModuleFontSize)));
     g.drawText(moduleName_, names, juce::Justification::centredLeft, true);
-
-    g.setFont(
-        juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kReadoutFontSize, juce::Font::plain)));
-    g.drawText(valueText_, readoutArea_, juce::Justification::centredRight, true);
 }
 
 // The combo's own focus outline comes from the look-and-feel; the shared accent ring goes over it so

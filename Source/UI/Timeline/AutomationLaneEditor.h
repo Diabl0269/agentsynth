@@ -5,9 +5,11 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
+#include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h"
 #include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -46,6 +48,12 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // empty space draws a box, Escape clears; dragging a selected point moves the whole selection, Delete/Backspace
 // removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step. Cmd+A/C/X/V reach
 // it as the app's edit commands (MainComponent routes them to the focused lane editor).
+// With two or more points selected a stretch box with four edge handles (LanePointStretch) surrounds them: the side
+// handles scale the selection's beats about the opposite edge (the edge pushes the next unselected points along), the
+// top and bottom ones scale its values; Alt+Shift+Left/Right/Up/Down do the same from the keyboard. The drag previews
+// and commits once on mouse-up, Escape cancels.
+// Double-clicking a point (or Return with the keyboard cursor on one) opens a PointValueField beside it: type a value,
+// Return sets that one point's value (clamped to the lane's range, one undo step), Escape cancels.
 // Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
@@ -76,6 +84,12 @@ public:
      *  back to the plain number. */
     std::function<juce::String(double)> valueToText;
 
+    /** The lane value a typed text stands for, in the lane's own units, or nullopt when it is not a value; may be
+     *  null, which parses a plain number. */
+    std::function<std::optional<double>(const juce::String&)> textToValue;
+    /** The lane's parameter name for the value field's accessible title; may be null or return empty. */
+    std::function<juce::String()> laneLabel;
+
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
 
@@ -96,10 +110,10 @@ public:
     synth::LaneId getActiveLane() const noexcept { return laneId_; }
 
     // Picks the tool directly and stops following the timeline's edit tool.
-    void setTool(Tool tool) noexcept;
+    void setTool(Tool tool);
     Tool getTool() const noexcept { return tool_; }
     // Follows the timeline's edit tool (automationToolFor), re-read at every mouse-down for Shift.
-    void setEditTool(EditTool tool) noexcept;
+    void setEditTool(EditTool tool);
     // What the Draw tool puts down (AutomationLaneShapeGesture): the pen, a line, or a stamped shape.
     void setDrawShape(DrawShape shape) noexcept;
     DrawShape getDrawShape() const noexcept { return shapeGesture_.getDrawShape(); }
@@ -116,6 +130,8 @@ public:
     // otherwise), like the piano roll's velocity strip.
     juce::MouseCursor getMouseCursor() override;
     void lookAndFeelChanged() override;
+    // The stretch handles' hint while the pointer is over one, the editor's own hint elsewhere.
+    juce::String getTooltip() override;
 
     // ---- Point selection (AutomationLaneEditorPoints.cpp) ----
     LanePointSelection& getPointSelection() noexcept { return selection_; }
@@ -136,6 +152,12 @@ public:
     bool pasteAtBeat(double beat);
     bool deleteSelectedPoints();
 
+    // ---- Stretch box (AutomationLaneEditorStretch.cpp) ----
+    // The padded box around the selection (empty unless two or more points are selected under the Pointer tool).
+    juce::Rectangle<float> getStretchBoxForTest() const { return stretchBox(); }
+    juce::Rectangle<float> getStretchHandleRectForTest(StretchHandle handle) const;
+    const LanePointStretch& getStretchForTest() const noexcept { return stretch_; }
+
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
     // Toggles the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value).
@@ -144,6 +166,9 @@ public:
     void applySegmentCurveChoice(double leftBeat, int curve);
 
     // ---- Test hooks ----
+
+    // The typed-value field beside a point.
+    PointValueField& getValueFieldForTest() noexcept { return valueField_; }
 
     // The value bubble over the hovered or dragged point.
     PointValueBubble& getPointBubbleForTest() noexcept { return bubble_; }
@@ -162,7 +187,7 @@ public:
     double yToValue(double y) const;
 
 private:
-    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser, LaneConstant };
+    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser, LaneConstant, Stretch };
 
     struct HandleHit {
         double beat = 0.0;
@@ -221,6 +246,7 @@ private:
     void grabPoint(const HandleHit& hit);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
     void commitPointMove();
+    double gridStepBeats() const;
     bool nudgePoints(double beatDirection, double valueDirection, bool coarse);
     bool stepCursor(int direction);
     bool handleSelectionKey(const juce::KeyPress& key);
@@ -229,6 +255,29 @@ private:
     void selectOnly(const LaneBreakpoint& point);
     juce::String describePoints() const;
     void refreshDescription();
+
+    // ---- Stretch (AutomationLaneEditorStretch.cpp) ----
+    bool stretchBoxVisible() const;
+    juce::Rectangle<float> stretchBox() const;
+    StretchHandle stretchHandleAt(juce::Point<int> pos) const;
+    bool beginStretchAt(juce::Point<int> pos);
+    void dragStretch(juce::Point<int> pos);
+    void commitStretch();
+    void cancelStretch();
+    bool stretchKey(const juce::KeyPress& key);
+    void commitStretchResult(const std::vector<LaneBreakpoint>& original, const StretchResult& result);
+    void paintStretchBox(juce::Graphics& g);
+    void trackStretchHover(juce::Point<int> pos);
+    void refreshStretchBox();
+    std::optional<juce::MouseCursor> stretchCursor() const;
+    double pushGapBeats() const;
+
+    // ---- Typed value (AutomationLaneEditorValueField.cpp) ----
+    bool openValueField(double beat);
+    bool openValueFieldOnCursor();
+    std::optional<double> parseTypedValue(const juce::String& text) const;
+    void commitTypedValue(double beat, double value);
+    void closeValueFieldIfPointGone();
 
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
@@ -275,7 +324,13 @@ private:
 
     AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
     PointValueBubble bubble_{*this};
+    PointValueField valueField_{*this};
+    std::optional<double> valueFieldBeat_; // the point the field is editing
     LanePointSelection selection_{*this};
+    LanePointStretch stretch_{*this};
+    StretchHandle hoverHandle_ = StretchHandle::None;
+    double stretchGrabBeat_ = 0.0;
+    double stretchGrabValue_ = 0.0;
     LanePointGlide glide_{*this};
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;

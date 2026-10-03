@@ -8,6 +8,7 @@
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
@@ -42,12 +43,16 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
     setWantsKeyboardFocus(true);
 
+    modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
     configureCardGlide();
     configureCanvasFrame();
     startTimerHz(30);
 }
 
-GraphEditor::~GraphEditor() { stopTimer(); }
+GraphEditor::~GraphEditor() {
+    stopTimer();
+    modDot_.reset(); // before `content`, which its tooltip animator is attached to
+}
 
 // Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
 // repaint that also drops the cable memo, and the VBlank updater that drives it.

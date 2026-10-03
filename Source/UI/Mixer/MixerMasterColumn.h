@@ -10,6 +10,7 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
@@ -116,6 +117,8 @@ public:
     // see MixerColumnComponent's sibling pattern for the coverage-table entries with more than
     // one) ----
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
+    /** Test/inspection: whether the fader's parameter was automated as of the last tick. */
+    bool isFaderAutomatedMarkerShownForTest() const { return faderAutomated_.fade.isAutomated(); }
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
     /** The fader, for the pick-target overlay. */
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
@@ -159,6 +162,11 @@ private:
      *  refreshMeter()'s existing 10 Hz tick so the breathing outline actually animates. */
     void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
+    /** The automation-lane marker on the fader (MixerMasterColumnAutomationMarker.cpp). */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    synth::ui::AutomatedControlState faderAutomated_;
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;

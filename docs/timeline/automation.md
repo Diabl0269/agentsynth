@@ -43,7 +43,17 @@ row (an open track with no lanes shows only that row), zoom-scaled like a lane r
   `AutomationUiFeed`, which has a single reader), shown as the parameter's own text when
   `TrackHeaderHost::getParameterValueText` can give it, else the number. It refreshes from the
   panel's existing transport poll (`updateFromTransport`), only when the beat changed, only for
-  headers on screen, and repaints only when the text changed;
+  headers on screen, and repaints only when the text changed.
+  The slot is `LaneValueReadout`, and it is the only readout: while the lane has a selected point it
+  shows that point's value (read from the doc, so a drag shows it on release) in the theme accent colour,
+  and goes back to the playhead value in muted when the selection clears (click on empty space, Escape,
+  the point deleted). With several points selected it shows the keyboard-cursor point if that one is
+  selected, else the first selected point. `TimelineAutomationLanes::updateSelectedReadout` feeds it from
+  each editor's `onSelectionChanged` and after every doc refresh; a selection that empties and refills
+  inside one doc notification (a move) changes nothing. The colour cross-fades in 130 ms with an
+  `AnimationDriver` and lands at once under Reduce Motion or off screen; nothing repaints once settled.
+  Its accessible name says which value it is ("Cutoff value at playhead" / "Cutoff selected point value"),
+  with the text as its description, and its tooltip likewise;
 - a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
@@ -356,7 +366,7 @@ Reduce Motion (`prefersReducedMotion()`) or off screen, and repaints nothing onc
 dragged the bubble follows its previewed value; an exit mid-drag does not drop it. The text is the
 parameter's own text for the value (`AutomationLaneEditor::valueToText`, which `TimelineAutomationLanes`
 sets to `laneValueText`, the lane header's path through `TrackHeaderHost::getParameterValueText`), falling
-back to the plain number. Later per-point features (selection, typed value, header readout, stretch) extend
+back to the plain number. Later per-point features (header readout) extend
 `PointValueBubble` and the editor's `updateHover()`.
 
 Under the Pointer tool a point shows the grab hand on hover and while it is dragged (`dragGrabCursor()`, see
@@ -367,6 +377,37 @@ flat line and dragging vertically moves the value by the pointer's travel, clamp
 bubble showing it live; nothing is written until mouse-up, which commits through
 `TimelineDoc::setLaneConstantValue` as one undo step. Once the lane has a point the line is a curve and this
 drag does not apply.
+
+### Typing a point's value
+
+Double-click a point (Pointer tool), or press Return while the keyboard cursor is on one (a click or Alt+Left/Right puts
+it there), and a small field opens right of the point (left when there is no room) with the value text selected:
+`AutomationLanes/PointReadout/PointValueField.{h,cpp}`, a `juce::TextEditor` child of the editor, glued in
+`AutomationLaneEditorValueField.cpp`. Type a number and press Return to set it; Escape cancels and the keyboard focus
+goes back to the editor. A double-click on a point never adds one; a double-click on empty space adds a point exactly as
+before.
+
+- **Parsing.** `AutomationLaneEditor::textToValue` (set by `TimelineAutomationLanes` to `laneTextToValue`) turns the text
+  into a lane value through `TrackHeaderHost::getParameterValueFromText`, the inverse of `getParameterValueText`:
+  `MainComponent` resolves the lane's parameter and uses its own text-to-value, so "-12" on a dB parameter is -12 dB.
+  With no host, or a parameter that does not resolve, the text is read as a plain number with an optional unit ("-12",
+  "-12 dB", "3.5%"; `PointValueField::parseNumber`) in the lane's own units. Text with no digit is refused before any
+  parser sees it, because a parameter's text-to-value reads "abc" as 0. The result is clamped to the lane's range.
+- **Commit.** Return changes only that point's value (beat, tension and curve are kept) through `commitPointEdit`: one
+  undo step, none when the value is unchanged. With several points selected only the double-clicked point takes the
+  value and the selection stays as it was.
+- **Invalid text** keeps the field open, draws its text and outline in the theme's `error` colour and commits nothing;
+  typing again clears it. Losing focus commits text that parses and discards text that does not, like the inline label
+  editors. The field closes by itself when its point is removed (undo).
+- **Escape and Return are handled in `PointValueField::keyPressed`**, before `TextEditor` posts them as command
+  messages, so the field closes inside the key press and no listener callback ever hides or refocuses it (see
+  [the inline label editors](../layout/chrome.md#inline-label-editors-and-accessibility)). The field is a permanent
+  child that is hidden, never deleted, while closed.
+- **Motion.** The field fades in 140 ms and out 100 ms through an `AnimationDriver` (no new timer), landing at once under
+  Reduce Motion or off screen. The value bubble steps aside while it is open.
+- **Accessibility.** The field is Tab/keyboard-reachable while open, has the accent focus ring (`paintFocusRing`), the
+  accessible title "Value of <parameter> point" (`AutomationLaneEditor::laneLabel`) and a tooltip naming Return and
+  Escape.
 
 ### Selecting points
 
@@ -410,9 +451,41 @@ paint and the input entry points by `TimelineDoc::getRevision()`.
 Each point is reachable from the keyboard: Tab into the editor, Alt+Left/Right walk the points, Delete removes the
 one the cursor is on. The focus ring (`paintFocusRing`) sits on the cursor point, or around the lane when there is
 none. The editor's screen-reader description is rewritten on every selection change (point count, how many are
-selected, and for a single point its bar and beat and its value in the parameter's own text) and announced as a
-title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
+selected, and for a single point its bar and beat and its value in the parameter's own text; with two or more
+selected it also names the stretch keys) and announced as a title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
 existing rebindable commands. Return stays free.
+
+### Stretching a selection
+
+With two or more points selected under the Pointer tool, a thin accent box (`LanePointStretch`, padded 8 px so a handle
+never sits on a point) surrounds them with a small square handle centred on each of its four edges; handles stay inside
+the lane even when a point sits at its top or bottom. The box fades in over 160 ms and out over 110 ms on one
+`AnimationDriver` (Reduce Motion or an off-screen editor lands at once; nothing repaints once settled).
+
+| Gesture | Result |
+|---|---|
+| Drag the right handle | Scale the selected beats about the left edge (the leftmost selected beat stays), so four points spread out evenly when dragged right and squeeze when dragged left |
+| Drag the left handle | The same about the right edge |
+| Drag the top / bottom handle | Scale the selected VALUES about the box's opposite edge (lowest value for the top handle, highest for the bottom one), each clamped to the lane's range; dragging past the opposite edge flattens, never flips; a selection whose values are all equal has nothing to scale |
+| Escape during the drag | Cancel: nothing changes and the editor consumes the key |
+| Alt+Shift+Left / Right | Move the right edge one grid step (a sixteenth with snap off) left or right: squeeze or stretch, one undo step per press |
+| Alt+Shift+Up / Down | Grow or shrink the selection's value range by 5% about its lowest value, one undo step per press |
+
+The dragged EDGE snaps to the shared view-state snap (the others follow proportionally and are not snapped, so a
+stretch keeps the points' relative spacing); no beat goes below 0, and the closest two selected points never come nearer
+than 1/64 beat, so a squeeze cannot collapse points onto one beat. Growing is bounded and pushing: when the edge comes
+within one grid step of the nearest unselected point beyond it, that point and every unselected point after it move
+along, kept a grid step beyond the edge with their own spacing (a tiny gap with snap off); a left stretch stops when
+the pushed block reaches beat 0, and squeezing never pushes. Unselected points between the selected ones stay put.
+
+The drag previews in the editor's preview state like a move (curve and dots redraw from it; the doc is untouched) and
+commits on mouse-up as ONE `editBreakpoints` through `commitPointEdit`, pushed points included, so one Cmd+Z restores
+everything; a drag that ends where it began commits nothing. The selection afterwards is the same points at their new
+beats. The value bubble is hidden for the whole stretch. A handle takes the press before any point, segment or box
+select under it (reach 6 px); the inside of the box takes no clicks, so a point inside still selects and drags
+normally. Handles show the horizontal or vertical resize cursor on hover and for the whole drag, and the editor's
+tooltip reads "Drag to stretch the selected points in time" / "Drag to scale their values" over them. The math
+(`stretchBeats`, `scaleValues`) is pure; the editor glue is `AutomationLaneEditorStretch.cpp`.
 
 For later per-point features: `getPointSelection()` is the selection (`getSelected()` beats, `selectedPoints(lane)`
 the breakpoints, `boundingBox(lane, mapper)` the box around them in editor coordinates, `getCursor()`), and the
@@ -617,7 +690,10 @@ partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview
 rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
 `AutomationLanesPointBubbleTests.cpp` (the value bubble on hover and drag with its text and fallback, the grab
 cursor, the flat-line drag as one undo step, its clamp, and the editor's accessible name),
-`AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
+`AutomationLanesPointValueFieldTests.cpp` (double-click and Return opening the field with its text selected, a typed
+value as one undo step keeping tension and curve, a unit, Escape, invalid text, the clamp, an unchanged value, empty
+space still adding a point, the parameter's own parser, focus loss, one of several selected points, the field closing
+when its point goes) and `AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
 undo step, Delete/Backspace, nudge, the keyboard cursor, copy/cut/paste, the selection following the doc, the accent
 dot read back from pixels, the description) and `LanePointMathTests.cpp` (the selection set, rigid-block move,
 replace, box test, clipboard and the glide's state machine); the surface routing of Cmd+A/C/X/V is in
@@ -627,3 +703,10 @@ cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip 
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key
 stamping over it, Line ramping on it, Delete, the point cap refusal, stamped points edited with Select,
 double-click and the eraser).
+
+## The marker beside an automated control
+
+A knob or fader that has a lane shows a small marker at its top-left corner (a short line with a point at each end),
+on the module card and on the mixer, so automated parameters stand out without opening the timeline. It follows the lane
+through add, remove and undo, fades in and out, and its tooltip and accessible description say "Automated". Details in
+[`layout/module-card.md#automated-marker`](../layout/module-card.md#automated-marker).

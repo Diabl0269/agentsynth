@@ -115,6 +115,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
@@ -192,6 +194,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerColumnMidiLearn.cpp
+    Source/UI/Mixer/MixerColumnAutomationMarker.cpp
+    Source/UI/Mixer/MixerMasterColumnAutomationMarker.cpp
     Source/UI/Mixer/MixerDirectColumn.h
     Source/UI/Mixer/MixerDirectColumn.cpp
     Source/UI/Mixer/MixerMasterColumn.h
@@ -296,16 +300,22 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
     Source/UI/Timeline/AutomationLaneEditorPoints.cpp
+    Source/UI/Timeline/AutomationLaneEditorValueField.cpp
+    Source/UI/Timeline/AutomationLaneEditorStretch.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.cpp
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.h
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
@@ -397,6 +407,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
+    Source/UI/Graph/ModDot/KnobModSources.h
+    Source/UI/Graph/ModDot/KnobModSources.cpp
+    Source/UI/Graph/ModDot/ModDotButton.h
+    Source/UI/Graph/ModDot/ModDotController.h
+    Source/UI/Graph/ModDot/ModDotController.cpp
+    Source/UI/Graph/ModDot/ModDotTooltip.h
+    Source/UI/Graph/ModDot/ModDotTooltip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
@@ -407,11 +425,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentAutomationMarker.cpp
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
+    Source/UI/Layout/AutomatedMarker.h
+    Source/UI/Layout/AutomatedMarker.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h

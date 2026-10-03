@@ -10,6 +10,7 @@
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
@@ -215,6 +216,14 @@ public:
      *  -- mirrors ModuleComponent::findMidiLearnableParamForTest. */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
 
+    /** Test/inspection: whether `component`'s parameter was automated as of the last tick. */
+    bool isAutomatedMarkerShownForTest(const juce::Component* component) const {
+        for (const auto& e : midiLearnableEntries_)
+            if (e.component == component)
+                return e.automated.fade.isAutomated();
+        return false;
+    }
+
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
 
@@ -303,6 +312,11 @@ private:
     void refreshMidiLearnBadges();
     void repaintArmedMidiLearnOutline(); // Keeps the armed breathing outline animating; see .cpp
     void paintMidiLearnOverlays(juce::Graphics& g);
+    /** The automation-lane marker beside every automated control (MixerColumnAutomationMarker.cpp): one query per
+     *  column on the 10 Hz tick, repainting only while a marker fades or changes. */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
 
     /** One entry per learnable control currently bound -- cleared and rebuilt by rebindControls()
      *  (and, for send rows, by sendList_'s own onSendKnobBuilt callback fired from inside it),
@@ -316,6 +330,7 @@ private:
         bool isSolo = false;
         juce::String targetName;
         bool mapped = false;
+        synth::ui::AutomatedControlState automated;
     };
     std::vector<MidiLearnableEntry> midiLearnableEntries_;
     /** Controls this column has already addMouseListener'd itself onto -- registerMidiLearnable()

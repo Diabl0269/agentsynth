@@ -514,6 +514,7 @@ void ModuleComponent::timerCallback() {
     // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves it fires on every
     // tick.
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
             if (e.param != nullptr && e.paramId == midiLearnArmedParamId_) {
@@ -724,16 +725,14 @@ void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, 
     modAmountGestureAttenuverterId_ = {};
 }
 
-// Claims a click on `param`'s knob when its CV jack is knob-bound (hidden -- getPortForPoint
-// can no longer offer this parameter's jack as a pickup point, whether or not a cable currently
-// lands here, exactly like a real, empty gutter jack still accepts a click to START a drag) and the
-// click is within a few px of the landing dot GraphEditorCables.cpp paints there -- never inside
-// the ring's own annulus, which wantsModAmountGestureFor above already claimed first. `knob`'s
-// LOCAL bounds are used (same as wantsModAmountGestureFor) -- `e.position` arrives in that same
-// local frame, so the landing point must be computed from them too, NOT from getModTargetKnobAnchor
-// (which is CARD-local).
-bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
-                                                 const juce::MouseEvent& e) const {
+// True when a click on `param`'s knob lands within a few px of the landing dot GraphEditorCables.cpp
+// paints there -- never inside the ring's own annulus, which wantsModAmountGestureFor above already
+// claimed first. `knob`'s LOCAL bounds are used (same as wantsModAmountGestureFor) -- `e.position`
+// arrives in that same local frame, so the landing point must be computed from them too, NOT from
+// getModTargetKnobAnchor (which is CARD-local). The mod dot (wantsModDotGestureFor) and the cable
+// pickup share this hit zone; which one a press starts is decided by the order they are asked in.
+bool ModuleComponent::pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                          const juce::MouseEvent& e) const {
     if (destChannelForBoundParam(param) < 0)
         return false;
     constexpr float kPickupHitPad = 4.0f; // the dot is only 7px across; a pixel-perfect target is unfriendly
@@ -751,6 +750,16 @@ bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* par
     // The pad stays comfortably clear of the ring annulus (see knobLandingRadiusOffset's push-out
     // math): the dot sits well beyond the ring, so it never reaches back into the ring's +-5px zone.
     return anchor.getDistanceFrom(e.position) <= (kKnobLandingDotDiameter * 0.5f + kPickupHitPad);
+}
+
+// Claims a click on the dot when this knob's CV jack is knob-bound (hidden -- getPortForPoint can no
+// longer offer this parameter's jack as a pickup point, whether or not a cable currently lands here,
+// exactly like a real, empty gutter jack still accepts a click to START a drag). Asked AFTER the
+// mod-dot gesture, so it only sees a press the dot did not take: Cmd-press, or a dot with no
+// attenuverter routing (nothing to adjust).
+bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                                 const juce::MouseEvent& e) const {
+    return pressIsOnLandingDot(param, knob, e);
 }
 
 // CardKnobSlider::onCablePickupGesture: forwards straight into the SAME connection-drag machinery
@@ -809,6 +818,7 @@ void ModuleComponent::wireCardControlGestures(juce::Slider& knob, synth::ui::Car
     // outside the ring, never inside its annulus, so this never fights wantsModAmountGestureFor
     // above) is the only way left to pick the cable back up. `&knob` is safe the same way it is
     // above: the lambda only ever runs while `knob` is alive, from `knob`'s own mouseDown.
+    wireModDotGesture(knob, gestures, param);
     gestures.wantsCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsCablePickupGestureFor(param, knob, e);
     };

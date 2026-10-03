@@ -204,6 +204,23 @@ juce::String MainComponent::getParameterValueText(const juce::String& uuid, cons
     return {};
 }
 
+// The inverse of getParameterValueText: the parameter's own text-to-value gives a normalised value, which a ranged
+// parameter's range turns back into the lane's units (a hosted parameter's lane values are already 0..1).
+std::optional<double> MainComponent::getParameterValueFromText(const juce::String& uuid, const juce::String& paramId,
+                                                               const juce::String& text) {
+    auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return std::nullopt;
+    auto* processor = node->getProcessor();
+    const auto resolution =
+        synth::resolveLaneParameter(processor, paramId, synth::captureParamIndexHint(processor, paramId));
+    if (resolution.rangedParam != nullptr)
+        return (double)resolution.rangedParam->convertFrom0to1(resolution.rangedParam->getValueForText(text));
+    if (resolution.hostedParam != nullptr)
+        return (double)resolution.hostedParam->getValueForText(text);
+    return std::nullopt;
+}
+
 void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
     if (uuid.isEmpty())
         return;

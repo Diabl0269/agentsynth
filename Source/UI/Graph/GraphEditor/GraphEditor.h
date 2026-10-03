@@ -25,8 +25,12 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
+namespace synth::ui {
+class ModDotController; // UI/Graph/ModDot/ModDotController.h
+}
 class AudioEngine;
 class CanvasCardKeyboard;
 class ModuleComponent;
@@ -267,6 +271,8 @@ public:
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
 
     // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
+    /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
+    synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
     SmartConnectionEngine& getSmartConnections() noexcept { return smartConnections_; }
@@ -362,6 +368,9 @@ public:
     // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
     std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)>
         onQueryMidiMappingsForNode; // mapped paramID -> display label; absent means unmapped
+    // The paramIDs of a node that have an automation lane on the timeline (the marker beside their knob); absent means
+    // none. Set by MainComponent; polled once per card on the card's gated tick.
+    std::function<std::set<juce::String>(juce::AudioProcessorGraph::NodeID)> onQueryAutomatedParamsForNode;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)>
@@ -743,6 +752,7 @@ private:
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this};
+    std::unique_ptr<synth::ui::ModDotController> modDot_; // the mod dot's drag, tooltip and last-chosen source
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;

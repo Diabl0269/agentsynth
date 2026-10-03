@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_graphics/juce_graphics.h>
+#include <optional>
 #include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
@@ -53,5 +54,11 @@ juce::Colour laneColourFor(const synth::TimelineDoc& doc, synth::LaneId lane, ju
 
 /** `value` as the parameter shows it when `host` can say, else as a number. `host` may be null. */
 juce::String laneValueText(const synth::AutomationLane& lane, double value, TrackHeaderHost* host);
+// The lane value a typed text stands for: the parameter's own parse through `host`, else a plain number with an
+// optional unit; nullopt when it is neither.
+std::optional<double> laneTextToValue(const synth::AutomationLane& lane, const juce::String& text,
+                                      TrackHeaderHost* host);
+// The lane's parameter name, falling back to its parameter id.
+juce::String laneParameterName(const synth::AutomationLane& lane, TrackHeaderHost* host);
 
 } // namespace synth::ui
