@@ -73,6 +73,24 @@ bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::La
     });
 }
 
+bool retargetLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, const LaneTarget& target) {
+    synth::TimelineDoc* doc_ = &doc;
+    return applyEdit(doc, undo, [doc_, lane, target] {
+        return doc_->retargetLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
+    });
+}
+
+synth::LaneId duplicateLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
+                                    const LaneTarget& target) {
+    synth::LaneId created;
+    synth::TimelineDoc* doc_ = &doc;
+    applyEdit(doc, undo, [doc_, lane, target, &created] {
+        created = doc_->duplicateLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
+        return created.isValid();
+    });
+    return created;
+}
+
 std::vector<synth::TrackId> laneMoveTargets(const synth::TimelineDoc& doc, synth::LaneId lane) {
     std::vector<synth::TrackId> targets;
     const auto* owner = doc.getTrackForLane(lane);

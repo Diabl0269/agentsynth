@@ -188,6 +188,10 @@ void TimelineAutomationLanes::syncPools() {
                 const auto* lane = doc_ != nullptr ? doc_->getLane(id) : nullptr;
                 return lane != nullptr ? laneParameterName(*lane, host_) : juce::String();
             };
+            editor->onLaneMenuRequested = [this, id](const juce::PopupMenu::Options& options) {
+                if (auto* header = headerFor(id))
+                    header->showMenuAt(options);
+            };
             editor->onSelectionChanged = [this, id] { updateSelectedReadout(id); };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)
@@ -255,6 +259,23 @@ AutomationLaneEditor* TimelineAutomationLanes::focusedEditor() const {
         if (editor->hasKeyboardFocus(true))
             return editor.get();
     return nullptr;
+}
+
+synth::LaneId TimelineAutomationLanes::focusedLane() const {
+    if (const auto* editor = focusedEditor())
+        return editor->getActiveLane();
+    for (const auto& [id, header] : headers_)
+        if (header->hasKeyboardFocus(true))
+            return id;
+    return {};
+}
+
+bool TimelineAutomationLanes::requestDuplicateLane(synth::LaneId lane) {
+    auto* header = headerFor(lane);
+    if (header == nullptr)
+        return false;
+    header->openDuplicatePicker();
+    return true;
 }
 
 AutomationLaneHeaderComponent* TimelineAutomationLanes::headerFor(synth::LaneId lane) const {

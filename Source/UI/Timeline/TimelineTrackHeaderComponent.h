@@ -12,6 +12,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -235,6 +236,13 @@ struct TrackHeaderHost {
         return {};
     }
 
+    /** What a lane needs to be bound to `parameter`: the node's uuid (assigned here for a node that has never been
+     *  automated), the parameter id and index hint, and the parameter's real range. nullopt when the parameter no
+     *  longer resolves. Binds nothing. Non-pure with an inert default. */
+    virtual std::optional<LaneTarget> prepareLaneTarget(const AutomatableParameter& /*parameter*/) {
+        return std::nullopt;
+    }
+
     // ---- Modulators under an automation lane (docs/timeline/automation.md#modulators) ----
     // Every default answers "nothing", so a stub host needs none of them.
 
@@ -265,6 +273,13 @@ struct TrackHeaderHost {
      *  when they sit in different macros). False when nothing changed. */
     virtual bool connectModulator(const juce::String& /*lfoUuid*/, const juce::String& /*nodeUuid*/,
                                   const juce::String& /*paramId*/) {
+        return false;
+    }
+    /** True when `modulator` can be re-pointed at another source with changeModulatorSource(); the lane's
+     *  "Change source..." item shows only then. */
+    virtual bool canChangeModulatorSource(const ModulatorInfo& /*modulator*/) { return false; }
+    /** Re-points the routing at the existing LFO `lfoUuid` as ONE undo step; false when nothing changed. */
+    virtual bool changeModulatorSource(const ModulatorInfo& /*modulator*/, const juce::String& /*lfoUuid*/) {
         return false;
     }
     /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */

@@ -49,4 +49,11 @@ buildAddAutomationPicker(const AddAutomationChoices& choices, const juce::String
     return picker;
 }
 
+namespace test_hooks {
+std::function<void(std::unique_ptr<ModMatrixPicker>)>& laneParameterPickerHookForTest() {
+    static std::function<void(std::unique_ptr<ModMatrixPicker>)> hook;
+    return hook;
+}
+} // namespace test_hooks
+
 } // namespace synth::ui

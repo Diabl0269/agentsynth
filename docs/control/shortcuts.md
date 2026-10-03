@@ -49,7 +49,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
-| Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
+| Cmd+D | Duplicate (Selected Modules, the selected clips/notes, or the focused automation lane: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |
@@ -200,9 +200,11 @@ enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane 
 - **TimelineClips** — the timeline panel is visible AND real keyboard focus
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
-- **AutomationLane** — same, but focus sits on an automation lane editor: Select All takes every point of the
+- **AutomationLane** — same, but focus sits on an automation lane's editor or header: Select All takes every point of the
   lane, Copy/Cut/Paste move points ([timeline/automation.md](../timeline/automation.md#selecting-points)),
-  Duplicate and Repeat are inactive, and zoom is the timeline's.
+  Duplicate copies the lane below itself once a parameter is picked
+  ([timeline/automation.md](../timeline/automation.md#change-parameter-and-duplicate)), Repeat is inactive, and zoom is
+  the timeline's.
 - **Mixer** — the mixer panel is actually showing (docked-and-active on the tab strip, an "Own
   panel" strip, or detached into its own window — `BottomDockComponent::isMixerShowing()` /
   `MixerPlacementController::isOwnPanelShowing()`) AND real keyboard focus sits inside

@@ -130,6 +130,9 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);
         wireBand(*band);
+        band->onMenuRequested = [row = entry.rows.back().get()](const juce::PopupMenu::Options& options) {
+            row->showMenuAt(options);
+        };
         band->setModulator(info, lane, parameterName);
         bodies_->addAndMakeVisible(*band);
         entry.bands.push_back(std::move(band));

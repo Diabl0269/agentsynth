@@ -139,19 +139,17 @@ MainComponent::getAutomatableParameters(synth::TrackId track) {
     return result;
 }
 
-// Creates the lane on `track` (the one the person asked about, not the ownership rule's pick). A node that has
-// never been automated has no uuid yet; it gets one here, mirrored into the processor like every uuid write
-// (ModuleBase::setNodeUuid), the same ensure-uuid step automateParameter() takes.
-synth::LaneId MainComponent::addAutomationLane(synth::TrackId track,
-                                               const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
-    if (timelineDoc.getTrack(track) == nullptr)
-        return {};
+// Binds nothing: finds the node and parameter, gives a node that has never been automated its uuid (mirrored into
+// the processor like every uuid write, ModuleBase::setNodeUuid -- the same ensure-uuid step automateParameter()
+// takes) and reads the parameter's real range.
+std::optional<synth::ui::LaneTarget>
+MainComponent::prepareLaneTarget(const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
     auto* node = parameter.nodeUid != 0
                      ? audioEngine.getGraph().getNodeForId(juce::AudioProcessorGraph::NodeID(parameter.nodeUid))
                      : findNodeByUuid(parameter.nodeUuid);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
     if (module == nullptr)
-        return {};
+        return std::nullopt;
 
     juce::String uuid = node->properties["uuid"].toString();
     if (uuid.isEmpty()) {
@@ -159,10 +157,33 @@ synth::LaneId MainComponent::addAutomationLane(synth::TrackId track,
         node->properties.set("uuid", uuid);
         module->setNodeUuid(uuid);
     }
+    const auto resolved = synth::resolveLaneParameter(node->getProcessor(), parameter.paramId, parameter.paramIndex);
+    if (!resolved.resolved())
+        return std::nullopt;
+
+    synth::ui::LaneTarget target;
+    target.nodeUuid = uuid;
+    target.paramId = parameter.paramId;
+    target.paramIndex = parameter.paramIndex;
+    const auto bounds = synth::laneValueBoundsFor(resolved);
+    target.range.minValue = static_cast<float>(bounds.minValue);
+    target.range.maxValue = static_cast<float>(bounds.maxValue);
+    target.range.defaultValue = static_cast<float>(synth::laneDefaultValueFor(resolved));
+    return target;
+}
+
+// Creates the lane on `track` (the one the person asked about, not the ownership rule's pick).
+synth::LaneId MainComponent::addAutomationLane(synth::TrackId track,
+                                               const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
+    if (timelineDoc.getTrack(track) == nullptr)
+        return {};
+    const auto target = prepareLaneTarget(parameter);
+    if (!target.has_value())
+        return {};
 
     synth::ui::TrackHeaderHost::PluginLaneOption option;
-    option.nodeUuid = uuid;
-    option.paramId = parameter.paramId;
-    option.paramIndex = parameter.paramIndex;
+    option.nodeUuid = target->nodeUuid;
+    option.paramId = target->paramId;
+    option.paramIndex = target->paramIndex;
     return addLaneForOption(option, track);
 }

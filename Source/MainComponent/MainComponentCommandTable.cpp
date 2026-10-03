@@ -221,7 +221,9 @@ bool MainComponent::performDuplicateSelection() {
             statusBar.showMessage("Nothing to duplicate - select one or more notes first");
         return true;
     case EditSurface::AutomationLane:
-        statusBar.showMessage("Duplicate does not apply to automation points - copy and paste instead");
+        // The lane is copied below itself once a parameter is picked for the copy (Esc leaves nothing behind).
+        if (!timelinePanel.getAutomationLanes().requestDuplicateLane(activeLane()))
+            statusBar.showMessage("Nothing to duplicate - focus an automation lane first");
         return true;
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case

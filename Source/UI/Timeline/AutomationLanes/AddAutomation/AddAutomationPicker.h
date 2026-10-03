@@ -32,4 +32,9 @@ std::unique_ptr<ModMatrixPicker>
 buildAddAutomationPicker(const AddAutomationChoices& choices, const juce::String& trackName,
                          std::function<void(const TrackHeaderHost::AutomatableParameter&)> onPick);
 
+namespace test_hooks {
+/** When set, a lane header hands its change-parameter / duplicate picker here instead of opening a call-out. */
+std::function<void(std::unique_ptr<ModMatrixPicker>)>& laneParameterPickerHookForTest();
+} // namespace test_hooks
+
 } // namespace synth::ui

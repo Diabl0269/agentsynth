@@ -1,8 +1,12 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
+#include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <vector>
@@ -16,17 +20,24 @@ struct TrackHeaderHost;
 // The header-column half of one automation lane row, under the track that owns the lane: a stripe
 // in the track's colour, the parameter and module names, the curve's value at the playhead (or the
 // selected point's value, see setSelectedPointValue), the
-// lane's record mode and a menu (add a modulator, move to another track, delete). Holds no lane state of its own;
+// lane's record mode and a menu (add a modulator, change the parameter, duplicate, move to another track, delete).
+// The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10);
+// a click on the parameter name opens the change-parameter picker. Holds no lane state of its own;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
 // returns (the owning panel prunes it on the doc notification).
-class AutomationLaneHeaderComponent : public juce::Component {
+class AutomationLaneHeaderComponent
+    : public juce::Component
+    , public juce::SettableTooltipClient
+    , public KeyboardContextMenuProvider {
 public:
     static constexpr int kIndent = 16;       // px the row is inset from the track header's left edge
     static constexpr int kStripeWidth = 4;   // px of track colour at the row's left edge
     static constexpr int kReadoutWidth = 44; // px for the value at the playhead
     static constexpr int kDeleteLaneMenuId = 1;
     static constexpr int kAddModulatorMenuId = 2;
+    static constexpr int kChangeParameterMenuId = 3;
+    static constexpr int kDuplicateMenuId = 4;
     static constexpr int kMoveToTrackMenuIdBase = 100; // + index into the menu's move targets
 
     /** `doc` must outlive this component; `host` and `undo` may be null. */
@@ -61,6 +72,20 @@ public:
     /** A combo id (LaneRecordMode + 1) as the record-mode selector applies it. */
     void applyRecordModeChoice(int comboId);
 
+    /** Shows the menu with `options` placing it (the pointer for a right-click, the header's anchor from the keyboard).
+     */
+    void showMenuAt(const juce::PopupMenu::Options& options);
+    /** Opens the picker that points this lane at another parameter; a no-op without a host or a free parameter. */
+    void openChangeParameterPicker();
+    /** Opens the picker for a copy of this lane directly below it; the copy exists only once a parameter is picked. */
+    void openDuplicatePicker();
+    /** The parameter name's hit area, in this component's coordinates. */
+    juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameArea_; }
+
+    void mouseDown(const juce::MouseEvent& e) override;
+    juce::MouseCursor getMouseCursor() override;
+    bool showContextMenuForKeyboardFocus() override;
+
 private:
     class MenuButton : public IconButton {
     public:
@@ -68,6 +93,8 @@ private:
     };
 
     void showMenu();
+    void openParameterPicker(bool duplicate);
+    bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     void applyRecordModeColour();

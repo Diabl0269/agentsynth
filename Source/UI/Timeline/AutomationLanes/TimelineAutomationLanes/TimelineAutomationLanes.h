@@ -85,6 +85,11 @@ public:
     AutomationLaneEditor* editorFor(synth::LaneId lane) const;
     /** The lane editor that holds keyboard focus, or nullptr; the edit commands (Cmd+A/C/X/V) act on it. */
     AutomationLaneEditor* focusedEditor() const;
+    /** The lane whose editor OR header holds keyboard focus, or an invalid id; the lane commands (Duplicate) act on it.
+     */
+    synth::LaneId focusedLane() const;
+    /** Opens the Duplicate picker of `lane`'s header; false when the lane has no header on screen. */
+    bool requestDuplicateLane(synth::LaneId lane);
     AutomationLaneHeaderComponent* headerFor(synth::LaneId lane) const;
     /** The track's "+ Add automation..." row while its lanes are open, else nullptr. */
     AddAutomationRow* addRowFor(synth::TrackId track) const;
