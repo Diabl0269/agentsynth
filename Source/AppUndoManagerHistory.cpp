@@ -11,11 +11,14 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
     juce::Component::SafePointer<GraphEditor> ge(graphEditor);
     const auto cablesBefore =
         ge != nullptr ? ge->snapshotCablesForRetract() : std::vector<graph_editor_types::VisibleCable>();
+    const auto hullsBefore = ge != nullptr ? ge->snapshotPaintedHulls() : MacroHullGlide::Hulls();
     beginRestore();
     const bool did = redoStep ? undoManager.redo() : undoManager.undo();
     endRestore(did);
-    if (did && ge != nullptr)
+    if (did && ge != nullptr) {
         ge->retractCablesGoneSince(cablesBefore);
+        ge->glideHullsFrom(hullsBefore); // a macro border a take-out or join moved glides back like it glided out
+    }
     return did;
 }
 
@@ -25,8 +28,9 @@ bool AppUndoManager::redo() { return applyHistoryStep(true); }
 
 // Both undo() and redo() land here (docs/layout/animation.md "Undo and redo glide"). isRestoring() lets views glide
 // rather than snap while it runs. The glide scope captures the cards' bounds before the restore and arms a slide from
-// them afterwards, so the canvas moves back the way the edit moved forward. A restore that rebuilds the cards matches
-// none and lands at once.
+// them afterwards, so the canvas moves back the way the edit moved forward. A card matches by component, or by node id
+// when the restore rebuilt the cards (freeing any node tears every card down, as taking a module out of a macro does);
+// a card for a node the restore creates has no "before" and lands at once.
 void AppUndoManager::beginRestore() {
     restoring_ = true;
     if (graphEditor != nullptr)

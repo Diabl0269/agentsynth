@@ -242,6 +242,10 @@ public:
     std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract();
     /** Retracts and fades every cable in `before` that is no longer drawn (CableRetractAnimator.h). */
     void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before);
+    /** The expanded macro borders as drawn now; hand it to glideHullsFrom() after a change that may move them. */
+    MacroHullGlide::Hulls snapshotPaintedHulls() const;
+    /** Glides every border that moved since `before` (a snapshotPaintedHulls()) to its live bounds. */
+    void glideHullsFrom(const MacroHullGlide::Hulls& before);
     /** True once the drag in progress has moved its module into or out of a macro (applied as it crossed). */
     bool hasLiveMacroMembershipChange() const noexcept { return liveMembershipChanged_; }
 
@@ -913,8 +917,6 @@ private:
     void startMacroCrossingDriver();
     // ---- Live membership change and border glide (GraphEditorMacroLiveDrag.cpp) ----
     juce::Rectangle<int> macroHullTargetBounds(const juce::String& macroId) const;
-    MacroHullGlide::Hulls snapshotPaintedHulls() const;
-    void glideHullsFrom(const MacroHullGlide::Hulls& before);
     bool canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId) const;
     void applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
                              const juce::String& joinId);
