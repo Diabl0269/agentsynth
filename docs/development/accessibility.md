@@ -39,6 +39,15 @@ around its selected row, and a list that takes focus with nothing selected selec
 flips a tick; Return does). The selector rebuilds its lists when the device changes, so the helper re-scans on
 child changes and focus changes, and polls the selected row with a light timer only while a list has focus.
 
+## Focus order
+
+Focus moves between regions with Tab/Shift+Tab (`control/focus-regions.md`) and inside a region with that region's own
+keys. A region whose root is a plain container (the Timeline's routing pane, the piano roll's scale pane) takes focus
+itself, enters its controls with Down, steps with Up/Down in on-screen order and returns with Escape
+(`Source/UI/Layout/FocusStepWithin.h`); its controls are Tab-reachable through the region cycle, not as stops of the region
+before it. The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
+focused control does not use them itself (a combo box or text field keeps its Up/Down).
+
 ## Module cards
 
 The canvas is one focus region; inside it the arrows move between cards, Return steps into the selected card,

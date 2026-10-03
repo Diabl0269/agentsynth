@@ -8,6 +8,7 @@
 // with juce::KeyboardFocusTraverser.
 #include "PianoRollTestHelpers.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <algorithm>
@@ -143,6 +144,39 @@ TEST(PianoRollKeyboardReachTest, TabWalksTheHeaderChipsThenTheVelocityControls) 
     EXPECT_GE(indexOf(&f.roll.getVelocityValueBox()), 0) << "the Set box";
     EXPECT_GE(indexOf(&f.roll.getVelocityLane()), 0) << "the velocity strip";
     EXPECT_GE(indexOf(&f.roll.getScaleAssistPanel().getScaleCombo()), 0) << "the scale panel's controls";
+}
+
+// The scale pane is its own Tab region, in the cycle only while it is on screen.
+TEST(PianoRollKeyboardReachTest, TheScalePaneIsAFocusRegionOnlyWhileItShows) {
+    RollWithClip f;
+    auto& pane = f.roll.getScaleAssistPanel();
+    EXPECT_FALSE(f.roll.isScalePanelShowing());
+    f.roll.toggleScalePanel();
+    f.roll.resized();
+    EXPECT_TRUE(f.roll.isScalePanelShowing());
+    f.roll.toggleScalePanel();
+    EXPECT_FALSE(f.roll.isScalePanelShowing()) << "closed again";
+    f.roll.toggleScalePanel();
+
+    EXPECT_TRUE(pane.getWantsKeyboardFocus());
+    EXPECT_EQ(pane.getTitle(), "Scale assist");
+    const auto stops = synth::ui::focusableDescendants(pane);
+    ASSERT_FALSE(stops.empty());
+    EXPECT_EQ(stops.front(), &pane.getRootCombo()) << "the root picker is the first control";
+    EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, +1), stops.front());
+    EXPECT_EQ(synth::ui::neighbourStop(pane, stops.front(), -1), nullptr);
+    EXPECT_EQ(synth::ui::neighbourStop(pane, &pane.getRootCombo(), +1), &pane.getScaleCombo());
+    EXPECT_TRUE(std::find(stops.begin(), stops.end(), &pane.getGenerateButton()) != stops.end());
+    EXPECT_TRUE(std::none_of(stops.begin(), stops.end(), [&](auto* c) {
+        return dynamic_cast<juce::Viewport*>(c) != nullptr || dynamic_cast<juce::ScrollBar*>(c) != nullptr;
+    })) << "the viewport's own stops are not controls";
+
+    EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::downKey)));
+    EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::upKey)));
+    auto& keys = pane.getPaneKeysForTest();
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane.getRootCombo())) << "Escape leaves a combo";
+    EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getRootCombo())) << "a combo keeps its arrows";
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getGenerateButton())) << "a button steps on";
 }
 
 TEST(PianoRollKeyboardReachTest, ReturnFromClipModeOpensTheRollAndEscapeHandsTheClipBack) {

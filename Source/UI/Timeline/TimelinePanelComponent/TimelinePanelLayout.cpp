@@ -751,6 +751,12 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 // track header viewport, transport bar and clip lane area all tile wall-to-wall against this
 // panel's own edge, so an outline painted at the end of paint() above would sit UNDER them and
 // never show.
-void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
+//
+// The routing pane and the piano roll's scale pane are focus regions nested inside this one, so the panel skips its own
+// outline while focus is in either: the pane paints its own, never two outlines for one focus location.
+void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) {
+    if (!routingPane_.hasKeyboardFocus(true) && !pianoRoll_.getScaleAssistPanel().hasKeyboardFocus(true))
+        synth::ui::paintFocusRegionOutline(*this, g);
+}
 
 } // namespace synth::ui

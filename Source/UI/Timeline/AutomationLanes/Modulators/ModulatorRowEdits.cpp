@@ -102,6 +102,27 @@ void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
         showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
 }
 
+// A bare Up/Down on the row itself moves focus to the row above or below (the track list's order); the row's controls
+// keep their own arrows because their keys never reach here.
+bool ModulatorRow::keyPressed(const juce::KeyPress& key) {
+    if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return false;
+    if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    return false;
+}
+
+void ModulatorRow::focusGained(juce::Component::FocusChangeType) {
+    repaint();
+    if (onKeyboardFocused)
+        onKeyboardFocused();
+}
+
+void ModulatorRow::focusLost(juce::Component::FocusChangeType) { repaint(); }
+
 // Shift+F10 on the "..." button (the row's one focusable control that is not an edit).
 bool ModulatorRow::showContextMenuForKeyboardFocus() {
     showMenuAt(contextMenuOptions(menuButton_.getScreenBounds()));

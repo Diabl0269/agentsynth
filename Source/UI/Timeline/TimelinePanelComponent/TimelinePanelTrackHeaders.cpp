@@ -445,6 +445,7 @@ void TimelinePanelComponent::layoutTrackHeaders() {
 // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
 void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     addTrackFocusRecorded_ = false;
+    keyboardStop_ = nullptr;
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
             focusedTrackIndex_ = i;
@@ -464,6 +465,7 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     if (count == 0)
         return;
     addTrackFocusRecorded_ = false;
+    keyboardStop_ = nullptr;
     focusedTrackIndex_ = focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
     // Best-effort: without a native peer (headless tests) this is a harmless no-op, same as every
     // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
@@ -478,6 +480,19 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
 // selects a track and must keep clamping.
 void TimelinePanelComponent::stepTrackFocusFromHeader(int direction) {
     const int count = trackHeaderList_.headers.size();
+    // A track row with open lanes: Down enters the first one, and Up off the next track's row lands on the last one.
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, count)) {
+        const auto stops = keyboardStops();
+        const auto* current = trackHeaderList_.headers.getUnchecked(focusedTrackIndex_);
+        const auto at = std::find(stops.begin(), stops.end(), current);
+        const auto next = direction > 0 ? at + 1 : at - 1;
+        if (at != stops.end() && next >= stops.begin() && next < stops.end() &&
+            dynamic_cast<TimelineTrackHeaderComponent*>(*next) == nullptr) {
+            focusKeyboardStop(**next);
+            return;
+        }
+    }
+    keyboardStop_ = nullptr;
     if (direction > 0 && count > 0 && focusedTrackIndex_ == count - 1) {
         addTrackFromTop_ = false;
         focusAddTrackButton();
@@ -534,6 +549,12 @@ bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) 
     }
     focusedTrackIndex_ = count - 1;
     addTrackFocusRecorded_ = false;
+    const auto stops = keyboardStops();
+    if (!stops.empty() && dynamic_cast<TimelineTrackHeaderComponent*>(stops.back()) == nullptr) {
+        focusKeyboardStop(*stops.back()); // the last track's last open lane
+        return true;
+    }
+    keyboardStop_ = nullptr;
     if (!recordFocusForTest_)
         trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
     ensureTrackVisible(focusedTrackIndex_);

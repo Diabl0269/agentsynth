@@ -30,6 +30,14 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
     header.onDragMove = [this](int screenY) { dragLane(screenY); };
     header.onDragRelease = [this] { return endLaneDrag(); };
     header.onLaneKey = [this, id](const juce::KeyPress& key) { return handleLaneKey(id, key); };
+    header.onFocusMoveRequested = [this, &header](int direction) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(header, direction);
+    };
+    header.onKeyboardFocused = [this, &header] {
+        if (onKeyboardStopFocused)
+            onKeyboardStopFocused(header);
+    };
 }
 
 // The lanes of `track` that have a row (a modulator's amount lane has none), in track order.

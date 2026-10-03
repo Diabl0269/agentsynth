@@ -61,7 +61,7 @@ when reasoning about a key that "does nothing."
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
-| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Dock tabs, Timeline, Mixer, Controllers, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
+| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Dock tabs, Timeline, Timeline routing pane, piano-roll scale pane, Mixer, Controllers, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
@@ -104,7 +104,7 @@ selection AND always inactive on the Graph surface.
 ### Focus regions
 
 Tab and Shift+Tab move between the open focus regions (Toolbar, Library, Canvas, Dock tabs, Timeline,
-Mixer, Controllers, AI Panel, Mod Matrix). How the regions are registered, nested and outlined, and
+routing pane, scale pane, Mixer, Controllers, AI Panel, Mod Matrix). How the regions are registered, nested and outlined, and
 what the keys do inside each one, is in [`focus-regions.md`](focus-regions.md).
 
 ### Open Context Menu

@@ -130,6 +130,15 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);
         wireBand(*band);
+        auto* rowPtr = entry.rows.back().get();
+        rowPtr->onFocusMoveRequested = [this, rowPtr](int direction) {
+            if (onFocusMoveRequested)
+                onFocusMoveRequested(*rowPtr, direction);
+        };
+        rowPtr->onKeyboardFocused = [this, rowPtr] {
+            if (onKeyboardStopFocused)
+                onKeyboardStopFocused(*rowPtr);
+        };
         band->onMenuRequested = [row = entry.rows.back().get()](const juce::PopupMenu::Options& options) {
             row->showMenuAt(options);
         };
@@ -195,6 +204,21 @@ void TimelineAutomationLanes::refreshModulatorAmounts(int visibleTop, int visibl
             entry.bands[i]->setAmountReadout(amount);
         }
     }
+}
+
+std::vector<juce::Component*> TimelineAutomationLanes::keyboardStopsFor(const synth::Track& track) const {
+    std::vector<juce::Component*> stops;
+    if (!isVisibleLane(track))
+        return stops;
+    for (const auto& lane : track.lanes) {
+        auto* header = headerFor(lane.id);
+        if (isAmountLane(lane.id) || header == nullptr)
+            continue;
+        stops.push_back(header);
+        for (int i = 0; i < modulatorCount(lane.id); ++i)
+            stops.push_back(modulatorRowFor(lane.id, i));
+    }
+    return stops;
 }
 
 int TimelineAutomationLanes::modulatorCount(synth::LaneId lane) const {

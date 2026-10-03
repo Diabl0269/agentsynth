@@ -18,6 +18,8 @@
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
 #include "Timeline/MusicalScale.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <array>
 #include <cstdint>
@@ -33,6 +35,11 @@ class ScaleAssistPanel : public juce::Component {
 public:
     ScaleAssistPanel() {
         setComponentID("scaleAssistPanel");
+        // Its own focus region (Tab: timeline -> routing pane -> scale pane): the root takes focus, Up/Down step
+        // through the controls and Escape comes back. A click never moves keyboard focus onto the root.
+        setWantsKeyboardFocus(true);
+        setMouseClickGrabsKeyboardFocus(false);
+        setTitle("Scale assist");
         buildRootAndScaleControls();
         buildCustomScaleEditor();
         buildPitchVisibilityControl();
@@ -50,8 +57,18 @@ public:
         scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
         rebuildScaleCombo();
         showCustomEditor(false);
+        paneKeys_.attachToDescendants();
     }
     ~ScaleAssistPanel() override = default;
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        const bool plain = !key.getModifiers().isAnyModifierKeyDown();
+        if (plain && key.isKeyCode(juce::KeyPress::downKey))
+            return stepFocusWithin(*this, +1, nullptr);
+        return plain && key.isKeyCode(juce::KeyPress::upKey);
+    }
+
+    void paintOverChildren(juce::Graphics& g) override { paintFocusRegionOutline(*this, g); }
 
     void paint(juce::Graphics& g) override {
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
@@ -195,6 +212,7 @@ public:
     std::function<void(int minPitch, int maxPitch, bool addToExisting)> onGenerate;
 
     // ---- Test accessors (every interactive child also carries its own componentID) ----
+    PaneKeys& getPaneKeysForTest() noexcept { return paneKeys_; }
     juce::ComboBox& getRootCombo() noexcept { return rootCombo_; }
     juce::ComboBox& getScaleCombo() noexcept { return scaleCombo_; }
     juce::ToggleButton& getPitchVisibilityToggle() noexcept { return pitchVisibilityToggle_; }
@@ -536,6 +554,7 @@ private:
     // scrollbar only when that content is taller than the panel — see resized()/contentNaturalHeight().
     juce::Component scaleContent_;
     juce::Viewport scrollViewport_;
+    PaneKeys paneKeys_{*this};
 
     juce::Label rootLabel_;
     juce::ComboBox rootCombo_;

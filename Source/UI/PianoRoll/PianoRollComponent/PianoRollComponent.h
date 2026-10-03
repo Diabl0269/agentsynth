@@ -214,6 +214,8 @@ public:
     synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept;
     const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept;
     void toggleScalePanel();
+    /** The scale panel is on its way in or fully shown, with a clip open in the roll. */
+    bool isScalePanelShowing() const noexcept { return isOpen() && scalePanelVisible_; }
     juce::Rectangle<int> getScaleButtonBounds() const noexcept;
 
     // quantisePitchesToScale/quantisePitchesToActiveScale/isPitchQuantiseEnabled — see

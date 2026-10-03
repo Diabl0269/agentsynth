@@ -7,8 +7,8 @@ namespace synth::ui {
 
 RoutingComboButton::RoutingComboButton(const juce::String& name)
     : juce::Button(name) {
-    // A click must never move keyboard focus off the panel's focus root.
-    setWantsKeyboardFocus(false);
+    // A keyboard stop of the routing pane, but a click must never move keyboard focus off the panel's focus root.
+    setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
