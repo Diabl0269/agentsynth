@@ -37,6 +37,7 @@ void AutomationLaneEditor::setActiveLane(synth::LaneId id) {
     dragMode_ = DragMode::None;
     hoveredBeat_.reset();
     bubble_.hide();
+    valueField_.close(false);
     shapeGesture_.cancel();
     selection_.cancelGesture();
     selection_.clear();
@@ -465,6 +466,8 @@ void AutomationLaneEditor::updateHover(juce::Point<int> pos) {
 }
 
 void AutomationLaneEditor::showBubbleAt(double beat, double value) {
+    if (valueField_.isOpen())
+        return;
     bubble_.show({(float)viewState_.beatToX(beat), (float)valueToY(value)}, valueText(value));
 }
 
@@ -757,8 +760,11 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
     if (doc_ == nullptr || !laneId_.isValid() || doc_->getLane(laneId_) == nullptr)
         return;
     const auto pos = e.getPosition();
-    if (hitTestHandle(pos))
-        return; // no-op on an existing handle
+    if (const auto hit = hitTestHandle(pos)) {
+        if (tool_ == Tool::Pointer)
+            openValueField(hit->beat); // a double-click on a point types its value; it never adds one
+        return;
+    }
 
     const double beat = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
     const double value = clampValue(yToValue(pos.y));
@@ -790,6 +796,8 @@ bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
         }
         return handleSelectionKey(key); // clears a selection; idle otherwise — the key belongs to the panel
     }
+    if (key == juce::KeyPress::returnKey && tool_ == Tool::Pointer && openValueFieldOnCursor())
+        return true;
     return handleSelectionKey(key);
 }
 

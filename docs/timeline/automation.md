@@ -356,7 +356,7 @@ Reduce Motion (`prefersReducedMotion()`) or off screen, and repaints nothing onc
 dragged the bubble follows its previewed value; an exit mid-drag does not drop it. The text is the
 parameter's own text for the value (`AutomationLaneEditor::valueToText`, which `TimelineAutomationLanes`
 sets to `laneValueText`, the lane header's path through `TrackHeaderHost::getParameterValueText`), falling
-back to the plain number. Later per-point features (selection, typed value, header readout, stretch) extend
+back to the plain number. Later per-point features (header readout, stretch) extend
 `PointValueBubble` and the editor's `updateHover()`.
 
 Under the Pointer tool a point shows the grab hand on hover and while it is dragged (`dragGrabCursor()`, see
@@ -367,6 +367,37 @@ flat line and dragging vertically moves the value by the pointer's travel, clamp
 bubble showing it live; nothing is written until mouse-up, which commits through
 `TimelineDoc::setLaneConstantValue` as one undo step. Once the lane has a point the line is a curve and this
 drag does not apply.
+
+### Typing a point's value
+
+Double-click a point (Pointer tool), or press Return while the keyboard cursor is on one (a click or Alt+Left/Right puts
+it there), and a small field opens right of the point (left when there is no room) with the value text selected:
+`AutomationLanes/PointReadout/PointValueField.{h,cpp}`, a `juce::TextEditor` child of the editor, glued in
+`AutomationLaneEditorValueField.cpp`. Type a number and press Return to set it; Escape cancels and the keyboard focus
+goes back to the editor. A double-click on a point never adds one; a double-click on empty space adds a point exactly as
+before.
+
+- **Parsing.** `AutomationLaneEditor::textToValue` (set by `TimelineAutomationLanes` to `laneTextToValue`) turns the text
+  into a lane value through `TrackHeaderHost::getParameterValueFromText`, the inverse of `getParameterValueText`:
+  `MainComponent` resolves the lane's parameter and uses its own text-to-value, so "-12" on a dB parameter is -12 dB.
+  With no host, or a parameter that does not resolve, the text is read as a plain number with an optional unit ("-12",
+  "-12 dB", "3.5%"; `PointValueField::parseNumber`) in the lane's own units. Text with no digit is refused before any
+  parser sees it, because a parameter's text-to-value reads "abc" as 0. The result is clamped to the lane's range.
+- **Commit.** Return changes only that point's value (beat, tension and curve are kept) through `commitPointEdit`: one
+  undo step, none when the value is unchanged. With several points selected only the double-clicked point takes the
+  value and the selection stays as it was.
+- **Invalid text** keeps the field open, draws its text and outline in the theme's `error` colour and commits nothing;
+  typing again clears it. Losing focus commits text that parses and discards text that does not, like the inline label
+  editors. The field closes by itself when its point is removed (undo).
+- **Escape and Return are handled in `PointValueField::keyPressed`**, before `TextEditor` posts them as command
+  messages, so the field closes inside the key press and no listener callback ever hides or refocuses it (see
+  [the inline label editors](../layout/chrome.md#inline-label-editors-and-accessibility)). The field is a permanent
+  child that is hidden, never deleted, while closed.
+- **Motion.** The field fades in 140 ms and out 100 ms through an `AnimationDriver` (no new timer), landing at once under
+  Reduce Motion or off screen. The value bubble steps aside while it is open.
+- **Accessibility.** The field is Tab/keyboard-reachable while open, has the accent focus ring (`paintFocusRing`), the
+  accessible title "Value of <parameter> point" (`AutomationLaneEditor::laneLabel`) and a tooltip naming Return and
+  Escape.
 
 ### Selecting points
 
@@ -617,7 +648,10 @@ partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview
 rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
 `AutomationLanesPointBubbleTests.cpp` (the value bubble on hover and drag with its text and fallback, the grab
 cursor, the flat-line drag as one undo step, its clamp, and the editor's accessible name),
-`AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
+`AutomationLanesPointValueFieldTests.cpp` (double-click and Return opening the field with its text selected, a typed
+value as one undo step keeping tension and curve, a unit, Escape, invalid text, the clamp, an unchanged value, empty
+space still adding a point, the parameter's own parser, focus loss, one of several selected points, the field closing
+when its point goes) and `AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
 undo step, Delete/Backspace, nudge, the keyboard cursor, copy/cut/paste, the selection following the doc, the accent
 dot read back from pixels, the description) and `LanePointMathTests.cpp` (the selection set, rigid-block move,
 replace, box test, clipboard and the glide's state machine); the surface routing of Cmd+A/C/X/V is in

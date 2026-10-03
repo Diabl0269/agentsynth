@@ -64,6 +64,7 @@ void AutomationLaneEditor::syncToDoc() {
     else
         glide_.pointsChanged(std::move(now));
     refreshDescription();
+    closeValueFieldIfPointGone();
 }
 
 void AutomationLaneEditor::laneDocChanged() {

@@ -15,6 +15,7 @@
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace juce {
@@ -66,6 +67,14 @@ struct TrackHeaderHost {
     virtual juce::String getParameterValueText(const juce::String& /*uuid*/, const juce::String& /*paramId*/,
                                                double /*value*/) {
         return {};
+    }
+
+    /** The lane value (in the lane's own units) a typed text stands for, parsed by the parameter itself ("-12" for
+     *  a dB parameter), or nullopt when the parameter doesn't resolve. */
+    virtual std::optional<double> getParameterValueFromText(const juce::String& /*uuid*/,
+                                                            const juce::String& /*paramId*/,
+                                                            const juce::String& /*text*/) {
+        return std::nullopt;
     }
 
     /** One-click re-bind. NEVER called automatically: a binding is only ever changed by an explicit

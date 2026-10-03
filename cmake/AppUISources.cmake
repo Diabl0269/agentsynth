@@ -294,6 +294,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
     Source/UI/Timeline/AutomationLaneEditorPoints.cpp
+    Source/UI/Timeline/AutomationLaneEditorValueField.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
@@ -304,6 +305,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.cpp
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.h
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
