@@ -86,7 +86,7 @@ TEST(MixerFaderDragTest, PlainDragMovesValueAlongTheTaperFromTheAnchor) {
     // convertFrom0to1 round-trip through the taper (attachment_'s sendInitialUpdate()), which
     // isn't guaranteed bit-identical for 0.0 -- far below anything audible or visible.
     ASSERT_NEAR(f.slider().getValue(), 0.0, 1.0e-5);
-    ASSERT_EQ(f.slider().getHeight(), 184);
+    ASSERT_EQ(f.slider().getHeight(), 182);
 
     const juce::Point<float> downPos(12.0f, 100.0f);
     f.slider().mouseDown(faderMouseEvent(f.slider(), downPos, downPos, juce::ModifierKeys(kNoModifiers), false));

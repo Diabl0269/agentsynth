@@ -302,15 +302,14 @@ Own panel/Window (`setMixerTabEnabled(false)`), since those placements have thei
 detach state.
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
-22 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
+24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
 acts on whichever tab is active, and the header — with the real button, now reading "Dock back" —
 appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
 either host's own button through three different parents.
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
 dock's own top edge — not inside the Timeline panel — so the Mixer and Controllers tabs resize the
-dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
-22 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
+dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays24 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
 `onResizeHeightCommitted`. The dock carves nothing for the Mixer: `+ Bus`/Reset Meters live in the
 mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the

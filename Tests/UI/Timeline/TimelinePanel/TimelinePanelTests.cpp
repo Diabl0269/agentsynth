@@ -104,15 +104,16 @@ TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
     EXPECT_EQ(panelBounds.getX(), 0);
     EXPECT_EQ(panelBounds.getWidth(), 1600);
-    // Metrics::timelinePanelHeight literal default (220) minus BottomDockComponent's own 22px tab
+    // Metrics::timelinePanelHeight literal default (220) minus BottomDockComponent's own tab
     // strip -- the dock's TOTAL carve is still 220, but the tab strip now eats part of it.
-    EXPECT_EQ(panelBounds.getHeight(), 198);
+    EXPECT_EQ(panelBounds.getHeight(), 220 - synth::ui::BottomDockComponent::kTabStripHeight);
     // Sits directly above the status bar.
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY());
 
     // Graph editor shrunk by exactly the dock's total carve (220), NOT just the panel's own
     // (smaller) content height -- the graph editor sits above the WHOLE dock, tab strip included.
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(),
+              panelBounds.getY() - synth::ui::BottomDockComponent::kTabStripHeight);
 
     // Library/AI panels unaffected horizontally (default: library visible at 200px, AI hidden).
     EXPECT_EQ(mc.getGraphEditor().getBounds().getX(), libraryX);

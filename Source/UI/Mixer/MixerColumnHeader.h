@@ -235,7 +235,7 @@ public:
         }
 
         const auto slots = layoutSlots();
-        g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
         if (busBadgeVisible_) {
             g.setColour(text.withAlpha(0.7f));
             g.drawText("BUS", slots.badge, juce::Justification::centred, false);
@@ -254,7 +254,7 @@ public:
         // live text editor) -- resized() positions it over exactly this same reduction of bounds
         // (layoutSlots() below), so the two must stay in step; nothing else is drawn into it here.
         nameLabel_.setColour(juce::Label::textColourId, text);
-        nameLabel_.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+        nameLabel_.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
     }
 
     void resized() override {

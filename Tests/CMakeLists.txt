@@ -133,6 +133,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/MasterDualIOTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
+    Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
     Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp

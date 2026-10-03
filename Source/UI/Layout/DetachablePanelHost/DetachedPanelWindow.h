@@ -73,7 +73,7 @@ public:
      *  which DetachablePanelHost wires to the same dispatch MainComponent's own keyPressed uses. */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
-    static constexpr int kHeaderStripHeight = 22; // == DetachablePanelHost::kHeaderStripHeight
+    static constexpr int kHeaderStripHeight = 24; // == DetachablePanelHost::kHeaderStripHeight
 
     // ---- Testing hooks (DetachedPanelWindowTests.cpp) ----
     synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }

@@ -22,7 +22,7 @@ MixerFader::MixerFader() {
     addAndMakeVisible(slider_);
 
     readout_.setJustificationType(juce::Justification::centred);
-    readout_.setFont(juce::Font(juce::FontOptions(10.0f)));
+    readout_.setFont(juce::Font(juce::FontOptions(12.0f)));
     addAndMakeVisible(readout_);
 }
 
@@ -150,7 +150,7 @@ void MixerFader::parameterGestureChanged(int, bool gestureIsStarting) {
 
 void MixerFader::resized() {
     auto bounds = getLocalBounds();
-    readout_.setBounds(bounds.removeFromBottom(16));
+    readout_.setBounds(bounds.removeFromBottom(18));
     slider_.setBounds(bounds);
 }
 

@@ -49,7 +49,7 @@ TEST(MixerSectionLayoutTest, WithRoomEverySectionGetsItsHeightAndTheFaderTakesTh
     EXPECT_EQ(g.panTop, 222);
     EXPECT_EQ(g.panHeight, 28);
     EXPECT_EQ(g.readoutTop, 250);
-    EXPECT_EQ(g.faderTop, 262);
+    EXPECT_EQ(g.faderTop, 264);
     EXPECT_EQ(g.msTop, 600 - 2 - 20);
     EXPECT_EQ(g.faderHeight, g.msTop - g.faderTop);
 }
@@ -58,18 +58,18 @@ TEST(MixerSectionLayoutTest, WithRoomEverySectionGetsItsHeightAndTheFaderTakesTh
 // minimum; the sections give way first, EQ then Sends then Inserts.
 TEST(MixerSectionLayoutTest, AShortColumnGivesWayEqThenSendsThenInsertsAndTheFaderKeepsItsMinimum) {
     Layout layout;
-    const auto g = layout.resolve(198);
+    const auto g = layout.resolve(196);
     EXPECT_EQ(g.faderHeight, Layout::kMinFaderHeight);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Eq)], 0);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Sends)], 0);
-    EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 36);
+    EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 32);
     EXPECT_EQ(g.panHeight, Layout::kPanHeight) << "the pan knob gives way only after every section";
 }
 
 TEST(MixerSectionLayoutTest, RequiredColumnHeightFitsEverySectionWithTheFaderAtItsMinimum) {
     Layout layout;
     const int required = layout.requiredColumnHeight();
-    EXPECT_EQ(required, 340);
+    EXPECT_EQ(required, 342);
     const auto g = layout.resolve(required);
     EXPECT_EQ(g.faderHeight, Layout::kMinFaderHeight);
     EXPECT_EQ(g.sectionHeight[at(MixerSection::Inserts)], 90);

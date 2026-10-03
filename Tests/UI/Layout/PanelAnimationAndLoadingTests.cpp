@@ -246,17 +246,18 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
     mc.simulateToggleBottomPanelClick();
-    // 220 total carve minus BottomDockComponent's 22px tab strip -- see
+    // 220 total carve minus BottomDockComponent's tab strip -- see
     // timelinePanelBoundsInMainComponent's own comment.
-    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
+    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220 - synth::ui::BottomDockComponent::kTabStripHeight);
 
     mc.setPanelOpenProgressForTest(SlidingPanel::Timeline, 0.5f);
     // MainComponent-relative bounds (the panel is nested inside the dock's tab strip now).
     const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(panelBounds.getHeight(), 88); // (220 * 0.5) - 22
+    EXPECT_EQ(panelBounds.getHeight(), 110 - synth::ui::BottomDockComponent::kTabStripHeight); // (220 * 0.5) - strip
     EXPECT_EQ(panelBounds.getWidth(), 1600) << "full width at every point of the slide";
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY()) << "bottom edge pinned";
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(),
+              panelBounds.getY() - synth::ui::BottomDockComponent::kTabStripHeight);
 }
 
 // The jump this whole design removes: the tween starts from the fraction's CURRENT value, so

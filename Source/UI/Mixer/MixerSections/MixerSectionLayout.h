@@ -27,7 +27,7 @@ public:
     static constexpr int kColumnInset = 2;
     static constexpr int kHeaderHeight = 24;
     static constexpr int kPanHeight = 28;
-    static constexpr int kMeterReadoutHeight = 12;
+    static constexpr int kMeterReadoutHeight = 14;
     static constexpr int kMsRowHeight = 20;
     static constexpr int kMinFaderHeight = 56;
 
