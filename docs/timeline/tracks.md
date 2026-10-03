@@ -124,7 +124,10 @@ up from wherever real focus actually is.
 
 Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on a
 focused row shows the same menu a right-click does, at the row: `TimelineTrackHeaderComponent` implements
-`KeyboardContextMenuProvider` and calls `showContextMenu()`, the function `mouseDown()` calls for a right-click.
+`KeyboardContextMenuProvider` and calls `showContextMenu()`, the function `mouseDown()` calls for a right-click. A
+bare Return on the row does the same (rename is a double-click on the name, so Return has no other job there), and
+the row's tooltip says "Right-click, Shift+F10 or Return for the track menu". The same three routes open the menu of an
+automation lane header and a modulator row, which have no "..." button either.
 
 ## Click to select
 

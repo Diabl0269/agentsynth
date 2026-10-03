@@ -47,7 +47,9 @@ void ModulatorRow::refreshValues() {
     };
     if (info_.isLfo) {
         const auto& lfo = info_.sourceUuid;
-        shape_.setSelectedId(juce::roundToInt(host_->getNodeParameter(lfo, "shape")) + 1, juce::dontSendNotification);
+        const int shape = juce::roundToInt(host_->getNodeParameter(lfo, "shape"));
+        shape_.setSelectedId(shape + 1, juce::dontSendNotification);
+        shapeIcon_.setShape(shape);
         syncRate_.setSelectedId(juce::roundToInt(host_->getNodeParameter(lfo, "rateSync")) + 1,
                                 juce::dontSendNotification);
         const bool synced = host_->getNodeParameter(lfo, "mode") >= 0.5f;
@@ -80,8 +82,6 @@ void ModulatorRow::applyMenuChoice(int menuId) {
         host->removeModulator(info);
 }
 
-void ModulatorRow::showMenu() { showMenuAt(juce::PopupMenu::Options().withTargetComponent(&menuButton_)); }
-
 void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {
     auto menu = buildMenu();
     if (auto& hook = test_hooks::laneMenuHookForTest()) {
@@ -95,18 +95,20 @@ void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {
     });
 }
 
-// A right-click anywhere on the row that is not one of its controls opens the same menu as the "..." button, at
-// the pointer.
+// A right-click anywhere on the row that is not one of its controls (the shape picture counts as the row) opens the row
+// menu at the pointer.
 void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu())
         showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
 }
 
-// A bare Up/Down on the row itself moves focus to the row above or below (the track list's order); the row's controls
-// keep their own arrows because their keys never reach here.
+// A bare Up/Down on the row itself moves focus to the row above or below (the track list's order), and a bare Return
+// opens its menu; the row's controls keep their own keys because those never reach here.
 bool ModulatorRow::keyPressed(const juce::KeyPress& key) {
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
+    if (key.isKeyCode(juce::KeyPress::returnKey))
+        return showContextMenuForKeyboardFocus();
     if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
@@ -123,9 +125,12 @@ void ModulatorRow::focusGained(juce::Component::FocusChangeType) {
 
 void ModulatorRow::focusLost(juce::Component::FocusChangeType) { repaint(); }
 
-// Shift+F10 on the "..." button (the row's one focusable control that is not an edit).
+// Shift+F10 (or the menu key) or Return on the row, or Shift+F10 on one of its controls: the menu opens beside the
+// focused control, or the row.
 bool ModulatorRow::showContextMenuForKeyboardFocus() {
-    showMenuAt(contextMenuOptions(menuButton_.getScreenBounds()));
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const auto anchor = focused != nullptr && isParentOf(focused) ? focused->getScreenBounds() : getScreenBounds();
+    showMenuAt(contextMenuOptions(anchor));
     return true;
 }
 

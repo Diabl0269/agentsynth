@@ -68,9 +68,11 @@ TEST(IconButtonTest, PaintsWithoutAnAppLookAndFeel) {
 
 TEST(IconButtonTest, EveryGlyphPaintsSomething) {
     synth::theme::AppLookAndFeel lf;
-    for (auto glyph : {Glyph::Play, Glyph::Stop, Glyph::RecordIdle, Glyph::RecordOn, Glyph::Loop, Glyph::ReturnToStart,
-                       Glyph::Metronome, Glyph::Close, Glyph::Pin, Glyph::PinOn, Glyph::Delete, Glyph::MenuDots,
-                       Glyph::EyeOpen, Glyph::EyeHidden}) {
+    for (auto glyph :
+         {Glyph::Play,          Glyph::Stop,      Glyph::RecordIdle,  Glyph::RecordOn,    Glyph::Loop,
+          Glyph::ReturnToStart, Glyph::Metronome, Glyph::Close,       Glyph::Pin,         Glyph::PinOn,
+          Glyph::Delete,        Glyph::MenuDots,  Glyph::EyeOpen,     Glyph::EyeHidden,   Glyph::ShapeSine,
+          Glyph::ShapeTriangle, Glyph::ShapeSaw,  Glyph::ShapeSquare, Glyph::ShapeRandom, Glyph::ShapeCustom}) {
         IconButton button("b", glyph);
         button.setLookAndFeel(&lf);
         EXPECT_TRUE(hasAnyPixel(render(button))) << "glyph " << (int)glyph;

@@ -322,6 +322,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     refreshHeightHandleText();
     // The row is the keyboard stop (Up/Down walk the rows), so a screen reader names it by its track.
     setTitle(t->name);
+    setTooltip("Right-click, Shift+F10 or Return for the track menu");
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
@@ -372,6 +373,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");
+        setTooltip("Right-click, Shift+F10 or Return for the menu");
         nameLabel_.setEditable(false, false, false);
         nameLabel_.setTooltip("Automation lanes no single track plays");
     } else {
@@ -666,6 +668,12 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
             onFocusMoveRequested(1);
         return true;
     }
+
+    // Return opens the row's menu, the same one a right-click and Shift+F10 open (rename is a double-click on the
+    // name).
+    if (key.isKeyCode(juce::KeyPress::returnKey) &&
+        !key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return showContextMenuForKeyboardFocus();
 
     // The "Next Clip" key carries focus from the row into its track's clips.
     if (onEnterClipsRequested && matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)))

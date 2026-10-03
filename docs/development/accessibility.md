@@ -48,6 +48,11 @@ itself, enters its controls with Down, steps with Up/Down in on-screen order and
 before it. The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
 focused control does not use them itself (a combo box or text field keeps its Up/Down).
 
+A row that has a menu (a track row, an automation lane header, a modulator row) has no "..." button: the menu is a
+right-click, Shift+F10 (`KeyboardContextMenuProvider`) or Return on the focused row, the row is named for what it is
+("Cutoff automation lane") and its tooltip lists the three ways in. A picture that only shows state (the modulator
+shape icon) is named and tooltipped but is not a Tab stop; the control it mirrors stays the one that edits.
+
 ## Module cards
 
 The canvas is one focus region; inside it the arrows move between cards, Return steps into the selected card,

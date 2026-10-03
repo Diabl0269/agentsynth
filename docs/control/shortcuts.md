@@ -115,6 +115,10 @@ focus-cycle keys: `MainComponent` performs it, inactive while the launch overlay
 detached panel window resolves the same bound key itself (`isOpenContextMenuKeyPress`), because
 `MainComponent::keyPressed` never sees keys typed in another top-level window.
 
+On a track row, an automation lane header and a modulator row, a bare Return opens that same menu too (those rows
+have no "..." button), and their tooltips name Right-click, Shift+F10 and Return. The Cmd-hold hint bubbles only
+label static buttons, so these rows carry the key in their tooltips instead.
+
 The action starts from the focused component and walks up its parents to the first one that implements
 `KeyboardContextMenuProvider` (`Source/UI/Layout/KeyboardContextMenu.h`). That provider's answer is
 final: a provider with nothing to open a menu for returns false, the key stays unhandled, and no outer

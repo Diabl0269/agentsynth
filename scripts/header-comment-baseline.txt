@@ -45,4 +45,4 @@
 1 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
 24 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
-58 Source/UI/Timeline/TimelineTrackHeaderComponent.h
+57 Source/UI/Timeline/TimelineTrackHeaderComponent.h

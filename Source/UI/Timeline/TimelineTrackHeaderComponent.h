@@ -377,6 +377,7 @@ struct TrackHeaderHost {
 
 class TimelineTrackHeaderComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public KeyboardContextMenuProvider {
 public:
     // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather

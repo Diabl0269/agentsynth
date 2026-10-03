@@ -1,9 +1,9 @@
 #pragma once
 
 #include "UI/Layout/ContextMenuPlacement.h"
-#include "UI/Layout/IconButton.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -13,9 +13,9 @@ namespace synth::ui {
 struct TrackHeaderHost;
 
 // The header-column half of one modulator row under an automation lane: a tag in the owning track's
-// colour, the source card's title, and -- for an LFO -- its shape, rate and sync plus a menu (show on
-// canvas, remove); any other source is read-only. A routing through an Attenuverter also shows its
-// amount ("Amount  +72%"), which the band beside it edits (ModulatorBand).
+// colour, the source card's title, and -- for an LFO -- a picture of its shape, the shape, rate and sync controls and
+// a menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is read-only. A routing through
+// an Attenuverter also shows its amount ("Amount  +72%"), which the band beside it edits (ModulatorBand).
 //
 // Holds no parameter state: every control mirrors the live processor through the host
 // (refreshValues), and every edit goes back through TrackHeaderHost::setNodeParameter, the same undo
@@ -23,6 +23,7 @@ struct TrackHeaderHost;
 // call returns (the owner prunes it on the graph-changed refresh).
 class ModulatorRow
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public KeyboardContextMenuProvider {
 public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
@@ -55,18 +56,18 @@ public:
     juce::ComboBox& getSyncRateCombo() noexcept { return syncRate_; }
     juce::Slider& getRateSlider() noexcept { return rateHz_; }
     juce::ToggleButton& getSyncToggle() noexcept { return sync_; }
-    juce::Button& getMenuButton() noexcept { return menuButton_; }
+    ModulatorShapeIcon& getShapeIcon() noexcept { return shapeIcon_; }
 
-    /** The menu as the button shows it; ids are the k*MenuId constants. */
+    /** The row menu (right-click, Shift+F10 or Return on the row); ids are the k*MenuId constants. */
     juce::PopupMenu buildMenu() const;
     /** Applies a menu choice; may destroy this row (see the class comment). */
     void applyMenuChoice(int menuId);
-    /** Shows the menu with `options` placing it: the pointer for a right-click anywhere on the row, the "..." button's
-     *  anchor otherwise. */
+    /** Shows the menu with `options` placing it: the pointer for a right-click anywhere on the row, beside the row for
+     *  the keyboard. */
     void showMenuAt(const juce::PopupMenu::Options& options);
     void mouseDown(const juce::MouseEvent& e) override;
     /** Up (-1) / Down (+1) on the focused row itself (not on its controls, which keep their own arrows); may be null.
-     */
+     *  Return on the row opens its menu. */
     std::function<void(int direction)> onFocusMoveRequested;
     /** Fired when this row takes keyboard focus; may be null. */
     std::function<void()> onKeyboardFocused;
@@ -76,14 +77,8 @@ public:
     bool showContextMenuForKeyboardFocus() override;
 
 private:
-    class MenuButton : public IconButton {
-    public:
-        MenuButton();
-    };
-
     void initLfoControls();
     void applyNames();
-    void showMenu();
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
                        std::function<float(double)> toParameter);
@@ -99,7 +94,7 @@ private:
     juce::ComboBox syncRate_;
     juce::Slider rateHz_;
     juce::ToggleButton sync_;
-    MenuButton menuButton_;
+    ModulatorShapeIcon shapeIcon_;
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     juce::Rectangle<int> tagArea_;
     juce::Rectangle<int> titleArea_;

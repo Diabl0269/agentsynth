@@ -64,15 +64,16 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 - a lane menu: **Add modulator...** ([below](#modulators)), **Change parameter...** and **Duplicate**
   ([below](#change-parameter-and-duplicate)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and
-  **Delete lane** (`TimelineDoc::removeLane`), each one undo step. The "..." button opens it; so does a
-  right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)) and Shift+F10;
+  **Delete lane** (`TimelineDoc::removeLane`), each one undo step. There is no "..." button: a
+  right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)), Shift+F10 and Return on the focused
+  row open it, and the header's tooltip says so (the space the button took goes to the value readout);
 - a click on the parameter name opens the Change parameter picker (the name is a hit region with a pointing-hand
   cursor, not a separate control: the keyboard route is the menu item).
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
-edit its last statement. Every control is a Tab stop with a title and tooltip ("Cutoff record mode",
-"Lane menu for Cutoff") and the shared focus ring.
+edit its last statement. Every control is a Tab stop with a title and tooltip ("Cutoff record mode") and the
+shared focus ring; the row itself is named "Cutoff automation lane".
 
 ### Unassigned automation
 
@@ -174,15 +175,14 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
 Up/Down walk the track list as one column: a track's row, then each of its open lanes (a lane header, followed by its
 modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
 "+ Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
-Where the arrows navigate: only when focus is on the row itself (a lane header, a modulator row, or the lane's "..." button,
-whose key bubbles to the header). The record-mode combo keeps its own Up/Down, and Cmd+Alt+Up/Down still move the lane; any other modified
+Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. The record-mode combo keeps its own Up/Down, and Cmd+Alt+Up/Down still move the lane; any other modified
 arrow is left alone. Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
 it holds focus. Tab from the timeline then goes to the routing pane and the scale pane
 ([focus regions](../control/focus-regions.md)). The panel's stop list is `TimelinePanelLaneKeyboard.cpp`.
 
 ## Right-click anywhere on a lane
 
-A right-click opens the lane's own menu (the one the "..." button opens) with its top-left at the pointer
+A right-click opens the lane's own menu with its top-left at the pointer
 (`contextMenuOptionsAtPoint`, see [layout](../layout/layout.md)) on: the lane header (the value readout forwards its
 clicks to it), the lane's curve editor wherever it is not a handle or the curve itself (those keep Delete point and
 Hold/Linear), a [modulator row](#modulators) and a modulator's band (its curve editor included), where it opens the
@@ -266,8 +266,13 @@ indented 28 px (one step further in than a lane header), three lines in the head
 rate; sync and amount):
 
 - an `LFO` tag and a left stripe in the owning track's colour (`laneColourFor`, pushed to a readable contrast
-  on the row's surface with `readableOn`), the LFO card's title, a **Sync** toggle and a "..." menu: **Show on
-  canvas** (select the card and centre the canvas on it) and **Remove modulator**;
+  on the row's surface with `readableOn`), the LFO card's title and, at the right end of that line, a small picture
+  of the LFO's shape (`ModulatorShapeIcon`: sine, triangle, sawtooth, square, a staircase for sample and hold, and a
+  curve with dots for custom; the glyphs are `Glyph::ShapeSine` .. `ShapeCustom`). The picture is display only, named
+  and tooltipped "Sine shape" and so on, and cross-fades over 160 ms when the shape changes (at once while the row
+  is not showing). The row has no "..." button: its menu, **Show on canvas** (select the card and centre the canvas on
+  it) and **Remove modulator**, opens on a right-click anywhere on the row (the picture included), Shift+F10 and
+  Return on the focused row. A **Sync** toggle sits on the third line;
 - the **shape** (Sine/Triangle/Sawtooth/Square/S&H/Custom) and the **rate** (a 1/1..1/32 combo while synced,
   a Hz bar while free-running);
 - an **Amount** label and a signed readout in the track's colour ("+72%", "-30%" with a real minus sign,
@@ -399,7 +404,7 @@ blocks. A routing whose parameter has no lane gets its amount lane too (so the s
 as an ordinary lane row until that parameter gets a lane of its own.
 
 Every control is a Tab stop that a click does not take focus to, shows the accent focus ring, and is named
-for what it controls ("Cutoff LFO shape", "Cutoff LFO rate", "Modulator menu for Cutoff LFO"), with the
+for what it controls ("Cutoff LFO shape", "Cutoff LFO rate", ), with the
 same text as its tooltip. Test hooks: `refreshModulators`, `modulatorRowForTest`, `modulatorBandForTest`,
 `modulatorRowBoundsForTest`.
 
