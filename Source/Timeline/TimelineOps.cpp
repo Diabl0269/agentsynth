@@ -262,9 +262,10 @@ TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::Dynamic
         return fail(where + "This build cannot create instrument tracks from here.");
 
     if (applyHost != nullptr) {
-        // The host creates the doc track AND the nodes; on false it has removed both.
-        juce::String instrumentUuid;
-        if (!applyHost->addInstrumentTrack(name, fields.instrument, fields.poly, fields.inserts, instrumentUuid))
+        // The host creates the doc track AND the nodes; on nullopt it has removed both. The returned
+        // uuids are not used yet: they are what in-response references (an insert's "id", the
+        // op's "instrumentId") will resolve against.
+        if (!applyHost->addInstrumentTrack(name, fields.instrument, fields.poly, fields.inserts).has_value())
             return fail(where + "could not build the instrument track.");
     } else if (!doc.addTrack(TrackKind::Midi, name).isValid()) {
         return fail(where + "could not create the track.");

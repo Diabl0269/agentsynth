@@ -305,6 +305,7 @@ public:
     juce::String
     insertTrackPresetFromFileForTest(const juce::File& file); // inserted track's name, or empty on rejection
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
+    synth::TimelineOpsHost& getTimelineOpsHostForTest() { return timelineOpsHost_; }
 
 private:
     // ---- Command table: backs getAllCommands/getCommandInfo/perform (MainComponentCommandTable.cpp) ----
@@ -383,11 +384,11 @@ private:
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
     friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody inside its recordBatch
-    /** Opens NO undo transaction (the caller must); on false, nothing it created is left behind. */
-    bool buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
-                                  const juce::String& trackName, bool poly,
-                                  const std::vector<synth::InstrumentTrackInsert>& inserts,
-                                  juce::String& instrumentUuid);
+    /** Opens NO undo transaction (the caller must); on nullopt, nothing it created is left behind. */
+    std::optional<synth::InstrumentTrackBuildResult>
+    buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
+                             const juce::String& trackName, bool poly,
+                             const std::vector<synth::InstrumentTrackInsert>& inserts);
 
     using InstrumentChainBuild = synth::maincomponent::InstrumentChainBuild;
     bool createTrackInForInstrumentChain(const juce::String& trackName, InstrumentChainBuild& build);

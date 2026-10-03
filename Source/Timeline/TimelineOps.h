@@ -5,6 +5,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <vector>
 
 class AppUndoManager; // Source/AppUndoManager.h — global namespace, like every other user of it.
@@ -31,14 +32,21 @@ struct InstrumentTrackInsert {
     juce::var params; // an object, or void for none
 };
 
+/** The uuid of every node an `addInstrumentTrack` build created that an op can address. */
+struct InstrumentTrackBuildResult {
+    juce::String trackInUuid;
+    juce::String instrumentUuid;
+    std::vector<juce::String> insertUuids; // one per insert, in op order
+};
+
 /** What the app supplies so a batch can build graph-side tracks. */
 struct TimelineOpsHost {
     virtual ~TimelineOpsHost() = default;
-    /** Builds a bound instrument track like the "+ Track -> Instrument" menu, inside the batch's transaction; false =
-     * nothing left behind. */
-    virtual bool addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                                    const std::vector<InstrumentTrackInsert>& inserts,
-                                    juce::String& instrumentUuid) = 0;
+    /** Builds a bound instrument track like the "+ Track -> Instrument" menu, inside the batch's transaction;
+     * nullopt = nothing left behind. */
+    virtual std::optional<InstrumentTrackBuildResult>
+    addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
+                       const std::vector<InstrumentTrackInsert>& inserts) = 0;
     /** Runs `mutation` as ONE undo step over graph, timeline and macros; returns the pushed flag. */
     virtual bool recordBatch(const std::function<void()>& mutation) = 0;
 };

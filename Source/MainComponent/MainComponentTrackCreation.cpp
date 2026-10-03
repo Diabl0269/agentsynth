@@ -265,8 +265,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
             }
 
             trackName = trackNamePrefix + " " + juce::String(index + 1);
-            juce::String instrumentUuid;
-            buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{}, instrumentUuid);
+            buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{});
         });
 
     reconcileTimelineAfterGraphChange();
@@ -278,14 +277,15 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 // the timelineOps host (inside TimelineOpsHost::recordBatch, never consulting a preset): Track In
 // -> instrument -> envelope stage -> `inserts` -> channel -> Master, boxed into one macro named
 // `trackName`. Opens no transaction. On a failure partway (kMaxTracks, or a factory/addNode
-// failure) it removes every node it added and the doc track before returning false -- the host
+// failure) it removes every node it added and the doc track before returning nullopt -- the host
 // contract, and it keeps the menu flow from leaving a half-built chain behind too. Edges it
 // already moved on pre-existing nodes (a reused Master) are not rewound; the enclosing
-// transaction's snapshot still covers them for undo.
-bool MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
-                                             const juce::String& trackName, bool poly,
-                                             const std::vector<synth::InstrumentTrackInsert>& inserts,
-                                             juce::String& instrumentUuid) {
+// transaction's snapshot still covers them for undo. On success it hands back the uuids it minted
+// for the Track In, the instrument and each insert (in op order), for in-response references.
+std::optional<synth::InstrumentTrackBuildResult>
+MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
+                                        const juce::String& trackName, bool poly,
+                                        const std::vector<synth::InstrumentTrackInsert>& inserts) {
     auto& graph = audioEngine.getGraph();
     const int index = (int)timelineDoc.getTracks().size();
     std::set<juce::AudioProcessorGraph::NodeID> nodesBefore;
@@ -309,14 +309,12 @@ bool MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juc
             graph.removeNode(id); // drops its connections too
         if (build.trackId.isValid())
             timelineDoc.removeTrack(build.trackId);
-        return false;
+        return std::nullopt;
     }
-
-    instrumentUuid = build.instrumentUuid;
     // Inside the caller's mutation, not after: MacroSet::retainOnly() (run by updateComponents())
     // must see every node above still alive to keep the macro's membership.
     graphEditor.updateComponents();
-    return true;
+    return synth::InstrumentTrackBuildResult{build.trackInUuid, build.instrumentUuid, build.insertUuids};
 }
 
 // buildInstrumentTrackBody step 3b: each effect insert a timelineOps op asked for, in order, after

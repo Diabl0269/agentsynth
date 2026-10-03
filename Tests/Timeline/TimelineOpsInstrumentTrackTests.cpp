@@ -53,8 +53,9 @@ public:
         , graph(g)
         , undo(u) {}
 
-    bool addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                            const std::vector<InstrumentTrackInsert>& inserts, juce::String& instrumentUuid) override {
+    std::optional<synth::InstrumentTrackBuildResult>
+    addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
+                       const std::vector<InstrumentTrackInsert>& inserts) override {
         ++addCalls;
         calledInsideRecordBatch = insideRecordBatch;
         lastName = name;
@@ -62,18 +63,25 @@ public:
         lastPoly = poly;
         lastInserts = inserts;
         if (failBuild)
-            return false;
+            return std::nullopt;
 
         const auto trackId = doc.addTrack(TrackKind::Midi, name);
         if (!trackId.isValid())
-            return false;
-        auto trackIn = graph.addNode(synth::AIStateMapper::createModule("Track In"));
-        trackIn->properties.set("uuid", "track-in-" + name);
-        auto instrument = graph.addNode(synth::AIStateMapper::createModule(instrumentType));
-        instrumentUuid = "instrument-" + name;
-        instrument->properties.set("uuid", instrumentUuid);
-        doc.setTrackBinding(trackId, "track-in-" + name);
-        return true;
+            return std::nullopt;
+        synth::InstrumentTrackBuildResult result;
+        result.trackInUuid = "track-in-" + name;
+        graph.addNode(synth::AIStateMapper::createModule("Track In"))->properties.set("uuid", result.trackInUuid);
+        result.instrumentUuid = "instrument-" + name;
+        graph.addNode(synth::AIStateMapper::createModule(instrumentType))
+            ->properties.set("uuid", result.instrumentUuid);
+        for (size_t i = 0; i < inserts.size(); ++i) {
+            result.insertUuids.push_back("insert-" + name + "-" + juce::String((int)i));
+            graph.addNode(synth::AIStateMapper::createModule(inserts[i].type))
+                ->properties.set("uuid", result.insertUuids.back());
+        }
+        doc.setTrackBinding(trackId, result.trackInUuid);
+        lastResult = result;
+        return result;
     }
 
     bool recordBatch(const std::function<void()>& mutation) override {
@@ -97,6 +105,7 @@ public:
     juce::String lastName, lastType;
     bool lastPoly = false;
     std::vector<InstrumentTrackInsert> lastInserts;
+    std::optional<synth::InstrumentTrackBuildResult> lastResult;
 };
 
 } // namespace
@@ -193,10 +202,22 @@ TEST_F(TimelineOpsInstrumentTrackTest, RejectsPastTheTrackCap) {
                    "past its limit of " + juce::String(TimelineDoc::kMaxTracks) + " tracks");
 }
 
-TEST_F(TimelineOpsInstrumentTrackTest, AcceptsAnIntegerInstrumentId) {
-    const auto result = validate(
-        envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7}])"));
-    EXPECT_TRUE(result.ok) << result.message;
+TEST_F(TimelineOpsInstrumentTrackTest, IntegerIdsAreAcceptedAndInert) {
+    const auto withIds = envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+        "instrumentId": 7, "inserts": [{"type": "Filter", "id": 3}]}])");
+    const auto withoutIds = envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+        "inserts": [{"type": "Filter"}]}])");
+    const auto preview = validate(withIds);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_EQ(preview.previewText, validate(withoutIds).previewText) << "an id changes nothing the user sees";
+
+    ASSERT_TRUE(apply(withIds).ok);
+    // Inert: the host is handed exactly what it gets without ids, and no node takes an id as identity.
+    ASSERT_EQ(host.lastInserts.size(), 1u);
+    EXPECT_EQ(host.lastInserts[0].type, "Filter");
+    ASSERT_TRUE(host.lastResult.has_value());
+    EXPECT_NE(host.lastResult->instrumentUuid, "7");
+    EXPECT_NE(host.lastResult->insertUuids.front(), "3");
 }
 
 // =============================================================================
@@ -232,6 +253,18 @@ TEST_F(TimelineOpsInstrumentTrackTest, HostReceivesTheValidatedInserts) {
     EXPECT_EQ(static_cast<double>(host.lastInserts[0].params.getProperty("cutoff", {})), 800.0);
     EXPECT_EQ(host.lastInserts[1].type, "Distortion");
     EXPECT_TRUE(host.lastInserts[1].params.isVoid());
+
+    // The host hands back one uuid per insert, in op order, each naming a node of the declared type.
+    ASSERT_TRUE(host.lastResult.has_value());
+    ASSERT_EQ(host.lastResult->insertUuids.size(), host.lastInserts.size());
+    for (size_t i = 0; i < host.lastInserts.size(); ++i) {
+        const juce::AudioProcessorGraph::Node* found = nullptr;
+        for (auto* node : graph.getNodes())
+            if (node->properties["uuid"].toString() == host.lastResult->insertUuids[i])
+                found = node;
+        ASSERT_NE(found, nullptr);
+        EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(found->getProcessor()), host.lastInserts[i].type);
+    }
 }
 
 // =============================================================================

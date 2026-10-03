@@ -75,9 +75,12 @@ on what a response actually carries, and the user's Apply click stays the write 
 (`TimelineOps.h`), which `MainComponentTimelineOpsHost` implements and `MainComponentSetup.cpp`
 installs on `AIIntegrationService::setTimelineOpsHost` beside the apply callback:
 
-- `addInstrumentTrack(name, instrumentType, poly, inserts, instrumentUuid)` — the app's own build
+- `addInstrumentTrack(name, instrumentType, poly, inserts)` — the app's own build
   (`MainComponent::buildInstrumentTrackBody`, shared with the menu), skipping the default track
-  preset so the preview cannot lie, inside the batch's transaction. Returns false having removed
+  preset so the preview cannot lie, inside the batch's transaction. Returns an
+  `InstrumentTrackBuildResult` — the uuids of the Track In, the instrument and each insert (in op
+  order) — which later in-response references (an insert's `id`, the op's `instrumentId`) will
+  resolve against; those ids are accepted and inert until then. Returns `nullopt` having removed
   anything it created.
 - `recordBatch(mutation)` — runs the whole batch as ONE undo step over graph, timeline and macros
   (`AppUndoManager::recordGraphTimelineAndMacroChange`), then reconciles the timeline.
@@ -86,7 +89,7 @@ installs on `AIIntegrationService::setTimelineOpsHost` beside the apply callback
 ("This build cannot create instrument tracks from here."). With a host it checks every field and the
 inserts (no host needed for those), then adds just the MIDI track to the scratch doc so later ops in
 the batch (`placeClips` by name, …) see it. **The graph side cannot be dry-run**: validation never
-calls the host, so a factory failure surfaces at apply, where the host's false return makes
+calls the host, so a factory failure surfaces at apply, where the host's `nullopt` makes
 `apply()` restore the doc and report it, with nothing pushed to undo.
 
 `apply()` keeps the plain `recordTimelineChange` path for a batch with no `addInstrumentTrack` op.

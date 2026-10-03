@@ -13,9 +13,9 @@ public:
     explicit MainComponentTimelineOpsHost(MainComponent& owner) noexcept
         : owner_(owner) {}
 
-    bool addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                            const std::vector<synth::InstrumentTrackInsert>& inserts,
-                            juce::String& instrumentUuid) override;
+    std::optional<synth::InstrumentTrackBuildResult>
+    addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
+                       const std::vector<synth::InstrumentTrackInsert>& inserts) override;
     bool recordBatch(const std::function<void()>& mutation) override;
 
 private:

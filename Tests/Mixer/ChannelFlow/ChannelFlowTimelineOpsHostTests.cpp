@@ -19,6 +19,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
+#include <optional>
+#include <vector>
 
 namespace {
 
@@ -121,4 +123,61 @@ TEST_F(ChannelFlowTest, TimelineOpsAddInstrumentTrackRejectsAnExistingTrackNameW
         R"({"timelineOps": [{"op": "addInstrumentTrack", "name": "Sampler 1", "instrument": "Oscillator"}]})"));
     EXPECT_FALSE(applied.ok);
     expectSameSnapshotCFT(snapshotCFT(mc), before);
+}
+
+// The real host hands back the uuid of every node an op can address: the Track In the track is
+// bound to, the instrument, and one per insert in op order, each resolving to a node of the
+// declared type inside the track's macro. In-response references (an insert's "id", the op's
+// "instrumentId") will resolve against these.
+TEST_F(ChannelFlowTest, TimelineOpsHostReturnsTheUuidOfEveryNodeItCreated) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& host = mc.getTimelineOpsHostForTest();
+
+    const std::vector<synth::InstrumentTrackInsert> inserts{{"Filter", juce::JSON::parse(R"({"cutoff": 800})")},
+                                                            {"Distortion", {}}};
+    std::optional<synth::InstrumentTrackBuildResult> result;
+    EXPECT_TRUE(host.recordBatch([&] { result = host.addInstrumentTrack("Bass", "Wavetable", false, inserts); }));
+    ASSERT_TRUE(result.has_value());
+
+    const auto* macro = findMacroNamed(mc, "Bass");
+    ASSERT_NE(macro, nullptr);
+    const auto& tracks = mc.getTimelineDoc().getTracks();
+    ASSERT_FALSE(tracks.empty());
+    EXPECT_EQ(tracks.back().bindingUuid, result->trackInUuid);
+    EXPECT_TRUE(isModuleOfTypeCFT(nodeForUuidCFT(graph, result->trackInUuid), ModuleType::TimelineMidiSource));
+    auto* instrument = nodeForUuidCFT(graph, result->instrumentUuid);
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(instrument->getProcessor()), "Wavetable");
+    EXPECT_TRUE(macro->hasMember(result->instrumentUuid));
+
+    ASSERT_EQ(result->insertUuids.size(), inserts.size());
+    for (size_t i = 0; i < inserts.size(); ++i) {
+        auto* node = nodeForUuidCFT(graph, result->insertUuids[i]);
+        ASSERT_NE(node, nullptr) << inserts[i].type;
+        EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(node->getProcessor()), inserts[i].type);
+        EXPECT_TRUE(macro->hasMember(result->insertUuids[i])) << inserts[i].type;
+    }
+    EXPECT_NE(result->insertUuids[0], result->insertUuids[1]);
+}
+
+// The op's "instrumentId" and an insert's "id" are accepted through the real apply path and change
+// nothing: neither becomes a node identity.
+TEST_F(ChannelFlowTest, TimelineOpsAddInstrumentTrackIdsAreAcceptedAndInert) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    const auto applied = mc.getAiServiceForTest().applyTimelineOps(juce::JSON::parse(R"({"timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Sampler", "instrumentId": 7,
+         "inserts": [{"type": "Filter", "id": 3}]}]})"));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    const auto* macro = findMacroNamed(mc, "Bass");
+    ASSERT_NE(macro, nullptr);
+    EXPECT_NE(findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Filter), nullptr);
+    EXPECT_EQ(nodeForUuidCFT(graph, "7"), nullptr) << "an id never becomes a node identity";
+    EXPECT_EQ(nodeForUuidCFT(graph, "3"), nullptr);
 }
