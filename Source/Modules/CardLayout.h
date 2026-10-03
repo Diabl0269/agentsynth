@@ -78,8 +78,12 @@ struct CardParamItem {
 struct CardViewItem {
     CardView view = CardView::Scope;
     bool open = true; ///< Collapsible views: open by default or not.
+    /** Top-left of the view from the section's content origin, as a param item's; nullopt = flows. */
+    std::optional<juce::Point<int>> at;
 
-    bool operator==(const CardViewItem& other) const noexcept { return view == other.view && open == other.open; }
+    bool operator==(const CardViewItem& other) const noexcept {
+        return view == other.view && open == other.open && at == other.at;
+    }
 };
 
 using CardItem = std::variant<CardParamItem, CardViewItem>;

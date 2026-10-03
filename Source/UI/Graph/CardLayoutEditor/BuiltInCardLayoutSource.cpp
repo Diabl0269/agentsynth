@@ -68,6 +68,7 @@ BuiltInCardLayoutSource::BuiltInCardLayoutSource(GraphEditor& editor, AppUndoMan
     if (auto* node = graph.getNodeForId(nodeId)) {
         openedOn_ = node->getProcessor();
         moduleType_ = AIStateMapper::getFactoryTypeName(openedOn_);
+        openingOverride_ = getCardLayoutOverride(graph, nodeId).clone();
     }
     if (undo_ != nullptr)
         sessionBefore_ = AIStateMapper::graphToJSON(graph);
@@ -176,6 +177,14 @@ CardLayout BuiltInCardLayoutSource::reset(bool allOfType) {
         types->clearDefault(moduleType_);
     refreshCard();
     return currentLayout();
+}
+
+void BuiltInCardLayoutSource::restoreOpeningLayout() {
+    auto* g = graph();
+    if (g == nullptr || !isAlive())
+        return;
+    restoreCardLayoutOverride(*g, nodeId_, openingOverride_);
+    refreshCard();
 }
 
 juce::StringArray BuiltInCardLayoutSource::listPresets() const {

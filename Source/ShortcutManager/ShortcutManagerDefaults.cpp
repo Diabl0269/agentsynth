@@ -446,4 +446,16 @@ void ShortcutManager::addLayoutEditorDefaultBindings() {
     bindings["layoutEditorMoveUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);
     bindings["layoutEditorMoveDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::commandModifier, 0);
     bindings["layoutEditorRename"] = juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::noModifiers, 0);
+    // The on-card editor's nudge: an arrow moves the focused control 1 px, Shift+arrow 8 px.
+    const auto arrow = [](int keyCode, bool big) {
+        return juce::KeyPress(keyCode, big ? juce::ModifierKeys::shiftModifier : juce::ModifierKeys::noModifiers, 0);
+    };
+    bindings["layoutEditorNudgeLeft"] = arrow(juce::KeyPress::leftKey, false);
+    bindings["layoutEditorNudgeRight"] = arrow(juce::KeyPress::rightKey, false);
+    bindings["layoutEditorNudgeUp"] = arrow(juce::KeyPress::upKey, false);
+    bindings["layoutEditorNudgeDown"] = arrow(juce::KeyPress::downKey, false);
+    bindings["layoutEditorNudgeLeftBig"] = arrow(juce::KeyPress::leftKey, true);
+    bindings["layoutEditorNudgeRightBig"] = arrow(juce::KeyPress::rightKey, true);
+    bindings["layoutEditorNudgeUpBig"] = arrow(juce::KeyPress::upKey, true);
+    bindings["layoutEditorNudgeDownBig"] = arrow(juce::KeyPress::downKey, true);
 }

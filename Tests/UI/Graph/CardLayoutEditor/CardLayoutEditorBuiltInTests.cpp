@@ -2,7 +2,7 @@
 //
 // The card layout editor over a built-in module (BuiltInCardLayoutSource), always opened through the
 // real right-click path: a synthesized right click on a real card control (or the module menu), the
-// "Edit Layout..." item the card built, and the editor that click launched. Each edit is checked on
+// "Layout List..." item the card built, and the editor that click launched. Each edit is checked on
 // the rebuilt card itself, and the session's single undo step.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -35,7 +35,7 @@ TEST(CardLayoutEditorBuiltIn, EditLayoutFromAControlAndFromTheModuleMenuOpensThe
     const auto id = rig.add(std::make_unique<FilterModule>());
 
     auto* editor = rig.openFromControl(id, "cutoff");
-    ASSERT_NE(editor, nullptr) << "the control's Edit Layout... launched the editor";
+    ASSERT_NE(editor, nullptr) << "the control's Layout List... launched the editor";
     EXPECT_EQ(editor->getSource().title(), "Filter layout");
     for (const auto* id2 : {"cutoff", "resonance", "drive", "filterType", "poly", "outputLevel"})
         EXPECT_GE(editor->findRowForTest(id2), 0) << id2;
@@ -43,7 +43,7 @@ TEST(CardLayoutEditorBuiltIn, EditLayoutFromAControlAndFromTheModuleMenuOpensThe
     EXPECT_EQ(editor->findRowForTest("#0"), 0) << "rows are grouped, the first group's header first";
     rig.close();
 
-    EXPECT_NE(rig.openFromModuleMenu(id), nullptr) << "the module menu's Edit Layout... opens it too";
+    EXPECT_NE(rig.openFromModuleMenu(id), nullptr) << "the module menu's Layout List... opens it too";
 }
 
 TEST(CardLayoutEditorBuiltIn, UntickingHidesTheControlInTheMoreRowLiveAndTickingBringsItBack) {

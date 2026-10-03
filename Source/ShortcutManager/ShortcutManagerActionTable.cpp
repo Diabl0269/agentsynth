@@ -177,12 +177,20 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"mixerEnterRows", ShortcutCategory::Mixer},
         {"mixerOpenEq", ShortcutCategory::Mixer},
         {"mixerToggleRowBypass", ShortcutCategory::Mixer},
-        // Layout Editor -- the card layout editor's list (CardLayoutEditorComponent), focused only
-        // while its panel is open.
+        // Layout Editor -- the card layout editor's list (CardLayoutEditorComponent) and the on-card
+        // editor's nudge keys (CardLayoutOnCardEditor), live only while an editor is open.
         {"layoutEditorToggleShown", ShortcutCategory::LayoutEditor},
         {"layoutEditorMoveUp", ShortcutCategory::LayoutEditor},
         {"layoutEditorMoveDown", ShortcutCategory::LayoutEditor},
         {"layoutEditorRename", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeLeft", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeRight", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeUp", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeDown", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeLeftBig", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeRightBig", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeUpBig", ShortcutCategory::LayoutEditor},
+        {"layoutEditorNudgeDownBig", ShortcutCategory::LayoutEditor},
     };
     return table;
 }

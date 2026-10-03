@@ -66,6 +66,16 @@ TEST(CardBodyFreeform, PositionedItemsSitAtTheirPositionAndTheCardGrowsToFitThem
     EXPECT_TRUE(built.card->getLocalBounds().contains(cutoff.widget->getBounds()));
 }
 
+TEST(CardBodyFreeform, APositionedKnobFillsItsCellAsAFlowingOneDoes) {
+    FilterModule probe;
+    Built flowing(automaticLayoutWith(probe, {}));
+    Built positioned(positionedFilterLayout(probe, {100, 40}, {0, 0}));
+    ASSERT_NE(flowing.card, nullptr);
+    ASSERT_NE(positioned.card, nullptr);
+    EXPECT_EQ(positioned.item("cutoff").widget->getWidth(), flowing.item("cutoff").widget->getWidth());
+    EXPECT_EQ(positioned.item("cutoff").label->getWidth(), flowing.item("cutoff").label->getWidth());
+}
+
 TEST(CardBodyFreeform, MeasuringAndPlacingAgreeOnTheSectionHeight) {
     FilterModule probe;
     Built built(positionedFilterLayout(probe, {100, 40}, {0, 0}));

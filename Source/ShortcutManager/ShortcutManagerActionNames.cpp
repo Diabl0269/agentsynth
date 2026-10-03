@@ -80,7 +80,7 @@ juce::String mixerActionName(const juce::String& actionId) {
     return {};
 }
 
-// The card layout editor's list keys. Empty when `actionId` is not one of them.
+// The card layout editor's list keys and the on-card editor's nudge keys. Empty when `actionId` is not one of them.
 juce::String layoutEditorActionName(const juce::String& actionId) {
     if (actionId == "layoutEditorToggleShown")
         return "Show or Hide the Control on the Card";
@@ -90,6 +90,22 @@ juce::String layoutEditorActionName(const juce::String& actionId) {
         return "Move the Control Down";
     if (actionId == "layoutEditorRename")
         return "Rename the Control";
+    if (actionId == "layoutEditorNudgeLeft")
+        return "Nudge the Control Left";
+    if (actionId == "layoutEditorNudgeRight")
+        return "Nudge the Control Right";
+    if (actionId == "layoutEditorNudgeUp")
+        return "Nudge the Control Up";
+    if (actionId == "layoutEditorNudgeDown")
+        return "Nudge the Control Down";
+    if (actionId == "layoutEditorNudgeLeftBig")
+        return "Nudge the Control Left by 8 Pixels";
+    if (actionId == "layoutEditorNudgeRightBig")
+        return "Nudge the Control Right by 8 Pixels";
+    if (actionId == "layoutEditorNudgeUpBig")
+        return "Nudge the Control Up by 8 Pixels";
+    if (actionId == "layoutEditorNudgeDownBig")
+        return "Nudge the Control Down by 8 Pixels";
     return {};
 }
 

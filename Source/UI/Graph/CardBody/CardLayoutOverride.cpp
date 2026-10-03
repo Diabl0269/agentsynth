@@ -14,6 +14,18 @@ juce::var getCardLayoutOverride(const juce::AudioProcessorGraph& graph, juce::Au
     return {};
 }
 
+bool restoreCardLayoutOverride(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                               const juce::var& json) {
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return false;
+    if (json.isVoid())
+        node->properties.remove(kCardLayoutNodeProperty);
+    else
+        node->properties.set(kCardLayoutNodeProperty, json.clone());
+    return true;
+}
+
 // The undo step is a whole-graph snapshot pair (recordStructuralChange); restoring it goes through
 // AIStateMapper::applySnapshotPreservingNodes, which puts the property back or removes it. The
 // stored value is a deep copy, so a later edit of the caller's CardLayout never aliases the node.

@@ -65,7 +65,10 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The widgets: `CardFader`, `CardSegmentedSwitch`, `CardStepper`, and `CardControlGestures` (the gestures a knob and a fader share) | `Source/UI/Graph/CardWidgets/` |
 | The right-click quick path (the explicit layout, the edits, the undoable write and rebuild, the menu items) | `CardLayoutQuickEdit.*`; the stale-card rebuild in `GraphEditorCanvas.cpp` (`CardBody::isStaleFor`) |
 | The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
-| The layout editor: the panel, its rows, its working model, and the two sources (built-in module, hosted plugin) | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentLayoutEditor.cpp` opens it |
+| The layout list ("Layout List..."): the panel, its rows, its working model, and the two sources (built-in module, hosted plugin) | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentLayoutEditor.cpp` opens it |
+| The on-card editor ("Edit Layout..."): the overlay, one outline and grip per control, the edit bar, the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
+| Snapping to guides and pushing a crowded neighbour aside, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
+| Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
 
 As built: the card resolves its layout once, when it is built (instance override, then the type's
@@ -130,6 +133,7 @@ ViewItem
   view     : scope | response | spectrum | envelope | lfoShape | lfoCurve | waveform
            | wavetable | eqCurve | threshold | gainReduction
   open     : bool               // collapsible views: open by default or not
+  x, y     : 0..4000 | null     // free position, as a param item's; the on-card editor writes it for every view of an edited group so it stays put
 Condition
   param    : string             // a choice or bool parameter of the same module
   is       : string[]           // choice VALUE strings ("Granular"), or "true"/"false"
@@ -408,12 +412,55 @@ envelope view out draws no graph and no toggle.
 ## Editing a layout
 
 - **Quick path, on any control:** the right-click menu gains **Hide from card**, **Show as
-  fader / Show as knob** (for a continuous parameter) and **Edit Layout...**. On a control in the More
-  row, **Show on card** puts it back where the default had it. Built: each click edits the layout the
+  fader / Show as knob** (for a continuous parameter), **Edit Layout...** and **Layout List...**. On a
+  control in the More row, **Show on card** puts it back where the default had it. Built: each click edits the layout the
   card draws now (the automatic layout written out as explicit items when the node has none), and Show
   as fader picks `faderV` ([module-card.md](module-card.md#hide-or-show-from-the-right-click-menu)).
-- **The editor (built):** **Edit Layout...** (a control's menu, or the module menu in the block after
-  Bypass Module) opens `CardLayoutEditorComponent` in a `juce::CallOutBox` beside the card. It lists
+- **Edit Layout... (built): the card is the editor.** From a control's menu or the module menu (in the
+  block after Bypass Module), the card gets an accent outline and an edit bar in its header (**Cancel**,
+  **Done**, with room to their left for the Preset and Apply to controls a later step adds). Every control
+  of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
+  outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
+  outline, and the footer row and tab groups get none yet. A swap group is one outline, on its shown
+  member. The outlines are an overlay (`CardLayoutOnCardEditor`) that sits over the card as a sibling in
+  the canvas, never a child of it: every write rebuilds the card, so the overlay holds the GraphEditor and
+  the node id, and after each write re-finds the card and re-syncs its bounds and outlines.
+  - *Moving.* Press anywhere on a control, or on its grip, and drag: the real widget and its caption move
+    with the outline and stay under the pointer. Inside the group's content width and no higher than the
+    group's top, the control may go anywhere; a drop below the last row grows the group by up to a row.
+    An accent guide appears in the gap when the control's left, centre or right (or top, centre, bottom)
+    lines up with another control's of the same group, and pulls the control onto the line within 4 px;
+    hold Cmd to place it freely. On release every control the drop leaves closer than 8 px goes the
+    shortest way out (left, right, up or down, inside the group and clear of the others; a pushed control
+    then pushes what it lands on). A neighbour that was already flush with the control before the drag is
+    left alone unless the drop overlaps it, so moving a control one pixel does not shove the flush rows
+    around it. Esc during a drag puts the control back and writes nothing.
+  - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
+    outlines (relative to the group's content origin, so a layout with positions survives a width or
+    theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
+    the card. The rebuilt card starts where everything was, then glides: pushed controls 160 ms, the
+    dropped one settles in 140 ms, none under Reduce Motion. A drop that changes nothing writes nothing.
+    The first drop turns a flowing group into a positioned one, with every control exactly where it was.
+    The positioned group is 6 px taller than the flowing one (the free-placement padding), so the groups
+    under it sit 6 px lower.
+  - *Keys.* Tab moves between the edit bar and the controls (the outlines are one focus stop each, with
+    the accent focus ring and a solid outline plus a faint wash on hover or focus). The arrow keys move
+    the focused control 1 px, Shift+arrow 8 px; the control moves at once and the write waits until the
+    keys stop for 250 ms, so a held arrow is one write. These are the rebindable **Layout Editor** actions
+    `layoutEditorNudgeLeft`/`Right`/`Up`/`Down` and `...Big` ([shortcuts.md](../control/shortcuts.md#layout-editor)).
+    Esc ends a drag, else cancels the session. Return on a control is a hook for the options a later step
+    adds (it does nothing yet). Each move is announced ("Cutoff moved right 8").
+  - *Ending.* **Done** keeps the layout; **Cancel** or Esc writes back the layout the card opened with
+    (the node's raw stored value, or none) and records nothing. The editor also closes if its card's
+    module is removed or the canvas goes. One session at a time: opening it on another card ends the
+    running one as Done. The running session hangs on the GraphEditor's property set
+    (`OnCardEditorOwner.cpp`, the way `ModuleCardLayoutBinding` hangs the store) and dies with it. The
+    overlay fades in over 160 ms and out over 110 ms (a plain 80 ms either way under Reduce Motion).
+  - *Not built yet:* Preset and Apply to in the edit bar, Add control, the right-click per-control panel
+    (the outline's menu is a hook), outlines on footer and tab controls, and moving a control to another
+    group by dragging.
+- **Layout List... (built, kept for now): the list editor.** Opens `CardLayoutEditorComponent` in a
+  `juce::CallOutBox` beside the card. It lists
   every control the card can show, grouped by section under a header row per group: a tick (shown, or
   hidden in the More row; a hidden row keeps its place), a grab handle to drag it (the shared reorder
   drag; a row dropped under a group's header joins that group), its name (click to rename; an empty
@@ -429,22 +476,25 @@ envelope view out draws no graph and no toggle.
   every edit keeps the section a tab. Not built: adding or removing a tab, reordering tabs, turning a
   group into a tab or back, and choosing which tab a new card opens on (+ Add group always adds a grid
   group at the end).
-- **Two sources, one editor.** What the list edits comes from a `CardLayoutEditorSource`:
+- **Two sources, one list.** What the list edits comes from a `CardLayoutEditorSource`:
   `BuiltInCardLayoutSource` (the card's own parameters, the node's `cardLayout`, the type's default
   in the bound store) and `HostedCardLayoutSource` (a hosted instance's parameters, its extra-state
-  layout, written as the flat v1 slot list). The hosted plugin's **Edit Layout...** is this editor
+  layout, written as the flat v1 slot list). The hosted plugin's **Edit Layout...** is this list
   (`PluginKnobPickerComponent` adds touch-to-add); its module-menu item is named **Edit Layout...**
   too. The hosted source has no groups and no widget choice, and an unticked row leaves its layout
-  (it lists after the ticked ones), as before.
-- **Undo:** one step per quick-path click, and one per editor session on a built-in card: the
-  session takes a graph snapshot when it opens and records the difference when the panel closes
+  (it lists after the ticked ones), as before. The on-card editor writes through the built-in source too
+  (it adds `restoreOpeningLayout()` for Cancel).
+- **Undo:** one step per quick-path click, and one per editor session on a built-in card, for the list and
+  the on-card editor alike: the
+  session takes a graph snapshot when it opens and records the difference when it closes
   (`AppUndoManager::recordGraphChangeSince`), so the layout, its label and widget edits and the
   neighbours a taller card pushed aside undo together. **Apply to all** writes the per-type file and
   clears this module's override inside that same step; undo gives the override back, but the per-type
   file is a setting, not part of the project, and stays. A session that changes nothing records
-  nothing. The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
-- **Direct in-card editing** (dragging controls on the card itself) is a later addition on top of the
-  same model; the editor comes first because it is fully keyboard-reachable.
+  nothing, and a cancelled on-card session leaves the layout as it opened, so it records nothing.
+  The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
+- **Later:** the list editor goes once the on-card editor has taken over what only the list does (Presets,
+  Apply to, Add control, the per-control panel).
 
 ---
 
@@ -501,7 +551,12 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - Tab strip (built): one Tab stop; Left/Right switch tabs and stop at the ends, Home/End jump to the
   first and last; the accent focus ring; titled "Control tabs" with a tooltip naming those keys; a
   group of radio buttons titled with the tab names, each with a tooltip.
-- Editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
+- On-card editor (built): the edit bar's Cancel and Done are named by their text with tooltips; each
+  control's outline is one focus stop (the shared accent focus ring, a faint wash and a solid outline on
+  hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
+  "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options"; the arrow keys nudge, Esc
+  cancels, and each move is announced.
+- List editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
   a title and a tooltip naming its keys as bound now. Up/Down move between rows (fixed list keys);
   Space shows or hides, Cmd+Up/Down moves (across a group's edge into the next group), Enter renames:
   the rebindable **Layout Editor** actions (`layoutEditorToggleShown`, `layoutEditorMoveUp`,
@@ -574,6 +629,16 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   accessibility audit with no gaps; `CardLayoutEditorModelTests.cpp` the working model in both modes.
   The hosted source keeps `Tests/UI/Graph/PluginKnobPicker/` (search, tick, reorder, label, scope,
   presets, reset, touch-to-add, the entry points).
+- `Tests/UI/Graph/CardLayoutEditor/OnCard/` (built): `OnCardLayoutMathTests.cpp` snapping (4 px, centres,
+  Cmd) and pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions;
+  `OnCardEditorTests.cpp` opens the editor through the real module and control menus over a Filter with
+  one titled, tooltipped outline per control, free placement leaving every control where it was, the
+  overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
+  gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
+  the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
+  nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done as
+  one undo step, Cancel restoring the opening layout with none. Motion is off in them
+  (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.
 - E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make
   Level a fader, save (`graphToJSON`), reload into a fresh canvas (`applyJSONToGraph`, trusted), and
   the card matches; Apply to all and a Filter added later shows it.

@@ -146,6 +146,10 @@ void appendEditLayoutMenuItem(juce::PopupMenu& menu, std::function<void()> open)
     menu.addItem("Edit Layout...", std::move(open));
 }
 
+void appendLayoutListMenuItem(juce::PopupMenu& menu, std::function<void()> open) {
+    menu.addItem("Layout List...", std::move(open));
+}
+
 // The actions run after the menu closes, by which time the card may be gone (and is, once an edit
 // rebuilds it), so they hold the editor through a SafePointer and the node by id, never the card.
 void appendCardLayoutMenuItems(juce::PopupMenu& menu, GraphEditor& editor, AppUndoManager* undo,
@@ -181,6 +185,11 @@ void appendCardLayoutMenuItems(juce::PopupMenu& menu, GraphEditor& editor, AppUn
         if (auto* ed = safeEditor.getComponent())
             if (auto* card = cardFor(*ed, nodeId))
                 card->showCardLayoutEditor();
+    });
+    appendLayoutListMenuItem(menu, [safeEditor, nodeId] {
+        if (auto* ed = safeEditor.getComponent())
+            if (auto* card = cardFor(*ed, nodeId))
+                card->showCardLayoutList();
     });
 }
 
