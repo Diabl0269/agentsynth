@@ -496,7 +496,12 @@ A click on a knob's mod dot (or Return/Space on its Tab stop) opens a small pane
 at it, in a `juce::CallOutBox` that eases in like every popover (`CalloutReveal`). While it is open the dot carries
 the `accent` ring. `ModDotPopover` (`Source/UI/Graph/ModDot/`) holds two pages and swaps them in place, never a second
 popup; everything it paints uses the theme tokens itself (`ModDotPalette`), since a parentless call-out does not
-inherit the LookAndFeel.
+inherit the LookAndFeel. The callout keeps the side of the dot it opened on: the panel only grows as far as the room
+on that side (the Add source list scrolls inside what is left, and is otherwise as tall as its rows, up to about
+350 px), so changing pages never makes it jump to the dot's other side. The callout's window is made the key window
+and focus is taken as soon as it can be (retried for about two seconds); if a control that held focus goes away
+(a removed row, a switched page) the panel's tick moves focus to the page's first control, so Esc and the arrows
+keep working.
 
 * **Sources page** ("Cutoff · modulation"). One row per source on the knob (`synth::ui::knobModSources`, macro
   ports looked through, so a row names the LFO, not the inlet): a swatch (`modRingPositive` from 0 up,

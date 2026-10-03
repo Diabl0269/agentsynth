@@ -18,7 +18,9 @@ namespace synth::ui {
 
 class ModDotController;
 
-class ModDotPopover final : public juce::Component {
+class ModDotPopover final
+    : public juce::Component
+    , private juce::Timer {
 public:
     enum class Page { Sources, AddSource };
     static constexpr double kFadeMs = 110.0;
@@ -36,6 +38,15 @@ public:
     void syncFromGraph();
     /** The controller is going away: close without telling it. */
     void orphan() { controllerForClose_ = nullptr; }
+    /** The tallest the panel may grow (the room left on the side of the dot the callout opened on): the Add source
+     *  list then scrolls instead of the callout re-placing itself on another side. 0 = no limit. */
+    void setMaxHeight(int height);
+    /** Limits the panel's height to the room on the side of the dot `box` opened on inside `area`, so growing to the
+     *  Add source page never makes the callout re-place itself on another side. */
+    void keepSideOf(const juce::CallOutBox& box, juce::Rectangle<int> dot, juce::Rectangle<int> area);
+    /** Pure: the panel height that still fits on the side of `dot` that a callout at `box` is on. */
+    static int roomOnSide(juce::Rectangle<int> box, juce::Rectangle<int> dot, juce::Rectangle<int> area,
+                          int borderSize);
     void showSources();
     void showAddSource();
     /** Closes the callout the panel sits in (or, with `onDismiss` set, tells the owner to). */
@@ -61,7 +72,10 @@ private:
     void applyHeight(int height);
     void pageHeightChanged(Page which);
     ModDotPage& pageComponent(Page page);
-    void focusEntryOnce();
+    void timerCallback() override;
+    bool focusIsInside() const;
+    /** Moves keyboard focus into the panel when it is on screen and focus is not already in it. */
+    void ensureFocusInside();
 
     GraphEditor& editor_;
     ModDotController& controller_;
@@ -76,7 +90,7 @@ private:
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver pageAnim_;
     ModDotController* controllerForClose_;
-    bool focusedOnce_ = false;
+    int focusTries_ = 0;
 };
 
 } // namespace synth::ui

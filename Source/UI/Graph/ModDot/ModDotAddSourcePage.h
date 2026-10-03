@@ -33,6 +33,8 @@ public:
 
     /** Replaces the list (groups in catalog order, empty ones left out), keeping the user's folds and the query. */
     void setChoices(std::vector<Choice> choices);
+    /** The tallest the page may be (0 = no limit beyond kMaxListHeight): the list scrolls inside what is left. */
+    void setMaxHeight(int height);
     /** A fresh arrival: empty search, the search field focused. */
     void reset();
 
@@ -93,6 +95,8 @@ private:
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver anim_;
     int listHeight_ = 0;
+    int maxHeight_ = 0;
+    int listViewHeight() const;
 };
 
 } // namespace synth::ui

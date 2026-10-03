@@ -218,6 +218,75 @@ TEST_F(ModuleComponentTest, EscapeStepsBackFromTheSearchToTheSourcesPageToClosed
     EXPECT_FALSE(f.undo.canUndo()) << "nothing was edited";
 }
 
+// The search field is what holds the keyboard on this page, so Escape must work through the editor's own key path
+// (and the message it posts when it sees the key itself), not only through the panel's keyPressed.
+TEST_F(ModuleComponentTest, EscapeInTheSearchFieldStepsBackThroughTheEditorsOwnKeyPath) {
+    NoMotion motion;
+    AddFixture f;
+    int closed = 0;
+    f.panel->onDismiss = [&] { ++closed; };
+    f.openAdd();
+    auto& search = f.add().searchEditor();
+    typeInto(search, "lfo");
+    ASSERT_NE(f.add().visibleRowLabels().size(), 3u) << "the query filtered the rows";
+
+    EXPECT_TRUE(search.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(search.getText(), "") << "first Escape clears the search";
+    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(search.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources) << "second goes back to the sources page";
+    EXPECT_EQ(closed, 0);
+
+    // The editor's posted-message route lands on the same step.
+    f.openAdd();
+    typeInto(f.add().searchEditor(), "lfo");
+    ASSERT_TRUE(f.add().searchEditor().onEscapeKey != nullptr);
+    f.add().searchEditor().onEscapeKey();
+    EXPECT_EQ(f.add().searchEditor().getText(), "");
+}
+
+// Growing to the Add source page must not move the callout to another side of the dot: the panel is capped to the
+// room on the side it opened on and the list scrolls inside.
+TEST_F(ModuleComponentTest, TheCalloutKeepsItsSideWhenTheAddSourcePageIsTallerThanTheRoom) {
+    NoMotion motion;
+    AddFixture f;
+    for (int i = 0; i < 12; ++i)
+        addNode(f.engine.getGraph(), std::make_unique<LFOModule>()); // enough rows to fill the page
+    f.refresh();
+    auto* panel = f.panel; // the dot was clicked in the fixture
+    ASSERT_NE(panel, nullptr);
+
+    juce::Component screen;
+    screen.setBounds(0, 0, 600, 500);
+    const juce::Rectangle<int> dot(100, 300, 12, 12);
+    auto content = std::move(f.held);
+    juce::CallOutBox box(*content, dot, &screen);
+    ASSERT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "opens under the dot";
+    panel->keepSideOf(box, dot, screen.getLocalBounds());
+
+    f.openAdd();
+    EXPECT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "still under the dot after the page grew";
+    EXPECT_TRUE(screen.getLocalBounds().contains(box.getBounds())) << "and on screen";
+    EXPECT_LE(panel->getHeight(),
+              ModDotPopover::roomOnSide(box.getBounds(), dot, screen.getLocalBounds(), box.getBorderSize()));
+    clickNow(f.add().backButton());
+    EXPECT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "and when it comes back";
+    content.reset();
+}
+
+TEST_F(ModuleComponentTest, TheAddSourceListIsAsTallAsItsRowsUpToTheCap) {
+    NoMotion motion;
+    AddFixture f;
+    f.openAdd();
+    typeInto(f.add().searchEditor(), "lfo");
+    const int searched = f.panel->getHeight();
+    f.add().setQuery({});
+    const int all = f.panel->getHeight();
+    EXPECT_LT(searched, all) << "a search with few hits shrinks the panel";
+    EXPECT_EQ(f.panel->getHeight(), f.add().preferredHeight());
+    EXPECT_LE(all, 360);
+}
+
 TEST_F(ModuleComponentTest, TheBackArrowReturnsToTheSources) {
     NoMotion motion;
     AddFixture f;

@@ -26,6 +26,7 @@ ModDotPopover::ModDotPopover(GraphEditor& editor, ModDotController& controller, 
     , updater_(this)
     , controllerForClose_(&controller) {
     setComponentID("modDotPopover");
+    setWantsKeyboardFocus(true); // a fallback target: keys still reach the panel when a control it held goes away
     setTitle(target_.paramName + " modulation");
     addAndMakeVisible(sourcesPage_);
     addChildComponent(addPage_);
@@ -64,6 +65,27 @@ void ModDotPopover::syncFromGraph() {
         return;
     }
     sourcesPage_.sync(/*fresh=*/false);
+    ensureFocusInside(); // a removed row or a switched page must not leave the keyboard with nothing
+}
+
+int ModDotPopover::roomOnSide(juce::Rectangle<int> box, juce::Rectangle<int> dot, juce::Rectangle<int> area,
+                              int borderSize) {
+    const int chrome = borderSize + 16; // the callout's border and its (default 16 px) arrow
+    if (box.getCentreY() > dot.getBottom())
+        return area.getBottom() - dot.getBottom() - chrome;
+    if (box.getCentreY() < dot.getY())
+        return dot.getY() - area.getY() - chrome;
+    return area.getHeight() - 2 * borderSize; // beside the dot: the whole height
+}
+
+void ModDotPopover::keepSideOf(const juce::CallOutBox& box, juce::Rectangle<int> dot, juce::Rectangle<int> area) {
+    // The box's bounds are in the area's frame (screen, or the parent a test gives it).
+    setMaxHeight(juce::jmax(0, roomOnSide(box.getBounds(), dot, area, box.getBorderSize())));
+}
+
+void ModDotPopover::setMaxHeight(int height) {
+    addPage_.setMaxHeight(height);
+    pageHeightChanged(Page::AddSource);
 }
 
 // A page's content moved (a row grew, a group folded): the page follows its content and, when it is the one shown,
@@ -200,20 +222,42 @@ void ModDotPopover::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(bounds.reduced(0.5f), p.radius, 1.0f);
 }
 
-void ModDotPopover::focusEntryOnce() {
-    if (focusedOnce_ || !isShowing())
+bool ModDotPopover::focusIsInside() const {
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    return focused != nullptr && (focused == this || isParentOf(focused));
+}
+
+void ModDotPopover::ensureFocusInside() {
+    auto* peer = getPeer();
+    if (peer == nullptr || !isShowing() || focusIsInside())
         return;
-    focusedOnce_ = true;
+    if (!peer->isFocused()) {
+        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+            box->toFront(true); // the callout's window must be the key one before a control can take the keys
+        return;
+    }
     pageComponent(page_).focusEntry();
 }
 
-// A CallOutBox attaches its content after construction, so the entrance and the focus can only start once this
-// has a parent (and the box has been shown).
-void ModDotPopover::parentHierarchyChanged() {
-    reveal_.startIfInCallout();
-    focusEntryOnce();
+void ModDotPopover::timerCallback() {
+    ensureFocusInside();
+    if (focusIsInside() || ++focusTries_ > 60)
+        stopTimer();
 }
 
-void ModDotPopover::visibilityChanged() { focusEntryOnce(); }
+// A CallOutBox attaches its content after construction and only becomes the key window a moment after it is shown,
+// so the entrance starts once this has a parent and the focus is taken as soon as the window can give it.
+void ModDotPopover::parentHierarchyChanged() {
+    reveal_.startIfInCallout();
+    if (getParentComponent() != nullptr && !focusIsInside())
+        startTimerHz(30);
+}
+
+void ModDotPopover::visibilityChanged() {
+    if (isShowing() && !focusIsInside() && !isTimerRunning()) {
+        focusTries_ = 0;
+        startTimerHz(30);
+    }
+}
 
 } // namespace synth::ui

@@ -14,7 +14,12 @@ namespace synth::ui {
 
 namespace {
 void launchInCallout(std::unique_ptr<juce::Component> content, juce::Component& anchor) {
-    juce::CallOutBox::launchAsynchronously(std::move(content), anchor.getScreenBounds(), nullptr);
+    auto* panel = dynamic_cast<ModDotPopover*>(content.get());
+    const auto dot = anchor.getScreenBounds();
+    auto& box = juce::CallOutBox::launchAsynchronously(std::move(content), dot, nullptr);
+    if (panel != nullptr)
+        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(dot))
+            panel->keepSideOf(box, dot, display->userArea);
 }
 
 // The timeline names a routing by uuids (a node id does not survive an undo), so the source, the target and the

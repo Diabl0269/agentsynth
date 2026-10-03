@@ -98,6 +98,9 @@ ModDotAddSourcePage::ModDotAddSourcePage(juce::String paramName)
             return stepBack();
         return false;
     };
+    // The editor posts Return/Escape as a message when its own keyPressed does not see them; same actions.
+    search_->onReturnKey = [this] { pickBestMatch(); };
+    search_->onEscapeKey = [this] { stepBack(); };
     addAndMakeVisible(*search_);
 
     expandAll_.onClick = [this] { setAll(true); };
@@ -265,13 +268,26 @@ void ModDotAddSourcePage::layoutList() {
     list_.setSize(width, juce::jmax(y, 1));
     const bool changed = y != listHeight_;
     listHeight_ = y;
-    if (changed || viewport_.getHeight() != juce::jmin(juce::jmax(y, kEmptyListHeight), kMaxListHeight))
+    if (changed || viewport_.getHeight() != listViewHeight())
         heightChanged();
     repaint();
 }
 
-int ModDotAddSourcePage::preferredHeight() const {
-    return kListY + juce::jmin(juce::jmax(listHeight_, kEmptyListHeight), kMaxListHeight) + kBottomPad;
+// The list is as tall as its rows (a few at least, so "No source matches" has room), up to the cap, then scrolls.
+int ModDotAddSourcePage::listViewHeight() const {
+    int cap = kMaxListHeight;
+    if (maxHeight_ > 0)
+        cap = juce::jlimit(kEmptyListHeight, kMaxListHeight, maxHeight_ - kListY - kBottomPad);
+    return juce::jmin(juce::jmax(listHeight_, kEmptyListHeight), cap);
+}
+
+int ModDotAddSourcePage::preferredHeight() const { return kListY + listViewHeight() + kBottomPad; }
+
+void ModDotAddSourcePage::setMaxHeight(int height) {
+    if (height == maxHeight_)
+        return;
+    maxHeight_ = height;
+    heightChanged();
 }
 
 void ModDotAddSourcePage::resized() {
