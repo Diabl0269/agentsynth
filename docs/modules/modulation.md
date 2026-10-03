@@ -471,7 +471,7 @@ follow. A small tooltip, `"LFO 1 · +42%"` with a colour swatch (`modRingPositiv
 sign), sits above-right of the knob, outside the knob's cell, and fades out when you let go. The value
 stays; the whole drag is **one** undo step ("Change modulation amount", Cmd+Z). Esc during the drag
 puts the starting amount back and leaves no undo step. A press that moves under 3 px is a click, which
-hands off to `ModDotController::onModDotClicked` (unset: nothing happens; a menu is planned there).
+opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::onModDotClicked`.
 
 * **Last-chosen source.** Session-only, never saved in the project, per (card, destination channel).
   The default is the first attenuverter routing on the knob; `ModDotController::setLastChosen` changes
@@ -483,12 +483,69 @@ hands off to `ModDotController::onModDotClicked` (unset: nothing happens; a menu
   modulation, 2 sources", tooltip "Modulation sources for Cutoff"). Up and Down change the last-chosen
   source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
   and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
-  call `onModDotClicked`.
+  open the dot's panel like a click.
 * **Where it lives.** The tooltip is painted on the canvas above the cards
   (`GraphContentComponent::paintOverChildren`, `ModDotTooltip`), so no card clips it. The gesture is a
   third claim on `CardControlGestures` (`wantsModDotGesture`/`onModDotGesture`), asked after the
   ring-amount drag and before the cable pickup, wired in `ModuleComponent::wireCardControlGestures`;
   the behaviour is `ModDotController` (`Source/UI/Graph/ModDot/`), owned by `GraphEditor`.
+
+### The mod dot menu
+
+A click on a knob's mod dot (or Return/Space on its Tab stop) opens a small panel under the dot, its arrow pointing
+at it, in a `juce::CallOutBox` that eases in like every popover (`CalloutReveal`). While it is open the dot carries
+the `accent` ring. `ModDotPopover` (`Source/UI/Graph/ModDot/`) holds two pages and swaps them in place, never a second
+popup; everything it paints uses the theme tokens itself (`ModDotPalette`), since a parentless call-out does not
+inherit the LookAndFeel. The callout keeps the side of the dot it opened on: the panel only grows as far as the room
+on that side (the Add source list scrolls inside what is left, and is otherwise as tall as its rows, up to about
+350 px), so changing pages never makes it jump to the dot's other side. The callout's window is made the key window
+and focus is taken as soon as it can be (retried for about two seconds); if a control that held focus goes away
+(a removed row, a switched page) the panel's tick moves focus to the page's first control, so Esc and the arrows
+keep working.
+
+* **Sources page** ("Cutoff · modulation"). One row per source on the knob (`synth::ui::knobModSources`, macro
+  ports looked through, so a row names the LFO, not the inlet): a swatch (`modRingPositive` from 0 up,
+  `modRingNegative` below), the source's name, an amount bar, the signed amount in the mono font, "Show <Source> in
+  timeline" and "Remove <Source>". Dragging the bar edits live (the ring follows) as ONE undo step; typing in the
+  amount (click it, Return applies as one step, Esc cancels) is one step too. Clicking a row, or focusing it, selects
+  it (a 10 percent accent tint) and calls `ModDotController::setLastChosen`, so a dot drag edits that source next; the
+  chosen source's row is selected when the panel opens. The last row, after a divider, is "+ Add source".
+* **Add source page.** The same panel cross-fades (110 ms) to a back arrow ("Back to sources"), the title "Add source
+  to <Param>", a pill search field (focused on arrival) and "Expand all" / "Collapse all", then collapsible groups:
+  LFOs, Envelopes, Macros, MIDI, then the Mod Matrix's other categories (Sequencers, Oscillators, Filters, Effects,
+  Other), each only when it has a source. The groups are `synth::ui::enumerateModSources` regrouped
+  (`ModSourceCatalog.h`): the SAME list the Mod Matrix's source combos are built from, so the two always offer the
+  same sources; macro ports and the card itself are left out. A source already on this knob (same module and output)
+  is greyed and read "added", and cannot be picked twice. The search is the shared matcher
+  (`UI/Layout/SearchMatch.h`: every word must match, matched letters highlighted); while it has text, groups with a
+  match are open and the rest hidden, clearing it puts back the folds the user had, and no hit reads "No source
+  matches". Return picks the best match.
+* **Picking a source** connects it through the same programmatic routing seam as the Mod Matrix and the timeline's
+  "Add modulator" (`GraphEditor::connectModulationSource`, which `connectExistingLfoModulator` now wraps), so macro
+  ports are minted where a macro boundary is crossed. The new routing starts at +25 percent
+  (`kModDotNewSourceDepth`); the cable, its depth and any ports are ONE undo step. The panel returns to the sources
+  page with the new row selected (and chosen for a later dot drag).
+* **Remove** goes through the same path as the timeline's "Remove modulator" (`ModDotController::host.removeModulator`,
+  set by `MainComponent` to `removeModulator`): the routing and its amount lane go in one undo step, the ports it
+  crossed are swept, and removing an LFO's last destination asks first. With no host set (a canvas test) it falls back
+  to `GraphEditor::removeModulationChain`.
+* **Show in timeline** (`host.revealModulator` -> `MainComponent::revealModulatorInTimeline`) opens the Timeline tab and
+  shows the lane of the knob's parameter, where its modulator rows sit. A parameter with no lane gets one the way
+  "Automate" makes it (`automateParameter`, one undo step); the view scrolls to the lane row, not to the single
+  modulator row under it.
+* **Closing and keys.** A click outside closes it, the edits already applied. Esc steps back: it clears the search,
+  then returns to the sources page, then closes; focus moves into the panel on open and back to the dot's button on
+  close. Up and Down walk the rows (and, on the Add source page, the group headers and source rows); Left and Right on
+  an amount bar step 1 percent (Shift 10), each key press one undo step; on a group header Left folds, Right
+  unfolds, Return toggles.
+* **Accessibility.** Every control has a keyboard stop with the accent focus ring, a name and a tooltip: the bar is a
+  slider ("<Source> amount", the value in percent, "Drag to change how strongly <Source> moves <Param>"), the group
+  headers read "LFOs, expanded" / "collapsed". The `ModDotPopover` surface is audited in
+  `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp`.
+* **Where it lives.** The panel and its pages are `ModDotPopover`, `ModDotSourcesPage` (+ `ModDotSourceRow`,
+  `ModDotAmountBar`) and `ModDotAddSourcePage` (+ `ModDotAddSourceParts`); `ModDotController` opens it
+  (`popoverLauncher` is the seam a headless test uses instead of a real call-out) and follows the graph with it open
+  on the editor's tick. Motion: [animation.md](../layout/animation.md#what-moves-and-how).
 
 ## Drag-to-knob modulation
 

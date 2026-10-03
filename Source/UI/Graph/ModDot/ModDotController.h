@@ -10,21 +10,30 @@
 //    snapshot, lazily, and commits it on release. Esc restores the amount the press started from and
 //    pushes no undo step.
 //  * A key step (the dot's own Tab stop) is one undo step per press.
+//  * A click opens the dot's panel (ModDotPopover) under the dot; the panel's edits go through the controller's
+//    host hooks (remove and "show in timeline" belong to the app window) with editor-only fallbacks.
 //
 // docs/modules/modulation.md#drag-to-knob-modulation.
 
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "KnobModSources.h"
 #include "ModDotTooltip.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 
 class GraphEditor;
 
 namespace synth::ui {
+
+class ModDotPopover;
+
+/** The amount a source added from the dot's panel starts at: a quarter way, clearly audible with room both ways. */
+inline constexpr float kModDotNewSourceDepth = 0.25f;
 
 class ModDotController {
 public:
@@ -33,11 +42,39 @@ public:
 
     /** `canvas` is the component the tooltip paints on (the editor's content component). */
     ModDotController(GraphEditor& editor, juce::Component& canvas);
+    ~ModDotController();
 
-    /** A plain click on a dot, or Return/Space on its button: the next ticket's menu opens here.
-     *  `anchor` is the dot's button. Unset = nothing happens. */
+    /** A plain click on a dot, or Return/Space on its button; `anchor` is the dot's button. Opens the dot's panel
+     *  (openPopover) unless a test replaces it. */
     std::function<void(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor)>
         onModDotClicked;
+
+    // ---- the dot's panel ----
+    /** Shows `content` in a callout pointing at `anchor`. The default launches a juce::CallOutBox; a headless
+     *  test captures the content instead (a real callout needs a display). */
+    using PopoverLauncher = std::function<void(std::unique_ptr<juce::Component> content, juce::Component& anchor)>;
+    PopoverLauncher popoverLauncher;
+    /** What the app window does for the panel; each is optional, with an editor-only fallback where there is one. */
+    struct Host {
+        /** Remove one source as the timeline's "Remove modulator" does (one undo step with its amount lane, asks
+         *  before deleting an LFO left with nothing). Fallback: GraphEditor::removeModulationChain. */
+        std::function<void(const ModulatorInfo&)> removeModulator;
+        /** Open the timeline and bring the source's modulator row into view. No fallback. */
+        std::function<void(const ModulatorInfo&)> revealModulator;
+    } host;
+
+    void openPopover(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor);
+    /** The open panel, or null. */
+    ModDotPopover* getPopover() const;
+    void closePopover();
+    /** The editor's 30 Hz tick: the open panel follows the graph. */
+    void tickPopover();
+    /** Called by the panel as it goes away. */
+    void popoverClosed(ModDotPopover* popover);
+    void removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                      juce::AudioProcessorGraph::NodeID attenuverterId);
+    void revealSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                      juce::AudioProcessorGraph::NodeID attenuverterId);
 
     // ---- last-chosen source ----
     /** The attenuverter a drag or key step on (`card`, `destChannel`) changes: the stored choice while
@@ -89,6 +126,7 @@ private:
     void scheduleKeyHide();
 
     GraphEditor& editor_;
+    juce::Component::SafePointer<juce::Component> popover_;
     ModDotTooltip tooltip_;
     std::map<std::pair<juce::uint32, int>, juce::uint32> lastChosen_;
     std::optional<Gesture> gesture_;

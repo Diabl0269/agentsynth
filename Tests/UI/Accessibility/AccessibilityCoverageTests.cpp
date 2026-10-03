@@ -22,6 +22,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/SamplerModule.h"
+#include "Modules/VCAModule.h"
 #include "Modules/VisualBuffer.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -31,6 +32,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Graph/ModDot/ModDotPopover.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -672,4 +674,32 @@ TEST(AccessibilityCoverageTest, ModMatrix) {
 
     synth::ui::ModMatrixPicker picker("source", {{1, "LFOs", "LFO 1"}, {2, "Filters", "Filter 1"}}, 1, nullptr);
     EXPECT_TRUE(matchesBaseline("ModMatrixPicker", auditAccessibility(picker)));
+}
+
+// The mod dot's panel with a routing on a knob, on both its pages: the sources page (rows with their bars, amounts and
+// buttons, "+ Add source") and the Add source page (search, links, group headers, source rows).
+TEST(AccessibilityCoverageTest, ModDotPopover) {
+    AudioEngine engine;
+    GraphEditor editor(engine, nullptr);
+    auto& graph = engine.getGraph();
+    auto* lfo = graph.addNode(std::make_unique<LFOModule>()).get();
+    graph.addNode(std::make_unique<LFOModule>());
+    auto* vca = graph.addNode(std::make_unique<VCAModule>()).get();
+    int gainChannel = -1;
+    for (const auto& t : dynamic_cast<ModuleBase*>(vca->getProcessor())->getModulationTargets())
+        if (t.paramId == "gain")
+            gainChannel = t.channelIndex;
+    ASSERT_GE(gainChannel, 0);
+    engine.addModRouting(lfo->nodeID, 0, vca->nodeID, gainChannel);
+
+    juce::Component anchor;
+    synth::ui::ModDotPopover popover(editor, editor.getModDot(), vca->nodeID, gainChannel, anchor);
+    auto gaps = auditAccessibility(popover);
+    EXPECT_EQ(popover.sourcesPage().rowCount(), 1);
+    popover.showAddSource();
+    ASSERT_EQ(popover.page(), synth::ui::ModDotPopover::Page::AddSource);
+    const auto addGaps = auditAccessibility(popover);
+    EXPECT_FALSE(popover.addSourcePage().visibleRowLabels().empty());
+    gaps.insert(gaps.end(), addGaps.begin(), addGaps.end());
+    EXPECT_TRUE(matchesBaseline("ModDotPopover", gaps));
 }

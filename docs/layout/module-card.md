@@ -490,7 +490,10 @@ A knob or fader a modulation cable lands on also carries a transparent `synth::u
 keyboard and screen-reader face: its own Tab stop right after its knob (`getKeyboardControls` sorts it
 with the knob it belongs to), named "<Param> modulation, N sources" with the tooltip "Modulation
 sources for <Param>", the solid accent focus ring around the dot, Up/Down for the last-chosen
-source's amount (Shift: ten times the step) and Return/Space for the dot's click hook. It exists only
+source's amount (Shift: ten times the step) and Return/Space, which open the dot's panel like a plain click on the dot (a
+press that moves under 3 px; see
+[`modules/modulation.md#the-mod-dot-menu`](../modules/modulation.md#the-mod-dot-menu)). While the panel is open the
+button draws the accent ring around the dot even without keyboard focus. It exists only
 while the knob has an attenuverter routing and is shown, so it is hidden with a knob on another tab
 page or one the layout hides; `ModuleComponent::syncModDotButtons` rebuilds it on every layout and
 whenever the GraphEditor tick sees the routing set change. The mouse passes through it to the knob. See

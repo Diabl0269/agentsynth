@@ -5,6 +5,7 @@
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModMatrixKeyboard.h"
 #include "UI/Graph/ModMatrixPicker.h"
@@ -179,6 +180,8 @@ struct ModMatrixComponent::ModRow
     void detach();
     void refresh(const ModRoutingInfo& info);
     void populateCombos();
+    void populateSourceCombo();
+    void populateDestCombo();
 
     // Re-points the attenuverter's edges and runs the change as ONE undo step.
     void reroute(bool sourceChanged, Endpoint source, Endpoint dest);
@@ -703,116 +706,108 @@ void ModMatrixComponent::ModRow::populateCombos() {
     destCombo.clear(juce::dontSendNotification);
     sourceItems.clear();
     destItems.clear();
+    populateSourceCombo();
+    populateDestCombo();
+}
 
+namespace {
+const std::map<ModulationCategory, juce::String>& modulationCategoryNames() {
+    static const std::map<ModulationCategory, juce::String> names = {{ModulationCategory::Envelope, "Envelopes"},
+                                                                     {ModulationCategory::LFO, "LFOs"},
+                                                                     {ModulationCategory::Oscillator, "Oscillators"},
+                                                                     {ModulationCategory::Sequencer, "Sequencers"},
+                                                                     {ModulationCategory::Filter, "Filters"},
+                                                                     {ModulationCategory::FX, "Effects"},
+                                                                     {ModulationCategory::Other, "Other"}};
+    return names;
+}
+} // namespace
+
+// The sources come from synth::ui::enumerateModSources, the list the mod dot's Add source page reads too.
+void ModMatrixComponent::ModRow::populateSourceCombo() {
+    const auto sources = synth::ui::enumerateModSources(owner.audioEngine.getGraph());
+    if (owner.isSourceMenuFlat) {
+        for (const auto& source : sources) {
+            sourceCombo.addItem(source.label(), source.itemId());
+            sourceItems.push_back({source.itemId(), {}, source.label()});
+        }
+        return;
+    }
+
+    juce::PopupMenu sourceMenu;
+    size_t i = 0;
+    while (i < sources.size()) {
+        const auto category = sources[i].category;
+        const auto& categoryName = modulationCategoryNames().at(category);
+        juce::PopupMenu categoryMenu;
+        while (i < sources.size() && sources[i].category == category) {
+            const auto node = sources[i].node;
+            size_t end = i;
+            while (end < sources.size() && sources[end].category == category && sources[end].node == node)
+                ++end;
+            if (end - i == 1) {
+                const auto& source = sources[i];
+                categoryMenu.addItem(source.itemId(), source.moduleTitle);
+                sourceCombo.addItem(source.moduleTitle, source.itemId());
+                sourceItems.push_back({source.itemId(), categoryName, source.moduleTitle});
+            } else {
+                juce::PopupMenu instanceMenu;
+                for (size_t k = i; k < end; ++k) {
+                    // The closed combo's label comes only from the leaf item's own text, so the module name
+                    // is part of it: a multi-output module's box never shows a bare jack name.
+                    const auto label = sources[k].label();
+                    instanceMenu.addItem(sources[k].itemId(), label);
+                    sourceCombo.addItem(label, sources[k].itemId());
+                    sourceItems.push_back({sources[k].itemId(), categoryName, label});
+                }
+                categoryMenu.addSubMenu(sources[i].moduleTitle, instanceMenu);
+            }
+            i = end;
+        }
+        sourceMenu.addSubMenu(categoryName, categoryMenu);
+    }
+    *sourceCombo.getRootMenu() = sourceMenu;
+}
+
+void ModMatrixComponent::ModRow::populateDestCombo() {
     auto& graph = owner.audioEngine.getGraph();
-    bool useGroups = !owner.isSourceMenuFlat;
-
-    std::map<ModulationCategory, juce::String> categoryNames = {{ModulationCategory::Envelope, "Envelopes"},
-                                                                {ModulationCategory::LFO, "LFOs"},
-                                                                {ModulationCategory::Oscillator, "Oscillators"},
-                                                                {ModulationCategory::Sequencer, "Sequencers"},
-                                                                {ModulationCategory::Filter, "Filters"},
-                                                                {ModulationCategory::FX, "Effects"},
-                                                                {ModulationCategory::Other, "Other"}};
-
     std::map<ModulationCategory, std::vector<juce::AudioProcessorGraph::Node*>> modulesByCategory;
-
-    for (auto* node : graph.getNodes()) {
-        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
+    for (auto* node : graph.getNodes())
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
             modulesByCategory[module->getModulationCategory()].push_back(node);
+
+    juce::PopupMenu destMenu;
+    for (auto const& [cat, modules] : modulesByCategory) {
+        juce::PopupMenu catDestSub;
+        int destCount = 0;
+        for (auto* node : modules) {
+            auto* module = static_cast<ModuleBase*>(node->getProcessor());
+            const juce::String displayName = synth::moduleTitle(*node);
+            const auto targets = synth::ui::modDestinationCandidates(module);
+            if (targets.empty())
+                continue;
+            juce::PopupMenu instDestSub;
+            for (const auto& target : targets) {
+                const int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
+                const auto flat = displayName + ": " + target.name;
+                destCombo.addItem(flat, itemId);
+                // Nested: the module name is baked into the leaf, as for the sources (the closed combo's label
+                // comes only from the item's own text).
+                destItems.push_back({itemId,
+                                     owner.isSourceMenuFlat ? juce::String() : modulationCategoryNames().at(cat),
+                                     owner.isSourceMenuFlat ? flat : displayName + " - " + target.name});
+                if (!owner.isSourceMenuFlat)
+                    instDestSub.addItem(itemId, displayName + " - " + target.name);
+            }
+            if (!owner.isSourceMenuFlat)
+                catDestSub.addSubMenu(displayName, instDestSub);
+            ++destCount;
         }
+        if (!owner.isSourceMenuFlat && destCount > 0)
+            destMenu.addSubMenu(modulationCategoryNames().at(cat), catDestSub);
     }
-
-    if (!useGroups) {
-        // Flat list implementation
-        for (auto const& [cat, modules] : modulesByCategory) {
-            for (auto* node : modules) {
-                auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = synth::moduleTitle(*node);
-
-                for (const auto& output : synth::ui::modSourceOutputs(*module)) {
-                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)output.channel);
-                    juce::String label = displayName;
-                    if (output.label.isNotEmpty())
-                        label += " - " + output.label;
-                    sourceCombo.addItem(label, itemId);
-                    sourceItems.push_back({itemId, {}, label});
-                }
-
-                auto targets = synth::ui::modDestinationCandidates(module);
-                for (const auto& target : targets) {
-                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                    destCombo.addItem(displayName + ": " + target.name, itemId);
-                    destItems.push_back({itemId, {}, displayName + ": " + target.name});
-                }
-            }
-        }
-    } else {
-        // Nested Menu Implementation
-        juce::PopupMenu sourceMenu;
-        juce::PopupMenu destMenu;
-
-        for (auto const& [cat, modules] : modulesByCategory) {
-            juce::PopupMenu catSourceSub;
-            juce::PopupMenu catDestSub;
-            int sourceCount = 0;
-            int destCount = 0;
-
-            for (auto* node : modules) {
-                auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = synth::moduleTitle(*node);
-
-                const auto outputs = synth::ui::modSourceOutputs(*module);
-                if (!outputs.empty()) {
-                    if (outputs.size() == 1) {
-                        int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)outputs.front().channel);
-                        catSourceSub.addItem(itemId, displayName);
-                        sourceCombo.addItem(displayName, itemId);
-                        sourceItems.push_back({itemId, categoryNames[cat], displayName});
-                    } else {
-                        juce::PopupMenu instSourceSub;
-                        for (const auto& output : outputs) {
-                            int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)output.channel);
-                            // The closed-combobox label is resolved purely from this leaf item's own
-                            // text (JUCE never concatenates ancestor submenu titles), so the module
-                            // name must live here too, or a multi-output module's box shows a bare
-                            // jack name with no way to tell which module it is.
-                            const auto label = displayName + " - " + output.label;
-                            instSourceSub.addItem(itemId, label);
-                            sourceCombo.addItem(label, itemId);
-                            sourceItems.push_back({itemId, categoryNames[cat], label});
-                        }
-                        catSourceSub.addSubMenu(displayName, instSourceSub);
-                    }
-                    sourceCount++;
-                }
-
-                auto targets = synth::ui::modDestinationCandidates(module);
-                if (!targets.empty()) {
-                    juce::PopupMenu instDestSub;
-                    for (const auto& target : targets) {
-                        int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                        // Same fix as the source leaves above: the closed combo box's label comes
-                        // only from this item's own text, never from the submenu title, so the
-                        // module name has to be baked in here too.
-                        instDestSub.addItem(itemId, displayName + " - " + target.name);
-                        destCombo.addItem(displayName + ": " + target.name, itemId);
-                        destItems.push_back({itemId, categoryNames[cat], displayName + " - " + target.name});
-                    }
-                    catDestSub.addSubMenu(displayName, instDestSub);
-                    destCount++;
-                }
-            }
-
-            if (sourceCount > 0)
-                sourceMenu.addSubMenu(categoryNames[cat], catSourceSub);
-            if (destCount > 0)
-                destMenu.addSubMenu(categoryNames[cat], catDestSub);
-        }
-
-        *sourceCombo.getRootMenu() = sourceMenu;
+    if (!owner.isSourceMenuFlat)
         *destCombo.getRootMenu() = destMenu;
-    }
 }
 
 // Opens the searchable picker over the row's combo. A pick selects the combo's id with a synchronous

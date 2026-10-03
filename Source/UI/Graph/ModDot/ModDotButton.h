@@ -31,6 +31,15 @@ public:
     /** Return / Space. */
     std::function<void()> onActivate;
 
+    /** While the dot's panel is open the dot carries the accent ring, focused or not. */
+    void setMenuOpen(bool open) {
+        if (menuOpen_ != open) {
+            menuOpen_ = open;
+            repaint();
+        }
+    }
+    bool isMenuOpen() const noexcept { return menuOpen_; }
+
     int getDestChannel() const noexcept { return destChannel_; }
     /** The knob or fader this dot belongs to; Tab visits the dot right after it. */
     juce::Slider* getKnob() const noexcept { return knob_.getComponent(); }
@@ -48,21 +57,31 @@ public:
             return true;
         }
         if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
-            if (onActivate)
-                onActivate();
+            clicked();
             return true;
         }
         return false;
     }
 
+    // A screen reader's press (VoiceOver's VO-Space is AXPress -> triggerClick) opens the menu the same
+    // way Return does; the mouse never reaches this button, it passes through to the knob.
+    void clicked() override {
+        if (onActivate)
+            onActivate();
+    }
+
     void paintButton(juce::Graphics& g, bool, bool) override {
         // Around the 7 px dot, which sits at the centre.
         const auto ring = getLocalBounds().toFloat().withSizeKeepingCentre(11.0f, 11.0f);
-        paintFocusRing(g, ring, *this, 5.5f);
+        if (menuOpen_)
+            paintFocusRingAlways(g, ring, *this, 5.5f);
+        else
+            paintFocusRing(g, ring, *this, 5.5f);
     }
 
 private:
     int destChannel_;
+    bool menuOpen_ = false;
     juce::Component::SafePointer<juce::Slider> knob_;
 };
 

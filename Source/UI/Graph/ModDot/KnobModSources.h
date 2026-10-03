@@ -15,14 +15,25 @@ namespace synth::ui {
 struct KnobModSource {
     juce::AudioProcessorGraph::NodeID attenuverterId;
     juce::AudioProcessorGraph::NodeID sourceNodeId; // the real modulator, behind any macro ports
+    int sourceChannel = 0;                          // the raw output channel of it the routing reads
     juce::String sourceName;                        // its title (a rename shows), empty if the node is gone
     float amount = 1.0f;                            // the attenuverter's live "amount", -1..1
     bool bypassed = false;
 };
 
 /** Every AttenuverterChain routing onto (`dest`, `destChannel`), in GraphEditor::getCachedModDisplayInfo()
- *  order. Message thread only. */
-std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProcessorGraph::NodeID dest, int destChannel);
+ *  order. `fresh` reads the engine's routings now instead of the editor's cache (which only the editor's 30 Hz tick
+ *  refreshes): for a caller that just edited the graph. Message thread only. */
+std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProcessorGraph::NodeID dest, int destChannel,
+                                          bool fresh = false);
+
+/** The knob a destination channel drives, as the mod dot's menu words it. */
+struct KnobModTarget {
+    juce::String paramId;   // the bound parameter's id (what a timeline lane is keyed by)
+    juce::String paramName; // its display name ("Cutoff"); the jack's name when it binds to no parameter
+    bool valid() const { return paramName.isNotEmpty(); }
+};
+KnobModTarget knobModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card, int destChannel);
 
 /** The attenuverter's live "amount" (-1..1), or `fallback` when the node or parameter is gone. */
 float attenuverterAmount(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID attenuverterId,

@@ -230,6 +230,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ArrowKeyNavigation.cpp
     Source/UI/Layout/FoldAllButton.h
     Source/UI/Layout/FoldAllButton.cpp
+    Source/UI/Layout/NavigationSearchField.h
     Source/UI/Layout/SearchMatch.h
     Source/UI/Layout/SearchMatch.cpp
     Source/UI/Layout/TabSwitchKeys.h
@@ -417,6 +418,25 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotController.cpp
     Source/UI/Graph/ModDot/ModDotTooltip.h
     Source/UI/Graph/ModDot/ModDotTooltip.cpp
+    Source/UI/Graph/ModDot/ModDotAddSourceParts.h
+    Source/UI/Graph/ModDot/ModDotAddSourcePage.h
+    Source/UI/Graph/ModDot/ModDotAmountBar.h
+    Source/UI/Graph/ModDot/ModDotGlyphButton.h
+    Source/UI/Graph/ModDot/ModDotMotion.h
+    Source/UI/Graph/ModDot/ModDotPage.h
+    Source/UI/Graph/ModDot/ModDotPalette.h
+    Source/UI/Graph/ModDot/ModDotPopover.h
+    Source/UI/Graph/ModDot/ModDotSourceRow.h
+    Source/UI/Graph/ModDot/ModDotSourcesPage.h
+    Source/UI/Graph/ModDot/ModSourceCatalog.h
+    Source/UI/Graph/ModDot/ModDotAddSourcePage.cpp
+    Source/UI/Graph/ModDot/ModDotAmountBar.cpp
+    Source/UI/Graph/ModDot/ModDotControllerPopover.cpp
+    Source/UI/Graph/ModDot/ModDotGlyphs.cpp
+    Source/UI/Graph/ModDot/ModDotPopover.cpp
+    Source/UI/Graph/ModDot/ModDotSourceRow.cpp
+    Source/UI/Graph/ModDot/ModDotSourcesPage.cpp
+    Source/UI/Graph/ModDot/ModSourceCatalog.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp

@@ -12,6 +12,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
@@ -280,6 +281,13 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onAutomateParameterRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
+    };
+    // The mod dot's panel removes a source through the timeline's own Remove modulator, and shows one in the timeline.
+    graphEditor.getModDot().host.removeModulator = [this](const synth::ui::ModulatorInfo& modulator) {
+        removeModulator(modulator);
+    };
+    graphEditor.getModDot().host.revealModulator = [this](const synth::ui::ModulatorInfo& modulator) {
+        revealModulatorInTimeline(modulator);
     };
     // Hosted-plugin cards resolve their layout against this store; the member outlives graphEditor.
     graphEditor.setPluginCardLayoutStore(&pluginCardLayoutStore);
