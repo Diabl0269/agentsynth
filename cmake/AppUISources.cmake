@@ -297,12 +297,15 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditor.cpp
     Source/UI/Timeline/AutomationLaneEditorPoints.cpp
     Source/UI/Timeline/AutomationLaneEditorValueField.cpp
+    Source/UI/Timeline/AutomationLaneEditorStretch.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
