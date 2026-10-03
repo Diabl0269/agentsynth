@@ -411,7 +411,7 @@ envelope view out draws no graph and no toggle.
   drag; a row dropped under a group's header joins that group), its name (click to rename; an empty
   name, or the control's own, clears the override), and a widget choice listing only the widgets the
   card would really draw it as (`cardBodyKindFor`, the automatic one first; a toggle, or a choice too
-  long to segment, gets none). A header's title is renamed the same way. Above the list: **Apply to**
+  long to segment, gets none). A header's title is renamed the same way; an untitled group is listed by a name from its id (`cardSectionDisplayName`: "Footer", "Controls" for `main`, "Group 2" for `group-2`, "Trigger meter" for `trigger-meter`), never "Untitled group", and the card still draws no header row for it. Above the list: **Apply to**
   (this module / all <Type> modules), **Presets** (save as, load, delete, in the type's
   `ModuleCardLayouts/<Type>/` folder), **Reset to default**, a search (it hides rows, never group
   headers, so a drop can still land in any group) and **+ Add group** (a titled "New group" at the end).

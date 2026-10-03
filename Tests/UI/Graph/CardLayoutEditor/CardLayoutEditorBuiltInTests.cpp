@@ -5,11 +5,13 @@
 // "Edit Layout..." item the card built, and the editor that click launched. Each edit is checked on
 // the rebuilt card itself, and the session's single undo step.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 
 using namespace cardlayouteditor_test;
 using synth::CardWidget;
@@ -337,4 +339,34 @@ TEST(CardLayoutEditorBuiltIn, ResetForAllModulesClearsTheTypeDefaultToo) {
     editor->triggerResetToAutomaticForTest();
     EXPECT_NE(rig.store.loadDefault("Filter").status, synth::ModuleCardLayoutStore::LoadStatus::Ok);
     EXPECT_FALSE(rig.card(id)->getCardBody()->hasMoreRow());
+}
+
+// Every group the editor lists has a real name, on every module type the library offers (each
+// opened through its real module menu): an untitled section is named from its id, never "Untitled group".
+TEST(CardLayoutEditorBuiltIn, EveryGroupOnEveryModuleTypeHasARealName) {
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+    int headersChecked = 0;
+    for (const auto& type : types) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (processor == nullptr)
+            continue;
+        EditorCanvas rig;
+        const auto id = rig.add(std::move(processor));
+        auto* editor = rig.openFromModuleMenu(id);
+        if (editor == nullptr)
+            continue; // a bespoke card with no layout to edit
+        for (int r = 0; r < editor->getVisibleRowCountForTest(); ++r) {
+            auto* row = editor->getRowForTest(r);
+            if (row == nullptr || !row->getTitle().startsWith("Group: "))
+                continue;
+            ++headersChecked;
+            const auto name = row->getTitle().fromFirstOccurrenceOf("Group: ", false, false);
+            EXPECT_TRUE(name.trim().isNotEmpty()) << type;
+            EXPECT_FALSE(name.containsIgnoreCase("untitled")) << type << ": " << name;
+        }
+    }
+    EXPECT_GT(headersChecked, 20) << "the walk reached the module types' groups";
 }

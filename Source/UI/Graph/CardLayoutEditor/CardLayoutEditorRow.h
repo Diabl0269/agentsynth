@@ -93,7 +93,8 @@ private:
     bool header_ = false;
     bool tab_ = false; ///< A header of a tab section.
     bool draggable_ = false;
-    juce::String name_; ///< The control's own name, or the group title.
+    juce::String name_;         ///< The control's own name, or the group title.
+    juce::String fallbackName_; ///< A group's name while it has no title.
     std::optional<juce::String> labelOverride_;
     std::vector<CardWidget> widgetChoices_;
     juce::String pendingLabelForTest_;

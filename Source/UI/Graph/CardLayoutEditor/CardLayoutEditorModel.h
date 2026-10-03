@@ -19,7 +19,8 @@ public:
         Kind kind = Kind::Param;
         int section = 0;
         juce::String key;
-        juce::String name; ///< The parameter's or view's own name, or the section title.
+        juce::String name;         ///< The parameter's or view's own name, or the section title.
+        juce::String fallbackName; ///< A header's name while it has no title (cardSectionDisplayName).
         bool shown = true;
         bool placed = true; ///< False for an unticked row that left the layout.
         bool tab = false;   ///< A header of a `tab` section: one tab of the card's tab strip.
