@@ -489,6 +489,9 @@ public:
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+    /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "+ Track".
+     */
+    juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
     bool handleRootFocusKey(const juce::KeyPress& key);
 
@@ -569,6 +572,17 @@ private:
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
     void stepTrackFocusFromHeader(int direction);
+
+    // ---- Lanes in the arrow order (TimelinePanelLaneKeyboard.cpp) ----
+    // Under a track whose lanes are open, Up/Down visit each lane header and its modulator rows before the next track;
+    // folded lanes are skipped. `keyboardStop_` is the lane header or modulator row last moved to (null while a track
+    // row or "+ Track" is the stop), kept like focusedTrackIndex_ so the model is readable without a native window.
+    std::vector<juce::Component*> keyboardStops() const;
+    void stepFocusFromLaneStop(juce::Component& from, int direction);
+    void focusKeyboardStop(juce::Component& stop);
+    void ensureStopVisible(const juce::Component& stop);
+    void wireLaneKeyboard();
+    juce::Component::SafePointer<juce::Component> keyboardStop_;
     bool recordFocusForTest_ = false;
     bool addTrackFocusRecorded_ = false;
     bool addTrackFromTop_ = false; // "+ Track" was entered from above (root Down, Up off row 0), not from the last row

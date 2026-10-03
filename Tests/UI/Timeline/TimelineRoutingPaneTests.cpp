@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanel/TimelinePanelTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include <gtest/gtest.h>
@@ -117,6 +118,39 @@ TEST(TimelineRoutingPaneTest, AnUnboundTrackSaysNotConnectedInTheWarningState) {
     EXPECT_FALSE(f.pane().getShowOnCanvasLinkForTest().isVisible()) << "nothing to show";
     EXPECT_EQ(f.pane().getMidiDestinationsTextForTest(), "None");
     EXPECT_EQ(f.pane().getChannelTextForTest(), "No mixer channel");
+}
+
+// The pane is its own Tab region: the root takes focus, Up/Down step through the visible controls in order and Escape
+// from a control comes back to the root. (A headless test has no native focus, so the order and the key results are
+// what is asserted.)
+TEST(TimelineRoutingPaneTest, TheRootAndItsControlsAreKeyboardStopsInOrderWithUpDownAndEscape) {
+    BarePanel f;
+    f.doc.addTrack(TrackKind::Midi, "Lead");
+    clickRow(f.panel, 0);
+    auto& pane = f.pane();
+    EXPECT_TRUE(pane.getWantsKeyboardFocus());
+    EXPECT_EQ(pane.getTitle(), "Routing for Lead");
+
+    const auto stops = synth::ui::focusableDescendants(pane);
+    ASSERT_EQ(stops.size(), 2u) << "Canvas node and MIDI destinations; the links are hidden for an unbound track";
+    EXPECT_EQ(stops[0], &pane.getCanvasNodeButtonForTest());
+    EXPECT_EQ(stops[1], &pane.getMidiDestinationsButtonForTest());
+    EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, +1), stops[0]) << "Down from the root enters the first control";
+    EXPECT_EQ(synth::ui::neighbourStop(pane, stops[0], +1), stops[1]);
+    EXPECT_EQ(synth::ui::neighbourStop(pane, stops[1], -1), stops[0]);
+    EXPECT_EQ(synth::ui::neighbourStop(pane, stops[1], +1), nullptr) << "no wrapping at the end";
+    EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, -1), nullptr) << "Up from the root has nowhere to go";
+
+    const auto plain = [](int code) { return juce::KeyPress(code, juce::ModifierKeys::noModifiers, 0); };
+    EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::downKey)));
+    EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::upKey)));
+    EXPECT_FALSE(pane.keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0)));
+
+    auto& keys = pane.getPaneKeysForTest();
+    auto& canvasNode = pane.getCanvasNodeButtonForTest();
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &canvasNode)) << "Escape returns to the pane root";
+    EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane)) << "on the root it bubbles on";
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &canvasNode)) << "a button's Up/Down step on";
 }
 
 // A short bottom panel must not clip the lower sections: the pane scrolls inside the side pane instead.

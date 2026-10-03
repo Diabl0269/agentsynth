@@ -52,6 +52,9 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     , host_(host)
     , parameterName_(parameterName) {
     setComponentID("modulatorRow");
+    // The row is a keyboard stop of its own, like a lane header (Up/Down walk the track list through it).
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(false);
     if (info_.isLfo)
         initLfoControls();
     applyNames();
@@ -211,6 +214,7 @@ void ModulatorRow::paint(juce::Graphics& g) {
 // The value text sits on the bars, and every Tab stop shows the shared accent ring over whatever its
 // look-and-feel draws, so focus reads the same on every control in the row.
 void ModulatorRow::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())

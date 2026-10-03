@@ -853,6 +853,22 @@ void MainComponent::rebuildFocusRegions() {
                                      bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
                                      ensureBottomDockOpen();
                                  }});
+    // The Timeline's two side panels are Tab stops of their own right after the track list, each only while it is on
+    // screen: the routing pane (the side pane open on the Timeline tab) and the piano roll's scale pane. They live
+    // inside the Timeline, so the same dock guard applies; Up/Down walk their controls (FocusStepWithin.h).
+    if (!bottomDock.getTimelineHost().isDetached()) {
+        const auto timelineShowing = [this] {
+            return isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive();
+        };
+        focusRegions_.addRegion(
+            {"timelineRouting", &timelinePanel.getRoutingPane(),
+             [this, timelineShowing] { return timelineShowing() && timelinePanel.getSidePane().isOpen(); }, nullptr});
+        focusRegions_.addRegion({"scaleAssist", &timelinePanel.getPianoRoll().getScaleAssistPanel(),
+                                 [this, timelineShowing] {
+                                     return timelineShowing() && timelinePanel.getPianoRoll().isScalePanelShowing();
+                                 },
+                                 nullptr});
+    }
     // The actual registration (open predicate + no `open` callback -- see MixerFocusRegion.h's own
     // comment) lives in the free `registerMixerFocusRegion` helper so a future detached mixer
     // window can register the same region against its own FocusRegionRegistry with a different

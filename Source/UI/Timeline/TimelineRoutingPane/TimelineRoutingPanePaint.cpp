@@ -1,6 +1,7 @@
 // Concern: TimelineRoutingPane::paint -- the header line, the section headings and borders, and the muted lines.
 #include "TimelineRoutingPane.h"
 
+#include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -52,6 +53,8 @@ void drawHeaderLine(juce::Graphics& g, const juce::Rectangle<int>& area, const j
     g.drawText(name, line, juce::Justification::centredLeft, true);
 }
 } // namespace
+
+void TimelineRoutingPane::paintOverChildren(juce::Graphics& g) { paintFocusRegionOutline(*this, g); }
 
 void TimelineRoutingPane::paint(juce::Graphics& g) {
     const auto colours = coloursOf(*this);

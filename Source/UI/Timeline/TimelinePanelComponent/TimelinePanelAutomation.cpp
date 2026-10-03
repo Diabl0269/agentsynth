@@ -21,6 +21,7 @@ void TimelinePanelComponent::initAutomationLanes() {
         layoutAutomationRows();
     };
     automationLanes_.onLaneFocused = [this](synth::LaneId lane) { selectedAutomationLane_ = lane; };
+    wireLaneKeyboard();
     automationLanes_.onAddAutomationRequested = [this](synth::TrackId track, juce::Component& row) {
         openAddAutomationPicker(track, row);
     };

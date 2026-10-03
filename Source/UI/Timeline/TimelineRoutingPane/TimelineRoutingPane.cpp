@@ -25,8 +25,11 @@ TimelineRoutingPane::TimelineRoutingPane()
     : showOnCanvas_("Show on canvas " + chevron())
     , showInMixer_("Show in mixer " + chevron()) {
     setComponentID("timelineRoutingPane");
-    setWantsKeyboardFocus(false);
+    // The pane is its own focus region (Tab goes timeline -> routing pane -> scale pane): the root takes focus and
+    // Up/Down step through the controls below. A click never moves keyboard focus into it.
+    setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
+    setTitle("Track routing"); // until a track is shown and the title names it
 
     canvasNode_.setTitle("Canvas node");
     canvasNode_.setDescription("The node that plays this track. Opens a menu to choose a different one.");
@@ -41,19 +44,29 @@ TimelineRoutingPane::TimelineRoutingPane()
     // The channel row is read-only: the chip is only a name and a meter here, the link beside it does the finding.
     channelChip_.setInterceptsMouseClicks(false, false);
 
-    // A click on a link must never move keyboard focus off the panel's focus root.
+    // Every control is a keyboard stop, but a click on one never moves keyboard focus off the panel's focus root.
     for (auto* link : {&showOnCanvas_, &showInMixer_}) {
-        link->setWantsKeyboardFocus(false);
+        link->setWantsKeyboardFocus(true);
         link->setMouseClickGrabsKeyboardFocus(false);
     }
 
     for (auto* child : std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_,
                                                                &channelChip_, &showInMixer_})
         addChildComponent(*child);
+    for (auto* control :
+         std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_, &showInMixer_})
+        paneKeys_.attach(*control);
     refresh();
 }
 
 TimelineRoutingPane::~TimelineRoutingPane() = default;
+
+bool TimelineRoutingPane::keyPressed(const juce::KeyPress& key) {
+    const bool plain = !key.getModifiers().isAnyModifierKeyDown();
+    if (plain && key.isKeyCode(juce::KeyPress::downKey))
+        return stepFocusWithin(*this, +1, nullptr);
+    return plain && key.isKeyCode(juce::KeyPress::upKey); // Up on the root has nowhere to go; the key stays here
+}
 
 void TimelineRoutingPane::setDoc(synth::TimelineDoc* doc) { doc_ = doc; }
 

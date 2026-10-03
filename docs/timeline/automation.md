@@ -169,6 +169,17 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
 - Not done: the drag does not auto-scroll the track list (a track's lanes normally fit on screen), and the slot the
   lifted block leaves is not outlined with the track list's dashed marker.
 
+## Keyboard order
+
+Up/Down walk the track list as one column: a track's row, then each of its open lanes (a lane header, followed by its
+modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
+"+ Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
+Where the arrows navigate: only when focus is on the row itself (a lane header, a modulator row, or the lane's "..." button,
+whose key bubbles to the header). The record-mode combo keeps its own Up/Down, and Cmd+Alt+Up/Down still move the lane; any other modified
+arrow is left alone. Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
+it holds focus. Tab from the timeline then goes to the routing pane and the scale pane
+([focus regions](../control/focus-regions.md)). The panel's stop list is `TimelinePanelLaneKeyboard.cpp`.
+
 ## Right-click anywhere on a lane
 
 A right-click opens the lane's own menu (the one the "..." button opens) with its top-left at the pointer

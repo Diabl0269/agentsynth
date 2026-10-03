@@ -98,7 +98,15 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
-    using juce::Component::keyPressed;
+    /** Keys for the header row itself (or bubbling from its "..." button): Up/Down ask the owner to move keyboard focus
+     *  to the previous/next row; the record-mode combo keeps its own Up/Down. */
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(juce::Component::FocusChangeType cause) override;
+    void focusLost(juce::Component::FocusChangeType cause) override;
+    /** Up (-1) / Down (+1) on the focused header row; may be null. */
+    std::function<void(int direction)> onFocusMoveRequested;
+    /** Fired when this header row takes keyboard focus; may be null. */
+    std::function<void()> onKeyboardFocused;
     juce::MouseCursor getMouseCursor() override;
     bool showContextMenuForKeyboardFocus() override;
 

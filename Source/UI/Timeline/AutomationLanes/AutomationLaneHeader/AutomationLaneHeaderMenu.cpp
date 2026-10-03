@@ -157,6 +157,28 @@ bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::
     return onLaneKey && onLaneKey(key);
 }
 
+// Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below. Everything else bubbles on.
+bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
+    if (onLaneKey && onLaneKey(key))
+        return true;
+    if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return false;
+    if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    return false;
+}
+
+void AutomationLaneHeaderComponent::focusGained(juce::Component::FocusChangeType) {
+    repaint();
+    if (onKeyboardFocused)
+        onKeyboardFocused();
+}
+
+void AutomationLaneHeaderComponent::focusLost(juce::Component::FocusChangeType) { repaint(); }
+
 void AutomationLaneHeaderComponent::setLift(float lift) {
     if (lift == lift_)
         return;

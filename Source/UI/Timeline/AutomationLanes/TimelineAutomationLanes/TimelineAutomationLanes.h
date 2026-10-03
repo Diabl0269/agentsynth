@@ -152,6 +152,14 @@ public:
     std::function<void()> onLayoutChanged;
     /** Fired when a track's "+ Add automation..." row is pressed; the panel opens the picker on it. */
     std::function<void(synth::TrackId, juce::Component&)> onAddAutomationRequested;
+    /** The keyboard stops directly under `track` while its lanes are open: each lane header, then its modulator rows,
+     * in doc order; empty for a folded track. Amount lanes have no row, so none. */
+    std::vector<juce::Component*> keyboardStopsFor(const synth::Track& track) const;
+    /** A lane header or modulator row (the first argument) asked for focus to move up (-1) or down (+1). */
+    std::function<void(juce::Component&, int direction)> onFocusMoveRequested;
+    /** A lane header or modulator row took keyboard focus. */
+    std::function<void(juce::Component&)> onKeyboardStopFocused;
+
     /** Fired when a lane editor takes keyboard focus. */
     std::function<void(synth::LaneId)> onLaneFocused;
 

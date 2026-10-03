@@ -4,6 +4,7 @@
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -64,6 +65,14 @@ public:
      *  anchor otherwise. */
     void showMenuAt(const juce::PopupMenu::Options& options);
     void mouseDown(const juce::MouseEvent& e) override;
+    /** Up (-1) / Down (+1) on the focused row itself (not on its controls, which keep their own arrows); may be null.
+     */
+    std::function<void(int direction)> onFocusMoveRequested;
+    /** Fired when this row takes keyboard focus; may be null. */
+    std::function<void()> onKeyboardFocused;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(juce::Component::FocusChangeType cause) override;
+    void focusLost(juce::Component::FocusChangeType cause) override;
     bool showContextMenuForKeyboardFocus() override;
 
 private:

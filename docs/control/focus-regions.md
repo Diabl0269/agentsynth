@@ -8,11 +8,11 @@ base for arrow-key navigation within the module library and for Up/Down + M/S/R 
 track header rows ([`shortcuts.md`](shortcuts.md#library-keyboard-navigation), [Timeline](shortcuts.md#timeline)); both build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with nine regions once every root component
+mixer/timeline would need its own registry), populated with eleven regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
 (always open — the `graphEditor`), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
 dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
-**Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
+**Routing pane** (`timelineRouting`: the Timeline showing with its side pane open) and **Scale pane** (`scaleAssist`: the Timeline showing with the piano roll's scale panel on screen), both straight after Timeline and with no `open` callback, **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
 Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
 bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
 `open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
@@ -95,6 +95,13 @@ below for the Mixer region's own keyboard behaviour.
   around the focus focuses the Canvas region instead. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
   [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
+- **The Timeline's two side panes** — Tab goes track list, routing pane, scale pane, each only while it is on screen
+  (Shift+Tab reverses), like any region. Each pane root takes focus and draws the panel outline (the Timeline's own
+  outline stands down while focus is in a pane). Inside a pane, Down from the root enters the first control and Up/Down
+  step between controls in on-screen order (no wrap; Up off the first control returns to the root); a combo box or text
+  field keeps its own Up/Down, and Escape from any control returns to the pane root. The rule lives in
+  `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`). The track list's own Up/Down walk, lanes included, is
+  in [`timeline/automation.md`](../timeline/automation.md#keyboard-order).
 - **Arrow keys on the Canvas** — the canvas region moves between module cards with the arrows, moves the
   selected cards with Alt+arrows and steps into a card with Return. Unlike the Toolbar and the dock tabs these
   are rebindable Graph actions; see [**Canvas card keys**](shortcuts.md#canvas-card-keys) below.

@@ -37,6 +37,10 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     , host_(host)
     , undo_(undo) {
     setComponentID("automationLaneHeader");
+    // The row is a keyboard stop of its own (Up/Down walk the track list through it); a click does not move focus off
+    // the clips, whose Cmd+X/C/V the app routes by where real focus sits.
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(false);
 
     addAndMakeVisible(recordMode_);
     recordMode_.setComponentID("automationLaneRecordMode");
@@ -78,6 +82,8 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     const auto labels = laneLabelsFor(*lane, host_);
     parameterName_ = labels.parameter;
     moduleName_ = labels.module;
+    setTitle(parameterName_ + " automation lane");
+    setDescription(moduleName_);
     readout_.setParameterName(parameterName_);
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
 
@@ -154,6 +160,7 @@ void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
 // The combo's own focus outline comes from the look-and-feel; the shared accent ring goes over it so
 // every control in the row shows focus the same way.
 void AutomationLaneHeaderComponent::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
     if (lift_ > 0.0f) {
         const auto accent = synth::theme::themeOf(*this).colors.accent;
         g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));

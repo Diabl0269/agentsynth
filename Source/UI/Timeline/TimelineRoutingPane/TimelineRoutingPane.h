@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Timeline/ChannelChipComponent.h"
@@ -52,6 +53,8 @@ public:
     juce::String getPaneTitle() const override { return "Track routing"; }
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
+    bool keyPressed(const juce::KeyPress& key) override;
     void resized() override;
 
     // ---- Test seams ----
@@ -64,6 +67,7 @@ public:
     void setOpenMidiDestinationsHookForTest(std::function<void()> hook) { openDestinationsHook_ = std::move(hook); }
     /** The picker "MIDI destinations" opens, wired exactly like the real one but never launched. */
     std::unique_ptr<MidiDestinationPicker> createMidiDestinationPickerForTest() { return buildPicker(); }
+    PaneKeys& getPaneKeysForTest() noexcept { return paneKeys_; }
     juce::Button& getCanvasNodeButtonForTest() noexcept { return canvasNode_; }
     juce::Button& getMidiDestinationsButtonForTest() noexcept { return midiDestinations_; }
     juce::Button& getShowOnCanvasLinkForTest() noexcept { return showOnCanvas_; }
@@ -150,6 +154,7 @@ private:
     RoutingComboButton midiDestinations_{"MIDI destinations"};
     ChannelChipComponent channelChip_;
     TextLinkButton showInMixer_;
+    PaneKeys paneKeys_{*this};
 
     std::function<void(juce::PopupMenu&)> showBindingMenuHook_;
     std::function<void()> openDestinationsHook_;

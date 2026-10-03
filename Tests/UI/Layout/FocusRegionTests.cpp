@@ -22,6 +22,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -279,9 +280,9 @@ private:
     std::optional<PersistedKeysGuard> guard_;
 };
 
-// The registry MainComponent builds must be exactly the nine regions, in the documented Tab-cycle order
-// (Toolbar, Library, Canvas, Dock tabs, Timeline, Mixer, Controllers, AI Panel, Mod Matrix).
-TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheNineDocumentedRegionsInOrder) {
+// The registry MainComponent builds must be exactly the documented regions, in the documented Tab-cycle order
+// (Toolbar, Library, Canvas, Dock tabs, Timeline, Routing pane, Scale pane, Mixer, Controllers, AI Panel, Mod Matrix).
+TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheDocumentedRegionsInOrder) {
     // The mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
     // not appended at the end (see MixerFocusRegionTests.cpp for the two regions' open predicates).
@@ -292,8 +293,8 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheNineDocumentedRegionsInO
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "dockTabs", "timeline", "mixer", "midiRemote",
-                                      "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "dockTabs", "timeline", "timelineRouting",
+                                      "scaleAssist", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
@@ -301,6 +302,8 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheNineDocumentedRegionsInO
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
     EXPECT_EQ(regs.findById("dockTabs")->root, &mc.getBottomDock().getTabStripFocus());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
+    EXPECT_EQ(regs.findById("timelineRouting")->root, &mc.getTimelinePanel().getRoutingPane());
+    EXPECT_EQ(regs.findById("scaleAssist")->root, &mc.getTimelinePanel().getPianoRoll().getScaleAssistPanel());
     EXPECT_EQ(regs.findById("mixer")->root, &mc.getBottomDock().getMixerPanel());
     EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getBottomDock().getMidiRemotePanel());
     EXPECT_EQ(regs.findById("aiPanel")->root, &mc.getAiChatComponent());
@@ -363,6 +366,26 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "dockTabs");
     EXPECT_EQ(regs.nextOpenRegionId("dockTabs", true), "timeline");
     EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "wraps back to the top";
+}
+
+// The routing pane is a Tab stop right after the track list, only while the side pane is open on the Timeline; the
+// scale pane (inside the piano roll) only while the roll shows it. Shift+Tab reverses.
+TEST_F(FocusRegionMainComponentTest, TabVisitsTheRoutingPaneAfterTheTimelineOnlyWhileItIsOpen) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
+    auto& regs = mc.getFocusRegionsForTest();
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
+    mc.getTimelinePanel().getSidePane().setOpen(false);
+    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "closed side pane: no routing stop";
+    EXPECT_FALSE(regs.findById("timelineRouting")->isCurrentlyOpen());
+
+    mc.getTimelinePanel().getSidePane().setOpen(true);
+    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "timelineRouting");
+    EXPECT_EQ(regs.nextOpenRegionId("timelineRouting", true), "toolbar") << "no scale pane while no clip is open";
+    EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "timelineRouting") << "Shift+Tab reverses";
+    EXPECT_EQ(regs.nextOpenRegionId("timelineRouting", false), "timeline");
+    EXPECT_FALSE(regs.findById("scaleAssist")->isCurrentlyOpen());
 }
 
 // Tab and Shift+Tab dispatch successfully (there is always at least Library+Canvas open) when the
