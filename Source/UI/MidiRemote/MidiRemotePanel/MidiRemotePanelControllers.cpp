@@ -6,6 +6,7 @@
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
 
+#include "UI/Layout/PopupMotion.h"
 #include <juce_audio_devices/juce_audio_devices.h>
 
 namespace synth::ui {
@@ -41,11 +42,11 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
             if (confirmed)
                 confirmed(choice);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         content->onCancelled = [safeBox] {
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
     }
 }

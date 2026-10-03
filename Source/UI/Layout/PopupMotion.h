@@ -12,6 +12,7 @@
 // With Reduce motion on, both are a plain 80 ms fade and nothing moves.
 
 #include "UI/Layout/UIAnimation.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui::popup_motion {
@@ -90,6 +91,36 @@ public:
     /** Master switch (default on). Off: attached windows show and hide instantly. */
     static void setEnabled(bool enabled);
     static bool isEnabled();
+
+    /** Close `window` softly: fade the LIVE window out (the leaving half of the table in
+     *  docs/layout/animation.md, 80 ms plain fade under Reduce motion), then run `reallyClose`
+     *  one message-loop turn later. Use it for every close the app itself decides (Escape, a
+     *  button, a pick, a programmatic close) instead of closing directly; JUCE's own closes
+     *  (click-away, a menu choice, the title-bar button) are picked up by the leaving picture.
+     *
+     *  `reallyClose` runs at once, before this returns, when the window has no native peer, was
+     *  never attached, is not showing or the engine is disabled (every headless run), so a test
+     *  sees the final state immediately. A second dismiss while one is running is ignored.
+     *  While the fade runs the window ignores the mouse, so it cannot be acted on twice. */
+    static void dismiss(juce::Component& window, std::function<void()> reallyClose);
+
+    /** dismiss() whose close is `window.exitModalState(0)`, for a modal window launched with
+     *  LaunchOptions (the window is deleted by the modal manager). */
+    static void dismissModal(juce::Component& window);
+
+    /** dismiss() whose close is `box.dismiss()` (a call-out popover). */
+    static void dismissCallOut(juce::CallOutBox& box);
+
+    /** True from dismiss() until its `reallyClose` has run. */
+    static bool isDismissing(const juce::Component& window);
+
+    /** How many leaving pictures are on screen right now (a window JUCE hid or deleted that is still
+     *  fading). For tests. */
+    static int getNumLeavingGhosts();
+
+    /** Test seam: lets dismiss() animate a window that has no native peer (the tween then ends on
+     *  its watchdog timer, since no VBlank ever arrives). Default off. */
+    static void setAnimateOffScreenForTest(bool animate);
 
     /** Open a DialogWindow from `options` and attach. Use instead of options.launchAsync(). */
     static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options) {

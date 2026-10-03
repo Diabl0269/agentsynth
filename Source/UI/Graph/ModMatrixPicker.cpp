@@ -1,6 +1,7 @@
 #include "ModMatrixPicker.h"
 
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -428,7 +429,7 @@ void ModMatrixPicker::setAccessibleNames(const juce::String& pickerTitle, const 
 
 void ModMatrixPicker::dismiss() {
     if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-        box->dismiss();
+        synth::ui::PopupMotion::dismissCallOut(*box);
 }
 
 // ---- Test seams ----

@@ -6,6 +6,7 @@
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <functional>
 #include <gtest/gtest.h>
 
 namespace {
@@ -208,3 +209,170 @@ TEST(PopupMotionAttach, DisabledEngineStaysOutOfTheWay) {
 }
 
 } // namespace
+
+// ----------------------------------------------------------------------------------------------
+// Leaving: dismiss() fades the live window, then closes
+// ----------------------------------------------------------------------------------------------
+
+namespace {
+
+struct AnimateOffScreenGuard {
+    explicit AnimateOffScreenGuard(bool on) { PopupMotion::setAnimateOffScreenForTest(on); }
+    ~AnimateOffScreenGuard() { PopupMotion::setAnimateOffScreenForTest(false); }
+};
+
+// Runs the message loop until `done` or two seconds pass.
+bool pumpUntil(const std::function<bool()>& done) {
+    const auto deadline = juce::Time::getMillisecondCounter() + 2000;
+    while (!done() && juce::Time::getMillisecondCounter() < deadline)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    return done();
+}
+
+} // namespace
+
+TEST(PopupMotionDismiss, ClosesAtOnceWhenTheWindowIsNotOnScreen) {
+    juce::Component window;
+    window.setBounds(0, 0, 50, 50);
+    PopupMotion::attach(window);
+    window.setVisible(true);
+    bool closed = false;
+    PopupMotion::dismiss(window, [&] { closed = true; });
+    EXPECT_TRUE(closed); // no peer, no seam: the final state is there before dismiss() returns
+    EXPECT_FALSE(PopupMotion::isDismissing(window));
+}
+
+TEST(PopupMotionDismiss, ClosesAtOnceWhenTheWindowWasNeverAttached) {
+    juce::Component window;
+    window.setVisible(true);
+    bool closed = false;
+    PopupMotion::dismiss(window, [&] { closed = true; });
+    EXPECT_TRUE(closed);
+}
+
+TEST(PopupMotionDismiss, ClosesAtOnceWhenTheEngineIsDisabled) {
+    AnimateOffScreenGuard seam(true);
+    PopupMotion::setEnabled(false);
+    juce::Component window;
+    PopupMotion::attach(window);
+    window.setVisible(true);
+    bool closed = false;
+    PopupMotion::dismiss(window, [&] { closed = true; });
+    PopupMotion::setEnabled(true);
+    EXPECT_TRUE(closed);
+}
+
+TEST(PopupMotionDismiss, StartsAFadeAndClosesOnlyWhenItEnds) {
+    AnimateOffScreenGuard seam(true);
+    juce::Component window;
+    window.setBounds(0, 0, 50, 50);
+    PopupMotion::attach(window);
+    window.setVisible(true);
+    int closes = 0;
+    PopupMotion::dismiss(window, [&] { ++closes; });
+    EXPECT_EQ(closes, 0); // the close did not happen directly
+    EXPECT_TRUE(PopupMotion::isDismissing(window));
+    {
+        bool self = true, kids = true;
+        window.getInterceptsMouseClicks(self, kids);
+        EXPECT_FALSE(self);
+    } // cannot be acted on twice while it fades
+
+    PopupMotion::dismiss(window, [&] { closes += 100; }); // a second dismiss is ignored
+    ASSERT_TRUE(pumpUntil([&] { return closes > 0; }));
+    EXPECT_EQ(closes, 1);
+    EXPECT_FALSE(PopupMotion::isDismissing(window));
+}
+
+TEST(PopupMotionDismiss, ReduceMotionStillFadesBriefly) {
+    AnimateOffScreenGuard seam(true);
+    ReducedMotionOverrideGuard reduced(true);
+    juce::Component window;
+    PopupMotion::attach(window);
+    window.setVisible(true);
+    bool closed = false;
+    PopupMotion::dismiss(window, [&] { closed = true; });
+    EXPECT_FALSE(closed); // reduce motion shortens the fade, it does not skip it
+    EXPECT_TRUE(pumpUntil([&] { return closed; }));
+}
+
+TEST(PopupMotionDismiss, ADismissedWindowDeletedByItsCloseLeavesNoGhostBehind) {
+    AnimateOffScreenGuard seam(true);
+    auto window = std::make_unique<juce::Component>();
+    window->setBounds(0, 0, 50, 50);
+    PopupMotion::attach(*window);
+    window->setVisible(true);
+    auto* raw = window.get();
+    bool closed = false;
+    PopupMotion::dismiss(*raw, [&] {
+        closed = true;
+        window.reset();
+    });
+    ASSERT_TRUE(pumpUntil([&] { return closed; }));
+    EXPECT_EQ(window, nullptr);
+}
+
+TEST(PopupMotionDismiss, CallOutDismissGoesThroughTheFadeToo) {
+    AnimateOffScreenGuard seam(true);
+    synth::theme::AppLookAndFeel laf;
+    juce::LookAndFeel::setDefaultLookAndFeel(&laf);
+    {
+        juce::Component parent;
+        parent.setBounds(0, 0, 400, 300);
+        juce::Component content;
+        content.setSize(100, 60);
+        juce::CallOutBox box(content, {50, 50, 20, 20}, &parent);
+        box.setVisible(true);
+        PopupMotion::dismissCallOut(box);
+        EXPECT_TRUE(PopupMotion::isDismissing(box));
+    }
+    juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
+}
+
+// ----------------------------------------------------------------------------------------------
+// Closes JUCE does itself leave on a picture. These need a real native window; a platform that
+// cannot give one in a test run skips them.
+// ----------------------------------------------------------------------------------------------
+
+namespace {
+
+struct RedWindow : juce::Component {
+    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::red); }
+};
+
+std::unique_ptr<RedWindow> showNativeWindow() {
+    auto window = std::make_unique<RedWindow>();
+    window->setBounds(200, 200, 100, 60);
+    PopupMotion::attach(*window);
+    window->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    window->setVisible(true);
+    return window;
+}
+
+void letItSettle() {
+    const auto until = juce::Time::getMillisecondCounter() + 300;
+    while (juce::Time::getMillisecondCounter() < until)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+}
+
+} // namespace
+
+TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    letItSettle();
+    window->setVisible(false);
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}
+
+TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    letItSettle();
+    window.reset();
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}

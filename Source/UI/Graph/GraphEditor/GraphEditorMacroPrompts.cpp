@@ -123,7 +123,7 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
 
     dialog->onChoice = [window, respond](bool createPorts, bool remember) {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
         respond(createPorts, remember);
     };
 }
@@ -521,7 +521,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
 
     dialog->onRequestClose = [safeThis, window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
         // Teardown backstop: an abandoned picker's CallOutBox can outlive this dialog and its onCommit
         // clear may never reach it, so disarm whatever this session armed (by the node it cached, no node
         // arg); a no-op when nothing was armed, so a plain Close of a never-previewed picker repaints nothing.

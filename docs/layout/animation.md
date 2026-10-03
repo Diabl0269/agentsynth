@@ -295,16 +295,34 @@ fully clickable from its first frame, only its opacity and a few pixels move. It
 window without a native peer (every headless test, a call-out given a parent component) or while
 `PopupMotion::setEnabled(false)`.
 
-**Leaving.** JUCE hides, or deletes, a popup the instant it is dismissed, so the leaving motion
-runs on a picture of it: a click-through, shadowed window at the same place that fades and slides
-back, then deletes itself. A plain window (menus, alerts, call-outs) is pictured with
-`createComponentSnapshot`; a window with a native title bar (the app's dialogs) is pictured, title
-bar included, from its `NSView` on macOS. A window deleted while still flagged visible (a menu
-after a choice, an alert after a button) leaves with the picture taken while it was open.
+**Leaving.** Every close the app decides itself (Escape, a Close or choice button, a pick in a popover,
+a programmatic close) goes through `PopupMotion::dismiss(window, reallyClose)`, which fades the LIVE
+window out (110 ms, 80 ms plain fade under Reduce motion; the table above) and runs `reallyClose` one
+turn after the fade ends. Never close a popup directly: `closeHostingWindow` (`DialogKeyboard.h`, the
+Escape path of every dialog and call-out), `PopupMotion::dismissCallOut(box)` and
+`PopupMotion::dismissModal(window)` (an `exitModalState(0)` of a `LaunchOptions` dialog) are the three
+forms. `reallyClose` runs at once, before `dismiss` returns, for a window with no native peer, one
+that was never attached, one not showing, or with the engine disabled, so headless runs and the full
+test suite see the final state immediately; the frame driver only runs while a fade runs. While the
+fade runs the window ignores the mouse and a second `dismiss` does nothing, so a choice cannot fire
+twice. Tests reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`.
+
+Closes JUCE performs itself (click-away on a menu or call-out, a menu row chosen, an alert button, a
+dialog's title-bar button) cannot be deferred, so they leave on a picture of the window: a
+click-through, shadowed window at the same place that fades and slides back, then deletes itself. A
+plain window (menus, alerts, call-outs) is pictured with `createComponentSnapshot`; a window with a
+native title bar (the app's dialogs) is pictured, title bar included, from its `NSView` on macOS. A
+window deleted while still flagged visible leaves with the picture taken while it was open. A window
+that `dismiss` faded gets no picture (it already faded). `PopupMotion::getNumLeavingGhosts()` counts the pictures on screen, for tests (`PopupMotionLeaving`).
 
 **Not covered.**
-- Leaving, for a native-title window on Windows or Linux: nothing is drawn, it vanishes at once
-  (the opening still animates).
+- Leaving, for a native-title window closed by JUCE itself (title-bar button) on Windows or Linux:
+  nothing is drawn, it vanishes at once (the opening still animates, and an app-decided close fades
+  the live window on every platform).
+- Closes left direct on purpose: the help call-out of the module library
+  (`ModuleLibraryComponent::closeHelpPopover` and its switch to the pinned panel, which hand the
+  popup's content between owners in the same call), a `ModDotController` being destroyed (its popover
+  must be gone with it), and `NonModalLabel`'s modal-state exit (not a window).
 - The leaving picture is a snapshot, not the live window: a menu row's hover highlight or text typed
   into an alert after it opened is not in it, and a dialog closed within 160 ms of opening has none
   and just disappears.
@@ -344,8 +362,10 @@ shortcut.
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
 - **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its
-  anchor and leaves the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. One shared
-  mechanism, never per call site: [Popup windows](#popup-windows).
+  anchor and leaves the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close,
+  Escape and click-away included, leaves this way (`PopupMotion::dismiss`, never a direct close), and
+  lands at once when not on screen. One shared mechanism, never per call site:
+  [Popup windows](#popup-windows).
 - **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
   re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
 - **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and
