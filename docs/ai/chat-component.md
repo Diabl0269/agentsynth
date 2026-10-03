@@ -118,6 +118,23 @@ height, which is what lets a long wrapped line — a refused plan's reason, a lo
 `EditPlanCard::getRequiredHeight(width)` takes the render width as a parameter for the same reason:
 the height calculation and the actual render width must always agree.
 
+## Long messages fold
+
+Nothing in the chat is cut off with an ellipsis. A bubble shows at most six lines of text; a longer
+message (an assistant answer, or an error such as an unreachable provider) shows its first six lines
+and a "Show more" link (`TextLinkButton`), which unfolds the whole text and then reads "Show less". The
+text label inside the bubble always holds the whole message at its full measured height (no border, so
+the wrap matches the measurement) and a clipping parent shows only the first six lines while folded,
+so the label itself never truncates. A message of six lines or fewer has no link and no extra space.
+
+The fold state is `MessageData::textUnfolded`, so `updateChatDisplay()` rebuilds keep it; it is not
+saved with the history, so a restored chat starts folded. The link is a Tab stop with the accent focus
+ring, titled and tipped "Show the whole message" / "Show less of this message"; the bubble's screen-reader
+title is the whole text whether folded or not. The height change animates over 160 ms ease-out: the
+bubble holds a `fold fraction` driven by an `AnimationDriver`, and each frame re-runs the list layout,
+which asks the bubble for its interpolated height (the same list relayout the card's Show details uses,
+now animated). A bubble that is not on screen snaps.
+
 ## Debug logger registration
 
 In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling

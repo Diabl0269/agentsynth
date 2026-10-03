@@ -2,6 +2,8 @@
 #include "AIChatComponentEditPlanCard.h"
 #include "Branding.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
+#include "UI/Layout/TextLinkButton.h"
+#include "UI/Layout/UIAnimation.h"
 #include <thread>
 
 namespace synth {
@@ -14,7 +16,9 @@ namespace synth {
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<bool()> applyPlan,
-                  std::function<void(const juce::URL&)> urlOpener, EditPlanCard::RateCallback onRate) {
+                  std::function<void(const juce::URL&)> urlOpener, EditPlanCard::RateCallback onRate,
+                  std::function<void(bool)> onFoldChanged)
+        : onFoldChangedCallback(std::move(onFoldChanged)) {
         role = data.role;
         text = data.text;
         responseMs = data.responseMs;
@@ -25,8 +29,23 @@ public:
         addAndMakeVisible(textLabel);
         textLabel.setAccessible(false);
         textLabel.setText(text, juce::dontSendNotification);
+        // No border: the bubble measures the text at the full content width with no inset, and a
+        // label that wraps narrower than it was measured ends the last line with an ellipsis.
+        textLabel.setBorderSize(juce::BorderSize<int>(0));
         textLabel.setMinimumHorizontalScale(1.0f);
         textLabel.setJustificationType(juce::Justification::topLeft);
+        // The label always holds the whole text at full height; textClip shows the first six lines
+        // of it while the message is folded, so nothing is ever cut with an ellipsis.
+        addAndMakeVisible(textClip);
+        textClip.setInterceptsMouseClicks(false, false);
+        textClip.addAndMakeVisible(textLabel);
+
+        unfolded = data.textUnfolded;
+        foldFraction = unfolded ? 1.0f : 0.0f;
+        foldLink.setWantsKeyboardFocus(true);
+        foldLink.onClick = [this] { toggleFold(); };
+        updateFoldLinkTexts();
+        addChildComponent(foldLink);
 
         // One card per answer that carries a plan, whatever it holds (a patch, timeline ops, or
         // both); a refused plan still gets its card, showing why, with no Apply.
@@ -43,6 +62,8 @@ public:
             addAndMakeVisible(*upgradeButton);
         }
     }
+
+    ~MessageBubble() override { foldAnim.stop(vblank); }
 
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
         return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::listItem);
@@ -103,6 +124,7 @@ public:
         // getLocalBounds().reduced(kOuterPadding) + removeFromTop(kRoleBandHeight). Without this,
         // textLabel started at the same y the role band paints into and clipped/overlapped it.
         b.removeFromTop(kRoleBandHeight + kRoleContentGap);
+        const int contentWidth = b.getWidth();
 
         if (planCard) {
             planCard->setBounds(b.removeFromBottom(planCard->getRequiredHeight(b.getWidth())));
@@ -114,17 +136,20 @@ public:
             b.removeFromBottom(kRoleContentGap);
         }
 
-        textLabel.setBounds(b);
+        const TextMetrics m = measureText(contentWidth);
+        textClip.setBounds(b.removeFromTop(visibleTextHeight(m)));
+        // One spare line below the measured text so the label's own line count never falls short.
+        textLabel.setBounds(0, 0, contentWidth, m.fullHeight + (int)std::ceil(textLabel.getFont().getHeight()));
+
+        foldLink.setVisible(m.foldable);
+        if (m.foldable)
+            foldLink.setBounds(b.removeFromTop(kFoldLinkHeight));
     }
 
     int getRequiredHeight(int width) {
         int contentWidth = width - kOuterPadding * 2;
-        juce::Font font = textLabel.getFont();
-
-        juce::GlyphArrangement ga;
-        ga.addJustifiedText(font, text, 0.0f, 0.0f, (float)contentWidth, juce::Justification::left);
-
-        int textHeight = (int)ga.getBoundingBox(0, -1, true).getHeight();
+        const TextMetrics m = measureText(contentWidth);
+        int textHeight = visibleTextHeight(m) + (m.foldable ? kFoldLinkHeight : 0);
         // Outer padding (top+bottom) + the role band + the gap below it, on top of the wrapped
         // message text — see resized()'s matching reservation.
         int height = textHeight + kOuterPadding * 2 + kRoleBandHeight + kRoleContentGap;
@@ -139,7 +164,84 @@ public:
         return juce::jmax(40, height);
     }
 
+    // Whether the text is longer than the fold, at this bubble width (test hook).
+    bool isFoldable(int width) { return measureText(width - kOuterPadding * 2).foldable; }
+
 private:
+    // A message longer than this many lines is folded behind "Show more".
+    static constexpr int kFoldLines = 6;
+    static constexpr int kFoldLinkHeight = 20;
+    static constexpr double kFoldAnimMs = 160.0;
+
+    struct TextMetrics {
+        int fullHeight = 0;
+        int foldedHeight = 0;
+        bool foldable = false;
+    };
+
+    TextMetrics measureText(int contentWidth) {
+        const juce::Font font = textLabel.getFont();
+        TextMetrics m;
+        m.fullHeight = AIChatComponent::computeWrappedTextHeight(font, text, contentWidth);
+        const float lineHeight = font.getHeight();
+        const int lines = juce::jmax(1, (int)std::lround((float)(m.fullHeight - 2) / lineHeight));
+        m.foldable = lines > kFoldLines;
+        m.foldedHeight = (int)std::ceil(lineHeight * (float)kFoldLines);
+        return m;
+    }
+
+    // Height of the text area now: the folded height, the full height, or between them while the
+    // fold animation runs.
+    int visibleTextHeight(const TextMetrics& m) const {
+        if (!m.foldable)
+            return m.fullHeight;
+        return m.foldedHeight + (int)std::lround((float)(m.fullHeight - m.foldedHeight) * foldFraction);
+    }
+
+    void updateFoldLinkTexts() {
+        const juce::String label = unfolded ? "Show less" : "Show more";
+        const juce::String tip = unfolded ? "Show less of this message" : "Show the whole message";
+        foldLink.setButtonText(label);
+        foldLink.setTitle(tip);
+        foldLink.setTooltip(tip);
+        foldLink.repaint();
+    }
+
+    void relayoutList() {
+        if (auto* chat = findParentComponentOfClass<AIChatComponent>())
+            chat->resized();
+        else
+            resized();
+    }
+
+    void toggleFold() {
+        unfolded = !unfolded;
+        updateFoldLinkTexts();
+        if (onFoldChangedCallback)
+            onFoldChangedCallback(unfolded);
+
+        const float from = foldFraction;
+        const float to = unfolded ? 1.0f : 0.0f;
+        if (isShowing()) {
+            // Same 160 ms ease-out as the other short UI motion; each frame re-runs the list's layout,
+            // which asks this bubble for its (interpolated) height.
+            foldAnim.start(
+                vblank, kFoldAnimMs, synth::ui::easeOutCubic,
+                [this, from, to](float t) {
+                    foldFraction = from + (to - from) * t;
+                    relayoutList();
+                },
+                [this, to] {
+                    foldFraction = to;
+                    relayoutList();
+                });
+        } else {
+            foldAnim.stop(vblank);
+            foldFraction = to;
+            relayoutList();
+        }
+    }
+
     static constexpr int kUpgradeButtonHeight = 28;
     // 8px-grid outer padding (replaces the old ad hoc reduced(10)/reduced(2) mismatch between
     // paint() and resized() that let the role label overlap the message text).
@@ -153,6 +255,14 @@ private:
     juce::Label textLabel;
     std::unique_ptr<EditPlanCard> planCard;
     std::unique_ptr<juce::TextButton> upgradeButton;
+
+    std::function<void(bool)> onFoldChangedCallback;
+    bool unfolded = false;
+    float foldFraction = 0.0f; // 0 folded .. 1 unfolded
+    juce::Component textClip;
+    synth::ui::TextLinkButton foldLink{"Show more"};
+    juce::VBlankAnimatorUpdater vblank{this};
+    synth::ui::AnimationDriver foldAnim;
 };
 
 void AIChatComponent::resized() {
@@ -378,6 +488,10 @@ void AIChatComponent::updateChatDisplay() {
                         }
                     }
                 }
+            },
+            [this, i](bool unfolded) {
+                if (i < messages.size())
+                    messages[i].textUnfolded = unfolded;
             });
         messageList.addAndMakeVisible(bubble);
     }

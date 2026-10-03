@@ -116,6 +116,7 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
                          : (hot ? accent.brighter(kTextLinkHoverBrighten) : accent));
     g.setFont(font);
     g.drawText(button.getButtonText(), bounds, justification, false);
+    synth::ui::paintFocusRing(g, bounds.toFloat(), button);
     if (!hot)
         return;
 

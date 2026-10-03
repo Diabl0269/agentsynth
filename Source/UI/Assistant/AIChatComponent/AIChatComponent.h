@@ -429,6 +429,9 @@ private:
 
         // True once the card's Apply succeeded; saved with the history (kPlanAppliedMarker).
         bool planApplied = false;
+
+        // Long message unfolded by the reader; kept across rebuilds, never saved to history.
+        bool textUnfolded = false;
     };
     static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
     std::vector<MessageData> messages;
