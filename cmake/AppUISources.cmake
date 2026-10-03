@@ -293,6 +293,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditor.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp

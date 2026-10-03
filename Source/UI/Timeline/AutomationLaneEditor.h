@@ -4,6 +4,7 @@
 #include "EditTool.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
+#include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -34,11 +35,16 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // move it; drag a segment to scrub its left point's tension; double-click empty space adds a point), Pencil (freehand
 // drag, thinned via synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
 // as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation).
+// Pointer tool: the point under the pointer, or being dragged, shows a value bubble above it (text from
+// valueToText); a point shows the grab cursor; pressing the flat line of a lane with NO points and dragging
+// vertically sets the lane's constant value, committed once on mouse-up.
 // Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
 
-class AutomationLaneEditor : public juce::Component {
+class AutomationLaneEditor
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     enum class Tool { Pointer, Pencil, Line, Eraser };
 
@@ -57,6 +63,10 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
 
+    /** Text for a lane value in the parameter's own units ("-6.0 dB"); may be null or return empty, which falls
+     *  back to the plain number. */
+    std::function<juce::String(double)> valueToText;
+
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
 
@@ -73,6 +83,8 @@ public:
     void setActiveLane(synth::LaneId id) noexcept {
         laneId_ = id;
         dragMode_ = DragMode::None;
+        hoveredBeat_.reset();
+        bubble_.hide();
         shapeGesture_.cancel();
         repaint();
     }
@@ -95,7 +107,8 @@ public:
     // The colour the curve and points are painted in right now (see setCurveColour).
     juce::Colour getResolvedCurveColour() const;
 
-    // The pen while the Draw tool is the active tool (the plain arrow otherwise), like the piano roll's velocity strip.
+    // The grab hand over a point (Pointer tool), the pen while the Draw tool is the active tool (the plain arrow
+    // otherwise), like the piano roll's velocity strip.
     juce::MouseCursor getMouseCursor() override;
     void lookAndFeelChanged() override;
 
@@ -107,6 +120,9 @@ public:
     void applySegmentCurveChoice(double leftBeat, int curve);
 
     // ---- Test hooks ----
+
+    // The value bubble over the hovered or dragged point.
+    PointValueBubble& getPointBubbleForTest() noexcept { return bubble_; }
 
     // The handle's on-screen rect for a live breakpoint at `beat`, or an empty rect if it doesn't
     // resolve — what a test uses to compute where to synthesize a mouse event, mirroring
@@ -122,7 +138,7 @@ public:
     double yToValue(double y) const;
 
 private:
-    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser };
+    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser, LaneConstant };
 
     struct HandleHit {
         double beat = 0.0;
@@ -162,6 +178,13 @@ private:
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
+
+    // Hover/bubble: follows the point under `pos` (none = hidden), and floats over (beat, value) with its text.
+    void updateHover(juce::Point<int> pos);
+    void showBubbleAt(double beat, double value);
+    juce::String valueText(double value) const;
+    // True when `pos` is on the flat line of the active lane while it has no points.
+    bool onFlatLine(juce::Point<int> pos) const;
 
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
@@ -208,6 +231,7 @@ private:
     std::optional<double> hoveredBeat_; // the handle under the pointer, always drawn
 
     AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
+    PointValueBubble bubble_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };

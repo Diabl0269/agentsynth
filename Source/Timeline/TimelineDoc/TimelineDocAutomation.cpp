@@ -170,6 +170,22 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     });
 }
 
+// The range default is what playback writes every block while the lane has no breakpoints, so it IS the lane's
+// constant. Clamped into the range; a non-finite value or unknown lane is rejected; the value already held is a
+// no-op. A user edit: callers wrap it in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setLaneConstantValue(LaneId id, double value) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || !std::isfinite(value))
+        return false;
+    const float clamped = juce::jlimit(lane->range.minValue, lane->range.maxValue, static_cast<float>(value));
+    if (lane->range.defaultValue == clamped)
+        return true; // already there: no revision bump, no notification
+    return applyMutation([&] {
+        lane->range.defaultValue = clamped;
+        return true;
+    });
+}
+
 // -------------------------------------------------------- bindings --
 
 bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
