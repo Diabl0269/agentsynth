@@ -537,8 +537,8 @@ inserts an ADSR and a VCA ahead of the rest of the chain:
 **Inserted AFTER any Voice Mixer stage, never before it**, and both nodes are forced non-poly
 regardless of the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only — it
 never reads the MIDI note-on and note-off fallback that drives its non-poly branch — so a poly ADSR
-fed only Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` is explicitly set to
-0.7, independently of its own stock default, so this auto-wired chain settles at a musical level;
+fed only Track In's MIDI would output a permanent zero envelope. The ADSR is otherwise exactly the card the
+module library creates (stock defaults, plus the new-module Dual I/O default); only `poly` is forced.
 VCA's `gain` is overridden to 1.0 so the envelope alone governs level. **Sampler is untouched** — it
 already has its own one-shot playback envelope.
 `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one

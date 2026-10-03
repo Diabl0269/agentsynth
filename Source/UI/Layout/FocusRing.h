@@ -2,7 +2,15 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+namespace synth::theme {
+struct Theme;
+}
+
 namespace synth::ui {
+
+// The ring's stroke width for `theme`: 1.5x the border weight on a dark theme, 2.5x on a light one,
+// where a thin accent line on a white control beside its grey border reads as no ring at all.
+float focusRingThickness(const synth::theme::Theme& theme);
 
 // Strokes the same ring as paintFocusRing without asking whether `comp` holds focus, for a caller that
 // decides that itself (a ring that follows a tracked item rather than the component, or a test with no

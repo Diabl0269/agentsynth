@@ -4,13 +4,17 @@
 
 namespace synth::ui {
 
+float focusRingThickness(const synth::theme::Theme& theme) {
+    return theme.metrics.borderWidth * (theme.isDark ? 1.5f : 2.5f);
+}
+
 void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
                           float cornerRadius) {
     juce::Colour colour = juce::Colours::orange;
     float thickness = 1.5f;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&comp.getLookAndFeel())) {
         colour = lf->getTheme().colors.accent;
-        thickness = lf->getTheme().metrics.borderWidth * 1.5f;
+        thickness = focusRingThickness(lf->getTheme());
     }
     g.setColour(colour);
     const auto ring = area.reduced(thickness * 0.5f);

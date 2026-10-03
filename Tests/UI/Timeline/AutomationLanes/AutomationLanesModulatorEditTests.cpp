@@ -5,6 +5,7 @@
 // inside a macro reopens with its row.
 
 #include "AutomationLanesModulatorFixture.h"
+#include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 
 using namespace modulator_test;
@@ -33,10 +34,10 @@ TEST_F(TimelinePanelIntegrationTest, RowEditsChangeTheLiveParametersAndEachIsOne
     EXPECT_EQ(s.row()->getShapeCombo().getSelectedId(), 1) << "the row follows the undo";
 
     // Sync rate.
-    s.row()->getSyncRateCombo().setSelectedId(5, juce::sendNotificationSync);
-    EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), 4.0f) << "1/16";
+    s.row()->getSyncRateCombo().setSelectedId(4, juce::sendNotificationSync);
+    EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), 3.0f) << "1/16";
     ASSERT_TRUE(s.undo().undo());
-    EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), 2.0f);
+    EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), 5.0f) << "back to the 1/4 default";
 
     // Amount: a real upward drag on the band's flat line is one graph step, however many moves it took, and
     // creates no amount lane.
@@ -155,4 +156,19 @@ TEST_F(TimelinePanelIntegrationTest, AProjectWithAModulatorInsideAMacroReopensWi
         EXPECT_EQ(owner->name, "Tone");
     }
     scratch.deleteRecursively();
+}
+
+// The row's sync-rate picker offers the app-wide tempo-division list, shortest first; item id = index + 1.
+TEST_F(TimelinePanelIntegrationTest, SyncRateComboListsTheSharedDivisionsShortestFirst) {
+    Scene s;
+    s.addLfoFromLaneMenu();
+    auto& combo = s.row()->getSyncRateCombo();
+    const auto& divisions = synth::envelopeNoteDivisions();
+    ASSERT_EQ(combo.getNumItems(), divisions.size());
+    for (int i = 0; i < divisions.size(); ++i) {
+        EXPECT_EQ(combo.getItemText(i), divisions[i]);
+        EXPECT_EQ(combo.getItemId(i), i + 1);
+    }
+    EXPECT_EQ(combo.getItemText(0), "1/128") << "shortest first";
+    EXPECT_EQ(combo.getItemText(divisions.size() - 1), "1/1");
 }

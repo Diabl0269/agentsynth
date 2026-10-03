@@ -20,7 +20,7 @@ struct TrackHeaderHost;
 class ModulatorRow : public juce::Component {
 public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
-    // header column is ~190 px, too narrow for the app's combos and bars side by side on two lines.
+    // header column is ~200 px, too narrow for the app's combos and bars side by side on two lines.
     static constexpr int kBaseHeight = 54;
     static constexpr int kIndent = 28; // one step further in than a lane header
     static constexpr int kShowOnCanvasMenuId = 1;

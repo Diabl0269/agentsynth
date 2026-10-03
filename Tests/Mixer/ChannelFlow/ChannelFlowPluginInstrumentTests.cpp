@@ -633,6 +633,45 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
+// The ADSR a '+ Track' chain builds is the same card as one dragged from the library: every
+// parameter but the forced-mono `poly` is the stock default, and the new-module hook (Dual I/O default)
+// runs on it like it does on a library drop.
+TEST_F(ChannelFlowTest, TrackChainAdsrMatchesTheLibraryAdsrAndRunsTheNewModuleHook) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    auto trackInNode = graph.addNode(synth::AIStateMapper::createModule("Track In"));
+    auto oscNode = graph.addNode(synth::AIStateMapper::createModule("Oscillator"));
+    ASSERT_NE(trackInNode, nullptr);
+    ASSERT_NE(oscNode, nullptr);
+
+    juce::StringArray hooked;
+    const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
+        graph, *trackInNode, *oscNode, /*chainSourceRightChannel=*/1, {200, 0}, {300, 0},
+        [&hooked](juce::AudioProcessor&, const juce::String& type) { hooked.add(type); });
+    ASSERT_NE(envAndVca.vca, nullptr);
+    EXPECT_TRUE(hooked.contains("ADSR"));
+    EXPECT_TRUE(hooked.contains("VCA"));
+
+    auto* adsrNode = findNodeOfTypeCFT(graph, ModuleType::ADSR);
+    ASSERT_NE(adsrNode, nullptr);
+    auto libraryAdsr = synth::AIStateMapper::createModule("ADSR");
+    ASSERT_NE(libraryAdsr, nullptr);
+    for (auto* param : libraryAdsr->getParameters()) {
+        auto* ref = dynamic_cast<juce::RangedAudioParameter*>(param);
+        ASSERT_NE(ref, nullptr);
+        if (ref->paramID == "poly")
+            continue; // forced mono: Track In's raw MIDI only gates the mono branch
+        auto* built = dynamic_cast<juce::RangedAudioParameter*>([&]() -> juce::AudioProcessorParameter* {
+            for (auto* p : adsrNode->getProcessor()->getParameters())
+                if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(p); r != nullptr && r->paramID == ref->paramID)
+                    return p;
+            return nullptr;
+        }());
+        ASSERT_NE(built, nullptr) << ref->paramID;
+        EXPECT_FLOAT_EQ(built->getValue(), ref->getValue()) << ref->paramID << " differs from the library ADSR";
+    }
+}
+
 // synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
 // level (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path never
 // takes this branch today, same reasoning as the poly tests above) — proves a poly instrument gets
@@ -672,9 +711,6 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
             if (boolParam->paramID == "poly")
                 EXPECT_TRUE(boolParam->get()) << "the ADSR must be poly — its gate now comes from Poly MIDI CV";
-        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
-            if (floatParam->paramID == "sustain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f) << "same sustain override as the non-poly path";
     }
     for (auto* param : polyEnv.vca->getProcessor()->getParameters()) {
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))

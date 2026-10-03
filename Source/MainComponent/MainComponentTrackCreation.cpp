@@ -391,7 +391,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
         const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
             graph, *build.trackInNode, *build.instrumentNode, {polyMidiX, build.trackInPosition.y},
-            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y});
+            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y}, newModuleHook());
         if (polyEnv.vca != nullptr) {
             build.polyMidiUuid = polyEnv.polyMidiUuid;
             build.adsrUuid = polyEnv.adsrUuid;
@@ -437,7 +437,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
         const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
             graph, *build.trackInNode, *build.chainSource, build.sourceRightChannel,
-            {adsrX, build.chainSourcePosition.y}, {vcaX, build.chainSourcePosition.y});
+            {adsrX, build.chainSourcePosition.y}, {vcaX, build.chainSourcePosition.y}, newModuleHook());
         if (envAndVca.vca != nullptr) {
             build.adsrUuid = envAndVca.adsrUuid;
             build.vcaUuid = envAndVca.vcaUuid;

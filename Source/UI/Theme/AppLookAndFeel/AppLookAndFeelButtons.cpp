@@ -26,9 +26,11 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
     // none, and Button::paint() only ever passes this function isOver()/isDown()
     // (juce_Button.cpp), never focus state. Reuses drawTextEditorOutline/drawComboBox's own
     // "accent outline when focused, same border weight" convention rather than inventing a new
-    // style, so every plain TextButton in the app shows focus.
-    g.setColour(button.hasKeyboardFocus(true) ? c.accent : c.border.withMultipliedAlpha(dim));
+    // style, so every plain TextButton in the app shows focus. The focused ring is the shared one
+    // (thicker on a light theme, where a 1 px accent line beside the grey border read as no ring).
+    g.setColour(c.border.withMultipliedAlpha(dim));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
+    synth::ui::paintFocusRing(g, button.getLocalBounds().toFloat(), button, m.pillRadius);
 }
 
 juce::Font AppLookAndFeel::getTextButtonFont(juce::TextButton&, int buttonHeight) {
@@ -200,7 +202,7 @@ void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& butt
     // ring touching it would merge into it). The box shrinks only when the row is too short for the
     // ring to fit inside the component.
     constexpr float kRingGap = 1.0f;
-    const float ringExtent = kRingGap + theme.metrics.borderWidth * 1.5f;
+    const float ringExtent = kRingGap + synth::ui::focusRingThickness(theme);
     const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f * ringExtent);
     juce::Rectangle<float> box(4.0f, ((float)button.getHeight() - boxSize) * 0.5f, boxSize, boxSize);
     if (focusRingOnly) {

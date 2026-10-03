@@ -2,6 +2,7 @@
 // the menu live in ModulatorRowEdits.cpp; the band in the lanes region is ModulatorBand.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
+#include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -67,7 +68,7 @@ void ModulatorRow::initLfoControls() {
     const juce::StringArray shapes{"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"};
     for (int i = 0; i < shapes.size(); ++i)
         shape_.addItem(shapes[i], i + 1);
-    const juce::StringArray rates{"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
+    const juce::StringArray& rates = synth::envelopeNoteDivisions();
     for (int i = 0; i < rates.size(); ++i)
         syncRate_.addItem(rates[i], i + 1);
 
@@ -146,12 +147,13 @@ void ModulatorRow::resized() {
 // Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
 // rate in what is left. Line 3: Sync, then the amount. Nothing is clipped at the default column width.
 void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine) {
-    const int shapeWidth =
-        juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(shape_), shapeLine.getWidth() * 3 / 5);
+    // The rate combo's longest name ("1/128") is reserved first, so the shape never takes its room.
+    const int rateFit = synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(syncRate_);
+    const int shapeWidth = juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(shape_),
+                                      shapeLine.getWidth() * 3 / 5, shapeLine.getWidth() - rateFit - kGap);
     shape_.setBounds(shapeLine.removeFromLeft(shapeWidth).reduced(0, 1));
     shapeLine.removeFromLeft(kGap);
-    const int rateWidth =
-        juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(syncRate_), shapeLine.getWidth());
+    const int rateWidth = juce::jmin(rateFit, shapeLine.getWidth());
     syncRate_.setBounds(shapeLine.withWidth(rateWidth).reduced(0, 1));
     rateTextArea_ = shapeLine.removeFromRight(kRateTextWidth);
     rateHz_.setBounds(shapeLine.reduced(0, 3));

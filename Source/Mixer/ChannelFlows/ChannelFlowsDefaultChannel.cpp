@@ -148,11 +148,10 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 // before it, so a poly instrument's per-voice audio is summed to one stereo pair before the
 // (necessarily-mono) VCA gates it.
 //
-// ADSR's sustain (stock factory default 1.0; this override is kept
-// for clarity/explicitness) is set to 0.7 so a held note settles at a musical level instead of the
-// full peak; the release stage (stock default, unchanged) is what fixes the drone-after-note-off
-// bug. VCA's gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs
-// perceived level, not an extra silent 50% attenuation stacked under it.
+// The ADSR is left exactly as the module library creates it (stock defaults, and the new-module
+// hook's Dual I/O default), so a '+ Track' ADSR and a dragged-in one are the same card; the release
+// stage is what fixes the drone-after-note-off bug. VCA's gain (stock factory default 0.5) is overridden to 1.0 so the
+// envelope alone governs perceived level, not an extra silent 50% attenuation stacked under it.
 //
 // The poly path supersedes this as the poly instrument's ONLY option: when the instrument is poly,
 // the caller now builds addPolyEnvelopeAndVCAForInstrument() below instead of this one (true
@@ -164,22 +163,20 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
                                                  juce::AudioProcessorGraph::Node& trackIn,
                                                  juce::AudioProcessorGraph::Node& chainSource,
                                                  int chainSourceRightChannel, juce::Point<int> adsrPosition,
-                                                 juce::Point<int> vcaPosition) {
+                                                 juce::Point<int> vcaPosition,
+                                                 const DefaultChannelLayout::NewModuleHook& onNewModule) {
     EnvelopeAndVCA result;
 
     juce::String adsrUuid;
-    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid);
+    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid, onNewModule);
     if (adsr == nullptr)
         return result;
     // Forced non-poly regardless of the instrument's own poly flag — see above for why a poly ADSR
     // fed only Track In's MIDI would never fire.
     setBoolParam(*adsr->getProcessor(), "poly", false);
-    // Explicit sustain override so this auto-wired chain's level doesn't depend on ADSR's own
-    // stock default (1.0) — see above.
-    setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;
-    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid);
+    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid, onNewModule);
     if (vca == nullptr) {
         result.adsrUuid = adsrUuid;
         return result;
@@ -235,16 +232,17 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::AudioProcessorGraph::Node& trackIn,
                                                       juce::AudioProcessorGraph::Node& instrument,
                                                       juce::Point<int> polyMidiPosition, juce::Point<int> adsrPosition,
-                                                      juce::Point<int> vcaPosition) {
+                                                      juce::Point<int> vcaPosition,
+                                                      const DefaultChannelLayout::NewModuleHook& onNewModule) {
     PolyEnvelopeAndVCA result;
 
     juce::String polyMidiUuid;
-    auto* polyMidi = addChainNode(graph, "Poly MIDI", polyMidiPosition, polyMidiUuid);
+    auto* polyMidi = addChainNode(graph, "Poly MIDI", polyMidiPosition, polyMidiUuid, onNewModule);
     if (polyMidi == nullptr)
         return result;
 
     juce::String adsrUuid;
-    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid);
+    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid, onNewModule);
     if (adsr == nullptr) {
         result.polyMidiUuid = polyMidiUuid;
         return result;
@@ -253,11 +251,9 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     // MIDI's per-voice CV below, not raw MIDI, so the poly branch actually fires. See
     // addEnvelopeAndVCAForRawInstrument's own comment above for why the non-poly path can't do this.
     setBoolParam(*adsr->getProcessor(), "poly", true);
-    // Same override as the non-poly path, same reason: a held note should sustain.
-    setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;
-    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid);
+    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid, onNewModule);
     if (vca == nullptr) {
         result.polyMidiUuid = polyMidiUuid;
         result.adsrUuid = adsrUuid;

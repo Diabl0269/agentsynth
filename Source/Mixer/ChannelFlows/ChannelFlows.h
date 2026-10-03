@@ -112,6 +112,8 @@ struct EnvelopeAndVCA {
  * @param chainSource the node the caller would otherwise pass to buildDefaultAudioChannel as
  *                `source` (the raw instrument — never a Voice Mixer's sum any more, see above)
  *                — becomes the VCA's audio input instead.
+ * @param onNewModule optional new-module hook (the library drop path's Dual I/O default) run on each
+ *                created module before it enters the graph, so the ADSR matches a library-made one.
  * @param chainSourceRightChannel the raw channel carrying `chainSource`'s right leg (same meaning as
  *                buildDefaultAudioChannel's `sourceRightChannel`).
  * @return the created nodes' uuids and the VCA node itself — pass the VCA as the new `chainSource`
@@ -122,7 +124,8 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
                                                  juce::AudioProcessorGraph::Node& trackIn,
                                                  juce::AudioProcessorGraph::Node& chainSource,
                                                  int chainSourceRightChannel, juce::Point<int> adsrPosition,
-                                                 juce::Point<int> vcaPosition);
+                                                 juce::Point<int> vcaPosition,
+                                                 const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
 /** The nodes addPolyEnvelopeAndVCAForInstrument() created; `vca` is null (every uuid empty) on a
  *  partial factory/addNode failure — same "nothing usable was built" contract as EnvelopeAndVCA. */
@@ -154,7 +157,8 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::AudioProcessorGraph::Node& trackIn,
                                                       juce::AudioProcessorGraph::Node& instrument,
                                                       juce::Point<int> polyMidiPosition, juce::Point<int> adsrPosition,
-                                                      juce::Point<int> vcaPosition);
+                                                      juce::Point<int> vcaPosition,
+                                                      const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
 /**
  * BFS forward from `start` along every signal edge to find every point where `start`'s own signal

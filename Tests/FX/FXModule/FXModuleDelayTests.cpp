@@ -196,7 +196,7 @@ TEST(DelayTempoSync, TheDivisionChoosesTheTime) {
     DelayModule m;
     m.setPlayHead(&tempo);
     setDelayParam(m, "tempoSync", 1.0f);
-    setDelayParam(m, "timeDiv", 3.0f); // 1/8
+    setDelayParam(m, "timeDiv", 4.0f); // 1/8
     m.prepareToPlay(kDelaySr, kDelayBlock);
     EXPECT_EQ(firstEcho(impulseResponse(m, 12000)[0]), 11025);
 }
@@ -204,7 +204,7 @@ TEST(DelayTempoSync, TheDivisionChoosesTheTime) {
 TEST(DelayTempoSync, ALongDivisionIsHeldToTheTimeKnobsRange) {
     DelayModule m; // 1/1 at 120 BPM is 2 s; the line (and the Time knob) top out at 1 s
     setDelayParam(m, "tempoSync", 1.0f);
-    setDelayParam(m, "timeDiv", 0.0f);
+    setDelayParam(m, "timeDiv", 7.0f); // 1/1
     m.prepareToPlay(kDelaySr, kDelayBlock);
     EXPECT_EQ(firstEcho(impulseResponse(m, 45000)[0]), 44100);
 }

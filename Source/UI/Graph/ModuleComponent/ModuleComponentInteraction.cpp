@@ -542,6 +542,13 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // listener registered on it, so JUCE delivers that press to the editor.
     owner.commitAnyOpenTitleRename();
 
+    // A press on the card's own body (header, a label, empty space) selects the card without
+    // stepping inside it. JUCE would otherwise hand focus to the card's first focusable child, which
+    // then wears a focus ring nobody asked for; keyboard entry is Return / Tab (enterFromKeyboard).
+    // A press on a control keeps the focus that control just took.
+    if (!isOnKeyboardControl(e.eventComponent))
+        focusForKeyboard(&owner);
+
     // A click that landed on a CHILD control this component attached itself to as a
     // MouseListener (currently just the generic auto-UI sliders — see createControls()) rather
     // than on this component's own body. e.getPosition() below is in THAT CHILD's local space, not

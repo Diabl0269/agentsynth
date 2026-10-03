@@ -29,7 +29,7 @@ TEST_F(TimelinePanelIntegrationTest, AddLfoModulatorCreatesAnLfoBesideTheModuleC
     // Defaults: Sine, synced at 1/4, bipolar, full level.
     EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "shape"), 0.0f);
     EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "mode"), 1.0f);
-    EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "rateSync"), 2.0f);
+    EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "rateSync"), 5.0f);
     EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "bipolar"), 1.0f);
     EXPECT_FLOAT_EQ(s.parameter(lfoUuid, "level"), 1.0f);
 

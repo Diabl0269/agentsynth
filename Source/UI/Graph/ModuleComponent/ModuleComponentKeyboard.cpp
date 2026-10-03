@@ -59,6 +59,15 @@ void ModuleComponent::focusForKeyboard(juce::Component* target) {
         target->grabKeyboardFocus();
 }
 
+bool ModuleComponent::isOnKeyboardControl(const juce::Component* hit) {
+    if (hit == nullptr || hit == this)
+        return false;
+    for (auto* stop : getKeyboardControls())
+        if (stop == hit || stop->isParentOf(hit))
+            return true;
+    return false;
+}
+
 juce::Component* ModuleComponent::currentKeyboardFocus() const {
     return recordFocusForTest_ ? recordedFocus_.getComponent() : juce::Component::getCurrentlyFocusedComponent();
 }

@@ -20,7 +20,7 @@ public:
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(
                              [](bool on, int) { return on ? juce::String("Sync") : juce::String("Time"); })));
         addParameter(timeDivParam =
-                         new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 2));
+                         new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 5));
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));
         addOutputLevelParameter();
         addMuteParameter();
