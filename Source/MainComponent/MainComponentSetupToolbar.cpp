@@ -265,9 +265,7 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
     };
     for (const auto& [button, label] : labels) {
         button->setTitle(label);
-        // The feedback button stays icon-only at every width, so it keeps the text it was built with.
-        if (button != &feedbackButton)
-            button->setButtonText(iconOnly ? juce::String() : label);
+        button->setButtonText(iconOnly ? juce::String() : label);
     }
 }
 

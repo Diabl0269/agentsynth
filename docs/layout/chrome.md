@@ -42,8 +42,8 @@ hardcoded colour `0xff0B0D10`.
 `prefWidth` becomes 32 (icon-only). In wide mode each button has a labelled preferred width —
 Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104,
 ToggleAiPanel 92. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
-for both, so no separator is drawn between them) and is always icon-only at a fixed 40 px, since it
-never grows a text label.
+for both, so no separator is drawn between them) and is 84 px wide, enough for its "Feedback" caption
+at full size.
 
 **Sub-group visual grouping.** `ToolbarComponent`'s local `groupOf(slot)` helper maps each `Slot`
 to its sub-group, `layoutButtons()` inserts a 12 px spacer `FlexItem` at every sub-group boundary
@@ -52,42 +52,60 @@ each intra-section sub-group gap, using the buttons' own post-layout bounds and 
 plus `isVisible()`. The left/right section boundary is excluded — that is the existing flex spacer.
 It no-ops when the `LookAndFeel` is not the themed `AppLookAndFeel`.
 
-**Toggle pills.** `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
+**Toggle state.** `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
 `setToggleState(..., juce::dontSendNotification)` on their panel-toggle button (Library, Minimap,
-ModMatrix, AiPanel, Timeline under its `#if` guard) so the button's toggle state always matches
-panel visibility. Always `dontSendNotification`, never `setClickingTogglesState`, so a button's own
-`onClick` never double-fires.
+ModMatrix, AiPanel, Panel) so the button's toggle state always matches panel visibility. Always
+`dontSendNotification`, never `setClickingTogglesState`, so a button's own `onClick` never
+double-fires.
 
-The pill's hover/press/toggled-on paint states are owned entirely by
-`AppLookAndFeel::drawDrawableButton`, not delegated to `LookAndFeel_V4::drawDrawableButton`: the
-stock `LookAndFeel_V2` base does an unconditional flat `g.fillAll()` keyed only on toggle state,
-with no hover/press distinction and no rounding. Toggled-on is a 13/15/20% (rest/hover/press) accent
-wash with a 0.35-alpha 1 px stroke — an "active" tint, not a filled button — and icon and label
-colour step through a `textMuted -> textPrimary (hover/press) -> accent (on)` / `textDisabled`
-ladder. The label is drawn in `drawDrawableButton` at a fixed 11 px, bottom-docked with a 6 px pad,
-replacing the stock formula that starved it at `min(16, 25%*height)`. The icon is a tinted
-`Drawable` clone built in `MainComponent::applyToolbarIcons()`: `retintIcons()` tints the base
-`textMuted`, and the hover and on variants are `replaceColour`'d and wired through `setImages`'
-state slots (see [icons](icons.md#token-to-tint-map)). A uniform
-`DrawableButton::setEdgeIndent(8)` on all toolbar buttons keeps icon optical size (~17-19 px)
-consistent regardless of button width — height, not width, is the binding constraint in
-`getImageBounds()`.
+### Toolbar buttons
 
-**The icon re-clone is gated to narrow-mode transitions.** `applyToolbarIcons()` clones `Drawable`
-objects to set button images, which is expensive, so `MainComponent::resized()` calls it only when
-the mode actually flips:
+Every button is a `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`), a
+`juce::DrawableButton` subclass that never uses DrawableButton's image children: it carries the
+state and `AppLookAndFeel::drawToolbarButton` (`AppLookAndFeelToolbarButton.cpp`) paints it. The
+other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) keep
+`drawDrawableButton`, unchanged.
+
+- **Groups and colours.** `applyToolbarIcons()` gives each button its icon and colour group
+  (`ToolbarButton::setIcon(icon, group)`; `toolbarGroupHue()` resolves the token): **file** (New,
+  Save, Load) `hueGreen`; **edit** (Undo, Redo, Auto Arrange) `hueAmber`; **view** (Library,
+  Minimap, Matrix, Panel) `accent`; **AI** `hueRose`; **housekeeping** (Settings, Feedback, Light
+  mode) `hueViolet`.
+- **Chip.** The icon sits on a 30 x 24 chip, radius 7, 4 px from the top of the button: the group
+  colour at 16 percent at rest and 26 percent on hover (10 and 16 percent on a light theme, any
+  theme with `isDark` false). A lit toggle fills the chip solid with the colour. In narrow mode
+  (no caption) the chip is centred vertically in the button.
+- **Glyph.** 19 px, drawn from the icon's 24-unit SVG grid in four colour roles (see
+  [icons](icons.md#multi-role-icons)). On a lit chip the roles invert (colour and paper turn
+  `iconInk`, soft turns ink at 40 percent, ink takes the colour), cross-fading with the chip.
+  Hide/Show panel has its own glyph (`Icon::TogglePanel`).
+- **Caption.** Inter semi-bold 10.5 px (`AppLookAndFeel::uiSemiBoldFont`), 2 px under the chip:
+  `textMuted` at rest, `textPrimary` on hover, press and when lit, `textDisabled` when disabled.
+  Captions are never coloured.
+- **Ground.** Nothing at rest, `surfaceHi` at 60 percent on hover and 85 percent pressed (radius
+  `pillRadius`).
+- **Disabled.** No chip; the glyph at 40 percent.
+- **Motion.** Hover, press and lit each ease (see
+  [animation](animation.md#what-moves-and-how)); on hover the glyph lifts 1 px and does
+  one small per-icon motion. Under Reduce Motion nothing moves; only the colours change.
+
+The art is rebuilt from the icon library's untinted originals on every `setIcon`/`refreshArt` (and
+on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint.
+`applyToolbarIcons()` runs once at the end of `initialiseCommon()`, after every theme switch via
+`changeListenerCallback`, and from `MainComponent::resized()` only when the narrow mode actually
+flips (which changes the captions):
 
 ```cpp
 bool prevNarrow = toolbarNarrowMode_;
 toolbar.layoutButtons(toolbarBounds);       // updates toolbar.isNarrowMode()
 toolbarNarrowMode_ = toolbar.isNarrowMode();
 if (toolbarNarrowMode_ != prevNarrow)
-    applyToolbarIcons();                    // re-clone only on mode flip
+    applyToolbarIcons();                    // rebuild only on mode flip
 ```
 
-A resize that does not cross the 480 px threshold skips the clone work entirely.
-`applyToolbarIcons()` is also called unconditionally once at the end of `initialiseCommon()` and
-after every theme switch via `changeListenerCallback`.
+Tests: `Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp` (group colours on a dark and
+the Daylight theme, lit, disabled, captions, theme switch, body/part split, the Feedback slot) and
+`ToolbarButtonMotionTests.cpp` (hover, press and Reduce Motion through real mouse events).
 
 ### Toolbar keyboard access
 
@@ -113,8 +131,7 @@ strip stays as before.
 **Names.** `MainComponent::applyToolbarLabels` gives every button a screen-reader title and, unless the
 toolbar is in narrow mode, the same visible text. A toggle's title is the action a press does ("Hide
 Library" / "Show Library", likewise Minimap, Matrix, AI and Panel; "Light Mode" / "Dark Mode"), in both
-widths, because these buttons expose no checked state to a screen reader. "Feedback" is icon-only at every
-width. The toolbar's accessibility value is the name of the ringed button, so Left/Right announce it.
+widths, because these buttons expose no checked state to a screen reader. The toolbar's accessibility value is the name of the ringed button, so Left/Right announce it.
 Tooltips name each button's shortcut where it has one.
 
 ## Minimum window size

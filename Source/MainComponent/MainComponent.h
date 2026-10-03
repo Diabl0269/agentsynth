@@ -36,6 +36,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
@@ -645,20 +646,20 @@ private:
 
     ToolbarComponent toolbar; // the strip; the buttons below stay direct children of MainComponent
 
-    juce::DrawableButton newButton{"new", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton saveButton{"save", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton loadButton{"load", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton settingsButton{"settings", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton feedbackButton{"feedback", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton undoButton{"undo", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton redoButton{"redo", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton toggleAiPanelButton{"toggleAi", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton toggleModMatrixButton{"toggleMatrix", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton toggleMinimapButton{"toggleMinimap", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton toggleBottomPanelButton{"toggleBottomPanel", juce::DrawableButton::ImageAboveTextLabel};
-    juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};
+    synth::ui::ToolbarButton newButton{"new"};
+    synth::ui::ToolbarButton saveButton{"save"};
+    synth::ui::ToolbarButton loadButton{"load"};
+    synth::ui::ToolbarButton settingsButton{"settings"};
+    synth::ui::ToolbarButton feedbackButton{"feedback"};
+    synth::ui::ToolbarButton undoButton{"undo"};
+    synth::ui::ToolbarButton redoButton{"redo"};
+    synth::ui::ToolbarButton toggleAiPanelButton{"toggleAi"};
+    synth::ui::ToolbarButton toggleModMatrixButton{"toggleMatrix"};
+    synth::ui::ToolbarButton toggleMinimapButton{"toggleMinimap"};
+    synth::ui::ToolbarButton autoArrangeButton{"autoArrange"};
+    synth::ui::ToolbarButton toggleLibraryButton{"toggleLibrary"};
+    synth::ui::ToolbarButton toggleBottomPanelButton{"toggleBottomPanel"};
+    synth::ui::ToolbarButton themeToggleButton{"toggleTheme"};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

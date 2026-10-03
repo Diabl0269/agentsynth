@@ -56,9 +56,10 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     // distinction and no rounding - so it cannot host the themed pill this component needs. We
     // fully own the background+label paint here instead. The icon itself is a CHILD Drawable
     // positioned by DrawableButton::resized()/getImageBounds() and painted separately — its
-    // rest/hover/toggled-on tint comes from the three pre-tinted Drawable variants
-    // MainComponent::applyToolbarIcons() hands to setImages() (muted/textPrimary/accent, mirroring
-    // the label ladder below), not from anything painted in here.
+    // rest/hover/toggled-on tint comes from the pre-tinted Drawable variants the owner hands to
+    // setImages() (MixerIconButton: muted/textPrimary/accent, mirroring the label ladder below), not
+    // from anything painted in here. The top bar's buttons are ToolbarButtons, painted by
+    // drawToolbarButton instead.
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
 
@@ -111,10 +112,9 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     // produced unreadable ~7-9px text at the toolbar's old 36px height.
     if (button.getStyle() == juce::DrawableButton::ImageAboveTextLabel && button.getButtonText().isNotEmpty()) {
         static constexpr float kLabelSize = 11.0f;
-        static constexpr float kLabelBottomPad = 6.0f; // balances the ~8px top inset the icon gets
-                                                       // from its own edgeIndent (kToolbarIconEdgeIndent
-                                                       // in MainComponent::applyToolbarIcons()), so the
-                                                       // icon+label block reads centred, not top-heavy.
+        static constexpr float kLabelBottomPad = 6.0f; // balances the ~8px top inset an icon gets from
+                                                       // its edgeIndent, so the icon+label block reads
+                                                       // centred, not top-heavy.
         static constexpr float kLabelSideInset = 4.0f;
 
         const auto full = button.getLocalBounds().toFloat();
@@ -136,7 +136,7 @@ namespace {
 constexpr float kOnWashAlpha = 0.18f;
 constexpr float kBareHoverAlpha = 0.08f;
 constexpr float kBarePressAlpha = 0.14f;
-constexpr float kBareOnAlpha = 0.13f; // the same lit wash drawDrawableButton gives a toolbar toggle
+constexpr float kBareOnAlpha = 0.13f; // the same lit wash drawDrawableButton gives a toggled-on button
 constexpr float kBareOnHoverAlpha = 0.15f;
 constexpr float kBareOnPressAlpha = 0.20f;
 constexpr float kRoundHoverAlpha = 0.18f;

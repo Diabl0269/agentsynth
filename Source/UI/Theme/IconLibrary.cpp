@@ -1,5 +1,7 @@
 #include "IconLibrary.h"
 
+#include <optional>
+
 #ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
 #endif
@@ -29,7 +31,61 @@ void IconLibrary::setTintColour(Icon id, juce::Colour c) {
     // theme switch produces the correct colour (not a re-tint of an already-tinted drawable).
     auto clone = originals_[idx]->createCopy();
     clone->replaceColour(juce::Colours::white, c);
+    // A multi-role icon tinted with one colour: the colour roles take it, the details are cut out.
+    recolourRoles(*clone, {c, c.withMultipliedAlpha(kRoleSoftAlpha), juce::Colours::transparentBlack,
+                           juce::Colours::transparentBlack});
     drawables_[idx] = std::move(clone);
+}
+
+std::unique_ptr<juce::Drawable> IconLibrary::createRecoloured(Icon id, const IconRoleColours& roles) const {
+    const auto& original = originals_[static_cast<size_t>(id)];
+    if (original == nullptr)
+        return nullptr;
+    auto clone = original->createCopy();
+    recolourRoles(*clone, roles);
+    return clone;
+}
+
+namespace {
+// The role colour for one placeholder-painted colour, carrying over any opacity the SVG added on top
+// of the role's own (Save's shutter is paper at 70 percent). Non-placeholder colours are left alone.
+std::optional<juce::Colour> roleColourFor(juce::Colour colour, const IconRoleColours& roles) {
+    const auto rgb = colour.getARGB() | 0xff000000u;
+    const float alpha = colour.getFloatAlpha();
+    if (rgb == kRoleInk)
+        return roles.ink.withMultipliedAlpha(alpha);
+    if (rgb == kRolePaper)
+        return roles.paper.withMultipliedAlpha(alpha);
+    if (rgb != kRoleHue)
+        return std::nullopt;
+    // A hue shape well under full opacity is the soft role (the SVG writes it at kRoleSoftAlpha).
+    constexpr float kSoftThreshold = 0.6f;
+    if (alpha < kSoftThreshold)
+        return roles.soft.withMultipliedAlpha(juce::jmin(1.0f, alpha / kRoleSoftAlpha));
+    return roles.hue.withMultipliedAlpha(alpha);
+}
+
+void recolourFill(juce::DrawableShape& shape, bool stroke, const IconRoleColours& roles) {
+    const auto fill = stroke ? shape.getStrokeFill() : shape.getFill();
+    if (!fill.isColour())
+        return;
+    if (const auto mapped = roleColourFor(fill.colour, roles)) {
+        if (stroke)
+            shape.setStrokeFill(*mapped);
+        else
+            shape.setFill(*mapped);
+    }
+}
+} // namespace
+
+void IconLibrary::recolourRoles(juce::Drawable& drawable, const IconRoleColours& roles) {
+    if (auto* shape = dynamic_cast<juce::DrawableShape*>(&drawable)) {
+        recolourFill(*shape, false, roles);
+        recolourFill(*shape, true, roles);
+    }
+    for (auto* child : drawable.getChildren())
+        if (auto* childDrawable = dynamic_cast<juce::Drawable*>(child))
+            recolourRoles(*childDrawable, roles);
 }
 
 std::unique_ptr<juce::Drawable> IconLibrary::getDrawable(Icon id) const {
@@ -107,6 +163,8 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::toolrange_svg, BinaryData::toolrange_svgSize},
         // The mixer header's sources badge (appended after Icon::ToolRange).
         {BinaryData::mixersources_svg, BinaryData::mixersources_svgSize},
+        // The toolbar's Hide/Show panel glyph (appended after Icon::MixerSources).
+        {BinaryData::togglepanel_svg, BinaryData::togglepanel_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

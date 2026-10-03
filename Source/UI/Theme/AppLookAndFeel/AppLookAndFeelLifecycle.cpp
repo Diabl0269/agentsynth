@@ -155,6 +155,10 @@ void AppLookAndFeel::recomputeMeterColourStops() {
                                                             : synth::ui::MeterColourStops::fromTheme(theme.colors);
 }
 
+std::unique_ptr<juce::Drawable> AppLookAndFeel::getRoleIcon(Icon id, const IconRoleColours& roles) const {
+    return iconLibrary_.createRecoloured(id, roles);
+}
+
 void AppLookAndFeel::retintIcons() {
     const auto& c = theme.colors;
 
@@ -164,33 +168,14 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ModuleDelete, c.error);
     iconLibrary_.setTintColour(Icon::ModuleDualIO, c.textMuted);
 
-    // Toolbar action + panel-toggle glyphs are tinted MUTED here — this is the rest-state base
-    // that MainComponent::applyToolbarIcons() clones and re-tints (via Drawable::replaceColour)
-    // into the hover (textPrimary) and toggled-on (accent) variants it hands to
-    // DrawableButton::setImages(). Do not tint these textPrimary here: applyToolbarIcons()'s
-    // replaceColour(textMuted, ...) calls assume this exact starting colour.
-    iconLibrary_.setTintColour(Icon::ActionNew, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionUndo, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionRedo, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionSave, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionLoad, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionSettings, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionFeedback, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleAI, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleMinimap, c.textMuted);
+    // The toolbar's glyphs are multi-role: synth::ui::ToolbarButton recolours them per group from the
+    // untinted originals (getRoleIcon) whenever the theme changes, so none is tinted here.
 
     // TransportStop is status-bar-only chrome (StatusBarComponent's master-mute button, which
-    // sets only a single "normal" image — no hover/toggled-on variants) — kept at textPrimary,
-    // unlike the toolbar set above.
+    // sets only a single "normal" image — no hover/toggled-on variants) — kept at textPrimary.
     iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
 
-    // TransportPlay is scaffolding (no dedicated glyph yet — see IconLibrary.h) reused as the
-    // ToggleBottomPanel toolbar button's icon, so it follows the same muted-base convention as the
-    // rest of the toolbar set above.
+    // TransportPlay is scaffolding (no button shows it); tinted like the rest of the chrome.
     iconLibrary_.setTintColour(Icon::TransportPlay, c.textMuted);
 
     // Library category headers are quieter than the action chrome.

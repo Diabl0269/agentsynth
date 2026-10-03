@@ -787,6 +787,8 @@ add_executable(Tests
     UI/PianoRoll/PianoRollKeyboardReachTests.cpp
     UI/Chrome/ToolbarKeyboardTests.cpp
     UI/Chrome/ToolbarTitlesTests.cpp
+    UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp
+    UI/Chrome/ToolbarButton/ToolbarButtonMotionTests.cpp
     UI/Chrome/StatusBarAccessibilityTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp

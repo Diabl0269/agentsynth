@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <path d="M12,3 A9,9 0 0,0 12,21 A9,9 0 0,0 12,3 Z" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
-  <path d="M12,3 A9,9 0 0,1 12,21 Z" fill="#FFFFFF"/>
+  <!-- Toolbar icon, house group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
+  <g id="mv">
+    <circle cx="12" cy="12" r="8.6" fill="#FF00FF" fill-opacity=".45" />
+    <path d="M12 3.4a8.6 8.6 0 0 1 0 17.2z" fill="#FF00FF" />
+    <circle cx="8.2" cy="9.4" r="1.2" fill="#FFFF00" />
+    <circle cx="9.4" cy="14.6" r=".8" fill="#FFFF00" />
+  </g>
 </svg>

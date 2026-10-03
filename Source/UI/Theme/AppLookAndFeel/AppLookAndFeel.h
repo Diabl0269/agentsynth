@@ -10,6 +10,7 @@
 namespace synth::ui {
 class IconButton;
 class ColourSwatchButton;
+class ToolbarButton;
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -22,6 +23,13 @@ void paintIconButton(juce::Graphics& g, const synth::ui::IconButton& button, con
 // The colour the glyph is painted in: disabled, lit (the on-colour or accent), hot, then rest.
 juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
                                    bool down);
+
+// Paints a synth::ui::ToolbarButton (ground, group chip, glyph, caption, focus ring) from `theme`.
+void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& button, const Theme& theme);
+// The chip a toolbar button's icon sits on, in the button's coordinates, before any press squash.
+juce::Rectangle<float> toolbarChipBounds(const synth::ui::ToolbarButton& button);
+// Maps the 24-unit icon grid onto the 19 px glyph centred on that chip, before any lift or squash.
+juce::AffineTransform toolbarIconTransform(const synth::ui::ToolbarButton& button);
 
 // The theme `comp` paints with: its AppLookAndFeel's, or a default-constructed Theme when it sits
 // outside any (a bare test fixture). The shared controls below never fall back to colour literals.
@@ -125,6 +133,8 @@ public:
     std::unique_ptr<juce::Drawable> getIcon(Icon id) const { return iconLibrary_.getDrawable(id); }
     // peekIcon: non-owning view into the tinted cache. Nullptr if absent.
     const juce::Drawable* peekIcon(Icon id) const noexcept { return iconLibrary_.peekDrawable(id); }
+    // A fresh multi-role icon with its roles in `roles` (IconLibrary::createRecoloured); nullptr if absent.
+    std::unique_ptr<juce::Drawable> getRoleIcon(Icon id, const IconRoleColours& roles) const;
 
     // ---------- stock widget overrides ----------
     void drawRotarySlider(juce::Graphics&, int x, int y, int width, int height, float sliderPosProportional,
@@ -184,6 +194,10 @@ public:
     // The one icon button (Source/UI/Layout/IconButton.h): not a JUCE override, called by IconButton::paintButton.
     void drawIconButton(juce::Graphics&, synth::ui::IconButton&, bool shouldDrawButtonAsHighlighted,
                         bool shouldDrawButtonAsDown);
+    // The top bar's button (Source/UI/Chrome/ToolbarButton/): not a JUCE override, called by
+    // ToolbarButton::paintButton.
+    void drawToolbarButton(juce::Graphics&, synth::ui::ToolbarButton&, bool shouldDrawButtonAsHighlighted,
+                           bool shouldDrawButtonAsDown);
     // The shared chip, piano-key toggle, colour swatch, text link and fold arrow (AppLookAndFeelSharedControls.cpp):
     // not JUCE overrides, called by the controls that own the content.
     juce::Colour drawChip(juce::Graphics&, juce::Rectangle<float> bounds, const ChipState&);
@@ -290,6 +304,8 @@ public:
     // so a card lays out identically on every platform. The typeface is created per call, not cached in
     // a static (a static outlives JUCE shutdown and trips the leak detector).
     static juce::Font uiFont(float height);
+    // The embedded Inter semi-bold at `height` (the default bold font when font assets are absent).
+    static juce::Font uiSemiBoldFont(float height);
     static int uiTextWidth(const juce::String& text, float height);
     void paintTogglePill(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
                          bool keyboardFocused);

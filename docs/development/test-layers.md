@@ -535,7 +535,21 @@ BinaryData symbol non-null, which guards CMake renames); `TransportPlayIsScaffol
 `WaveformIconsLoad` (all four of WaveformSine/Saw/Square/Triangle non-null);
 `WaveformIconsTintedToTextPrimary` (tint matches `textPrimary` after `retintIcons()`);
 `WaveformIconKTableCount` (a compile-time `static_assert` on the table size);
-`WaveformBinaryDataSymbolsPresent`.
+`WaveformBinaryDataSymbolsPresent`; `RoleRecolourMapsEveryPlaceholder` and
+`RoleRecolourAlwaysStartsFromTheOriginal` (the toolbar's [multi-role recolour](../layout/icons.md#multi-role-icons),
+including roles that are themselves placeholder colours); `TogglePanelIconEnumOrdinalAndBinaryData`.
+
+## Toolbar buttons
+
+`Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp` and `ToolbarButtonMotionTests.cpp` cover
+`Source/UI/Chrome/ToolbarButton/` and `AppLookAndFeelToolbarButton.cpp` by painting real buttons over
+`bg0` and sampling pixels: every button's chip and glyph carry its group colour on Obsidian and on
+Daylight (16 / 10 percent chip), a lit chip is solid with an ink glyph, a disabled button has no chip,
+captions stay on the background-to-text blend in every state, a theme switch re-colours from the
+originals, the split body + moving parts draw pixel-identical to the whole icon, and the Feedback slot
+is 84 px. Motion goes through synthesized `mouseEnter` / `mouseExit` / `mouseDown` on the button
+(headless, so each tween lands at once); with `setReducedMotionForTest(true)` no transform, lift or
+squash is applied while the chip still takes its hover colour.
 
 ## Status bar
 
