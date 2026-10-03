@@ -183,8 +183,14 @@ void CardLayoutOnCardEditor::writeSection(int section, const std::vector<std::pa
         placed.back().rect = rect;
     }
     const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
-    const auto layout = withCellPositions(body->explicitLayout(), placed, collectViews(*card_, section), g.contentX,
-                                          body->getPlan().sections[(size_t)section].cellTop);
+    writeLayout(withCellPositions(body->explicitLayout(), placed, collectViews(*card_, section), g.contentX,
+                                  body->getPlan().sections[(size_t)section].cellTop));
+}
+
+// The source writes `layout` and rebuilds the card; this overlay re-syncs to the card that results.
+void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
+    if (source_ == nullptr)
+        return;
     writing_ = true;
     source_->apply(layout, false);
     writing_ = false;

@@ -90,6 +90,9 @@ private:
     std::vector<CardParamItem> missing_;
 };
 
+/** The label override that `text` means for a control named `displayName`: trimmed, none when empty or the
+ *  control's own name. The one rule the list and the on-card panel share. */
+std::optional<juce::String> labelOverrideFor(const juce::String& text, const juce::String& displayName);
 /** The key of a view item's row. */
 juce::String cardLayoutViewKey(CardView view);
 /** A view's name in the editor list ("Threshold display"). */

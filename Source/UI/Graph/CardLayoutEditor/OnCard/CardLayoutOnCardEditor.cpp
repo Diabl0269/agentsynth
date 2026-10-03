@@ -39,6 +39,7 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
 CardLayoutOnCardEditor::~CardLayoutOnCardEditor() {
     stopTimer();
     cancelPendingUpdate();
+    closePanel();
     if (card_ != nullptr)
         card_->removeComponentListener(this);
     source_.reset();
@@ -108,6 +109,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     reconcileOutlines();
     toFront(false);
     repaint();
+    refreshPanel();
 }
 
 int CardLayoutOnCardEditor::indexOfCell(const juce::String& key) const {
@@ -142,6 +144,7 @@ void CardLayoutOnCardEditor::wireOutline(CardLayoutOutline& outline) {
     outline.onRelease = [this](const juce::MouseEvent& e) { releaseOn(e); };
     outline.onKey = [this, key](const juce::KeyPress& press) { return handleKey(key, press); };
     outline.onClick = [this, key] {
+        openControlPanel(key);
         if (onControlOptions)
             onControlOptions(key);
     };
@@ -164,6 +167,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
     if (closed_ || closing_)
         return;
     closing_ = true;
+    closePanel();
     stopTimer();
     glidePump_.stop();
     fadePump_.stop();

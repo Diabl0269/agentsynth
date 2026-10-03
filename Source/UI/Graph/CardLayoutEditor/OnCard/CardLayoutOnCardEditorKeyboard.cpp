@@ -59,12 +59,14 @@ bool CardLayoutOnCardEditor::handleKey(const juce::String& key, const juce::KeyP
     return false;
 }
 
-// Esc: a drag in progress goes back, else the session is cancelled. It reaches here from the outlines
-// (through handleKey) and from the bar's buttons, which leave the key to bubble.
+// Esc: an open control panel closes first, then a drag in progress goes back, else the session is cancelled. It reaches
+// here from the outlines (through handleKey) and from the bar's buttons, which leave the key to bubble.
 bool CardLayoutOnCardEditor::keyPressed(const juce::KeyPress& key) {
     if (closed_ || key != juce::KeyPress::escapeKey)
         return false;
-    if (drag_.pressed)
+    if (panel_ != nullptr)
+        closePanel();
+    else if (drag_.pressed)
         cancelDrag();
     else
         cancel();

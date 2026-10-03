@@ -67,6 +67,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
 | The layout list ("Layout List..."): the panel, its rows, its working model, and the two sources (built-in module, hosted plugin) | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentLayoutEditor.cpp` opens it |
 | The on-card editor ("Edit Layout..."): the overlay, one outline and grip per control, the edit bar, the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
+| The per-control panel (Show as, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
 | Snapping to guides and pushing a crowded neighbour aside, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
@@ -448,16 +449,29 @@ envelope view out draws no graph and no toggle.
     the focused control 1 px, Shift+arrow 8 px; the control moves at once and the write waits until the
     keys stop for 250 ms, so a held arrow is one write. These are the rebindable **Layout Editor** actions
     `layoutEditorNudgeLeft`/`Right`/`Up`/`Down` and `...Big` ([shortcuts.md](../control/shortcuts.md#layout-editor)).
-    Esc ends a drag, else cancels the session. Return on a control is a hook for the options a later step
-    adds (it does nothing yet). Each move is announced ("Cutoff moved right 8").
+    Esc ends a drag, else cancels the session. Return on a control opens its options panel (below). Each move is announced ("Cutoff moved right 8").
   - *Ending.* **Done** keeps the layout; **Cancel** or Esc writes back the layout the card opened with
     (the node's raw stored value, or none) and records nothing. The editor also closes if its card's
     module is removed or the canvas goes. One session at a time: opening it on another card ends the
     running one as Done. The running session hangs on the GraphEditor's property set
     (`OnCardEditorOwner.cpp`, the way `ModuleCardLayoutBinding` hangs the store) and dies with it. The
     overlay fades in over 160 ms and out over 110 ms (a plain 80 ms either way under Reduce Motion).
-  - *Not built yet:* Preset and Apply to in the edit bar, Add control, the right-click per-control panel
-    (the outline's menu is a hook), outlines on footer and tab controls, and moving a control to another
+  - *The per-control panel (built).* Right-click, double-click or Return on a control opens one small panel
+    with every option at once, in a `juce::CallOutBox` beside the control with its arrow pointing at it (so
+    it never covers the control; it eases in and out like every popup, [animation.md](animation.md#popup-windows)).
+    **Show as** is a row of joined buttons (`CardSegmentedSwitch`) naming only the widgets that suit the
+    parameter (the list's `widgetChoicesFor`), hidden when there is one choice. **Label** renames the
+    caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),
+    and the full name stays as the caption's tooltip. **Range** (Minimum and Maximum, in the parameter's
+    own units) shows only for a float parameter drawn as a knob or fader: blank both clears it, one blank
+    leaves that end at the parameter's own, each end is clamped to the parameter's range, and anything not a
+    number or with a minimum not below the maximum is refused (the fields revert and a hint line says why).
+    **Hide from card** adds the control to `hidden` (it goes to the More row) and closes the panel. Every
+    change is written at once through the session's source, like a drop, so the card rebuilds and the panel
+    stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
+    the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it
+    when the session ends or the control leaves the card; all of it stays inside the session's one undo step.
+  - *Not built yet:* Preset and Apply to in the edit bar, Add control, outlines on footer and tab controls, and moving a control to another
     group by dragging.
 - **Layout List... (built, kept for now): the list editor.** Opens `CardLayoutEditorComponent` in a
   `juce::CallOutBox` beside the card. It lists
@@ -555,7 +569,9 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   control's outline is one focus stop (the shared accent focus ring, a faint wash and a solid outline on
   hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
   "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options"; the arrow keys nudge, Esc
-  cancels, and each move is announced.
+  cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
+  titled "Show as", "Label", "Minimum", "Maximum" and "Hide from card", each with a tooltip, in that Tab order
+  (the text fields and buttons carry the shared accent focus ring); Esc closes it.
 - List editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
   a title and a tooltip naming its keys as bound now. Up/Down move between rows (fixed list keys);
   Space shows or hides, Cmd+Up/Down moves (across a group's edge into the next group), Enter renames:
