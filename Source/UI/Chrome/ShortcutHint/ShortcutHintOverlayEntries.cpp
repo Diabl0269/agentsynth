@@ -2,6 +2,7 @@
 
 #include "ShortcutHintText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -20,7 +21,8 @@ const synth::theme::AppLookAndFeel* themedLook(const juce::Component& c) {
 } // namespace
 
 int ShortcutHintOverlay::textWidth(const juce::Font& font, const juce::String& text) const {
-    return juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, text));
+    // Rounded UP: a pill's label is drawn into exactly this width, and rounding down clips its last letter.
+    return (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, text));
 }
 
 int ShortcutHintOverlay::capWidth(const juce::String& text, bool compact) const {
