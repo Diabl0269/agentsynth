@@ -80,7 +80,10 @@ TEST(AutomationLanesRetargetTest, ClickingTheParameterNameOpensTheSamePicker) {
     const auto name = header->getNameAreaForTest();
     ASSERT_FALSE(name.isEmpty());
 
-    header->mouseDown(makeClickEvent(*header, name.getCentre().toFloat(), leftButton()));
+    const auto click = makeClickEvent(*header, name.getCentre().toFloat(), leftButton());
+    header->mouseDown(click);
+    EXPECT_EQ(capture.picker, nullptr) << "the pick waits for the release: a press may still become a drag";
+    header->mouseUp(click);
 
     ASSERT_NE(capture.picker, nullptr);
     const auto texts = capture.picker->getVisibleItemTextsForTest();
@@ -92,8 +95,10 @@ TEST(AutomationLanesRetargetTest, ALeftClickAwayFromTheNameOpensNoPicker) {
     MenuPanel f;
     PickerCapture capture;
     auto* header = f.header(f.lane);
-    header->mouseDown(
-        makeClickEvent(*header, {(float)synth::ui::AutomationLaneHeaderComponent::kIndent + 1.0f, 3.0f}, leftButton()));
+    const auto click =
+        makeClickEvent(*header, {(float)synth::ui::AutomationLaneHeaderComponent::kIndent + 1.0f, 3.0f}, leftButton());
+    header->mouseDown(click);
+    header->mouseUp(click);
     EXPECT_EQ(capture.picker, nullptr);
 }
 

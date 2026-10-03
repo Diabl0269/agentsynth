@@ -85,6 +85,9 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineClipOpen",
         "timelineClipMoveEarlier",
         "timelineClipMoveLater",
+        // AutomationLaneEditor / AutomationLaneHeaderComponent, through TimelineAutomationLanes
+        "timelineMoveLaneUp",
+        "timelineMoveLaneDown",
         // TimelineTrackHeaderComponent::keyPressed
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",

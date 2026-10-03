@@ -17,7 +17,8 @@ TimelineAutomationLanes::Bodies::Bodies() {
 TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, juce::Component& headerParent)
     : viewState_(viewState)
     , headerParent_(headerParent)
-    , bodies_(std::make_unique<Bodies>()) {
+    , bodies_(std::make_unique<Bodies>())
+    , laneDrag_(headerParent, [this] { onLaneDragFrame(); }) {
     laneRange_.onChanged = [this] { laneRangeChanged(); };
 }
 
@@ -34,6 +35,8 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
+    discardLaneDrag();
+    rowOrigin_.clear();
     modulators_.clear();
     routings_.clear();
     amountLanes_.clear();
@@ -158,6 +161,9 @@ void TimelineAutomationLanes::syncPools() {
                 if (!isAmountLane(lane.id))
                     wanted.insert(lane.id);
 
+    // A lane that leaves the screen mid-drag takes its header (and the gesture) with it.
+    if (laneDrag_.isReordering() && wanted.count(liftedLane_) == 0 && doc_->getLane(liftedLane_) == nullptr)
+        discardLaneDrag();
     for (auto it = editors_.begin(); it != editors_.end();)
         it = wanted.count(it->first) == 0 ? editors_.erase(it) : std::next(it);
     for (auto it = headers_.begin(); it != headers_.end();)
@@ -192,6 +198,7 @@ void TimelineAutomationLanes::syncPools() {
                 if (auto* header = headerFor(id))
                     header->showMenuAt(options);
             };
+            editor->onLaneKey = [this, id](const juce::KeyPress& key) { return handleLaneKey(id, key); };
             editor->onSelectionChanged = [this, id] { updateSelectedReadout(id); };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)
@@ -202,6 +209,7 @@ void TimelineAutomationLanes::syncPools() {
         }
         if (headers_.count(id) == 0) {
             auto header = std::make_unique<AutomationLaneHeaderComponent>(*doc_, id, host_, undo_);
+            wireHeader(*header, id);
             headerParent_.addAndMakeVisible(*header);
             headers_[id] = std::move(header);
         }

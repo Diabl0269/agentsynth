@@ -260,6 +260,7 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
         shortcuts_->removeChangeListener(this);
     shortcuts_ = manager;
     shortcutsWeak_ = manager;
+    automationLanes_.setShortcuts(manager); // Move Lane Up/Down read their bindings through it
     if (shortcuts_ != nullptr)
         shortcuts_->addChangeListener(this);
     refreshShortcutTooltips();

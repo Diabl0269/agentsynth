@@ -147,6 +147,28 @@ the same ensure-uuid step the knob path takes.
 Test hooks: `setAddAutomationPickerHookForTest` (receives the picker instead of a call-out),
 `addAutomationRowForTest`, `addAutomationRowBoundsForTest`.
 
+## Reordering lanes
+
+Grab a lane header and drag it up or down: the lanes of that track slide aside and the lane lands in the slot it was
+dropped on (`TimelineAutomationLanes::beginLaneDrag` and friends, `TimelineAutomationLanesReorder.cpp`). It is the track
+list's gesture (the shared `ReorderDragSession`, see [animation](../layout/animation.md#reorder-drag)): a 4 px threshold, so a
+click on the parameter name still opens the Change parameter picker (it now fires on release), the lifted header
+drawn raised, 160 ms make-room and 140 ms settle, Esc gives everything back, and the animation lands at once when the
+panel is not on screen. A lane never leaves its own track: the block is clamped to that track's lanes.
+
+- A block is a lane row plus its modulator rows, which travel together. Only the header column animates; the curve
+  editors and modulator bands follow the new order when the drop commits, as the clip lanes follow a track reorder.
+- The order is `Track::lanes` order. A modulator's [amount lane](#amount-lane) is an ordinary entry of that list that has
+  no row, so the drop passes the doc index of the visible lane whose slot it took (`TimelineDoc::moveLane(lane, index)`:
+  the index is where the lane ends up, clamped; a move that changes nothing is not a mutation) and the hidden lanes keep
+  their relative places. One undo step (`moveLaneOrderUndoable`); the order is saved and loaded with the track.
+- **Keyboard:** Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`, rebindable) move the lane whose
+  header controls or editor hold focus one visible slot, one undo step, the block gliding into its slot. The keys reach
+  the lane before the record-mode combo (which would change its selection on Up/Down) and before the point keys.
+  The lane keeps its header, its accessible names and its focus.
+- Not done: the drag does not auto-scroll the track list (a track's lanes normally fit on screen), and the slot the
+  lifted block leaves is not outlined with the track list's dashed marker.
+
 ## Right-click anywhere on a lane
 
 A right-click opens the lane's own menu (the one the "..." button opens) with its top-left at the pointer
@@ -709,6 +731,9 @@ collide with the first's own new identity. `swapLaneParams` mutates both sides i
 `applyMutation`, so the invariant never sees an intermediate, colliding state.
 
 ## Tests
+
+`AutomationLanesReorderTests.cpp` (the header drag, Esc, click versus drag, the track boundary, Cmd+Alt+Up/Down, a rebind)
+and `Tests/Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp` (`moveLane`, save and load) cover the reorder.
 
 `Tests/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp` (right-click at the pointer on the header and the editor,
 handle and segment keeping their menus, the menu key), `AutomationLanesRetargetTests.cpp` and
