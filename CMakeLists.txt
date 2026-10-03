@@ -533,6 +533,11 @@ add_library(Core STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
+    # The shared icon button + its drawn glyphs: Core because StatusBarComponent (Core) uses it
+    Source/UI/Theme/IconGlyphs.h
+    Source/UI/Theme/IconGlyphs.cpp
+    Source/UI/Layout/IconButton.h
+    Source/UI/Layout/IconButton.cpp
     # FRO147: MeterColourStops is pure model code (no juce::Component) that used to live only in
     # AppUI's source list, but AppLookAndFeel (Core, below) now caches an effective MeterColourStops
     # itself (the ONE cache every meter painter reads) -- so Core needs the definition too. Moved

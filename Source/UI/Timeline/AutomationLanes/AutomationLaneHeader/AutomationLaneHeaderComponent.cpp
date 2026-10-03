@@ -61,22 +61,10 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
 }
 
 AutomationLaneHeaderComponent::MenuButton::MenuButton()
-    : juce::Button("automationLaneMenu") {
+    : IconButton("automationLaneMenu", synth::theme::Glyph::MenuDots, Style::Bare) {
     setComponentID("automationLaneMenu");
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
-}
-
-// Three dots drawn rather than a text ellipsis glyph, so the button never depends on font coverage.
-void AutomationLaneHeaderComponent::MenuButton::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto colours = coloursFor(*this);
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour(highlighted ? colours.text : colours.textMuted);
-    constexpr float dot = 2.5f;
-    for (int i = -1; i <= 1; ++i)
-        g.fillEllipse(
-            juce::Rectangle<float>(dot, dot).withCentre(bounds.getCentre().translated((float)i * 4.5f, 0.0f)));
-    synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }
 
 // Names, colour and record mode are document state, so every doc notification re-reads them; the

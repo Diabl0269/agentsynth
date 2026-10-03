@@ -3,6 +3,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
@@ -80,7 +81,7 @@ public:
     // The colour the record glyph is painting in right now — red when engaged, a neutral text
     // colour when idle. The same accessor paintButton() itself uses, so this is the drawn state,
     // not a parallel guess at it.
-    juce::Colour getRecordGlyphColourForTest() const { return recordButton_.glyphColour(); }
+    juce::Colour getRecordGlyphColourForTest() const { return recordButton_.glyphColour(false, false); }
 
     // Metronome + count-in. Non-owning; may be null (tests, or before MainComponent finishes
     // wiring) — the button click is then inert, matching setTransport's null contract. Whichever of
@@ -175,29 +176,16 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
 
 private:
-    // A small juce::Button subclass that draws one of the transport glyphs as a plain path — see
-    // the class comment. getToggleState() selects which visual each glyph shows: play vs stop for
-    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome. Every
-    // glyph is drawn inside a CENTRED SQUARE inset from the button, so a button that isn't square
-    // (however short the strip it is handed) never squashes it.
-    // right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
-    // so a MIDI Learn menu can open on any of the four buttons without also toggling
-    // playback/record/loop/metronome — juce::Button has no isPopupMenu() guard of its own.
-    class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<juce::Button> {
+    // One of the five transport buttons: a synth::ui::IconButton (Framed) whose Glyph names the action
+    // it triggers and picks the drawn glyph. getToggleState() selects the visual: play vs stop for
+    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome.
+    // Right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
+    // so a MIDI Learn menu can open on any of them without also toggling playback/record/loop/metronome.
+    class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<synth::ui::IconButton> {
     public:
         enum class Glyph { PlayStop, Record, Loop, Metronome, ReturnToStart };
-        GlyphButton(const juce::String& name, Glyph glyph)
-            : synth::ui::midilearn::RightClickSafeButton<juce::Button>(name)
-            , glyph_(glyph) {}
+        GlyphButton(const juce::String& name, Glyph glyph);
         Glyph getGlyph() const noexcept { return glyph_; }
-        void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
-        // The keyboard-focus ring: a Tab-reachable glyph button must show where focus is.
-        void paintOverChildren(juce::Graphics& g) override;
-
-        // THE colour this glyph is drawn in — paintButton()'s only source, and the record button's
-        // red/idle test seam (see getRecordGlyphColourForTest). Record is the one glyph whose lit
-        // colour is not the theme accent (kRecordRedArgb).
-        juce::Colour glyphColour() const;
 
     private:
         Glyph glyph_;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mixer/MixerViewDoc.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -30,14 +31,13 @@ inline const synth::theme::Theme* zonesThemeOf(const juce::Component& component)
 
 /** An eye that is open while the channel is shown and struck through while it is hidden. A plain click
  *  toggles; an Alt-click asks to show only this channel. */
-class MixerZonesEye : public juce::Button {
+class MixerZonesEye : public IconButton {
 public:
     MixerZonesEye();
 
     std::function<void()> onToggle;
     std::function<void()> onSoloShow;
 
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
     void clicked(const juce::ModifierKeys& mods) override;
 };
 

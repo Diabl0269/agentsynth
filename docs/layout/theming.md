@@ -257,8 +257,23 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
-These stock-widget overrides are implemented in `AppLookAndFeel`:
+The shared icon button, then the stock-widget overrides implemented in `AppLookAndFeel`:
 
+- **IconButton** — `synth::ui::IconButton` (`Source/UI/Layout/IconButton.h`) is the one icon-only
+  button: transport, play/stop in the status bar, the mixer-zones eye, the macro-port delete X, the
+  help popup's pin and close, and the lane/modulator "..." menus all use it. It is a `juce::Button`
+  holding a `synth::theme::Glyph`, with four styles: `Framed` (surface fill and border), `Bare`
+  (nothing until hovered, then a faint wash), `Round` (circular accent wash) and `Danger` (error wash
+  and glyph on hover). `AppLookAndFeel::drawIconButton` paints all of them with ONE colour ladder,
+  the same one `drawDrawableButton` uses for toolbar icons: disabled `textDisabled`, on
+  `setOnColour(...)` or `accent`, hover/press `textPrimary` (`error` for `Danger`), rest `textMuted`;
+  `IconButton::glyphColour()` exposes it. `setGlyphWhenOn` swaps the glyph with the toggle state
+  (play to stop, eye hidden to open, pin to pinned). The glyphs are paths in
+  `Source/UI/Theme/IconGlyphs.cpp`, not `IconLibrary` SVGs, so they render in the headless test build
+  where the embedded SVGs are null; use `IconLibrary` for any icon that needs an SVG and `IconGlyphs`
+  for these drawn ones. The button never sets its own title, tooltip or description, and outside any
+  `AppLookAndFeel` it paints with a default `Theme`. It lives in `Core` (not `AppUI`) because
+  `StatusBarComponent` uses it.
 - **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).
 - **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark,
