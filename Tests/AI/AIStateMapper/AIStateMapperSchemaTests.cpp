@@ -43,3 +43,29 @@ TEST(AIStateMapperTest, TimelineOpsTrackFieldIsNotOpenSchema) {
     EXPECT_FALSE(trackDef->hasProperty("oneOf"));
     EXPECT_FALSE(trackDef->hasProperty("anyOf"));
 }
+
+// addInstrumentTrack's fields must be expressible through a local grammar (a closed item schema
+// would forbid them outright), each with a concrete type -- never `{}`, never anyOf/oneOf.
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
+    for (const auto& schema : {synth::AIStateMapper::getPatchSchemaWithTimelineOps(),
+                               synth::AIStateMapper::getTimelineOpsEnvelopeSchema()}) {
+        auto* rootProperties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
+        ASSERT_NE(rootProperties, nullptr);
+        auto* opItems =
+            rootProperties->getProperty("timelineOps").getDynamicObject()->getProperty("items").getDynamicObject();
+        ASSERT_NE(opItems, nullptr);
+        auto* opProperties = opItems->getProperty("properties").getDynamicObject();
+        ASSERT_NE(opProperties, nullptr);
+
+        EXPECT_TRUE(opProperties->getProperty("op").getProperty("enum", {}).getArray()->contains("addInstrumentTrack"));
+        const std::pair<const char*, const char*> expected[] = {
+            {"instrument", "string"}, {"poly", "boolean"}, {"instrumentId", "integer"}, {"inserts", "array"}};
+        for (const auto& [field, type] : expected) {
+            auto* def = opProperties->getProperty(field).getDynamicObject();
+            ASSERT_NE(def, nullptr) << field;
+            EXPECT_EQ(def->getProperty("type").toString(), type) << field;
+            EXPECT_FALSE(def->hasProperty("anyOf")) << field;
+            EXPECT_FALSE(def->hasProperty("oneOf")) << field;
+        }
+    }
+}

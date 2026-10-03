@@ -5,6 +5,61 @@
 
 namespace synth {
 
+namespace {
+
+// The TIMELINE & AUTOMATION OPERATIONS section buildSystemPrompt appends while the timeline tools
+// are active: the five timelineOps ops, in the same terse style as the patch rules above.
+const char* timelineOpsPromptSection() {
+    return "\n\n### TIMELINE & AUTOMATION OPERATIONS (timelineOps):\n"
+           "The user also has a TIMELINE: tracks, MIDI clips with notes, and parameter-automation lanes. "
+           "When they ask for arrangement content - notes/melodies/chords on a track, a new track, or a "
+           "parameter changing OVER TIME (\"automate\", \"sweep\", \"fade\", \"over N bars\") - add a "
+           "top-level `timelineOps` array to your JSON response (alongside `nodes`/`connections`; use empty "
+           "arrays for those when the graph itself needs no change). Beats are quarter-note beats; beat 0 is "
+           "bar 1. The current tracks appear in the \"## Arrangement\" section and the automatable targets "
+           "in the \"## Automation targets\" section of the user's message.\n"
+           "The operations (max 64 per response; ANY invalid op rejects the whole batch, so keep batches "
+           "small and exact):\n"
+           "1. `{\"op\": \"addTrack\", \"kind\": \"midi\"|\"automation\", \"name\": \"...\"}` - a new empty "
+           "track.\n"
+           "2. `{\"op\": \"placeClips\", \"track\": \"<exact MIDI track name>\" or {\"index\": N}, "
+           "\"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"...\", \"notes\": [{\"startBeat\": "
+           "0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}]}]}` - writes MIDI notes; a note's "
+           "startBeat is relative to ITS CLIP's start, and notes must fit inside the clip.\n"
+           "3. `{\"op\": \"writeLane\", \"nodeUuid\": \"<uuid from Automation targets>\", \"paramId\": "
+           "\"<param id>\", \"points\": [{\"beat\": 0, \"value\": 200}, {\"beat\": 8, \"value\": 8000}]}` - "
+           "parameter automation over time. Values are RAW values inside the parameter's listed range "
+           "(never 0-1 normalised). Points REPLACE any existing points inside the written beat span. Only "
+           "(nodeUuid, paramId) pairs from the Automation targets section resolve - never invent a uuid.\n"
+           "4. `placeMidiClip` (a base64 .mid blob) exists but PREFER placeClips - explicit notes are "
+           "checkable.\n"
+           "5. `{\"op\": \"addInstrumentTrack\", \"name\": \"<new track name>\", \"instrument\": "
+           "\"Oscillator\"|\"Wavetable\"|\"Sampler\", \"poly\": false, \"inserts\": [{\"type\": \"Filter\", "
+           "\"params\": {\"cutoff\": 800}}]}` - a MIDI track that PLAYS the instrument immediately: the app "
+           "builds its Track In, instrument, envelope (Oscillator/Wavetable), channel strip and Master routing "
+           "itself, so never add a Track In or Audio Output node for it. The name must be NEW (not an existing "
+           "track's); later ops in the same batch address the track by that name. `poly` (Oscillator/Wavetable "
+           "only) and `inserts` (up to 8 audio effect modules placed before the channel strip, in order) are "
+           "optional. Prefer this over addTrack when the user wants a new part to hear.\n"
+           "The user always sees a preview and must click Apply before anything changes.\n"
+           "\nAutomation example - \"sweep the filter cutoff up over 8 beats\" (Filter uuid \"abc-123\"):\n"
+           "```json\n"
+           "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"writeLane\", \"nodeUuid\": "
+           "\"abc-123\", \"paramId\": \"cutoff\", \"points\": [{\"beat\": 0, \"value\": 200.0}, {\"beat\": 8, "
+           "\"value\": 8000.0}]}]}\n"
+           "```\n"
+           "Melody example - notes on existing MIDI track \"Lead\":\n"
+           "```json\n"
+           "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"placeClips\", \"track\": "
+           "\"Lead\", \"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"Riff\", \"notes\": ["
+           "{\"startBeat\": 0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}, {\"startBeat\": 1, "
+           "\"lengthBeats\": 1, \"pitch\": 63, \"velocity\": 100}, {\"startBeat\": 2, \"lengthBeats\": 2, "
+           "\"pitch\": 67, \"velocity\": 100}]}]}]}\n"
+           "```";
+}
+
+} // namespace
+
 void AIIntegrationService::initSystemPrompt() { chatHistory.push_back({"system", buildSystemPrompt()}); }
 
 void AIIntegrationService::refreshSystemPrompt() {
@@ -259,47 +314,8 @@ juce::String AIIntegrationService::buildSystemPrompt() const {
     // The timeline tool section exists only while the runtime switch is on AND a timeline context
     // is installed — off, this prompt is byte-identical to the pre-timeline one (pinned by
     // AIIntegrationServiceTest.TimelineToolsToggleGatesThePromptAndSchema).
-    if (timelineToolsActive()) {
-        systemMsg +=
-            "\n\n### TIMELINE & AUTOMATION OPERATIONS (timelineOps):\n"
-            "The user also has a TIMELINE: tracks, MIDI clips with notes, and parameter-automation lanes. "
-            "When they ask for arrangement content - notes/melodies/chords on a track, a new track, or a "
-            "parameter changing OVER TIME (\"automate\", \"sweep\", \"fade\", \"over N bars\") - add a "
-            "top-level `timelineOps` array to your JSON response (alongside `nodes`/`connections`; use empty "
-            "arrays for those when the graph itself needs no change). Beats are quarter-note beats; beat 0 is "
-            "bar 1. The current tracks appear in the \"## Arrangement\" section and the automatable targets "
-            "in the \"## Automation targets\" section of the user's message.\n"
-            "The operations (max 64 per response; ANY invalid op rejects the whole batch, so keep batches "
-            "small and exact):\n"
-            "1. `{\"op\": \"addTrack\", \"kind\": \"midi\"|\"automation\", \"name\": \"...\"}` - a new empty "
-            "track.\n"
-            "2. `{\"op\": \"placeClips\", \"track\": \"<exact MIDI track name>\" or {\"index\": N}, "
-            "\"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"...\", \"notes\": [{\"startBeat\": "
-            "0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}]}]}` - writes MIDI notes; a note's "
-            "startBeat is relative to ITS CLIP's start, and notes must fit inside the clip.\n"
-            "3. `{\"op\": \"writeLane\", \"nodeUuid\": \"<uuid from Automation targets>\", \"paramId\": "
-            "\"<param id>\", \"points\": [{\"beat\": 0, \"value\": 200}, {\"beat\": 8, \"value\": 8000}]}` - "
-            "parameter automation over time. Values are RAW values inside the parameter's listed range "
-            "(never 0-1 normalised). Points REPLACE any existing points inside the written beat span. Only "
-            "(nodeUuid, paramId) pairs from the Automation targets section resolve - never invent a uuid.\n"
-            "4. `placeMidiClip` (a base64 .mid blob) exists but PREFER placeClips - explicit notes are "
-            "checkable.\n"
-            "The user always sees a preview and must click Apply before anything changes.\n"
-            "\nAutomation example - \"sweep the filter cutoff up over 8 beats\" (Filter uuid \"abc-123\"):\n"
-            "```json\n"
-            "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"writeLane\", \"nodeUuid\": "
-            "\"abc-123\", \"paramId\": \"cutoff\", \"points\": [{\"beat\": 0, \"value\": 200.0}, {\"beat\": 8, "
-            "\"value\": 8000.0}]}]}\n"
-            "```\n"
-            "Melody example - notes on existing MIDI track \"Lead\":\n"
-            "```json\n"
-            "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"placeClips\", \"track\": "
-            "\"Lead\", \"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"Riff\", \"notes\": ["
-            "{\"startBeat\": 0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}, {\"startBeat\": 1, "
-            "\"lengthBeats\": 1, \"pitch\": 63, \"velocity\": 100}, {\"startBeat\": 2, \"lengthBeats\": 2, "
-            "\"pitch\": 67, \"velocity\": 100}]}]}]}\n"
-            "```";
-    }
+    if (timelineToolsActive())
+        systemMsg += timelineOpsPromptSection();
 
     return systemMsg;
 }

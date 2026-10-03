@@ -474,6 +474,13 @@ int AIStateMapper::findChoiceIndex(juce::AudioParameterChoice* p, const juce::St
     return -1;
 }
 
+// The public door to the untrusted apply path, for model-authored params that arrive outside a
+// patch (a timelineOps insert): exactly what applyJSONToGraph does for an untrusted node's params.
+void AIStateMapper::applyUntrustedParams(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj) {
+    if (processor != nullptr && paramsObj != nullptr)
+        applyParamsToProcessor(processor, paramsObj, /*trusted=*/false);
+}
+
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                            bool trusted, bool skipUnchanged) {
     // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost

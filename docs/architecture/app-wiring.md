@@ -49,9 +49,12 @@ there is no per-file class boundary. Source layout:
   (available Track In candidates, plugin lane options, MIDI destination options, note audition).
 - `MainComponentTrackCreation.cpp` — add/delete track, MIDI/audio/instrument/plugin track
   creation, channel-strip build-out. `buildInstrumentTrackAndChain`'s undo-transaction body is
-  split into 4 named steps (`createTrackInForInstrumentChain`/`adoptInstrumentNodeForChain`/
-  `buildInstrumentEnvelopeChain`/`buildInstrumentChannelAndMacro`) sharing state through
-  the private `InstrumentChainBuild` struct.
+  `buildInstrumentTrackBody` (shared with the timelineOps host), split into named steps
+  (`createTrackInForInstrumentChain`/`adoptInstrumentNodeForChain`/`buildInstrumentEnvelopeChain`/
+  `buildInstrumentInserts`/`buildInstrumentChannelAndMacro`) sharing state through the private
+  `InstrumentChainBuild` struct.
+- `MainComponentTimelineOpsHost.{h,cpp}` — the `synth::TimelineOpsHost` adapter a timelineOps
+  `addInstrumentTrack` op builds through ([timeline ops](../ai/timeline-ops.md#addinstrumenttrack)).
 - `MainComponentTypes.h` — the nested value types (`EditSurface`, `SlidingPanel`, the three dialog-choice
   enums, `InstrumentChainBuild`, `AudioTake`), declared at namespace scope in `synth::maincomponent`
   and re-exported as member aliases so `MainComponent::EditSurface` etc. still compile.

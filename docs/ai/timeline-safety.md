@@ -18,6 +18,10 @@ There are two ways timeline data could reach the app, and exactly one of them is
 | The **patch grammar** — a `"timeline"` key inside a patch suggestion | **Closed, permanently** | `validatePatch(trusted=false)` refuses it (`TimelineNotAllowed`, see [reserved keys](patch-format.md#reserved-keys-and-forward-compatibility)). A patch is applied to the graph; a timeline is not part of a graph. |
 | The **tools** — the discrete app-side timeline operations (add-track, place-clips, write-lane, place-midi-clip) | **Open, guarded** | Each payload goes through `validateTimeline` before it touches `TimelineDoc`. |
 
+The one tool that builds graph-side, `addInstrumentTrack`, binds only the `Track In` it creates
+itself and runs the app's own track build; `Track In` stays non-authorable in patches (see
+[timeline ops](timeline-ops.md#addinstrumenttrack)).
+
 The open door is a separate guarded entrance, *not* a relaxation of the patch path. Pinned by
 `TimelineValidatorTest.PatchGrammarStillRefusesTimelineData`, which takes a document this validator
 accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.

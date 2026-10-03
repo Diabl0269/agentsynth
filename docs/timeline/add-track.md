@@ -212,3 +212,10 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    track, the same way the Audio entry's macro is built — Master stays outside it, for the same
    reason.
 7. Bind the track to the `Track In` node's uuid and give it the palette colour for its index.
+
+The same build also runs from a model's `addInstrumentTrack` timeline op, through
+`MainComponent::buildInstrumentTrackBody` with the op's exact track name and without the default
+track preset lookup, plus optional effect **inserts** placed after the step-3/4 envelope stage and
+before the Gate (each a macro member) — see
+[`docs/ai/timeline-ops.md`](../ai/timeline-ops.md#addinstrumenttrack). On a failure partway, that
+shared body removes every node it added and the doc track before returning.

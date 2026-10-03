@@ -64,6 +64,11 @@ TEST_F(AIIntegrationServiceTest, TimelineToolsToggleGatesThePromptAndSchema) {
     const juce::String enabled = service->getHistory().front().content;
     EXPECT_TRUE(enabled.contains("TIMELINE & AUTOMATION OPERATIONS"));
     EXPECT_TRUE(enabled.contains("writeLane"));
+    // The graph-building op is taught too: what it builds, and that its track name must be new.
+    EXPECT_TRUE(enabled.contains("addInstrumentTrack"));
+    EXPECT_TRUE(enabled.contains("PLAYS the instrument immediately"));
+    EXPECT_TRUE(enabled.contains("The name must be NEW"));
+    EXPECT_FALSE(baseline.contains("addInstrumentTrack"));
     EXPECT_TRUE(enabled.startsWith(baseline)) << "the timeline section is appended, never rewrites the patch prompt";
 
     // Off again: byte-identical to the baseline.

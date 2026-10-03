@@ -18,6 +18,17 @@
 
 namespace {
 
+// A host that only has to EXIST: validate() never builds, it just refuses an addInstrumentTrack op
+// when no host is wired in. TimelineOpsHarness and TimelineOpsFixtureTests each carry one.
+struct ValidationOnlyHost : synth::TimelineOpsHost {
+    std::optional<synth::InstrumentTrackBuildResult>
+    addInstrumentTrack(const juce::String&, const juce::String&, bool,
+                       const std::vector<synth::InstrumentTrackInsert>&) override {
+        return std::nullopt;
+    }
+    bool recordBatch(const std::function<void()>&) override { return false; }
+};
+
 // Same fixed graph TimelineOpsHarness builds and Tests/Timeline/TimelineOpsTests.cpp's own fixture uses:
 // a Filter and an Oscillator carrying the "filter-uuid"/"osc-uuid" properties a writeLane fixture
 // targets.
@@ -72,9 +83,10 @@ TEST(TimelineOpsFixtureTest, EveryFixtureMatchesItsRecordedExpectation) {
         juce::AudioProcessorGraph graph;
         buildFixtureGraph(graph);
         synth::TimelineDoc doc;
+        ValidationOnlyHost host;
 
         if (kind == "timelineOps") {
-            const auto result = synth::TimelineOps::validate(payload, doc, graph);
+            const auto result = synth::TimelineOps::validate(payload, doc, graph, &host);
             EXPECT_EQ(result.ok, expectedValid) << "message: " << result.message;
             if (!expectedValid && expectedMessageContains.isNotEmpty())
                 EXPECT_TRUE(result.message.contains(expectedMessageContains)) << "actual message: " << result.message;

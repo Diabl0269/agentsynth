@@ -147,7 +147,8 @@ juce::var timelineOpsArraySchema() {
         "items": {
             "type": "object",
             "properties": {
-                "op": {"type": "string", "enum": ["addTrack", "placeClips", "writeLane", "placeMidiClip"]},
+                "op": {"type": "string", "enum": ["addTrack", "addInstrumentTrack", "placeClips", "writeLane",
+                                                        "placeMidiClip"]},
                 "kind": {"type": "string", "enum": ["midi", "automation"]},
                 "name": {"type": "string"},
                 "track": {"type": "string"},
@@ -167,7 +168,14 @@ juce::var timelineOpsArraySchema() {
                     "tension": {"type": "number"}, "curve": {"type": "integer"}},
                     "required": ["beat", "value"]}},
                 "startBeat": {"type": "number"},
-                "midBase64": {"type": "string"}
+                "midBase64": {"type": "string"},
+                "instrument": {"type": "string"},
+                "poly": {"type": "boolean"},
+                "instrumentId": {"type": "integer"},
+                "inserts": {"type": "array", "items": {"type": "object", "properties": {
+                    "type": {"type": "string"}, "id": {"type": "integer"},
+                    "params": {"type": "object", "additionalProperties": true}},
+                    "required": ["type"]}}
             },
             "required": ["op"]
         }

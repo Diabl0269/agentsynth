@@ -382,6 +382,8 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
+    Source/Timeline/InstrumentTrackOpReader.cpp
+    Source/Timeline/InstrumentTrackOpReader.h
     Source/Timeline/TimelineOps.cpp
     Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
@@ -569,7 +571,6 @@ include(cmake/PopupMotionSources.cmake)
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
 # which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
 # or the CLAP headers, i.e. exactly the new dependency this decision avoids.
-#
 # The JUCE_PLUGINHOST_* switches are set PUBLIC on JuceModules (cmake/JuceModules.cmake), which
 # Core links PUBLIC: the module code must be compiled with them, and every consumer (AppUI, Tests,
 # the plugin wrapper) must agree on these values or the format list in DefaultHostedPluginBackend's
@@ -830,7 +831,6 @@ endif()
 # above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
 # opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
 # docs/architecture/architecture.md.
-#
 # Standalone is deliberately NOT in FORMATS: JUCE would emit a second "Agent Synth.app" that
 # collides with the AgentSynth app target's own artifact in release packaging, for a build that
 # does strictly less than the real app.

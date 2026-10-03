@@ -231,8 +231,11 @@ void MainComponent::wireAiChatAndAccount() {
     // objects every other timeline edit in this class goes through, which is what puts an AI-applied
     // batch on the one shared undo stack alongside the user's own edits. `this` is safe to capture:
     // aiService is a member destroyed with us, and it clears the callback with it.
+    // The host builds graph-side tracks (addInstrumentTrack) and wraps such a batch in one
+    // graph + timeline + macro undo step; it is declared before aiService, so it outlives it.
+    aiService.setTimelineOpsHost(&timelineOpsHost_);
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
-        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager);
+        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager, &timelineOpsHost_);
     });
 
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
