@@ -128,15 +128,9 @@ TEST(LanePointGlideTest, AHiddenOwnerOrReducedMotionLandsAtOnce) {
 
 TEST(LanePointGlideTest, APureRemovalOrAdditionRunsAndAMoveDoesNot) {
     synth::ui::setReducedMotionForTest(false);
-    juce::Component owner;
-    owner.setSize(100, 40);
-    owner.addToDesktop(juce::ComponentPeer::windowIsTemporary);
-    owner.setVisible(true);
-    if (!owner.isShowing()) {
-        synth::ui::setReducedMotionForTest(std::nullopt);
-        GTEST_SKIP() << "no peer in this environment";
-    }
+    juce::Component owner; // no native window: one aborts the ASAN job's display with BadAtom
     LanePointGlide glide(owner);
+    glide.forceAnimateForTest(true);
     glide.reset(sample());
 
     auto fewer = sample();
@@ -158,6 +152,5 @@ TEST(LanePointGlideTest, APureRemovalOrAdditionRunsAndAMoveDoesNot) {
     moved[1].beat = 3.0;
     glide.pointsChanged(moved);
     EXPECT_FALSE(glide.isRunning()) << "a point that moved is one removal and one addition: lands at once";
-    owner.removeFromDesktop();
     synth::ui::setReducedMotionForTest(std::nullopt);
 }

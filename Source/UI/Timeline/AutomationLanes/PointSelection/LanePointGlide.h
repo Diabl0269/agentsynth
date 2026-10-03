@@ -38,6 +38,9 @@ public:
     // The points leaving in the running change, still to be drawn.
     const std::vector<LaneBreakpoint>& leaving() const noexcept { return leaving_; }
 
+    // Tests: animate as if the owner were on screen, so no native window is needed.
+    void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+
 private:
     bool animates() const;
     void finish();
@@ -48,6 +51,7 @@ private:
     std::vector<LaneBreakpoint> leaving_;
     std::vector<LaneBreakpoint> entering_;
     bool running_ = false;
+    bool forceAnimateForTest_ = false;
     float amount_ = 1.0f;
     juce::VBlankAnimatorUpdater vblank_;
     AnimationDriver driver_;
