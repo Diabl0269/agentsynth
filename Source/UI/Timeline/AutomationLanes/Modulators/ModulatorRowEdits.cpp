@@ -1,10 +1,12 @@
 // Concern: the modulator row's edits -- every control writes its parameter through the host's undoable
 // parameter path -- the live-value refresh that keeps the controls in step with the canvas card, and the
-// "..." menu (Show on canvas, Remove modulator).
+// "..." menu (Show on canvas, Change source..., Remove modulator).
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -64,6 +66,13 @@ void ModulatorRow::refreshValues() {
 juce::PopupMenu ModulatorRow::buildMenu() const {
     juce::PopupMenu menu;
     menu.addItem(kShowOnCanvasMenuId, "Show on canvas");
+    if (host_ != nullptr && host_->canChangeModulatorSource(info_)) {
+        const auto lfos = host_->getLfoChoices(info_.targetUuid, info_.paramId);
+        const bool another = std::any_of(lfos.begin(), lfos.end(), [this](const TrackHeaderHost::LfoChoice& lfo) {
+            return lfo.uuid != info_.sourceUuid && !lfo.movesThisParameter;
+        });
+        menu.addItem(kChangeSourceMenuId, "Change source..." + (another ? juce::String() : " (no other LFO)"), another);
+    }
     menu.addSeparator();
     menu.addItem(kRemoveMenuId, "Remove modulator");
     return menu;
@@ -78,8 +87,34 @@ void ModulatorRow::applyMenuChoice(int menuId) {
         return;
     if (menuId == kShowOnCanvasMenuId)
         host->showNodeOnCanvas(info.sourceUuid);
+    else if (menuId == kChangeSourceMenuId)
+        openChangeSourcePicker();
     else if (menuId == kRemoveMenuId)
         host->removeModulator(info);
+}
+
+// The pick arrives after the call-out closes, when this row may be gone (the graph refresh prunes it), so the callback
+// holds the host and the routing by value and never this. The host re-points it as ONE undo step.
+void ModulatorRow::openChangeSourcePicker() {
+    if (host_ == nullptr || !host_->canChangeModulatorSource(info_))
+        return;
+    auto* host = host_;
+    const auto info = info_;
+    const auto name = parameterName_.isNotEmpty() ? parameterName_ : info.paramId;
+    const auto choices =
+        collectChangeSourceChoices(host->getLfoChoices(info.targetUuid, info.paramId), info.sourceUuid, name);
+    if (choices.lfos.empty())
+        return;
+    auto picker = buildAddModulatorPicker(choices, name, [host, info](const AddModulatorPick& pick) {
+        if (!pick.isNew)
+            host->changeModulatorSource(info, pick.lfoUuid);
+    });
+    picker->setAccessibleNames("Change source of " + info.sourceTitle + " on " + name, "Search modulators for " + name);
+    if (auto& hook = test_hooks::changeSourcePickerHookForTest()) {
+        hook(std::move(picker));
+        return;
+    }
+    juce::CallOutBox::launchAsynchronously(std::move(picker), getScreenBounds(), nullptr);
 }
 
 void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {

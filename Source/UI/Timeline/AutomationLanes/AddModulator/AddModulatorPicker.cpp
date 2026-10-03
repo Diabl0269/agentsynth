@@ -1,5 +1,6 @@
 // Concern: turning the host's LFOs into the add-modulator picker's rows and a pick back into "new or this one".
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -44,6 +45,17 @@ AddModulatorChoices collectAddModulatorChoices(std::vector<TrackHeaderHost::LfoC
     return choices;
 }
 
+AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
+                                               const juce::String& currentSourceUuid,
+                                               const juce::String& parameterName) {
+    lfos.erase(std::remove_if(lfos.begin(), lfos.end(),
+                              [&](const TrackHeaderHost::LfoChoice& lfo) { return lfo.uuid == currentSourceUuid; }),
+               lfos.end());
+    auto choices = collectAddModulatorChoices(std::move(lfos), parameterName);
+    choices.items.erase(choices.items.begin()); // "New LFO"
+    return choices;
+}
+
 std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoices& choices,
                                                          const juce::String& parameterName,
                                                          std::function<void(const AddModulatorPick&)> onPick) {
@@ -63,6 +75,11 @@ std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoic
 
 namespace test_hooks {
 std::function<void(std::unique_ptr<ModMatrixPicker>)>& addModulatorPickerHookForTest() {
+    static std::function<void(std::unique_ptr<ModMatrixPicker>)> hook;
+    return hook;
+}
+
+std::function<void(std::unique_ptr<ModMatrixPicker>)>& changeSourcePickerHookForTest() {
     static std::function<void(std::unique_ptr<ModMatrixPicker>)> hook;
     return hook;
 }

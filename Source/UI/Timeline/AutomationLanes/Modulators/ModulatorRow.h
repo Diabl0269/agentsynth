@@ -32,6 +32,7 @@ public:
     static constexpr int kIndent = 28; // one step further in than a lane header
     static constexpr int kShowOnCanvasMenuId = 1;
     static constexpr int kRemoveMenuId = 2;
+    static constexpr int kChangeSourceMenuId = 3; // only when the host can re-point the routing
 
     /** `host` may be null (every control then stays inert). `parameterName` words the controls' names. */
     ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName);
@@ -79,6 +80,7 @@ public:
 private:
     void initLfoControls();
     void applyNames();
+    void openChangeSourcePicker();
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
                        std::function<float(double)> toParameter);
