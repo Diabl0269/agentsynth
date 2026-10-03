@@ -68,9 +68,12 @@ Notes on individual entries:
   [tracks](../timeline/tracks.md#kind-badge)). The text pill remains the fallback in a headless
   build, or when the icon asset is missing — the badge is identity chrome either way, never a
   control.
-- **`FollowPlayhead`** (40) is the toolbar-style toggle button next to the timeline panel's snap
-  selector that page-flips the view to keep the playhead on screen while playing — see
-  [playhead](../timeline/playhead.md#follow-playhead).
+- **`FollowPlayhead`** (40) is the toggle button next to the timeline panel's snap selector that
+  page-flips the view to keep the playhead on screen while playing — see
+  [playhead](../timeline/playhead.md#follow-playhead). The glyph is the playhead (a down-pointing
+  head on a line) with two chevrons chasing it from the left. Its colour carries the toggle state:
+  the library tints it `textMuted` and the panel clones a `textPrimary` hover and an `accent` on
+  variant, on top of the button's accent wash.
 - **`CatIO`** (41) is the speaker glyph for the module library's "I/O" category header (Audio Input
   and Audio Output), and doubles as the Audio Output card's identity glyph in
   `ModuleComponent::paint()` — see

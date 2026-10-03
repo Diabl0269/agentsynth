@@ -70,6 +70,8 @@ A toggle button sits immediately next to the snap toggle in the panel's snap/too
 (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see
 [`layout/icons.md`](../layout/icons.md)). `kFollowPlayheadButtonWidth` is 30 px; the snap
 toggle's `kSnapToggleButtonWidth` is **46 px**, wide enough for the word `"Snap"`.
+The glyph is the playhead with two chevrons chasing it; its colour is the on/off cue (muted at
+rest, accent while following).
 
 **The button is labelled with the VERB, not with its key.** A button that spells its own letter
 goes stale the moment a user rebinds it, so the live key is in the tooltip, resolved through
