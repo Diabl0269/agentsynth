@@ -27,6 +27,12 @@ synth::ui::AutomationLaneEditor* MainComponent::activeLaneEditor() const {
     return timelinePanel.getAutomationLanes().editorFor(timelinePanel.getSelectedAutomationLane());
 }
 
+// The lane the lane commands act on: the one whose editor or header holds focus, else the lane last shown or focused.
+synth::LaneId MainComponent::activeLane() const {
+    const auto focused = timelinePanel.getAutomationLanes().focusedLane();
+    return focused.isValid() ? focused : timelinePanel.getSelectedAutomationLane();
+}
+
 // True while the active lane editor has a point selected.
 bool MainComponent::hasPointSelection() const {
     const auto* editor = activeLaneEditor();
@@ -84,7 +90,7 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::AutomationLane:
-            return false; // a point has no "next to itself" to duplicate into
+            return activeLane().isValid(); // duplicates the lane
         case EditSurface::Graph:
             return graphEditor.getSelectionCount() > 0;
         case EditSurface::Mixer:

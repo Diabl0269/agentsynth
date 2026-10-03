@@ -27,6 +27,27 @@ void insertBreakpoint(std::vector<AutomationLane::Breakpoint>& points, const Aut
         points.insert(pos, point);
 }
 
+// `points` with every value moved from `from` onto `to` by its position within the range, so a curve keeps its
+// shape on a parameter with other bounds. Identical ranges copy verbatim (no float round trip); a zero-width
+// source range has no position to keep, so every point lands on `to`'s default.
+std::vector<AutomationLane::Breakpoint> rescalePoints(const std::vector<AutomationLane::Breakpoint>& points,
+                                                      const AutomationLane::RangeSnapshot& from,
+                                                      const AutomationLane::RangeSnapshot& to) {
+    auto result = points;
+    if (from.minValue == to.minValue && from.maxValue == to.maxValue)
+        return result;
+    const double fromSpan = (double)from.maxValue - (double)from.minValue;
+    const double toSpan = (double)to.maxValue - (double)to.minValue;
+    for (auto& point : result) {
+        const double value = fromSpan > 0.0
+                                 ? (double)to.minValue +
+                                       juce::jlimit(0.0, 1.0, (point.value - (double)from.minValue) / fromSpan) * toSpan
+                                 : (double)to.defaultValue;
+        point.value = juce::jlimit((double)to.minValue, (double)to.maxValue, value);
+    }
+    return result;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------- lanes --
@@ -261,6 +282,68 @@ bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
         // whether this uuid actually resolves.
         lane->orphaned = false;
         return true;
+    });
+}
+
+// The lane keeps its id, track, position and record mode, so its editor, header and undo history follow it to the
+// new parameter. Points are stored in the parameter's own units, so they move onto the new range by position (a lane
+// with no points takes the new default as its constant). The doc-wide one-lane-per-parameter rule is the same one
+// rebindLane enforces; `orphaned` is cleared optimistically and the next reconcile re-derives it.
+// False, nothing changed, when another lane owns (nodeUuid, paramId) or an input is invalid. A user gesture: wrap in
+// recordTimelineChange.
+bool TimelineDoc::retargetLane(LaneId id, const juce::String& nodeUuid, const juce::String& paramId,
+                               const AutomationLane::RangeSnapshot& range, int paramIndexHint) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || nodeUuid.isEmpty() || paramId.isEmpty() || !isValidRange(range))
+        return false;
+    if (auto* existing = findLaneForParam(nodeUuid, paramId); existing != nullptr && existing->id != id)
+        return false;
+
+    const bool sameBinding = lane->nodeUuid == nodeUuid && lane->paramId == paramId;
+    const bool sameRange = lane->range.minValue == range.minValue && lane->range.maxValue == range.maxValue &&
+                           lane->range.defaultValue == range.defaultValue;
+    if (sameBinding && sameRange && !lane->orphaned && lane->paramIndexHint == paramIndexHint)
+        return true;
+
+    return applyMutation([&] {
+        lane->points = rescalePoints(lane->points, lane->range, range);
+        lane->nodeUuid = nodeUuid;
+        lane->paramId = paramId;
+        lane->range = range;
+        lane->paramIndexHint = paramIndexHint;
+        lane->orphaned = false;
+        return true;
+    });
+}
+
+// Built and inserted inside one mutation: the copy never exists without its parameter and points, so an undo of the
+// step removes it whole. It sits right after its source so the pair reads as one block on the track.
+// A copy of `source` on another parameter, directly below it on its track, as ONE mutation. Invalid id, nothing
+// changed, when the parameter already has a lane, the track is full or an input is invalid.
+LaneId TimelineDoc::duplicateLane(LaneId source, const juce::String& nodeUuid, const juce::String& paramId,
+                                  const AutomationLane::RangeSnapshot& range, int paramIndexHint) {
+    Track* owner = nullptr;
+    auto* original = findLane(source, &owner);
+    if (original == nullptr || nodeUuid.isEmpty() || paramId.isEmpty() || !isValidRange(range))
+        return {};
+    if (findLaneForParam(nodeUuid, paramId) != nullptr)
+        return {};
+    if (static_cast<int>(owner->lanes.size()) >= kMaxLanesPerTrack)
+        return {};
+
+    return applyMutation([&] {
+        AutomationLane copy;
+        copy.id = LaneId{nextLaneId++};
+        copy.nodeUuid = nodeUuid;
+        copy.paramId = paramId;
+        copy.range = range;
+        copy.paramIndexHint = paramIndexHint;
+        copy.recordMode = original->recordMode;
+        copy.points = rescalePoints(original->points, original->range, range);
+        const auto id = copy.id;
+        const auto position = (original - owner->lanes.data()) + 1;
+        owner->lanes.insert(owner->lanes.begin() + position, std::move(copy));
+        return id;
     });
 }
 

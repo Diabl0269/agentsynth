@@ -1,6 +1,8 @@
 #pragma once
 
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -18,7 +20,9 @@ struct TrackHeaderHost;
 // (refreshValues), and every edit goes back through TrackHeaderHost::setNodeParameter, the same undo
 // path the canvas knobs use. Message thread only. "Remove modulator" destroys this row before the
 // call returns (the owner prunes it on the graph-changed refresh).
-class ModulatorRow : public juce::Component {
+class ModulatorRow
+    : public juce::Component
+    , public KeyboardContextMenuProvider {
 public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
     // header column is ~200 px, too narrow for the app's combos and bars side by side on two lines.
@@ -56,6 +60,11 @@ public:
     juce::PopupMenu buildMenu() const;
     /** Applies a menu choice; may destroy this row (see the class comment). */
     void applyMenuChoice(int menuId);
+    /** Shows the menu with `options` placing it: the pointer for a right-click anywhere on the row, the "..." button's
+     *  anchor otherwise. */
+    void showMenuAt(const juce::PopupMenu::Options& options);
+    void mouseDown(const juce::MouseEvent& e) override;
+    bool showContextMenuForKeyboardFocus() override;
 
 private:
     class MenuButton : public IconButton {

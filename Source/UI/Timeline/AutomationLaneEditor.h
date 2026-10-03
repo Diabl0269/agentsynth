@@ -4,6 +4,8 @@
 #include "EditTool.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h"
@@ -54,12 +56,14 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // on mouse-up, Escape cancels. Double-clicking a point (or Return with the keyboard cursor on one) opens a
 // PointValueField beside it: type a value, Return sets that one point's value (clamped to the lane's range, one undo
 // step), Escape cancels. Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
-// don't run in tests); right-click a handle shows Delete point.
+// don't run in tests); right-click a handle shows Delete point; right-click anywhere else (and Shift+F10) asks for the
+// lane's own menu through onLaneMenuRequested.
 namespace synth::ui {
 
 class AutomationLaneEditor
     : public juce::Component
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , public KeyboardContextMenuProvider {
 public:
     enum class Tool { Pointer, Pencil, Line, Eraser };
 
@@ -88,6 +92,12 @@ public:
     std::function<std::optional<double>(const juce::String&)> textToValue;
     /** The lane's parameter name for the value field's accessible title; may be null or return empty. */
     std::function<juce::String()> laneLabel;
+
+    /** Asked to show the lane's menu with the given placement (the pointer for a right-click on empty lane space,
+     *  the editor's top-left for Shift+F10); may be null, which leaves a right-click on empty space unhandled. */
+    std::function<void(const juce::PopupMenu::Options&)> onLaneMenuRequested;
+
+    bool showContextMenuForKeyboardFocus() override;
 
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
@@ -283,6 +293,8 @@ private:
     void commitTypedValue(double beat, double value);
     void closeValueFieldIfPointGone();
 
+    void handlePopupClick(const juce::MouseEvent& e);
+    void showContextMenu(juce::PopupMenu menu);
     void showHandleContextMenu(double beat);
     void showSegmentContextMenu(int leftIndex);
 

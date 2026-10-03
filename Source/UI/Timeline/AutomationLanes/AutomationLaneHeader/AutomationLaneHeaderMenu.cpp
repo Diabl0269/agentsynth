@@ -1,8 +1,10 @@
-// Concern: the automation lane header's edits -- the record-mode selector and the "..." menu
-// (Add modulator..., Move to track, Delete lane). Every edit is one undo step: the lane edits go
+// Concern: the automation lane header's edits -- the record-mode selector and the lane menu
+// (Add modulator..., Change parameter..., Duplicate, Move to track, Delete lane), opened from the "..." button, a
+// right-click anywhere on the header, or the keyboard. Every edit is one undo step: the lane edits go
 // through AutomationLaneActions, the modulator through the host, which owns the graph.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
+#include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
@@ -23,8 +25,12 @@ juce::PopupMenu AutomationLaneHeaderComponent::buildMenu() {
         if (const auto* track = doc_.getTrack(moveTargets_[(size_t)i]))
             moveMenu.addItem(kMoveToTrackMenuIdBase + i, track->name);
 
+    const bool canPick = canPickParameter();
+    const juce::String noneFree = canPick ? juce::String() : juce::String(" (no free parameter)");
     juce::PopupMenu menu;
     addModulatorItem(menu);
+    menu.addItem(kChangeParameterMenuId, "Change parameter..." + noneFree, canPick);
+    menu.addItem(kDuplicateMenuId, "Duplicate" + noneFree, canPick);
     menu.addSeparator();
     menu.addSubMenu("Move to track", moveMenu, !moveTargets_.empty());
     menu.addSeparator();
@@ -80,6 +86,14 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
         openAddModulatorPicker();
         return;
     }
+    if (menuId == kChangeParameterMenuId) {
+        openChangeParameterPicker();
+        return;
+    }
+    if (menuId == kDuplicateMenuId) {
+        openDuplicatePicker();
+        return;
+    }
     const int index = menuId - kMoveToTrackMenuIdBase;
     if (index < 0 || index >= (int)moveTargets_.size())
         return;
@@ -88,11 +102,57 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
 }
 
 void AutomationLaneHeaderComponent::showMenu() {
+    showMenuAt(juce::PopupMenu::Options().withTargetComponent(&menuButton_));
+}
+
+void AutomationLaneHeaderComponent::showMenuAt(const juce::PopupMenu::Options& options) {
+    auto menu = buildMenu();
+    if (auto& hook = test_hooks::laneMenuHookForTest()) {
+        hook(menu, options);
+        return;
+    }
     juce::Component::SafePointer<AutomationLaneHeaderComponent> safeThis(this);
-    buildMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&menuButton_), [safeThis](int result) {
+    menu.showMenuAsync(options, [safeThis](int result) {
         if (auto* self = safeThis.getComponent(); self != nullptr && result != 0)
             self->applyMenuChoice(result);
     });
 }
 
+// A right-click anywhere on the header opens the lane menu at the pointer; a left click on the parameter name
+// opens the picker that changes what the lane controls. The record-mode combo and the "..." button take their
+// own clicks. The value readout forwards its events here (see the constructor).
+void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
+    const auto local = e.getEventRelativeTo(this);
+    if (e.mods.isPopupMenu()) {
+        showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
+        return;
+    }
+    if (e.mods.isLeftButtonDown() && nameArea_.contains(local.getPosition()))
+        openChangeParameterPicker();
+}
+
+juce::MouseCursor AutomationLaneHeaderComponent::getMouseCursor() {
+    if (host_ != nullptr && nameArea_.contains(getMouseXYRelative()))
+        return juce::MouseCursor::PointingHandCursor;
+    return juce::Component::getMouseCursor();
+}
+
+// Shift+F10 (or the menu key) on the record-mode combo or the "..." button: the menu opens beside the focused
+// control, the way a right-click would open it at the pointer.
+bool AutomationLaneHeaderComponent::showContextMenuForKeyboardFocus() {
+    if (doc_.getLane(laneId_) == nullptr)
+        return false;
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const auto anchor = focused != nullptr && isParentOf(focused) ? focused->getScreenBounds() : getScreenBounds();
+    showMenuAt(contextMenuOptions(anchor));
+    return true;
+}
+
 } // namespace synth::ui
+
+namespace synth::ui::test_hooks {
+std::function<void(const juce::PopupMenu&, const juce::PopupMenu::Options&)>& laneMenuHookForTest() {
+    static std::function<void(const juce::PopupMenu&, const juce::PopupMenu::Options&)> hook;
+    return hook;
+}
+} // namespace synth::ui::test_hooks

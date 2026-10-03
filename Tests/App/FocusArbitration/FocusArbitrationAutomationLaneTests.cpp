@@ -1,5 +1,6 @@
 // Concern: the automation lane surface of the one focus-ownership rule (MainComponent::resolveEditSurface):
-// Select All, Copy, Cut and Paste act on a lane editor's points, and Duplicate and Repeat stay inactive there.
+// Select All, Copy, Cut and Paste act on a lane editor's points, Duplicate acts on the lane itself, and Repeat stays
+// inactive there.
 #include "FocusArbitrationTestFixture.h"
 
 namespace {
@@ -39,7 +40,7 @@ TEST_F(FocusArbitrationTest, SelectAllOnTheAutomationLaneSurfaceSelectsThePoints
     EXPECT_EQ(f.mc.getGraphEditor().getSelectionCount(), 0) << "the graph selection is untouched";
     EXPECT_TRUE(commandIsActive(f.mc, AppCommands::copySelection));
     EXPECT_TRUE(commandIsActive(f.mc, AppCommands::cutSelection));
-    EXPECT_FALSE(commandIsActive(f.mc, AppCommands::duplicateSelection)) << "a point has nothing to duplicate into";
+    EXPECT_TRUE(commandIsActive(f.mc, AppCommands::duplicateSelection)) << "Duplicate copies the lane, not a point";
     EXPECT_FALSE(commandIsActive(f.mc, AppCommands::repeatSelection));
 }
 

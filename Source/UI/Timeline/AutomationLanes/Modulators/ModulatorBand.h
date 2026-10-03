@@ -1,10 +1,12 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
@@ -32,6 +34,7 @@ struct TrackHeaderHost;
 class ModulatorBand
     : public juce::Component
     , public juce::TooltipClient
+    , public KeyboardContextMenuProvider
     , private synth::TimelineDoc::Listener
     , private juce::AsyncUpdater {
 public:
@@ -67,6 +70,11 @@ public:
     AutomationLaneEditor* getEditor() noexcept { return editor_.get(); }
     /** The proxy doc the editor edits (test seam). */
     const synth::TimelineDoc& getProxyDoc() const noexcept { return proxy_; }
+
+    /** Asked to show the modulator row's menu with the given placement: a right-click anywhere on the band (its
+     *  curve editor included) and Shift+F10; may be null. */
+    std::function<void(const juce::PopupMenu::Options&)> onMenuRequested;
+    bool showContextMenuForKeyboardFocus() override;
 
     juce::String getTooltip() override;
     void paint(juce::Graphics& g) override;

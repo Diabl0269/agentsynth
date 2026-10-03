@@ -336,7 +336,7 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
                 return EditSurface::PianoRoll;
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
                 return EditSurface::TimelineClips;
-            if (timelinePanel.getAutomationLanes().focusedEditor() != nullptr)
+            if (timelinePanel.getAutomationLanes().focusedLane().isValid())
                 return EditSurface::AutomationLane;
         }
     }

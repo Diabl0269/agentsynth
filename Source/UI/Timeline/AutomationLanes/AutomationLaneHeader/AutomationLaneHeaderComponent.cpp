@@ -1,5 +1,6 @@
 // Concern: the automation lane header's construction, doc refresh, value readout, layout and paint.
-// The record-mode and "..." menu actions live in AutomationLaneHeaderMenu.cpp.
+// The record-mode and lane menu actions live in AutomationLaneHeaderMenu.cpp, the parameter pickers in
+// AutomationLaneHeaderParameterPicker.cpp.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
 #include "UI/Layout/FocusRing.h"
@@ -50,6 +51,8 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     recordMode_.onChange = [this] { applyRecordModeChoice(recordMode_.getSelectedId()); };
 
     addAndMakeVisible(readout_);
+    // The readout takes mouse clicks (for its tooltip), so a right-click on it is forwarded here to open the menu.
+    readout_.addMouseListener(this, false);
     addAndMakeVisible(menuButton_);
     menuButton_.onClick = [this] { showMenu(); };
 
@@ -78,6 +81,8 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     recordMode_.setSelectedId(lane->recordMode + 1, juce::dontSendNotification);
     recordMode_.setTitle(parameterName_ + " record mode");
     recordMode_.setTooltip(parameterName_ + " record mode");
+    setTooltip("Click the name to change what " + parameterName_ +
+               " controls; right-click or Shift+F10 for the lane menu");
     menuButton_.setTitle("Lane menu for " + parameterName_);
     menuButton_.setTooltip("Lane menu for " + parameterName_);
     applyRecordModeColour();

@@ -109,12 +109,15 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
     Source/UI/Timeline/AutomationLanes/AutomationHandleDensity.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
+    Source/UI/Timeline/AutomationLanes/LaneMenuHook.h
+    Source/UI/Timeline/AutomationLanes/LaneTarget.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderParameterPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h

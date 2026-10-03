@@ -345,6 +345,7 @@ private:
     bool touchesAnyMacro() const;
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
     synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
+    synth::LaneId activeLane() const;                          // the lane the lane commands (Duplicate) act on
     bool hasPointSelection() const;
     bool isBottomDockVisibleForSnap() const;
     bool isZoomCommandActive(juce::CommandID id) const;
@@ -465,6 +466,8 @@ private:
     getAutomatableParameters(synth::TrackId track) override;
     synth::LaneId addAutomationLane(synth::TrackId track,
                                     const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) override;
+    std::optional<synth::ui::LaneTarget>
+    prepareLaneTarget(const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) override;
     // Modulators under an automation lane (MainComponentModulators.cpp).
     std::vector<synth::ui::ModulatorInfo> getModulators(const juce::String& nodeUuid,
                                                         const juce::String& paramId) override;

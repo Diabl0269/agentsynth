@@ -624,6 +624,13 @@ public:
     // it in recordTimelineChange).
     bool rebindLane(LaneId id, const juce::String& newNodeUuid);
 
+    // See TimelineDocAutomation.cpp.
+    bool retargetLane(LaneId id, const juce::String& nodeUuid, const juce::String& paramId,
+                      const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
+
+    LaneId duplicateLane(LaneId source, const juce::String& nodeUuid, const juce::String& paramId,
+                         const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
+
     // Rebinds whichever of (nodeUuid, paramA)/(nodeUuid, paramB) has a lane to the other paramId, in place.
     bool swapLaneParams(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB);
 

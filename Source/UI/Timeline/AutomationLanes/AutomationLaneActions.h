@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include <juce_graphics/juce_graphics.h>
 #include <optional>
 #include <vector>
@@ -34,6 +35,15 @@ std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& d
 
 /** Deletes the lane, removing an Automation track it leaves empty in the same step. */
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane);
+
+/** Points the lane at `target` (TimelineDoc::retargetLane): its curve keeps its shape, a parameter that already
+ *  has a lane is refused. False when nothing changed. */
+bool retargetLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, const LaneTarget& target);
+
+/** Adds a copy of `lane` bound to `target` directly below it (TimelineDoc::duplicateLane); the new lane's id,
+ *  invalid when nothing was created. */
+synth::LaneId duplicateLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
+                                    const LaneTarget& target);
 
 /** Every MIDI and Audio track the lane could move to, in track order (never its own track). */
 std::vector<synth::TrackId> laneMoveTargets(const synth::TimelineDoc& doc, synth::LaneId lane);

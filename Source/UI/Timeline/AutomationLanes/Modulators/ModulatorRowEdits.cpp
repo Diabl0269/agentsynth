@@ -3,6 +3,7 @@
 // "..." menu (Show on canvas, Remove modulator).
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
+#include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <cmath>
 
@@ -79,12 +80,32 @@ void ModulatorRow::applyMenuChoice(int menuId) {
         host->removeModulator(info);
 }
 
-void ModulatorRow::showMenu() {
+void ModulatorRow::showMenu() { showMenuAt(juce::PopupMenu::Options().withTargetComponent(&menuButton_)); }
+
+void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {
+    auto menu = buildMenu();
+    if (auto& hook = test_hooks::laneMenuHookForTest()) {
+        hook(menu, options);
+        return;
+    }
     juce::Component::SafePointer<ModulatorRow> safeThis(this);
-    buildMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&menuButton_), [safeThis](int result) {
+    menu.showMenuAsync(options, [safeThis](int result) {
         if (auto* self = safeThis.getComponent(); self != nullptr && result != 0)
             self->applyMenuChoice(result);
     });
+}
+
+// A right-click anywhere on the row that is not one of its controls opens the same menu as the "..." button, at
+// the pointer.
+void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
+    if (e.mods.isPopupMenu())
+        showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
+}
+
+// Shift+F10 on the "..." button (the row's one focusable control that is not an edit).
+bool ModulatorRow::showContextMenuForKeyboardFocus() {
+    showMenuAt(contextMenuOptions(menuButton_.getScreenBounds()));
+    return true;
 }
 
 } // namespace synth::ui

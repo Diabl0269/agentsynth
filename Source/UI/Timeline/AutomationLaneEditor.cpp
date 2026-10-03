@@ -10,6 +10,7 @@
 #include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
+#include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/ToolCursors.h"
 #include "UI/Timeline/TrackColour.h"
@@ -532,10 +533,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
     const auto pos = e.getPosition();
 
     if (e.mods.isPopupMenu()) {
-        if (auto hit = hitTestHandle(pos))
-            showHandleContextMenu(hit->beat);
-        else if (auto segIdx = hitTestSegmentLeftIndex(pos.x))
-            showSegmentContextMenu(*segIdx);
+        handlePopupClick(e);
         return;
     }
 
@@ -868,6 +866,35 @@ void AutomationLaneEditor::applySegmentCurveChoice(double leftBeat, int curve) {
     repaint();
 }
 
+// A handle has its own menu, and so has the curve between two points; anywhere else on the lane is the lane's
+// own menu, which only the owner of the lane can build (the parameter, the track, the host).
+void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
+    const auto pos = e.getPosition();
+    if (auto hit = hitTestHandle(pos))
+        showHandleContextMenu(hit->beat);
+    else if (auto segIdx = onCurve(pos) ? hitTestSegmentLeftIndex(pos.x) : std::nullopt)
+        showSegmentContextMenu(*segIdx);
+    else if (onLaneMenuRequested)
+        onLaneMenuRequested(synth::ui::contextMenuOptionsAtPoint(e.getScreenPosition()));
+}
+
+bool AutomationLaneEditor::showContextMenuForKeyboardFocus() {
+    if (!onLaneMenuRequested || doc_ == nullptr || doc_->getLane(laneId_) == nullptr)
+        return false;
+    onLaneMenuRequested(synth::ui::contextMenuOptionsAtPoint(getScreenBounds().getPosition()));
+    return true;
+}
+
+// The handle and segment menus go through the shared test hook too, so a test can tell which menu a click opened.
+void AutomationLaneEditor::showContextMenu(juce::PopupMenu menu) {
+    const auto options = synth::ui::contextMenuOptionsAtPointer();
+    if (auto& hook = synth::ui::test_hooks::laneMenuHookForTest()) {
+        hook(menu, options);
+        return;
+    }
+    menu.showMenuAsync(options);
+}
+
 void AutomationLaneEditor::showHandleContextMenu(double beat) {
     const auto laneId = laneId_;
     juce::PopupMenu menu;
@@ -879,7 +906,7 @@ void AutomationLaneEditor::showHandleContextMenu(double beat) {
             mutate();
         repaint();
     });
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+    showContextMenu(menu);
 }
 
 void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
@@ -897,7 +924,7 @@ void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
     menu.addItem("Linear", true, currentCurve == static_cast<int>(synth::BreakpointCurve::Linear), [this, leftBeat] {
         applySegmentCurveChoice(leftBeat, static_cast<int>(synth::BreakpointCurve::Linear));
     });
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+    showContextMenu(menu);
 }
 
 } // namespace synth::ui

@@ -61,9 +61,13 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 - a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
-- a "..." menu: **Add modulator...** ([below](#modulators)), **Move to track** (every other MIDI/Audio
+- a lane menu: **Add modulator...** ([below](#modulators)), **Change parameter...** and **Duplicate**
+  ([below](#change-parameter-and-duplicate)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and
-  **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
+  **Delete lane** (`TimelineDoc::removeLane`), each one undo step. The "..." button opens it; so does a
+  right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)) and Shift+F10;
+- a click on the parameter name opens the Change parameter picker (the name is a hit region with a pointing-hand
+  cursor, not a separate control: the keyboard route is the menu item).
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
@@ -142,6 +146,40 @@ the same ensure-uuid step the knob path takes.
 
 Test hooks: `setAddAutomationPickerHookForTest` (receives the picker instead of a call-out),
 `addAutomationRowForTest`, `addAutomationRowBoundsForTest`.
+
+## Right-click anywhere on a lane
+
+A right-click opens the lane's own menu (the one the "..." button opens) with its top-left at the pointer
+(`contextMenuOptionsAtPoint`, see [layout](../layout/layout.md)) on: the lane header (the value readout forwards its
+clicks to it), the lane's curve editor wherever it is not a handle or the curve itself (those keep Delete point and
+Hold/Linear), a [modulator row](#modulators) and a modulator's band (its curve editor included), where it opens the
+row's menu (Show on canvas, Remove modulator). The editor asks its owner through `onLaneMenuRequested`, the band through
+`onMenuRequested`; neither builds a menu itself. Shift+F10 (`openContextMenu`) opens the same menu from a focused header,
+editor, modulator row or band (`KeyboardContextMenuProvider`). A direct-cable modulator band is decoration that takes no
+clicks, so a right-click there still falls through to the clip lanes; its row in the header column has the menu.
+
+## Change parameter and Duplicate
+
+Both open the "+ Add automation..." picker (`buildAddAutomationPicker`) for the lane's track. It already leaves out
+every parameter that has a lane, so a lane never ends up automating a parameter twice (`TimelineDoc` refuses it too).
+The host resolves the pick to a `LaneTarget` (node uuid, parameter, index hint and the parameter's real range;
+`TrackHeaderHost::prepareLaneTarget`). Both items are disabled, with the reason in their text, without a host or when
+no parameter is free.
+
+- **Change parameter...** (`TimelineDoc::retargetLane`, `retargetLaneUndoable`): the lane keeps its id, track, position,
+  record mode and curve. Points are stored in the parameter's own units, so each value moves onto the new range by its
+  position in the old one (a quarter of the way up stays a quarter of the way up); a lane with no points takes the new
+  parameter's default as its constant. One undo step. The lane's modulators stay bound to the OLD parameter, because the
+  graph is the truth: they leave the lane, and a modulator's amount lane whose routing no longer reaches a lane shows as
+  an ordinary lane row.
+- **Duplicate** (`TimelineDoc::duplicateLane`, `duplicateLaneUndoable`; Cmd+D on a focused lane editor or header, the
+  `duplicateSelection` action): the picker opens FIRST and the copy is created only when a parameter is picked, directly
+  below its source on the same track with the same points (rescaled like above) and record mode, in one undo step.
+  Dismissing the picker changes nothing, so there is never a transient lane without a parameter.
+
+`TrackHeaderHost::canChangeModulatorSource` / `changeModulatorSource` are the seam for a "Change source..." item on a
+modulator row; the default host says no and the app does not implement it yet (it needs the remove, the connect and the
+amount lane's re-key in one graph + timeline undo step).
 
 ## Modulators
 
@@ -517,8 +555,9 @@ lane range are taken before the tool mapping is consulted ([Draw shapes](#draw-s
 | Line | Drag previews a straight line from press to release; mouse-up replaces the dragged span with exactly the two snapped endpoints, Linear |
 | Eraser | Drag removes every handle it touches — collected into a set as the pointer passes over them (dimmed in the preview), deleted on mouse-up |
 
-Right-click a SEGMENT shows Hold/Linear, ticking the current one, routed through the headless
-`applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`.
+Right-click a SEGMENT (on the curve itself) shows Hold/Linear, ticking the current one, routed through the headless
+`applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`. Right-click anywhere else
+on the lane opens the lane menu ([below](#right-click-anywhere-on-a-lane)).
 
 Escape clears in-flight tool-drag state (a box included) and returns `true`; when idle it clears a point selection
 and returns `true`, and returns `false` when there is nothing to clear so the key falls through to the panel.
@@ -670,6 +709,12 @@ collide with the first's own new identity. `swapLaneParams` mutates both sides i
 `applyMutation`, so the invariant never sees an intermediate, colliding state.
 
 ## Tests
+
+`Tests/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp` (right-click at the pointer on the header and the editor,
+handle and segment keeping their menus, the menu key), `AutomationLanesRetargetTests.cpp` and
+`AutomationLanesDuplicateTests.cpp` (the pickers, one undo step, no duplicate parameter, dismissal),
+`AutomationLanesLaneMainTests.cpp` (the same against a real `MainComponent`, Cmd+D through its key handler) and
+`Tests/Timeline/TimelineDoc/TimelineDocLaneRetargetTests.cpp` (the doc operations).
 
 `Tests/UI/Timeline/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture and
 publish-discipline coverage (mirroring the `TimelineClipLaneArea` / `PianoRollComponent`

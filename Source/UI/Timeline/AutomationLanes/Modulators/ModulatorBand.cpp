@@ -4,6 +4,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -85,6 +86,10 @@ void ModulatorBand::setModulator(const ModulatorInfo& info, synth::LaneId ownerL
         editor_->setDrawShape(drawShape_);
         // The band is the one Tab stop and the one accessible node: the editor's press hands focus up to it.
         editor_->setWantsKeyboardFocus(false);
+        editor_->onLaneMenuRequested = [this](const juce::PopupMenu::Options& options) {
+            if (onMenuRequested)
+                onMenuRequested(options);
+        };
         editor_->setAccessible(false);
         addAndMakeVisible(*editor_);
         editor_->setBounds(getLocalBounds());
@@ -204,11 +209,23 @@ void ModulatorBand::setKnobAmount(double amount) {
     setAmountReadout(knobAmount());
 }
 
+// A right-click opens the modulator row's menu at the pointer and starts no knob drag.
 void ModulatorBand::mouseDown(const juce::MouseEvent& e) {
+    if (e.mods.isPopupMenu()) {
+        if (onMenuRequested)
+            onMenuRequested(contextMenuOptionsAtPoint(e.getScreenPosition()));
+        return;
+    }
     grabKeyboardFocus();
     knobDragging_ = false;
     knobDragStart_ = knobAmount();
-    juce::ignoreUnused(e);
+}
+
+bool ModulatorBand::showContextMenuForKeyboardFocus() {
+    if (!onMenuRequested)
+        return false;
+    onMenuRequested(contextMenuOptionsAtPoint(getScreenBounds().getPosition()));
+    return true;
 }
 
 // Relative, like a knob: the band's full height is the whole -100%..+100% span. The undo step opens on the
