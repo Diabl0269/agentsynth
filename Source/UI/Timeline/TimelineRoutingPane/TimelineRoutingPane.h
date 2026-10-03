@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/SidePane/SidePane.h"
+#include "UI/Layout/TextLinkButton.h"
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
@@ -145,10 +146,10 @@ private:
     bool fitting_ = false;
 
     RoutingComboButton canvasNode_{"Canvas node"};
-    RoutingTextLink showOnCanvas_;
+    TextLinkButton showOnCanvas_;
     RoutingComboButton midiDestinations_{"MIDI destinations"};
     ChannelChipComponent channelChip_;
-    RoutingTextLink showInMixer_;
+    TextLinkButton showInMixer_;
 
     std::function<void(juce::PopupMenu&)> showBindingMenuHook_;
     std::function<void()> openDestinationsHook_;

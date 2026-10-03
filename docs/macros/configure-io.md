@@ -224,7 +224,7 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   action.
 - **Keyboard focus is visible.** `juce::Button::paint()` hands `paintButton()` only `isOver()` and
   `isDown()`, never keyboard-focus state, so a custom `paintButton` override draws nothing different
-  when tabbed to. `GlyphButton` (via the shared `IconButton`) and `PortColourSwatch` call `synth::ui::paintFocusRing`
+  when tabbed to. `GlyphButton` (via the shared `IconButton`) and `PortColourSwatch` (via the shared `ColourSwatchButton`) call `synth::ui::paintFocusRing`
   ([accessibility](../development/accessibility.md)), the same accent ring every stock control draws.
   `AppLookAndFeel::drawButtonBackground` carries the same fix, so every plain `juce::TextButton`
   app-wide shows focus too. Every repaint here is the one JUCE's own

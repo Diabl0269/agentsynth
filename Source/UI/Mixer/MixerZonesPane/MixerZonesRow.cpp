@@ -1,4 +1,4 @@
-// Concern: the Zones pane's row, eye toggle, "Show all" link and group heading -- their painting,
+// Concern: the Zones pane's row, eye toggle and group heading -- their painting,
 // accessibility text and mouse handling.
 #include "MixerZonesRow.h"
 
@@ -28,25 +28,6 @@ void MixerZonesEye::clicked(const juce::ModifierKeys& mods) {
         onSoloShow();
     else if (onToggle)
         onToggle();
-}
-
-MixerZonesLink::MixerZonesLink(const juce::String& text)
-    : juce::Button(text) {
-    setWantsKeyboardFocus(false);
-    setTitle(text);
-    setMouseCursor(juce::MouseCursor::PointingHandCursor);
-}
-
-void MixerZonesLink::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    const auto* theme = zonesThemeOf(*this);
-    const auto accent = theme != nullptr ? theme->colors.accent : juce::Colour(0xff00D1FF);
-    g.setColour(isEnabled() ? (highlighted ? accent.brighter(0.3f) : accent) : accent.withAlpha(0.35f));
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredRight, false);
-    if (isEnabled()) {
-        const auto width = juce::Font(juce::FontOptions(11.0f)).getStringWidthFloat(getButtonText());
-        g.fillRect(static_cast<float>(getWidth()) - width, static_cast<float>(getHeight() / 2 + 7), width, 1.0f);
-    }
 }
 
 MixerZonesRow::MixerZonesRow(Hooks hooks)
@@ -106,10 +87,10 @@ void MixerZonesRow::setKeyboardCursor(bool shown) {
 void MixerZonesRow::resized() { eye_.setBounds(getLocalBounds().removeFromRight(kEyeWidth)); }
 
 void MixerZonesRow::paint(juce::Graphics& g) {
-    const auto* theme = zonesThemeOf(*this);
-    const auto surface = theme != nullptr ? theme->colors.surfaceHi : juce::Colour(0xff232833);
-    const auto text = theme != nullptr ? theme->colors.textPrimary : juce::Colour(0xffEAEEF3);
-    const auto accent = theme != nullptr ? theme->colors.accent : juce::Colour(0xff00D1FF);
+    const auto& theme = zonesThemeOf(*this);
+    const auto surface = theme.colors.surfaceHi;
+    const auto text = theme.colors.textPrimary;
+    const auto accent = theme.colors.accent;
 
     auto bounds = getLocalBounds();
     if (lift_ > 0.0f) {
@@ -168,8 +149,8 @@ juce::String MixerZonesGroupHeader::titleFor(synth::MixerZone zone) {
 }
 
 void MixerZonesGroupHeader::paint(juce::Graphics& g) {
-    const auto* theme = zonesThemeOf(*this);
-    g.setColour(theme != nullptr ? theme->colors.textMuted : juce::Colour(0xff8A93A0));
+    const auto& theme = zonesThemeOf(*this);
+    g.setColour(theme.colors.textMuted);
     g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
     g.drawText(getDisplayText(), getLocalBounds().withTrimmedLeft(kInset), juce::Justification::bottomLeft, false);
 }

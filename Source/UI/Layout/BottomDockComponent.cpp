@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Layout/TabStripKeys.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -782,23 +783,17 @@ void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     if (lf == nullptr)
         return;
     auto& button = buttonForTab(*liftedTab_);
-    const auto& theme = lf->getTheme();
-    const auto& c = theme.colors;
+    const auto& c = lf->getTheme().colors;
     const float lift = reorder_.getLift();
     const auto tab = button.getBounds()
                          .withX(static_cast<int>(std::lround(reorder_.getDraggedStart())))
                          .toFloat()
                          .translated(0.0f, -kLiftedTabRise * lift);
 
-    // Cheap drop shadow, the same offset translucent copy AppLookAndFeel's fader cap uses.
-    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow) * lift));
-    g.fillRoundedRectangle(tab.translated(0.0f, 1.0f), kLiftedTabRadius);
-
+    // The shadow, raised fill and accent border are the one look every reorder list lifts its row with
+    // (it insets its body by 1 px, so it is given the tab grown by 0.5 px to land the outline on the tab's edge).
     g.beginTransparencyLayer(kLiftedTabOpacity);
-    g.setColour(c.surfaceHi);
-    g.fillRoundedRectangle(tab, kLiftedTabRadius);
-    g.setColour(c.accent.withMultipliedAlpha(lift));
-    g.drawRoundedRectangle(tab.reduced(0.5f), kLiftedTabRadius - 0.5f, 1.0f);
+    paintReorderLift(g, tab.expanded(0.5f), lift, c.surfaceHi, c.accent);
     g.setColour(c.textPrimary);
     g.setFont(lf->getTextButtonFont(button, button.getHeight()));
     g.drawFittedText(button.getButtonText(), tab.toNearestInt().reduced(4, 0), juce::Justification::centred, 1);

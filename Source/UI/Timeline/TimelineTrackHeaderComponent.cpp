@@ -111,13 +111,6 @@ HeaderColours coloursFor(const juce::Component& component) {
 } // namespace
 
 //==============================================================================
-void TimelineTrackHeaderComponent::SwatchButton::paintButton(juce::Graphics& g, bool highlighted, bool) {
-    auto bounds = getLocalBounds().toFloat().reduced(1.0f);
-    g.setColour(highlighted ? colour.brighter(0.25f) : colour);
-    g.fillRoundedRectangle(bounds, 2.0f);
-}
-
-//==============================================================================
 TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId,
                                                            TrackHeaderHost* host)
     : doc_(doc)

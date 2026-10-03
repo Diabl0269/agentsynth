@@ -244,3 +244,18 @@ TEST(IconButtonTest, PlainOnToneReadsLikeHoverNotAccent) {
     EXPECT_EQ(button.glyphColour(false, false), c.textPrimary) << "on is plain text, not the accent";
     button.setLookAndFeel(nullptr);
 }
+
+TEST(IconButtonTest, BareButtonToggledOnShowsTheLitAccentWash) {
+    synth::theme::AppLookAndFeel lf;
+    IconButton button("b", Glyph::Close, Style::Bare);
+    button.setLookAndFeel(&lf);
+    EXPECT_EQ(render(button).getPixelAt(4, kSize / 2).getAlpha(), 0) << "off and at rest: no background";
+    button.setToggleState(true, juce::dontSendNotification);
+    const auto lit = render(button).getPixelAt(4, kSize / 2);
+    EXPECT_GT(lit.getAlpha(), 0);
+    EXPECT_GT(lit.getBlue(), lit.getRed()) << "the wash is the accent, not a neutral grey";
+
+    button.setOnTone(IconButton::OnTone::Plain);
+    EXPECT_EQ(render(button).getPixelAt(4, kSize / 2).getAlpha(), 0) << "a plain on-tone stays unlit";
+    button.setLookAndFeel(nullptr);
+}

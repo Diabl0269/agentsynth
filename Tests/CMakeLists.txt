@@ -573,6 +573,7 @@ add_executable(Tests
     UI/Layout/ArrowKeyNavigationTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
+    UI/Layout/SharedChipControlsTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
     UI/Layout/TabStripKeysTests.cpp
     UI/Layout/TextFieldKeysTests.cpp

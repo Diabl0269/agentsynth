@@ -224,50 +224,22 @@ private:
     static constexpr int kDefaultMaxPitch = 72; // C5
     static constexpr const char* kUserScalesPropertyKey = "pianoRollUserScales";
 
-    // A custom-scale toggle painted as a small piano KEY rather than a checkbox+label: the app-wide
-    // AppLookAndFeel::drawToggleButton always draws a checkbox (tick box + text to its right, see
-    // Theme/AppLookAndFeel.cpp), which reads nothing like a keyboard, so this overrides
-    // paintButton() directly and never calls into the LookAndFeel at all. isBlack_ picks the
-    // pianoKeyBlack/pianoKeyWhite-derived base fill (set once at construction time in
-    // buildCustomScaleEditor, never touched again); the accent fill on top of it IS the toggled-on
-    // state, so there is no separate tick to draw. Still a plain juce::ToggleButton underneath —
-    // getToggleState()/setToggleState()/onClick/getButtonText() are all untouched, which is what
-    // keeps getCustomPitchToggle(i) returning something callers (and every existing test) can use
-    // exactly as they did before.
+    // A custom-scale toggle painted as a small piano KEY rather than a checkbox+label: it overrides
+    // paintButton() and draws through AppLookAndFeel::drawKeyToggle (the stock drawToggleButton always
+    // draws a tick box, which reads nothing like a keyboard). isBlack_ picks the pianoKeyBlack or
+    // pianoKeyWhite base fill (set once at construction time in buildCustomScaleEditor); the accent fill
+    // on top of it IS the toggled-on state, so there is no separate tick. Still a plain juce::ToggleButton
+    // underneath: getToggleState()/setToggleState()/onClick/getButtonText() are untouched.
     class PianoKeyToggle : public juce::ToggleButton {
     public:
         void setBlackKey(bool isBlack) noexcept { isBlack_ = isBlack; }
 
         void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override {
-            juce::Colour keyFill, accent, border;
-            if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-                const auto& c = lf->getTheme().colors;
-                keyFill = isBlack_ ? c.pianoKeyBlack : c.pianoKeyWhite;
-                accent = c.accent;
-                border = c.border;
-            } else {
-                keyFill = isBlack_ ? juce::Colours::black : juce::Colours::whitesmoke;
-                accent = juce::Colours::cyan;
-                border = juce::Colours::grey;
-            }
-
-            const bool on = getToggleState();
-            const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-            g.setColour(on ? accent : keyFill);
-            g.fillRoundedRectangle(bounds, 2.5f);
-            if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted) {
-                g.setColour(juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.20f : 0.10f));
-                g.fillRoundedRectangle(bounds, 2.5f);
-            }
-            g.setColour(border);
-            g.drawRoundedRectangle(bounds, 2.5f, 1.0f);
-
-            // .contrasting so the note name holds against either key fill AND against the accent
-            // once toggled on, in every theme — the same reasoning PianoRollComponent's own keys
-            // column uses for its row labels (paintKeysColumn).
-            g.setColour((on ? accent : keyFill).contrasting(0.9f));
-            g.setFont(juce::Font(juce::FontOptions(juce::jlimit(7.0f, 10.0f, bounds.getHeight() - 6.0f))));
-            g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centred, false);
+            if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+                lf->drawKeyToggle(g, *this, isBlack_, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+            else
+                synth::theme::paintKeyToggle(g, *this, synth::theme::themeOf(*this), isBlack_,
+                                             shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
         }
 
     private:

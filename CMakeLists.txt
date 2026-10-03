@@ -533,17 +533,16 @@ add_library(Core STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
-    # The shared icon button + its drawn glyphs: Core because StatusBarComponent (Core) uses it
+    # The shared icon button, colour swatch, text link + the drawn glyphs: Core because Core components use them
     Source/UI/Theme/IconGlyphs.h
     Source/UI/Theme/IconGlyphs.cpp
     Source/UI/Layout/IconButton.h
     Source/UI/Layout/IconButton.cpp
-    # FRO147: MeterColourStops is pure model code (no juce::Component) that used to live only in
-    # AppUI's source list, but AppLookAndFeel (Core, below) now caches an effective MeterColourStops
-    # itself (the ONE cache every meter painter reads) -- so Core needs the definition too. Moved
-    # here rather than compiled into BOTH Core and AppUI, which would duplicate-symbol any target
-    # linking both (AgentSynth, Tests). AppUI's own MixerMeter.cpp/ChannelChipComponent.cpp (still
-    # AppUI-only, still real juce::Components) reach it transitively via AppUI's PUBLIC link to Core.
+    Source/UI/Layout/ColourSwatchButton.h
+    Source/UI/Layout/ColourSwatchButton.cpp
+    Source/UI/Layout/TextLinkButton.h
+    Source/UI/Layout/TextLinkButton.cpp
+    # Pure model code that AppLookAndFeel caches, so Core compiles it (AppUI too would duplicate symbols)
     Source/UI/Mixer/MeterColourStops.h
     Source/UI/Mixer/MeterColourStops.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h
@@ -552,6 +551,7 @@ add_library(Core STATIC
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelSliders.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFader.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelButtons.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelSharedControls.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelComboAndMenus.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelScrollbarsAndChrome.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelCanvasTreatments.cpp

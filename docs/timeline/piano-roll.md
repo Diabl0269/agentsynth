@@ -150,7 +150,8 @@ Vertically, pitch maps at `pixelsPerSemitone_` px/semitone (default `kPixelsPerS
 Cmd+Shift+wheel scales it within `[kMinPixelsPerSemitone, kMaxPixelsPerSemitone]` = `[4, 40]`), and
 `firstVisiblePitch_` names the HIGHEST pitch drawn at the grid's top row, clamped to `[0, 127]`.
 
-A 20 px header strip sits above both the keys column and the grid. Its chips are plain
+A 20 px header strip sits above both the keys column and the grid. Its chips are the shared chip
+(`AppLookAndFeel::drawChip`, [theming](../layout/theming.md#themed-widgets)) holding plain
 `juce::Path` and text shapes, never a Unicode glyph through a themed font — the same "draw it,
 don't asset it" rule the shared icon glyphs (`Source/UI/Theme/IconGlyphs.cpp`) follow, and the reason every label
 here goes through `AppLookAndFeel`; see the root `CLAUDE.md`'s font-swap invariant.

@@ -41,6 +41,12 @@ TimelineRoutingPane::TimelineRoutingPane()
     // The channel row is read-only: the chip is only a name and a meter here, the link beside it does the finding.
     channelChip_.setInterceptsMouseClicks(false, false);
 
+    // A click on a link must never move keyboard focus off the panel's focus root.
+    for (auto* link : {&showOnCanvas_, &showInMixer_}) {
+        link->setWantsKeyboardFocus(false);
+        link->setMouseClickGrabsKeyboardFocus(false);
+    }
+
     for (auto* child : std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_,
                                                                &channelChip_, &showInMixer_})
         addChildComponent(*child);

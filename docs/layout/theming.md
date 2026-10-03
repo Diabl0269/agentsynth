@@ -257,7 +257,8 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
-The shared icon button, then the stock-widget overrides implemented in `AppLookAndFeel`:
+The shared icon button, chip, key toggle, colour swatch and text link, then the stock-widget overrides
+implemented in `AppLookAndFeel`:
 
 - **IconButton** — `synth::ui::IconButton` (`Source/UI/Layout/IconButton.h`) is the one icon-only
   button: transport, play/stop in the status bar, the mixer-zones eye, the macro-port delete X, the
@@ -274,6 +275,36 @@ The shared icon button, then the stock-widget overrides implemented in `AppLookA
   for these drawn ones. The button never sets its own title, tooltip or description, and outside any
   `AppLookAndFeel` it paints with a default `Theme`. It lives in `Core` (not `AppUI`) because
   `StatusBarComponent` uses it.
+- **Side-pane toggle** — `SidePaneToggleButton` is a `Bare` `IconButton` whose glyph is
+  `Glyph::SidePane` (a window with a divider after its left strip) while the pane is closed and
+  `Glyph::SidePaneOpen` (the strip filled) while it is open, via `setGlyphWhenOn`. It keeps its tooltip,
+  title, description and its binding to the pane; colours and the focus ring come from `drawIconButton`.
+- **Chip** — `AppLookAndFeel::drawChip(g, bounds, ChipState)` (free function `synth::theme::paintChip`,
+  which a control outside any `AppLookAndFeel` calls with a default `Theme`) paints the chip surface and
+  nothing else: `surface` fill (`surfaceHi` when `raised`, `toolActive` when `active`), brighter on hover
+  (0.12) and press (0.25), or darker when the fill is light so a white chip still shows them, a 1 px `border` outline (`warning` at 0.7 alpha when `warning`), the
+  `cornerRadiusSmall` radius. It returns the fill so a caller can pick a contrasting label colour. The
+  track channel chip, the routing pane's combo buttons and the piano-roll header chips draw their
+  background with it and add their own content (meter and name, value and chevron, glyph or word). The
+  chevron of a chip combo and of `drawComboBox` is the one `paintComboChevron`.
+- **Key toggle** — `AppLookAndFeel::drawKeyToggle(g, toggle, isBlackKey, highlighted, down)` paints a
+  `juce::ToggleButton` as a piano key (the scale assist panel's custom-scale pitches): `pianoKeyWhite` or
+  `pianoKeyBlack` fill, `accent` while on, a `textPrimary` wash at 0.10 (hover) or 0.20 (press), a `border`
+  outline, the note name in the contrasting colour, and the accent focus ring. Outside any
+  `AppLookAndFeel` the same code runs with a default `Theme`.
+- **ColourSwatchButton** — `synth::ui::ColourSwatchButton` (`Source/UI/Layout/ColourSwatchButton.h`) is a
+  `juce::Button` filled with its public `colour`, painted by `AppLookAndFeel::drawColourSwatch`: a
+  `border` outline, a brighter fill and a `textPrimary` ring on hover, a darker fill on press, the accent
+  focus ring. A right-click calls `onRightClick` (never `onClick`) when it is set. The favourites shelf in
+  the colour picker, the timeline track header's colour swatch and the macro port dialog's port colour
+  swatch are all this class; the last two add their own mouse and arrow-key handlers on top. It sets no
+  title, tooltip or description. It lives in `Core` next to `IconButton`.
+- **TextLinkButton** — `synth::ui::TextLinkButton` (`Source/UI/Layout/TextLinkButton.h`) is the one text
+  link ("Show all", "Show on canvas"), painted by `AppLookAndFeel::drawTextLink`: `accent` text, brighter
+  and underlined while hovered (never underlined at rest), dimmed while disabled. The justification is a
+  constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
+  and the underline follows it. The text is its accessible title; description, tooltip and focus policy
+  stay with the call site. It lives in `Core` next to `IconButton`.
 - **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).
 - **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark,

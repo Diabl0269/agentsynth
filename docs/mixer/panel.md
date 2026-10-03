@@ -166,8 +166,8 @@ default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
   the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
   Past a 4 px threshold the dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`):
   it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row (a
-  `surfaceHi` fill, 1 px `accent` outline, radius 4, soft shadow, 95% opacity; the rise and
-  shadow ease in with the lift), while the other tabs glide aside (160 ms) to open a gap and the gap
+  the shared `paintReorderLift` look: `surfaceHi` fill, 1 px `accent` outline, soft shadow, at 95%
+  opacity; the rise and shadow ease in with the lift), while the other tabs glide aside (160 ms) to open a gap and the gap
   shows a 1 px dashed `border` outline. **`tabOrder_` does not change while dragging.** On release
   the order is applied in one go — persisted, and the three tabs' own Cmd+digit key bindings
   re-keyed to match (`permuteShortcutKeysForNewOrder`) — and the lifted tab settles into its slot

@@ -122,6 +122,17 @@ void paintEye(juce::Graphics& g, juce::Rectangle<float> bounds, bool hidden) {
     if (hidden)
         g.drawLine(area.getX() + 1.0f, area.getBottom() + 1.5f, area.getRight() - 1.0f, area.getY() - 1.5f, 1.4f);
 }
+
+// A window whose left strip is filled while the pane is open and only divided off while it is closed.
+void paintSidePane(juce::Graphics& g, juce::Rectangle<float> area, bool open) {
+    const auto glyph = juce::Rectangle<float>(14.0f, 11.0f).withCentre(area.getCentre());
+    g.drawRoundedRectangle(glyph, 1.5f, 1.2f);
+    const auto strip = glyph.withWidth(5.0f);
+    if (open)
+        g.fillRect(strip.reduced(0.6f));
+    else
+        g.fillRect(strip.getRight() - 0.6f, glyph.getY() + 1.0f, 1.2f, glyph.getHeight() - 2.0f);
+}
 } // namespace
 
 void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
@@ -168,6 +179,12 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::EyeHidden:
         paintEye(g, area, true);
+        break;
+    case Glyph::SidePane:
+        paintSidePane(g, area, false);
+        break;
+    case Glyph::SidePaneOpen:
+        paintSidePane(g, area, true);
         break;
     }
 }

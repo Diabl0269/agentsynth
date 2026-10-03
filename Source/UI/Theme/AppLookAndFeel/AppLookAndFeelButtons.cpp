@@ -136,6 +136,9 @@ namespace {
 constexpr float kOnWashAlpha = 0.18f;
 constexpr float kBareHoverAlpha = 0.08f;
 constexpr float kBarePressAlpha = 0.14f;
+constexpr float kBareOnAlpha = 0.13f; // the same lit wash drawDrawableButton gives a toolbar toggle
+constexpr float kBareOnHoverAlpha = 0.15f;
+constexpr float kBareOnPressAlpha = 0.20f;
 constexpr float kRoundHoverAlpha = 0.18f;
 constexpr float kRoundPressAlpha = 0.28f;
 constexpr float kDangerHoverAlpha = 0.15f;
@@ -179,7 +182,12 @@ void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& b
         break;
     }
     case Style::Bare:
-        if (hot) {
+        // Toggled on (with the accent tone) reads like a lit toolbar toggle: a light accent wash.
+        if (button.isEnabled() && button.getToggleState() &&
+            button.getOnTone() == synth::ui::IconButton::OnTone::Accent && !button.getOnColour().has_value()) {
+            g.setColour(c.accent.withAlpha(down ? kBareOnPressAlpha : (hot ? kBareOnHoverAlpha : kBareOnAlpha)));
+            g.fillRoundedRectangle(full, radius);
+        } else if (hot) {
             g.setColour(c.textPrimary.withAlpha(down ? kBarePressAlpha : kBareHoverAlpha));
             g.fillRoundedRectangle(full, radius);
         }
