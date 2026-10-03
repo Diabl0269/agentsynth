@@ -59,9 +59,7 @@ void ModuleComponent::MidiLearnableRegistry::setBaseTooltip(const juce::Componen
         if (e.component != &component)
             continue;
         e.baseTooltip = tooltip;
-        if (e.mapped)
-            if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(e.component))
-                tooltipClient->setTooltip(tooltip + " - " + e.tooltip);
+        applyTooltip(e);
     }
 }
 
@@ -109,10 +107,7 @@ bool ModuleComponent::MidiLearnableRegistry::refreshBadges(
             continue;
         e.mapped = mapped;
         e.tooltip = tooltip;
-        if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(e.component)) {
-            tooltipClient->setTooltip(mapped ? (e.baseTooltip.isNotEmpty() ? e.baseTooltip + " - " + tooltip : tooltip)
-                                             : e.baseTooltip);
-        }
+        applyTooltip(e);
         changed = true;
     }
     return changed;

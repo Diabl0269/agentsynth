@@ -263,6 +263,10 @@ add_executable(Tests
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentAutomationMarkerTests.cpp
+    UI/Layout/AutomatedMarkerTests.cpp
+    UI/Mixer/MixerAutomationMarkerTests.cpp
+    UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKeyboardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentReadoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp

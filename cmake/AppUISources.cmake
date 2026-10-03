@@ -192,6 +192,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerColumnMidiLearn.cpp
+    Source/UI/Mixer/MixerColumnAutomationMarker.cpp
+    Source/UI/Mixer/MixerMasterColumnAutomationMarker.cpp
     Source/UI/Mixer/MixerDirectColumn.h
     Source/UI/Mixer/MixerDirectColumn.cpp
     Source/UI/Mixer/MixerMasterColumn.h
@@ -410,11 +412,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentAutomationMarker.cpp
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
+    Source/UI/Layout/AutomatedMarker.h
+    Source/UI/Layout/AutomatedMarker.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h

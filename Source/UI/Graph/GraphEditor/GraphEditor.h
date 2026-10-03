@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
 class AudioEngine;
@@ -362,6 +363,9 @@ public:
     // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
     std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)>
         onQueryMidiMappingsForNode; // mapped paramID -> display label; absent means unmapped
+    // The paramIDs of a node that have an automation lane on the timeline (the marker beside their knob); absent means
+    // none. Set by MainComponent; polled once per card on the card's gated tick.
+    std::function<std::set<juce::String>(juce::AudioProcessorGraph::NodeID)> onQueryAutomatedParamsForNode;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)>

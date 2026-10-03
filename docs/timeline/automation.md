@@ -671,3 +671,10 @@ cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip 
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key
 stamping over it, Line ramping on it, Delete, the point cap refusal, stamped points edited with Select,
 double-click and the eraser).
+
+## The marker beside an automated control
+
+A knob or fader that has a lane shows a small marker at its top-left corner (a short line with a point at each end),
+on the module card and on the mixer, so automated parameters stand out without opening the timeline. It follows the lane
+through add, remove and undo, fades in and out, and its tooltip and accessible description say "Automated". Details in
+[`layout/module-card.md#automated-marker`](../layout/module-card.md#automated-marker).

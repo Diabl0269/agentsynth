@@ -261,6 +261,7 @@ void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     // Same tick also keeps the armed breathing outline animating -- see
     // repaintArmedMidiLearnOutline()'s own comment.
     repaintArmedMidiLearnOutline();
@@ -393,6 +394,7 @@ void MixerMasterColumn::paint(juce::Graphics& g) {
 
 void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
     paintMidiLearnOverlays(g);
+    paintAutomatedMarkers(g);
 
     if (!keyboardFocused_)
         return;

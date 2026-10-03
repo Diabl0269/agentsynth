@@ -514,6 +514,7 @@ void ModuleComponent::timerCallback() {
     // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves it fires on every
     // tick.
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
             if (e.param != nullptr && e.paramId == midiLearnArmedParamId_) {

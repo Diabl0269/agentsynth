@@ -250,6 +250,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // MIDI-mapped badges + the armed-control breathing outline, drawn last so they sit on
     // top of every knob/toggle/combo/header button (ModuleComponentMidiLearn.cpp).
     paintMidiLearnOverlays(g);
+    paintAutomatedMarkers(g);
 }
 
 // Compact docked port widget (docs/macros/ports.md#how-a-port-is-drawn): a small

@@ -68,12 +68,14 @@ void paintMidiMappedBadge(juce::Graphics& g, juce::Rectangle<int> controlBounds,
 // 6px dot at controlBounds's top-right, in badgeColour (the caller's resolved
 // theme.colors.midiMapped, or its fallback constant when no AppLookAndFeel is available -- the
 // same idiom every paint() override in this codebase already uses).
-void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour) {
+juce::Rectangle<int> midiMappedDotRect(juce::Rectangle<int> controlBounds) {
     constexpr int kBadgeDiameter = 6;
+    return {controlBounds.getRight() - kBadgeDiameter, controlBounds.getY(), kBadgeDiameter, kBadgeDiameter};
+}
+
+void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour) {
     g.setColour(badgeColour);
-    g.fillEllipse(static_cast<float>(controlBounds.getRight() - kBadgeDiameter),
-                  static_cast<float>(controlBounds.getY()), static_cast<float>(kBadgeDiameter),
-                  static_cast<float>(kBadgeDiameter));
+    g.fillEllipse(midiMappedDotRect(controlBounds).toFloat());
 }
 
 // A thin 1px rect around controlBounds, alpha easing ~0.4..1.0 on a 1.2s sine anchored at
