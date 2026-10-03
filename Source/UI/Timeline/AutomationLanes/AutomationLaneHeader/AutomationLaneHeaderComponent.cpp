@@ -53,8 +53,11 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     addAndMakeVisible(readout_);
     // The readout takes mouse clicks (for its tooltip), so a right-click on it is forwarded here to open the menu.
     readout_.addMouseListener(this, false);
+    // Up/Down on the combo would change its selection, so the lane keys are offered before the combo sees them.
+    recordMode_.addKeyListener(this);
     addAndMakeVisible(menuButton_);
     menuButton_.onClick = [this] { showMenu(); };
+    menuButton_.addKeyListener(this);
 
     refreshFromDoc();
 }
@@ -151,6 +154,13 @@ void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
 // The combo's own focus outline comes from the look-and-feel; the shared accent ring goes over it so
 // every control in the row shows focus the same way.
 void AutomationLaneHeaderComponent::paintOverChildren(juce::Graphics& g) {
+    if (lift_ > 0.0f) {
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
+        g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
+        g.fillRect(getLocalBounds());
+        g.setColour(accent.withMultipliedAlpha(lift_));
+        g.drawRect(getLocalBounds(), 1);
+    }
     synth::ui::paintFocusRing(g, recordMode_.getBounds().toFloat().expanded(1.0f), recordMode_, 3.0f);
 }
 

@@ -76,23 +76,45 @@ std::vector<int> TimelineAutomationLanes::rowHeightOverrides() const {
 }
 
 // Called by the panel for every track header it places -- including one mid reorder-drag -- so a
-// track's lane headers travel with it rather than with the static layout.
+// track's lane headers travel with it rather than with the static layout. While a lane of THIS track is
+// being reordered its blocks take their y from the animator (matched by lane id, so the placement survives the
+// doc change a drop makes); `staticY` keeps the static layout, which is what the compact "+" and the add row follow.
 void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRowY, int width) {
     const auto* t = doc_ != nullptr ? doc_->getTrack(track) : nullptr;
     if (t == nullptr || !isVisibleLane(*t))
         return;
+    rowOrigin_[track] = firstRowY;
+    rowWidth_ = width;
     const int rowHeight = laneRowHeight();
     const int modHeight = modulatorRowHeight();
-    int y = firstRowY;
+    const bool reordering = laneDrag_.isReordering() && track == dragTrack_;
+    int staticY = firstRowY;
     int lastLaneY = -1;
     for (const auto& lane : t->lanes) {
+        int y = staticY;
+        float lift = 0.0f;
+        const auto found = std::find(dragLaneIds_.begin(), dragLaneIds_.end(), lane.id);
+        const int key = reordering && found != dragLaneIds_.end() ? static_cast<int>(found - dragLaneIds_.begin()) : -1;
+        if (key >= 0) {
+            const auto& animator = laneDrag_.animator();
+            const bool dragged = key == animator.getDraggedKey();
+            y = static_cast<int>(std::lround(dragged ? animator.getDraggedStart() : animator.getLayoutStart(key)));
+            lift = dragged ? animator.getLift() : 0.0f;
+        }
         if (auto* header = headerFor(lane.id)) {
             header->setBounds(0, y, width, rowHeight);
-            lastLaneY = y;
+            header->setLift(lift);
+            lastLaneY = staticY;
         }
         for (int i = 0; i < modulatorCount(lane.id); ++i)
             modulatorRowFor(lane.id, i)->setBounds(0, y + rowHeight + i * modHeight, width, modHeight);
-        y += laneBlockHeight(lane);
+        if (lift > 0.0f) {
+            if (auto* header = headerFor(lane.id))
+                header->toFront(false);
+            for (int i = 0; i < modulatorCount(lane.id); ++i)
+                modulatorRowFor(lane.id, i)->toFront(false);
+        }
+        staticY += laneBlockHeight(lane);
     }
     if (auto* row = addRowFor(track)) {
         const bool compact = addRowIsCompact(*t) && lastLaneY >= 0;
@@ -104,7 +126,7 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
                            size);
             row->toFront(false);
         } else {
-            row->setBounds(0, y, width, addRowHeight());
+            row->setBounds(0, staticY, width, addRowHeight());
         }
     }
 }

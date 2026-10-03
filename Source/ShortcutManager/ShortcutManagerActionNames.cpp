@@ -296,6 +296,10 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Move Clip Earlier by One Grid Step";
     if (actionId == "timelineClipMoveLater")
         return "Move Clip Later by One Grid Step";
+    if (actionId == "timelineMoveLaneUp")
+        return "Move Automation Lane Up";
+    if (actionId == "timelineMoveLaneDown")
+        return "Move Automation Lane Down";
     // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
     // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
     if (actionId == "snapSetWhole")

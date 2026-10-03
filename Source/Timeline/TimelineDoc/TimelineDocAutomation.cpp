@@ -112,6 +112,28 @@ bool TimelineDoc::moveLaneToTrack(LaneId laneId, TrackId destTrack) {
     });
 }
 
+// Lane order is Track::lanes order, which toVar and fromVar keep as written, so a reorder persists as it stands. The
+// index is where the lane ends up (erase, then insert), so a drag that reads "land in slot N" passes N whatever
+// direction it moved. Hidden amount lanes live in the same list; callers that only show some lanes pass the doc index
+// of the visible lane whose slot they want.
+bool TimelineDoc::moveLane(LaneId laneId, int newIndex) {
+    Track* owner = nullptr;
+    auto* lane = findLane(laneId, &owner);
+    if (lane == nullptr)
+        return false;
+    const int from = static_cast<int>(lane - owner->lanes.data());
+    const int to = juce::jlimit(0, static_cast<int>(owner->lanes.size()) - 1, newIndex);
+    if (to == from)
+        return false;
+
+    return applyMutation([&] {
+        AutomationLane moved = std::move(*lane);
+        owner->lanes.erase(owner->lanes.begin() + from);
+        owner->lanes.insert(owner->lanes.begin() + to, std::move(moved));
+        return true;
+    });
+}
+
 bool TimelineDoc::addBreakpoint(LaneId laneId, double beat, double value, float tension, int curve) {
     auto* lane = findLane(laneId);
     if (lane == nullptr)

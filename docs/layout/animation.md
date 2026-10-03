@@ -137,7 +137,7 @@ fractions; each frame it calls `onLayoutNeeded` (wired to `MainComponent::resize
 
 ## Reorder drag
 
-Every reorderable list (the bottom dock's tab strip, the mixer's track columns, the mixer's zones rows and send rows, the timeline's track list, the macro port dialog's rows and the plugin knob picker's rows) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
+Every reorderable list (the bottom dock's tab strip, the mixer's track columns, the mixer's zones rows and send rows, the timeline's track list and a track's automation lanes, the macro port dialog's rows and the plugin knob picker's rows) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
 
 - `ReorderDragAnimator` — pure logic along ONE axis (x for a strip, y for a list), no components and
   no painting, with an injectable clock so it is unit-tested headlessly
@@ -413,6 +413,7 @@ strings.
 | **Mixer Own-panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`) on the controller's OWN driver — not the shared one | `MixerPlacementController` |
 | **Macro port names zoom fade** | Alpha is a pure function of zoom (`easeInOutCubic` over 0.5 to 0.7), no driver or timer, so not a time-bounded-rule exception; the strip fill recedes; on an open macro the same factor also slides each port's interior jack onto its boundary jack and narrows the painted strip to a rail (layout widths fixed) | `GraphEditor` / `MacroCardComponent` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
+| **Automation lane reorder** | Dragging a lane header within its track: the lane's block (row plus modulator rows) lifts under the pointer, the other lanes glide aside (160 ms, `easeOutCubic`), settle on drop (140 ms), Esc returns it; Cmd+Alt+Up/Down glides the moved block into its slot; headers only (the curve editors follow on commit); at once when not on screen; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` via `ReorderDragSession` |
 | **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
 | **Side pane open/close** | The pane's width tweens 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out from the current width; content keeps its full width and is revealed; lands at once when not on screen; see [side pane](side-pane.md) | `SidePane` |
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |

@@ -99,6 +99,10 @@ public:
 
     bool showContextMenuForKeyboardFocus() override;
 
+    /** Offered every key first (Move Lane Up/Down act on the whole lane, not its points); true when used. May be null.
+     */
+    std::function<bool(const juce::KeyPress&)> onLaneKey;
+
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
 

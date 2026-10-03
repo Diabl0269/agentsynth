@@ -810,6 +810,8 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
 //==============================================================================
 bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
+    if (onLaneKey && onLaneKey(key))
+        return true;
     syncToDoc();
     if (shapeGesture_.keyPressed(key))
         return true;

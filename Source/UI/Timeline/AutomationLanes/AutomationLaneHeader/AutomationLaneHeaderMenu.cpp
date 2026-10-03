@@ -127,8 +127,41 @@ void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
         showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
         return;
     }
-    if (e.mods.isLeftButtonDown() && nameArea_.contains(local.getPosition()))
+    if (!e.mods.isLeftButtonDown())
+        return;
+    pressed_ = true;
+    pressedOnName_ = nameArea_.contains(local.getPosition());
+    if (onDragPress)
+        onDragPress(e.getScreenPosition().y);
+}
+
+// A press on the header is either a click (on the name it opens the parameter picker, on release) or the start of a
+// drag that reorders the lane; the pool tells them apart once the pointer has travelled past the drag threshold.
+void AutomationLaneHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (pressed_ && onDragMove)
+        onDragMove(e.getScreenPosition().y);
+}
+
+void AutomationLaneHeaderComponent::mouseUp(const juce::MouseEvent& e) {
+    if (!pressed_)
+        return;
+    pressed_ = false;
+    const bool click = onDragRelease ? onDragRelease() : true;
+    const bool wasName = pressedOnName_;
+    pressedOnName_ = false;
+    if (click && wasName && nameArea_.contains(e.getEventRelativeTo(this).getPosition()))
         openChangeParameterPicker();
+}
+
+bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::Component*) {
+    return onLaneKey && onLaneKey(key);
+}
+
+void AutomationLaneHeaderComponent::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
 }
 
 juce::MouseCursor AutomationLaneHeaderComponent::getMouseCursor() {

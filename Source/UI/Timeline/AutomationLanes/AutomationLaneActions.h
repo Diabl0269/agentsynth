@@ -33,6 +33,9 @@ bool moveLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::Lane
 std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
                                                      synth::LaneId lane);
 
+/** Moves the lane to `newIndex` within its track's lane list (TimelineDoc::moveLane). False when nothing changed. */
+bool moveLaneOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, int newIndex);
+
 /** Deletes the lane, removing an Automation track it leaves empty in the same step. */
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane);
 

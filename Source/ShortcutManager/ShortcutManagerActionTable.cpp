@@ -142,6 +142,9 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineClipOpen", ShortcutCategory::Timeline},
         {"timelineClipMoveEarlier", ShortcutCategory::Timeline},
         {"timelineClipMoveLater", ShortcutCategory::Timeline},
+        // The focused automation lane up or down within its track (Cmd+Alt+Up / Down).
+        {"timelineMoveLaneUp", ShortcutCategory::Timeline},
+        {"timelineMoveLaneDown", ShortcutCategory::Timeline},
         {"snapSetWhole", ShortcutCategory::Timeline},
         {"snapSetHalf", ShortcutCategory::Timeline},
         {"snapSetQuarter", ShortcutCategory::Timeline},

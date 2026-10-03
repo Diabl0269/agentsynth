@@ -63,6 +63,11 @@ std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& d
     return travelling;
 }
 
+bool moveLaneOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, int newIndex) {
+    synth::TimelineDoc* target = &doc;
+    return applyEdit(doc, undo, [target, lane, newIndex] { return target->moveLane(lane, newIndex); });
+}
+
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane) {
     synth::TimelineDoc* target = &doc;
     return applyEdit(doc, undo, [target, lane] {

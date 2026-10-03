@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
@@ -17,7 +18,8 @@
 #include <set>
 #include <vector>
 
-class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutManager.h)
 
 namespace synth {
 class TransportService;
@@ -48,6 +50,8 @@ public:
     void setUndoManager(AppUndoManager* undo);
     void setTransport(synth::TransportService* transport);
     void setEditTool(EditTool tool);
+    /** The bindings Move Lane Up/Down read; null falls back to Cmd+Alt+Up/Down. */
+    void setShortcuts(ShortcutManager* shortcuts) noexcept { shortcuts_ = shortcuts; }
 
     /** The container the lane editors live in; the panel sizes it to its lanes region. */
     juce::Component& getBodies() noexcept;
@@ -120,6 +124,17 @@ public:
     /** How many of `track`'s lanes are shown as amount bands rather than as lane rows. */
     int hiddenLaneCount(synth::TrackId track) const;
 
+    // ---- Reordering lanes within their track (TimelineAutomationLanesReorder.cpp) ----
+    /** Moves `lane` by `delta` visible lanes (negative = up) within its track as one undo step, gliding the header
+     *  like a drop does; false at either end or when the lane is not shown. */
+    bool moveLaneBy(synth::LaneId lane, int delta);
+    /** True while a lane header is lifted or still settling into its slot. */
+    bool isLaneReorderActive() const noexcept { return laneDrag_.isReordering(); }
+    /** Esc through the same listener a real key press reaches. */
+    bool sendLaneDragEscapeForTest() { return laneDrag_.sendEscapeForTest(); }
+    /** The lane whose header is drawn lifted, or an invalid id. */
+    synth::LaneId liftedLane() const noexcept { return laneDrag_.isReordering() ? liftedLane_ : synth::LaneId(); }
+
     // ---- Draw shapes and the lane range (TimelineAutomationLanesShapes.cpp) ----
     void setDrawShape(DrawShape shape);
     /** The one lane range across every lane. */
@@ -162,6 +177,17 @@ private:
     void refreshModulatorAmounts(int visibleTop, int visibleBottom);
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();
+    void wireHeader(AutomationLaneHeaderComponent& header, synth::LaneId id);
+    bool handleLaneKey(synth::LaneId lane, const juce::KeyPress& key);
+    void beginLaneDrag(synth::LaneId lane, int screenY);
+    void dragLane(int screenY);
+    bool endLaneDrag();
+    void commitLaneDrag();
+    void discardLaneDrag();
+    void onLaneDragFrame();
+    float laneDragPointerY(int screenY) const;
+    std::vector<synth::LaneId> shownLanesOf(const synth::Track& track) const;
+    std::vector<float> laneStartsFor(const synth::Track& track, const std::vector<synth::LaneId>& ids) const;
     void syncAddRows();
     void refreshPooled();
     void updateSelectedReadout(synth::LaneId lane);
@@ -189,6 +215,16 @@ private:
     std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_;        // what the graph routes into each open lane
     std::set<synth::LaneId> amountLanes_;                                 // lanes drawn as a modulator's amount band
     double lastReadoutBeat_ = -1.0;
+    ShortcutManager* shortcuts_ = nullptr;
+
+    // The lane reorder drag. Slots are the track's lane blocks (a lane row plus its modulator rows) in header-list
+    // coordinates; keys are indices into dragLaneIds_, fixed at press time.
+    ReorderDragSession laneDrag_;
+    std::vector<synth::LaneId> dragLaneIds_;
+    synth::TrackId dragTrack_;
+    synth::LaneId liftedLane_;
+    std::map<synth::TrackId, int> rowOrigin_; // where each open track's first lane row sits, as last placed
+    int rowWidth_ = 0;
 };
 
 } // namespace synth::ui

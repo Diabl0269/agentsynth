@@ -89,6 +89,7 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocNotesTests.cpp
     Timeline/TimelineDoc/TimelineDocAutomationTests.cpp
     Timeline/TimelineDoc/TimelineDocLaneRetargetTests.cpp
+    Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp
     Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
     Timeline/TimelineDoc/TimelineDocRangesTests.cpp
@@ -620,6 +621,7 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesRetargetTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesDuplicateTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesReorderTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesLaneMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesAddModulatorTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp

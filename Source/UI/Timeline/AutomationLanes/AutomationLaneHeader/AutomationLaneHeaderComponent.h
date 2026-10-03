@@ -29,6 +29,7 @@ struct TrackHeaderHost;
 class AutomationLaneHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
+    , public juce::KeyListener
     , public KeyboardContextMenuProvider {
 public:
     static constexpr int kIndent = 16;       // px the row is inset from the track header's left edge
@@ -82,7 +83,22 @@ public:
     /** The parameter name's hit area, in this component's coordinates. */
     juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameArea_; }
 
+    /** The drag-to-reorder gesture, owned by the lane pool: a press, every drag step (raw screen y) and the release,
+     *  which answers true when the press never became a drag (a plain click). All may be null. */
+    std::function<void(int screenY)> onDragPress;
+    std::function<void(int screenY)> onDragMove;
+    std::function<bool()> onDragRelease;
+    /** Offered every key that reaches the record-mode combo or the "..." button first (the combo would take
+     *  Up/Down itself); true when the pool used it (Move Lane Up/Down). May be null. */
+    std::function<bool(const juce::KeyPress&)> onLaneKey;
+    /** 0..1 strength of the lifted look while this lane is reorder-dragged; repaints only on a change. */
+    void setLift(float lift);
+
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
+    using juce::Component::keyPressed;
     juce::MouseCursor getMouseCursor() override;
     bool showContextMenuForKeyboardFocus() override;
 
@@ -114,6 +130,9 @@ private:
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 
     juce::Rectangle<int> nameArea_;
+    float lift_ = 0.0f;
+    bool pressed_ = false;       // a left press is down on the header
+    bool pressedOnName_ = false; // ...and landed on the parameter name
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneHeaderComponent)
 };
