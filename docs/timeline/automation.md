@@ -366,7 +366,7 @@ Reduce Motion (`prefersReducedMotion()`) or off screen, and repaints nothing onc
 dragged the bubble follows its previewed value; an exit mid-drag does not drop it. The text is the
 parameter's own text for the value (`AutomationLaneEditor::valueToText`, which `TimelineAutomationLanes`
 sets to `laneValueText`, the lane header's path through `TrackHeaderHost::getParameterValueText`), falling
-back to the plain number. Later per-point features (header readout, stretch) extend
+back to the plain number. Later per-point features (header readout) extend
 `PointValueBubble` and the editor's `updateHover()`.
 
 Under the Pointer tool a point shows the grab hand on hover and while it is dragged (`dragGrabCursor()`, see
@@ -451,9 +451,41 @@ paint and the input entry points by `TimelineDoc::getRevision()`.
 Each point is reachable from the keyboard: Tab into the editor, Alt+Left/Right walk the points, Delete removes the
 one the cursor is on. The focus ring (`paintFocusRing`) sits on the cursor point, or around the lane when there is
 none. The editor's screen-reader description is rewritten on every selection change (point count, how many are
-selected, and for a single point its bar and beat and its value in the parameter's own text) and announced as a
-title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
+selected, and for a single point its bar and beat and its value in the parameter's own text; with two or more
+selected it also names the stretch keys) and announced as a title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
 existing rebindable commands. Return stays free.
+
+### Stretching a selection
+
+With two or more points selected under the Pointer tool, a thin accent box (`LanePointStretch`, padded 8 px so a handle
+never sits on a point) surrounds them with a small square handle centred on each of its four edges; handles stay inside
+the lane even when a point sits at its top or bottom. The box fades in over 160 ms and out over 110 ms on one
+`AnimationDriver` (Reduce Motion or an off-screen editor lands at once; nothing repaints once settled).
+
+| Gesture | Result |
+|---|---|
+| Drag the right handle | Scale the selected beats about the left edge (the leftmost selected beat stays), so four points spread out evenly when dragged right and squeeze when dragged left |
+| Drag the left handle | The same about the right edge |
+| Drag the top / bottom handle | Scale the selected VALUES about the box's opposite edge (lowest value for the top handle, highest for the bottom one), each clamped to the lane's range; dragging past the opposite edge flattens, never flips; a selection whose values are all equal has nothing to scale |
+| Escape during the drag | Cancel: nothing changes and the editor consumes the key |
+| Alt+Shift+Left / Right | Move the right edge one grid step (a sixteenth with snap off) left or right: squeeze or stretch, one undo step per press |
+| Alt+Shift+Up / Down | Grow or shrink the selection's value range by 5% about its lowest value, one undo step per press |
+
+The dragged EDGE snaps to the shared view-state snap (the others follow proportionally and are not snapped, so a
+stretch keeps the points' relative spacing); no beat goes below 0, and the closest two selected points never come nearer
+than 1/64 beat, so a squeeze cannot collapse points onto one beat. Growing is bounded and pushing: when the edge comes
+within one grid step of the nearest unselected point beyond it, that point and every unselected point after it move
+along, kept a grid step beyond the edge with their own spacing (a tiny gap with snap off); a left stretch stops when
+the pushed block reaches beat 0, and squeezing never pushes. Unselected points between the selected ones stay put.
+
+The drag previews in the editor's preview state like a move (curve and dots redraw from it; the doc is untouched) and
+commits on mouse-up as ONE `editBreakpoints` through `commitPointEdit`, pushed points included, so one Cmd+Z restores
+everything; a drag that ends where it began commits nothing. The selection afterwards is the same points at their new
+beats. The value bubble is hidden for the whole stretch. A handle takes the press before any point, segment or box
+select under it (reach 6 px); the inside of the box takes no clicks, so a point inside still selects and drags
+normally. Handles show the horizontal or vertical resize cursor on hover and for the whole drag, and the editor's
+tooltip reads "Drag to stretch the selected points in time" / "Drag to scale their values" over them. The math
+(`stretchBeats`, `scaleValues`) is pure; the editor glue is `AutomationLaneEditorStretch.cpp`.
 
 For later per-point features: `getPointSelection()` is the selection (`getSelected()` beats, `selectedPoints(lane)`
 the breakpoints, `boundingBox(lane, mapper)` the box around them in editor coordinates, `getCursor()`), and the
