@@ -226,7 +226,8 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
   failure is returned. The host's macro set is not restored here: the real host removes what a
   failed build made, but an earlier successful build in the same plan keeps its macro.
 
-Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). Tests:
+Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 2, the server prompt that teaches `envelope` and
+`instrumentParams`; a request without a version gets prompt 1, so an older app never receives those fields. Tests:
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (the rules, the preview, the
 backstop through a failing fake host, both request shapes),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step
