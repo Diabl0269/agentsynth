@@ -8,6 +8,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 namespace {
 
@@ -26,6 +27,7 @@ struct FaderRig {
     explicit FaderRig(const Theme& t, juce::Slider::SliderStyle style, int w, int h, double value)
         : theme(t) {
         laf.applyTheme(theme);
+        laf.setKnobAppearance({synth::theme::KnobStyle::Classic, true}); // the pixel checks below are Classic
         slider.setSliderStyle(style);
         slider.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         slider.setRange(0.0, 1.0, 0.0);
@@ -182,6 +184,98 @@ TEST(FaderMetricsTest, SizePicksFollowTheRealBounds) {
 
 TEST(FaderThemeTest, DaylightMidiMappedBadgeIsReadablePurple) {
     EXPECT_EQ(synth::theme::makeDaylight().colors.midiMapped, juce::Colour(0xff9333EA));
+}
+
+// ---- Styles and colour: a fader follows the knob style and the knob family colour rule ----
+
+using synth::theme::KnobAppearance;
+using synth::theme::KnobStyle;
+
+int differingPixels(const juce::Image& a, const juce::Image& b) {
+    int count = 0;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                ++count;
+    return count;
+}
+
+KnobStyle styleAt(int i) { return (KnobStyle)i; }
+
+TEST(FaderStyleTest, EveryStylePaintsADifferentFader) {
+    for (const auto orientation : {juce::Slider::LinearVertical, juce::Slider::LinearHorizontal}) {
+        const bool vertical = orientation == juce::Slider::LinearVertical;
+        std::vector<juce::Image> images;
+        for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
+            FaderRig rig(synth::theme::makeObsidian(), orientation, vertical ? 100 : 120, vertical ? 150 : 22, 0.6);
+            rig.laf.setKnobAppearance({styleAt(i), true});
+            images.push_back(rig.paint());
+        }
+        for (size_t a = 0; a < images.size(); ++a)
+            for (size_t b = a + 1; b < images.size(); ++b)
+                EXPECT_GT(differingPixels(images[a], images[b]), 0)
+                    << (vertical ? "vertical " : "horizontal ") << a << " vs " << b;
+    }
+}
+
+TEST(FaderStyleTest, ThumbRadiusAndTravelDoNotMoveWithTheStyle) {
+    for (const auto orientation : {juce::Slider::LinearVertical, juce::Slider::LinearHorizontal}) {
+        const bool vertical = orientation == juce::Slider::LinearVertical;
+        for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
+            FaderRig rig(synth::theme::makeObsidian(), orientation, vertical ? 100 : 120, vertical ? 150 : 22, 0.5);
+            rig.laf.setKnobAppearance({styleAt(i), true});
+            EXPECT_EQ(rig.laf.getSliderThumbRadius(rig.slider), vertical ? 9 : 7) << i;
+            const auto travel = rig.laf.getSliderLayout(rig.slider).sliderBounds;
+            EXPECT_EQ(travel.getHeight(), vertical ? 150 - 18 : 22) << i;
+            EXPECT_EQ(travel.getWidth(), vertical ? 100 : 120 - 14) << i;
+        }
+    }
+}
+
+// A fader inside a parent that may carry the family property, like a module card.
+struct FamilyFaderRig {
+    FamilyFaderRig(KnobAppearance appearance, int family) {
+        laf.applyTheme(synth::theme::makeObsidian());
+        laf.setKnobAppearance(appearance);
+        slider.setSliderStyle(juce::Slider::LinearVertical);
+        slider.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+        slider.setRange(0.0, 1.0, 0.0);
+        slider.setValue(0.5, juce::dontSendNotification);
+        parent.setLookAndFeel(&laf);
+        if (family >= 0)
+            parent.getProperties().set(AppLookAndFeel::kKnobFamilyProperty, family);
+        parent.addAndMakeVisible(slider);
+        parent.setBounds(0, 0, 100, 150);
+        slider.setBounds(0, 0, 100, 150);
+    }
+    ~FamilyFaderRig() { parent.setLookAndFeel(nullptr); }
+
+    // A fill pixel just under the cap (full strength in every style).
+    juce::Colour fillPixel() {
+        auto img = makeImage(100, 150);
+        juce::Graphics g(img);
+        slider.paintEntireComponent(g, false);
+        const int pos = (int)std::lround((float)slider.getPositionOfValue(slider.getValue()));
+        return img.getPixelAt(50, pos + 9);
+    }
+
+    AppLookAndFeel laf;
+    juce::Component parent;
+    juce::Slider slider;
+};
+
+TEST(FaderStyleTest, FillTakesTheFamilyColourLikeAKnob) {
+    const auto colors = synth::theme::makeObsidian().colors;
+    ASSERT_GT(channelDistance(colors.hueAmber, colors.accent), 120) << "the test needs distinct colours";
+    for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
+        const auto style = styleAt(i);
+        FamilyFaderRig sources({style, true}, 0); // ModuleCategory 0 = sources
+        EXPECT_LE(channelDistance(sources.fillPixel(), colors.hueAmber), 40) << i << " family on";
+        FamilyFaderRig off({style, false}, 0);
+        EXPECT_LE(channelDistance(off.fillPixel(), colors.accent), 40) << i << " family off";
+        FamilyFaderRig mixer({style, true}, -1); // no family property: the mixer, a controller surface
+        EXPECT_LE(channelDistance(mixer.fillPixel(), colors.accent), 40) << i << " no family";
+    }
 }
 
 } // namespace

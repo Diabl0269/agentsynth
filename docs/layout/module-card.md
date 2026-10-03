@@ -259,7 +259,7 @@ out as its own run, by the same measure-and-apply walk:
 - **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
   (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
   fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter
-  also draws its focus ring round the cap. A vertical fader's value box is 40 px, so it shows the parameter's text without spaces ("1.00s") at the theme's label size (`CardFader::useCompactValueText`) rather than truncating. It carries every knob gesture through
+  also draws its focus ring round the cap. It takes the knob style, and its fill takes the card's family colour like a knob (`AppLookAndFeel::knobValueColour`). A vertical fader's value box is 40 px, so it shows the parameter's text without spaces ("1.00s") at the theme's label size (`CardFader::useCompactValueText`) rather than truncating. It carries every knob gesture through
   `CardControlGestures` (the modulation-amount drag, the cable pickup on its landing dot, the hover
   that highlights the landing cable, the keyboard steps) and is in the card's slider list, so
   Automate, MIDI Learn, value reflection and the modulation-target lookup treat it as a knob. Its own
