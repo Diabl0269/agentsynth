@@ -25,7 +25,9 @@ LanePointGlide::LanePointGlide(juce::Component& owner)
 
 LanePointGlide::~LanePointGlide() { driver_.stop(vblank_); }
 
-bool LanePointGlide::animates() const { return owner_.isShowing() && !prefersReducedMotion(); }
+bool LanePointGlide::animates() const {
+    return (forceAnimateForTest_ || owner_.isShowing()) && !prefersReducedMotion();
+}
 
 void LanePointGlide::reset(std::vector<LaneBreakpoint> now) {
     driver_.stop(vblank_);

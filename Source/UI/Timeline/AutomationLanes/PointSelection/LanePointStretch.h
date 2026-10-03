@@ -83,12 +83,16 @@ public:
     // True once the preview differs from where the points started.
     bool changed() const { return stretchChanged(selected_, result_); }
 
+    // Tests: animate as if the owner were on screen, so no native window is needed.
+    void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+
 private:
     bool animates() const;
     void fadeTo(float target);
 
     juce::Component& owner_;
     bool shown_ = false;
+    bool forceAnimateForTest_ = false;
     float alpha_ = 0.0f;
     mutable juce::Rectangle<float> lastBox_;
     juce::VBlankAnimatorUpdater vblank_;

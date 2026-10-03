@@ -198,7 +198,9 @@ LanePointStretch::LanePointStretch(juce::Component& owner)
 
 LanePointStretch::~LanePointStretch() { driver_.stop(vblank_); }
 
-bool LanePointStretch::animates() const { return owner_.isShowing() && !prefersReducedMotion(); }
+bool LanePointStretch::animates() const {
+    return (forceAnimateForTest_ || owner_.isShowing()) && !prefersReducedMotion();
+}
 
 void LanePointStretch::setBoxShown(bool shown) {
     if (shown == shown_)

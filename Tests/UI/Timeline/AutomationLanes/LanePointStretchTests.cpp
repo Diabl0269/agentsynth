@@ -200,19 +200,12 @@ TEST(LanePointStretchTest, AHiddenOwnerOrReducedMotionShowsAndHidesTheBoxAtOnce)
 
 TEST(LanePointStretchTest, TheBoxFadesOnAShowingOwner) {
     synth::ui::setReducedMotionForTest(false);
-    juce::Component owner;
-    owner.setSize(100, 40);
-    owner.addToDesktop(juce::ComponentPeer::windowIsTemporary);
-    owner.setVisible(true);
-    if (!owner.isShowing()) {
-        synth::ui::setReducedMotionForTest(std::nullopt);
-        GTEST_SKIP() << "no peer in this environment";
-    }
+    juce::Component owner; // no native window: one aborts the ASAN job's display with BadAtom
     {
         synth::ui::LanePointStretch stretch(owner);
+        stretch.forceAnimateForTest(true);
         stretch.setBoxShown(true);
         EXPECT_LT(stretch.boxAlpha(), 1.0f) << "it fades in rather than appearing";
     }
-    owner.removeFromDesktop();
     synth::ui::setReducedMotionForTest(std::nullopt);
 }
