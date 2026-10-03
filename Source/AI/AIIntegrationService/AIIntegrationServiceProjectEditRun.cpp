@@ -249,8 +249,9 @@ public:
     std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name, const juce::String& type,
                                                                  bool poly,
                                                                  const std::vector<InstrumentTrackInsert>& inserts,
-                                                                 const juce::var& envelopeParams) override {
-        auto result = inner_.addInstrumentTrack(name, type, poly, inserts, envelopeParams);
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override {
+        auto result = inner_.addInstrumentTrack(name, type, poly, inserts, envelopeParams, instrumentParams);
         if (result.has_value())
             results.push_back(*result);
         return result;
@@ -434,7 +435,8 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
 // would add), so later ops in the plan can address the track by name.
 std::optional<InstrumentTrackBuildResult>
 StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) {
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams) {
     juce::ignoreUnused(poly);
     if (!doc_.addTrack(TrackKind::Midi, name).isValid())
         return std::nullopt;
@@ -448,7 +450,7 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
         return node != nullptr ? AIStateMapper::ensureNodeUuid(node.get()) : juce::String();
     };
     InstrumentTrackBuildResult result;
-    result.instrumentUuid = addStandIn(instrumentType, {});
+    result.instrumentUuid = addStandIn(instrumentType, instrumentParams);
     if (instrumentType != "Sampler")
         result.envelopeUuid = addStandIn("ADSR", envelopeParams);
     for (const auto& insert : inserts)

@@ -64,7 +64,8 @@ public:
     std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name,
                                                                  const juce::String& instrumentType, bool poly,
                                                                  const std::vector<InstrumentTrackInsert>& inserts,
-                                                                 const juce::var& envelopeParams) override;
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     TimelineDoc* editableTimelineDoc() override { return &doc_; }
 

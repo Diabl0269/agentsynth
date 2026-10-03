@@ -55,7 +55,8 @@ public:
 
     std::optional<synth::InstrumentTrackBuildResult>
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) override {
+                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                       const juce::var& instrumentParams) override {
         ++addCalls;
         calledInsideRecordBatch = insideRecordBatch;
         lastName = name;
@@ -63,6 +64,7 @@ public:
         lastPoly = poly;
         lastInserts = inserts;
         lastEnvelopeParams = envelopeParams;
+        lastInstrumentParams = instrumentParams;
         if (failBuild)
             return std::nullopt;
 
@@ -106,7 +108,7 @@ public:
     juce::String lastName, lastType;
     bool lastPoly = false;
     std::vector<InstrumentTrackInsert> lastInserts;
-    juce::var lastEnvelopeParams;
+    juce::var lastEnvelopeParams, lastInstrumentParams;
     std::optional<synth::InstrumentTrackBuildResult> lastResult;
 };
 
@@ -285,6 +287,27 @@ TEST_F(TimelineOpsInstrumentTrackTest, RejectsBadEnvelopes) {
     expectRejected(head + R"({"params": {"attack": "fast"}}}])", "Invalid value for parameter \"attack\"");
 }
 
+TEST_F(TimelineOpsInstrumentTrackTest, RejectsBadInstrumentParams) {
+    const juce::String head =
+        R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentParams": )";
+    expectRejected(head + R"(3}])", "\"instrumentParams\" that is not an object");
+    expectRejected(head + R"({"nonsense": 1}}])", "Unknown parameter \"nonsense\"");
+    expectRejected(head + R"({"poly": true}}])", "the op's own \"poly\" sets");
+    expectRejected(head + R"({"waveform": "Wobble"}}])", "Unrecognized choice \"Wobble\"");
+    // Checked against the instrument's own type: an Oscillator has no "cutoff".
+    expectRejected(head + R"({"cutoff": 800}}])", "Unknown parameter \"cutoff\"");
+}
+
+TEST_F(TimelineOpsInstrumentTrackTest, HostReceivesTheValidatedInstrumentParams) {
+    ASSERT_TRUE(apply(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator",
+        "instrumentParams": {"waveform": "Saw"}}])"))
+                    .ok);
+    ASSERT_TRUE(host.lastInstrumentParams.isObject());
+    EXPECT_EQ(host.lastInstrumentParams.getProperty("waveform", {}).toString(), "Saw");
+    ASSERT_TRUE(apply(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Plain", "instrument": "Oscillator"}])")).ok);
+    EXPECT_TRUE(host.lastInstrumentParams.isVoid());
+}
+
 // A Sampler plays through its own one-shot envelope; there is no ADSR for the op to shape.
 TEST_F(TimelineOpsInstrumentTrackTest, RejectsAnEnvelopeOnASamplerTrack) {
     expectRejected(R"([{"op": "addInstrumentTrack", "name": "Keys", "instrument": "Sampler",
@@ -337,6 +360,10 @@ TEST_F(TimelineOpsInstrumentTrackTest, PreviewStringsArePinned) {
         {R"([{"op": "addInstrumentTrack", "name": "Pad", "instrument": "Wavetable", "poly": true,
               "inserts": [{"type": "Filter"}], "envelope": {"id": 9, "params": {"attack": 1.5, "release": 2}}}])",
          R"(Adds instrument track "Pad" (poly Wavetable with envelope and channel strip, inserts: Filter, envelope: attack 1.5, release 2))"},
+        {R"([{"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator",
+              "instrumentParams": {"waveform": "Saw"}, "inserts": [{"type": "Filter"}],
+              "envelope": {"params": {"decay": 0.25}}}])",
+         R"(Adds instrument track "Acid" (Oscillator with envelope and channel strip, instrument: waveform Saw, inserts: Filter, envelope: decay 0.25))"},
         {R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
               "envelope": {"id": 3, "params": {}}}])",
          R"(Adds instrument track "Bass" (Oscillator with envelope and channel strip))"},

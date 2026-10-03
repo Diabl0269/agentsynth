@@ -57,11 +57,9 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
         ASSERT_NE(opProperties, nullptr);
 
         EXPECT_TRUE(opProperties->getProperty("op").getProperty("enum", {}).getArray()->contains("addInstrumentTrack"));
-        const std::pair<const char*, const char*> expected[] = {{"instrument", "string"},
-                                                                {"poly", "boolean"},
-                                                                {"instrumentId", "integer"},
-                                                                {"inserts", "array"},
-                                                                {"envelope", "object"}};
+        const std::pair<const char*, const char*> expected[] = {
+            {"instrument", "string"}, {"poly", "boolean"},    {"instrumentId", "integer"},
+            {"inserts", "array"},     {"envelope", "object"}, {"instrumentParams", "object"}};
         for (const auto& [field, type] : expected) {
             auto* def = opProperties->getProperty(field).getDynamicObject();
             ASSERT_NE(def, nullptr) << field;

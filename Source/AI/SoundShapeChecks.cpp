@@ -82,6 +82,7 @@ int filterCutoffChannel() {
 struct Nodes {
     IdMap envelopes, filters;
     std::vector<juce::var> trackEnvelopes;
+    std::vector<juce::var> oscillators; // params of every Oscillator: patch nodes and new tracks' instruments
 };
 
 void collectPatchNodes(const juce::var& root, Nodes& out) {
@@ -97,6 +98,8 @@ void collectPatchNodes(const juce::var& root, Nodes& out) {
             out.envelopes[id] = node.getProperty("params", {});
         else if (type == "Filter")
             out.filters[id] = node.getProperty("params", {});
+        else if (type == "Oscillator")
+            out.oscillators.push_back(node.getProperty("params", {}));
     }
 }
 
@@ -107,6 +110,8 @@ void collectTrackBuilds(const juce::var& root, Nodes& out) {
     for (const auto& op : *ops) {
         if (op.getProperty("op", {}).toString() != "addInstrumentTrack")
             continue;
+        if (op.getProperty("instrument", {}).toString() == "Oscillator")
+            out.oscillators.push_back(op.getProperty("instrumentParams", {}));
         if (op.getProperty("instrument", {}).toString() != "Sampler") {
             const juce::var envelope = op.getProperty("envelope", {});
             const juce::var params = envelope.getProperty("params", {});
@@ -122,6 +127,24 @@ void collectTrackBuilds(const juce::var& root, Nodes& out) {
                     out.filters[id] = insert.getProperty("params", {});
             }
     }
+}
+
+// The Oscillator's waveform param as the response sets it (a name, or the choice index), else its default.
+bool isSawOrSquare(const juce::var& params) {
+    const juce::var waveform = params.getProperty("waveform", {});
+    if (waveform.isString())
+        return waveform.toString().equalsIgnoreCase("Saw") || waveform.toString().equalsIgnoreCase("Square");
+    if (waveform.isInt() || waveform.isDouble()) {
+        auto probe = AIStateMapper::createModule("Oscillator");
+        for (auto* param : probe->getParameters())
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param);
+                choice != nullptr && choice->paramID == "waveform") {
+                const int index = static_cast<int>(static_cast<double>(waveform));
+                return index >= 0 && index < choice->choices.size() &&
+                       (choice->choices[index] == "Saw" || choice->choices[index] == "Square");
+            }
+    }
+    return false; // left out: the default is a Sine
 }
 
 // One modulation from an envelope onto a Filter's cutoff, with both ends' params.
@@ -212,6 +235,16 @@ ShapeCheck checkAcid(const juce::var& response, const juce::var& existingPatch) 
     std::vector<CutoffModulation> found;
     if (const auto problem = findCutoffModulations(response, existingPatch, found); problem.isNotEmpty())
         return {false, problem};
+
+    Nodes nodes;
+    collectPatchNodes(existingPatch, nodes);
+    collectPatchNodes(response, nodes);
+    collectTrackBuilds(response, nodes);
+    bool sawOrSquare = false;
+    for (const auto& params : nodes.oscillators)
+        sawOrSquare = sawOrSquare || isSawOrSquare(params);
+    if (!sawOrSquare)
+        return {false, "no Saw or Square oscillator (set instrumentParams {\"waveform\": \"Saw\"} on the track)"};
 
     const double minResonance = filterRangePoint("resonance", kAcidMinResonanceFraction);
     juce::String firstProblem;

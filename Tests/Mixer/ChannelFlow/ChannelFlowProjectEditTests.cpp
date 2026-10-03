@@ -37,18 +37,17 @@ constexpr const char* kPlanJson = R"({"mode": "merge",
             {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})";
 
 // Two tracks, each reusing its own envelope (7010 mono, 7020 poly) as the source of a modulation onto
-// its Filter insert's cutoff (7011, 7021). Decay 2.0 sits outside [0,1], where the untrusted apply
-// leaves it unrescaled, so the landed value is the one asked for.
+// its Filter insert's cutoff (7011, 7021). Typical pluck times: they land exactly as written.
 constexpr const char* kEnvelopePlanJson = R"({"mode": "merge", "nodes": [], "connections": [],
     "modulations": [{"source": 7010, "dest": 7011, "destParam": "cutoff", "amount": 0.5},
                     {"source": 7020, "dest": 7021, "destParam": "cutoff", "amount": 0.5}],
     "timelineOps": [
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
          "inserts": [{"type": "Filter", "id": 7011, "params": {"cutoff": 400}}],
-         "envelope": {"id": 7010, "params": {"sustain": 0.0, "decay": 2.0, "release": 3.0}}},
+         "envelope": {"id": 7010, "params": {"sustain": 0.0, "decay": 0.2, "release": 0.15}}},
         {"op": "addInstrumentTrack", "name": "Pad", "instrument": "Wavetable", "poly": true,
          "inserts": [{"type": "Filter", "id": 7021}],
-         "envelope": {"id": 7020, "params": {"sustain": 0.25, "decay": 2.0}}}]})";
+         "envelope": {"id": 7020, "params": {"sustain": 0.25, "decay": 0.2}}}]})";
 
 double rawParamPE(juce::AudioProcessor* processor, const juce::String& paramId) {
     for (auto* param : processor->getParameters())
@@ -172,7 +171,7 @@ TEST_F(ChannelFlowTest, ProjectEditEnvelopeParamsLandOnTheBuiltAdsrAndItsIdModul
         double decay;
         double release; // < 0: not set by the plan, left at the module default
     };
-    for (const auto& expected : {Expected{"Bass", 0.0, 2.0, 3.0}, Expected{"Pad", 0.25, 2.0, -1.0}}) {
+    for (const auto& expected : {Expected{"Bass", 0.0, 0.2, 0.15}, Expected{"Pad", 0.25, 0.2, -1.0}}) {
         SCOPED_TRACE(expected.track);
         const auto* macro = findMacroNamedPE(mc, expected.track);
         ASSERT_NE(macro, nullptr);

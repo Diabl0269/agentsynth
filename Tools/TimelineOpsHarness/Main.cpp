@@ -50,7 +50,7 @@ juce::String argValue(const juce::StringArray& args, const juce::String& flag, c
 struct ValidationOnlyHost : synth::TimelineOpsHost {
     std::optional<synth::InstrumentTrackBuildResult>
     addInstrumentTrack(const juce::String&, const juce::String&, bool, const std::vector<synth::InstrumentTrackInsert>&,
-                       const juce::var&) override {
+                       const juce::var&, const juce::var&) override {
         return std::nullopt;
     }
     bool recordBatch(const std::function<void()>&) override { return false; }

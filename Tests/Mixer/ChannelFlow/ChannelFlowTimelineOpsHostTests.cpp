@@ -141,7 +141,8 @@ TEST_F(ChannelFlowTest, TimelineOpsHostReturnsTheUuidOfEveryNodeItCreated) {
     const std::vector<synth::InstrumentTrackInsert> inserts{{"Filter", juce::JSON::parse(R"({"cutoff": 800})")},
                                                             {"Distortion", {}}};
     std::optional<synth::InstrumentTrackBuildResult> result;
-    EXPECT_TRUE(host.recordBatch([&] { result = host.addInstrumentTrack("Bass", "Wavetable", false, inserts, {}); }));
+    EXPECT_TRUE(
+        host.recordBatch([&] { result = host.addInstrumentTrack("Bass", "Wavetable", false, inserts, {}, {}); }));
     ASSERT_TRUE(result.has_value());
 
     const auto* macro = findMacroNamed(mc, "Bass");
@@ -192,14 +193,14 @@ TEST_F(ChannelFlowTest, TimelineOpsHostReturnsTheEnvelopeUuidAndAppliesItsParams
     mc.getAudioEngine().suspendDeviceCallback();
     auto& graph = mc.getAudioEngine().getGraph();
     auto& host = mc.getTimelineOpsHostForTest();
-    // Release 2.5 / decay 3.0 sit outside [0,1], where the untrusted apply keeps the raw value.
-    const juce::var params = juce::JSON::parse(R"({"sustain": 0.0, "decay": 3.0, "release": 2.5})");
+    const juce::var params = juce::JSON::parse(R"({"sustain": 0.0, "decay": 0.2, "release": 0.15})");
 
-    std::optional<synth::InstrumentTrackBuildResult> mono, poly, sampler;
+    std::optional<synth::InstrumentTrackBuildResult> mono, poly, sampler, saw;
     EXPECT_TRUE(host.recordBatch([&] {
-        mono = host.addInstrumentTrack("Bass", "Oscillator", false, {}, params);
-        poly = host.addInstrumentTrack("Pad", "Wavetable", true, {}, params);
-        sampler = host.addInstrumentTrack("Keys", "Sampler", false, {}, {});
+        mono = host.addInstrumentTrack("Bass", "Oscillator", false, {}, params, {});
+        poly = host.addInstrumentTrack("Pad", "Wavetable", true, {}, params, {});
+        sampler = host.addInstrumentTrack("Keys", "Sampler", false, {}, {}, {});
+        saw = host.addInstrumentTrack("Acid", "Oscillator", false, {}, {}, juce::JSON::parse(R"({"waveform": "Saw"})"));
     }));
     ASSERT_TRUE(mono.has_value());
     ASSERT_TRUE(poly.has_value());
@@ -213,8 +214,16 @@ TEST_F(ChannelFlowTest, TimelineOpsHostReturnsTheEnvelopeUuidAndAppliesItsParams
         ASSERT_TRUE(isModuleOfTypeCFT(node, ModuleType::ADSR));
         EXPECT_TRUE(findMacroNamed(mc, name)->hasMember(result->envelopeUuid));
         EXPECT_NEAR(rawParamValue(node->getProcessor(), "sustain"), 0.0, 1.0e-3);
-        EXPECT_NEAR(rawParamValue(node->getProcessor(), "decay"), 3.0, 1.0e-3);
-        EXPECT_NEAR(rawParamValue(node->getProcessor(), "release"), 2.5, 1.0e-3);
+        EXPECT_NEAR(rawParamValue(node->getProcessor(), "decay"), 0.2, 1.0e-3);
+        EXPECT_NEAR(rawParamValue(node->getProcessor(), "release"), 0.15, 1.0e-3);
     }
+    // instrumentParams land on the instrument itself (waveform choice 2 is Saw; the default is Sine).
+    ASSERT_TRUE(saw.has_value());
+    auto* sawNode = nodeForUuidCFT(graph, saw->instrumentUuid);
+    ASSERT_NE(sawNode, nullptr);
+    EXPECT_NEAR(rawParamValue(sawNode->getProcessor(), "waveform"), 2.0, 1.0e-3);
+    auto* monoOsc = nodeForUuidCFT(graph, mono->instrumentUuid);
+    ASSERT_NE(monoOsc, nullptr);
+    EXPECT_NEAR(rawParamValue(monoOsc->getProcessor(), "waveform"), 0.0, 1.0e-3);
     EXPECT_TRUE(sampler->envelopeUuid.isEmpty()) << "a Sampler plays through its own one-shot envelope";
 }

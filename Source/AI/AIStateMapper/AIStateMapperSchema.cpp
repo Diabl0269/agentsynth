@@ -174,6 +174,7 @@ juce::var timelineOpsArraySchema() {
                     "type": {"type": "string"}, "id": {"type": "integer"},
                     "params": {"type": "object", "additionalProperties": true}},
                     "required": ["type"]}},
+                "instrumentParams": {"type": "object", "additionalProperties": true},
                 "envelope": {"type": "object", "properties": {
                     "id": {"type": "integer"},
                     "params": {"type": "object", "additionalProperties": true}}}

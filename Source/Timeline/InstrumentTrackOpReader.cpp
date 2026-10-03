@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 
 namespace synth {
@@ -146,20 +147,39 @@ juce::String readEnvelope(const juce::var& envelopeVar, juce::var& paramsOut) {
     return {};
 }
 
-// The "envelope" suffix of the preview: attack/decay/sustain/release in that order, then any other
-// given param by name, listing only what the op set.
-juce::String describeEnvelopeParams(const juce::var& params) {
+/** The instrument's own params: an object checked like an insert's, against the instrument type's real
+ *  params. "poly" is the op's own field, so it is refused here. */
+juce::String readInstrumentParams(const juce::String& instrument, const juce::var& params, juce::var& paramsOut) {
+    auto* paramsObj = params.getDynamicObject();
+    if (paramsObj == nullptr)
+        return "has an \"instrumentParams\" that is not an object.";
+    if (paramsObj->hasProperty("poly"))
+        return "instrumentParams include \"poly\", which the op's own \"poly\" sets. Leave it out.";
+    auto probe = AIStateMapper::createModule(instrument);
+    if (probe == nullptr)
+        return "instrumentParams cannot be checked in this build.";
+    if (const auto result = AIStateMapper::validateNodeParams(probe.get(), paramsObj); !result.ok)
+        return "instrumentParams (" + instrument + "): " + result.message;
+    paramsOut = params;
+    return {};
+}
+
+// A preview list of the params an op set: `preferred` first in that order, then any other by name.
+juce::String describeParams(const juce::var& params, std::initializer_list<const char*> preferred) {
     auto* paramsObj = params.getDynamicObject();
     if (paramsObj == nullptr || paramsObj->getProperties().size() == 0)
         return {};
     juce::StringArray parts;
-    for (const char* key : {"attack", "decay", "sustain", "release"})
+    for (const char* key : preferred)
         if (paramsObj->hasProperty(key))
             parts.add(juce::String(key) + " " + formatParamValue(paramsObj->getProperty(key)));
     juce::StringArray others;
     for (int i = 0; i < paramsObj->getProperties().size(); ++i) {
         const juce::String key = paramsObj->getProperties().getName(i).toString();
-        if (key != "attack" && key != "decay" && key != "sustain" && key != "release")
+        bool listed = false;
+        for (const char* p : preferred)
+            listed = listed || key == p;
+        if (!listed)
             others.add(key);
     }
     others.sort(false);
@@ -193,6 +213,11 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (!isOptionalInt(op.getProperty("instrumentId")))
         return "has a non-integer \"instrumentId\".";
 
+    if (const juce::var paramsVar = op.getProperty("instrumentParams"); !paramsVar.isVoid())
+        if (const auto error = readInstrumentParams(out.instrument, paramsVar, out.instrumentParams);
+            error.isNotEmpty())
+            return error;
+
     // Checked before the early return below: an op with an envelope and no inserts still has one.
     if (const juce::var envelopeVar = op.getProperty("envelope"); !envelopeVar.isVoid()) {
         if (out.instrument == "Sampler")
@@ -225,13 +250,16 @@ juce::String describeInstrumentTrack(const InstrumentTrackOpFields& fields) {
     const bool addsEnvelope = fields.instrument != "Sampler";
     juce::String text = (fields.poly ? "poly " : "") + fields.instrument +
                         (addsEnvelope ? " with envelope and channel strip" : " with channel strip");
+    if (const auto own = describeParams(fields.instrumentParams, {}); own.isNotEmpty())
+        text << ", instrument: " << own;
     if (!fields.inserts.empty()) {
         juce::StringArray types;
         for (const auto& insert : fields.inserts)
             types.add(insert.type);
         text << ", inserts: " << types.joinIntoString(", ");
     }
-    if (const auto envelope = describeEnvelopeParams(fields.envelopeParams); envelope.isNotEmpty())
+    if (const auto envelope = describeParams(fields.envelopeParams, {"attack", "decay", "sustain", "release"});
+        envelope.isNotEmpty())
         text << ", envelope: " << envelope;
     return text;
 }

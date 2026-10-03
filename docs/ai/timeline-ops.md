@@ -1,4 +1,4 @@
-# Timeline Operations
+#Timeline Operations
 
 `synth::TimelineOps` (`Source/Timeline/TimelineOps.h/.cpp`) is the **write** half of the timeline
 seam: discrete, validated, previewable operations a model may ask for, applied to `TimelineDoc` as
@@ -13,20 +13,34 @@ non-authorable in patches (`kNonAuthorableModuleTypes`).
 ## The envelope
 
 ```json
-{ "timelineOps": [
-  { "op": "addInstrumentTrack", "name": "Lead", "instrument": "Oscillator",
-    "inserts": [ { "type": "Filter", "params": { "cutoff": 800 } } ],
-    "envelope": { "params": { "decay": 0.3, "sustain": 0 } } },
-  { "op": "addTrack",   "kind": "midi", "name": "Bass" },
-  { "op": "placeClips", "track": "Bass",
-    "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
-                 "notes": [ { "startBeat": 0, "lengthBeats": 1,
-                              "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
-  { "op": "writeLane",  "nodeUuid": "...", "paramId": "cutoff",
-    "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] },
-  { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
-    "midBase64": "<base64-encoded Standard MIDI File>" }
-] }
+{
+    "timelineOps" : [
+        {
+            "op" : "addInstrumentTrack",
+            "name" : "Lead",
+            "instrument" : "Oscillator",
+            "inserts" : [ {"type" : "Filter", "params" : {"cutoff" : 800}} ],
+            "envelope" : {"params" : {"decay" : 0.3, "sustain" : 0}}
+        },
+        {"op" : "addTrack", "kind" : "midi", "name" : "Bass"}, {
+            "op" : "placeClips",
+            "track" : "Bass",
+            "clips" : [ {
+                "startBeat" : 0,
+                "lengthBeats" : 4,
+                "name" : "A",
+                "notes" : [ {"startBeat" : 0, "lengthBeats" : 1, "pitch" : 36, "velocity" : 100, "channel" : 1} ]
+            } ]
+        },
+        {
+            "op" : "writeLane",
+            "nodeUuid" : "...",
+            "paramId" : "cutoff",
+            "points" : [ {"beat" : 0, "value" : 800, "tension" : 0, "curve" : 1} ]
+        },
+        {"op" : "placeMidiClip", "track" : "Bass", "startBeat" : 0, "midBase64" : "<base64-encoded Standard MIDI File>"}
+    ]
+}
 ```
 
 This is the **client** half of the capability. The private backend repo owns the **server** half —
@@ -36,8 +50,13 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
 | Op | What it does | What it deliberately does not do |
 | --- | --- | --- |
 | `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
-| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path); `envelope` (optional object `{id?, params?}`, Oscillator/Wavetable only - see [the track's own envelope](#the-tracks-own-envelope)). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
-| `placeClips` | Places clips, and their clip-relative notes, on a MIDI track targeted by exact name or `{"index": N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
+| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path);
+`instrumentParams` (
+    optional object : the instrument 's own params, e.g. `{"waveform": "Saw"}`, checked against the instrument type' s real params and applied to the built instrument; `poly` is
+        refused there); `envelope` (optional object `{
+    id ?, params ?}`, Oscillator/Wavetable only - see [the track's own envelope](#the-tracks-own-envelope)). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
+| `placeClips` | Places clips, and their clip-relative notes, on a MIDI track targeted by exact name or `{
+    "index" : N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
 | `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track, creating that track if there is none (it has no graph, so it cannot pick the owning track the way `MainComponent::automateParameter` does; the next project open moves the lane), then REPLACES every point in the written span (min to max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
 | `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream`, placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat`. Clip length is `ceil` of its last note's end, floored at 1 beat, reusing `MidiClipFile::importIntoTrack`. | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
 
@@ -108,11 +127,21 @@ Distortion` appended when the op has inserts, and `, envelope: attack 0.005, dec
 release 0.15` after that listing only the envelope params the op set (attack, decay, sustain,
 release in that order, then any other by name; no suffix when it set none).
 
+`instrumentParams` is read by `readInstrumentTrackOpFields` like an insert's `params`
+(`validateNodeParams` on a probe of the instrument type), applied by the real host with
+`applyUntrustedParams` before the build wires anything, and by the preview's stand-in instrument. The
+preview adds `, instrument: waveform Saw` after the type.
+
 ### The track's own envelope
 
 An Oscillator or Wavetable track gets an ADSR and a VCA from the build; nothing else could reach that
-ADSR, so a model could not make a pluck or pad on a new track. `envelope` is `{ "id": <int>?,
-"params": { <ADSR param id>: <raw value> }? }`, closed to those two keys:
+ADSR, so a model could not make a pluck or pad on a new track. `envelope` is `{
+    "id"
+        : <int>
+          ?
+          , "params"
+          : {<ADSR param id> : <raw value>}
+          ? }`, closed to those two keys:
 
 - `params` are checked by `validateNodeParams` against a real ADSR (the helper an insert's `params`
   use), then handed to the host, which applies them with `applyUntrustedParams` to the ADSR it built
@@ -124,9 +153,8 @@ ADSR, so a model could not make a pluck or pad on a new track. `envelope` is `{ 
   modulation can use it as `source`, a `writeLane` as `nodeId`, and `remove` can delete it. That is
   how "plucky" (sustain 0, short decay) and "filter envelope" (the track's envelope onto a Filter
   insert's cutoff) are expressed without a free ADSR node that nothing triggers.
-- The untrusted apply path rescales a value in `[0,1]` against a wider range
-  ([patch-preview](patch-preview.md)): an ADSR time (range 0-5 s) given as 0.2 lands as 1.0 s. Sustain
-  (range 0-1) is exact. The preview text shows the values as asked.
+- Params go through the untrusted apply path, which rescales only a `[0,1]` value the parameter's
+  range cannot hold ([patch-preview](patch-preview.md)): an ADSR decay of 0.2 s lands as 0.2 s.
 
 The same field exists server-side in the hosted `project.generate` contract. The local prompt teaches
 it with the sound-design words (pluck, pad, filter envelope, acid -> parameter values) and three
@@ -345,7 +373,9 @@ checks over a parsed response root: `checkPluck` (some envelope with sustain <= 
 attack <= 0.02), `checkFilterEnvelope` (a modulation whose source is an envelope - an
 `envelope.id` of the response, or an ADSR node of the response or the existing patch - and whose dest
 is a Filter, by `destParam` `cutoff` or the Filter's cutoff port) and `checkAcid` (that, with the
-`LPF24` filter type, resonance >= 60% of its range and envelope sustain <= 0.3). A param the response
+`LPF24` filter type, resonance >= 60% of its range, envelope sustain <= 0.3 and a Saw or Square
+oscillator: an `instrumentParams.waveform` of the new track, or an Oscillator node of the response or
+the existing patch). A param the response
 leaves out is judged at the module's own default. Tests: `Tests/AI/SoundShapeChecksTests.cpp`; the
 prompt's three worked responses are previewed and scored in
 `AIIntegrationServiceProjectEditTests.cpp`. `Tools/AIEvalHarness --mode project` sends four requests

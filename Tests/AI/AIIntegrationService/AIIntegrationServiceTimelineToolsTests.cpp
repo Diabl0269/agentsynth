@@ -91,6 +91,8 @@ TEST_F(AIIntegrationServiceTest, TimelinePromptTeachesTheEnvelopeAndTheSoundDesi
 
     EXPECT_TRUE(enabled.contains("`envelope` shapes the track's OWN ADSR"));
     EXPECT_TRUE(enabled.contains("a Sampler has none"));
+    EXPECT_TRUE(enabled.contains("`instrumentParams` sets the instrument's own params"));
+    EXPECT_TRUE(enabled.contains("`instrumentParams` {\"waveform\": \"Saw\"}"));
     EXPECT_TRUE(enabled.contains("SOUND-DESIGN WORDS"));
     EXPECT_TRUE(enabled.contains("pluck, plucky, stab, staccato, percussive: sustain 0"));
     EXPECT_TRUE(enabled.contains("pad, swell: attack at least 0.5"));

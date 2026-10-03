@@ -82,7 +82,8 @@ constexpr const char* kEnvelopePlan = R"({"mode": "merge", "nodes": [], "connect
     "timelineOps": [
         {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
          "inserts": [{"type": "Filter", "id": 7011}],
-         "envelope": {"id": 7010, "params": {"sustain": 0.0, "release": 2.5}}},
+         "instrumentParams": {"waveform": "Saw"},
+         "envelope": {"id": 7010, "params": {"sustain": 0.0, "release": 0.15}}},
         {"op": "writeLane", "nodeId": 7010, "paramId": "attack",
          "points": [{"beat": 0, "value": 0.5}, {"beat": 4, "value": 1.5}]}]})";
 
@@ -324,7 +325,9 @@ TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdBindsAModulationSourceAndA
     const auto docBefore = docDump();
     const auto preview = service->previewProjectEdit(parse(kEnvelopePlan));
     ASSERT_TRUE(preview.ok) << preview.message;
-    EXPECT_TRUE(preview.previewText.contains("envelope: sustain 0, release 2.5")) << preview.previewText;
+    EXPECT_TRUE(
+        preview.previewText.contains("instrument: waveform Saw, inserts: Filter, envelope: sustain 0, release 0.15"))
+        << preview.previewText;
     EXPECT_EQ(host->builds, 0);
     EXPECT_EQ(graphDump(), graphBefore);
     EXPECT_EQ(docDump(), docBefore);
@@ -338,7 +341,9 @@ TEST_F(AIIntegrationServiceProjectEditTest, EnvelopeIdBindsAModulationSourceAndA
     ASSERT_NE(adsr, nullptr);
     ASSERT_NE(filter, nullptr);
     EXPECT_NEAR(rawParamValue(adsr->getProcessor(), "sustain"), 0.0, 1.0e-4) << "the envelope params were applied";
-    EXPECT_NEAR(rawParamValue(adsr->getProcessor(), "release"), 2.5, 1.0e-3);
+    EXPECT_NEAR(rawParamValue(firstNodeOfFactoryType(*graph, "Oscillator")->getProcessor(), "waveform"), 2.0, 1.0e-3)
+        << "the stand-in/host instrument took instrumentParams";
+    EXPECT_NEAR(rawParamValue(adsr->getProcessor(), "release"), 0.15, 1.0e-3);
 
     const int cutoffChannel = dynamic_cast<ModuleBase*>(filter->getProcessor())->modulationChannelForParam("cutoff");
     ASSERT_GE(cutoffChannel, 0);

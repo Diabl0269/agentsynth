@@ -23,7 +23,8 @@ public:
     std::optional<InstrumentTrackBuildResult> addInstrumentTrack(const juce::String& name, const juce::String& type,
                                                                  bool,
                                                                  const std::vector<InstrumentTrackInsert>& inserts,
-                                                                 const juce::var& envelopeParams) override {
+                                                                 const juce::var& envelopeParams,
+                                                                 const juce::var& instrumentParams) override {
         ++builds;
         if (builds == failOnBuild) {
             graph.addNode(AIStateMapper::createModule("LFO"));
@@ -32,7 +33,7 @@ public:
         if (!doc.addTrack(TrackKind::Midi, name).isValid())
             return std::nullopt;
         InstrumentTrackBuildResult result;
-        result.instrumentUuid = add(type, {});
+        result.instrumentUuid = add(type, instrumentParams);
         if (type != "Sampler" && !withoutEnvelope)
             result.envelopeUuid = add("ADSR", envelopeParams);
         for (const auto& insert : inserts)

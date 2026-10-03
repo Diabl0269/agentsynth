@@ -25,11 +25,14 @@ juce::var trackWithEnvelope(const juce::String& envelopeParams) {
 
 // Filter insert 7011 and envelope 7010 on a new track, joined by `modulation`.
 juce::var acidResponse(const juce::String& filterParams, const juce::String& envelopeParams,
-                       const juce::String& modulation = R"({"source": 7010, "dest": 7011, "destParam": "cutoff"})") {
-    return parse(R"({"mode": "merge", "nodes": [], "connections": [], "modulations": [)" + modulation +
-                 R"(], "timelineOps": [{"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator",
+                       const juce::String& modulation = R"({"source": 7010, "dest": 7011, "destParam": "cutoff"})",
+                       const juce::String& instrumentParams = R"({"waveform": "Saw"})") {
+    return parse(
+        R"({"mode": "merge", "nodes": [], "connections": [], "modulations": [)" + modulation +
+        R"(], "timelineOps": [{"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator", "instrumentParams": )" +
+        instrumentParams + R"(,
         "inserts": [{"type": "Filter", "id": 7011, "params": )" +
-                 filterParams + R"(}], "envelope": {"id": 7010, "params": )" + envelopeParams + "}}]}");
+        filterParams + R"(}], "envelope": {"id": 7010, "params": )" + envelopeParams + "}}]}");
 }
 
 const char* kExistingPatch = R"({"nodes": [{"id": 1003, "type": "Filter", "params": {"cutoff": 2000}},
@@ -158,4 +161,28 @@ TEST(SoundShapeChecksTest, AcidFailsWithoutAnEnvelopeOnTheCutoff) {
                                                     R"({"source": 7010, "dest": 7011, "destParam": "resonance"})"));
     EXPECT_FALSE(onResonance.pass);
     EXPECT_FALSE(checkAcid(parse(R"({"nodes": [], "connections": []})")).pass);
+}
+
+TEST(SoundShapeChecksTest, AcidNeedsASawOrSquareOscillator) {
+    const juce::String filter = R"({"resonance": 0.8})", envelope = R"({"sustain": 0.1})";
+    const juce::String mod = R"({"source": 7010, "dest": 7011, "destParam": "cutoff"})";
+    EXPECT_TRUE(checkAcid(acidResponse(filter, envelope, mod, R"({"waveform": "Square"})")).pass);
+    EXPECT_TRUE(checkAcid(acidResponse(filter, envelope, mod, R"({"waveform": 2})")).pass) << "index 2 is Saw";
+
+    const auto sine = checkAcid(acidResponse(filter, envelope, mod, R"({"waveform": "Sine"})"));
+    EXPECT_FALSE(sine.pass);
+    EXPECT_TRUE(sine.reason.contains("Saw or Square")) << sine.reason;
+    EXPECT_FALSE(checkAcid(acidResponse(filter, envelope, mod, R"({})")).pass) << "the default waveform is a Sine";
+}
+
+TEST(SoundShapeChecksTest, AcidAcceptsAnExistingOscillatorNodeWithASawWaveform) {
+    const auto existing = parse(R"({"nodes": [{"id": 1, "type": "Oscillator", "params": {"waveform": "Saw"}},
+        {"id": 1003, "type": "Filter", "params": {"resonance": 0.8}}, {"id": 1004, "type": "ADSR",
+        "params": {"sustain": 0.1}}], "connections": []})");
+    const auto response = parse(R"({"modulations": [{"source": 1004, "dest": 1003, "destParam": "cutoff"}]})");
+    EXPECT_TRUE(checkAcid(response, existing).pass);
+    const auto sineExisting = parse(R"({"nodes": [{"id": 1, "type": "Oscillator"},
+        {"id": 1003, "type": "Filter", "params": {"resonance": 0.8}}, {"id": 1004, "type": "ADSR",
+        "params": {"sustain": 0.1}}], "connections": []})");
+    EXPECT_FALSE(checkAcid(response, sineExisting).pass);
 }

@@ -44,10 +44,12 @@ struct InstrumentTrackBuildResult {
 struct TimelineOpsHost {
     virtual ~TimelineOpsHost() = default;
     /** Builds a bound instrument track like the "+ Track -> Instrument" menu, inside the batch's transaction;
-     * nullopt = nothing left behind. `envelopeParams` (an object or void) is applied to the built ADSR. */
+     * nullopt = nothing left behind. `envelopeParams` (an object or void) is applied to the built ADSR,
+     * `instrumentParams` to the instrument. */
     virtual std::optional<InstrumentTrackBuildResult>
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
-                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) = 0;
+                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                       const juce::var& instrumentParams) = 0;
     /** Runs `mutation` as ONE undo step over graph, timeline and macros; returns the pushed flag. */
     virtual bool recordBatch(const std::function<void()>& mutation) = 0;
     /** The live doc an edit plan applies to inside recordBatch; null (the default) = cannot apply one. */
