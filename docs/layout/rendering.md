@@ -28,6 +28,29 @@ text layout and parameter reads on every animation frame. **Do not reintroduce u
 changed" seam that drops the memo and repaints (`content.repaint()`). **Any new repaint of the
 canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.**
 
+## Per-frame work does not grow with the patch
+
+The 30 Hz tick rebuilds the cable list (the memo above is dropped every tick so cable activity stays live) and every
+glide frame rebuilds and repaints it, so on a project with dozens of tracks anything per cable, per card or per macro
+in those passes runs hundreds of times a frame. Three rules keep it linear:
+
+- **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
+  re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
+  `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
+  tracks.
+- **A paint computes each macro border once.** The outline, chip, collapse and '+'/'-' buttons and every port-strip row
+  all ask `paintedMacroHullBounds()`; `GraphContentComponent::paint` opens a `graph_editor_paint::HullMemoScope`
+  (`GraphEditorPaintMemo.h`) so the first answer per macro serves the rest of that paint. Nothing moves a card during
+  one paint, so the memo never goes stale; it does not outlive the paint.
+- **A glide only snapshots what can be seen.** `CardGlideAnimator::arm` renders a snapshot (a full card paint) only for
+  a card whose old-to-new path crosses the visible canvas; an off-screen card is neither hidden nor snapshotted but
+  keeps its item, so its cables still slide. Snapshotting every moved card stalled an undo of a big Auto Arrange for
+  most of a second.
+
+`Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp` holds these as work counts (`graph_editor_paint::
+workCounters()`), not timings. `Tests/App/ManyTracksProfileTests.cpp` is a disabled bench that prints the real per-frame
+costs for 10 to 80 instrument tracks (`--gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'`).
+
 ## Gated timers, not free-running ones
 
 - **`ModuleComponent::timerCallback` runs at 15 Hz** (`startTimerHz(15)`) and repaints only when the

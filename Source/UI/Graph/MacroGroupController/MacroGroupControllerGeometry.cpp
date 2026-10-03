@@ -11,21 +11,32 @@
 
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/HierarchicalArrange.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 using namespace detail;
 
+namespace {
+// Interned once: properties["uuid"] with a string literal builds a juce::Identifier per call, a locked
+// StringPool search, and the member lookups below run it per node, per member, per hull, many times a paint.
+const juce::Identifier& uuidKey() {
+    static const juce::Identifier key("uuid");
+    return key;
+}
+} // namespace
+
 juce::String MacroGroupController::nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const {
     if (auto* node = host_.graph().getNodeForId(nodeId))
-        return node->properties["uuid"].toString();
+        return node->properties[uuidKey()].toString();
     return {};
 }
 
 juce::AudioProcessorGraph::NodeID MacroGroupController::resolveMemberNodeId(const juce::String& memberUuid) const {
+    ++graph_editor_paint::workCounters().nodeScans;
     for (auto* node : host_.graph().getNodes()) {
-        if (node->properties["uuid"].toString() == memberUuid)
+        if (node->properties[uuidKey()].toString() == memberUuid)
             return node->nodeID;
     }
     return {};
@@ -78,8 +89,9 @@ namespace {
 // Free-function twin of MacroGroupController::resolveMemberNodeId, for computeMacroHullBounds
 // below (a free function itself, taking GraphCanvasHost& rather than a live `this`).
 juce::AudioProcessorGraph::NodeID resolveMemberNodeIdIn(GraphCanvasHost& host, const juce::String& memberUuid) {
+    ++graph_editor_paint::workCounters().nodeScans;
     for (auto* node : host.graph().getNodes())
-        if (node->properties["uuid"].toString() == memberUuid)
+        if (node->properties[uuidKey()].toString() == memberUuid)
             return node->nodeID;
     return {};
 }

@@ -279,6 +279,36 @@ TEST(CardGlide, CableEndpointsFollowAGlidingCardAndSettleOnTheFinalAnchor) {
     EXPECT_EQ(find(c.editor.buildVisibleCables()).p1, end.p1);
 }
 
+// A card whose whole path is off the visible canvas is neither hidden nor snapshotted (snapshotting every moved card
+// stalled an undo of a many-track arrange), yet the cables touching it still slide with it.
+TEST(CardGlide, ACardGlidingEntirelyOffScreenIsNotHiddenButItsCablesStillFollow) {
+    Canvas c;
+    const auto view = c.editor.getVisibleCanvasRect().toNearestInt();
+    const auto onScreen = c.filter(view.getCentreX(), view.getCentreY());
+    const auto offScreen = c.osc(view.getRight() + 2000, view.getY());
+    c.engine.getGraph().addConnection({{offScreen, 0}, {onScreen, 0}});
+    c.editor.updateComponents();
+    const auto onFrom = c.rect(onScreen);
+    const auto offFrom = c.rect(offScreen);
+    {
+        CardGlideAnimator::Scope glide(c.glide());
+        c.comp(onScreen)->setTopLeftPosition(onFrom.getPosition() + juce::Point<int>(60, 40));
+        c.comp(offScreen)->setTopLeftPosition(offFrom.getPosition() + juce::Point<int>(300, 0));
+    }
+    ASSERT_TRUE(c.glide().isLive());
+    EXPECT_EQ(c.comp(onScreen)->getAlpha(), 0.0f) << "a visible card glides as a snapshot";
+    EXPECT_EQ(c.comp(offScreen)->getAlpha(), 1.0f) << "nothing of it can be seen: no snapshot, not hidden";
+    EXPECT_EQ(c.glide().currentRectFor(c.comp(offScreen)), offFrom) << "it still glides, for its cables";
+    EXPECT_NE(c.glide().offsetFor(offScreen.uid), juce::Point<float>());
+
+    c.editor.advanceCardGlideForTest(0.5f);
+    EXPECT_TRUE(c.glide().isLive()) << "an item with no snapshot is not dropped mid-glide";
+    EXPECT_NE(c.glide().offsetFor(offScreen.uid), juce::Point<float>());
+    c.land();
+    EXPECT_EQ(c.comp(onScreen)->getAlpha(), 1.0f);
+    EXPECT_EQ(c.comp(offScreen)->getAlpha(), 1.0f);
+}
+
 // ---- Never on load ----
 
 TEST(CardGlide, OpeningAProjectWithOpenCollapsedAndNestedMacrosNeverGlides) {

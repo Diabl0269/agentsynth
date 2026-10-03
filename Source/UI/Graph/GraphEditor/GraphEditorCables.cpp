@@ -9,6 +9,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/CableCurve.h"
@@ -520,6 +521,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 }
 
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
+    const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
     // installed, so the cast returns null and we fall back to plain fills/lines.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
