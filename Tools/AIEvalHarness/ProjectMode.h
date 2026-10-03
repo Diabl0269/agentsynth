@@ -65,6 +65,8 @@ inline const std::vector<Scenario>& scenarios() {
         {"plucky", "make a plucky lead track", Shape::pluck, nullptr},
         {"filter-env-new", "add a bass track with a filter envelope", Shape::filterEnvelope, nullptr},
         {"filter-env-existing", "add a filter envelope", Shape::filterEnvelope, kEnvelopedPatch},
+        // A new track beside one that already has an ADSR: the new Filter must use the NEW track's envelope.
+        {"filter-env-beside", "add a bass track with a filter envelope", Shape::filterEnvelope, kEnvelopedPatch},
         {"acid", "make an acid bassline track", Shape::acid, nullptr},
     };
     return s;

@@ -102,6 +102,18 @@ TEST(SoundShapeChecksTest, FilterEnvelopePassesForAnAdsrNodeAndFilterNodeOfTheRe
                     .pass);
 }
 
+// Asked for "a bass track with a filter envelope" in a project that
+// already had a track, the model routed the OTHER track's ADSR onto the new track's Filter. That
+// envelope is triggered by the other track's notes, so the bass filter never moves on its own notes.
+TEST(SoundShapeChecksTest, FilterEnvelopeFailsWhenANewTracksFilterIsMovedByAnotherTracksEnvelope) {
+    const juce::var otherTrack = parse(R"({"nodes": [{"id": 55, "type": "ADSR", "params": {"sustain": 0}}]})");
+    const auto check = checkFilterEnvelope(acidResponse(R"({"cutoff": 400})", R"({"decay": 0.2})",
+                                                        R"({"source": 55, "dest": 7011, "destParam": "cutoff"})"),
+                                           otherTrack);
+    EXPECT_FALSE(check.pass);
+    EXPECT_TRUE(check.reason.contains("track's own")) << check.reason;
+}
+
 TEST(SoundShapeChecksTest, FilterEnvelopeFailsWhenTheModulationIsNotEnvelopeToFilterCutoff) {
     const auto existing = parse(kExistingPatch);
     // No modulation at all.

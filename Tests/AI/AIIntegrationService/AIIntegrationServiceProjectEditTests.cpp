@@ -119,6 +119,18 @@ protected:
     std::unique_ptr<PlanFakeHost> host;
 };
 
+// A plan that only builds a track carries an empty merge patch; the preview names the track and
+// does not lead with "Merges a patch that changes nothing", which read like a failure.
+TEST_F(AIIntegrationServiceProjectEditTest, ATrackOnlyPlanPreviewsJustTheTrack) {
+    const auto preview = service->previewProjectEdit(parse(
+        R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [{"op": "addInstrumentTrack",
+            "name": "Pluck", "instrument": "Oscillator"}]})"));
+    ASSERT_TRUE(preview.ok) << preview.message;
+    ASSERT_EQ(preview.previewLines.size(), 1) << preview.previewText;
+    EXPECT_TRUE(preview.previewLines[0].startsWith("Adds instrument track \"Pluck\"")) << preview.previewText;
+    EXPECT_FALSE(preview.previewText.contains("changes nothing")) << preview.previewText;
+}
+
 TEST_F(AIIntegrationServiceProjectEditTest, PreviewDescribesEveryPhaseAndMutatesNothing) {
     graph->addNode(std::make_unique<OscillatorModule>());
     const auto graphBefore = graphDump();

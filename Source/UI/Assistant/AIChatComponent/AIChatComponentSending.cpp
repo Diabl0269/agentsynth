@@ -182,7 +182,10 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         if (accountServicePtr != nullptr)
             accountServicePtr->refreshEntitlement();
     } else {
-        messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
+        // Some provider messages already start with "Error: " (RemoteProvider's HTTP failures);
+        // prefixing those again read "Error: Error: ..." in the bubble.
+        const auto& text = aiResponse.error.message;
+        messages.push_back({"assistant", text.startsWith("Error: ") ? text : "Error: " + text, ""});
         messages.back().responseMs = elapsed;
     }
 

@@ -83,6 +83,9 @@ struct Nodes {
     IdMap envelopes, filters;
     std::vector<juce::var> trackEnvelopes;
     std::vector<juce::var> oscillators; // params of every Oscillator: patch nodes and new tracks' instruments
+    // A new track's Filter insert id -> that track's envelope id (-1 when the track gave its envelope none).
+    // Only the track's own envelope is triggered by its notes, so it is the only valid source for that Filter.
+    std::map<juce::int64, juce::int64> insertOwnEnvelope;
 };
 
 void collectPatchNodes(const juce::var& root, Nodes& out) {
@@ -112,19 +115,24 @@ void collectTrackBuilds(const juce::var& root, Nodes& out) {
             continue;
         if (op.getProperty("instrument", {}).toString() == "Oscillator")
             out.oscillators.push_back(op.getProperty("instrumentParams", {}));
+        juce::int64 envelopeId = -1;
         if (op.getProperty("instrument", {}).toString() != "Sampler") {
             const juce::var envelope = op.getProperty("envelope", {});
             const juce::var params = envelope.getProperty("params", {});
             out.trackEnvelopes.push_back(params);
             juce::int64 id = 0;
-            if (readId(envelope.getProperty("id", {}), id))
+            if (readId(envelope.getProperty("id", {}), id)) {
                 out.envelopes[id] = params;
+                envelopeId = id;
+            }
         }
         if (auto* inserts = op.getProperty("inserts", {}).getArray())
             for (const auto& insert : *inserts) {
                 juce::int64 id = 0;
-                if (insert.getProperty("type", {}).toString() == "Filter" && readId(insert.getProperty("id", {}), id))
+                if (insert.getProperty("type", {}).toString() == "Filter" && readId(insert.getProperty("id", {}), id)) {
                     out.filters[id] = insert.getProperty("params", {});
+                    out.insertOwnEnvelope[id] = envelopeId;
+                }
             }
     }
 }
@@ -185,6 +193,10 @@ juce::String findCutoffModulations(const juce::var& response, const juce::var& e
             problem = "an envelope modulates something that is not a Filter";
         else if (!targetsCutoff(modulation))
             problem = "an envelope modulates a Filter parameter other than cutoff";
+        else if (const auto own = nodes.insertOwnEnvelope.find(dest);
+                 own != nodes.insertOwnEnvelope.end() && own->second != source)
+            problem = "a new track's Filter is moved by another envelope, not the track's own (give the track's "
+                      "envelope an id and use it as the source)";
         if (problem.isNotEmpty()) {
             firstProblem = firstProblem.isEmpty() ? problem : firstProblem;
             continue;

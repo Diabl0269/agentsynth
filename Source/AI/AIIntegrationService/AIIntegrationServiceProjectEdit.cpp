@@ -63,8 +63,11 @@ juce::String describePatchPhase(const projectedit::RunResult& run) {
     add(Kind::ConnectionRemoved, "removes", "connection", "connections");
     add(Kind::ModulationAdded, "adds", "modulation", "modulations");
     add(Kind::ModulationRemoved, "removes", "modulation", "modulations");
-    return parts.isEmpty() ? juce::String("Merges a patch that changes nothing")
-                           : "Merges a patch that " + parts.joinIntoString(", ");
+    // A plan that only builds tracks carries an empty merge patch; saying it "changes nothing"
+    // above the track sentence read like a failure, so that sentence is left out.
+    if (parts.isEmpty())
+        return run.opsPreview.isNotEmpty() ? juce::String() : juce::String("Merges a patch that changes nothing");
+    return "Merges a patch that " + parts.joinIntoString(", ");
 }
 
 ProjectEditResult toResult(const projectedit::RunResult& run) {

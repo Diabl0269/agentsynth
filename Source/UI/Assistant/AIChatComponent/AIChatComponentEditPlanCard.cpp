@@ -35,6 +35,10 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     previewLabel.setText(preview, juce::dontSendNotification);
     previewLabel.setFont(juce::Font(12.0f));
     previewLabel.setMinimumHorizontalScale(1.0f);
+    // previewHeight() measures the text at the label's full width, so the label must not narrow it
+    // with JUCE's default 5 px side border; with it, a long line wrapped once more than measured and
+    // its last line was clipped under the buttons (same fix as the message bubble's label).
+    previewLabel.setBorderSize(juce::BorderSize<int>(0));
     previewLabel.setJustificationType(juce::Justification::topLeft);
     previewLabel.setTitle(planOk ? "What this plan changes" : "Why this plan cannot apply");
     previewLabel.setDescription(preview);

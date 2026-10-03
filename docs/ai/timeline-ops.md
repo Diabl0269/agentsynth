@@ -372,13 +372,14 @@ Valid is not the same as right: a plan can preview fine and still leave the enve
 checks over a parsed response root: `checkPluck` (some envelope with sustain <= 0.01, decay <= 0.5,
 attack <= 0.02), `checkFilterEnvelope` (a modulation whose source is an envelope - an
 `envelope.id` of the response, or an ADSR node of the response or the existing patch - and whose dest
-is a Filter, by `destParam` `cutoff` or the Filter's cutoff port) and `checkAcid` (that, with the
+is a Filter, by `destParam` `cutoff` or the Filter's cutoff port; a Filter insert of a new track must be
+moved by that track's own `envelope.id`, since any other envelope follows another track's notes) and `checkAcid` (that, with the
 `LPF24` filter type, resonance >= 60% of its range, envelope sustain <= 0.3 and a Saw or Square
 oscillator: an `instrumentParams.waveform` of the new track, or an Oscillator node of the response or
 the existing patch). A param the response
 leaves out is judged at the module's own default. Tests: `Tests/AI/SoundShapeChecksTests.cpp`; the
 prompt's three worked responses are previewed and scored in
-`AIIntegrationServiceProjectEditTests.cpp`. `Tools/AIEvalHarness --mode project` sends four requests
+`AIIntegrationServiceProjectEditTests.cpp`. `Tools/AIEvalHarness --mode project` sends five requests
 through `sendProjectMessage` and prints per scenario whether the plan was valid and whether its shape
 is right ([README](../../Tools/AIEvalHarness/README.md)).
 
