@@ -406,6 +406,7 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     // already uses (Source/UI/CLAUDE.md's no-unconditional-repaint rule), mirroring
     // ModuleComponent's own gated-timer precedent for its badge refresh.
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     // Same tick also keeps the armed breathing outline animating -- see that method's own
     // comment for why nothing did before this.
     repaintArmedMidiLearnOutline();
@@ -464,6 +465,7 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
     // ModuleComponent's paintMidiLearnOverlays() -- must run before the keyboard-focus outline
     // below returns early so a mapped/armed control still shows its overlay on an unfocused column.
     paintMidiLearnOverlays(g);
+    paintAutomatedMarkers(g);
 
     // A dragged column reads as raised: a faint light wash and an accent border, both fading with lift_.
     if (lift_ > 0.0f) {

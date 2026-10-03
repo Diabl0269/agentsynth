@@ -138,6 +138,17 @@ const AutomationLane* TimelineDoc::getLaneForParam(const juce::String& nodeUuid,
     return const_cast<TimelineDoc*>(this)->findLaneForParam(nodeUuid, paramId);
 }
 
+std::set<juce::String> TimelineDoc::automatedParamIds(const juce::String& nodeUuid) const {
+    std::set<juce::String> out;
+    if (nodeUuid.isEmpty())
+        return out;
+    for (const auto& track : tracks)
+        for (const auto& lane : track.lanes)
+            if (lane.nodeUuid == nodeUuid)
+                out.insert(lane.paramId);
+    return out;
+}
+
 const Marker* TimelineDoc::getMarker(MarkerId id) const { return const_cast<TimelineDoc*>(this)->findMarker(id); }
 
 // ----------------------------------------------------------------- doc-level --

@@ -4,6 +4,7 @@
 #include <functional>
 #include <juce_core/juce_core.h>
 #include <optional>
+#include <set>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -581,6 +582,8 @@ public:
     // The lane bound to (nodeUuid, paramId), or nullptr — the doc-wide identity lookup addLane
     // dedupes against.
     const AutomationLane* getLaneForParam(const juce::String& nodeUuid, const juce::String& paramId) const;
+    // The paramIds of every lane bound to `nodeUuid` (the knob markers' source). Empty for an empty uuid.
+    std::set<juce::String> automatedParamIds(const juce::String& nodeUuid) const;
 
     // -- Bindings / reconciliation -----------------------------------------------
     // Recomputes EVERY track's and lane's `orphaned` flag: orphaned = binding is non-empty AND

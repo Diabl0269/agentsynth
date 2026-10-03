@@ -464,6 +464,25 @@ for the gesture itself and the depth band it moves; hosted-plugin card knobs
 (`ModuleComponentHostedPluginCard.cpp`) stay plain `juce::Slider`s — they are never modulation
 targets.
 
+## Automated marker
+
+A knob or fader whose parameter has an automation lane on the timeline shows a small marker, so you can tell at a
+glance what is automated: a short slanted line with a dot at each end (about 8 by 6 px, 2 px dots, a 1.5 px stroke),
+at the **top-left** of the control's cell in the theme's `textPrimary` at 70 percent. The violet MIDI-mapped dot keeps the
+top-right, and the two never overlap (`automatedMarkerRect` against `midilearn::midiMappedDotRect`). It is only a marker:
+no click, no focus stop. It fades in over 160 ms and out over 110 ms (a plain 80 ms fade under Reduce Motion), driven by
+one time-bounded `AutomatedMarkerTicker` per card, made the first time a marker changes; nothing repaints once it has
+settled.
+
+The card asks the host once per gated 15 Hz tick, like the MIDI badge: `GraphEditor::onQueryAutomatedParamsForNode(nodeId)`
+returns the paramIDs with a lane (`MainComponent` answers from `TimelineDoc::automatedParamIds`), and
+`ModuleComponent::refreshAutomatedMarkers()` (`ModuleComponentAutomationMarker.cpp`) moves each registered control towards
+the answer, so adding, removing or undoing a lane is followed within a tick. The control's tooltip gains an
+"Automated: <parameter>" line and its accessible description says "Automated" (a screen reader reads "Cutoff, 1.2 kHz,
+automated") for as long as the lane exists. The glyph and fade live in `Source/UI/Layout/AutomatedMarker.{h,cpp}`; the
+mixer uses the same ones ([`mixer/panel.md#automation-markers`](../mixer/panel.md#automation-markers)). Tests:
+`AutomatedMarkerTests.cpp`, `ModuleComponentAutomationMarkerTests.cpp`, `AutomationMarkerMainTests.cpp`.
+
 ## Custom card titles
 
 Double-clicking a card's **header band** (`ModuleComponent::kHeaderHeight`, 24 px) opens an inline

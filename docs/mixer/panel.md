@@ -503,6 +503,17 @@ lane and shows it under its track in the timeline. **FRO350:** it also switches 
 tab (`showBottomDockTab`, so a detached Timeline window is brought forward instead) and selects the new
 lane. It is offered even when no Controllers host is wired.
 
+### Automation markers
+
+A fader, pan or send knob whose parameter has a lane on the timeline shows the same small marker as a module card
+([`layout/module-card.md#automated-marker`](../layout/module-card.md#automated-marker)): a short slanted line with a dot
+at each end, at the control's **top-left**, where the violet MIDI-mapped dot keeps the top-right. A column asks
+`GraphEditor::onQueryAutomatedParamsForNode` (which `MainComponent` answers from the timeline doc) on its existing
+10 Hz meter tick (`MixerColumnAutomationMarker.cpp`, `MixerMasterColumnAutomationMarker.cpp`); the master fader does
+the same. The marker fades in over 160 ms and out over 110 ms, the control's tooltip gains an "Automated: <parameter>"
+line, and its screen-reader description says "Automated" for as long as the lane exists. Tests:
+`MixerAutomationMarkerTests.cpp`.
+
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
 parameters, and `MixerPanelComponent::rebuild()` is reached from the AFTER-restore hook
