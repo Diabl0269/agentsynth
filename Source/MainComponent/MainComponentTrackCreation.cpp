@@ -579,6 +579,18 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     macroMembers.push_back(channel.eqUuid);
     macroMembers.push_back(channel.compressorUuid);
     macroMembers.push_back(channel.stripUuid);
+    // The chain wires every module's Left AND Right leg, but a module built collapsed (the default
+    // preference) has no Right jack. Left as built, the Oscillator -> VCA and VCA -> Gate Right cables
+    // are invisible and cannot be unplugged: unplugging the one cable the user can see leaves the sound
+    // playing through the hidden one. Same cleanup the Dual I/O toggle runs when a module collapses.
+    // Only the voice-chain modules: the channel (Gate/EQ/Compressor/Strip) keeps its own stereo wiring.
+    std::vector<juce::String> voiceChain{build.instrumentUuid, build.voiceMixerUuid, build.adsrUuid, build.vcaUuid};
+    voiceChain.insert(voiceChain.end(), build.insertUuids.begin(), build.insertUuids.end());
+    for (const auto& uuid : voiceChain)
+        if (uuid.isNotEmpty())
+            if (auto* node = findNodeByUuid(uuid))
+                graphEditor.dropHiddenRightLegConnections(node->nodeID);
+
     graphEditor.getMacroController().addMacroForMembers(macroMembers, trackName, build.trackInPosition);
     graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
     return true;

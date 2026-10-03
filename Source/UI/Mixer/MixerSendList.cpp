@@ -286,7 +286,7 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
 void MixerSendList::paint(juce::Graphics& g) {
     const auto accent = synth::theme::themeOf(*this).colors.accent;
 
-    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
     const int lifted = rowDrag_.isReordering() ? rowDrag_.animator().getDraggedKey() : -1;
     for (int i = 0; i < (int)entries_.size(); ++i)
         if (i != lifted)

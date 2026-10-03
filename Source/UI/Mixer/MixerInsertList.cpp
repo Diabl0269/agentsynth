@@ -178,7 +178,7 @@ void MixerInsertList::paint(juce::Graphics& g) {
     // insert-discovery fix above, hit exactly this).
     const int contentRows = juce::jmax(1, (int)entries_.size());
 
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.setFont(juce::Font(juce::FontOptions(12.0f)));
     if (entries_.empty()) {
         g.setColour(muted);
         g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft, true);

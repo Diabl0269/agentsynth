@@ -151,7 +151,7 @@ juce::String MixerZonesGroupHeader::titleFor(synth::MixerZone zone) {
 void MixerZonesGroupHeader::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.setColour(theme.colors.textMuted);
-    g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
+    g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     g.drawText(getDisplayText(), getLocalBounds().withTrimmedLeft(kInset), juce::Justification::bottomLeft, false);
 }
 

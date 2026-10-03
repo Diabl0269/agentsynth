@@ -51,6 +51,8 @@ TEST_F(ChannelFlowTest, TimelineOpsAddInstrumentTrackBuildsTheMenuChainThroughTh
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // Split jacks, so every module's Right leg has a jack and the chain wires it.
+    mc.getGraphEditor().setDefaultDualIOForNewModules(true);
     auto& graph = mc.getAudioEngine().getGraph();
     auto& aiService = mc.getAiServiceForTest();
     const auto before = snapshotCFT(mc);

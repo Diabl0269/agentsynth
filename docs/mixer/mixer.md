@@ -544,6 +544,14 @@ already has its own one-shot playback envelope.
 `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one
 collapsed macro.
 
+**Right-leg cables follow the jacks.** The chain is wired with both legs, then
+`GraphEditor::dropHiddenRightLegConnections` runs on the voice-chain modules (instrument, Voice Mixer,
+ADSR, VCA, inserts), so a module built collapsed — the default preference — carries no cable on a Right
+block that has no jack. Without it the Oscillator → VCA and VCA → Gate Right cables were invisible and
+could not be unplugged: unplugging the visible cable left the sound playing through the hidden one.
+With split jacks each leg has its own cable, and unplugging one plays only the other leg
+(`ChannelFlowVcaSignalPathTests.cpp`).
+
 ### A poly instrument gets a per-voice envelope
 
 When the instrument's `poly` parameter is on at instrument-track creation time — set

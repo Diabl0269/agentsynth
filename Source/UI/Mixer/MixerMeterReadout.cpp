@@ -71,7 +71,7 @@ void MixerMeterReadout::paint(juce::Graphics& g) {
     const auto normalColour = synth::theme::themeOf(*this).colors.textMuted;
     const auto clipColour = synth::theme::themeOf(*this).colors.meterClip;
     g.setColour(clipped_ ? clipColour : normalColour);
-    g.setFont(juce::Font(juce::FontOptions(9.0f)));
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
     g.drawText(displayText_, getLocalBounds(), juce::Justification::centred, false);
 }
 

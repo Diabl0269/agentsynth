@@ -118,7 +118,7 @@ void MixerCollapsedSection::paint(juce::Graphics& g) {
     if (summary_.isEmpty())
         return;
     g.setColour(synth::theme::themeOf(*this).colors.textDisabled);
-    g.setFont(juce::Font(juce::FontOptions(9.0f)));
+    g.setFont(juce::Font(juce::FontOptions(10.5f)));
     g.drawText(summary_, getLocalBounds().reduced(4, 0), juce::Justification::centredLeft, true);
 }
 

@@ -97,7 +97,7 @@ public:
     void paint(juce::Graphics&) override;
     void lookAndFeelChanged() override;
 
-    static constexpr int kHeaderStripHeight = 22; // == BottomDockComponent::kTabStripHeight
+    static constexpr int kHeaderStripHeight = 24; // == BottomDockComponent::kTabStripHeight
 
     // ---- Testing hooks (DetachablePanelHostTests.cpp) ----
     DetachedPanelWindow* getDetachedWindowForTest() const { return window_.get(); }

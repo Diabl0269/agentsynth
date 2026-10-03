@@ -89,6 +89,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // Split jacks: the Right legs have jacks, so the chain wires them (collapsed, they are left out;
+    // ChannelFlowVcaSignalPathTests.cpp pins that half).
+    mc.getGraphEditor().setDefaultDualIOForNewModules(true);
     auto& graph = mc.getAudioEngine().getGraph();
     auto& macros = mc.getGraphEditor().getMacros();
 
