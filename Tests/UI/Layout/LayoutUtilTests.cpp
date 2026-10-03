@@ -233,6 +233,31 @@ TEST(LayoutUtilTest, WidthBucket_ColumnStride) {
 }
 
 // ============================================================================
+// findFreeSlotBelow: keeps the desired x, walks down in grid steps
+// ============================================================================
+
+TEST(LayoutUtilTest, FindFreeSlotBelowKeepsXAndTakesTheFirstClearRow) {
+    using namespace synth::LayoutUtil;
+    const std::vector<Box> others{{NodeID(1), {0, 0, 280, 200}}, {NodeID(2), {0, 240, 280, 100}}};
+
+    // Clear already: the desired spot, snapped.
+    EXPECT_EQ(findFreeSlotBelow({400, 40}, 280, 100, others), juce::Point<int>(400, 40));
+
+    // Blocked: same x, and the first grid row clearing every box by the collision gap.
+    const auto spot = findFreeSlotBelow({0, 0}, 280, 100, others);
+    EXPECT_EQ(spot.x, 0);
+    EXPECT_GE(spot.y, 340 + kCollisionGap);
+    EXPECT_LT(spot.y, 340 + kCollisionGap + kGridSize);
+    EXPECT_EQ(spot.y % kGridSize, 0);
+    EXPECT_FALSE(intersectsAny({spot.x, spot.y, 280, 100}, others, NodeID{}));
+}
+
+TEST(LayoutUtilTest, FindFreeSlotBelowClampsToTheCanvasOrigin) {
+    using namespace synth::LayoutUtil;
+    EXPECT_EQ(findFreeSlotBelow({-300, -16}, 280, 100, {}), juce::Point<int>(0, 0));
+}
+
+// ============================================================================
 // MacroBankGeometry
 // ============================================================================
 

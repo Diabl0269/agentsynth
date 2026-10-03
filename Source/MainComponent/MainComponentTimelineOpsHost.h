@@ -18,6 +18,7 @@ public:
                        const std::vector<synth::InstrumentTrackInsert>& inserts) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     synth::TimelineDoc* editableTimelineDoc() override;
+    void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override;
 
 private:
     MainComponent& owner_;

@@ -7,6 +7,7 @@
 // MacroGroupController.h's class comment for why it stays on GraphEditor.
 
 #include "MacroGroupController.h"
+#include "ModelCardBounds.h"
 
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -131,9 +132,13 @@ juce::Rectangle<int> memberUnionIn(GraphCanvasHost& host, const CompByNodeUid& c
     for (const auto& uuid : macro.members) {
         if (macro.memberIsPort(uuid) || uuid == extraExcludedUuid)
             continue; // a port's own fronting node, or the LEAVE test's own dragged member
-        auto it = compByNodeUid.find(resolveMemberNodeIdIn(host, uuid).uid);
-        if (it != compByNodeUid.end())
+        const auto nodeId = resolveMemberNodeIdIn(host, uuid);
+        if (auto it = compByNodeUid.find(nodeId.uid); it != compByNodeUid.end())
             add(it->second->getBounds());
+        else if (auto* node = host.graph().getNodeForId(nodeId))
+            // No card yet (detached for an AI edit plan): the member's model rect.
+            add(synth::modelCardBounds(*node,
+                                       [&host](const juce::String& t) { return host.estimateModuleSizeForType(t); }));
     }
     const auto& macros = host.getMacros();
     for (const auto& childId : macros.childrenOf(macro.id))

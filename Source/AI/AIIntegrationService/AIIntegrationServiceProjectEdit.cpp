@@ -9,6 +9,8 @@
 #include "AIIntegrationService.h"
 #include "AIIntegrationServiceInternal.h"
 
+#include <algorithm>
+
 namespace synth {
 
 namespace {
@@ -18,6 +20,17 @@ std::set<juce::uint32> liveNodeUids(const juce::AudioProcessorGraph& graph) {
     for (auto* node : graph.getNodes())
         uids.insert(node->nodeID.uid);
     return uids;
+}
+
+// Every node in `graph` that `before` did not hold, in creation order (uids only grow).
+std::vector<juce::AudioProcessorGraph::NodeID> nodesCreatedSince(const juce::AudioProcessorGraph& graph,
+                                                                 const std::set<juce::uint32>& before) {
+    std::vector<juce::AudioProcessorGraph::NodeID> created;
+    for (auto* node : graph.getNodes())
+        if (before.count(node->nodeID.uid) == 0)
+            created.push_back(node->nodeID);
+    std::sort(created.begin(), created.end(), [](auto a, auto b) { return a.uid < b.uid; });
+    return created;
 }
 
 juce::String countText(int n, const juce::String& singular, const juce::String& plural) {
@@ -111,7 +124,9 @@ ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root
 
 // Preview first (nothing live is touched by a rejection), then all three phases inside ONE
 // host->recordBatch: the graph + timeline + macro transaction every instrument-track flow uses, so
-// one Cmd+Z reverts the tracks, the patch and the notes and lanes together.
+// one Cmd+Z reverts the tracks, the patch and the notes and lanes together. Still inside it, the host
+// places every new node the patch left without a position (placeNewModules,
+// docs/ai/timeline-ops.md#where-things-land), so where things land is part of that one step too.
 //
 // Listeners: aiPatchAboutToApply fires before the batch (the editor detaches its module
 // components, so nothing holds a processor the patch phase frees) and aiPatchApplied after it, on
@@ -135,7 +150,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
     if (!preview.ok)
         return preview;
     projectedit::Plan plan;
-    if (const auto error = projectedit::readPlan(root, liveNodeUids(audioGraph), plan); error.isNotEmpty())
+    const auto uidsBefore = liveNodeUids(audioGraph);
+    if (const auto error = projectedit::readPlan(root, uidsBefore, plan); error.isNotEmpty())
         return rejected(error);
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
@@ -146,8 +162,10 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
     projectedit::RunResult run;
     const bool pushed = timelineOpsHost->recordBatch([&] {
         run = projectedit::runPlan(plan, root, *doc, audioGraph, *timelineOpsHost, /*checkStructure=*/false);
-        if (run.ok)
+        if (run.ok) {
+            timelineOpsHost->placeNewModules(nodesCreatedSince(audioGraph, uidsBefore));
             return;
+        }
         doc->fromVar(docBefore);
         AIStateMapper::applyJSONToGraph(graphBefore, audioGraph, /*clearExisting=*/true, /*trusted=*/true);
     });

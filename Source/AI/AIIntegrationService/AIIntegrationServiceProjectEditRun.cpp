@@ -249,6 +249,9 @@ public:
     }
     bool recordBatch(const std::function<void()>& mutation) override { return inner_.recordBatch(mutation); }
     TimelineDoc* editableTimelineDoc() override { return inner_.editableTimelineDoc(); }
+    void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override {
+        inner_.placeNewModules(created);
+    }
 
     std::vector<InstrumentTrackBuildResult> results;
 

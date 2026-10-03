@@ -51,6 +51,11 @@ struct TimelineOpsHost {
     virtual bool recordBatch(const std::function<void()>& mutation) = 0;
     /** The live doc an edit plan applies to inside recordBatch; null (the default) = cannot apply one. */
     virtual TimelineDoc* editableTimelineDoc() { return nullptr; }
+    /** Called inside recordBatch once an edit plan has applied, with every node the plan created (creation order):
+     * gives the ones with no position a spot beside what they connect to. The default places nothing. */
+    virtual void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
+        juce::ignoreUnused(created);
+    }
 };
 
 /**

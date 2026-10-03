@@ -76,6 +76,13 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
 
+// Like findFreeSlot, but the search only walks DOWN from `desired` (snapped, clamped to x,y >= 0) in kGridSize
+// steps, so the result keeps the desired x: the first clear row under a spot beside a card. Gives up after
+// kWalkDownMaxSteps steps and returns the last row tried.
+inline constexpr int kWalkDownMaxSteps = 2048;
+juce::Point<int> findFreeSlotBelow(juce::Point<int> desired, int w, int h, const std::vector<Box>& others,
+                                   int gap = kCollisionGap);
+
 // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
 //
 // One sibling on the canvas (a loose module, or a whole macro as ONE rigid unit) has grown; every
