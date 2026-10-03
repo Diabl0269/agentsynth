@@ -328,3 +328,51 @@ TEST(PopupMotionDismiss, CallOutDismissGoesThroughTheFadeToo) {
     }
     juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 }
+
+// ----------------------------------------------------------------------------------------------
+// Closes JUCE does itself leave on a picture. These need a real native window; a platform that
+// cannot give one in a test run skips them.
+// ----------------------------------------------------------------------------------------------
+
+namespace {
+
+struct RedWindow : juce::Component {
+    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::red); }
+};
+
+std::unique_ptr<RedWindow> showNativeWindow() {
+    auto window = std::make_unique<RedWindow>();
+    window->setBounds(200, 200, 100, 60);
+    PopupMotion::attach(*window);
+    window->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    window->setVisible(true);
+    return window;
+}
+
+void letItSettle() {
+    const auto until = juce::Time::getMillisecondCounter() + 300;
+    while (juce::Time::getMillisecondCounter() < until)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+}
+
+} // namespace
+
+TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    letItSettle();
+    window->setVisible(false);
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}
+
+TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    letItSettle();
+    window.reset();
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}

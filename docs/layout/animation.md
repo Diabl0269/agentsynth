@@ -308,7 +308,7 @@ click-through, shadowed window at the same place that fades and slides back, the
 plain window (menus, alerts, call-outs) is pictured with `createComponentSnapshot`; a window with a
 native title bar (the app's dialogs) is pictured, title bar included, from its `NSView` on macOS. A
 window deleted while still flagged visible leaves with the picture taken while it was open. A window
-that `dismiss` faded gets no picture (it already faded).
+that `dismiss` faded gets no picture (it already faded). `PopupMotion::getNumLeavingGhosts()` counts the pictures on screen, for tests (`PopupMotionLeaving`).
 
 **Not covered.**
 - Leaving, for a native-title window closed by JUCE itself (title-bar button) on Windows or Linux:

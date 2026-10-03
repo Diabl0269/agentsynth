@@ -29,6 +29,11 @@ bool& enabledFlag() {
     return enabled;
 }
 
+int& ghostCounter() {
+    static int count = 0;
+    return count;
+}
+
 int roundToInt(float v) { return (int)std::lround(v); }
 
 class Impl;
@@ -58,6 +63,7 @@ public:
         setOpaque(false);
         setInterceptsMouseClicks(false, false);
         setAccessible(false);
+        ++ghostCounter();
         setBounds(screenBounds);
         addToDesktop(juce::ComponentPeer::windowIsTemporary | juce::ComponentPeer::windowIgnoresKeyPresses |
                      juce::ComponentPeer::windowIgnoresMouseClicks |
@@ -71,6 +77,8 @@ public:
             [this] { finish(); });
         startTimer((int)popup_motion::durationMs(Phase::Out, reduce_) + kWatchdogSlackMs);
     }
+
+    ~Ghost() override { --ghostCounter(); }
 
     void paint(juce::Graphics& g) override {
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
@@ -390,6 +398,8 @@ void PopupMotion::attach(juce::Component& window) {
 void PopupMotion::setEnabled(bool enabled) { enabledFlag() = enabled; }
 
 bool PopupMotion::isEnabled() { return enabledFlag(); }
+
+int PopupMotion::getNumLeavingGhosts() { return ghostCounter(); }
 
 void PopupMotion::setAnimateOffScreenForTest(bool animate) { offscreenForTestFlag() = animate; }
 

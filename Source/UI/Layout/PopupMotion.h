@@ -114,6 +114,10 @@ public:
     /** True from dismiss() until its `reallyClose` has run. */
     static bool isDismissing(const juce::Component& window);
 
+    /** How many leaving pictures are on screen right now (a window JUCE hid or deleted that is still
+     *  fading). For tests. */
+    static int getNumLeavingGhosts();
+
     /** Test seam: lets dismiss() animate a window that has no native peer (the tween then ends on
      *  its watchdog timer, since no VBlank ever arrives). Default off. */
     static void setAnimateOffScreenForTest(bool animate);
