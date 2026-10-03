@@ -321,9 +321,18 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha));
     g.setFont(juce::Font(juce::FontOptions(kMacroPortNameFontSize)));
     // The name starts kMacroPortStripInset from the boundary edge and stops short of the interior
-    // jack; a name that does not fit is shortened with an ellipsis, never squeezed. First row only.
-    g.drawFittedText(name, macroPortNameArea(boundaryIsInput),
-                     boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1, 1.0f);
+    // jack; a name that does not fit is shortened with an ellipsis, never squeezed. A split stereo port has a
+    // second boundary jack on its own row: it carries the same name with " R" so no jack is left unnamed.
+    int boundaryJacks = 1;
+    if (auto* mb = dynamic_cast<ModuleBase*>(module);
+        mb != nullptr && !(module->acceptsMidi() || module->producesMidi()))
+        boundaryJacks =
+            juce::jmax(1, boundaryIsInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount());
+    for (int row = 0; row < boundaryJacks; ++row)
+        g.drawFittedText(row == 0 ? name : name + " R",
+                         macroPortNameArea(boundaryIsInput).translated(0, row * kMacroPortWidgetRowStep),
+                         boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
+                         1.0f);
 }
 
 float ModuleComponent::macroPortNameAlpha() const {
