@@ -10,9 +10,21 @@
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace {
 constexpr double kGlideMs = 160.0;
+
+// The part of the canvas the card's viewer shows, in canvas coordinates: the canvas (the card's parent) is a
+// transformed child of the editor that frames it. Everything when the card has no such grandparent.
+juce::Rectangle<int> visibleCanvasArea(const juce::Component& card) {
+    auto* canvas = card.getParentComponent();
+    auto* view = canvas != nullptr ? canvas->getParentComponent() : nullptr;
+    if (view == nullptr)
+        return {std::numeric_limits<int>::min() / 2, std::numeric_limits<int>::min() / 2,
+                std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+    return canvas->getLocalArea(view, view->getLocalBounds());
+}
 
 juce::Rectangle<float> lerpRect(juce::Rectangle<int> a, juce::Rectangle<int> b, float t) {
     auto lerp = [t](int x, int y) { return static_cast<float>(x) + static_cast<float>(y - x) * t; };
@@ -43,6 +55,10 @@ juce::Rectangle<float> CardGlideAnimator::currentRect(const Item& item) const no
 // A card already gliding retargets from where it is drawn right now (docs/layout/animation.md "Interruption"), and
 // keeps the alpha saved when it was first hidden: re-saving would record the 0 this class set. Every other live card
 // is rebased the same way because the driver restarts its clock at 0.
+// A card whose whole path (the union of its old and new rects, which every in-between rect stays inside) is outside
+// the visible canvas is neither hidden nor snapshotted: nothing of it can be seen, and rendering a snapshot per moved
+// card is what made an undo of a many-track arrange stall for most of a second. It keeps an item without a snapshot,
+// so cables touching it still slide (offsetFor).
 bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale) {
     std::vector<const Entry*> changed;
     std::vector<juce::Rectangle<int>> fromRects;
@@ -66,12 +82,17 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
                  items_.end());
     for (auto& item : items_)
         item.from = currentRect(item).toNearestInt();
+    const auto visible = visibleCanvasArea(*changed.front()->comp);
     for (size_t i = 0; i < changed.size(); ++i) {
         auto* comp = changed[i]->comp;
         auto existing = std::find_if(items_.begin(), items_.end(),
                                      [comp](const Item& it) { return it.comp.getComponent() == comp; });
         if (existing != items_.end()) {
             existing->to = comp->getBounds(); // `from` already rebased to the drawn position
+            if (existing->snapshot.isNull() && existing->from.getUnion(existing->to).intersects(visible)) {
+                existing->snapshot = comp->createComponentSnapshot(comp->getLocalBounds(), true, snapshotScale);
+                comp->setAlpha(0.0f); // was off-screen, now crosses the view: its alpha was never touched
+            }
             continue;
         }
         Item item;
@@ -80,8 +101,10 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         item.from = fromRects[i];
         item.to = comp->getBounds();
         item.savedAlpha = comp->getAlpha();
-        item.snapshot = comp->createComponentSnapshot(comp->getLocalBounds(), true, snapshotScale);
-        comp->setAlpha(0.0f);
+        if (item.from.getUnion(item.to).intersects(visible)) {
+            item.snapshot = comp->createComponentSnapshot(comp->getLocalBounds(), true, snapshotScale);
+            comp->setAlpha(0.0f);
+        }
         items_.push_back(std::move(item));
     }
     progress_ = 0.0f;
@@ -98,7 +121,9 @@ void CardGlideAnimator::applyTweenAt(float t) noexcept {
             item.comp = nullptr;
             item.snapshot = {};
         }
-    items_.erase(std::remove_if(items_.begin(), items_.end(), [](const Item& it) { return it.snapshot.isNull(); }),
+    // An off-screen card's item has no snapshot but a live card; one whose card is gone or grabbed has neither.
+    items_.erase(std::remove_if(items_.begin(), items_.end(),
+                                [](const Item& it) { return it.snapshot.isNull() && it.comp == nullptr; }),
                  items_.end());
 }
 

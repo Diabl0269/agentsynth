@@ -6,23 +6,24 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorPaintMemo.h"
 
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
-// Shared by the re-anchor pass and the hover setter below: the ModuleComponent hosting a given
-// graph node, or nullptr if none exists right now (a routing to a node whose card hasn't been
-// created/synced yet -- transient during a graph rebuild). O(nodes * components); only called from
-// the memoized cable rebuild and from a hover change, never per-paint-frame.
+#include <unordered_map>
+
+// The ModuleComponent hosting a given graph node, or nullptr if none exists right now (a routing to
+// a node whose card hasn't been created/synced yet -- transient during a graph rebuild). One node
+// lookup plus one pass over the cards; the re-anchor pass below builds its own map instead, since it
+// asks once per cable.
 ModuleComponent* GraphEditor::moduleComponentForNode(juce::AudioProcessorGraph::NodeID id) {
-    auto& graph = audioEngine.getGraph();
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr)
-            continue;
-        for (auto* node : graph.getNodes()) {
-            if (node->nodeID == id && node->getProcessor() == comp->getModule())
-                return comp;
-        }
-    }
+    ++graph_editor_paint::workCounters().nodeScans;
+    auto* node = audioEngine.getGraph().getNodeForId(id);
+    if (node == nullptr)
+        return nullptr;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr && comp->getModule() == node->getProcessor())
+            return comp;
     return nullptr;
 }
 
@@ -37,11 +38,24 @@ ModuleComponent* GraphEditor::moduleComponentForNode(juce::AudioProcessorGraph::
 // and mark landsOnKnob so paint can draw the landing dot (GraphEditorCables.cpp's
 // paintOverChildren). A hidden-page knob (sliderIndexForModTarget says -1) is left alone -- it
 // keeps the gutter jack pass 1/2 already gave it, exactly as before.
+// Runs on every cable rebuild (each 30 Hz tick and each glide frame), so the node -> card lookup is
+// one map built here in O(nodes + cards): a per-cable moduleComponentForNode() made this pass
+// O(cables x cards) and dominated the tick on a many-track project.
 void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables) {
+    std::unordered_map<const juce::AudioProcessor*, ModuleComponent*> compForProcessor;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr)
+            compForProcessor.emplace(comp->getModule(), comp);
+    std::unordered_map<uint32_t, ModuleComponent*> compForNode;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        if (auto it = compForProcessor.find(node->getProcessor()); it != compForProcessor.end())
+            compForNode.emplace(node->nodeID.uid, it->second);
+
     for (auto& cable : cables) {
-        auto* dstComp = moduleComponentForNode(juce::AudioProcessorGraph::NodeID{cable.destNodeId});
-        if (dstComp == nullptr)
+        const auto found = compForNode.find(cable.destNodeId);
+        if (found == compForNode.end())
             continue;
+        auto* dstComp = found->second;
         auto anchor = dstComp->getModTargetKnobAnchor(cable.destChannel);
         if (!anchor.has_value())
             continue;

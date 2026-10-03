@@ -3,11 +3,44 @@
 // GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest.
 
 #include "GraphEditor.h"
+#include "GraphEditorPaintMemo.h"
+
+namespace graph_editor_paint {
+namespace {
+HullMemoScope* activeMemo = nullptr; // innermost open scope; message thread only, like paint itself
+} // namespace
+
+// A paint pass asks for the same border many times (outline, chip, collapse button, '+'/'-', each port strip
+// row), and each ask unions the members' live bounds. Nothing moves a card during one paint(), so the first
+// answer holds for the rest of the pass; the scope is opened in GraphContentComponent::paint and nowhere else.
+HullMemoScope::HullMemoScope(const GraphEditor& editor)
+    : editor_(editor)
+    , previous_(activeMemo) {
+    activeMemo = this;
+}
+
+HullMemoScope::~HullMemoScope() { activeMemo = previous_; }
+
+WorkCounters& workCounters() noexcept {
+    static WorkCounters counters;
+    return counters;
+}
+} // namespace graph_editor_paint
 
 // Everything that draws or docks against a border (the dashed outline, the port strips, the chip and buttons,
-// the docked port widgets) reads this, so they all glide together.
+// the docked port widgets) reads this, so they all glide together. Inside a paint pass it is memoized per
+// macro (HullMemoScope above): computing it afresh per ask made a many-macro canvas spend most of each frame
+// re-unioning the same borders.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
-    return hullGlide_.apply(macroId, macroHullTargetBounds(macroId));
+    auto* memo = graph_editor_paint::activeMemo;
+    if (memo != nullptr && &memo->editor_ == this)
+        if (const auto it = memo->hulls_.find(macroId); it != memo->hulls_.end())
+            return it->second;
+    ++graph_editor_paint::workCounters().hullComputations;
+    const auto hull = hullGlide_.apply(macroId, macroHullTargetBounds(macroId));
+    if (memo != nullptr && &memo->editor_ == this)
+        memo->hulls_.emplace(macroId, hull);
+    return hull;
 }
 
 // Collapsed macros draw a card, not a border, so they never glide.

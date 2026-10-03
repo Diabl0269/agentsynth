@@ -95,17 +95,29 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
     // MacroPort entry, so absence from this map IS the "ordinary member" case above).
     // A two-row Stereo port also records each row under (uid, visible jack): key = uid * 4 + 1 + visibleJack.
     std::unordered_map<uint64_t, juce::Point<int>> portJackLocalForNode;
+    // uuid -> node, built once: resolving each member by a scan of the graph made this pass O(members x nodes).
+    std::unordered_map<juce::String, juce::AudioProcessorGraph::NodeID> nodeForUuid;
+    {
+        static const juce::Identifier uuidKey("uuid");
+        for (auto* node : graph().getNodes())
+            if (const auto uuid = node->properties[uuidKey].toString(); uuid.isNotEmpty())
+                nodeForUuid.emplace(uuid, node->nodeID); // first wins, as resolveMemberNodeId's scan does
+    }
+    auto resolveMember = [&nodeForUuid](const juce::String& uuid) {
+        const auto it = nodeForUuid.find(uuid);
+        return it != nodeForUuid.end() ? it->second : juce::AudioProcessorGraph::NodeID{};
+    };
     auto jackKey = [](uint32_t uid, int visibleJack) { return (uint64_t)uid * 4u + (uint64_t)(visibleJack + 1); };
     for (const auto& macro : macros.getAll()) {
         if (!macro.collapsed || !macros.isVisible(macro.id))
             continue; // expanded, or hidden under a collapsed ancestor whose card stands in for it
         for (const auto& uuid : macros.descendantMembers(macro.id)) {
-            auto nodeId = macroController_.resolveMemberNodeId(uuid);
+            auto nodeId = resolveMember(uuid);
             if (nodeId.uid != 0)
                 collapsedMacroForNode[nodeId.uid] = &macro;
         }
         for (const auto& port : macroController_.macroCardPortLayout(macro.id)) {
-            auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
+            auto nodeId = resolveMember(port.nodeUuid);
             if (nodeId.uid != 0)
                 portJackLocalForNode[jackKey(nodeId.uid, port.visibleJack)] = port.jackPos;
         }

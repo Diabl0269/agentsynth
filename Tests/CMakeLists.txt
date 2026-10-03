@@ -221,6 +221,7 @@ add_executable(Tests
     AI/PatchFeedbackStoreTests.cpp
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
+    App/ManyTracksProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
     App/MainComponent/MainComponentDocumentTests.cpp
@@ -246,6 +247,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorModDropHintTests.cpp
     UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp
     UI/Graph/GraphEditor/GraphEditorModHoverTests.cpp
+    UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp

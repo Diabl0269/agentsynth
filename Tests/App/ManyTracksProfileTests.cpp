@@ -1,0 +1,203 @@
+// ManyTracksProfileTests.cpp
+//
+// A disabled profiling bench, not a test: builds N instrument tracks through the real "+ Track -> Instrument" path in
+// a real MainComponent and prints the per-frame cost of the canvas tick, the card glide (auto-arrange, undo, redo),
+// the timeline and the mixer. Run by hand (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch):
+//   ./Tests --gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'
+// PROFILE_TRACKS=<n> (with PROFILE_EXPAND=1 to open every track's macro) runs one size; PROFILE_SPIN_TICK=<s>
+// (plus PROFILE_SPIN_PAINT=1) or PROFILE_SPIN_UNDO=<s> loops one pass for that long, to attach `sample` to.
+
+#include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
+
+#include "AppUndoManager.h"
+#include "MacroSet.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
+
+namespace {
+
+double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+
+double avgMs(int reps, const std::function<void()>& fn) {
+    fn(); // warm-up: the first paint rasterizes the card caches
+    const double t0 = nowMs();
+    for (int i = 0; i < reps; ++i)
+        fn();
+    return (nowMs() - t0) / reps;
+}
+
+void paintOnce(juce::Component& c) {
+    if (c.getWidth() > 0 && c.getHeight() > 0)
+        (void)c.createComponentSnapshot(c.getLocalBounds(), true, 1.0f);
+}
+
+// One glide frame as the VBlank runs it: tween + repaintCanvas (drops the cable memo) + a paint of the canvas.
+double glideFrameMs(GraphEditor& editor, bool withPaint) {
+    const double t0 = nowMs();
+    int frames = 0;
+    for (float t = 0.1f; t < 1.0f; t += 0.1f, ++frames) {
+        editor.advanceCardGlideForTest(t);
+        (void)editor.buildVisibleCables();
+        if (withPaint)
+            paintOnce(editor);
+    }
+    return (nowMs() - t0) / frames;
+}
+
+void profile(int tracks, bool expand) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 1000);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.simulateToggleBottomPanelClick(); // timeline visible
+    double t0 = nowMs();
+    for (int i = 0; i < tracks; ++i)
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    const double buildMs = nowMs() - t0;
+    // Each track gets 8 four-bar clips of 32 notes and one automation lane with 16 points.
+    auto& liveDoc = mc.getTimelineDoc();
+    synth::TimelineDoc doc; // populated off-line, then loaded in one notification
+    doc.fromVar(liveDoc.toVar());
+    std::vector<synth::TrackId> trackIds;
+    for (const auto& tr : doc.getTracks())
+        trackIds.push_back(tr.id);
+    for (auto id : trackIds) {
+        for (int c = 0; c < 8; ++c) {
+            const auto clip = doc.addClip(id, c * 16.0, 16.0, "Clip");
+            for (int n = 0; n < 32; ++n) {
+                synth::MidiNote note;
+                note.startBeat = n * 0.5;
+                note.lengthBeats = 0.4;
+                note.pitch = 48 + (n * 7) % 24;
+                doc.addNote(clip, note);
+            }
+        }
+        synth::AutomationLane::RangeSnapshot range;
+        range.maxValue = 1.0f;
+        const auto lane = doc.addLane(id, "node-x", "cutoff", range);
+        for (int p = 0; p < 16; ++p)
+            doc.addBreakpoint(lane, p * 8.0, (p % 2) ? 0.2 : 0.8);
+    }
+    liveDoc.fromVar(doc.toVar());
+    const auto firstClip = liveDoc.getTracks().front().clips.front().id;
+    int noteN = 0;
+    const double docMut = avgMs(5, [&] {
+        synth::MidiNote note;
+        note.startBeat = 0.25 * (++noteN % 60);
+        note.pitch = 30 + noteN % 60;
+        liveDoc.addNote(firstClip, note);
+    });
+    auto& editor = mc.getGraphEditor();
+    auto& glide = editor.getCardGlideForTest();
+    if (expand) {
+        std::vector<juce::String> ids;
+        for (const auto& m : editor.getMacros().getAll())
+            ids.push_back(m.id);
+        for (const auto& id : ids)
+            editor.getMacroController().setMacroCollapsed(id, false);
+        editor.finishCardGlideForTest();
+    }
+
+    int cards = 0; // module cards showing (a collapsed track's members are hidden behind its macro card)
+    for (auto* m : editor.getModuleComponents())
+        if (m != nullptr && m->isVisible())
+            ++cards;
+    const int macros = (int)editor.getMacros().getAll().size();
+    const int cables = (int)editor.buildVisibleCables().size();
+
+    if (const char* spin = std::getenv("PROFILE_SPIN_TICK")) { // for `sample`: spin the canvas tick
+        const double until = nowMs() + 1000.0 * std::atof(spin);
+        std::printf("[spin]\n");
+        std::fflush(stdout);
+        while (nowMs() < until) {
+            static_cast<juce::Timer&>(editor).timerCallback();
+            if (std::getenv("PROFILE_SPIN_PAINT") != nullptr)
+                paintOnce(editor);
+        }
+        return;
+    }
+    const double tick = avgMs(10, [&] { static_cast<juce::Timer&>(editor).timerCallback(); });
+    const double tickCables = avgMs(10, [&] {
+        static_cast<juce::Timer&>(editor).timerCallback();
+        (void)editor.buildVisibleCables();
+    });
+    const double tickPaint = avgMs(10, [&] {
+        static_cast<juce::Timer&>(editor).timerCallback();
+        paintOnce(editor);
+    });
+
+    t0 = nowMs();
+    editor.autoArrange();
+    const double arrangeMs = nowMs() - t0;
+    const bool armed = glide.isLive();
+    const double arrangeFrameNoPaint = glideFrameMs(editor, false);
+    const double arrangeFrame = glideFrameMs(editor, true);
+    editor.finishCardGlideForTest();
+
+    if (const char* spin = std::getenv("PROFILE_SPIN_UNDO")) { // for `sample`: spin undo/redo of the arrange
+        std::printf("[spin]\n");
+        std::fflush(stdout);
+        const double until = nowMs() + 1000.0 * std::atof(spin);
+        while (nowMs() < until) {
+            mc.getUndoManager().undo();
+            editor.finishCardGlideForTest();
+            mc.getUndoManager().redo();
+            editor.finishCardGlideForTest();
+        }
+        return;
+    }
+    t0 = nowMs();
+    mc.getUndoManager().undo();
+    const double undoMs = nowMs() - t0;
+    const double undoFrame = glideFrameMs(editor, true);
+    editor.finishCardGlideForTest();
+
+    t0 = nowMs();
+    mc.getUndoManager().redo();
+    const double redoMs = nowMs() - t0;
+    const double redoFrame = glideFrameMs(editor, true);
+    editor.finishCardGlideForTest();
+
+    auto& panel = mc.getTimelinePanel();
+    const double mcTick = avgMs(10, [&] { static_cast<juce::Timer&>(mc).timerCallback(); });
+    const double tlPaint = avgMs(5, [&] { paintOnce(panel); });
+    const double tlStrip =
+        avgMs(10, [&] { (void)panel.createComponentSnapshot({600, 0, 7, panel.getHeight()}, true, 1.0f); });
+    auto& vp = panel.getTrackHeaderViewport();
+    int y = 0;
+    const double tlScroll = avgMs(10, [&] {
+        y = (y + 40) % juce::jmax(1, vp.getViewedComponent()->getHeight());
+        vp.setViewPosition(0, y);
+        paintOnce(panel);
+    });
+    auto& mixer = mc.getBottomDock().getMixerPanel();
+    if (mixer.getWidth() == 0)
+        mixer.setBounds(0, 0, 1600, 400);
+    const double mixPaint = avgMs(5, [&] { paintOnce(mixer); });
+
+    std::printf(
+        "[profile] tracks=%d expand=%d macros=%d moduleCards=%d cables=%d build=%.0f | canvasTick=%.2f "
+        "tick+cables=%.2f "
+        "tick+paint=%.2f | arrange=%.1f armed=%d frameNoPaint=%.2f frame=%.2f | undo=%.1f frame=%.2f | "
+        "redo=%.1f frame=%.2f | docMutation=%.2f mcTick=%.2f tlPaint=%.2f tlStrip=%.2f tlScroll=%.2f mixPaint=%.2f\n",
+        tracks, expand ? 1 : 0, macros, cards, cables, buildMs, tick, tickCables, tickPaint, arrangeMs, armed ? 1 : 0,
+        arrangeFrameNoPaint, arrangeFrame, undoMs, undoFrame, redoMs, redoFrame, docMut, mcTick, tlPaint, tlStrip,
+        tlScroll, mixPaint);
+    std::fflush(stdout);
+}
+
+} // namespace
+
+TEST_F(ChannelFlowTest, DISABLED_ManyTracksProfile) {
+    if (const char* n = std::getenv("PROFILE_TRACKS")) {
+        profile(std::atoi(n), std::getenv("PROFILE_EXPAND") != nullptr);
+        return;
+    }
+    for (int n : {10, 40, 80})
+        for (bool expand : {false, true})
+            profile(n, expand);
+}
