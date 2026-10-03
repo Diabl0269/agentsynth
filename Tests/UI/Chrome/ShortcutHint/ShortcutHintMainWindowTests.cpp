@@ -179,7 +179,6 @@ TEST_F(ShortcutHintMainWindowTest, HoldingShiftLabelsTheDrawShapesAndNotTheBareT
     overlay->modifierKeysChanged(juce::ModifierKeys());
 }
 
-#if JUCE_MAC
 TEST_F(ShortcutHintMainWindowTest, HoldingCtrlLabelsRecordAndMetronomeOnTheTransportBar) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
@@ -205,7 +204,6 @@ TEST_F(ShortcutHintMainWindowTest, HoldingCtrlLabelsRecordAndMetronomeOnTheTrans
                            keyText(mc, "timelineToolDraw")));
     overlay->modifierKeysChanged(juce::ModifierKeys());
 }
-#endif
 
 TEST_F(ShortcutHintMainWindowTest, TheMixerTabLabelsItsSidePaneButtonWithTheToggleShortcut) {
     MainComponent mc(std::make_unique<MockProvider>());

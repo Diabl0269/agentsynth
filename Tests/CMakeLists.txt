@@ -406,6 +406,8 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
+    App/ShortcutManager/ShortcutManagerTransportChordsTests.cpp
+    UI/Timeline/TransportCtrlChordsTests.cpp
     App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
     App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp

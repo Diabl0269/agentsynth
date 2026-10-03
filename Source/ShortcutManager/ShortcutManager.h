@@ -32,6 +32,29 @@ enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, Mixer, Layout
 // subscription, since a bare std::function has exactly one slot.
 class ShortcutManager : public juce::ChangeBroadcaster {
 public:
+    /** Which modifier convention the factory defaults follow. Mac: Cmd and Ctrl are two physical keys,
+     *  so a "real Ctrl" chord is free. Other: JUCE folds Cmd onto Ctrl, so a chord that is Ctrl on Mac
+     *  is the SAME chord as the Cmd one and the Cmd action has to move. The host platform picks it;
+     *  setDefaultsPlatform() lets a test build the other platform's table. */
+    enum class DefaultsPlatform { Mac, Other };
+
+    static constexpr DefaultsPlatform hostDefaultsPlatform() noexcept {
+#if JUCE_MAC
+        return DefaultsPlatform::Mac;
+#else
+        return DefaultsPlatform::Other;
+#endif
+    }
+
+    DefaultsPlatform getDefaultsPlatform() const noexcept { return defaultsPlatform; }
+
+    /** Rebuilds every binding from the defaults of `platform` (and makes migrations follow it). */
+    void setDefaultsPlatform(DefaultsPlatform platform) {
+        defaultsPlatform = platform;
+        resetToDefaults();
+        sendSynchronousChangeMessage();
+    }
+
     ShortcutManager() {
         for (const auto& entry : getActionTable())
             actionIds.add(entry.id);
@@ -96,22 +119,45 @@ public:
         }
     }
 
-    /** One-shot, macOS only: Record and Metronome gained default chords (Ctrl+R / Ctrl+M), but
+    /** One-shot: Record and Metronome gained default chords (Ctrl+R / Ctrl+M) on every platform, but
      *  saveToProperties() persists every action's key, so an install that ever saved its settings
      *  holds them as UNBOUND and would never see the new defaults. Adopt the default only where the
      *  stored key is still unbound -- a user who bound their own chord keeps it -- and the flag stops
-     *  it re-firing if they later unbind on purpose. */
-    void migrateTransportCtrlChords([[maybe_unused]] juce::PropertiesFile& settings) {
-#if JUCE_MAC
+     *  it re-firing if they later unbind on purpose.
+     *
+     *  Off the Mac, Ctrl is also Cmd, so an old install holds Ctrl+M on Toggle Mod Matrix and Ctrl+R
+     *  on Repeat. Those two move to their new chords first (only if still on the old default), and a
+     *  transport chord is adopted only when no other General action holds it, so the migration can
+     *  never create two actions on one chord. */
+    void migrateTransportCtrlChords(juce::PropertiesFile& settings) {
         constexpr auto flag = "shortcutMigration_transportCtrlChords";
         if (settings.getBoolValue(flag, false))
             return;
         settings.setValue(flag, true);
-        if (!bindings["transportRecord"].isValid())
-            bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
-        if (!bindings["transportToggleMetronome"].isValid())
-            bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
-#endif
+        const juce::KeyPress ctrlR('r', juce::ModifierKeys::ctrlModifier, 0);
+        const juce::KeyPress ctrlM('m', juce::ModifierKeys::ctrlModifier, 0);
+        if (defaultsPlatform == DefaultsPlatform::Other) {
+            // Off the Mac the old Cmd defaults ARE Ctrl+R / Ctrl+M.
+            if (bindings["repeatSelection"] == ctrlR)
+                bindings["repeatSelection"] = juce::KeyPress('r', otherPlatformRepeatModifiers(), 0);
+            if (bindings["toggleModMatrix"] == ctrlM)
+                bindings["toggleModMatrix"] = juce::KeyPress('m', otherPlatformModMatrixModifiers(), 0);
+        }
+        if (!bindings["transportRecord"].isValid() && getConflictingAction("transportRecord", ctrlR).isEmpty())
+            bindings["transportRecord"] = ctrlR;
+        if (!bindings["transportToggleMetronome"].isValid() &&
+            getConflictingAction("transportToggleMetronome", ctrlM).isEmpty())
+            bindings["transportToggleMetronome"] = ctrlM;
+    }
+
+    /** Where Repeat and Toggle Mod Matrix live off the Mac, once Record and Metronome own Ctrl+R and
+     *  Ctrl+M (which there are also the Cmd chords). Ctrl+Shift+M is Locate Master's, so Mod Matrix
+     *  takes Ctrl+Alt. */
+    static juce::ModifierKeys otherPlatformRepeatModifiers() noexcept {
+        return juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier);
+    }
+    static juce::ModifierKeys otherPlatformModMatrixModifiers() noexcept {
+        return juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
     }
 
     void saveToProperties() {
@@ -454,6 +500,7 @@ private:
     // Built from getActionTable() in the constructor, so the order and the categories can never
     // drift apart.
     juce::StringArray actionIds;
+    DefaultsPlatform defaultsPlatform = hostDefaultsPlatform();
 
     // A ShortcutManager is usually a MainComponent-owned member that outlives every UI
     // surface holding a raw pointer to it, but a test that declares one as a LOCAL after the
