@@ -68,6 +68,22 @@ button and `MidiRecorder::startRecording` live on the transport bar
 ([transport](transport.md#recording)), which looks for the first `armed` track when it starts a
 take.
 
+## Show a track's module
+
+**Ctrl+E** on a focused track row (`timelineShowFocusedTrackModule`, rebindable, Timeline category) or the small target button at the right
+of the row's bottom line does the same thing: `TrackHeaderHost::showTrackModule`, implemented by `MainComponent::showTrackModule`
+(`MainComponentTrackModule.cpp`). The module is the track's *instrument* when it has one, so a Serum track lands on Serum and not on
+its Track In: the first node the bound Track In's MIDI reaches (through macro ports) that is a built-in MIDI instrument or a hosted
+plugin. With none (an audio track, a Track In wired to nothing) it is the bound node itself. It is selected and centred through
+`showNodeOnCanvas`, the path a modulator's "show" uses (the canvas centres at once; there is no animated pan helper). A node
+inside a collapsed macro, such as every instrument a new instrument track makes, has no card of its own, so the outermost collapsed
+macro's card is what gets centred. A hosted plugin's
+window is then toggled through `HostedPluginWindowManager::toggleEditorFor`, which reads the live window map, never a flag, because the
+window can be closed from its own title bar; a built-in instrument has no window, so it only gets its card selected. An unbound or
+orphaned track does nothing. The button (`TrackShowModuleButton`) is a Tab stop with a focus ring, named "Show <track> module", its
+tooltip names the live binding, and a click leaves focus on the row. It is not drawn on the Automation section header.
+Tests: `Tests/UI/Timeline/TimelineTrackShowModuleTests.cpp`, `Tests/App/MainComponent/MainComponentShowTrackModuleTests.cpp`.
+
 ## Keyboard focus and M/S/R
 
 A row is a real focus target — `setWantsKeyboardFocus(true)` in the constructor, the same pattern

@@ -103,6 +103,14 @@ public:
      *  (were one ever needed) would keep meaning. */
     void closeAllForNode(juce::AudioProcessorGraph::NodeID nodeId) { windows_.erase(nodeId); }
 
+    /** Closes the node's editor window when one is open, otherwise opens it (openEditorFor). */
+    void toggleEditorFor(HostedPluginModule* module, juce::AudioProcessorGraph::NodeID nodeId) {
+        if (windows_.find(nodeId) != windows_.end())
+            closeAllForNode(nodeId);
+        else
+            openEditorFor(module, nodeId);
+    }
+
     /** Destroys every open window. See the class comment's "Shutdown / member order" section for
      *  why MainComponent calls this explicitly, in addition to relying on declaration order. */
     void closeAll() { windows_.clear(); }

@@ -34,6 +34,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentAutomationLanes.cpp
     Source/MainComponent/MainComponentModulators.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
+    Source/MainComponent/MainComponentTrackModule.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
     Source/MainComponent/MainComponentTrackDuplicate.cpp
@@ -116,6 +117,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
+    Source/UI/Timeline/TrackShowModuleButton.h
+    Source/UI/Timeline/TrackShowModuleButton.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp

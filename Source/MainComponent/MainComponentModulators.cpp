@@ -299,12 +299,24 @@ void MainComponent::setNodeParameter(const juce::String& uuid, const juce::Strin
         undoManager.pushSnapshotFromCapture(graph);
 }
 
-// Select, then centre the canvas on the card, so a modulator off screen is found as well as highlighted.
+// Select, then centre the canvas on the card, so a modulator off screen is found as well as highlighted. A node inside
+// a collapsed macro has no card of its own on the canvas; the visible thing is the outermost collapsed macro's card,
+// so that is what gets centred (the hidden member's own bounds sit wherever its macro was expanded).
 void MainComponent::showNodeOnCanvas(const juce::String& uuid) {
     auto* node = findNodeByUuid(uuid);
     if (node == nullptr)
         return;
     selectNodeInGraph(uuid);
+    const synth::Macro* collapsedCard = nullptr;
+    auto& macros = graphEditor.getMacros();
+    for (const auto* macro = macros.findByMember(uuid); macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros.find(macro->parentId))
+        if (macro->collapsed)
+            collapsedCard = macro;
+    if (collapsedCard != nullptr) {
+        graphEditor.centreViewOn(collapsedCard->bounds.toFloat().getCentre());
+        return;
+    }
     for (auto* comp : graphEditor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == node->nodeID)
             graphEditor.centreViewOn(comp->getBounds().toFloat().getCentre());

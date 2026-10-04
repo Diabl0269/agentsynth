@@ -137,6 +137,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineResetTrackHeight", ShortcutCategory::Timeline},
         // Duplicates the focused track header (Cmd+D, the same chord the General "duplicateSelection" carries).
         {"timelineDuplicateFocusedTrack", ShortcutCategory::Timeline},
+        // Shows the focused track's module on the canvas, and opens or closes an instrument's window (Ctrl+E).
+        {"timelineShowFocusedTrackModule", ShortcutCategory::Timeline},
         {"timelineClipPrevious", ShortcutCategory::Timeline},
         {"timelineClipNext", ShortcutCategory::Timeline},
         {"timelineClipAbove", ShortcutCategory::Timeline},
