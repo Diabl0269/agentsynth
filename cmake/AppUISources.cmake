@@ -570,6 +570,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardLayoutOverride.h
     Source/UI/Graph/CardBody/DefaultCardLayouts.cpp
     Source/UI/Graph/CardBody/DefaultCardLayouts.h
+    Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h
@@ -675,6 +677,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorScope.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTimeTempo.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTestSeams.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.h
