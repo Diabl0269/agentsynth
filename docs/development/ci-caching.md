@@ -19,7 +19,11 @@ break in ways that look exactly like a healthy build, just slower — which is w
   rewrites every file's mtime each run and the compiler binary's mtime changes whenever GitHub
   rebuilds the runner image — under ccache's mtime-based defaults both produce false misses.
 - **FetchContent** — `build/_deps` (JUCE and GoogleTest sources), keyed on
-  `hashFiles('cmake/DependencyVersions.cmake')`.
+  `hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch')`:
+  the cached JUCE tree is the *patched* one ([`juce-patches.md`](juce-patches.md)), so a patch change must
+  change the key. The generation prefix was bumped for it (`deps4` → `deps5`, `release-deps-ninja4` →
+  `release-deps-ninja5`), because the `restore-keys` prefix fallback would otherwise restore an unpatched
+  `juce-src` that nothing re-patches.
 
 ## Six rules, each learned from an outage
 

@@ -150,6 +150,38 @@ deps_reuse_compute "$WORK/worktree" "$WORK/main" "build-ci-local"
 assert_args "no reuse: main checkout has no fetched _deps sources"
 assert_message "no reuse: nothing fetched yet, message explains why" "no fetched sources found"
 
+# --- JUCE is patched by FetchContent's PATCH_COMMAND, which a reused source dir skips -----------
+# make_patch <worktree_root> -- a worktree patch turning f.txt "unpatched" into "patched".
+make_patch() {
+    mkdir -p "$1/cmake/patches"
+    cat >"$1/cmake/patches/p.patch" <<'PATCH'
+diff --git a/f.txt b/f.txt
+--- a/f.txt
++++ b/f.txt
+@@ -1 +1 @@
+-unpatched
++patched
+PATCH
+}
+
+reset
+make_pins "$WORK/worktree" "set(JUCE_TAG 1.2.3)"
+make_pins "$WORK/main" "set(JUCE_TAG 1.2.3)"
+make_patch "$WORK/worktree"
+make_dep_src "$WORK/main" "build-ci-local" "juce"
+make_dep_src "$WORK/main" "build-ci-local" "sparkle"
+echo "unpatched" >"$WORK/main/build-ci-local/_deps/juce-src/f.txt"
+deps_reuse_compute "$WORK/worktree" "$WORK/main" "build-ci-local"
+assert_args "patched JUCE: an unpatched main-checkout copy is not reused, the others still are" \
+    "-DFETCHCONTENT_SOURCE_DIR_SPARKLE=$WORK/main/build-ci-local/_deps/sparkle-src"
+assert_message "patched JUCE: message says why JUCE was skipped" "lacks this worktree's cmake/patches"
+
+echo "patched" >"$WORK/main/build-ci-local/_deps/juce-src/f.txt"
+deps_reuse_compute "$WORK/worktree" "$WORK/main" "build-ci-local"
+assert_args "patched JUCE: a copy that already has the patch is reused" \
+    "-DFETCHCONTENT_SOURCE_DIR_JUCE=$WORK/main/build-ci-local/_deps/juce-src" \
+    "-DFETCHCONTENT_SOURCE_DIR_SPARKLE=$WORK/main/build-ci-local/_deps/sparkle-src"
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

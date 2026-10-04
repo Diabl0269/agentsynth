@@ -261,6 +261,28 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.
 
+### Add to card from the plugin window
+
+Two more ways in, for a parameter the user is looking at:
+
+- **Right-click a control in the plugin's own window.** A VST3 plugin that supports host context menus
+  asks the host for one with the control's `ParamID` (`IComponentHandler3::createContextMenu`). The
+  stock JUCE host ignores that id, so the build carries a small JUCE patch
+  ([`docs/development/juce-patches.md`](../development/juce-patches.md)) that appends app items to the
+  plugin's own. `HostedPluginModule` registers itself on every VST3 instance it publishes
+  (`registerParameterContextMenu`) and forwards the menu to its `onParameterContextMenu` slot, which the
+  card's `HostedCardBinding` owns and clears on shutdown. The item comes from
+  `appendAddToCardMenuItem` (`Source/UI/Graph/PluginKnobPicker/HostedParameterCardMenu.cpp`):
+  **Add to card** when the parameter is not on the card, a disabled **On the card** when it is, nothing
+  for an id the instance does not have. Choosing it calls `HostedCardLayoutSource::showParameter`, the
+  same model edit and `apply` the picker's tick makes (scope "This instance"), so the card rebuilds and the
+  change is one undo step. Only VST3 plugins that request a context menu for the control get the item; AU
+  and plugins that draw their own menus do not.
+- **Add control from plugin window...** on the card's right-click menu (hosted cards only, enabled once the
+  instance is live) opens the picker exactly like **Edit Layout...** but with *Touch in the plugin editor to
+  add* already ticked, which also opens the plugin's window. It is the reachable entry for touch capture
+  and the searchable list.
+
 ### Choosing knobs as built (FRO132)
 
 The picker is the shared card layout editor ([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)),
@@ -472,7 +494,12 @@ second root (`<settings>/ModuleCardLayouts/<ModuleType>/`).
   label, scope switch (clears the override and broadcasts), presets (save/load/delete, reset to
   automatic), touch-to-add via a real gesture and its off-thread -> message-thread hop, missing
   parameters, and the two real-gesture entry points (the card button and the context-menu item,
-  each through a real click handler with a stubbed `juce::CallOutBox`). The value-change fallback
+  each through a real click handler with a stubbed `juce::CallOutBox`), plus the "Add to card" item
+  (enabled, disabled "On the card", unknown id, module gone, the card's hook and rebuild, one undo step)
+  and "Add control from plugin window..." (hosted cards only, touch capture armed). The real popup of
+  a real VST3 plugin cannot run headless: those tests build the menu through
+  `HostedPluginModule::buildParameterContextMenu`, the function the patched JUCE host calls, and invoke the
+  item's action; `scripts/tests/juce-patch.test.sh` covers the patch applying. The value-change fallback
   and its burst filter are covered by `PluginKnobPickerTouchFallbackTests.cpp` (FRO241), see
   [Choosing knobs](#choosing-knobs).
 - `Tests/UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp` (FRO137): hosted controls

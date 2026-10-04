@@ -55,6 +55,11 @@ void PluginKnobPickerComponent::handleParameterTouched(int parameterIndex) {
         showParameter(it->paramId);
 }
 
+void PluginKnobPickerComponent::armTouchToAdd() {
+    touchToAddToggle_.setToggleState(true, juce::dontSendNotification);
+    touchCapture_->setArmed(true);
+}
+
 // Sets the toggle's visible state and arms exactly as its onClick would.
 void PluginKnobPickerComponent::setTouchToAddArmedForTest(bool armed) {
     touchToAddToggle_.setToggleState(armed, juce::dontSendNotification);

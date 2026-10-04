@@ -22,8 +22,8 @@
 #     alarm (scripts/ci-cache-check.sh's caller in the workflows, >8.5 GB actual usage) covers
 #     instead of a static sum.
 #   - every literal `ccache_max_size: <N><M|G>` in build-artifacts.yml's release build matrix.
-#   - a fixed DEPS_ALLOWANCE_MB for the build/_deps entries in both workflows (ci.yml's deps4,
-#     build-artifacts.yml's release-deps-ninja4, one entry per OS each) -- NOT capped by ccache, so
+#   - a fixed DEPS_ALLOWANCE_MB for the build/_deps entries in both workflows (ci.yml's deps5,
+#     build-artifacts.yml's release-deps-ninja5, one entry per OS each) -- NOT capped by ccache, so
 #     it can't be read off a config value; see the constant's own comment below for how it's
 #     derived.
 #
@@ -181,7 +181,7 @@ if [ -n "$ba_matches" ]; then
 fi
 
 total_mb=$((total_mb + DEPS_ALLOWANCE_MB))
-contributors+=("deps allowance (ci.yml deps4 + build-artifacts.yml release-deps-ninja4, all OSes) -> ${DEPS_ALLOWANCE_MB} MB")
+contributors+=("deps allowance (ci.yml deps5 + build-artifacts.yml release-deps-ninja5, all OSes) -> ${DEPS_ALLOWANCE_MB} MB")
 
 if [ "$LIST" -eq 1 ]; then
     printf '%s\n' "${contributors[@]}"

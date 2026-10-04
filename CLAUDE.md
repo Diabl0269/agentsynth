@@ -40,6 +40,7 @@ bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror 
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
 bash scripts/tests/check-ui-caps.test.sh           # no toUpperCase() / all-caps words in UI string literals (// not-ui-text: <reason> opts out)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
+bash scripts/tests/juce-patch.test.sh              # cmake/ApplyJucePatch.cmake applies the JUCE patch, idempotently (docs/development/juce-patches.md)
 bash scripts/check-file-sizes.sh            # 1000-line cap, strict ratchet baseline (--list / --update)
 bash scripts/check-function-sizes.sh        # 200-line-per-function cap, strict ratchet baseline (--list / --update)
 bash scripts/check-docs.sh                  # docs integrity: naming/links/refs/map, ratcheted naming only (--list / --update)

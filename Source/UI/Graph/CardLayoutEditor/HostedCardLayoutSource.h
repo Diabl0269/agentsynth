@@ -42,6 +42,13 @@ public:
 
     HostedPluginModule* getModule() const { return module_.get(); }
 
+    enum class ParameterState { Unknown, OnCard, Available };
+    /** Where `paramId` stands against the card layout this source reads. */
+    ParameterState parameterState(const juce::String& paramId) const;
+    /** Ticks `paramId` exactly as ticking its row in the picker does (scope "This instance"): one write,
+     *  one undo step. False, and nothing written, when it is unknown or already on the card. */
+    bool showParameter(const juce::String& paramId);
+
 private:
     void writeOverride(const juce::var& layout);
 

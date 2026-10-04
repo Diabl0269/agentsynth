@@ -41,6 +41,8 @@ private:
     void addChoice(const synth::ResolvedCardSlot& resolved, const juce::String& text);
     void wireGestures(synth::ui::HostedParameterAttachment& attachment, const juce::AudioProcessorParameter& param);
 
+    void appendParameterMenuItems(const juce::String& paramId, juce::PopupMenu& menu);
+
     void hostedInstanceGone() override;
     void hostedInstanceLive() override;
     void layoutChangedForPlugin(const synth::PluginIdentity& identity) override;

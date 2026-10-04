@@ -155,6 +155,10 @@ cmake, no compiler and no real worktree needed:
   checkout>/build-ci-local/_deps/{juce,googletest,sparkle}-src` for whichever of those the main
   checkout has already fetched. Partial reuse is fine — a source CMake still fetches on either side
   is fetched normally.
+- JUCE is reused only when every `cmake/patches/*.patch` of the worktree is already applied to the main
+  checkout's copy (`git apply --check --reverse`): a reused source dir skips FetchContent's patch step, so an
+  unpatched copy would build without the patch ([`juce-patches.md`](juce-patches.md)). The other sources are
+  still reused and the one-line message says JUCE was skipped.
 - `CI_LOCAL_NO_DEPS_REUSE=1` opts out unconditionally, forcing a normal from-scratch fetch.
 - Prints exactly one line saying what was reused, or why not (not a worktree, pins differ, nothing
   fetched yet in the main checkout, or the opt-out env is set).

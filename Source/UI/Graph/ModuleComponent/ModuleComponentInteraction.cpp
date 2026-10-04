@@ -436,10 +436,15 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
                 safeThis->showCardLayoutEditor();
         });
         m.addSeparator();
-    } else if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
+    } else if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module)) {
         synth::appendEditLayoutMenuItem(m, [safeThis] {
             if (safeThis != nullptr && safeThis->onChooseKnobsRequested)
                 safeThis->onChooseKnobsRequested();
+        });
+        // Opens the same picker with "touch a control in the plugin's window" already on.
+        m.addItem("Add control from plugin window...", hosted->hasInstance(), false, [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->showPluginKnobPicker(/*armTouchToAdd*/ true);
         });
         m.addSeparator();
     }

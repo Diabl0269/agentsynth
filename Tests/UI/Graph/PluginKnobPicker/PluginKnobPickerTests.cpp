@@ -12,16 +12,22 @@
 //   6. Entry points: the card's "Edit Layout..." button and its context-menu item, both driven by a
 //      real synthesized gesture through the real handler (a virtual seam stubs the actual
 //      juce::CallOutBox, which would otherwise crash a display-less runner).
+//   7. "Add to card" in the plugin window's parameter context menu, and the card menu's "Add control from
+//      plugin window..." (touch capture pre-armed). The real juce popup and a real VST3 plugin cannot run
+//      here: the menu is built through HostedPluginModule::buildParameterContextMenu, the very function the
+//      patched JUCE host calls, and the item's action is invoked directly.
 
 #include "../../../StubPluginInstance.h"
 #include "../../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
+#include "Modules/OscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h"
 #include "UI/Layout/DragCursor.h"
@@ -556,10 +562,12 @@ class RecordingModuleComponent final : public ModuleComponent {
 public:
     using ModuleComponent::ModuleComponent;
     int callOutBoxLaunches = 0;
+    std::unique_ptr<juce::Component> lastEditor; // what the call-out box would have shown
 
 protected:
-    void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component>, juce::Rectangle<int>) override {
+    void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int>) override {
         ++callOutBoxLaunches;
+        lastEditor = std::move(editor);
     }
 };
 
@@ -611,5 +619,151 @@ TEST(PluginKnobPickerEntryPointTest, ContextMenuEditLayoutOpensThePickerForAHost
     item->action();
 
     EXPECT_EQ(card.callOutBoxLaunches, 1);
+    card.detachFromProcessor();
+}
+
+// ============================================================================
+// 7. "Add to card" from the plugin window; "Add control from plugin window..." on the card
+// ============================================================================
+
+namespace {
+std::vector<juce::String> overrideParamIds(const HostedPluginModule& module) {
+    std::vector<juce::String> ids;
+    const auto parsed = CardLayout::fromVar(module.getCardLayoutOverride());
+    for (const auto& slot : parsed.layout.slots)
+        ids.push_back(slot.paramId);
+    return ids;
+}
+
+juce::PopupMenu windowMenuFor(HostedPluginModule& module, const juce::String& paramId) {
+    juce::PopupMenu menu;
+    module.buildParameterContextMenu(paramId, menu);
+    return menu;
+}
+} // namespace
+
+TEST(AddToCardMenuTest, AnUnshownParameterOffersAddToCardAndTheChoiceIsOneUndoStep) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob"), knobSpec("j", "Other")});
+    AppUndoManager undo;
+    node.module->onParameterContextMenu = [&](const juce::String& id, juce::PopupMenu& menu) {
+        synth::ui::appendAddToCardMenuItem(menu, *node.module, &rig.store, rig.engine.getGraph(), node.nodeId, &undo,
+                                           id);
+    };
+
+    const auto menu = windowMenuFor(*node.module, "k");
+    const auto* item = findMenuItemByText(menu, "Add to card");
+    ASSERT_NE(item, nullptr);
+    EXPECT_TRUE(item->isEnabled);
+    EXPECT_EQ(findMenuItemByText(menu, "On the card"), nullptr);
+    ASSERT_TRUE(static_cast<bool>(item->action));
+
+    const int serialBefore = undo.getEditSerial();
+    item->action();
+
+    EXPECT_EQ(overrideParamIds(*node.module), (std::vector<juce::String>{"k"}));
+    EXPECT_EQ(undo.getEditSerial(), serialBefore + 1);
+    ASSERT_TRUE(undo.undo());
+    EXPECT_TRUE(overrideParamIds(*node.module).empty()) << "one undo takes the parameter off the card again";
+}
+
+TEST(AddToCardMenuTest, AParameterAlreadyOnTheCardShowsADisabledOnTheCardItem) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    CardLayout layout;
+    layout.version = CardLayout::kCurrentVersion;
+    layout.slots.push_back(slotFor("k"));
+    node.module->setCardLayoutOverride(layout.toVar());
+    AppUndoManager undo;
+
+    juce::PopupMenu menu;
+    synth::ui::appendAddToCardMenuItem(menu, *node.module, &rig.store, rig.engine.getGraph(), node.nodeId, &undo, "k");
+
+    const auto* item = findMenuItemByText(menu, "On the card");
+    ASSERT_NE(item, nullptr);
+    EXPECT_FALSE(item->isEnabled);
+    EXPECT_EQ(findMenuItemByText(menu, "Add to card"), nullptr);
+    EXPECT_EQ(undo.getEditSerial(), 0);
+}
+
+TEST(AddToCardMenuTest, AnIdTheInstanceDoesNotHaveAddsNothing) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    juce::PopupMenu menu;
+    synth::ui::appendAddToCardMenuItem(menu, *node.module, &rig.store, rig.engine.getGraph(), node.nodeId, nullptr,
+                                       "no-such-parameter");
+    EXPECT_EQ(menu.getNumItems(), 0);
+}
+
+TEST(AddToCardMenuTest, ChoosingAfterTheModuleIsGoneIsANoOp) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    juce::PopupMenu menu;
+    synth::ui::appendAddToCardMenuItem(menu, *node.module, &rig.store, rig.engine.getGraph(), node.nodeId, nullptr,
+                                       "k");
+    const auto* item = findMenuItemByText(menu, "Add to card");
+    ASSERT_NE(item, nullptr);
+    node.module->unloadPlugin();
+    item->action(); // must not touch the unloaded module
+    EXPECT_TRUE(overrideParamIds(*node.module).empty());
+}
+
+TEST(AddToCardMenuTest, TheCardRegistersItsHookAndRebuildsWhenAParameterIsAdded) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    RecordingModuleComponent card(node.module, node.nodeId, rig.editor);
+    card.setSize(240, 200);
+    ASSERT_NE(node.module->onParameterContextMenu, nullptr);
+    EXPECT_EQ(childWithId<juce::Slider>(card, "hostedKnob:k"), nullptr) << "precondition: not on the card";
+
+    const auto menu = windowMenuFor(*node.module, "k");
+    const auto* item = findMenuItemByText(menu, "Add to card");
+    ASSERT_NE(item, nullptr);
+    item->action();
+
+    EXPECT_NE(childWithId<juce::Slider>(card, "hostedKnob:k"), nullptr) << "the card rebuilt with the new control";
+    EXPECT_NE(findMenuItemByText(windowMenuFor(*node.module, "k"), "On the card"), nullptr);
+
+    card.detachFromProcessor();
+    EXPECT_EQ(windowMenuFor(*node.module, "k").getNumItems(), 0) << "a torn-down card leaves no hook behind";
+}
+
+TEST(AddToCardMenuTest, TheCardMenuOffersAddControlFromPluginWindowAndArmsTouchCapture) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    std::vector<juce::AudioProcessorGraph::NodeID> editorRequests;
+    rig.editor.onOpenPluginEditorRequested = [&](juce::AudioProcessorGraph::NodeID id) {
+        editorRequests.push_back(id);
+    };
+    RecordingModuleComponent card(node.module, node.nodeId, rig.editor);
+
+    const auto menu = card.buildModuleContextMenu();
+    const auto* item = findMenuItemByText(menu, "Add control from plugin window...");
+    ASSERT_NE(item, nullptr);
+    EXPECT_TRUE(item->isEnabled);
+    ASSERT_TRUE(static_cast<bool>(item->action));
+    item->action();
+
+    ASSERT_EQ(card.callOutBoxLaunches, 1);
+    auto* picker = dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get());
+    ASSERT_NE(picker, nullptr);
+    EXPECT_TRUE(picker->isTouchToAddArmedForTest());
+    ASSERT_EQ(editorRequests.size(), 1u) << "arming opens the plugin's own window";
+    EXPECT_EQ(editorRequests[0], node.nodeId);
+
+    // "Edit Layout..." keeps opening the picker unarmed.
+    card.onChooseKnobsRequested();
+    picker = dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get());
+    ASSERT_NE(picker, nullptr);
+    EXPECT_FALSE(picker->isTouchToAddArmedForTest());
+    card.detachFromProcessor();
+}
+
+TEST(AddToCardMenuTest, ABuiltInCardMenuHasNoAddControlFromPluginWindowItem) {
+    PickerRig rig;
+    auto* oscillator = new OscillatorModule();
+    auto node = rig.engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(oscillator));
+    ModuleComponent card(oscillator, node->nodeID, rig.editor);
+    EXPECT_EQ(findMenuItemByText(card.buildModuleContextMenu(), "Add control from plugin window..."), nullptr);
     card.detachFromProcessor();
 }
