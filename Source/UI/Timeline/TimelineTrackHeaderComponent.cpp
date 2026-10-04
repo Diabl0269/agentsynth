@@ -22,6 +22,7 @@ juce::KeyPress plainKey(int character) { return juce::KeyPress(character, juce::
 constexpr int kSwatchWidth = 8;
 constexpr int kHeightHandleThickness = 5; // the strip along the row's bottom edge
 const juce::KeyPress kDuplicateKey('d', juce::ModifierKeys::commandModifier, 0);
+const juce::KeyPress kShowModuleKey('e', juce::ModifierKeys::ctrlModifier, 0);
 const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
@@ -181,6 +182,13 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
     initHeightHandle();
 
+    // Ctrl+E's pointer and Tab twin. Its tooltip names the binding, so refreshFromDoc rebuilds it.
+    addAndMakeVisible(showModuleButton_);
+    showModuleButton_.onClick = [this] {
+        if (host_ != nullptr)
+            host_->showTrackModule(trackId_);
+    };
+
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
@@ -326,7 +334,9 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     setTitle(t->name);
     setTooltip("Right-click, Shift+F10 or Return for the track menu; " +
                bindingText("timelineDuplicateFocusedTrack", kDuplicateKey) + " duplicates the track, " +
-               bindingText("timelineDeleteFocusedTrack", kDeleteTrackKey) + " deletes it");
+               bindingText("timelineDeleteFocusedTrack", kDeleteTrackKey) + " deletes it, " +
+               bindingText("timelineShowFocusedTrackModule", kShowModuleKey) + " shows its module");
+    showModuleButton_.setTrack(t->name, bindingText("timelineShowFocusedTrackModule", kShowModuleKey));
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
@@ -373,7 +383,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         bindingChip_.setVisible(false);
         for (juce::Component* hidden :
              {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&muteButton_),
-              static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_)})
+              static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_),
+              static_cast<juce::Component*>(&showModuleButton_)})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");
@@ -489,6 +500,10 @@ void TimelineTrackHeaderComponent::resized() {
 
     // Bottom row: the binding chip, sharing with the channel chip when one is showing.
     auto bottomRow = bounds.reduced(0, 1);
+    const auto showSlot = bottomRow.removeFromRight(TrackShowModuleButton::kSize);
+    showModuleButton_.setBounds(showSlot.withSizeKeepingCentre(
+        TrackShowModuleButton::kSize, juce::jmin(TrackShowModuleButton::kSize, showSlot.getHeight())));
+    bottomRow.removeFromRight(kRowPadding);
     if (channelChip_.isVisible()) {
         channelChip_.setBounds(bottomRow.removeFromRight(bottomRow.getWidth() / 2));
         bottomRow.removeFromRight(kRowPadding);
@@ -704,6 +719,12 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (!isSectionHeader() && matchesAction(key, "timelineDuplicateFocusedTrack", kDuplicateKey)) {
         if (host_ != nullptr)
             host_->duplicateTrack(trackId_);
+        return true;
+    }
+    // Ctrl+E shows THIS row's module (the same request as its button); a section header has no module of its own.
+    if (!isSectionHeader() && matchesAction(key, "timelineShowFocusedTrackModule", kShowModuleKey)) {
+        if (host_ != nullptr)
+            host_->showTrackModule(trackId_);
         return true;
     }
     // A folds THIS row's lanes, like the arrow (a row without an arrow still claims the key, so it never

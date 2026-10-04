@@ -499,6 +499,30 @@ TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineDuplicateFocusedTrackHas
 }
 
 // ---------------------------------------------------------------------------
+// timelineShowFocusedTrackModule -- Ctrl+E, Timeline category: a surface action claimed by the track header's
+// keyPressed. The Mixer's "mixerToggleEq" carries the same chord on the Mac; conflicts are per category.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleIsRegisteredWithItsNameCategoryAndCtrlE) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineShowFocusedTrackModule"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineShowFocusedTrackModule"), "Show Focused Track Module");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineShowFocusedTrackModule"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineShowFocusedTrackModule");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::ctrlModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleHasNoConflictInItsCategory) {
+    const auto binding = manager.getBinding("timelineShowFocusedTrackModule");
+    EXPECT_TRUE(manager.getConflictingAction("timelineShowFocusedTrackModule", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineShowFocusedTrackModule", binding);
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineShowFocusedTrackModuleHasNoCommand) {
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineShowFocusedTrackModule"), AppCommands::kNoCommand);
+}
+
+// ---------------------------------------------------------------------------
 // transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
 // (docs/control/midi-remote.md#action-targets) uses for the play/stop toggle. See
 // Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp for the rest of the family

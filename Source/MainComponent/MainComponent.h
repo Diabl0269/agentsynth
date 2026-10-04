@@ -500,6 +500,7 @@ private:
     void setNodeParameter(const juce::String& uuid, const juce::String& paramId, float value,
                           synth::ui::ParameterEditPhase phase) override;
     void showNodeOnCanvas(const juce::String& uuid) override;
+    void showTrackModule(synth::TrackId track) override;
     juce::ApplicationProperties* getAppProperties() override;
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;

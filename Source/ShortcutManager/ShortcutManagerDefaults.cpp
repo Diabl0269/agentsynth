@@ -305,6 +305,10 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // on purpose: conflicts are per category, and the row's own keyPressed claims the key before the
     // command layer sees it, so Cmd+D elsewhere keeps its current meaning.
     bindings["timelineDuplicateFocusedTrack"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
+    // Ctrl+E shows the focused track's module. A REAL ctrlModifier on every platform (Cmd+E is taken on the Mac, and
+    // off the Mac Cmd is Ctrl, so the one literal chord is the same everywhere). The Mixer's "mixerToggleEq" also
+    // carries Ctrl+E on the Mac; conflicts are per category and the track row claims the key first, so neither moves.
+    bindings["timelineShowFocusedTrackModule"] = juce::KeyPress('e', juce::ModifierKeys::ctrlModifier, 0);
     // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
     // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
     // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.

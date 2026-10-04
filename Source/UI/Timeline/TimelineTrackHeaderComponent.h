@@ -15,6 +15,7 @@
 #include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
+#include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -298,6 +299,8 @@ struct TrackHeaderHost {
                                   ParameterEditPhase /*phase*/) {}
     /** Selects the node on the canvas and brings it into view. */
     virtual void showNodeOnCanvas(const juce::String& uuid) { selectNodeInGraph(uuid); }
+    /** Ctrl+E / the row's button: the track's module on the canvas; an instrument's window opens, or closes if open. */
+    virtual void showTrackModule(synth::TrackId track) { juce::ignoreUnused(track); }
 
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
      *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
@@ -622,6 +625,7 @@ public:
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
     ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
+    TrackShowModuleButton& getShowModuleButton() noexcept { return showModuleButton_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
@@ -803,6 +807,7 @@ private:
     ContextMenuForwardingButton soloButton_{*this, "S"};
     ContextMenuForwardingButton armButton_{*this, "R"};
     TrackFoldArrow foldArrow_;
+    TrackShowModuleButton showModuleButton_;
     EdgeResizeHandle heightHandle_{EdgeResizeHandle::Axis::Vertical};
     void initHeightHandle();
     void refreshHeightHandleText();
