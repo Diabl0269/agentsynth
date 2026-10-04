@@ -5,6 +5,7 @@
 #include "CardLayoutEditBar.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
@@ -31,8 +32,8 @@ class BuiltInCardLayoutSource;
  * to the new card, so it holds the GraphEditor and the node id and never the card it covers. Done
  * keeps the result, Cancel or Esc restores the layout the card opened with; the whole session is one
  * undo step, recorded when the source is destroyed. The bar's Preset and Apply to menus, and the "+ Add control"
- * strip the overlay adds under the card, are the other things it hosts, and on an ADSR card the bar's "Time and tempo"
- * switch rewrites the stages' group.
+ * strip the overlay adds under the card, are the other things it hosts; on an ADSR card the strip also holds the
+ * "Time and tempo" switch, which rewrites the stages' group.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -42,6 +43,7 @@ class CardLayoutOnCardEditor final
 public:
     /** The strip under the card that holds "+ Add control": the overlay reaches this far past the card. */
     static constexpr int kAddStripHeight = 30;
+    static constexpr int kTimeTempoWidth = 120;
 
     /** Opens an editor over node `nodeId`'s card and adds it to the card's parent; null when the card
      *  is not drawn from layout data. `shortcuts` may be null (the default keys apply). */
@@ -78,6 +80,7 @@ public:
     CardLayoutControlPanel* getControlPanelForTest() const { return panel_.getComponent(); }
     CardLayoutEditBar& getEditBarForTest() noexcept { return editBar_; }
     juce::TextButton& getAddButtonForTest() noexcept { return addControl_; }
+    CardSegmentedSwitch& getTimeTempoSwitchForTest() noexcept { return timeTempo_; }
     /** The open Add control panel, or null once it is closed. */
     CardLayoutAddPanel* getAddPanelForTest() const { return addPanel_.getComponent(); }
     /** The Apply to and Preset menus as the bar's buttons would show them. */
@@ -216,6 +219,7 @@ private:
     juce::String panelParamId_;
     juce::Component::SafePointer<CardLayoutAddPanel> addPanel_;
     juce::TextButton addControl_{"+ Add control"};
+    CardSegmentedSwitch timeTempo_{"Time and tempo", juce::StringArray{"Shared", "Separate"}};
     AddDrag addDrag_;
     bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.
 

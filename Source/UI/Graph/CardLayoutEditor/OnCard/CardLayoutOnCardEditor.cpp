@@ -38,7 +38,6 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
     editBar_.onCancel = [this] { cancel(); };
     editBar_.onDone = [this] { done(); };
-    editBar_.onTimeTempo = [this](int index) { chooseTimeTempo(index); };
     editBar_.onPreset = [this] {
         buildPresetMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editBar_.getPresetButton()));
     };
@@ -50,6 +49,11 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     addControl_.setTooltip("Add a hidden control");
     addControl_.onClick = [this] { openAddPanel(); };
     addAndMakeVisible(addControl_);
+    timeTempo_.setTooltip("Show each stage once (its time or tempo control follows the card's Time/Tempo switch), "
+                          "or as separate Time and Tempo groups");
+    timeTempo_.onChange = [this](int index) { chooseTimeTempo(index); };
+    timeTempo_.setVisible(false);
+    addChildComponent(timeTempo_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -297,15 +301,17 @@ void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
     }
 }
 
+// The strip under the card: the Time and tempo switch (ADSR cards) on the left, "+ Add control" taking the rest.
 void CardLayoutOnCardEditor::resized() {
-    const int available = getWidth() - 2 * kBarMargin;
-    const bool twoRows = editBar_.hasTimeTempo() && CardLayoutEditBar::needsTwoRows(available);
-    editBar_.setTwoRows(twoRows);
-    const int width = std::min(available, twoRows ? CardLayoutEditBar::kMinWidth
-                                                  : CardLayoutEditBar::preferredWidth(editBar_.hasTimeTempo()));
+    const int width = std::min(getWidth() - 2 * kBarMargin, CardLayoutEditBar::kMinWidth);
     const int y = (ModuleComponent::kHeaderHeight - CardLayoutEditBar::kHeight) / 2;
-    editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::heightFor(twoRows));
-    addControl_.setBounds(0, getHeight() - kAddStripHeight + kAddGap, getWidth(), kAddStripHeight - kAddGap);
+    editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::kHeight);
+    auto strip = getLocalBounds().removeFromBottom(kAddStripHeight).withTrimmedTop(kAddGap);
+    if (timeTempo_.isVisible()) {
+        timeTempo_.setBounds(strip.removeFromLeft(kTimeTempoWidth));
+        strip.removeFromLeft(kBarMargin);
+    }
+    addControl_.setBounds(strip);
 }
 
 } // namespace synth::ui

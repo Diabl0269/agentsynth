@@ -67,7 +67,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
 | The layout list: the panel, its rows, its working model, and the two sources (built-in module, hosted plugin). Only a hosted plugin's "Edit Layout..." opens it now | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentHostedPluginCard.cpp` opens it |
 | The on-card editor ("Edit Layout...", the editor of every built-in card): the overlay, one outline per control (a grip on the movable ones), the edit bar (Preset, Apply to, Cancel, Done), the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
-| The ADSR "Time and tempo" switch: the pure Shared/Separate conversion of the stages group, and the bar switch that writes it | `CardBody/DefaultLayouts/AdsrTimeTempo.*`; `OnCard/CardLayoutOnCardEditorTimeTempo.cpp` |
+| The ADSR "Time and tempo" switch: the pure Shared/Separate conversion of the stages group, and the strip switch that writes it | `CardBody/DefaultLayouts/AdsrTimeTempo.*`; `OnCard/CardLayoutOnCardEditorTimeTempo.cpp` |
 | Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
@@ -430,11 +430,10 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   as fader picks `faderV` ([module-card.md](module-card.md#hide-or-show-from-the-right-click-menu)).
 - **Edit Layout... (built): the card is the editor, and the only editor of a built-in card.** From a control's menu or the module menu (in the
   block after Bypass Module), the card gets an accent outline and an edit bar in its header (**Preset**,
-  **Apply to**, **Cancel**, **Done**; on an ADSR, Amp Env or Filter Env card a "Time and tempo" switch
-  with **Shared** and **Separate** segments sits left of Preset and rewrites the stages group at once,
-  like any other edit of the session, so Cancel undoes it; on a card too narrow to hold it beside the buttons (a standard ADSR card)
-  it takes a second row under them, the bar growing 26 px into the card; it shows only while the layout still has its stages),
-  and a **+ Add control** button under it. Every control
+  **Apply to**, **Cancel**, **Done**), and under the card a strip with a **+ Add control** button; on an ADSR, Amp Env or Filter Env card
+  that strip also holds a "Time and tempo" switch with **Shared** and **Separate** segments, left of Add control
+  (it shows only while the layout still has its stages) and rewrites the stages group at once,
+  like any other edit of the session, so Cancel undoes it. Every control
   of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
   outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
   outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
@@ -503,7 +502,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     the saved presets, a tick on the one whose layout equals the card's now. Choosing a preset writes it to
     the scope in force and the overlay re-syncs to the rebuilt card. A name the store refuses (the reserved
     "default") is announced and saves nothing. Deleting a preset is not offered here.
-  - *+ Add control (built).* A full-width **+ Add control** button sits in a 30 px strip under the card: the
+  - *+ Add control (built).* A **+ Add control** button (full width, less the switch on an ADSR card) sits in a 30 px strip under the card: the
     overlay reaches that far past the card's bottom edge, so no neighbouring card moves and the card keeps
     its size. It is off while every control is on the card. It opens a call-out panel (the same kind as the
     per-control panel) with a search field, a count line ("3 hidden controls"; "2 of 3 hidden controls"
@@ -526,8 +525,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
       Released outside the card or over the panel, nothing is added.
     - *Motion and speech.* The added control fades in at its spot over 160 ms (80 ms under Reduce Motion);
       "Drive added" is announced. The panel eases in and out like every call-out.
-    - *Keys.* Tab order in the bar is (Time and tempo on an ADSR card,) Preset, Apply to, Cancel, Done; the Add control button comes after the
-      outlines. Each has the accent focus ring, an accessible name ("Preset", "Apply to", "Add control") and a
+    - *Keys.* Tab order in the bar is Preset, Apply to, Cancel, Done; then the outlines, then (on an ADSR card) the Time and tempo switch and the Add control button. Each has the accent focus ring, an accessible name ("Preset", "Apply to", "Add control") and a
       tooltip ("Save, load or reset this card's layout", "Choose which cards this layout changes", "Add a
       hidden control"). The panel's rows are named buttons but not Tab stops: the search field keeps focus and
       Up and Down announce the chosen row ("Drive, 1 of 2").

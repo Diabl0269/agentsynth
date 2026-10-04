@@ -43,19 +43,18 @@ AdsrTimeTempo modeOf(OnCardRig& rig, NodeID id) {
 }
 
 void choose(CardLayoutOnCardEditor& editor, int index) {
-    editor.getEditBarForTest().getTimeTempoSwitch().setSelectedIndex(index, juce::sendNotificationSync);
+    editor.getTimeTempoSwitchForTest().setSelectedIndex(index, juce::sendNotificationSync);
 }
 
 } // namespace
 
-TEST(OnCardTimeTempo, AnAdsrCardsBarHasTheSwitchOnSharedWithItsTitleAndTooltip) {
+TEST(OnCardTimeTempo, AnAdsrCardsStripHasTheSwitchOnSharedWithItsTitleAndTooltip) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<ADSRModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    auto& bar = editor->getEditBarForTest();
-    ASSERT_TRUE(bar.hasTimeTempo());
-    auto& toggle = bar.getTimeTempoSwitch();
+    ASSERT_TRUE(editor->getTimeTempoSwitchForTest().isVisible());
+    auto& toggle = editor->getTimeTempoSwitchForTest();
     EXPECT_TRUE(toggle.isVisible());
     EXPECT_EQ(toggle.getTitle(), "Time and tempo");
     EXPECT_EQ(toggle.getTooltip(),
@@ -65,8 +64,8 @@ TEST(OnCardTimeTempo, AnAdsrCardsBarHasTheSwitchOnSharedWithItsTitleAndTooltip) 
     EXPECT_EQ(toggle.getSegment(0)->getButtonText(), "Shared");
     EXPECT_EQ(toggle.getSegment(1)->getButtonText(), "Separate");
     EXPECT_EQ(toggle.getSelectedIndex(), kShared);
-    EXPECT_TRUE(bar.getLocalBounds().contains(toggle.getBounds()));
-    EXPECT_FALSE(toggle.getBounds().intersects(bar.getPresetButton().getBounds()));
+    EXPECT_TRUE(editor->getLocalBounds().contains(toggle.getBounds()));
+    EXPECT_FALSE(toggle.getBounds().intersects(editor->getAddButtonForTest().getBounds()));
 }
 
 TEST(OnCardTimeTempo, ChoosingSeparateRebuildsTheCardWithTimeAndTempoGroupsBothVisible) {
@@ -85,7 +84,7 @@ TEST(OnCardTimeTempo, ChoosingSeparateRebuildsTheCardWithTimeAndTempoGroupsBothV
         ASSERT_NE(widget, nullptr) << paramId;
         EXPECT_TRUE(widget->isVisible()) << paramId << " is always on the card";
     }
-    EXPECT_EQ(editor->getEditBarForTest().getTimeTempoSwitch().getSelectedIndex(), kSeparate);
+    EXPECT_EQ(editor->getTimeTempoSwitchForTest().getSelectedIndex(), kSeparate);
     EXPECT_NE(editor->getOutlineForTest("attackDiv"), nullptr) << "the divisions are outlined too";
 }
 
@@ -161,34 +160,35 @@ TEST(OnCardTimeTempo, AnOpenSessionOnACardAlreadySeparateShowsSeparate) {
 
     auto* second = rig.openOnCard(id);
     ASSERT_NE(second, nullptr);
-    EXPECT_EQ(second->getEditBarForTest().getTimeTempoSwitch().getSelectedIndex(), kSeparate);
+    EXPECT_EQ(second->getTimeTempoSwitchForTest().getSelectedIndex(), kSeparate);
 }
 
-TEST(OnCardTimeTempo, OtherCardsBarsHaveNoSwitch) {
+TEST(OnCardTimeTempo, OtherCardsHaveNoSwitch) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    EXPECT_FALSE(editor->getEditBarForTest().hasTimeTempo());
-    EXPECT_FALSE(editor->getEditBarForTest().getTimeTempoSwitch().isVisible());
+    EXPECT_FALSE(editor->getTimeTempoSwitchForTest().isVisible());
     EXPECT_EQ(synth::test::walkTabOrder(*editor).names()[0], "Preset");
 }
 
-TEST(OnCardTimeTempo, TheSwitchIsTheFirstTabStopThenArrowKeysChangeTheSegment) {
+TEST(OnCardTimeTempo, TheSwitchIsATabStopBeforeAddControlThenArrowKeysChangeTheSegment) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<ADSRModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
 
     const auto names = synth::test::walkTabOrder(*editor).names();
-    ASSERT_GE(names.size(), 5);
-    EXPECT_EQ(names[0], "Time and tempo");
-    EXPECT_EQ(names[1], "Preset");
-    EXPECT_EQ(names[2], "Apply to");
-    EXPECT_EQ(names[3], "Cancel");
-    EXPECT_EQ(names[4], "Done");
+    ASSERT_GE(names.size(), 6);
+    EXPECT_EQ(names[0], "Preset");
+    EXPECT_EQ(names[1], "Apply to");
+    EXPECT_EQ(names[2], "Cancel");
+    EXPECT_EQ(names[3], "Done");
+    const auto at = [&](const char* name) { return std::find(names.begin(), names.end(), name) - names.begin(); };
+    EXPECT_LT(at("Time and tempo"), at("Add control"));
+    EXPECT_EQ(at("Time and tempo") + 1, at("Add control"));
 
-    auto& toggle = editor->getEditBarForTest().getTimeTempoSwitch();
+    auto& toggle = editor->getTimeTempoSwitchForTest();
     EXPECT_TRUE(toggle.getWantsKeyboardFocus());
     EXPECT_TRUE(toggle.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Separate);
@@ -197,27 +197,31 @@ TEST(OnCardTimeTempo, TheSwitchIsTheFirstTabStopThenArrowKeysChangeTheSegment) {
     EXPECT_TRUE(synth::test::auditAccessibility(*editor).empty());
 }
 
-TEST(OnCardTimeTempo, OnANarrowCardTheSwitchSitsOnASecondRowAndEverythingStaysInsideTheBar) {
+TEST(OnCardTimeTempo, TheSwitchSitsLeftOfAddControlInTheStripUnderTheCardAndTheBarStaysOneRow) {
     OnCardRig rig;
     for (const char* type : {"ADSR", "Amp Env", "Filter Env"}) {
         const auto id = rig.add(synth::AIStateMapper::createModule(type));
         auto* editor = rig.openOnCard(id);
         ASSERT_NE(editor, nullptr) << type;
-        auto& bar = editor->getEditBarForTest();
-        ASSERT_TRUE(bar.hasTimeTempo()) << type;
-        EXPECT_EQ(bar.isTwoRows(), synth::ui::CardLayoutEditBar::needsTwoRows(editor->getWidth() - 16)) << type;
-        EXPECT_GE(bar.getX(), 0) << type;
-        for (auto* child : {static_cast<juce::Component*>(&bar.getTimeTempoSwitch()),
-                            static_cast<juce::Component*>(&bar.getPresetButton()),
-                            static_cast<juce::Component*>(&bar.getApplyToButton()),
-                            static_cast<juce::Component*>(&bar.getCancelButton()),
-                            static_cast<juce::Component*>(&bar.getDoneButton())})
-            EXPECT_TRUE(bar.getLocalBounds().contains(child->getBounds())) << type << " " << child->getTitle();
-        EXPECT_EQ(bar.getTimeTempoSwitch().getWidth(), synth::ui::CardLayoutEditBar::kTimeTempoWidth) << type;
-        if (bar.isTwoRows())
-            EXPECT_GE(bar.getTimeTempoSwitch().getY(), bar.getPresetButton().getBottom()) << type;
-        else
-            EXPECT_LT(bar.getTimeTempoSwitch().getRight(), bar.getPresetButton().getX()) << type;
+        auto& toggle = editor->getTimeTempoSwitchForTest();
+        auto& add = editor->getAddButtonForTest();
+        ASSERT_TRUE(toggle.isVisible()) << type;
+        EXPECT_EQ(editor->getEditBarForTest().getHeight(), synth::ui::CardLayoutEditBar::kHeight) << type;
+        EXPECT_EQ(toggle.getWidth(), CardLayoutOnCardEditor::kTimeTempoWidth) << type;
+        EXPECT_EQ(toggle.getX(), 0) << type;
+        EXPECT_EQ(toggle.getY(), add.getY()) << type;
+        EXPECT_LT(toggle.getRight(), add.getX()) << type;
+        EXPECT_GE(toggle.getY(), editor->getHeight() - CardLayoutOnCardEditor::kAddStripHeight) << type;
+        EXPECT_EQ(add.getRight(), editor->getWidth()) << type;
         rig.launched.reset();
     }
+}
+
+TEST(OnCardTimeTempo, AddControlKeepsTheFullWidthOnCardsWithoutTheSwitch) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    EXPECT_EQ(editor->getAddButtonForTest().getX(), 0);
+    EXPECT_EQ(editor->getAddButtonForTest().getRight(), editor->getWidth());
 }
