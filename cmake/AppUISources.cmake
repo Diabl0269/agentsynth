@@ -345,6 +345,10 @@ set(APPUI_SOURCES
     Source/UI/Assistant/PlanBadge.h
     Source/UI/Assistant/SignInDialog.cpp
     Source/UI/Assistant/SignInDialog.h
+    Source/UI/Chrome/ConfirmDontAskDialog.cpp
+    Source/UI/Chrome/ConfirmDontAskDialog.h
+    Source/UI/Timeline/DeleteTrackConfirm.cpp
+    Source/UI/Timeline/DeleteTrackConfirm.h
     Source/UI/Chrome/ExportAudioDialog.cpp
     Source/UI/Chrome/ExportAudioDialog.h
     Source/UI/Chrome/ProgressTaskWindow.cpp

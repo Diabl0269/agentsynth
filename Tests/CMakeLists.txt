@@ -551,6 +551,7 @@ add_executable(Tests
     UI/Timeline/TimelinePlayheadTests.cpp
     UI/Timeline/TimelineRoutingPaneTests.cpp
     UI/Timeline/TimelineMidiDestinationMacroRoutingTests.cpp
+    UI/Timeline/TimelineTrackDeleteConfirmTests.cpp
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp

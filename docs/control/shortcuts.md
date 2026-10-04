@@ -483,6 +483,7 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 | Option+= / Option+- / Option+0 | Increase / Decrease / Reset Track Height (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`, `timelineResetTrackHeight`) — sizes the focused row only, ×1.25 a step, one undo step each ([tracks](../timeline/tracks.md#one-tracks-height)); no Option+=/-/0 is bound anywhere else |
 | Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused row's track below it with its modules, clips and automation as one undo step ([add-track](../timeline/add-track.md#duplicate-a-track)); shares the chord with the General Duplicate (`duplicateSelection`) because conflicts are per category, and only a focused track row claims it |
 | A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier) |
+| Cmd+Backspace | Delete Focused Track (`timelineDeleteFocusedTrack`) — deletes the focused row's track as one undo step, after a "Delete track?" question with a Don't ask again box ([tracks](../timeline/tracks.md#row-context-menu)); the question comes back from `Settings → Preferences → "Ask before deleting a track with the keyboard"`. Bare Backspace/Delete on clips and lanes stay fixed keys and are unaffected |
 
 #### Settings and dialog arrow keys
 

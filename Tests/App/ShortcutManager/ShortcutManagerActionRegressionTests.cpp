@@ -445,6 +445,24 @@ TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsDoNotCollideWithAnyExisti
     }
 }
 
+// timelineDeleteFocusedTrack -- Cmd+Backspace, Timeline category, claimed by the focused track row's keyPressed. Bare
+// Backspace/Delete on clips and the canvas are fixed keys outside the table, so nothing else carries this chord.
+TEST_F(ShortcutManagerTest, TimelineDeleteFocusedTrackIsRegisteredWithItsNameCategoryAndCmdBackspace) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineDeleteFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineDeleteFocusedTrack"), "Delete Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineDeleteFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineDeleteFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), juce::KeyPress::backspaceKey);
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::commandModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineDeleteFocusedTrackHasNoConflictAndNoCommand) {
+    const auto binding = manager.getBinding("timelineDeleteFocusedTrack");
+    EXPECT_TRUE(manager.getConflictingAction("timelineDeleteFocusedTrack", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineDeleteFocusedTrack", binding);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineDeleteFocusedTrack"), AppCommands::kNoCommand);
+}
+
 TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveNoCommand) {
     // Pure surface actions: MainComponent never dispatches these through ApplicationCommandManager.
     EXPECT_EQ(AppCommands::getCommandForAction("timelineMuteFocusedTrack"), AppCommands::kNoCommand);

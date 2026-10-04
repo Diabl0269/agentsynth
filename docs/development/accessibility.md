@@ -54,6 +54,11 @@ right-click, Shift+F10 (`KeyboardContextMenuProvider`) or Return on the focused 
 ("Cutoff automation lane") and its tooltip lists the three ways in. A picture that only shows state (the modulator
 shape icon) is named and tooltipped but is not a Tab stop; the control it mirrors stays the one that edits.
 
+The track row's Cmd+Backspace question is an alert window: Delete is the default button (Return confirms; Cmd+Z undoes it),
+Escape cancels, Tab reaches the **Don't ask again** box (named, tooltipped, with the preference's way back) and **Delete**,
+and every button draws the shared focus ring. It appears and disappears with the popup motion
+([animation](../layout/animation.md#popup-windows)); the shared window is `showConfirmDontAsk` (`ConfirmDontAskDialog.h`).
+
 ## Module cards
 
 The canvas is one focus region; inside it the arrows move between cards, Return steps into the selected card,

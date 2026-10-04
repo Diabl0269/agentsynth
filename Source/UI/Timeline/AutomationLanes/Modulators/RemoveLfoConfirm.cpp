@@ -1,6 +1,6 @@
 // Concern: the "Remove LFO?" confirm window and its words.
 #include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
-#include "UI/Layout/PopupMotion.h"
+#include "UI/Chrome/ConfirmDontAskDialog.h"
 
 namespace synth::ui {
 
@@ -26,25 +26,10 @@ void confirmRemoveLfo(const RemoveLfoConfirmText& text, std::function<void(bool,
         hook(text, std::move(done));
         return;
     }
-    auto* window = new juce::AlertWindow(text.title, text.message, juce::MessageBoxIconType::WarningIcon);
-    auto* dontAsk = new juce::ToggleButton("Don't ask again");
-    dontAsk->setComponentID("removeLfoDontAskAgain");
-    dontAsk->setTitle("Don't ask again");
-    dontAsk->setTooltip("Stop asking before removing an LFO's last destination. You can turn it back on in "
-                        "Preferences, Timeline.");
-    dontAsk->setSize(220, 24);
-    window->addCustomComponent(dontAsk);
-    window->addButton("Remove LFO", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    synth::ui::PopupMotion::attach(*window);
-    window->enterModalState(
-        true, juce::ModalCallbackFunction::create([window, dontAsk, done = std::move(done)](int result) {
-            const bool tick = dontAsk->getToggleState(); // read before the window (and the box) goes
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (done)
-                done(result == 1, tick);
-        }),
-        false);
+    showConfirmDontAsk({text.title, text.message, "Remove LFO", "removeLfoDontAskAgain",
+                        "Stop asking before removing an LFO's last destination. You can turn it back on in "
+                        "Preferences, Timeline."},
+                       std::move(done));
 }
 
 namespace test_hooks {

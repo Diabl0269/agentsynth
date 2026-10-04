@@ -96,6 +96,8 @@ public:
     void setDoubleClickSpansLocatorsEnabled(bool enabled);
     bool isAskBeforeRemovingLfoEnabled() const;
     void setAskBeforeRemovingLfoEnabled(bool enabled);
+    bool isAskBeforeDeletingTrackEnabled() const;
+    void setAskBeforeDeletingTrackEnabled(bool enabled);
     bool isNaturalScrollingEnabled() const;
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
@@ -283,6 +285,7 @@ private:
     void persistLoopSelectionArms(bool enabled);
     void persistDoubleClickSpansLocators(bool enabled);
     void persistAskBeforeRemovingLfo(bool enabled);
+    void persistAskBeforeDeletingTrack(bool enabled);
     void initTimelineEditingToggles();
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
@@ -485,6 +488,7 @@ private:
     // this one is "make a clip from the locators".
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
+    juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track with the keyboard"};
     juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
     // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
     // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as

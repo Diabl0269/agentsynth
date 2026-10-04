@@ -147,6 +147,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         // The focused automation lane up or down within its track (Cmd+Alt+Up / Down).
         {"timelineMoveLaneUp", ShortcutCategory::Timeline},
         {"timelineMoveLaneDown", ShortcutCategory::Timeline},
+        // Deletes the focused track header's track, after a question that can be turned off (Cmd+Backspace).
+        {"timelineDeleteFocusedTrack", ShortcutCategory::Timeline},
         {"snapSetWhole", ShortcutCategory::Timeline},
         {"snapSetHalf", ShortcutCategory::Timeline},
         {"snapSetQuarter", ShortcutCategory::Timeline},

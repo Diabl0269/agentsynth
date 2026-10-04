@@ -13,6 +13,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <set>
@@ -52,6 +53,32 @@ void MainComponent::deleteTrack(synth::TrackId track) {
         timelineDoc.removeTrack(track);
     });
     reconcileTimelineAfterGraphChange();
+}
+
+// Cmd+Backspace on a focused row. Asks first unless the person switched the question off; the deletion itself is
+// deleteTrack, so the menu's one undo step is unchanged. "Don't ask again" counts only when they confirm.
+void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
+    const auto* existing = timelineDoc.getTrack(track);
+    if (existing == nullptr)
+        return;
+    const auto* settings = appProperties.getUserSettings();
+    if (settings != nullptr && !settings->getBoolValue(synth::ui::kAskBeforeDeletingTrackKey, true)) {
+        deleteTrack(track);
+        return;
+    }
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::confirmDeleteTrack(synth::ui::deleteTrackConfirmText(existing->name),
+                                  [safeThis, track](bool confirmed, bool dontAskAgain) {
+                                      auto* self = safeThis.getComponent();
+                                      if (self == nullptr || !confirmed)
+                                          return;
+                                      if (dontAskAgain)
+                                          if (auto* userSettings = self->appProperties.getUserSettings()) {
+                                              userSettings->setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
+                                              userSettings->saveIfNeeded();
+                                          }
+                                      self->deleteTrack(track);
+                                  });
 }
 
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {

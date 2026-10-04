@@ -36,6 +36,15 @@ void PreferencesSettingsTab::setAskBeforeRemovingLfoEnabled(bool enabled) {
     persistAskBeforeRemovingLfo(enabled);
 }
 
+bool PreferencesSettingsTab::isAskBeforeDeletingTrackEnabled() const {
+    return askBeforeDeletingTrackToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setAskBeforeDeletingTrackEnabled(bool enabled) {
+    askBeforeDeletingTrackToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistAskBeforeDeletingTrack(enabled);
+}
+
 // The toggles after the loop-selection one: double-click-spans-locators and the LFO-removal question, each
 // DEFAULT TRUE like the rows around them and read at use time (TimelineClipLaneArea, MainComponent::removeModulator).
 void PreferencesSettingsTab::initTimelineEditingToggles() {
@@ -63,6 +72,24 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     askBeforeRemovingLfoToggle.onClick = [this] {
         persistAskBeforeRemovingLfo(askBeforeRemovingLfoToggle.getToggleState());
     };
+
+    contentHost.addAndMakeVisible(askBeforeDeletingTrackToggle);
+    askBeforeDeletingTrackToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kTimelineAskBeforeDeletingTrackKey, true),
+        juce::dontSendNotification);
+    askBeforeDeletingTrackToggle.setTooltip(
+        "When on (the default), pressing Cmd+Backspace / Ctrl+Backspace on a focused track asks before deleting it. "
+        "Turn it off to "
+        "delete straight away; Cmd+Z / Ctrl+Z still brings the track back. The track menu's Delete Track never asks.");
+    askBeforeDeletingTrackToggle.onClick = [this] {
+        persistAskBeforeDeletingTrack(askBeforeDeletingTrackToggle.getToggleState());
+    };
+}
+
+void PreferencesSettingsTab::persistAskBeforeDeletingTrack(bool enabled) {
+    // Nothing live to push: MainComponent::deleteTrackAfterConfirm reads this key at use time (on the next press).
+    appProperties.getUserSettings()->setValue(kTimelineAskBeforeDeletingTrackKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
 }
 
 void PreferencesSettingsTab::persistAskBeforeRemovingLfo(bool enabled) {
@@ -142,12 +169,12 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
                                                   const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                   const BeginGroupFn& beginGroup) {
     enterCategory(Category::Timeline, y);
-    // Group 5: the two loop-locator toggles and the LFO-removal question (no divider between them).
+    // Group 5: the two loop-locator toggles and the LFO-removal and track-delete questions (no divider between them).
     {
-        const bool visible =
-            groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle, &askBeforeRemovingLfoToggle});
-        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle, &askBeforeRemovingLfoToggle},
-                        visible);
+        const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle,
+                                                           &askBeforeRemovingLfoToggle, &askBeforeDeletingTrackToggle};
+        const bool visible = groupMatches(rows);
+        setGroupVisible(rows, visible);
         beginGroup(visible);
         if (visible) {
             loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
@@ -155,6 +182,8 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
             doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            askBeforeDeletingTrackToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

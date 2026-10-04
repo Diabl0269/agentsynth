@@ -276,6 +276,10 @@ above its anchor slides up; a submenu beside its parent row slides sideways; a w
 pointer inside it, or a dialog opened from the keyboard, slides down. Reduce motion is
 `synth::ui::prefersReducedMotion()` (`ReducedMotion.h`): macOS Reduce motion; other platforms do not read a setting yet and answer false. It is read each time a popup shows or hides.
 
+The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
+window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
+in and out like any alert. The deleted track's row then leaves at once, like the menu's Delete Track.
+
 **Tooltips** are the exception to "popup windows": they are children of their app window, so they
 do not go through `PopupMotion`. See [Tooltips](#tooltips).
 
