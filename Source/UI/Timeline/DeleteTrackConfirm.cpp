@@ -20,7 +20,6 @@ DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName) {
             "The track, its clips and its instrument node go. " + undoShortcutText() + " brings it back."};
 }
 
-// Cancel is the default button (Return), so a stray Return after the shortcut keeps the track.
 void confirmDeleteTrack(const DeleteTrackConfirmText& text, std::function<void(bool, bool)> done) {
     if (auto& hook = test_hooks::deleteTrackConfirmHookForTest()) {
         hook(text, std::move(done));
@@ -28,8 +27,7 @@ void confirmDeleteTrack(const DeleteTrackConfirmText& text, std::function<void(b
     }
     showConfirmDontAsk({text.title, text.message, "Delete", "deleteTrackDontAskAgain",
                         "Stop asking before deleting a track with the keyboard. You can turn it back on in "
-                        "Preferences, Timeline.",
-                        /*cancelIsDefault=*/true},
+                        "Preferences, Timeline."},
                        std::move(done));
 }
 

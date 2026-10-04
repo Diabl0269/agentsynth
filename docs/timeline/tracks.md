@@ -534,7 +534,7 @@ The menu's items:
 - **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
   its bound `Track In` / `Track Audio` node go together, and come back together. The menu item never asks;
   **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
-  `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Cancel** as the Return default and
+  `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
   Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
   ("Ask before deleting a track with the keyboard") turns the question back on. Cmd+Z brings the track back either way.

@@ -5,20 +5,20 @@
 
 namespace synth::ui {
 
-// Escape always cancels: it is the button's own key when Return is not, and AlertWindow's built-in answer otherwise.
+// Return confirms and Escape cancels. The box carries no component name: AlertWindow draws a custom component's name
+// as a heading above it, which would repeat the box's own label.
 // The box is read before the window goes, because the window owns it.
 void showConfirmDontAsk(const ConfirmDontAskSpec& spec, std::function<void(bool, bool)> done) {
     auto* window = new juce::AlertWindow(spec.title, spec.message, juce::MessageBoxIconType::WarningIcon);
-    auto* dontAsk = new juce::ToggleButton("Don't ask again");
+    auto* dontAsk = new juce::ToggleButton();
+    dontAsk->setButtonText("Don't ask again");
     dontAsk->setComponentID(spec.dontAskId);
     dontAsk->setTitle("Don't ask again");
     dontAsk->setTooltip(spec.dontAskTooltip);
     dontAsk->setSize(220, 24);
     window->addCustomComponent(dontAsk);
-    const juce::KeyPress returnKey(juce::KeyPress::returnKey);
-    const juce::KeyPress escapeKey(juce::KeyPress::escapeKey);
-    window->addButton(spec.confirmLabel, 1, spec.cancelIsDefault ? juce::KeyPress() : returnKey);
-    window->addButton("Cancel", 0, spec.cancelIsDefault ? returnKey : escapeKey);
+    window->addButton(spec.confirmLabel, 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
     synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true,
                             juce::ModalCallbackFunction::create([window, dontAsk, done = std::move(done)](int result) {
