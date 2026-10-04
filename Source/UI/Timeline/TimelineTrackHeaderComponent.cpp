@@ -25,6 +25,7 @@ const juce::KeyPress kDuplicateKey('d', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
+const juce::KeyPress kDeleteTrackKey(juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier, 0);
 // Widened from 20 (laid out edge-to-edge, no gap): the M/S/R toggles read as one fused
 // block at that width, and this row was the worst offender in the timeline-panel button-size
 // sweep. Paired with kToggleGap below rather than just grown, so the buttons are also visually
@@ -724,6 +725,13 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
             onAutomationToggleRequested(trackId_);
         return true;
     }
+    // Cmd+Backspace deletes THIS row's track (after the host's question). Only a focused row sees the key, so
+    // Backspace and Delete on clips and the canvas are untouched; the Automation section header has no track to delete.
+    if (!isSectionHeader() && matchesAction(key, "timelineDeleteFocusedTrack", kDeleteTrackKey)) {
+        if (host_ != nullptr)
+            host_->deleteTrackAfterConfirm(trackId_);
+        return true;
+    }
 
     // Everything else (J/L/P/F, the tool digits, Escape...) is not this row's to claim — it bubbles
     // to TimelinePanelComponent::keyPressed exactly like it already does from the clip lane area and
@@ -844,7 +852,11 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
         addHeightItem(kResetHeightMenuId, "Reset Track Height", "timelineResetTrackHeight", kResetHeightKey);
         menu.addSeparator();
     }
-    menu.addItem(kDeleteTrackMenuId, "Delete Track");
+    juce::PopupMenu::Item deleteItem("Delete Track");
+    deleteItem.itemID = kDeleteTrackMenuId;
+    if (!isSectionHeader())
+        deleteItem.shortcutKeyDescription = bindingText("timelineDeleteFocusedTrack", kDeleteTrackKey);
+    menu.addItem(std::move(deleteItem));
     return menu;
 }
 

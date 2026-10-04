@@ -144,6 +144,8 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Solo Focused Track";
     if (actionId == "timelineArmFocusedTrack")
         return "Arm Focused Track";
+    if (actionId == "timelineDeleteFocusedTrack")
+        return "Delete Focused Track";
     if (actionId == "timelineToggleTrackAutomation")
         return "Show/Hide Track Automation";
     if (actionId == "timelineDuplicateFocusedTrack")

@@ -316,6 +316,10 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineClipOpen"] = juce::KeyPress(juce::KeyPress::returnKey, none, 0);
     bindings["timelineClipMoveEarlier"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
     bindings["timelineClipMoveLater"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
+    // Cmd+Backspace deletes the focused track row. Bare Backspace/Delete on clips and the canvas stay fixed keys
+    // outside this table; the row claims only the Cmd chord, and only while it has focus.
+    bindings["timelineDeleteFocusedTrack"] =
+        juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier, 0);
     // Cmd+Alt+Up / Down move the focused automation lane within its track, the way the canvas moves a card
     // with Alt+arrows. Unbound everywhere else: the only Cmd+Alt+arrow in the table would be this pair.
     const juce::ModifierKeys commandAlt{juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier};

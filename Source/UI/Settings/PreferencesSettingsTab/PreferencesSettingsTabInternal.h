@@ -54,6 +54,11 @@ constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClic
 // LFO and its settings, so the timeline asks first; the dialog's "Don't ask again" box turns this off too.
 constexpr const char* kTimelineAskBeforeRemovingLfoKey = "timelineAskBeforeRemovingLfo";
 
+// Read at use time by MainComponent::deleteTrackAfterConfirm (kAskBeforeDeletingTrackKey in DeleteTrackConfirm.h is
+// the same string). DEFAULT TRUE: Cmd+Backspace on a track row asks first; the dialog's "Don't ask again" box turns
+// this off.
+constexpr const char* kTimelineAskBeforeDeletingTrackKey = "timelineAskBeforeDeletingTrack";
+
 // Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
 // autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.

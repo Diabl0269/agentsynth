@@ -216,3 +216,35 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeRemovingLfoToggleWritesTh
     EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeRemovingLfo"), "0");
     EXPECT_FALSE(tab.isAskBeforeRemovingLfoEnabled());
 }
+
+// The "ask before deleting a track with the keyboard" preference: DEFAULT ON, its own key, read at use time by
+// MainComponent::deleteTrackAfterConfirm. The real switch writes it, and turning it back on restores the question.
+TEST_F(PreferencesSettingsTabTest, AskBeforeDeletingTrackDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isAskBeforeDeletingTrackEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineAskBeforeDeletingTrack"));
+        tab.setAskBeforeDeletingTrackEnabled(false);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "0");
+    }
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_FALSE(tab.isAskBeforeDeletingTrackEnabled());
+    tab.setAskBeforeDeletingTrackEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "1");
+}
+
+TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeDeletingTrackToggleWritesTheSetting) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 900);
+    juce::ToggleButton* toggle = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("deleting a track"))
+                toggle = tb;
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->getToggleState());
+    EXPECT_TRUE(toggle->getTooltip().contains("Cmd+Backspace"));
+    toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "0");
+    EXPECT_FALSE(tab.isAskBeforeDeletingTrackEnabled());
+}

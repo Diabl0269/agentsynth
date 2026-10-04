@@ -532,7 +532,13 @@ The menu's items:
 - **Duplicate Track** (above the height items; not on the Automation section header) copies the track below itself, and
   names its rebindable shortcut: [add-track](add-track.md#duplicate-a-track).
 - **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
-  its bound `Track In` / `Track Audio` node go together, and come back together.
+  its bound `Track In` / `Track Audio` node go together, and come back together. The menu item never asks;
+  **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
+  `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Cancel** as the Return default and
+  Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
+  Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
+  ("Ask before deleting a track with the keyboard") turns the question back on. Cmd+Z brings the track back either way.
+  Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own

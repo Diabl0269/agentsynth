@@ -93,6 +93,9 @@ struct TrackHeaderHost {
      *  selection. A highlight only — the canvas is not scrolled and focus is not moved. */
     virtual void selectNodeInGraph(const juce::String& uuid) = 0;
 
+    /** Cmd+Backspace on a focused row: asks first (unless switched off), then deleteTrack. */
+    virtual void deleteTrackAfterConfirm(synth::TrackId track) { deleteTrack(track); }
+
     /** Right-click -> "Delete Track": removes the track AND its bound Track In node as one compound
      *  undo step. */
     virtual void deleteTrack(synth::TrackId track) = 0;

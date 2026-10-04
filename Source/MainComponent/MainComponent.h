@@ -448,6 +448,7 @@ private:
     void bindTrackTo(synth::TrackId track, const juce::String& uuid) override;
     void createAndBindTrackInNode(synth::TrackId track) override;
     void selectNodeInGraph(const juce::String& uuid) override;
+    void deleteTrackAfterConfirm(synth::TrackId track) override;
     void deleteTrack(synth::TrackId track) override;
     void duplicateTrack(synth::TrackId track) override;
     void performTrackEdit(const std::function<void()>& mutation) override;

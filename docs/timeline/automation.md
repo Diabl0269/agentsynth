@@ -322,7 +322,7 @@ needs and makes the call its last statement.
 shows "Remove LFO 1?": "Cutoff is the last thing LFO 1 moves, so removing it also deletes LFO 1 and its
 settings. Cmd+Z brings it back." (Ctrl+Z off macOS), a **Don't ask again** box, and **Remove LFO** (Return) /
 **Cancel** (Escape). Cancel changes nothing. Confirming removes as one undo step; with the box ticked it also
-turns the preference off. The question is `confirmRemoveLfo` (`Modulators/RemoveLfoConfirm.{h,cpp}`), asked by
+turns the preference off. The question is `confirmRemoveLfo` (`Modulators/RemoveLfoConfirm.{h,cpp}`, on the shared `showConfirmDontAsk` window), asked by
 `MainComponent::removeModulator` before it calls `performRemoveModulator`; an LFO with another destination
 never asks. The preference is the user setting `timelineAskBeforeRemovingLfo` (default ON), toggled in
 Settings, Preferences, Timeline ("Ask before removing an LFO's last destination") and read at use time.
