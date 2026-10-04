@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <optional>
 #include <set>
 #include <type_traits>
@@ -366,6 +367,9 @@ public:
     bool resetTrackHeightScales();
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
+    // Copies `source` directly below it with fresh ids; `uuidRemap` rebinds the copy (see the definition).
+    TrackId duplicateTrack(TrackId source, const juce::String& name, juce::uint32 colourArgb,
+                           const std::map<juce::String, juce::String>& uuidRemap);
 
     // nullptr once the track is gone. The pointer is invalidated by the next mutation — never
     // hold it across one.

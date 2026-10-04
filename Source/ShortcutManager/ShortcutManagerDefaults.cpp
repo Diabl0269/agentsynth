@@ -301,6 +301,10 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineIncreaseTrackHeight"] = juce::KeyPress('=', juce::ModifierKeys::altModifier, 0);
     bindings["timelineDecreaseTrackHeight"] = juce::KeyPress('-', juce::ModifierKeys::altModifier, 0);
     bindings["timelineResetTrackHeight"] = juce::KeyPress('0', juce::ModifierKeys::altModifier, 0);
+    // Cmd+D duplicates the focused track row. It shares the chord with the General "duplicateSelection"
+    // on purpose: conflicts are per category, and the row's own keyPressed claims the key before the
+    // command layer sees it, so Cmd+D elsewhere keeps its current meaning.
+    bindings["timelineDuplicateFocusedTrack"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
     // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
     // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
     // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.

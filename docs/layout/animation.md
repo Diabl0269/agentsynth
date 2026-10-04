@@ -221,6 +221,10 @@ path); nothing else needs to know.
   `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
   `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. Any other rebuild
   lands at once.
+- **A duplicated track's row.** Cmd+D / "Duplicate Track" arms `TimelinePanelComponent::armTrackDuplicateGlide`; the
+  rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
+  `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
+  removes the row at once, like deleting a track.
 - **Off-screen.** Same check as the forward move (the app has no Reduce Motion setting): the timeline glide runs only
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.

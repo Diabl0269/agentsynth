@@ -97,6 +97,10 @@ struct TrackHeaderHost {
      *  undo step. */
     virtual void deleteTrack(synth::TrackId track) = 0;
 
+    /** Cmd+D / right-click -> "Duplicate Track": a copy of the track directly below it with its modules, clips and
+     *  automation, as ONE compound undo step. Non-pure inert default so every existing implementer keeps compiling. */
+    virtual void duplicateTrack(synth::TrackId track) { juce::ignoreUnused(track); }
+
     /** Runs a doc mutation as ONE undoable timeline step. Everything the header writes (name,
      *  colour, mute, solo, arm) goes through here rather than touching the doc directly, so the
      *  header never has to know an AppUndoManager exists. */
@@ -410,6 +414,7 @@ public:
     static constexpr int kIncreaseHeightMenuId = 2005;
     static constexpr int kDecreaseHeightMenuId = 2006;
     static constexpr int kResetHeightMenuId = 2007;
+    static constexpr int kDuplicateTrackMenuId = 2008;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 

@@ -63,6 +63,57 @@ bool TimelineDoc::removeTrack(TrackId id) {
     });
 }
 
+// Inserts a copy of `source` directly below it with fresh ids on the track, its clips, their notes and its lanes:
+// same kind, clips, notes and lane points, a colour of `colourArgb`, never soloed or armed.
+// `uuidRemap` (original node uuid -> its copy's uuid) rebinds the copy's track binding and lanes; a lane whose
+// node is not in the map is left off, because a (node, param) pair carries one lane doc-wide. Invalid TrackId
+// when `source` is missing, is the Automation track, or the doc is at kMaxTracks.
+TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, juce::uint32 colourArgb,
+                                    const std::map<juce::String, juce::String>& uuidRemap) {
+    const auto* original = findTrack(source);
+    if (original == nullptr || original->kind == TrackKind::Automation || static_cast<int>(tracks.size()) >= kMaxTracks)
+        return {};
+
+    return applyMutation([&] {
+        const auto remap = [&uuidRemap](const juce::String& uuid) {
+            const auto it = uuidRemap.find(uuid);
+            return it != uuidRemap.end() ? it->second : juce::String();
+        };
+
+        // Copied field by field, not by struct assignment: every id must be new.
+        Track copy;
+        copy.id = TrackId{nextTrackId++};
+        copy.kind = original->kind;
+        copy.name = name;
+        copy.colourArgb = colourArgb;
+        copy.muted = original->muted;
+        copy.heightScale = original->heightScale;
+        copy.bindingUuid = remap(original->bindingUuid);
+        for (const auto& clip : original->clips) {
+            Clip dup = clip;
+            dup.id = ClipId{nextClipId++};
+            for (auto& note : dup.notes)
+                note.id = NoteId{nextNoteId++};
+            copy.clips.push_back(std::move(dup));
+        }
+        for (const auto& lane : original->lanes) {
+            const auto uuid = remap(lane.nodeUuid);
+            if (uuid.isEmpty())
+                continue;
+            AutomationLane dup = lane;
+            dup.id = LaneId{nextLaneId++};
+            dup.nodeUuid = uuid;
+            dup.orphaned = false;
+            copy.lanes.push_back(std::move(dup));
+        }
+
+        const TrackId id = copy.id;
+        const auto at = tracks.begin() + (original - tracks.data()) + 1;
+        tracks.insert(at, std::move(copy));
+        return id;
+    });
+}
+
 bool TimelineDoc::moveTrack(TrackId id, int newIndex) {
     auto* track = findTrack(id);
     if (track == nullptr)

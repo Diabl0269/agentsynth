@@ -442,8 +442,9 @@ juce::uint32 SnippetManager::nextFreeIdBase(const juce::AudioProcessorGraph& gra
     return maxUid + 1;
 }
 
+// outIdMap (optional): each snippet node id -> the id it was renumbered to.
 juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase,
-                                           bool includeExtraState) {
+                                           bool includeExtraState, std::map<int, int>* outIdMap) {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     auto* src = snippet.getDynamicObject();
 
@@ -534,6 +535,8 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
 
     remapMacros(*root, src, idMap, dropPos);
 
+    if (outIdMap != nullptr)
+        *outIdMap = idMap;
     return juce::var(root.get());
 }
 
@@ -640,11 +643,15 @@ static void restoreMacros(std::vector<Macro>& out, const juce::Array<juce::var>*
             out.push_back(std::move(macros[i]));
 }
 
+// outCopies (optional): each snippet node id (extractSnippet writes the source node's own uid) -> the NodeID of its
+// copy, so a caller that extracted from a live graph can re-create the cables that left the selection.
 std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::var& snippet,
                                                                   juce::AudioProcessorGraph& graph,
                                                                   juce::Point<int> dropPos, bool includeExtraState,
-                                                                  std::vector<Macro>* outMacros, bool trustedPayload) {
-    auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph), includeExtraState);
+                                                                  std::vector<Macro>* outMacros, bool trustedPayload,
+                                                                  std::map<int, NodeID>* outCopies) {
+    std::map<int, int> snippetToPrepared;
+    auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph), includeExtraState, &snippetToPrepared);
 
     auto* preparedObj = prepared.getDynamicObject();
     auto* preparedNodes = arrayProperty(preparedObj, "nodes");
@@ -723,6 +730,11 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
 
     if (outMacros != nullptr)
         restoreMacros(*outMacros, arrayProperty(preparedObj, "macros"), idMap, graph);
+
+    if (outCopies != nullptr)
+        for (const auto& [snippetId, preparedId] : snippetToPrepared)
+            if (const auto it = idMap.find(preparedId); it != idMap.end())
+                (*outCopies)[snippetId] = it->second;
 
     return added;
 }

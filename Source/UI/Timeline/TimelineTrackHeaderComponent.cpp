@@ -21,6 +21,7 @@ juce::KeyPress plainKey(int character) { return juce::KeyPress(character, juce::
 
 constexpr int kSwatchWidth = 8;
 constexpr int kHeightHandleThickness = 5; // the strip along the row's bottom edge
+const juce::KeyPress kDuplicateKey('d', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
@@ -322,7 +323,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     refreshHeightHandleText();
     // The row is the keyboard stop (Up/Down walk the rows), so a screen reader names it by its track.
     setTitle(t->name);
-    setTooltip("Right-click, Shift+F10 or Return for the track menu");
+    setTooltip("Right-click, Shift+F10 or Return for the track menu; " +
+               bindingText("timelineDuplicateFocusedTrack", kDuplicateKey) + " duplicates the track");
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
@@ -694,6 +696,14 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         toggleArmed();
         return true;
     }
+    // Cmd+D copies THIS row below itself. Claimed here, ahead of the app-wide Cmd+D (duplicate the
+    // selection), because the focused row is what the user is pointing at; the Automation section
+    // header has nothing to copy and lets the key bubble.
+    if (!isSectionHeader() && matchesAction(key, "timelineDuplicateFocusedTrack", kDuplicateKey)) {
+        if (host_ != nullptr)
+            host_->duplicateTrack(trackId_);
+        return true;
+    }
     // A folds THIS row's lanes, like the arrow (a row without an arrow still claims the key, so it never
     // falls through to something else).
     if (onHeightStepRequested && !isSectionHeader()) {
@@ -778,6 +788,8 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
         return;
     if (menuId == kDeleteTrackMenuId)
         host_->deleteTrack(trackId_);
+    else if (menuId == kDuplicateTrackMenuId)
+        host_->duplicateTrack(trackId_);
     else if (menuId == kMakeChannelMenuId && host_->canMakeChannelForTrack(trackId_))
         host_->makeChannelForTrack(trackId_);
     else if (menuId == kSaveTrackPresetMenuId && host_->canSaveTrackPresetForTrack(trackId_))
@@ -809,6 +821,13 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     menu.addItem(kAddAutomationMenuId, "Add automation...",
                  host_ != nullptr && !host_->getAutomatableParameters(trackId_).empty());
     menu.addSeparator();
+    if (!isSectionHeader()) {
+        juce::PopupMenu::Item duplicate("Duplicate Track");
+        duplicate.itemID = kDuplicateTrackMenuId;
+        duplicate.shortcutKeyDescription = bindingText("timelineDuplicateFocusedTrack", kDuplicateKey);
+        menu.addItem(std::move(duplicate));
+        menu.addSeparator();
+    }
     // The keyboard path to the row height, each item naming its rebindable shortcut.
     if (!isSectionHeader()) {
         const auto addHeightItem = [&](int id, const juce::String& text, const juce::String& action,

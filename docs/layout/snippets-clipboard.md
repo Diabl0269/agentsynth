@@ -111,6 +111,10 @@ Guarded by `ClipboardPaste.RewiresInternalConnectionsBetweenTheCopiesNotBackToTh
 `...DoesNotSpliceTheCopiesIntoTheSurroundingPatch` and
 `...RebuildsModulationChainsBetweenTheCopies`.
 
+**`insertSnippet`'s optional `outCopies`** maps each snippet node id (the source node's own uid, what `extractSnippet`
+wrote) to the `NodeID` of its copy. Duplicate Track uses it to re-create the cables that left the copied set and to
+re-point timeline lanes at the copies ([add-track](../timeline/add-track.md#duplicate-a-track)).
+
 ## Non-parameter state
 
 `extractSnippet` / `prepareForInsert` / `insertSnippet` take an `includeExtraState` flag, **off by

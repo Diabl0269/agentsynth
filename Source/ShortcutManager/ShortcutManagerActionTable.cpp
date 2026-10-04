@@ -135,6 +135,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineIncreaseTrackHeight", ShortcutCategory::Timeline},
         {"timelineDecreaseTrackHeight", ShortcutCategory::Timeline},
         {"timelineResetTrackHeight", ShortcutCategory::Timeline},
+        // Duplicates the focused track header (Cmd+D, the same chord the General "duplicateSelection" carries).
+        {"timelineDuplicateFocusedTrack", ShortcutCategory::Timeline},
         {"timelineClipPrevious", ShortcutCategory::Timeline},
         {"timelineClipNext", ShortcutCategory::Timeline},
         {"timelineClipAbove", ShortcutCategory::Timeline},

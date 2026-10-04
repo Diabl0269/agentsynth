@@ -453,6 +453,34 @@ TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveN
 }
 
 // ---------------------------------------------------------------------------
+// timelineDuplicateFocusedTrack -- Cmd+D, Timeline category. It shares its chord with the General
+// "duplicateSelection" on purpose (conflicts are per category) and, like the m/s/r row above, is a pure
+// surface action: the track header's keyPressed claims the key, the command layer never sees it.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TimelineDuplicateFocusedTrackIsRegisteredWithItsNameCategoryAndCmdD) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineDuplicateFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineDuplicateFocusedTrack"), "Duplicate Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineDuplicateFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineDuplicateFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'd');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::commandModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineDuplicateFocusedTrackSharesCmdDWithDuplicateSelectionWithoutConflict) {
+    const auto binding = manager.getBinding("timelineDuplicateFocusedTrack");
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(manager.getBinding("duplicateSelection"), binding))
+        << "Cmd+D elsewhere keeps duplicating the selection";
+    EXPECT_TRUE(manager.getConflictingAction("timelineDuplicateFocusedTrack", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineDuplicateFocusedTrack", binding);
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineDuplicateFocusedTrackHasNoCommand) {
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineDuplicateFocusedTrack"), AppCommands::kNoCommand);
+    EXPECT_NE(AppCommands::getCommandForAction("duplicateSelection"), AppCommands::kNoCommand);
+}
+
+// ---------------------------------------------------------------------------
 // transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
 // (docs/control/midi-remote.md#action-targets) uses for the play/stop toggle. See
 // Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp for the rest of the family
