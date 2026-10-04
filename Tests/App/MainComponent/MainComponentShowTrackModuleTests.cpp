@@ -97,6 +97,22 @@ TEST_F(ShowTrackModuleTest, TheButtonDoesWhatTheKeyDoes) {
     EXPECT_NE(dynamic_cast<OscillatorModule*>(graph().getNodeForId(selected()[0])->getProcessor()), nullptr);
 }
 
+TEST_F(ShowTrackModuleTest, CtrlEOnAnInstrumentTrackCentresItsCollapsedMacroCard) {
+    const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto& editor = mc->getGraphEditor();
+    const auto* macro = editor.getMacros().findByMember(doc().getTrack(id)->bindingUuid);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_TRUE(macro->collapsed) << "a new instrument track is boxed in a collapsed macro";
+    editor.centreViewOn({5000.0f, 5000.0f}); // somewhere else entirely
+
+    ASSERT_TRUE(headerOf(id).keyPressed(kCtrlE));
+
+    const auto card = macro->bounds.toFloat().getCentre();
+    const auto view = editor.getVisibleCanvasRect().getCentre();
+    EXPECT_NEAR(card.x, view.x, 2.0f) << "the card, not its hidden members, is what gets centred";
+    EXPECT_NEAR(card.y, view.y, 2.0f);
+}
+
 TEST_F(ShowTrackModuleTest, CtrlEOnAnAudioTrackSelectsItsOwnNodeAndOpensNothing) {
     const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     const auto bound = nodeWithUuid(graph(), doc().getTrack(id)->bindingUuid);
