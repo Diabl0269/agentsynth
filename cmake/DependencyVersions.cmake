@@ -21,6 +21,13 @@ set(SYNTH_JUCE_GIT_REPOSITORY "https://github.com/juce-framework/JUCE.git"
 set(SYNTH_JUCE_GIT_TAG "8.0.3"
     CACHE STRING "JUCE release tag fetched via FetchContent (a specific tag, for stability)")
 
+# FetchContent's PATCH_COMMAND for JUCE (cmake/patches/*.patch, docs/development/juce-patches.md). A patch
+# changes build/_deps, so the workflows' deps cache keys hash the patch files too; a source dir given with
+# FETCHCONTENT_SOURCE_DIR_JUCE skips this step and must already be patched.
+set(SYNTH_JUCE_PATCH_COMMAND
+    ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-vst3-context-menu.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake)
+
 set(SYNTH_GOOGLETEST_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip"
     CACHE STRING "googletest archive fetched via FetchContent (test builds only)")
 

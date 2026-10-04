@@ -227,6 +227,13 @@ public:
     /** Message thread. Single slot, owned by the module's card; fires after every override change. */
     std::function<void()> onCardLayoutChanged;
 
+    /** Message thread. Single slot, owned by the card: adds items to a VST3 plugin window's context menu
+     *  for one parameter. */
+    std::function<void(const juce::String& paramId, juce::PopupMenu& menu)> onParameterContextMenu;
+
+    /** Message thread. Runs onParameterContextMenu; nothing when unset. */
+    void buildParameterContextMenu(const juce::String& paramId, juce::PopupMenu& menu);
+
     //==============================================================================
     // AudioProcessor
     //==============================================================================
@@ -304,6 +311,8 @@ private:
     /** Message thread. Comes back later to reap what a just-completed retire could not: at retire
      *  time the audio thread has not moved on yet, so the entry is never reapable in that pass. */
     void scheduleReapRetry();
+
+    void registerParameterContextMenu(juce::AudioPluginInstance& instance);
 
     /** Message thread. prepareToPlay/setPlayConfigDetails the instance to OUR rate and block. */
     void prepareInstance(juce::AudioPluginInstance& instance) const;

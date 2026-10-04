@@ -201,6 +201,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     }
 
     prepareInstance(*instance);
+    registerParameterContextMenu(*instance);
 
     // The plugin's own state, if we are restoring a patch. Applied BEFORE publication so the audio
     // thread never renders one block of the plugin's factory default.
@@ -246,6 +247,26 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // does not re-prepare an already-prepared node, so it cannot re-enter prepareToPlay either.)
     if (onInstancePublished)
         onInstancePublished();
+}
+
+// Routes a VST3 instance's parameter context menu to buildParameterContextMenu() through
+// juce::VST3PluginFormat::setHostContextMenuExtension (cmake/patches/juce-vst3-context-menu.patch,
+// docs/development/juce-patches.md). Any other format, and a build without VST3 hosting, ignores it. The
+// callback lives inside the plugin's host context and holds the module weakly, so a menu that outlives the
+// module finds nothing to call.
+void HostedPluginModule::registerParameterContextMenu([[maybe_unused]] juce::AudioPluginInstance& instance) {
+#if JUCE_PLUGINHOST_VST3 && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD)
+    juce::VST3PluginFormat::setHostContextMenuExtension(
+        instance, [weak = juce::WeakReference<HostedPluginModule>(this)](juce::uint32 paramId, juce::PopupMenu& menu) {
+            if (auto* module = weak.get())
+                module->buildParameterContextMenu(juce::String(paramId), menu);
+        });
+#endif
+}
+
+void HostedPluginModule::buildParameterContextMenu(const juce::String& paramId, juce::PopupMenu& menu) {
+    if (onParameterContextMenu)
+        onParameterContextMenu(paramId, menu);
 }
 
 void HostedPluginModule::retireActiveInstance() {

@@ -120,6 +120,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/development/local-ci.md`](development/local-ci.md) — `scripts/ci-local.sh`, the git hooks, the clang-format pin, worktree dependency reuse, running suites in parallel, dev-signing
 - [`docs/development/ci-pipeline.md`](development/ci-pipeline.md) — `ci.yml`'s triggers and jobs, the six required status checks, docs-only PR coverage, the apt-mirror failover
 - [`docs/development/ci-caching.md`](development/ci-caching.md) — the ccache and FetchContent caches, the six rules that keep them working, and the health check that gates them
+- [`docs/development/juce-patches.md`](development/juce-patches.md) — the patch applied to the FetchContent'd JUCE (VST3 parameter context menu hook), how it is applied idempotently, cached and refreshed
 - [`docs/development/ascii-literal-guard.md`](development/ascii-literal-guard.md) — no non-ASCII bytes in a `Source/` string literal, and the JUCE decoding contract behind it
 - [`docs/development/file-size-guard.md`](development/file-size-guard.md) — the 1000-line cap, its strict ratchet baseline, and how to split an over-cap file
 - [`docs/development/function-size-guard.md`](development/function-size-guard.md) — the 200-line-per-function cap, how a function's size is measured, and its ratchet baseline

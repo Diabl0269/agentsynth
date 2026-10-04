@@ -344,8 +344,9 @@ public:
     /** Hosted-plugin card only; empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
     std::function<void()> onChooseKnobsRequested;
 
-    /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
-    void showPluginKnobPicker();
+    /** No-op unless this is a live Hosted Plugin card. `armTouchToAdd` opens it with "touch a control in
+     *  the plugin's window" already on. See ModuleComponentHostedPluginCard.cpp. */
+    void showPluginKnobPicker(bool armTouchToAdd = false);
     /** Opens the card layout editor beside this card; the hosted plugin's picker on a hosted card,
      *  nothing on a bespoke card. See ModuleComponentLayoutEditor.cpp. */
     void showCardLayoutEditor();

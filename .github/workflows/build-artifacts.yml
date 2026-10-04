@@ -206,9 +206,9 @@ jobs:
         # pins CACHE_WARM_EXPECTED to 'false' (report-only, see below), so the bump can't fail it;
         # ci.yml's equivalent PR jobs use scripts/ci-cache-check.sh's DEPS_KEY_CHANGED input (see
         # its own header comment) for the same reason.
-        key: ${{ runner.os }}-release-deps-ninja4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-release-deps-ninja5-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja4-
+          ${{ runner.os }}-release-deps-ninja5-
 
     # ccache. This workflow had none until Aug 2026, so every release build recompiled the whole
     # tree from cold even though ci.yml had just built the identical commit. The key is scoped
@@ -344,8 +344,8 @@ jobs:
     # single most recent generation regardless — FRO341 dropped this from 2 generations to 1,
     # since 2 generations' worth of every cap in both workflows was, by construction, enough on
     # its own to exceed GitHub's 10 GB repo-wide cache limit — tolerates a missing/partial
-    # listing). release-deps-ninja4 is kept in its own key namespace, separate from ci.yml's
-    # deps4 (see this job's "release-deps-ninja4" key comment above) rather than merged, since the
+    # listing). release-deps-ninja5 is kept in its own key namespace, separate from ci.yml's
+    # deps5 (see this job's "release-deps-ninja5" key comment above) rather than merged, since the
     # two workflows populate build/_deps differently (ci.yml also fetches GoogleTest via
     # ENABLE_TESTS=ON; this workflow never does) — but it is NOT exempt from pruning: FRO341 found
     # this family had no prune call at all, so a superseded entry from every past
@@ -381,7 +381,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-release-ccache-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-release-deps-ninja4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-release-deps-ninja5-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see ci.yml's identical comment in its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

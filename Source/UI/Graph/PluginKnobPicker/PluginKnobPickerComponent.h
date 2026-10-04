@@ -29,6 +29,10 @@ public:
     /** Fired once per touch-to-add arming; the card wires it to its own "Open Editor". */
     std::function<void()> onOpenPluginEditorRequested;
 
+    /** Ticks "Touch in the plugin editor to add" and arms the capture, exactly as the tick does: the
+     *  plugin's own window opens through onOpenPluginEditorRequested. Idempotent. */
+    void armTouchToAdd();
+
     void setTouchToAddArmedForTest(bool armed);
     bool isTouchToAddArmedForTest() const;
     /** Delivers a gesture start for live parameter `parameterIndex` through the real touch capture. */

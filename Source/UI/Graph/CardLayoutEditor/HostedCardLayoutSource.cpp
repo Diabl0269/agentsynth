@@ -2,6 +2,7 @@
 // flat version 1 slot list, so a project opened in an older build keeps its plugin cards.
 // docs/control/plugin-card-layout.md#choosing-knobs.
 #include "HostedCardLayoutSource.h"
+#include "CardLayoutEditorModel.h"
 #include "Modules/CardLayoutJson.h"
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
 
@@ -91,6 +92,34 @@ CardLayout HostedCardLayoutSource::reset(bool allOfType) {
         store_->clearDefault(identity_);
     writeOverride(juce::var());
     return currentLayout();
+}
+
+namespace {
+CardLayoutEditorModel loadedModel(const HostedCardLayoutSource& source) {
+    CardLayoutEditorModel model(source.parameters(), source.hiddenRows(), source.supportsGroups());
+    model.load(source.currentLayout());
+    return model;
+}
+} // namespace
+
+HostedCardLayoutSource::ParameterState HostedCardLayoutSource::parameterState(const juce::String& paramId) const {
+    const auto model = loadedModel(*this);
+    if (model.findParam(paramId) == nullptr)
+        return ParameterState::Unknown;
+    return model.isShown(paramId) ? ParameterState::OnCard : ParameterState::Available;
+}
+
+// The same model edit and write the picker's tick makes (CardLayoutEditorComponent::setChecked ->
+// applyCurrentLayout), so the layout, the scope and the undo step cannot drift between the two paths.
+bool HostedCardLayoutSource::showParameter(const juce::String& paramId) {
+    if (module_.get() == nullptr)
+        return false;
+    auto model = loadedModel(*this);
+    if (model.findParam(paramId) == nullptr || model.isShown(paramId))
+        return false;
+    model.setShown(paramId, true);
+    apply(model.toLayout(), /*allOfType*/ false);
+    return true;
 }
 
 juce::StringArray HostedCardLayoutSource::listPresets() const {

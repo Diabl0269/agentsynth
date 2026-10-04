@@ -12,6 +12,7 @@
 #include "Modules/CardLayout.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 
 using namespace detail;
@@ -58,6 +59,9 @@ ModuleComponent::HostedCardBinding::HostedCardBinding(ModuleComponent& card, syn
         card_.rebuildHostedPluginCard();
         card_.relayoutHostedPluginCard();
     };
+    module.onParameterContextMenu = [this](const juce::String& paramId, juce::PopupMenu& menu) {
+        appendParameterMenuItems(paramId, menu);
+    };
     registered_ = true;
 }
 
@@ -75,9 +79,20 @@ void ModuleComponent::HostedCardBinding::shutdown() {
     if (auto* module = module_.get()) {
         module->removeInstanceObserver(this);
         module->onCardLayoutChanged = nullptr;
+        module->onParameterContextMenu = nullptr;
     }
     if (store_ != nullptr)
         store_->removeListener(this);
+}
+
+// The plugin window's right-click on one of its controls: "Add to card" (or "On the card") for that
+// parameter. The item's action reaches the module weakly, so a menu left open past a node delete is harmless.
+void ModuleComponent::HostedCardBinding::appendParameterMenuItems(const juce::String& paramId, juce::PopupMenu& menu) {
+    auto* module = module_.get();
+    if (module == nullptr)
+        return;
+    synth::ui::appendAddToCardMenuItem(menu, *module, store_, card_.owner.getAudioEngine().getGraph(), card_.nodeId,
+                                       card_.undoManager, paramId);
 }
 
 // The instance is still alive for this whole call (HostedPluginModule fires the gone edge before it can be
@@ -238,9 +253,10 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
 // Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Edit Layout..."
 // button (createHostedPluginControls() above wires onChooseKnobsRequested to this very function)
 // and from buildModuleContextMenu()'s "Edit Layout..." item (ModuleComponentInteraction.cpp),
-// both of which just call onChooseKnobsRequested() -- so this is the ONE place that actually builds
+// both of which just call onChooseKnobsRequested(), and from its "Add control from plugin window..." item,
+// which asks for touch capture to start armed -- so this is the ONE place that actually builds
 // the popover (see docs/control/plugin-card-layout.md#choosing-knobs).
-void ModuleComponent::showPluginKnobPicker() {
+void ModuleComponent::showPluginKnobPicker(bool armTouchToAdd) {
     if (hostedCard_ == nullptr)
         return;
     auto* hosted = hostedCard_->getModule();
@@ -257,6 +273,10 @@ void ModuleComponent::showPluginKnobPicker() {
         if (owner.onOpenPluginEditorRequested)
             owner.onOpenPluginEditorRequested(nodeId);
     };
+
+    // After the editor callback is wired: arming opens the plugin's own window through it.
+    if (armTouchToAdd)
+        picker->armTouchToAdd();
 
     const auto anchor = chooseKnobsButton != nullptr ? chooseKnobsButton->getScreenBounds() : getScreenBounds();
     launchCardLayoutEditorCallOutBox(std::move(picker), anchor);

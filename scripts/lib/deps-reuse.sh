@@ -32,6 +32,20 @@
 
 DEPS_REUSE_NAMES=(JUCE GOOGLETEST SPARKLE)
 
+# deps_reuse_juce_is_patched <worktree_root> <juce_src>
+#
+# JUCE is patched by FetchContent's PATCH_COMMAND (cmake/patches/*.patch, docs/development/juce-patches.md),
+# and FETCHCONTENT_SOURCE_DIR_JUCE skips that step -- so a source tree may only be reused when every patch
+# the worktree carries is already applied to it (it applies in reverse). Returns 0 when there are no patches.
+deps_reuse_juce_is_patched() {
+    local worktree_root="$1" juce_src="$2" patch
+    for patch in "$worktree_root"/cmake/patches/*.patch; do
+        [ -f "$patch" ] || continue
+        (cd "$juce_src" && git apply --check --reverse --ignore-whitespace "$patch") >/dev/null 2>&1 || return 1
+    done
+    return 0
+}
+
 # deps_reuse_compute <worktree_root> <main_checkout_root> <build_dir_name>
 #
 # Sets DEPS_REUSE_ARGS (array) and DEPS_REUSE_MESSAGE (string) as plain globals -- bash 3.2
@@ -66,9 +80,14 @@ deps_reuse_compute() {
 
     local deps_dir="$main_root/$build_dir_name/_deps"
     local name lower
-    local found=()
+    local found=() unpatched=""
     for name in "${DEPS_REUSE_NAMES[@]}"; do
         lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+        if [ "$name" = "JUCE" ] && [ -d "$deps_dir/${lower}-src" ] &&
+            ! deps_reuse_juce_is_patched "$worktree_root" "$deps_dir/${lower}-src"; then
+            unpatched=" (JUCE skipped: the main checkout's copy lacks this worktree's cmake/patches)"
+            continue
+        fi
         if [ -d "$deps_dir/${lower}-src" ]; then
             DEPS_REUSE_ARGS+=("-DFETCHCONTENT_SOURCE_DIR_${name}=$deps_dir/${lower}-src")
             found+=("$name")
@@ -76,12 +95,12 @@ deps_reuse_compute() {
     done
 
     if [ "${#found[@]}" -eq 0 ]; then
-        DEPS_REUSE_MESSAGE="ci-local: dependency-source reuse skipped (no fetched sources found under $deps_dir)."
+        DEPS_REUSE_MESSAGE="ci-local: dependency-source reuse skipped (no fetched sources found under $deps_dir)$unpatched."
         return 0
     fi
 
     local joined
     joined="$(printf '%s, ' "${found[@]}")"
     joined="${joined%, }"
-    DEPS_REUSE_MESSAGE="ci-local: reusing $joined source(s) from the main checkout ($deps_dir) -- pins match."
+    DEPS_REUSE_MESSAGE="ci-local: reusing $joined source(s) from the main checkout ($deps_dir) -- pins match$unpatched."
 }
