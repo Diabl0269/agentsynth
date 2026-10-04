@@ -336,3 +336,26 @@ TEST(SnippetInsert, IgnoresConnectionsReferencingAbsentNodes) {
     EXPECT_EQ(added.size(), 1u);
     EXPECT_EQ(target.getConnections().size(), 0) << "the dangling wire is dropped during preparation";
 }
+
+TEST(SnippetInsert, OutCopiesMapsEverySourceNodeToItsCopy) {
+    juce::AudioProcessorGraph source;
+    auto osc = addAt(source, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAt(source, std::make_unique<FilterModule>(), 300, 0);
+    source.addConnection({{osc->nodeID, 0}, {filter->nodeID, 0}});
+    auto snippet = SnippetManager::extractSnippet(source, {osc->nodeID, filter->nodeID}, "OscFilter");
+
+    // Insert into the SAME graph: the copies sit next to the originals, so a mapping that confused the two
+    // (or returned the original ids) would be visible.
+    std::map<int, SnippetManager::NodeID> copies;
+    const auto added = SnippetManager::insertSnippet(snippet, source, {0, 400}, false, nullptr, false, &copies);
+
+    ASSERT_EQ(added.size(), 2u);
+    ASSERT_EQ(copies.size(), 2u);
+    const auto oscCopy = copies.at((int)osc->nodeID.uid);
+    const auto filterCopy = copies.at((int)filter->nodeID.uid);
+    EXPECT_NE(oscCopy, osc->nodeID);
+    EXPECT_NE(filterCopy, filter->nodeID);
+    EXPECT_NE(dynamic_cast<OscillatorModule*>(source.getNodeForId(oscCopy)->getProcessor()), nullptr);
+    EXPECT_NE(dynamic_cast<FilterModule*>(source.getNodeForId(filterCopy)->getProcessor()), nullptr);
+    EXPECT_TRUE(source.isConnected({{oscCopy, 0}, {filterCopy, 0}})) << "the copy's own wire joins the copies";
+}

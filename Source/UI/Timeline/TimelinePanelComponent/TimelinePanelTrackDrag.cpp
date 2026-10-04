@@ -4,9 +4,11 @@
 // lanes on the right are NOT animated, they follow the new order when the drop commits.
 #include "AppUndoManager.h"
 #include "TimelinePanelComponent.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace synth::ui {
 
@@ -213,6 +215,33 @@ std::vector<TimelinePanelComponent::GlideRow> TimelinePanelComponent::rowsToGlid
             return {};
         rows.push_back(
             {header->getTrackId(), static_cast<float>(header->getY()), static_cast<float>(header->getHeight())});
+    }
+    return rows;
+}
+
+// A duplicate adds one row: the rows below it glide down a slot and the new row grows out of its source's slot,
+// through glideTrackRowsFrom like an undo. Disarms on every call, so a rebuild that never glides (off-screen, Reduce
+// Motion) cannot leave a stale arm for the next one.
+std::vector<TimelinePanelComponent::GlideRow> TimelinePanelComponent::rowsToGlideAfterDuplicate() {
+    std::vector<GlideRow> rows;
+    const auto source = std::exchange(duplicateGlideSource_, synth::TrackId{});
+    if (!source.isValid() || doc_ == nullptr || !canAnimateTrackGlide() || synth::ui::prefersReducedMotion())
+        return rows;
+    for (const auto* header : trackHeaderList_.headers)
+        if (!header->isSectionHeader())
+            rows.push_back(
+                {header->getTrackId(), static_cast<float>(header->getY()), static_cast<float>(header->getHeight())});
+    const auto anchor = std::find_if(rows.begin(), rows.end(), [source](const GlideRow& r) { return r.id == source; });
+    if (anchor == rows.end())
+        return {};
+    const GlideRow slot = *anchor;
+    for (const auto& track : doc_->getTracks()) {
+        const bool known =
+            std::any_of(rows.begin(), rows.end(), [&track](const GlideRow& r) { return r.id == track.id; });
+        if (!known && track.kind != synth::TrackKind::Automation) {
+            rows.insert(anchor + 1, {track.id, slot.y, slot.height});
+            break;
+        }
     }
     return rows;
 }

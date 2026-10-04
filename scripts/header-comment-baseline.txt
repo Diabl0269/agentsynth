@@ -5,10 +5,10 @@
 # Never add a NEW header here -- relocate its comments beside their out-of-line definitions
 # instead. Adding a member with its own short one-line caller-facing contract in the header
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
+2 Source/AI/AccountService.h
 31 Source/AI/AIIntegrationService/AIIntegrationService.h
 24 Source/AI/AIProvider.h
 92 Source/AI/AIStateMapper/AIStateMapper.h
-2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
 115 Source/AppUndoManager.h
@@ -22,7 +22,7 @@
 76 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
 56 Source/ProjectBundle.h
-56 Source/SnippetManager.h
+54 Source/SnippetManager.h
 53 Source/Timeline/AssetManager.h
 118 Source/Timeline/AudioClipStreamer.h
 52 Source/Timeline/AutomationApplier.h
@@ -31,7 +31,7 @@
 32 Source/Timeline/MidiClipFile.h
 33 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
-119 Source/Timeline/TimelineDoc/TimelineDoc.h
+117 Source/Timeline/TimelineDoc/TimelineDoc.h
 24 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
@@ -42,7 +42,6 @@
 42 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
 55 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
-1 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
 24 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
 57 Source/UI/Timeline/TimelineTrackHeaderComponent.h

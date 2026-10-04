@@ -493,6 +493,8 @@ public:
      */
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
+    void armTrackDuplicateGlide(synth::TrackId source) noexcept { duplicateGlideSource_ = source; }
+    void focusTrackRow(synth::TrackId id);
     bool handleRootFocusKey(const juce::KeyPress& key);
 
     // ---- "+ Track" keyboard stop (TimelinePanelTrackHeaders.cpp) ----
@@ -625,6 +627,8 @@ private:
         float height = 0.0f;
     };
     std::vector<GlideRow> rowsToGlideAfterUndo() const;
+    std::vector<GlideRow> rowsToGlideAfterDuplicate();
+    synth::TrackId duplicateGlideSource_;
     bool canAnimateTrackGlide() const { return isShowing() || trackGlideForcedForTest_; }
     bool trackGlideForcedForTest_ = false;
     void glideTrackRowsFrom(const std::vector<GlideRow>& old);

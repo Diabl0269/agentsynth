@@ -221,3 +221,43 @@ track preset lookup, plus optional effect **inserts** placed after the step-3/4 
 before the Gate (each a macro member) — see
 [`docs/ai/timeline-ops.md`](../ai/timeline-ops.md#addinstrumenttrack). On a failure partway, that
 shared body removes every node it added and the doc track before returning.
+
+## Duplicate a track
+
+**Cmd+D on a focused track row**, or **Duplicate Track** in the row's right-click menu (it names the shortcut), adds a
+copy directly below it with its modules, clips, notes and automation. The key is the rebindable
+`timelineDuplicateFocusedTrack` (Timeline category, default Cmd+D). It shares the chord with the General
+`duplicateSelection` because conflicts are per category and the row's own `keyPressed()` claims the key before the
+command layer sees it: Cmd+D anywhere else (canvas, clips, piano roll) keeps its meaning. The Automation section header
+has nothing to copy and lets the key bubble.
+
+`MainComponent::duplicateTrack` (`MainComponentTrackDuplicate.cpp`) runs ONE graph + timeline + macro undo step, then
+the reconcile pass:
+
+1. **Which modules.** The nodes the track plays and no other track does (`resolveAutomationOwners`, the rule
+   [automation](automation.md#which-track-a-lane-lands-on) uses), minus the output dock (Master and everything after it).
+   A node two tracks reach stays shared, and so does a free-standing patch that only feeds the output dock: a node is
+   copied only when cables through the track's own nodes link it to the track's start without passing through Master.
+2. **Copy.** The same `SnippetManager::extractSnippet` / `insertSnippet` pair copy-paste uses
+   ([snippets-clipboard](../layout/snippets-clipboard.md#copy-paste-and-duplicate)): new node ids and uuids, parameters and
+   extra state carried, cables between copied modules and their macros (with ports and nesting) come across, placed one
+   gap below the original's lowest card. `insertSnippet`'s `outCopies` hands back original id -> copy id.
+3. **Boundary cables.** A paste drops wires that left the selection; a duplicated track must not, so every cable between
+   a copied module and a module that was not copied is re-created on the copy: into Master (the copy's channel is routed
+   like a new track's), into a shared bus, and from a shared source. A modulation routing into a copied module from a
+   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A channel macro named after the
+   track is renamed to the copy's name so two mixer columns never read the same.
+4. **Timeline.** `TimelineDoc::duplicateTrack` inserts the copy below the source with fresh ids on the track, clips, notes
+   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A lane whose module is
+   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The copy is named "<name> copy",
+   takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
+
+Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row emerges
+from its source's slot while the rows below glide down one slot (140 ms through the same `ReorderDragAnimator` an undo
+uses, armed by `armTrackDuplicateGlide`); under Reduce Motion, or off-screen, it lands at once. At `kMaxTracks` nothing
+happens and the status bar says so.
+
+Tests: `Tests/App/MainComponent/MainComponentDuplicateTrackTests.cpp` (the real key through the row; new ids, remapped
+cables, Master routing, clips, notes, lane; one undo and redo),
+`Tests/UI/Timeline/TimelineTrackDuplicateTests.cpp` (key, rebind, menu, glide),
+`Tests/Timeline/TimelineDoc/TimelineDocTracksTests.cpp` (`duplicateTrack`).

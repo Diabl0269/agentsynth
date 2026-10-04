@@ -73,7 +73,8 @@ take.
 A row is a real focus target — `setWantsKeyboardFocus(true)` in the constructor, the same pattern
 `TimelineClipLaneArea` / `PianoRollComponent` use for the surfaces they own — with a `keyPressed()`
 override that resolves bare **M**/**S**/**R** (`timelineMuteFocusedTrack` /
-`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category — see
+`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category, and Cmd+D `timelineDuplicateFocusedTrack`, which
+[duplicates the track](add-track.md#duplicate-a-track) — see
 [`shortcuts.md`](../control/shortcuts.md#timeline)) into exactly the same `toggleMuted()` / `toggleSoloed()`
 / `toggleArmed()` → `performEdit()` path the M/S/R **buttons**' own `onClick` calls, so a keystroke
 and a click can never disagree about what "toggle" means or about the undo step it produces.
@@ -126,7 +127,7 @@ Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.
 focused row shows the same menu a right-click does, at the row: `TimelineTrackHeaderComponent` implements
 `KeyboardContextMenuProvider` and calls `showContextMenu()`, the function `mouseDown()` calls for a right-click. A
 bare Return on the row does the same (rename is a double-click on the name, so Return has no other job there), and
-the row's tooltip says "Right-click, Shift+F10 or Return for the track menu". The same three routes open the menu of an
+the row's tooltip says "Right-click, Shift+F10 or Return for the track menu; <the duplicate key> duplicates the track". The same three routes open the menu of an
 automation lane header and a modulator row, which have no "..." button either.
 
 ## Click to select
@@ -528,6 +529,8 @@ they keep opening their own menu or picker.
 
 The menu's items:
 
+- **Duplicate Track** (above the height items; not on the Automation section header) copies the track below itself, and
+  names its rebindable shortcut: [add-track](add-track.md#duplicate-a-track).
 - **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
   its bound `Track In` / `Track Audio` node go together, and come back together.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see

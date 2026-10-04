@@ -67,7 +67,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/view.md`](timeline/view.md) — `TimelineViewState`: beat↔pixel mapping, snap divisions, the lanes grid, wheel/pinch/keyboard zoom and scroll
 - [`docs/timeline/ruler.md`](timeline/ruler.md) — the ruler strip: tick density, the two gesture zones, the loop brace, markers
 - [`docs/timeline/tracks.md`](timeline/tracks.md) — track header rows: binding and channel chips, M/S/R, focus, drag-to-reorder, the row context menu
-- [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"+ Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers)
+- [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"+ Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers), and Duplicate Track
 - [`docs/timeline/playhead.md`](timeline/playhead.md) — the playhead overlay, its two timers, latency compensation, follow-playhead
 - [`docs/timeline/transport.md`](timeline/transport.md) — the transport bar, the recording gate, transport actions, metronome and count-in
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll

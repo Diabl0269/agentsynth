@@ -374,7 +374,9 @@ void TimelinePanelComponent::syncTrackHeaders() {
             ? trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId()
             : synth::TrackId();
 
-    const auto reorderedRows = rowsToGlideAfterUndo();
+    auto reorderedRows = rowsToGlideAfterUndo();
+    if (reorderedRows.empty())
+        reorderedRows = rowsToGlideAfterDuplicate();
     trackHeaderList_.headers.clear();
     focusedTrackIndex_ = -1;
     // A drag's OWN commit (commitTrackDrag) sets committingTrackDrag_ and finishes the gesture
@@ -455,6 +457,16 @@ void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     }
     focusedTrackIndex_ = -1; // id no longer resolves (deleted between the click and this call)
     refreshRoutingPane();
+}
+
+// Moves keyboard focus to `id`'s row and scrolls it into view; also disarms armTrackDuplicateGlide.
+void TimelinePanelComponent::focusTrackRow(synth::TrackId id) {
+    duplicateGlideSource_ = {};
+    setFocusedTrack(id);
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+        ensureTrackVisible(focusedTrackIndex_);
+    }
 }
 
 // Nothing focused yet starts at row 0 either direction (there is no "current position" for a

@@ -104,6 +104,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineIncreaseTrackHeight",
         "timelineDecreaseTrackHeight",
         "timelineResetTrackHeight",
+        "timelineDuplicateFocusedTrack",
     };
     return ids;
 }

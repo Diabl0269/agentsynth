@@ -146,6 +146,8 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Arm Focused Track";
     if (actionId == "timelineToggleTrackAutomation")
         return "Show/Hide Track Automation";
+    if (actionId == "timelineDuplicateFocusedTrack")
+        return "Duplicate Focused Track";
     if (actionId == "timelineIncreaseTrackHeight")
         return "Increase Track Height";
     if (actionId == "timelineDecreaseTrackHeight")

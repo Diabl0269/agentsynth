@@ -481,6 +481,7 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
 | Return / Space on **+ Track** | Opens the add-track menu, exactly like a click. ↓ on the Timeline region root lands on the button first, with or without tracks. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **+ Track** |
 | Option+= / Option+- / Option+0 | Increase / Decrease / Reset Track Height (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`, `timelineResetTrackHeight`) — sizes the focused row only, ×1.25 a step, one undo step each ([tracks](../timeline/tracks.md#one-tracks-height)); no Option+=/-/0 is bound anywhere else |
+| Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused row's track below it with its modules, clips and automation as one undo step ([add-track](../timeline/add-track.md#duplicate-a-track)); shares the chord with the General Duplicate (`duplicateSelection`) because conflicts are per category, and only a focused track row claims it |
 | A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier) |
 
 #### Settings and dialog arrow keys

@@ -229,6 +229,7 @@ add_executable(Tests
     App/MainComponent/MainComponentViewPersistTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentFreshUndoTests.cpp
+    App/MainComponent/MainComponentDuplicateTrackTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp
     App/MainComponent/MainComponentMidiRemoteStartupTests.cpp
@@ -553,6 +554,7 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
+    UI/Timeline/TimelineTrackDuplicateTests.cpp
     UI/Timeline/TimelineAddTrackKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardNavTests.cpp

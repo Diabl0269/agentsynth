@@ -48,7 +48,8 @@ itself, enters its controls with Down, steps with Up/Down in on-screen order and
 before it. The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
 focused control does not use them itself (a combo box or text field keeps its Up/Down).
 
-A row that has a menu (a track row, an automation lane header, a modulator row) has no "..." button: the menu is a
+A track row also takes Cmd+D (rebindable `timelineDuplicateFocusedTrack`) to duplicate its track, named in the row's tooltip and
+beside "Duplicate Track" in its menu; focus follows the copy. A row that has a menu (a track row, an automation lane header, a modulator row) has no "..." button: the menu is a
 right-click, Shift+F10 (`KeyboardContextMenuProvider`) or Return on the focused row, the row is named for what it is
 ("Cutoff automation lane") and its tooltip lists the three ways in. A picture that only shows state (the modulator
 shape icon) is named and tooltipped but is not a Tab stop; the control it mirrors stays the one that edits.
