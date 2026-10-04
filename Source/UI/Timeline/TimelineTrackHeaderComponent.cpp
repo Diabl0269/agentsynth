@@ -325,7 +325,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     // The row is the keyboard stop (Up/Down walk the rows), so a screen reader names it by its track.
     setTitle(t->name);
     setTooltip("Right-click, Shift+F10 or Return for the track menu; " +
-               bindingText("timelineDuplicateFocusedTrack", kDuplicateKey) + " duplicates the track");
+               bindingText("timelineDuplicateFocusedTrack", kDuplicateKey) + " duplicates the track, " +
+               bindingText("timelineDeleteFocusedTrack", kDeleteTrackKey) + " deletes it");
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
