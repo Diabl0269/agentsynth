@@ -422,7 +422,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);
     tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
 
-    auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
+    auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager, &appProperties);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
 
     auto* preferencesSettingsTab = new PreferencesSettingsTab(appProperties);

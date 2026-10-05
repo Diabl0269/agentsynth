@@ -1,6 +1,7 @@
 #include "ShortcutsSettingsTab.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Settings/SettingsFoldState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
@@ -25,8 +26,40 @@ juce::String bindingHelpText(const juce::KeyPress& binding) {
 }
 } // namespace
 
-ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
-    : shortcutManager(sm) {
+namespace {
+constexpr const char* kFoldedKey = "shortcutsFolded";
+
+// Stable names (not the display text) so rewording a heading cannot repoint a saved fold.
+const char* persistedName(ShortcutCategory category) {
+    switch (category) {
+    case ShortcutCategory::General:
+        return "General";
+    case ShortcutCategory::Graph:
+        return "Graph";
+    case ShortcutCategory::Timeline:
+        return "Timeline";
+    case ShortcutCategory::PianoRoll:
+        return "PianoRoll";
+    case ShortcutCategory::Mixer:
+        return "Mixer";
+    case ShortcutCategory::LayoutEditor:
+        return "LayoutEditor";
+    }
+    return "";
+}
+} // namespace
+
+void ShortcutsSettingsTab::saveFolds() {
+    juce::StringArray folded;
+    for (auto category : ShortcutManager::getCategoryOrder())
+        if (collapsedSections.count(category) > 0)
+            folded.add(persistedName(category));
+    synth::ui::settingsfold::save(appProperties, kFoldedKey, folded);
+}
+
+ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::ApplicationProperties* props)
+    : shortcutManager(sm)
+    , appProperties(props) {
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Keyboard Shortcuts", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
@@ -53,6 +86,12 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
             synth::ui::forwardEscapeToParents(searchEditor);
     };
     synth::ui::removeHiddenTabStops(searchEditor);
+
+    // Restored before the first layout, so the list opens folded as it was left.
+    const auto folded = synth::ui::settingsfold::load(appProperties, kFoldedKey);
+    for (auto category : ShortcutManager::getCategoryOrder())
+        if (folded.contains(persistedName(category)))
+            collapsedSections.insert(category);
 
     foldAllButton.onClick = [this] { toggleAllSections(); };
     addAndMakeVisible(foldAllButton);
@@ -378,6 +417,7 @@ void ShortcutsSettingsTab::setSectionCollapsed(ShortcutCategory category, bool c
         collapsed ? collapsedSections.insert(category).second : (collapsedSections.erase(category) > 0);
     if (!changed)
         return;
+    saveFolds();
     rebuildLayout();
 }
 
@@ -396,6 +436,7 @@ void ShortcutsSettingsTab::setAllSectionsCollapsed(bool collapsed) {
     if (next == collapsedSections)
         return;
     collapsedSections = std::move(next);
+    saveFolds();
     rebuildLayout();
 }
 

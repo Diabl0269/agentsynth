@@ -41,6 +41,8 @@ public:
     enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, All };
     static constexpr int kNumSections = 6; // every Category before All
     static juce::String categoryName(Category category);
+    // The stable name a category is saved under (never the display text or the enum value).
+    static juce::String persistedCategoryName(Category category);
     Category getSelectedCategory() const { return selectedCategory; }
     // Same path as picking the entry in the drop-down (fires the combo's onChange synchronously).
     void setSelectedCategory(Category category);
@@ -268,7 +270,8 @@ private:
     bool sectionHeadersActive() const { return selectedCategory == Category::All && searchQuery.isEmpty(); }
     void placeSectionHeaders(int contentWidth);
     void refreshSectionTitles();
-    void setupSectionControls(); // chained from setupCategorySelector()
+    void setupSectionControls(); // chained from setupCategorySelector(); restores the saved folds
+    void saveSectionFolds();     // remembers which sections are folded (user setting preferencesFolded)
 
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
@@ -421,7 +424,8 @@ private:
     // The category whose groups the layout pass is currently walking (set by each layout*Groups).
     Category layoutCategory{Category::All};
     // "All" view state: per-section fold, where each section's rows began in the last layout pass
-    // (-1 = not laid out), and the header buttons. Fold state is per tab instance, not persisted.
+    // (-1 = not laid out), and the header buttons. The folds are remembered across windows and launches
+    // (saveSectionFolds).
     bool sectionCollapsed[kNumSections] = {};
     int sectionStartY[kNumSections] = {};
     // A fold header of the "All" view (defined in ...Sections.cpp). A juce::Button so it is

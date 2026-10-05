@@ -16,7 +16,12 @@ the Settings window is.
   category; the one **Collapse all** / **Expand all** button in the strip above the rows (the same
   button, and the same place, as in Keyboard Shortcuts) does every header at once: it reads "Collapse
   all" while any section is open and "Expand all" once every section is folded. Folds are remembered
-  only while the Settings window is open (a new window starts fully expanded).
+  across Settings windows and launches (user setting `preferencesFolded`, the folded categories by stable
+  name, as for `preferencesCategory`; none saved means everything is expanded). They are restored in the
+  constructor before the first layout, so the tab opens as it was left with nothing animating into place.
+  The Keyboard Shortcuts tab does the same under `shortcutsFolded`; both go through
+  `UI/Settings/SettingsFoldState.h`, and the window itself remembers the open tab by name
+  (`settingsTabName`). → [`shortcuts.md`](../control/shortcuts.md)
 - Section headers and column heads are in normal case ("Graph", "Files & Autosave"), never all caps.
 - The picker row is sized by its content, not fixed: the drop-down is as wide as its longest entry (measured
   with the drop-down's own font plus the look-and-feel's text insets, `AppLookAndFeel::comboBoxWidthToFitItems`),
