@@ -16,13 +16,18 @@ namespace synth::ui {
 namespace {
 // The panel gets a window of its own beside the dot: not modal (a canvas pick has to reach the canvas), closed by
 // a press outside it, Esc or its owner, and deleted a turn after it is gone.
-void launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor) {
+void launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor,
+                   juce::ApplicationProperties* appProperties) {
     auto* panel = dynamic_cast<ModDotPopover*>(content.get());
     const auto dot = anchor.getScreenBounds();
     const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(dot);
     const auto area =
         display != nullptr ? display->userArea : juce::Desktop::getInstance().getDisplays().getTotalBounds(true);
     auto* frame = new ModDotPanelFrame(std::move(content), anchor, dot, area);
+    // The window sits outside the app window's tree: it takes the anchor's look (a plugin editor scopes its own) and
+    // needs a tooltip window of its own.
+    frame->setLookAndFeel(&anchor.getLookAndFeel());
+    frame->installTooltipWindow(appProperties);
     if (panel != nullptr) {
         panel->setMaxHeight(frame->maxContentHeight());
         panel->onDismiss = [frame = juce::Component::SafePointer<ModDotPanelFrame>(frame)] {
@@ -78,7 +83,7 @@ void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int d
     if (popoverLauncher)
         popoverLauncher(std::move(content), anchor);
     else
-        launchInFrame(std::move(content), anchor);
+        launchInFrame(std::move(content), anchor, host.appProperties);
 }
 
 ModDotPopover* ModDotController::getPopover() const { return static_cast<ModDotPopover*>(popover_.getComponent()); }

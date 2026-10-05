@@ -501,14 +501,22 @@ dot's centre, and it keeps doing so frame by frame as the panel grows (`ModDotPa
 `ModDotPanelGeometryTests`). The window is not modal: a press anywhere else closes it (the edits already applied),
 except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`). `ModDotPopover`
 (`Source/UI/Graph/ModDot/`) is the panel inside it; everything it paints uses the theme tokens itself (`ModDotPalette`).
-The window is made the key window and focus is taken as soon as it can be (retried for about two seconds); if a control
+The window owns a tooltip window of its own (`ModDotPanelFrame::installTooltipWindow`, the shared
+`AppTooltipWindow` with its fade and the "Show info tooltips" preference), a child of the frame, because the main
+window's tooltip covers only its own tree; tooltip texts are kept short enough to fit the panel's width. The window is
+made the key window and focus is taken as soon as it can be (retried for about two seconds); if a control
 that held focus goes away (a removed row, a folded list) the panel's tick moves focus to its first control, so Esc and
 the arrows keep working.
 
 * **Rows** ("Cutoff · modulation"). One row per source on the knob (`synth::ui::knobModSources`, macro ports looked
   through, so a row names the LFO, not the inlet): a swatch (`modRingPositive` from 0 up, `modRingNegative` below), the
-  source's name, an amount bar, the signed amount in the mono font, "Show <Source> in timeline" and "Remove <Source>".
-  Dragging the bar edits live (the ring follows) as ONE undo step; typing in the amount (click it, Return applies as
+  source's name, an amount fader, the signed amount in the mono font, "Show <Source> in timeline" and "Remove <Source>".
+  The fader is the Design System fader a module card shows (`ModDotAmountBar`, a horizontal `juce::Slider` painted by
+  `AppLookAndFeel`, -100 to +100 percent); the row's controls are a theme spacing unit (`ModDotPalette::space`) apart,
+  so the icons never touch the fader or the amount. The icons are always in colour, resting, hovered or focused
+  (`modDotGlyphColour`): remove in the negative colour (with a pulse in the remove-highlight mode), show in timeline
+  and the crosshair in the positive one, the list in the accent. Resting the pointer on any of them shows its tooltip.
+  Dragging the fader edits live (the ring follows) as ONE undo step; typing in the amount (click it, Return applies as
   one step, Esc cancels) is one step too. Clicking a row, or focusing it, selects it (a 10 percent accent tint) and
   calls `ModDotController::setLastChosen`, so a dot drag edits that source next; the chosen source's row is selected
   when the panel opens.
@@ -572,7 +580,7 @@ the arrows keep working.
   rows; Left and Right on an amount bar step 1 percent (Shift 10), each key press one undo step; on a group header Left
   folds, Right unfolds, Return toggles.
 * **Accessibility.** Every control has a keyboard stop with the accent focus ring, a name and a tooltip: the bar is a
-  slider ("<Source> amount", the value in percent, "Drag to change how strongly <Source> moves <Param>"), the halves
+  slider ("<Source> amount", the value in percent, tooltip "Drag to change <Source> amount", description "How strongly <Source> moves <Param>"), the halves
   read "Add source" / "Add source, list open" and "Pick on canvas" / "Pick on canvas, on", the group headers read
   "LFOs, expanded" / "collapsed", a source row reads "<Source>, 2 targets" (", added" when it is on the knob) and a new
   module row "New ADSR, new module". The `ModDotPopover` surface is audited in

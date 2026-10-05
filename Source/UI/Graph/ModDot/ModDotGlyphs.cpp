@@ -2,6 +2,23 @@
 
 namespace synth::ui {
 
+juce::Colour modDotGlyphColour(const ModDotPalette& p, ModDotGlyph glyph, float hover) {
+    juce::Colour base = p.accent;
+    switch (glyph) {
+    case ModDotGlyph::Trash:
+        base = p.negative;
+        break;
+    case ModDotGlyph::Timeline:
+    case ModDotGlyph::Crosshair:
+        base = p.positive;
+        break;
+    case ModDotGlyph::List:
+        base = p.accent;
+        break;
+    }
+    return base.brighter(0.25f * juce::jlimit(0.0f, 1.0f, hover));
+}
+
 void paintModDotChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress, juce::Colour colour) {
     // Same triangle as the module library's fold chevron: it points down at rest, so it is turned a quarter back
     // while folded.

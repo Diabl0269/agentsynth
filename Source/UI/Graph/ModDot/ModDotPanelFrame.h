@@ -7,6 +7,7 @@
 // docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotPanelGeometry.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -25,6 +26,12 @@ public:
     ModDotPanelFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor, juce::Rectangle<int> dot,
                      juce::Rectangle<int> area);
     ~ModDotPanelFrame() override;
+
+    /** Gives the window its own tooltip: the main window's covers only its own component tree, so without this
+     *  none of the panel's controls would ever show one. `appProperties` carries the "Show info tooltips"
+     *  preference (may be null). Call before showOnDesktop. */
+    void installTooltipWindow(juce::ApplicationProperties* appProperties);
+    synth::ui::AppTooltipWindow* tooltipWindow() noexcept { return tooltipWindow_.get(); }
 
     /** Puts the frame on the desktop, in front, with the soft entrance every popup has. */
     void showOnDesktop();
@@ -56,6 +63,7 @@ private:
     juce::Rectangle<int> dot_; // the anchor's bounds when the panel opened
     modDotPanel::Placement local_;
     juce::Path outline_;
+    std::unique_ptr<AppTooltipWindow> tooltipWindow_;
     bool closing_ = false;
     bool listening_ = false;
 };

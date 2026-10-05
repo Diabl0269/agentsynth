@@ -8,8 +8,10 @@ namespace synth::ui {
 namespace {
 constexpr int kPad = 8;
 constexpr int kSwatch = 10;
-constexpr int kNameWidth = 62;
+constexpr int kNameWidth = 56;
 constexpr int kAmountWidth = 44;
+constexpr int kIconGap = 2; // between the two icon buttons, which read as one group
+constexpr int kBarHeight = 22;
 constexpr float kFont = 12.5f;
 } // namespace
 
@@ -80,7 +82,7 @@ ModDotSourceRow::ModDotSourceRow(const KnobModSource& source, const juce::String
         if (onRemove)
             onRemove(*this);
     };
-    bar_.setValue(source.amount);
+    bar_.setAmount(source.amount);
     amountButton_->setButtonText(ModDotAmountBar::percentText(source.amount));
     applyNames();
 }
@@ -93,9 +95,11 @@ void ModDotSourceRow::applyNames() {
     const auto& name = source_.sourceName;
     setTitle(name + ", " + ModDotAmountBar::percentText(source_.amount));
     bar_.setTitle(name + " amount");
-    bar_.setTooltip("Drag to change how strongly " + name + " moves " + paramName_);
+    bar_.setTooltip("Drag to change " + name + " amount");
+    // The long form is for a screen reader: a tooltip has to fit inside the panel's window.
+    bar_.setDescription("How strongly " + name + " moves " + paramName_);
     amountButton_->setTitle(name + " amount value");
-    amountButton_->setTooltip("Click to type how strongly " + name + " moves " + paramName_);
+    amountButton_->setTooltip("Click to type " + name + " amount");
     timelineButton_.setTitle("Show " + name + " in timeline");
     timelineButton_.setTooltip("Show " + name + " in timeline");
     removeButton_.setTitle("Remove " + name);
@@ -107,7 +111,7 @@ void ModDotSourceRow::update(const KnobModSource& source) {
     const bool amountChanged = source.amount != source_.amount;
     source_ = source;
     if (!bar_.isMouseButtonDown()) {
-        bar_.setValue(source.amount);
+        bar_.setAmount(source.amount);
         amountButton_->setButtonText(ModDotAmountBar::percentText(source.amount));
     }
     if (renamed || amountChanged)
@@ -115,7 +119,7 @@ void ModDotSourceRow::update(const KnobModSource& source) {
     repaint();
 }
 
-juce::Colour ModDotSourceRow::swatchColour() const { return modDotPaletteFor(*this).swatchFor(bar_.getValue()); }
+juce::Colour ModDotSourceRow::swatchColour() const { return modDotPaletteFor(*this).swatchFor(bar_.amount()); }
 
 void ModDotSourceRow::setSelected(bool selected) {
     if (selected_ == selected)
@@ -135,7 +139,7 @@ void ModDotSourceRow::paint(juce::Graphics& g) {
         g.setColour(p.accent.withAlpha(0.10f));
         g.fillRoundedRectangle(area, 6.0f);
     }
-    g.setColour(p.swatchFor(bar_.getValue()));
+    g.setColour(p.swatchFor(bar_.amount()));
     g.fillEllipse(swatchArea_.toFloat());
     g.setColour(p.text);
     g.setFont(juce::Font(juce::FontOptions(kFont)));
@@ -145,16 +149,22 @@ void ModDotSourceRow::paint(juce::Graphics& g) {
 void ModDotSourceRow::resized() {
     // Laid out for the full row height whatever height the page has given it: a row growing in or shrinking out
     // is revealed and hidden, never squashed.
+    // Left to right: swatch, name, fader, amount, timeline, remove, each group a theme spacing unit from the next so
+    // the icons never touch the fader or the amount.
+    const int gap = modDotPaletteFor(*this).space;
     auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(kPad - 2, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
                                 .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
+    r.removeFromRight(kIconGap);
     timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    r.removeFromRight(gap);
     amountButton_->setBounds(r.removeFromRight(kAmountWidth).withSizeKeepingCentre(kAmountWidth, 20));
+    r.removeFromRight(gap);
     swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
-    r.removeFromLeft(6);
+    r.removeFromLeft(gap);
     nameArea_ = r.removeFromLeft(kNameWidth);
-    r.removeFromLeft(4);
-    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth() - 4, 22));
+    r.removeFromLeft(gap);
+    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
     if (editor_ != nullptr)
         editor_->setBounds(amountButton_->getBounds());
 }
@@ -193,7 +203,7 @@ void ModDotSourceRow::beginAmountEdit() {
     editor_->setColour(juce::TextEditor::outlineColourId, p.border);
     editor_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
     editor_->setInputRestrictions(5, "0123456789.-+%");
-    editor_->setText(juce::String(juce::roundToInt(bar_.getValue() * 100.0f)), false);
+    editor_->setText(juce::String(juce::roundToInt(bar_.amount() * 100.0f)), false);
     editor_->onNavigationKey = [this](const juce::KeyPress& key) {
         if (key == juce::KeyPress::returnKey) {
             endAmountEdit(true);

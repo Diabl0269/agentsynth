@@ -66,6 +66,8 @@ public:
         std::function<void(const ModulatorInfo&)> removeModulator;
         /** Open the timeline and bring the source's modulator row into view. No fallback. */
         std::function<void(const ModulatorInfo&)> revealModulator;
+        /** Where the "Show info tooltips" preference lives, for the panel window's tooltip (null: always on). */
+        juce::ApplicationProperties* appProperties = nullptr;
     } host;
 
     void openPopover(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor);
