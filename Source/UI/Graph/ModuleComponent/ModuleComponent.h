@@ -440,6 +440,10 @@ private:
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
     bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
+    /** The canvas zoom this card is drawn at (1 when it has no canvas parent). */
+    float canvasZoom() const;
+    /** Factor (1..2) hit tolerances grow by on a zoomed-out canvas, so a target keeps its on-screen size. */
+    float hitToleranceScale() const;
     /** The shared hit zone of the landing dot (mod dot and cable pickup). */
     bool pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
                              const juce::MouseEvent& e) const;

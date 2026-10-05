@@ -281,3 +281,6 @@ remove buttons highlighted instead of disconnecting them all
 `doubleClickPortDisconnect` in `juce::ApplicationProperties`. Default: **on**. Restored in
 `MainComponent::initialiseCommon()`, so the canvas honours it without opening Settings. When off,
 double-clicking a jack behaves like two single clicks, i.e. a cable drag.
+
+The jack and mod-dot hit targets grow with a zoomed-out canvas (up to double the card-local radius, at 50% zoom and
+below), so they keep their zoom-1 size on screen. Where jacks sit closer than that, the nearest one wins.

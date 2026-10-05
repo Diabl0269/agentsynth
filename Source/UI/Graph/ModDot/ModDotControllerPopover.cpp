@@ -78,6 +78,8 @@ namespace {
 // A callout ignores a click on its own dot for its first 200 ms and dismisses itself after that, so a panel older
 // than this is already on its way out when a double-click lands.
 constexpr juce::uint32 kReusablePanelMs = 180;
+// The smallest on-screen side of a dot's hit target (the dot's button is 16 px at zoom 1).
+constexpr int kMinAnchorScreenPx = 16;
 } // namespace
 
 void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel,
@@ -110,7 +112,13 @@ void ModDotController::globalMouseDown(const juce::MouseEvent& e) {
         return;
     auto* open = getPopover();
     auto* anchor = open != nullptr ? open->anchor() : nullptr;
-    if (anchor == nullptr || !anchor->isShowing() || !anchor->getScreenBounds().contains(e.getScreenPosition()))
+    if (anchor == nullptr || !anchor->isShowing())
+        return;
+    // A zoomed-out canvas shrinks the anchor on screen; the target keeps the size it has at zoom 1.
+    auto target = anchor->getScreenBounds();
+    target = target.expanded(juce::jmax(0, (kMinAnchorScreenPx - target.getWidth()) / 2),
+                             juce::jmax(0, (kMinAnchorScreenPx - target.getHeight()) / 2));
+    if (!target.contains(e.getScreenPosition()))
         return;
     lastDoubleClickTime_ = e.eventTime;
     dotDoubleClicked(open->card(), open->destChannel(), *anchor);
