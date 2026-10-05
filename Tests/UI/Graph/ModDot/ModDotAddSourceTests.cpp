@@ -86,6 +86,16 @@ TEST_F(ModuleComponentTest, AddSourceOffersTheGroupsWithSourcesAndGreysWhatIsAlr
     EXPECT_EQ(f.add().collapseAllButton().getTitle(), "Collapse all groups");
 }
 
+TEST_F(ModuleComponentTest, SearchingEnvFindsTheAdsrRowUnderItsRealName) {
+    NoMotion motion;
+    AddFixture f;
+    f.openAdd();
+    typeInto(f.add().searchEditor(), "env");
+    const auto labels = f.add().visibleRowLabels();
+    EXPECT_NE(std::find(labels.begin(), labels.end(), f.titleOf(f.adsr)), labels.end());
+    EXPECT_NE(f.rowLabelled(f.titleOf(f.adsr)), nullptr);
+}
+
 TEST_F(ModuleComponentTest, TypingFiltersToMatchingRowsAndReturnAddsTheBestOneAtPlus25InOneUndoStep) {
     NoMotion motion;
     AddFixture f;

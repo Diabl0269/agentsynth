@@ -75,6 +75,15 @@ TEST(ModMatrixPicker, TypingFiltersCaseInsensitivelyAndHidesEmptyCategories) {
     EXPECT_GT(f.source->getVisibleRowNamesForTest().size(), items.size() + 1);
 }
 
+TEST(ModMatrixPicker, ASourceItemsAliasesAreSearchedButTheRowKeepsItsName) {
+    ModMatrixPicker picker("source",
+                           {{1, "Envelopes", "ADSR 1", synth::ui::moduleSearchAliases("ADSR 1")},
+                            {2, "LFOs", "LFO 1", synth::ui::moduleSearchAliases("LFO 1")}},
+                           0, [](int) {});
+    picker.setSearchTextForTest("env");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), std::vector<juce::String>{"ADSR 1"});
+}
+
 TEST(ModMatrixPicker, TheSearchMatchesTheTargetLabelToo) {
     PickerFixture f;
     f.dest->setSearchTextForTest("cutoff");

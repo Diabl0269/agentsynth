@@ -97,6 +97,22 @@ TEST(ModuleLibrarySearchFilter, QueryHidesNonMatchingModules) {
     EXPECT_EQ(modules.size(), 1);
 }
 
+// Other synths' names for a module find it; the row keeps its real name.
+TEST(ModuleLibrarySearchFilter, AnAliasFindsTheModuleUnderItsRealName) {
+    for (const char* query : {"env", "envelope", "eg", "contour"}) {
+        ModuleLibraryComponent comp;
+        comp.setSize(200, 1600);
+        comp.setSearchText(query);
+        EXPECT_TRUE(visibleModules(comp).contains("ADSR")) << query;
+    }
+    ModuleLibraryComponent comp;
+    comp.setSize(200, 1600);
+    comp.setSearchText("vco");
+    EXPECT_TRUE(visibleModules(comp).contains("Oscillator"));
+    comp.setSearchText("vcf");
+    EXPECT_TRUE(visibleModules(comp).contains("Filter"));
+}
+
 // Every word must appear, in any order: the library matches like every other search box.
 TEST(ModuleLibrarySearchFilter, MultiWordQueryMatchesInAnyOrder) {
     ModuleLibraryComponent comp;

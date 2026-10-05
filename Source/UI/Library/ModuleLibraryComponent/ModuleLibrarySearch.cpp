@@ -2,6 +2,16 @@
 // visibility, and the search field's theme colours.
 #include "ModuleLibraryComponent.h"
 
+namespace {
+// What a row's query is matched against: its name, plus the other names a module goes by (a module row only;
+// the painter highlights the visible name alone).
+juce::String searchableText(const ModuleLibraryComponent::Entry& entry) {
+    if (entry.kind != ModuleLibraryComponent::RowKind::Module)
+        return entry.text;
+    return entry.text + " " + synth::ui::moduleSearchAliases(entry.text);
+}
+} // namespace
+
 void ModuleLibraryComponent::setSearchText(const juce::String& text) {
     if (searchEditor.getText() != text)
         searchEditor.setText(text, juce::dontSendNotification);
@@ -28,14 +38,15 @@ bool ModuleLibraryComponent::sectionVisibleInSearch(size_t headerIndex, size_t e
     if (synth::ui::searchMatches(entries[headerIndex].text, q))
         return true;
     for (size_t j = headerIndex + 1; j < end; ++j)
-        if (synth::ui::searchMatches(entries[j].text, q))
+        if (synth::ui::searchMatches(searchableText(entries[j]), q))
             return true;
     return false;
 }
 
 bool ModuleLibraryComponent::childVisibleInSearch(const Entry& entry) const {
     const auto q = normalisedSearchQuery(searchQuery);
-    return q.isNotEmpty() && (synth::ui::searchMatches(entry.text, q) || synth::ui::searchMatches(entry.section, q));
+    return q.isNotEmpty() &&
+           (synth::ui::searchMatches(searchableText(entry), q) || synth::ui::searchMatches(entry.section, q));
 }
 
 void ModuleLibraryComponent::applySearchEditorColours() {
