@@ -78,7 +78,7 @@ struct Fixture {
     ModuleComponent* vcaCard = nullptr;
     juce::Slider* gainKnob = nullptr;
     int gainChannel = -1;
-    // The panel a click on the dot opened: a real callout needs a display, so the launcher keeps it instead.
+    // The panel a click on the dot opened: a real window needs a display, so the launcher keeps it instead.
     std::unique_ptr<juce::Component> held;
 
     explicit Fixture(bool modulated = true, bool gainAsKnob = true) {

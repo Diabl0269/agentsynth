@@ -1,6 +1,6 @@
 #pragma once
 
-// The colours and fonts of the mod dot's panel. A parentless CallOutBox is a window of its own and does not
+// The colours and fonts of the mod dot's panel. The panel is a window of its own and does not
 // inherit the LookAndFeel the main window carries, so every piece of the panel paints itself from these tokens
 // (like ModMatrixPicker); with no themed LookAndFeel, e.g. a headless test, plain colours stand in.
 

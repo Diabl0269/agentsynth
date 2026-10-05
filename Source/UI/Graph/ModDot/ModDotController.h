@@ -12,9 +12,10 @@
 //  * A key step (the dot's own Tab stop) is one undo step per press.
 //  * A double-click on the dot (or on a visible CV jack bound to the knob) removes the knob's only source, chain
 //    and all, as one undo step; with several it opens the panel with every remove button highlighted. It is
-//    gated by GraphEditor::getDoubleClickPortDisconnectEnabled(). The callout is modal and swallows the second
-//    press of a quick double-click, so a global mouse listener also catches it while the panel is open.
-//  * A click opens the dot's panel (ModDotPopover) under the dot; the panel's edits go through the controller's
+//    gated by GraphEditor::getDoubleClickPortDisconnectEnabled(). A global mouse listener also catches the second
+//    press of a quick double-click while the panel is open.
+//  * A click opens the dot's panel (ModDotPopover) beside the dot, a second click closes it; the panel's edits go
+//  through the controller's
 //    host hooks (remove and "show in timeline" belong to the app window) with editor-only fallbacks.
 //
 // docs/modules/modulation.md#drag-to-knob-modulation.
@@ -54,8 +55,8 @@ public:
         onModDotClicked;
 
     // ---- the dot's panel ----
-    /** Shows `content` in a callout pointing at `anchor`. The default launches a juce::CallOutBox; a headless
-     *  test captures the content instead (a real callout needs a display). */
+    /** Shows `content` in a window beside `anchor` (ModDotPanelFrame); a headless test captures the content instead
+     *  (a real window needs a display). */
     using PopoverLauncher = std::function<void(std::unique_ptr<juce::Component> content, juce::Component& anchor)>;
     PopoverLauncher popoverLauncher;
     /** What the app window does for the panel; each is optional, with an editor-only fallback where there is one. */
@@ -71,6 +72,8 @@ public:
     /** The open panel, or null. */
     ModDotPopover* getPopover() const;
     void closePopover();
+    /** Stops the open panel's "Pick on canvas" mode, if it is on (the canvas is about to lose its cards). */
+    void endCanvasPick();
     /** A double-click on the knob's dot (`anchor` is its button, or the card for a jack without one): with one
      *  source, closes the panel and removes that chain (GraphEditor::removeModulationChain, one undo step); with
      *  several, opens the panel, or reuses it, in remove-highlight mode. Nothing without a source. */
@@ -133,15 +136,6 @@ private:
                      juce::AudioProcessorGraph::NodeID attenuverter, juce::Slider& knob);
     void announce(const juce::String& name, float amount);
     void scheduleKeyHide();
-
-    void globalMouseDown(const juce::MouseEvent& e);
-
-    // Sees the second press of a double-click on the dot even when the open (modal) panel blocks the dot.
-    struct DoubleClickListener final : juce::MouseListener {
-        ModDotController* owner = nullptr;
-        void mouseDown(const juce::MouseEvent& e) override { owner->globalMouseDown(e); }
-    } doubleClickListener_;
-    juce::Time lastDoubleClickTime_;
 
     GraphEditor& editor_;
     juce::Component::SafePointer<juce::Component> popover_;

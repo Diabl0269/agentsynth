@@ -1,7 +1,7 @@
 #pragma once
 
-// The small icon buttons of the mod dot's panel (back, show in timeline, remove) and the glyphs the panel draws as
-// paths, like the library's fold chevron: there is no icon set entry for them and a parentless callout would not
+// The small icon buttons of the mod dot's panel (show in timeline, remove) and the glyphs the panel draws as
+// paths, like the library's fold chevron: there is no icon set entry for them and a panel window would not
 // inherit one anyway. A real Tab stop with the accent focus ring, a screen-reader name and a tooltip.
 
 #include "ModDotMotion.h"
@@ -12,7 +12,7 @@
 
 namespace synth::ui {
 
-enum class ModDotGlyph { Back, Timeline, Trash };
+enum class ModDotGlyph { Timeline, Trash, List, Crosshair };
 
 /** Strokes `glyph` inside `area` (a square). */
 void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<float> area, juce::Colour colour);

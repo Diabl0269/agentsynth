@@ -58,7 +58,7 @@ TEST(ModDotMacroRouting, AddingASourceIntoAMacroMintsAnInletAndTheRowNamesTheRea
     const auto portTitle = synth::moduleTitle(*c.engine.getGraph().getNodeForId(inlets[0]));
     for (const auto& label : panel->addSourcePage().visibleRowLabels())
         EXPECT_NE(label, portTitle);
-    click(panel->addSourcePage().backButton());
+    click(panel->sourcesPage().addButton()); // folds the list again
 
     ASSERT_TRUE(c.undo.undo());
     EXPECT_TRUE(c.nodesOf<MacroInletModule>().empty()) << "one undo takes the cable and the port";

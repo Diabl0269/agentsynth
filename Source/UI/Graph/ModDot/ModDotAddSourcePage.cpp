@@ -7,16 +7,16 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kTopRow = 6;
-constexpr int kSearchY = kTopRow + 24 + 6;
+constexpr int kSearchY = 8;
 constexpr int kLinksY = kSearchY + ModDotAddSourcePage::kSearchHeight + 4;
 constexpr int kListY = kLinksY + ModDotAddSourcePage::kLinksHeight + 2;
 constexpr int kBottomPad = 6;
 constexpr int kEmptyListHeight = 52;
 
-const ModSourceGroup kGroupOrder[] = {ModSourceGroup::Lfos,    ModSourceGroup::Envelopes,  ModSourceGroup::Macros,
-                                      ModSourceGroup::Midi,    ModSourceGroup::Sequencers, ModSourceGroup::Oscillators,
-                                      ModSourceGroup::Filters, ModSourceGroup::Effects,    ModSourceGroup::Other};
+const ModSourceGroup kGroupOrder[] = {ModSourceGroup::Lfos,     ModSourceGroup::Envelopes,  ModSourceGroup::Macros,
+                                      ModSourceGroup::Midi,     ModSourceGroup::Sequencers, ModSourceGroup::Oscillators,
+                                      ModSourceGroup::Filters,  ModSourceGroup::Effects,    ModSourceGroup::Other,
+                                      ModSourceGroup::NewModule};
 } // namespace
 
 // One group: its header and its rows. The section's own bounds are as tall as the fold leaves room for; the rows
@@ -53,20 +53,15 @@ struct ModDotAddSourcePage::Section final : juce::Component {
 
 ModDotAddSourcePage::ModDotAddSourcePage(juce::String paramName)
     : paramName_(std::move(paramName))
-    , back_(ModDotGlyph::Back, "Back to sources", "Back to sources")
     , search_(std::make_unique<NavigationSearchField>())
     , expandAll_("Expand all", "Expand all groups")
     , collapseAll_("Collapse all", "Collapse all groups")
     , updater_(this) {
-    setTitle("Add source to " + paramName_);
-    addAndMakeVisible(back_);
-    back_.onClick = [this] {
-        if (onBackRequested)
-            onBackRequested();
-    };
+    setTitle("Source list for " + paramName_);
 
     search_->setTitle("Search sources");
-    search_->setTooltip("Type to filter. Down moves into the results, Return adds the best match, Escape goes back.");
+    search_->setTooltip(
+        "Type to filter. Down moves into the results, Return adds the best match, Escape closes the list.");
     search_->setMultiLine(false);
     search_->setReturnKeyStartsNewLine(false);
     search_->setJustification(juce::Justification::centredLeft);
@@ -140,10 +135,16 @@ void ModDotAddSourcePage::rebuild() {
         for (const auto& choice : choices_) {
             if (choice.item.group != group)
                 continue;
-            auto row = std::make_unique<ModDotChoiceRow>(choice.item, choice.added);
-            row->onPick = [this](const ModSourceItem& item) {
-                if (onPick)
-                    onPick(item);
+            auto row = std::make_unique<ModDotChoiceRow>(
+                choice.item, choice.added,
+                choice.newType.isEmpty() ? modSourceUsageText(choice.targets) : juce::String(), choice.newType);
+            row->onPick = [this](const ModDotChoiceRow& picked) {
+                if (picked.isNew()) {
+                    if (onPickNew)
+                        onPickNew(picked.newType(), picked.item().channel);
+                } else if (onPick) {
+                    onPick(picked.item());
+                }
             };
             section->addAndMakeVisible(*row);
             section->rows.push_back(std::move(row));
@@ -166,8 +167,11 @@ bool ModDotAddSourcePage::effectiveExpanded(ModSourceGroup group) const {
     return query_.isNotEmpty() ? searchCollapsed_.count(group) == 0 : userExpanded_.at(group);
 }
 
+// A "New <module>" row is offered only for a typed query, matched against the module's own name.
 bool ModDotAddSourcePage::rowMatches(const ModDotChoiceRow& row) const {
-    return searchMatches(row.item().label(), query_);
+    if (row.isNew() && query_.isEmpty())
+        return false;
+    return searchMatches(row.matchText(), query_);
 }
 
 void ModDotAddSourcePage::setQuery(const juce::String& text) {
@@ -291,7 +295,6 @@ void ModDotAddSourcePage::setMaxHeight(int height) {
 }
 
 void ModDotAddSourcePage::resized() {
-    back_.setBounds(kTopRow, kTopRow, 24, 24);
     search_->setBounds(10, kSearchY, getWidth() - 20, kSearchHeight);
     expandAll_.setBounds(8, kLinksY, expandAll_.preferredWidth(), kLinksHeight);
     collapseAll_.setBounds(expandAll_.getRight() + 2, kLinksY, collapseAll_.preferredWidth(), kLinksHeight);
@@ -301,10 +304,8 @@ void ModDotAddSourcePage::resized() {
 
 void ModDotAddSourcePage::paint(juce::Graphics& g) {
     const auto p = modDotPaletteFor(*this);
-    g.setColour(p.text);
-    g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
-    g.drawText("Add source to " + paramName_, juce::Rectangle<int>(36, kTopRow, getWidth() - 46, 24),
-               juce::Justification::centredLeft, true);
+    g.setColour(p.border);
+    g.fillRect(juce::Rectangle<int>(8, 0, getWidth() - 16, 1));
 
     const auto pill = juce::Rectangle<float>(10.0f, (float)kSearchY, (float)getWidth() - 20.0f, (float)kSearchHeight);
     g.setColour(p.field);
@@ -332,24 +333,29 @@ bool ModDotAddSourcePage::stepBack() {
         search_->grabKeyboardFocus();
         return true;
     }
-    if (onBackRequested)
-        onBackRequested();
+    if (onCollapseRequested)
+        onCollapseRequested();
     return true;
 }
 
+// The best-scoring source wins; a "New <module>" row is picked only when no existing source matches.
 void ModDotAddSourcePage::pickBestMatch() {
     ModDotChoiceRow* best = nullptr;
     int bestScore = 0;
-    for (auto& s : sections_)
-        for (auto& row : s->rows) {
-            if (!row->isVisible() || row->isAdded() || s->foldTo < 0.5f)
-                continue;
-            const int score = searchScore(row->item().label(), query_);
-            if (best == nullptr || score < bestScore) {
-                best = row.get();
-                bestScore = score;
+    for (const bool wantNew : {false, true}) {
+        for (auto& s : sections_)
+            for (auto& row : s->rows) {
+                if (!row->isVisible() || row->isAdded() || s->foldTo < 0.5f || row->isNew() != wantNew)
+                    continue;
+                const int score = searchScore(row->matchText(), query_);
+                if (best == nullptr || score < bestScore) {
+                    best = row.get();
+                    bestScore = score;
+                }
             }
-        }
+        if (best != nullptr)
+            break;
+    }
     if (best != nullptr)
         best->pick();
 }

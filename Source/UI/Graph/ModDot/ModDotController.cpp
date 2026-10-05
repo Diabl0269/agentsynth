@@ -1,6 +1,7 @@
 #include "ModDotController.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "ModDotPopover.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <cmath>
 
@@ -23,9 +24,12 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     : editor_(editor)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
-    doubleClickListener_.owner = this;
-    juce::Desktop::getInstance().addGlobalMouseListener(&doubleClickListener_);
+    // A click on the dot of the panel that is already open closes it.
     onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
+        if (auto* open = getPopover(); open != nullptr && open->card() == card && open->destChannel() == destChannel) {
+            closePopover();
+            return;
+        }
         openPopover(card, destChannel, anchor);
     };
 }
@@ -82,10 +86,8 @@ void ModDotController::pressed(juce::AudioProcessorGraph::NodeID card, int destC
     g.startAmount = attenuverterAmount(editor_.getAudioEngine().getGraph(), g.attenuverter);
     g.doubleClick = e.getNumberOfClicks() >= 2 && editor_.getDoubleClickPortDisconnectEnabled();
     gesture_ = g;
-    if (g.doubleClick && e.eventTime != lastDoubleClickTime_) {
-        lastDoubleClickTime_ = e.eventTime;
+    if (g.doubleClick)
         dotDoubleClicked(card, destChannel, anchor);
-    }
 }
 
 void ModDotController::dragged(const juce::MouseEvent& e) {

@@ -5,6 +5,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotController.h"
+#include "ModDotPanelFrame.h"
 #include "ModDotPopover.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
@@ -13,13 +14,27 @@
 namespace synth::ui {
 
 namespace {
-void launchInCallout(std::unique_ptr<juce::Component> content, juce::Component& anchor) {
+// The panel gets a window of its own beside the dot: not modal (a canvas pick has to reach the canvas), closed by
+// a press outside it, Esc or its owner, and deleted a turn after it is gone.
+void launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor) {
     auto* panel = dynamic_cast<ModDotPopover*>(content.get());
     const auto dot = anchor.getScreenBounds();
-    auto& box = juce::CallOutBox::launchAsynchronously(std::move(content), dot, nullptr);
-    if (panel != nullptr)
-        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(dot))
-            panel->keepSideOf(box, dot, display->userArea);
+    const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(dot);
+    const auto area =
+        display != nullptr ? display->userArea : juce::Desktop::getInstance().getDisplays().getTotalBounds(true);
+    auto* frame = new ModDotPanelFrame(std::move(content), anchor, dot, area);
+    if (panel != nullptr) {
+        panel->setMaxHeight(frame->maxContentHeight());
+        panel->onDismiss = [frame = juce::Component::SafePointer<ModDotPanelFrame>(frame)] {
+            if (frame != nullptr)
+                frame->close();
+        };
+        frame->keepOpenOnOutsideClick = [panel = juce::Component::SafePointer<ModDotPopover>(panel)] {
+            return panel != nullptr && panel->isPicking();
+        };
+    }
+    frame->onClosed = [frame] { juce::MessageManager::callAsync([frame] { delete frame; }); };
+    frame->showOnDesktop();
 }
 
 // The timeline names a routing by uuids (a node id does not survive an undo), so the source, the target and the
@@ -47,9 +62,9 @@ ModulatorInfo modulatorInfoFor(GraphEditor& editor, juce::AudioProcessorGraph::N
 } // namespace
 
 ModDotController::~ModDotController() {
-    juce::Desktop::getInstance().removeGlobalMouseListener(&doubleClickListener_);
     if (auto* open = getPopover()) {
-        open->orphan(); // its callout is deleted a turn later, by when this is gone
+        open->stopPick();
+        open->orphan(); // its window is deleted a turn later, by when this is gone
         open->dismiss();
     }
 }
@@ -63,24 +78,21 @@ void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int d
     if (popoverLauncher)
         popoverLauncher(std::move(content), anchor);
     else
-        launchInCallout(std::move(content), anchor);
+        launchInFrame(std::move(content), anchor);
 }
 
 ModDotPopover* ModDotController::getPopover() const { return static_cast<ModDotPopover*>(popover_.getComponent()); }
+
+void ModDotController::endCanvasPick() {
+    if (auto* open = getPopover())
+        open->stopPick();
+}
 
 void ModDotController::closePopover() {
     if (auto* open = getPopover())
         open->dismiss();
     popover_ = nullptr;
 }
-
-namespace {
-// A callout ignores a click on its own dot for its first 200 ms and dismisses itself after that, so a panel older
-// than this is already on its way out when a double-click lands.
-constexpr juce::uint32 kReusablePanelMs = 180;
-// The smallest on-screen side of a dot's hit target (the dot's button is 16 px at zoom 1).
-constexpr int kMinAnchorScreenPx = 16;
-} // namespace
 
 void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel,
                                         juce::Component& anchor) {
@@ -93,35 +105,13 @@ void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, 
         return;
     }
     auto* open = getPopover();
-    const bool reusable = open != nullptr && open->card() == card && open->destChannel() == destChannel &&
-                          open->ageMs() < kReusablePanelMs &&
-                          (open->getParentComponent() == nullptr || open->isShowing());
+    const bool reusable = open != nullptr && open->card() == card && open->destChannel() == destChannel;
     if (!reusable) {
         openPopover(card, destChannel, anchor);
         open = getPopover();
     }
     if (open != nullptr)
         open->setRemoveHighlighted(true);
-}
-
-// The second press of a double-click on the open panel's own dot: the modal callout blocks the dot, so the press
-// never reaches the card; this sees it first. Presses the dot did receive were handled in pressed() (same event time).
-void ModDotController::globalMouseDown(const juce::MouseEvent& e) {
-    if (e.getNumberOfClicks() < 2 || !e.mods.isLeftButtonDown() || e.mods.isCommandDown() ||
-        !editor_.getDoubleClickPortDisconnectEnabled() || e.eventTime == lastDoubleClickTime_)
-        return;
-    auto* open = getPopover();
-    auto* anchor = open != nullptr ? open->anchor() : nullptr;
-    if (anchor == nullptr || !anchor->isShowing())
-        return;
-    // A zoomed-out canvas shrinks the anchor on screen; the target keeps the size it has at zoom 1.
-    auto target = anchor->getScreenBounds();
-    target = target.expanded(juce::jmax(0, (kMinAnchorScreenPx - target.getWidth()) / 2),
-                             juce::jmax(0, (kMinAnchorScreenPx - target.getHeight()) / 2));
-    if (!target.contains(e.getScreenPosition()))
-        return;
-    lastDoubleClickTime_ = e.eventTime;
-    dotDoubleClicked(open->card(), open->destChannel(), *anchor);
 }
 
 void ModDotController::tickPopover() {

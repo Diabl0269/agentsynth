@@ -435,6 +435,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/KnobModSources.h
     Source/UI/Graph/ModDot/KnobModSources.cpp
     Source/UI/Graph/ModDot/ModDotButton.h
+    Source/UI/Graph/ModDot/ModDotCanvasPicker.h
+    Source/UI/Graph/ModDot/ModDotCanvasPicker.cpp
+    Source/UI/Graph/ModDot/ModDotPanelFrame.h
+    Source/UI/Graph/ModDot/ModDotPanelFrame.cpp
+    Source/UI/Graph/ModDot/ModDotPanelGeometry.h
+    Source/UI/Graph/ModDot/ModDotPanelGeometry.cpp
+    Source/UI/Graph/ModDot/ModDotSplitButton.h
+    Source/UI/Graph/ModDot/ModDotSplitButton.cpp
     Source/UI/Graph/ModDot/ModDotController.h
     Source/UI/Graph/ModDot/ModDotController.cpp
     Source/UI/Graph/ModDot/ModDotTooltip.h

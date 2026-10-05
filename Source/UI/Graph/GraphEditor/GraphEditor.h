@@ -531,6 +531,12 @@ public:
      *  False (nothing changed) when either node, the jack or the LFO is missing, or the LFO already drives it. */
     bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
                                      juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
+    /** A new module of factory type `typeName` beside `targetId`, cabled from its output `sourceChannel` into raw CV
+     *  channel `destChannel` at `depth`, as ONE undo step (the card, its place, the cable, its depth and any macro
+     *  join). Returns the new routing's hidden attenuverter; invalid (nothing changed) when it can't. */
+    juce::AudioProcessorGraph::NodeID addModulationSourceModule(const juce::String& typeName, int sourceChannel,
+                                                                juce::AudioProcessorGraph::NodeID targetId,
+                                                                int destChannel, float depth);
     /** Cables any modulation source (`sourceChannel` is the raw output channel a ModSourceItem names) into raw CV
      *  channel `destChannel` of `targetId` at `depth`, through the same macro-port seam, as ONE undo step. Returns
      *  the new routing's hidden attenuverter; invalid (nothing changed) when it can't or the pair is already wired.
@@ -739,7 +745,9 @@ private:
     juce::Point<int> dragCurrentPos;
     void maybeShowModDropHint(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi);
     // A new modulator's card: estimated, created, then re-resolved at its real size (GraphEditorModulators.cpp).
-    void placeNewModulator(juce::AudioProcessorGraph::Node& node, juce::AudioProcessorGraph::NodeID targetId);
+    void placeNewModulator(juce::AudioProcessorGraph::Node& node, juce::AudioProcessorGraph::NodeID targetId,
+                           const juce::String& typeName);
+    void fireBeforeDetachAllModuleComponents();
     void refreshSmartSuggestions() override;
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;

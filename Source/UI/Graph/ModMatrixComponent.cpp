@@ -723,7 +723,7 @@ const std::map<ModulationCategory, juce::String>& modulationCategoryNames() {
 }
 } // namespace
 
-// The sources come from synth::ui::enumerateModSources, the list the mod dot's Add source page reads too.
+// The sources come from synth::ui::enumerateModSources, the list the mod dot's Add source list reads too.
 void ModMatrixComponent::ModRow::populateSourceCombo() {
     const auto sources = synth::ui::enumerateModSources(owner.audioEngine.getGraph());
     if (owner.isSourceMenuFlat) {

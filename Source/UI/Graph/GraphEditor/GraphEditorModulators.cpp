@@ -101,7 +101,7 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
             return;
         lfoId = node->nodeID;
         const auto lfoUuid = synth::AIStateMapper::ensureNodeUuid(node.get());
-        placeNewModulator(*node, targetId);
+        placeNewModulator(*node, targetId, "LFO");
 
         auto* lfo = moduleOf(graph, lfoId);
         auto* dst = moduleOf(graph, targetId);
@@ -179,11 +179,55 @@ NodeID GraphEditor::connectModulationSource(NodeID sourceId, int sourceChannel, 
     return created;
 }
 
+// Same single record as addLfoModulator, for any module type: the cable goes through connectModulationSource (which
+// mints macro ports across a boundary), so the macro join, when the target sits in a macro, runs after the cable and
+// the crossing plan sees it as interior.
+NodeID GraphEditor::addModulationSourceModule(const juce::String& typeName, int sourceChannel, NodeID targetId,
+                                              int destChannel, float depth) {
+    auto& graph = audioEngine.getGraph();
+    auto* target = graph.getNodeForId(targetId);
+    if (target == nullptr || destChannel < 0 || isSingletonIOModule(typeName))
+        return {};
+    auto processor = synth::AIStateMapper::createModule(typeName);
+    if (processor == nullptr)
+        return {};
+    applyDefaultDualIOForNewModule(*processor, typeName);
+    const auto* macro = macros.findByMember(synth::AIStateMapper::ensureNodeUuid(target));
+    const juce::String macroId = macro != nullptr ? macro->id : juce::String();
+
+    NodeID attenuverter;
+    auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(processor));
+    auto mutation = [this, &graph, &attenuverter, proc, typeName, sourceChannel, targetId, destChannel, depth,
+                     macroId] {
+        juce::ScopedValueSetter<juce::String> joinScope(macroDragJoinId_, macroId);
+        auto node = graph.addNode(std::move(*proc));
+        if (node == nullptr)
+            return;
+        const auto sourceId = node->nodeID;
+        const auto uuid = synth::AIStateMapper::ensureNodeUuid(node.get());
+        placeNewModulator(*node, targetId, typeName);
+        attenuverter = connectModulationSource(sourceId, sourceChannel, targetId, destChannel, depth, false);
+        if (macroId.isNotEmpty())
+            macroController_.addSelectionToMacro(macroId, {uuid}, /*recordUndo=*/false);
+        else
+            macroController_.makeRoomFor("n:" + juce::String((juce::int64)sourceId.uid));
+        reflowOutputDock();
+        updateComponents();
+    };
+    if (undoManager != nullptr)
+        undoManager->recordGraphAndMacroChange(graph, macros, mutation);
+    else
+        mutation();
+    repaintCanvas();
+    return attenuverter;
+}
+
 // Two passes, like a library drop: an estimated size places the node before its card exists, then the
 // real card's size re-resolves it. Written straight to the final spot (no landing tween): nothing was
 // dragged, and the position must be final before the cable and the macro join read it.
-void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeID targetId) {
-    const auto estimate = estimateModuleSize("LFO");
+void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeID targetId,
+                                    const juce::String& typeName) {
+    const auto estimate = estimateModuleSize(typeName);
     auto* targetComp = moduleComponentFor(targetId);
     const auto desired =
         besideTarget(targetComp != nullptr ? targetComp->getBounds() : juce::Rectangle<int>{}, estimate);

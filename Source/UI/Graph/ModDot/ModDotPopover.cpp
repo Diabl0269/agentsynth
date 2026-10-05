@@ -4,12 +4,12 @@
 #include "ModDotButton.h"
 #include "ModDotController.h"
 #include "ModDotMotion.h"
-#include "ModDotPalette.h"
+#include "ModSourceCatalog.h"
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
-#include "UI/Layout/PopupMotion.h"
 #include <algorithm>
+#include <set>
 
 namespace synth::ui {
 
@@ -23,7 +23,6 @@ ModDotPopover::ModDotPopover(GraphEditor& editor, ModDotController& controller, 
     , target_(knobModTarget(editor, card, destChannel))
     , sourcesPage_(editor, controller, card, destChannel, target_)
     , addPage_(target_.paramName)
-    , reveal_(*this)
     , updater_(this)
     , controllerForClose_(&controller) {
     setComponentID("modDotPopover");
@@ -31,18 +30,20 @@ ModDotPopover::ModDotPopover(GraphEditor& editor, ModDotController& controller, 
     setTitle(target_.paramName + " modulation");
     addAndMakeVisible(sourcesPage_);
     addChildComponent(addPage_);
-    sourcesPage_.onAddSourceRequested = [this] { showAddSource(); };
-    sourcesPage_.onHeightChanged = [this] { pageHeightChanged(Page::Sources); };
-    addPage_.onBackRequested = [this] { showSources(); };
+    sourcesPage_.onAddSourceRequested = [this] { toggleList(); };
+    sourcesPage_.onPickOnCanvasRequested = [this] { togglePick(); };
+    sourcesPage_.onHeightChanged = [this] { layoutParts(); };
+    addPage_.onCollapseRequested = [this] { closeList(); };
     addPage_.onPick = [this](const ModSourceItem& item) { pickSource(item); };
-    addPage_.onHeightChanged = [this] { pageHeightChanged(Page::AddSource); };
+    addPage_.onPickNew = [this](const juce::String& typeName, int channel) { pickNewModule(typeName, channel); };
+    addPage_.onHeightChanged = [this] { layoutParts(); };
     if (auto* dot = dynamic_cast<ModDotButton*>(anchor_.getComponent()))
         dot->setMenuOpen(true);
-    setSize(ModDotPage::kWidth, sourcesPage_.preferredHeight());
+    layoutParts();
 }
 
 ModDotPopover::~ModDotPopover() {
-    pageAnim_.stop(updater_);
+    openAnim_.stop(updater_);
     if (controllerForClose_ != nullptr)
         controllerForClose_->popoverClosed(this);
     // A panel reopened on the same dot (a double-click) is already up by the time this one is deleted: leave the
@@ -51,7 +52,7 @@ ModDotPopover::~ModDotPopover() {
         return;
     if (auto* dot = dynamic_cast<ModDotButton*>(anchor_.getComponent()))
         dot->setMenuOpen(false);
-    // Focus goes back to the dot once the callout is gone.
+    // Focus goes back to the dot once the window is gone.
     juce::Component::SafePointer<juce::Component> anchor = anchor_;
     juce::MessageManager::callAsync([anchor] {
         if (anchor != nullptr && anchor->isShowing())
@@ -68,10 +69,6 @@ void ModDotPopover::setRemoveHighlighted(bool on) {
                                                      juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
-ModDotPage& ModDotPopover::pageComponent(Page page) {
-    return page == Page::Sources ? static_cast<ModDotPage&>(sourcesPage_) : static_cast<ModDotPage&>(addPage_);
-}
-
 void ModDotPopover::syncFromGraph() {
     auto* node = editor_.getAudioEngine().getGraph().getNodeForId(card_);
     if (node == nullptr) {
@@ -79,106 +76,129 @@ void ModDotPopover::syncFromGraph() {
         return;
     }
     sourcesPage_.sync(/*fresh=*/false);
-    ensureFocusInside(); // a removed row or a switched page must not leave the keyboard with nothing
-}
-
-int ModDotPopover::roomOnSide(juce::Rectangle<int> box, juce::Rectangle<int> dot, juce::Rectangle<int> area,
-                              int borderSize) {
-    const int chrome = borderSize + 16; // the callout's border and its (default 16 px) arrow
-    if (box.getCentreY() > dot.getBottom())
-        return area.getBottom() - dot.getBottom() - chrome;
-    if (box.getCentreY() < dot.getY())
-        return dot.getY() - area.getY() - chrome;
-    return area.getHeight() - 2 * borderSize; // beside the dot: the whole height
-}
-
-void ModDotPopover::keepSideOf(const juce::CallOutBox& box, juce::Rectangle<int> dot, juce::Rectangle<int> area) {
-    // The box's bounds are in the area's frame (screen, or the parent a test gives it).
-    setMaxHeight(juce::jmax(0, roomOnSide(box.getBounds(), dot, area, box.getBorderSize())));
+    if (listOpen_ || picker_ != nullptr)
+        refreshChoicesIfChanged(false);
+    ensureFocusInside(); // a removed row or a folded list must not leave the keyboard with nothing
 }
 
 void ModDotPopover::setMaxHeight(int height) {
-    addPage_.setMaxHeight(height);
-    pageHeightChanged(Page::AddSource);
+    maxHeight_ = height;
+    layoutParts();
 }
 
-// A page's content moved (a row grew, a group folded): the page follows its content and, when it is the one shown,
-// so does the panel.
-void ModDotPopover::pageHeightChanged(Page which) {
-    auto& page = pageComponent(which);
-    page.setSize(ModDotPage::kWidth, page.preferredHeight());
-    if (page_ == which && !pageAnim_.isRunning())
-        applyHeight(page.getHeight());
+int ModDotPopover::settledHeight(bool listOpen) const {
+    return sourcesPage_.preferredHeight() + (listOpen ? addPage_.preferredHeight() : 0);
 }
 
-void ModDotPopover::applyHeight(int height) {
-    if (height != getHeight())
-        setSize(getWidth(), height);
+// The panel is the rows page with the list page stacked under it. The list page keeps its own height and the panel's
+// edge reveals as much of it as the fold has reached, so unfolding is a growing panel, never a squashed list. The
+// list's height cap is what screen room is left under the rows.
+void ModDotPopover::layoutParts() {
+    const int sourcesHeight = sourcesPage_.preferredHeight();
+    addPage_.setMaxHeight(maxHeight_ > 0 ? juce::jmax(0, maxHeight_ - sourcesHeight) : 0);
+    const int listHeight = addPage_.preferredHeight();
+    sourcesPage_.setBounds(0, 0, ModDotPage::kWidth, sourcesHeight);
+    addPage_.setBounds(0, sourcesHeight, ModDotPage::kWidth, listHeight);
+    addPage_.setVisible(listAmount_ > 0.0f);
+    const int total = sourcesHeight + juce::roundToInt((float)listHeight * listAmount_);
+    if (total != getHeight() || getWidth() != ModDotPage::kWidth)
+        setSize(ModDotPage::kWidth, total);
 }
 
 void ModDotPopover::resized() {
     sourcesPage_.setBounds(0, 0, getWidth(), sourcesPage_.getHeight());
-    addPage_.setBounds(0, 0, getWidth(), addPage_.getHeight());
+    addPage_.setBounds(0, sourcesPage_.getHeight(), getWidth(), addPage_.getHeight());
 }
 
-void ModDotPopover::showSources() {
-    sourcesPage_.sync();
-    switchTo(Page::Sources);
-}
+void ModDotPopover::openList() { setListTarget(true); }
+void ModDotPopover::closeList() { setListTarget(false); }
+void ModDotPopover::toggleList() { setListTarget(!listOpen_); }
 
-void ModDotPopover::showAddSource() {
-    addPage_.setChoices(buildChoices());
-    addPage_.reset();
-    switchTo(Page::AddSource);
-}
-
-// Cross-fade the two pages over 110 ms while the panel's height settles over 160 ms; the pages keep their own
-// heights, so the fading page is simply revealed or cut off by the panel's edge. At once when not on screen.
-void ModDotPopover::switchTo(Page page) {
-    if (page == page_ && !pageAnim_.isRunning())
+// Unfolds the list under the rows over 160 ms (easeOutCubic) and folds it back over 110 ms (easeInCubic); the panel's
+// height follows frame by frame. At once when not on screen or under Reduce Motion.
+void ModDotPopover::setListTarget(bool open) {
+    if (listOpen_ == open)
         return;
-    auto& in = pageComponent(page);
-    auto& out = pageComponent(page == Page::Sources ? Page::AddSource : Page::Sources);
-    const int fromHeight = getHeight();
-    page_ = page;
-    in.setSize(ModDotPage::kWidth, in.preferredHeight());
-    const int toHeight = in.preferredHeight();
-    in.setVisible(true);
-    out.setInterceptsMouseClicks(false, false);
-    in.setInterceptsMouseClicks(true, true);
-
-    const auto finish = [this, &in, &out] {
-        out.setVisible(false);
-        out.setAlpha(1.0f);
-        in.setAlpha(1.0f);
-        applyHeight(in.preferredHeight());
-        in.focusEntry();
+    listOpen_ = open;
+    sourcesPage_.splitButton().setListOpen(open);
+    const bool focusWasInList = addPage_.isParentOf(juce::Component::getCurrentlyFocusedComponent());
+    if (open) {
+        choiceSignature_.clear();
+        refreshChoicesIfChanged(/*fresh=*/true);
+        addPage_.reset();
+        addPage_.setInterceptsMouseClicks(true, true);
+    } else {
+        addPage_.setInterceptsMouseClicks(false, false);
+    }
+    const float from = listAmount_;
+    const float to = open ? 1.0f : 0.0f;
+    const auto settle = [this, open, focusWasInList] {
+        listAmount_ = open ? 1.0f : 0.0f;
+        layoutParts();
+        if (open)
+            addPage_.focusEntry();
+        else if (focusWasInList)
+            sourcesPage_.addButton().grabKeyboardFocus();
     };
     if (!modDotMotionAllowed(*this)) {
-        pageAnim_.stop(updater_);
-        finish();
+        openAnim_.stop(updater_);
+        settle();
         return;
     }
-    in.setAlpha(0.0f);
-    const double fadeShare = kFadeMs / kSettleMs;
-    pageAnim_.start(
-        updater_, kSettleMs, [](float t) { return t; },
-        [this, &in, &out, fromHeight, toHeight, fadeShare](float t) {
-            const float fade = juce::jlimit(0.0f, 1.0f, (float)(t / fadeShare));
-            in.setAlpha(fade);
-            out.setAlpha(1.0f - fade);
-            applyHeight(fromHeight + juce::roundToInt((float)(toHeight - fromHeight) * easeOutCubic(t)));
+    if (open)
+        addPage_.setVisible(true);
+    openAnim_.start(
+        updater_, open ? kOpenMs : kCloseMs, open ? easeOutCubic : easeInCubic,
+        [this, from, to](float t) {
+            listAmount_ = from + (to - from) * t;
+            layoutParts();
         },
-        [finish] { finish(); });
+        settle);
+    if (open)
+        addPage_.focusEntry();
 }
 
-std::vector<ModDotAddSourcePage::Choice> ModDotPopover::buildChoices() const {
+void ModDotPopover::startPick() {
+    if (picker_ != nullptr)
+        return;
+    retiredPicker_.reset();
+    refreshChoicesIfChanged(/*fresh=*/true);
+    picker_ = std::make_unique<ModDotCanvasPicker>(
+        editor_, [this](juce::AudioProcessorGraph::NodeID node) { return pickable_.count(node.uid) > 0; });
+    picker_->onPicked = [this](juce::AudioProcessorGraph::NodeID node) { pickNode(node); };
+    picker_->onEscape = [this] { stopPick(); };
+    picker_->begin();
+    sourcesPage_.splitButton().setPicking(true);
+    juce::AccessibilityHandler::postAnnouncement("Pick on canvas. Click a module to add it as a source. Escape stops.",
+                                                 juce::AccessibilityHandler::AnnouncementPriority::medium);
+}
+
+// The layer is parked, not deleted: this can run from inside one of its own event handlers.
+void ModDotPopover::stopPick() {
+    sourcesPage_.splitButton().setPicking(false);
+    if (picker_ == nullptr)
+        return;
+    picker_->setVisible(false);
+    if (auto* parent = picker_->getParentComponent())
+        parent->removeChildComponent(picker_.get());
+    retiredPicker_ = std::move(picker_);
+}
+
+void ModDotPopover::togglePick() {
+    if (picker_ != nullptr)
+        stopPick();
+    else
+        startPick();
+}
+
+// Every source the Mod Matrix offers minus the card itself, macro ports and hidden attenuverters, each with what it
+// already moves, then (for a typed query) the module types the search can create.
+std::vector<ModDotAddSourcePage::Choice> ModDotPopover::buildChoices(bool fresh) const {
     auto& graph = editor_.getAudioEngine().getGraph();
-    const auto existing = knobModSources(editor_, card_, destChannel_, true);
+    const auto existing = knobModSources(editor_, card_, destChannel_, fresh);
+    const auto targets = modSourceTargetCounts(editor_, fresh);
     std::vector<ModDotAddSourcePage::Choice> choices;
     for (auto& item : enumerateModSources(graph)) {
-        // The card itself, macro ports (looked through) and the hidden attenuverters ("Mod Slot") of other
-        // routings are not sources to offer here.
         if (item.node == card_ || editor_.getMacroController().nodeIsMacroPort(item.node))
             continue;
         if (auto* node = graph.getNodeForId(item.node);
@@ -188,52 +208,89 @@ std::vector<ModDotAddSourcePage::Choice> ModDotPopover::buildChoices() const {
         choice.added = std::any_of(existing.begin(), existing.end(), [&item](const KnobModSource& s) {
             return s.sourceNodeId == item.node && s.sourceChannel == item.channel;
         });
+        if (const auto it = targets.find(item.itemId()); it != targets.end())
+            choice.targets = it->second;
         choice.item = std::move(item);
+        choices.push_back(std::move(choice));
+    }
+    for (const auto& type : newModuleSources()) {
+        ModDotAddSourcePage::Choice choice;
+        choice.item.moduleTitle = "New " + type.typeName;
+        choice.item.channel = type.channel;
+        choice.item.group = ModSourceGroup::NewModule;
+        choice.newType = type.typeName;
         choices.push_back(std::move(choice));
     }
     return choices;
 }
 
-// One undo step: the cable, its attenuverter at the new-source depth and any macro ports it crosses. Back on the
-// sources page the new row grows in already selected, and a later drag on the dot edits it.
+// Re-reads the list when what it shows changed (a source added elsewhere, a target count moved) and the nodes a
+// canvas pick may land on; a list that is still the same keeps its rows, folds and focus.
+void ModDotPopover::refreshChoicesIfChanged(bool fresh) {
+    const auto choices = buildChoices(fresh);
+    std::vector<int> signature;
+    pickable_.clear();
+    for (const auto& c : choices) {
+        if (c.newType.isNotEmpty())
+            continue;
+        signature.push_back(c.item.itemId());
+        signature.push_back(c.added ? -1 - c.targets : c.targets);
+        if (!c.added)
+            pickable_.insert(c.item.node.uid);
+    }
+    if (listOpen_ && signature != choiceSignature_)
+        addPage_.setChoices(choices);
+    choiceSignature_ = std::move(signature);
+}
+
+void ModDotPopover::pickNode(juce::AudioProcessorGraph::NodeID node) {
+    for (const auto& choice : buildChoices(true))
+        if (choice.item.node == node && choice.newType.isEmpty() && !choice.added) {
+            pickSource(choice.item);
+            return;
+        }
+}
+
+// One undo step: the cable, its attenuverter at the new-source depth and any macro ports it crosses.
 void ModDotPopover::pickSource(const ModSourceItem& item) {
-    const auto atten =
-        editor_.connectModulationSource(item.node, item.channel, card_, destChannel_, kModDotNewSourceDepth);
-    if (atten.uid != 0)
-        controller_.setLastChosen(card_, destChannel_, atten);
-    switchTo(Page::Sources); // first, so the new row grows in on a page that is showing
+    finishPick(editor_.connectModulationSource(item.node, item.channel, card_, destChannel_, kModDotNewSourceDepth));
+}
+
+// One undo step: the new module beside the card, its cable and depth (and a macro join when the card is in one).
+void ModDotPopover::pickNewModule(const juce::String& typeName, int channel) {
+    finishPick(editor_.addModulationSourceModule(typeName, channel, card_, destChannel_, kModDotNewSourceDepth));
+}
+
+// After a source was added: the list folds, a canvas pick ends, and the new row grows in already selected, so a
+// later drag on the dot edits it.
+void ModDotPopover::finishPick(juce::AudioProcessorGraph::NodeID attenuverter) {
+    if (attenuverter.uid != 0)
+        controller_.setLastChosen(card_, destChannel_, attenuverter);
+    stopPick();
+    closeList();
     sourcesPage_.sync();
-    if (atten.uid != 0)
-        sourcesPage_.select(atten);
+    if (attenuverter.uid != 0)
+        sourcesPage_.select(attenuverter);
 }
 
 void ModDotPopover::dismiss() {
-    if (onDismiss) {
+    if (onDismiss)
         onDismiss();
-        return;
-    }
-    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-        synth::ui::PopupMotion::dismissCallOut(*box);
 }
 
 bool ModDotPopover::keyPressed(const juce::KeyPress& key) {
     if (key != juce::KeyPress::escapeKey)
         return false;
-    if (page_ == Page::AddSource) {
+    if (picker_ != nullptr) {
+        stopPick();
+        return true;
+    }
+    if (listOpen_) {
         addPage_.stepBack();
         return true;
     }
     dismiss();
     return true;
-}
-
-void ModDotPopover::paint(juce::Graphics& g) {
-    const auto p = modDotPaletteFor(*this);
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour(p.panel);
-    g.fillRoundedRectangle(bounds, p.radius);
-    g.setColour(p.border);
-    g.drawRoundedRectangle(bounds.reduced(0.5f), p.radius, 1.0f);
 }
 
 bool ModDotPopover::focusIsInside() const {
@@ -246,11 +303,14 @@ void ModDotPopover::ensureFocusInside() {
     if (peer == nullptr || !isShowing() || focusIsInside())
         return;
     if (!peer->isFocused()) {
-        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-            box->toFront(true); // the callout's window must be the key one before a control can take the keys
+        if (auto* window = getTopLevelComponent())
+            window->toFront(true); // the panel's window must be the key one before a control can take the keys
         return;
     }
-    pageComponent(page_).focusEntry();
+    if (listOpen_)
+        addPage_.focusEntry();
+    else
+        sourcesPage_.focusEntry();
 }
 
 void ModDotPopover::timerCallback() {
@@ -259,10 +319,9 @@ void ModDotPopover::timerCallback() {
         stopTimer();
 }
 
-// A CallOutBox attaches its content after construction and only becomes the key window a moment after it is shown,
-// so the entrance starts once this has a parent and the focus is taken as soon as the window can give it.
+// The panel's window only becomes the key window a moment after it is shown, so focus is taken as soon as it can
+// give it.
 void ModDotPopover::parentHierarchyChanged() {
-    reveal_.startIfInCallout();
     if (getParentComponent() != nullptr && !focusIsInside())
         startTimerHz(30);
 }

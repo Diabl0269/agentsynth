@@ -4,51 +4,10 @@
 #include "ModDotController.h"
 #include "ModDotPalette.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/FocusRing.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
-
-class ModDotSourcesPage::AddButton final : public juce::Button {
-public:
-    AddButton()
-        : juce::Button("Add source")
-        , hover_(*this) {
-        setTitle("Add source");
-        setTooltip("Add source");
-        setWantsKeyboardFocus(true);
-        setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    }
-    bool keyPressed(const juce::KeyPress& key) override {
-        if (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey) {
-            triggerClick();
-            return true;
-        }
-        return false;
-    }
-    void mouseEnter(const juce::MouseEvent& e) override {
-        juce::Button::mouseEnter(e);
-        hover_.setHovered(true);
-    }
-    void mouseExit(const juce::MouseEvent& e) override {
-        juce::Button::mouseExit(e);
-        hover_.setHovered(false);
-    }
-    void paintButton(juce::Graphics& g, bool, bool) override {
-        const auto p = modDotPaletteFor(*this);
-        const auto area = getLocalBounds().toFloat().reduced(2.0f, 1.0f);
-        g.setColour(p.hover.withAlpha(hover_.value()));
-        g.fillRoundedRectangle(area, 6.0f);
-        g.setColour(p.accent);
-        g.setFont(juce::Font(juce::FontOptions(12.5f)));
-        g.drawText("+ Add source", getLocalBounds().reduced(10, 0), juce::Justification::centredLeft);
-        paintFocusRing(g, area, *this, 6.0f);
-    }
-
-private:
-    ModDotHoverFade hover_;
-};
 
 ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& controller,
                                      juce::AudioProcessorGraph::NodeID card, int destChannel, KnobModTarget target)
@@ -57,13 +16,16 @@ ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& cont
     , card_(card)
     , destChannel_(destChannel)
     , target_(std::move(target))
-    , addButton_(std::make_unique<AddButton>())
     , updater_(this) {
     setTitle(target_.paramName + " modulation sources");
-    addAndMakeVisible(*addButton_);
-    addButton_->onClick = [this] {
+    addAndMakeVisible(split_);
+    split_.listHalf().onClick = [this] {
         if (onAddSourceRequested)
             onAddSourceRequested();
+    };
+    split_.pickHalf().onClick = [this] {
+        if (onPickOnCanvasRequested)
+            onPickOnCanvasRequested();
     };
     for (const auto& source : knobModSources(editor_, card_, destChannel_, true)) {
         Entry entry;
@@ -202,11 +164,11 @@ void ModDotSourcesPage::layoutRows() {
         y += h;
     }
     dividerY_ = y + 3;
-    addButton_->setBounds(0, dividerY_ + 4, getWidth(), kAddHeight - 6);
+    split_.setBounds(6, dividerY_ + 4, getWidth() - 12, ModDotSplitButton::kHeight);
     heightChanged();
 }
 
-int ModDotSourcesPage::preferredHeight() const { return dividerY_ + 4 + kAddHeight - 6 + 6; }
+int ModDotSourcesPage::preferredHeight() const { return dividerY_ + 4 + ModDotSplitButton::kHeight + 6; }
 
 void ModDotSourcesPage::resized() { layoutRows(); }
 
@@ -235,10 +197,10 @@ void ModDotSourcesPage::focusEntry() {
             e.row->bar().grabKeyboardFocus();
             return;
         }
-    addButton_->grabKeyboardFocus();
+    split_.listHalf().grabKeyboardFocus();
 }
 
-// Up/Down walk the rows (each row's bar) and end on "+ Add source".
+// Up/Down walk the rows (each row's bar) and end on the split button's list half.
 void ModDotSourcesPage::navigate(juce::Component* from, int step) {
     struct Stop {
         juce::Component* control;
@@ -248,7 +210,7 @@ void ModDotSourcesPage::navigate(juce::Component* from, int step) {
     for (auto& e : entries_)
         if (!e.leaving)
             stops.push_back({&e.row->bar(), e.row.get()});
-    stops.push_back({addButton_.get(), addButton_.get()});
+    stops.push_back({&split_.listHalf(), &split_});
     int index = (int)stops.size() - 1;
     for (int i = 0; i < (int)stops.size(); ++i)
         if (from != nullptr && (stops[(size_t)i].container == from || stops[(size_t)i].container->isParentOf(from)))
@@ -286,7 +248,5 @@ ModDotSourceRow* ModDotSourcesPage::rowFor(juce::AudioProcessorGraph::NodeID att
             return e.row.get();
     return nullptr;
 }
-
-juce::Button& ModDotSourcesPage::addButton() noexcept { return *addButton_; }
 
 } // namespace synth::ui

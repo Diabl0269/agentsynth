@@ -1,7 +1,7 @@
 #pragma once
 
-// One page of the mod dot's panel (sources, add source). The panel swaps pages in place: it asks each for the
-// height it wants, and a page tells it when that changes (a row growing in, a group folding).
+// One part of the mod dot's panel (the rows, the source list), stacked top to bottom. The panel asks each for the
+// height it wants, and a part tells it when that changes (a row growing in, a group folding).
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>

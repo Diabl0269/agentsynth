@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
 #include "CanvasAccessibilityClip.h"
@@ -15,6 +16,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Project/ViewDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
@@ -48,11 +50,18 @@ ModuleComponent* rebuildCard(juce::OwnedArray<ModuleComponent>& modules, juce::C
 
 } // namespace
 
+// Ends the mod dot's "pick on canvas" mode (it holds no node pointer, but it highlights cards that are going away)
+// and then runs the owner's unbind hook.
+void GraphEditor::fireBeforeDetachAllModuleComponents() {
+    modDot_->endCanvasPick();
+    if (onBeforeDetachAllModuleComponents)
+        onBeforeDetachAllModuleComponents();
+}
+
 void GraphEditor::detachAllModuleComponents() {
     // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
     // whatever mutation the caller is about to run (see the member's own doc comment).
-    if (onBeforeDetachAllModuleComponents)
-        onBeforeDetachAllModuleComponents();
+    fireBeforeDetachAllModuleComponents();
     // A teardown can't be allowed to leave the settle animator holding a SafePointer to a card
     // set that no longer applies. Harmless either way (SafePointer guards it), but keeps the
     // zoomGestureActive state machine honest.

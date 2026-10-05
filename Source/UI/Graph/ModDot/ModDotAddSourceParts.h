@@ -1,6 +1,6 @@
 #pragma once
 
-// The small parts of the Add source page: a source row, a group's fold header and the "Expand all" links.
+// The small parts of the Add source list: a source row, a group's fold header and the "Expand all" links.
 // Each is a real Tab stop with the accent focus ring (radius 6), a screen-reader name and a tooltip.
 // Up/Down are left to the page, which walks them as one list.
 
@@ -15,22 +15,40 @@
 
 namespace synth::ui {
 
-/** One source in a group. An "added" source (already on the knob) is greyed and cannot be picked twice. */
+/** One source in a group, with how many things it already moves on the right ("2 targets", "Not used yet"). An
+ *  "added" source (already on the knob) is greyed and cannot be picked twice. A "New <module>" row (`newType` set)
+ *  carries a small "New" tag instead and creates that module when picked. */
 class ModDotChoiceRow final
     : public juce::Component
     , public juce::SettableTooltipClient {
 public:
     static constexpr int kHeight = 26;
+    static constexpr int kUsageWidth = 86;
 
-    ModDotChoiceRow(ModSourceItem item, bool added)
+    ModDotChoiceRow(ModSourceItem item, bool added, juce::String usage = {}, juce::String newType = {})
         : item_(std::move(item))
         , added_(added)
+        , usage_(std::move(usage))
+        , newType_(std::move(newType))
         , hover_(*this) {
         setWantsKeyboardFocus(true);
-        setTitle(added ? item_.label() + ", added" : item_.label());
-        setTooltip(added ? item_.label() + " is already on this knob" : "Add " + item_.label());
+        auto title = item_.label();
+        if (isNew()) {
+            setTitle(title + ", new module");
+            setTooltip("Create " + title + " and add it as a source");
+        } else {
+            setTitle(title + (usage_.isNotEmpty() ? ", " + usage_ : juce::String()) + (added ? ", added" : ""));
+            setTooltip(added ? title + " is already on this knob" : "Add " + title);
+        }
         setMouseCursor(added ? juce::MouseCursor::NormalCursor : juce::MouseCursor::PointingHandCursor);
     }
+
+    bool isNew() const noexcept { return newType_.isNotEmpty(); }
+    /** The factory key a "New" row creates; empty for an existing source. */
+    const juce::String& newType() const noexcept { return newType_; }
+    const juce::String& usageText() const noexcept { return usage_; }
+    /** What a search matches: the module's name for a "New" row (so "adsr" finds "New ADSR"), else the label. */
+    juce::String matchText() const { return isNew() ? newType_ : item_.label(); }
 
     const ModSourceItem& item() const noexcept { return item_; }
     bool isAdded() const noexcept { return added_; }
@@ -42,12 +60,12 @@ public:
     }
     const juce::String& query() const noexcept { return query_; }
 
-    std::function<void(const ModSourceItem&)> onPick;
+    std::function<void(const ModDotChoiceRow&)> onPick;
 
     /** Picks it, as a click or Return would; an added source does nothing. */
     void pick() {
         if (!added_ && onPick)
-            onPick(item_);
+            onPick(*this);
     }
 
     void paint(juce::Graphics& g) override {
@@ -59,10 +77,12 @@ public:
         }
         const auto text = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(14, 0);
         auto labelArea = text;
-        if (added_) {
-            g.setColour(p.disabled);
+        if (isNew())
+            paintNewTag(g, p, labelArea.removeFromRight(36));
+        else if (usage_.isNotEmpty()) {
+            g.setColour(added_ ? p.disabled : p.muted);
             g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.drawText("added", labelArea.removeFromRight(40), juce::Justification::centredRight);
+            g.drawText(usage_, labelArea.removeFromRight(kUsageWidth), juce::Justification::centredRight);
         }
         drawSearchHighlightedText(g, item_.label(), query_, labelArea, juce::Font(juce::FontOptions(12.5f)),
                                   added_ ? p.disabled : p.text, p.accent.withAlpha(0.28f), p.accent);
@@ -85,8 +105,19 @@ public:
     void focusLost(FocusChangeType) override { repaint(); }
 
 private:
+    static void paintNewTag(juce::Graphics& g, const ModDotPalette& p, juce::Rectangle<int> area) {
+        const auto pill = area.toFloat().withSizeKeepingCentre((float)area.getWidth(), 14.0f);
+        g.setColour(p.accent.withAlpha(0.18f));
+        g.fillRoundedRectangle(pill, 7.0f);
+        g.setColour(p.accent);
+        g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
+        g.drawText("New", pill.toNearestInt(), juce::Justification::centred);
+    }
+
     ModSourceItem item_;
     bool added_;
+    juce::String usage_;
+    juce::String newType_;
     juce::String query_;
     ModDotHoverFade hover_;
 };

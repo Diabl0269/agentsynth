@@ -6,7 +6,7 @@
 namespace synth::ui {
 
 /** A single-line search editor that lets its popup claim Up/Down/Return/Escape (the Mod Matrix picker and the mod
- *  dot's Add source page). Its own caret handling would swallow the arrows, and it reports Return and Escape through
+ *  dot's Add source list). Its own caret handling would swallow the arrows, and it reports Return and Escape through
  *  a posted command message, which would make a pick land a message-loop turn late. `onNavigationKey` returns true
  *  when it handled the key. */
 class NavigationSearchField : public juce::TextEditor {
