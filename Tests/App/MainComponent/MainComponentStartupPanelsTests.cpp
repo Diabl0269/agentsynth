@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 
 // The jack-layout preference has to reach the patch the app OPENS with, not just modules created
@@ -410,4 +411,27 @@ TEST_F(MainComponentTest, PasteCommandIsInertUntilSomethingHasBeenCopied) {
     juce::ApplicationCommandInfo liveInfo(AppCommands::pasteSelection);
     mainComp.getCommandInfo(AppCommands::pasteSelection, liveInfo);
     EXPECT_EQ(liveInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0);
+}
+
+// The real top-bar button path: the click starts the fade instead of hiding at once.
+TEST_F(MainComponentTest, ToolbarMinimapButtonClickAnimatesTheMap) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    auto& editor = mainComp.getGraphEditor();
+    editor.setMinimapAnimateOffScreenForTest(true);
+    synth::ui::setReducedMotionForTest(false);
+    struct Reset {
+        ~Reset() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } reset;
+    ASSERT_TRUE(editor.getMinimap().isVisible());
+
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_FALSE(editor.isMinimapVisible());
+    EXPECT_TRUE(editor.getMinimap().isVisible()) << "still fading";
+    editor.finishMinimapSlideForTest();
+    EXPECT_FALSE(editor.getMinimap().isVisible());
+
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_TRUE(editor.getMinimap().isVisible());
+    editor.finishMinimapSlideForTest();
+    EXPECT_FLOAT_EQ(editor.getMinimap().getAlpha(), 1.0f);
 }

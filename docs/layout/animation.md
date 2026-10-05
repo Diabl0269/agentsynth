@@ -374,6 +374,8 @@ shortcut.
   Escape and click-away included, leaves this way (`PopupMotion::dismiss`, never a direct close), and
   lands at once when not on screen. One shared mechanism, never per call site:
   [Popup windows](#popup-windows).
+- **Mini map.** The graph editor's mini map fades and slides 12 px out of / into its corner when
+  toggled (160 ms in, 110 ms out, plain 80 ms fade under Reduce Motion): [mini map](minimap.md#show-and-hide-motion).
 - **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
   re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
 - **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and

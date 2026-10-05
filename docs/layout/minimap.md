@@ -9,6 +9,19 @@ It is an untransformed sibling overlay on `GraphEditor`, the same pattern as the
 in **canvas coordinates** — the space module cards and cables already live in — and mapped down to
 the small map area with `computeWorldToMap()`.
 
+## Show and hide motion
+
+Toggling the map (top-bar button, Cmd+K) fades it and slides it 12 px out of, or back into, its
+bottom-left corner: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out. It uses the shared
+`PanelSlide` + `AnimationDriver` ([animation](animation.md#panelslide)), in
+`GraphEditorMinimapSlide.cpp`; `layoutMinimap()` derives bounds and alpha from the fraction, on every
+layout pass and every frame. Closing keeps the map visible, but click-through, until the fade ends,
+then hides it. A re-toggle mid-flight reverses from the current fraction. Under Reduce Motion it is a
+plain 80 ms fade with no slide. When the editor is not showing (headless tests, the persisted restore
+at startup) the toggle lands on its final state before it returns. Tests reach the animated path with
+`setMinimapAnimateOffScreenForTest(true)`, `advanceMinimapSlideForTest(t)` and
+`finishMinimapSlideForTest()`.
+
 ## Placement, sizing and auto-hide
 
 Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) x min(150, h/4)`.
@@ -84,7 +97,7 @@ off-screen also removes it and its children from the accessibility tree, not jus
 
 | Member | Purpose |
 |---|---|
-| `setMinimapVisible(bool)` | Sets the user preference and re-runs `resized()`'s fits check; also seeds a full model immediately so the map is not blank until the next 30 Hz tick |
+| `setMinimapVisible(bool)` | Sets the user preference and eases the map in or out (see [Show and hide motion](#show-and-hide-motion)); seeds a full model so the map is not blank until the next 30 Hz tick |
 | `toggleMinimapVisibility()` | `setMinimapVisible(!minimapVisible)` |
 | `isMinimapVisible()` | The user preference, not the fits-adjusted effective visibility |
 | `getMinimap()` | Direct access to the `MinimapComponent` |

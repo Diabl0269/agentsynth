@@ -30,6 +30,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     // it has restored the persisted preference — NOT addAndMakeVisible, which would show it before
     // that preference is known.
     addChildComponent(minimap);
+    minimapSlide_.snapTo(minimapVisible ? 1.0f : 0.0f);
     minimap.setVisible(minimapVisible);
     minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };
     minimap.onZoom = [this](float d) { zoomAroundCentre(d); };

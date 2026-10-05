@@ -369,6 +369,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMinimapSlide.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp

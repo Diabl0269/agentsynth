@@ -77,6 +77,15 @@ public:
     void setMinimapVisible(bool shouldBeVisible);
     void toggleMinimapVisibility();
     bool isMinimapVisible() const noexcept { return minimapVisible; }
+    /** Mini map slide-and-fade (GraphEditorMinimapSlide.cpp): 0 = gone, 1 = fully shown. */
+    float getMinimapSlideProgress() const noexcept { return minimapSlide_.getProgress(); }
+    bool isMinimapSlideMovingForTest() const noexcept { return minimapSlide_.isMoving(); }
+    /** Lets a toggle animate while the editor is off screen, so a test can reach the animated path. */
+    void setMinimapAnimateOffScreenForTest(bool animate) noexcept { minimapAnimateOffScreen_ = animate; }
+    /** Advances the slide to `t` (0..1) with no VBlank, as the real driver's onUpdate does. */
+    void advanceMinimapSlideForTest(float t);
+    /** Lands the slide, as the real driver's onComplete does. */
+    void finishMinimapSlideForTest();
     synth::ui::MinimapComponent& getMinimap() noexcept { return minimap; }
 
     juce::Rectangle<float> getVisibleCanvasRect() const;
@@ -730,6 +739,13 @@ private:
     synth::ui::MinimapComponent minimap;
     // User preference, independent of resized()'s auto-hide-when-tiny effective visibility.
     bool minimapVisible = true;
+    // Its show/hide ease (docs/layout/animation.md): the visible fraction and the one driver moving it.
+    synth::ui::PanelSlide minimapSlide_;
+    synth::ui::AnimationDriver minimapAnim_;
+    int minimapSlideDistance_ = 0; // px it travels from its corner; 0 under Reduce Motion
+    bool minimapAnimateOffScreen_ = false;
+    void layoutMinimap();
+    void finishMinimapSlide();
 
     // Navigation State
     float zoomLevel = 1.0f;
