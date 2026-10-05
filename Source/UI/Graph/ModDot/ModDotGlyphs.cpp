@@ -18,13 +18,6 @@ void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<floa
     const juce::PathStrokeType stroke(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
     juce::Path p;
     switch (glyph) {
-    case ModDotGlyph::Back:
-        p.startNewSubPath(a.getRight(), a.getCentreY());
-        p.lineTo(a.getX(), a.getCentreY());
-        p.startNewSubPath(a.getX() + a.getWidth() * 0.45f, a.getY() + a.getHeight() * 0.15f);
-        p.lineTo(a.getX(), a.getCentreY());
-        p.lineTo(a.getX() + a.getWidth() * 0.45f, a.getBottom() - a.getHeight() * 0.15f);
-        break;
     case ModDotGlyph::Timeline: { // three lanes of different length
         const float h = a.getHeight() / 5.0f;
         const float widths[] = {1.0f, 0.65f, 0.85f};
@@ -33,6 +26,31 @@ void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<floa
             p.startNewSubPath(a.getX(), y);
             p.lineTo(a.getX() + a.getWidth() * widths[i], y);
         }
+        break;
+    }
+    case ModDotGlyph::List: { // three bulleted rows
+        const float h = a.getHeight() / 5.0f;
+        for (int i = 0; i < 3; ++i) {
+            const float y = a.getY() + h * (0.5f + 2.0f * (float)i);
+            p.addEllipse(a.getX(), y - 0.8f, 1.6f, 1.6f);
+            p.startNewSubPath(a.getX() + a.getWidth() * 0.3f, y);
+            p.lineTo(a.getRight(), y);
+        }
+        break;
+    }
+    case ModDotGlyph::Crosshair: { // a ring with four ticks: aim at a card
+        const auto c = a.getCentre();
+        const float r = a.getWidth() * 0.28f;
+        p.addEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+        const float tick = a.getWidth() * 0.2f;
+        p.startNewSubPath(c.x, a.getY());
+        p.lineTo(c.x, a.getY() + tick);
+        p.startNewSubPath(c.x, a.getBottom());
+        p.lineTo(c.x, a.getBottom() - tick);
+        p.startNewSubPath(a.getX(), c.y);
+        p.lineTo(a.getX() + tick, c.y);
+        p.startNewSubPath(a.getRight(), c.y);
+        p.lineTo(a.getRight() - tick, c.y);
         break;
     }
     case ModDotGlyph::Trash: {

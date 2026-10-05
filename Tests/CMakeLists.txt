@@ -299,6 +299,9 @@ add_executable(Tests
     UI/Graph/ModDot/ModDotPopoverTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
+    UI/Graph/ModDot/ModDotInlineAddTests.cpp
+    UI/Graph/ModDot/ModDotPickOnCanvasTests.cpp
+    UI/Graph/ModDot/ModDotPanelGeometryTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp

@@ -1,6 +1,6 @@
-// The mod dot's panel, Add source page: the groups it offers, the search, "added" sources, the folds, picking one
-// (a routing at +25 percent, one undo step, back on the sources page with the new row selected) and Esc stepping
-// back. Plus the one pin that this page and the Mod Matrix offer the same sources.
+// The mod dot's source list (unfolded under the rows): the groups it offers, the search, "added" sources, the folds,
+// picking one (a routing at +25 percent, one undo step, the list folds and the new row is selected) and Esc stepping
+// back. Plus the one pin that this list and the Mod Matrix offer the same sources.
 // docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotTestFixture.h"
@@ -51,6 +51,7 @@ struct AddFixture : Fixture {
 
     ModDotAddSourcePage& add() { return panel->addSourcePage(); }
     void openAdd() { clickNow(panel->sourcesPage().addButton()); }
+    bool open() { return panel->isListOpen(); }
     juce::String titleOf(juce::AudioProcessorGraph::NodeID id) {
         return synth::moduleTitle(*engine.getGraph().getNodeForId(id));
     }
@@ -70,7 +71,7 @@ TEST_F(ModuleComponentTest, AddSourceOffersTheGroupsWithSourcesAndGreysWhatIsAlr
     ASSERT_NE(f.panel, nullptr);
     f.openAdd();
 
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(f.panel->isListOpen());
     const std::vector<juce::String> groups{"LFOs", "Envelopes", "Macros"};
     EXPECT_EQ(f.add().visibleGroupNames(), groups) << "groups with nothing in them are left out";
     ASSERT_NE(f.rowLabelled(f.titleOf(f.lfoId)), nullptr);
@@ -80,7 +81,6 @@ TEST_F(ModuleComponentTest, AddSourceOffersTheGroupsWithSourcesAndGreysWhatIsAlr
     EXPECT_FALSE(f.rowLabelled(f.titleOf(f.lfo2))->isAdded());
     for (const auto& label : f.add().visibleRowLabels())
         EXPECT_NE(label, f.titleOf(f.vcaId)) << "the card itself is never offered";
-    EXPECT_EQ(f.add().backButton().getTitle(), "Back to sources");
     EXPECT_EQ(f.add().searchEditor().getTitle(), "Search sources");
     EXPECT_EQ(f.add().expandAllButton().getTitle(), "Expand all groups");
     EXPECT_EQ(f.add().collapseAllButton().getTitle(), "Collapse all groups");
@@ -97,11 +97,11 @@ TEST_F(ModuleComponentTest, TypingFiltersToMatchingRowsAndReturnAddsTheBestOneAt
     ASSERT_FALSE(labels.empty());
     for (const auto& label : labels)
         EXPECT_TRUE(label.containsIgnoreCase("lfo")) << label;
-    EXPECT_EQ(f.add().visibleGroupNames(), std::vector<juce::String>{"LFOs"});
+    EXPECT_EQ(f.add().visibleGroupNames(), (std::vector<juce::String>{"LFOs", "New module"})) << "plus the New LFO row";
 
     EXPECT_TRUE(f.add().searchEditor().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
 
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources) << "back on the sources page";
+    EXPECT_FALSE(f.panel->isListOpen()) << "the list folds once a source is added";
     auto& sources = f.panel->sourcesPage();
     ASSERT_EQ(sources.rowCount(), 2);
     auto* added = sources.rowAt(1);
@@ -114,7 +114,7 @@ TEST_F(ModuleComponentTest, TypingFiltersToMatchingRowsAndReturnAddsTheBestOneAt
 
     ASSERT_TRUE(f.undo.undo());
     EXPECT_EQ(f.engine.getModulationRoutings().size(), 1u);
-    EXPECT_FALSE(f.undo.canUndo()) << "the cable, its depth and the page change are one undo step";
+    EXPECT_FALSE(f.undo.canUndo()) << "the cable and its depth are one undo step";
 }
 
 TEST_F(ModuleComponentTest, AClickOnARowAddsItAndAnAddedSourceCannotBePickedTwice) {
@@ -126,7 +126,7 @@ TEST_F(ModuleComponentTest, AClickOnARowAddsItAndAnAddedSourceCannotBePickedTwic
     ASSERT_NE(already, nullptr);
     already->mouseUp(makeModuleClickWithMods(*already, {10, 5}, kPlain));
     already->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(f.panel->isListOpen());
     EXPECT_EQ(f.engine.getModulationRoutings().size(), 1u);
     EXPECT_FALSE(f.undo.canUndo());
 
@@ -134,7 +134,7 @@ TEST_F(ModuleComponentTest, AClickOnARowAddsItAndAnAddedSourceCannotBePickedTwic
     ASSERT_NE(fresh, nullptr);
     fresh->mouseUp(makeModuleClickWithMods(*fresh, {10, 5}, kPlain));
     EXPECT_EQ(f.engine.getModulationRoutings().size(), 2u);
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources);
+    EXPECT_FALSE(f.panel->isListOpen());
     f.openAdd();
     ASSERT_NE(f.rowLabelled(f.titleOf(f.adsr)), nullptr);
     EXPECT_TRUE(f.rowLabelled(f.titleOf(f.adsr))->isAdded());
@@ -148,7 +148,7 @@ TEST_F(ModuleComponentTest, ASearchWithNoHitSaysSoAndHidesEveryGroup) {
     EXPECT_TRUE(f.add().visibleGroupNames().empty());
     EXPECT_EQ(f.add().noMatchText(), "No source matches");
     EXPECT_TRUE(f.add().searchEditor().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource) << "nothing to add";
+    EXPECT_TRUE(f.panel->isListOpen()) << "nothing to add";
 }
 
 TEST_F(ModuleComponentTest, GroupsFoldByClickKeysAndTheExpandAndCollapseAllLinks) {
@@ -194,12 +194,12 @@ TEST_F(ModuleComponentTest, SearchingOpensGroupsWithMatchesAndClearingPutsTheUse
 
     EXPECT_TRUE(f.add().searchEditor().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey))); // clears
     EXPECT_EQ(f.add().searchEditor().getText(), "");
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(f.panel->isListOpen());
     EXPECT_FALSE(f.add().isGroupExpanded("LFOs"));
     EXPECT_FALSE(f.add().isGroupExpanded("Envelopes"));
 }
 
-TEST_F(ModuleComponentTest, EscapeStepsBackFromTheSearchToTheSourcesPageToClosed) {
+TEST_F(ModuleComponentTest, EscapeStepsBackFromTheSearchToTheFoldedListToClosed) {
     NoMotion motion;
     AddFixture f;
     int closed = 0;
@@ -209,9 +209,9 @@ TEST_F(ModuleComponentTest, EscapeStepsBackFromTheSearchToTheSourcesPageToClosed
 
     EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_EQ(f.add().searchEditor().getText(), "") << "first the search clears";
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(f.panel->isListOpen());
     EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources) << "then the sources page";
+    EXPECT_FALSE(f.panel->isListOpen()) << "then the list folds";
     EXPECT_EQ(closed, 0);
     EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_EQ(closed, 1) << "then closed";
@@ -227,14 +227,16 @@ TEST_F(ModuleComponentTest, EscapeInTheSearchFieldStepsBackThroughTheEditorsOwnK
     f.panel->onDismiss = [&] { ++closed; };
     f.openAdd();
     auto& search = f.add().searchEditor();
+    const auto unfiltered = f.add().visibleRowLabels().size();
     typeInto(search, "lfo");
-    ASSERT_NE(f.add().visibleRowLabels().size(), 3u) << "the query filtered the rows";
+    ASSERT_LT(f.add().visibleRowLabels().size(), unfiltered + 1u);
+    ASSERT_NE(f.add().visibleRowLabels().size(), unfiltered) << "the query filtered the rows";
 
     EXPECT_TRUE(search.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_EQ(search.getText(), "") << "first Escape clears the search";
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::AddSource);
+    EXPECT_TRUE(f.panel->isListOpen());
     EXPECT_TRUE(search.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources) << "second goes back to the sources page";
+    EXPECT_FALSE(f.panel->isListOpen()) << "second folds the list";
     EXPECT_EQ(closed, 0);
 
     // The editor's posted-message route lands on the same step.
@@ -245,33 +247,20 @@ TEST_F(ModuleComponentTest, EscapeInTheSearchFieldStepsBackThroughTheEditorsOwnK
     EXPECT_EQ(f.add().searchEditor().getText(), "");
 }
 
-// Growing to the Add source page must not move the callout to another side of the dot: the panel is capped to the
-// room on the side it opened on and the list scrolls inside.
-TEST_F(ModuleComponentTest, TheCalloutKeepsItsSideWhenTheAddSourcePageIsTallerThanTheRoom) {
+// With little room on screen the panel keeps to it: the list scrolls inside what is left under the rows.
+TEST_F(ModuleComponentTest, TheListScrollsInsideTheRoomLeftOnScreen) {
     NoMotion motion;
     AddFixture f;
     for (int i = 0; i < 12; ++i)
-        addNode(f.engine.getGraph(), std::make_unique<LFOModule>()); // enough rows to fill the page
+        addNode(f.engine.getGraph(), std::make_unique<LFOModule>()); // enough rows to fill the list
     f.refresh();
-    auto* panel = f.panel; // the dot was clicked in the fixture
-    ASSERT_NE(panel, nullptr);
-
-    juce::Component screen;
-    screen.setBounds(0, 0, 600, 500);
-    const juce::Rectangle<int> dot(100, 300, 12, 12);
-    auto content = std::move(f.held);
-    juce::CallOutBox box(*content, dot, &screen);
-    ASSERT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "opens under the dot";
-    panel->keepSideOf(box, dot, screen.getLocalBounds());
+    f.panel->setMaxHeight(300);
 
     f.openAdd();
-    EXPECT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "still under the dot after the page grew";
-    EXPECT_TRUE(screen.getLocalBounds().contains(box.getBounds())) << "and on screen";
-    EXPECT_LE(panel->getHeight(),
-              ModDotPopover::roomOnSide(box.getBounds(), dot, screen.getLocalBounds(), box.getBorderSize()));
-    clickNow(f.add().backButton());
-    EXPECT_GT(box.getBounds().getCentreY(), dot.getBottom()) << "and when it comes back";
-    content.reset();
+
+    EXPECT_LE(f.panel->getHeight(), 300) << "the panel never outgrows the room";
+    EXPECT_EQ(f.panel->getHeight(), f.panel->settledHeight(true));
+    EXPECT_GT(f.add().preferredHeight(), 0);
 }
 
 TEST_F(ModuleComponentTest, TheAddSourceListIsAsTallAsItsRowsUpToTheCap) {
@@ -283,16 +272,18 @@ TEST_F(ModuleComponentTest, TheAddSourceListIsAsTallAsItsRowsUpToTheCap) {
     f.add().setQuery({});
     const int all = f.panel->getHeight();
     EXPECT_LT(searched, all) << "a search with few hits shrinks the panel";
-    EXPECT_EQ(f.panel->getHeight(), f.add().preferredHeight());
-    EXPECT_LE(all, 360);
+    EXPECT_EQ(f.panel->getHeight(), f.panel->sourcesPage().preferredHeight() + f.add().preferredHeight());
+    EXPECT_LE(all, f.panel->sourcesPage().preferredHeight() + 320);
 }
 
-TEST_F(ModuleComponentTest, TheBackArrowReturnsToTheSources) {
+TEST_F(ModuleComponentTest, ASecondClickOnAddSourceFoldsTheListAgain) {
     NoMotion motion;
     AddFixture f;
     f.openAdd();
-    clickNow(f.add().backButton());
-    EXPECT_EQ(f.panel->page(), ModDotPopover::Page::Sources);
+    ASSERT_TRUE(f.panel->isListOpen());
+    f.openAdd();
+    EXPECT_FALSE(f.panel->isListOpen());
+    EXPECT_EQ(f.panel->getHeight(), f.panel->sourcesPage().preferredHeight());
 }
 
 TEST_F(ModuleComponentTest, TheAddSourceListIsTheModMatrixsSourceList) {

@@ -1,9 +1,10 @@
 #pragma once
 
-// The panel's second page: every source the Mod Matrix would offer, in collapsible groups, with a search box.
-// Picking one reports it; the panel connects it and returns to the sources page. A source already on the knob is
-// shown greyed as "added". Searching expands the groups that have a match and hides the rest; clearing the search
-// puts back the folds the user had. docs/modules/modulation.md#the-mod-dot-menu.
+// The source list that opens under the panel's rows: a search box and every source the Mod Matrix would offer, in
+// collapsible groups, each row saying how many things it moves. Picking one reports it; the panel connects it. A
+// source already on the knob is shown greyed. Searching expands the groups that have a match, hides the rest and
+// adds "New <module>" rows for module types that match; clearing the search puts back the folds the user had.
+// docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotAddSourceParts.h"
 #include "ModDotPage.h"
@@ -17,7 +18,6 @@ namespace synth::ui {
 
 class ModDotAddSourcePage final : public ModDotPage {
 public:
-    static constexpr int kHeaderHeight = 30;
     static constexpr int kSearchHeight = 28;
     static constexpr int kLinksHeight = 22;
     static constexpr int kMaxListHeight = 250;
@@ -26,6 +26,8 @@ public:
     struct Choice {
         ModSourceItem item;
         bool added = false;
+        int targets = 0;      // how many things the source already moves
+        juce::String newType; // set on a "New <module>" row: the factory key it creates
     };
 
     explicit ModDotAddSourcePage(juce::String paramName);
@@ -35,14 +37,16 @@ public:
     void setChoices(std::vector<Choice> choices);
     /** The tallest the page may be (0 = no limit beyond kMaxListHeight): the list scrolls inside what is left. */
     void setMaxHeight(int height);
-    /** A fresh arrival: empty search, the search field focused. */
+    /** A fresh opening: empty search, folds as the user left them. */
     void reset();
 
-    /** Esc: clears the search when it has text, else asks to go back. Returns true when it did something. */
+    /** Esc: clears the search when it has text, else asks to collapse. Returns true when it did something. */
     bool stepBack();
 
-    std::function<void()> onBackRequested;
+    std::function<void()> onCollapseRequested;
     std::function<void(const ModSourceItem&)> onPick;
+    /** A "New <module>" row: the factory key and the output channel to read the new source from. */
+    std::function<void(const juce::String& typeName, int channel)> onPickNew;
 
     int preferredHeight() const override;
     void focusEntry() override;
@@ -52,7 +56,6 @@ public:
 
     // Test seams and inspection.
     juce::TextEditor& searchEditor() noexcept { return *search_; }
-    juce::Button& backButton() noexcept { return back_; }
     juce::Button& expandAllButton() noexcept { return expandAll_; }
     juce::Button& collapseAllButton() noexcept { return collapseAll_; }
     void setQuery(const juce::String& query); // as typing would
@@ -86,7 +89,6 @@ private:
     juce::String query_;
     std::vector<std::unique_ptr<Section>> sections_;
 
-    ModDotGlyphButton back_;
     std::unique_ptr<NavigationSearchField> search_;
     ModDotLinkButton expandAll_;
     ModDotLinkButton collapseAll_;

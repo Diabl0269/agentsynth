@@ -676,8 +676,8 @@ TEST(AccessibilityCoverageTest, ModMatrix) {
     EXPECT_TRUE(matchesBaseline("ModMatrixPicker", auditAccessibility(picker)));
 }
 
-// The mod dot's panel with a routing on a knob, on both its pages: the sources page (rows with their bars, amounts and
-// buttons, "+ Add source") and the Add source page (search, links, group headers, source rows).
+// The mod dot's panel with a routing on a knob and its source list unfolded: the rows (bars, amounts, buttons), the
+// Add source split button, and the list (search, links, group headers, source rows).
 TEST(AccessibilityCoverageTest, ModDotPopover) {
     AudioEngine engine;
     GraphEditor editor(engine, nullptr);
@@ -694,12 +694,9 @@ TEST(AccessibilityCoverageTest, ModDotPopover) {
 
     juce::Component anchor;
     synth::ui::ModDotPopover popover(editor, editor.getModDot(), vca->nodeID, gainChannel, anchor);
-    auto gaps = auditAccessibility(popover);
     EXPECT_EQ(popover.sourcesPage().rowCount(), 1);
-    popover.showAddSource();
-    ASSERT_EQ(popover.page(), synth::ui::ModDotPopover::Page::AddSource);
-    const auto addGaps = auditAccessibility(popover);
+    popover.openList();
+    ASSERT_TRUE(popover.isListOpen());
     EXPECT_FALSE(popover.addSourcePage().visibleRowLabels().empty());
-    gaps.insert(gaps.end(), addGaps.begin(), addGaps.end());
-    EXPECT_TRUE(matchesBaseline("ModDotPopover", gaps));
+    EXPECT_TRUE(matchesBaseline("ModDotPopover", auditAccessibility(popover)));
 }

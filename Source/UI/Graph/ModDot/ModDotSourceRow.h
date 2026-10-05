@@ -1,6 +1,6 @@
 #pragma once
 
-// One source of the mod dot's sources page: swatch, name, amount bar, signed amount (click to type), "show in
+// One source of the mod dot's rows: swatch, name, amount bar, signed amount (click to type), "show in
 // timeline" and remove. Pure view: it reports what the user did and the page applies it to the graph.
 // docs/modules/modulation.md#the-mod-dot-menu.
 

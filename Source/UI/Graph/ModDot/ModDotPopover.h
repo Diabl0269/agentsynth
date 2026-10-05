@@ -1,16 +1,16 @@
 #pragma once
 
-// The panel a click on a knob's mod dot opens: the sources on the knob (ModDotSourcesPage) and, in the same
-// panel, the list of sources to add (ModDotAddSourcePage). It lives in a juce::CallOutBox the controller launches
-// under the dot, arrow pointing at it. Switching pages cross-fades the content over 110 ms while the height
-// settles over 160 ms; there is never a second popup. Esc steps back (clear the search, then the sources page,
-// then closed); a click outside closes it, the edits already applied.
-// docs/modules/modulation.md#the-mod-dot-menu.
+// The panel a click on a knob's mod dot opens: the sources on the knob (ModDotSourcesPage) with, right under its
+// rows, the source list (ModDotAddSourcePage) that "Add source" unfolds in place (160 ms out, 110 ms back) and
+// "Pick on canvas" (ModDotCanvasPicker). One panel, never a second popup. Esc steps back (stop picking, clear the
+// search, fold the list, then close); a click outside closes it, the edits already applied. The window around it is
+// ModDotPanelFrame. docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotAddSourcePage.h"
+#include "ModDotCanvasPicker.h"
 #include "ModDotSourcesPage.h"
-#include "UI/Layout/CalloutReveal.h"
 #include <functional>
+#include <set>
 
 class GraphEditor;
 
@@ -22,9 +22,8 @@ class ModDotPopover final
     : public juce::Component
     , private juce::Timer {
 public:
-    enum class Page { Sources, AddSource };
-    static constexpr double kFadeMs = 110.0;
-    static constexpr double kSettleMs = 160.0;
+    static constexpr double kOpenMs = 160.0;
+    static constexpr double kCloseMs = 110.0;
 
     ModDotPopover(GraphEditor& editor, ModDotController& controller, juce::AudioProcessorGraph::NodeID card,
                   int destChannel, juce::Component& anchor);
@@ -32,9 +31,8 @@ public:
 
     juce::AudioProcessorGraph::NodeID card() const noexcept { return card_; }
     int destChannel() const noexcept { return destChannel_; }
-    Page page() const noexcept { return page_; }
     juce::Component* anchor() const noexcept { return anchor_.getComponent(); }
-    /** Milliseconds since the panel was made (a callout ignores a click on its dot for its first 200 ms). */
+    /** Milliseconds since the panel was made. */
     juce::uint32 ageMs() const noexcept { return juce::Time::getMillisecondCounter() - createdMs_; }
     /** Highlight mode: every remove button drawn in the negative colour with a pulse, and "Choose a source to
      *  remove" announced. Cleared by closing the panel. */
@@ -45,22 +43,24 @@ public:
     void syncFromGraph();
     /** The controller is going away: close without telling it. */
     void orphan() { controllerForClose_ = nullptr; }
-    /** The tallest the panel may grow (the room left on the side of the dot the callout opened on): the Add source
-     *  list then scrolls instead of the callout re-placing itself on another side. 0 = no limit. */
+    /** The tallest the whole panel may be (the room on screen): the source list scrolls inside what is left. 0 = no
+     *  limit. */
     void setMaxHeight(int height);
-    /** Limits the panel's height to the room on the side of the dot `box` opened on inside `area`, so growing to the
-     *  Add source page never makes the callout re-place itself on another side. */
-    void keepSideOf(const juce::CallOutBox& box, juce::Rectangle<int> dot, juce::Rectangle<int> area);
-    /** Pure: the panel height that still fits on the side of `dot` that a callout at `box` is on. */
-    static int roomOnSide(juce::Rectangle<int> box, juce::Rectangle<int> dot, juce::Rectangle<int> area,
-                          int borderSize);
-    void showSources();
-    void showAddSource();
-    /** Closes the callout the panel sits in (or, with `onDismiss` set, tells the owner to). */
+
+    /** The source list under the rows: unfolds it (searching focused) or folds it back. */
+    void openList();
+    void closeList();
+    void toggleList();
+    bool isListOpen() const noexcept { return listOpen_; }
+    /** "Pick on canvas": the next press on an eligible module card adds it as a source; Esc or the half again stops. */
+    void startPick();
+    void stopPick();
+    void togglePick();
+    bool isPicking() const noexcept { return picker_ != nullptr; }
+    /** Closes the window the panel sits in (or, with `onDismiss` set, tells the owner to). */
     void dismiss();
     std::function<void()> onDismiss;
 
-    void paint(juce::Graphics& g) override;
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
     void parentHierarchyChanged() override;
@@ -69,16 +69,22 @@ public:
     // Test seams and inspection.
     ModDotSourcesPage& sourcesPage() noexcept { return sourcesPage_; }
     ModDotAddSourcePage& addSourcePage() noexcept { return addPage_; }
-    bool isSwitching() const noexcept { return pageAnim_.isRunning(); }
-    CalloutReveal& reveal() noexcept { return reveal_; }
+    bool isAnimating() const noexcept { return openAnim_.isRunning(); }
+    ModDotCanvasPicker* canvasPicker() noexcept { return picker_.get(); }
+    /** The height the panel is heading for with the list open or folded. */
+    int settledHeight(bool listOpen) const;
+    /** Picks the "New <module>" source `typeName` as a click on its row would. */
+    void pickNewModule(const juce::String& typeName, int channel);
 
 private:
     void pickSource(const ModSourceItem& item);
-    std::vector<ModDotAddSourcePage::Choice> buildChoices() const;
-    void switchTo(Page page);
-    void applyHeight(int height);
-    void pageHeightChanged(Page which);
-    ModDotPage& pageComponent(Page page);
+    void pickNode(juce::AudioProcessorGraph::NodeID node);
+    void finishPick(juce::AudioProcessorGraph::NodeID attenuverter);
+    std::vector<ModDotAddSourcePage::Choice> buildChoices(bool fresh) const;
+    void refreshChoicesIfChanged(bool fresh);
+    void setListTarget(bool open);
+    void layoutParts();
+    void updateListCap();
     void timerCallback() override;
     bool focusIsInside() const;
     /** Moves keyboard focus into the panel when it is on screen and focus is not already in it. */
@@ -92,10 +98,15 @@ private:
     KnobModTarget target_;
     ModDotSourcesPage sourcesPage_;
     ModDotAddSourcePage addPage_;
-    Page page_ = Page::Sources;
-    CalloutReveal reveal_;
+    bool listOpen_ = false;
+    float listAmount_ = 0.0f; // 0 folded .. 1 open: how much of the list is showing
+    int maxHeight_ = 0;
+    std::vector<int> choiceSignature_;
+    std::unique_ptr<ModDotCanvasPicker> picker_;
+    std::unique_ptr<ModDotCanvasPicker> retiredPicker_;
+    std::set<juce::uint32> pickable_; // nodes a canvas pick may land on
     juce::VBlankAnimatorUpdater updater_;
-    AnimationDriver pageAnim_;
+    AnimationDriver openAnim_;
     ModDotController* controllerForClose_;
     int focusTries_ = 0;
     juce::uint32 createdMs_ = juce::Time::getMillisecondCounter();

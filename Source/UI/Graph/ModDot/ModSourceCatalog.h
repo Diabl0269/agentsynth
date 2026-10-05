@@ -6,12 +6,26 @@
 
 #include "Modules/ModuleBase.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
 #include <vector>
+
+class GraphEditor;
 
 namespace synth::ui {
 
-/** How the Add source page groups a source. The Mod Matrix keeps its own ModulationCategory grouping. */
-enum class ModSourceGroup { Lfos, Envelopes, Macros, Midi, Sequencers, Oscillators, Filters, Effects, Other };
+/** How the Add source list groups a source. The Mod Matrix keeps its own ModulationCategory grouping. */
+enum class ModSourceGroup {
+    Lfos,
+    Envelopes,
+    Macros,
+    Midi,
+    Sequencers,
+    Oscillators,
+    Filters,
+    Effects,
+    Other,
+    NewModule // the "New <module>" rows a search offers
+};
 
 struct ModSourceItem {
     juce::AudioProcessorGraph::NodeID node;
@@ -30,7 +44,26 @@ struct ModSourceItem {
 /** Every source in `graph`, in the Mod Matrix's order: by ModulationCategory, then graph order, then output. */
 std::vector<ModSourceItem> enumerateModSources(juce::AudioProcessorGraph& graph);
 
-/** The Add source page's heading for `group` ("LFOs", "Macros", ...). */
+/** A module type the search can create as a new source ("New ADSR"): its factory key and the output channel the
+ *  new source is read from (its first modulation output). */
+struct NewModuleSource {
+    juce::String typeName;
+    int channel = 0;
+};
+
+/** The factory types worth offering as a new source: the authorable modulators (LFOs, envelopes, macros, sequencers,
+ *  oscillators) that are not singletons. Probed from the factory once, in factory-key order. */
+const std::vector<NewModuleSource>& newModuleSources();
+
+/** How many things each source moves: the modulation routings leaving it (macro ports looked through), counting each
+ *  distinct destination jack once, keyed by ModSourceItem::itemId(). `fresh` asks the engine instead of the editor's
+ *  cached routings. Message thread only. */
+std::map<int, int> modSourceTargetCounts(GraphEditor& editor, bool fresh);
+
+/** "Not used yet", "1 target" or "N targets". */
+juce::String modSourceUsageText(int targets);
+
+/** The Add source list's heading for `group` ("LFOs", "Macros", ...). */
 juce::String modSourceGroupName(ModSourceGroup group);
 
 } // namespace synth::ui

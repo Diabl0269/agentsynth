@@ -185,8 +185,7 @@ void GraphEditor::deleteSelection() {
         // graph-replacing restore already unbinds through, same as MixerInsertList::
         // onBeforeNodeRemoved does for a single mixer-row removal -- unbind BEFORE freeing, not
         // after.
-        if (onBeforeDetachAllModuleComponents)
-            onBeforeDetachAllModuleComponents();
+        fireBeforeDetachAllModuleComponents();
         for (auto id : ids)
             graph.removeNode(id);
         // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh

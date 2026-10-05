@@ -397,8 +397,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         // which deliberately never does), so a mixer column's fader/pan/send-row bindings into
         // this node would dangle until an unrelated later graph edit finally dereferenced them.
         // Same seam, same pre-removal ordering as GraphEditor::deleteSelection().
-        if (onBeforeDetachAllModuleComponents)
-            onBeforeDetachAllModuleComponents();
+        fireBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
         // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a
         // fresh cable to is no longer orphaned by the time they run.
@@ -552,8 +551,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         // the next rebuild. Nothing between the checks above and this line touches a mixer
         // column -- steps 1-5 read only the old node and the graph -- so unbinding here is no
         // later, in ordering terms, than unbinding there.
-        if (onBeforeDetachAllModuleComponents)
-            onBeforeDetachAllModuleComponents();
+        fireBeforeDetachAllModuleComponents();
         graph.removeNode(oldNodeId);
 
         // 7. Re-create compatible direct connections
