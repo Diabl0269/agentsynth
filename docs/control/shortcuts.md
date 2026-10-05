@@ -11,7 +11,7 @@ held that key. The tab groups rows into one collapsible section per category wit
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
 "COLLAPSE ALL"/"EXPAND ALL"; see [`layout/module-library.md`](../layout/module-library.md#collapsible-sections) for
-the shared collapsible-list pattern it mirrors. The whole tab works from the keyboard: Tab visits the search box, the strip, each
+the shared collapsible-list pattern it mirrors. Which sections are folded is remembered across Settings windows and launches (user setting `shortcutsFolded`). The whole tab works from the keyboard: Tab visits the search box, the strip, each
 section header and each row's binding button (named "<Action> shortcut"), and while a row is listening
 that button keeps focus and takes every key, Space and Return included. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via

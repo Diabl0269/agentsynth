@@ -409,6 +409,7 @@ add_executable(Tests
     UI/Settings/SettingsWindowTests.cpp
     UI/Settings/SettingsWindowEscapeFadeTests.cpp
     UI/Settings/SettingsWindowTabKeysTests.cpp
+    UI/Settings/SettingsWindowReopenTests.cpp
     UI/Settings/SettingsWindowTabStripTests.cpp
     UI/Settings/SettingsWindowShortcutHintsTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp

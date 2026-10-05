@@ -19,8 +19,16 @@ int comboIdFromCategory(PreferencesSettingsTab::Category category) { return stat
 // reworded entry cannot repoint a saved choice).
 constexpr const char* kCategoryKey = "preferencesCategory";
 
-juce::String persistedCategoryName(PreferencesSettingsTab::Category category) {
-    using Category = PreferencesSettingsTab::Category;
+// A missing or unrecognised value is All, the view that shows every category.
+PreferencesSettingsTab::Category categoryFromPersistedName(const juce::String& name) {
+    for (auto category : kCategoriesInOrder)
+        if (PreferencesSettingsTab::persistedCategoryName(category) == name)
+            return category;
+    return kAllCategory;
+}
+} // namespace
+
+juce::String PreferencesSettingsTab::persistedCategoryName(Category category) {
     switch (category) {
     case Category::Graph:
         return "Graph";
@@ -39,15 +47,6 @@ juce::String persistedCategoryName(PreferencesSettingsTab::Category category) {
     }
     return "All";
 }
-
-// A missing or unrecognised value is All, the view that shows every category.
-PreferencesSettingsTab::Category categoryFromPersistedName(const juce::String& name) {
-    for (auto category : kCategoriesInOrder)
-        if (persistedCategoryName(category) == name)
-            return category;
-    return kAllCategory;
-}
-} // namespace
 
 juce::String PreferencesSettingsTab::categoryName(Category category) {
     switch (category) {
