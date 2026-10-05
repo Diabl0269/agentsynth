@@ -14,6 +14,7 @@
 // wherever the implicit member destructors are instantiated.
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
@@ -75,6 +76,8 @@ void GraphEditor::configureCardGlide() {
     };
     hooks.repaint = [this] { repaintCanvas(); };
     hooks.updater = &vblankUpdater;
+    hooks.canAnimate = [this] { return isShowing(); };
+    hooks.accent = [this] { return synth::theme::themeOf(*this).colors.accent; };
     cardGlide_.setHooks(std::move(hooks));
 }
 

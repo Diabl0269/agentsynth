@@ -928,6 +928,7 @@ private:
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
     void configureCardGlide();
+    void noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
     void configureCanvasFrame();
     void applyContentBounds();
     void beginCanvasEdgeDrag();

@@ -380,6 +380,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorGhosts.cpp
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
     Source/UI/Graph/CanvasFrame/CanvasFrame.h

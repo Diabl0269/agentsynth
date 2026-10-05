@@ -30,11 +30,11 @@ bool AppUndoManager::redo() { return applyHistoryStep(true); }
 // rather than snap while it runs. The glide scope captures the cards' bounds before the restore and arms a slide from
 // them afterwards, so the canvas moves back the way the edit moved forward. A card matches by component, or by node id
 // when the restore rebuilt the cards (freeing any node tears every card down, as taking a module out of a macro does);
-// a card for a node the restore creates has no "before" and lands at once.
+// a card the restore removes shrinks away and one it creates grows back (CardGlideAnimatorGhosts.cpp).
 void AppUndoManager::beginRestore() {
     restoring_ = true;
     if (graphEditor != nullptr)
-        glideScope_ = std::make_shared<CardGlideAnimator::Scope>(graphEditor->getCardGlide());
+        glideScope_ = std::make_shared<CardGlideAnimator::Scope>(graphEditor->getCardGlide(), /*restore=*/true);
 }
 
 void AppUndoManager::endRestore(bool did) {

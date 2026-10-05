@@ -211,8 +211,8 @@ path); nothing else needs to know.
   with the same geometry-final-at-once contract, 160 ms `easeOutCubic` and cable following as a forward move. A card
   matches its "before" by component, or by node id when the restore tore every card down and rebuilt it (any restore
   that frees a node does, e.g. the macro port a take-out created): so a module that moved between a macro and the root
-  glides back and forth with its cables. Only a card for a node the restore creates has no "before" and lands at once;
-  a project load never goes through `undo()` and so never glides.
+  glides back and forth with its cables. A card for a node the restore creates grows in, and one it removes shrinks away
+  ([delete and undo animation](#delete-and-undo-animation)); a project load never goes through `undo()` and so never glides.
 - **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to
   `GraphEditor::glideHullsFrom` after it, so the border a take-out or join moved glides (220 ms, `MacroHullGlide`) back
   to where it was, like it glided out.
@@ -228,6 +228,27 @@ path); nothing else needs to know.
 - **Off-screen.** Same check as the forward move (the app has no Reduce Motion setting): the timeline glide runs only
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.
+
+### Delete and undo animation
+
+Deleting a canvas card shrinks it away and Cmd+Z grows it back. The model change (delete, undo, redo) is still
+instant and one undo step; the animation is a paint-only layer in `CardGlideAnimator` (`CardGlideAnimatorGhosts.cpp`),
+drawn by the same overlay as the glide. `Source/UI/Layout/ExitEnterTimeline.h` is the shared, pure phase timeline for
+every surface that animates a delete:
+
+- **Delete:** exit (the item shrinks toward its centre, 180 ms) THEN gap (the cards that moved close up, 200 ms).
+- **Cmd+Z / redo:** gap (neighbours make room, 200 ms) THEN grow (the item grows back from its centre, 180 ms) THEN a
+  1 px accent outline around it fades (400 ms). Redo of a delete exits again.
+- The phases never overlap, so no frame shows two cards on top of each other.
+- **Reduce Motion** (`prefersReducedMotion()`): a plain fade in place instead of the shrink or grow.
+- **Opt-in snapshot:** the delete paths (`GraphEditor::deleteSelection`, `requestDeleteModule`) open a
+  `CardGlideAnimator::Scope` and call `noteExit()` for each card before the removal; an undo/redo scope
+  (`Scope(animator, restore=true)`) snapshots every on-screen card, then a card that is gone afterwards exits and a card
+  that is new enters. A card that survives under the same node id is never a ghost.
+- **Off-screen:** ghosts are made only while the canvas is showing (`Hooks::canAnimate`), so headless tests see the
+  final state synchronously; tests force it with `setForceAnimateForTest` and step `applyTimelineAtMs`.
+- Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at
+  once, or use their own collapse). They should reuse `ExitEnterTimeline`.
 
 ### Drag-and-drop cursor
 
