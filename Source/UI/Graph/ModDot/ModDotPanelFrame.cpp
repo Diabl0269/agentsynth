@@ -59,12 +59,29 @@ void ModDotPanelFrame::installTooltipWindow(juce::ApplicationProperties* appProp
 void ModDotPanelFrame::showOnDesktop() {
     addToDesktop(juce::ComponentPeer::windowIsTemporary);
     reposition();
-    PopupMotion::attach(*this);
+    PopupMotion::attach(*this, motionStyle());
     setVisible(true);
     toFront(true);
     juce::Desktop::getInstance().addGlobalMouseListener(this);
     listening_ = true;
     startTimer(200);
+}
+
+// Grows out of the dot: slides 12 px away from it with a 3% overshoot, and leaves 6 px back toward it.
+popup_motion::Style ModDotPanelFrame::motionStyle() const {
+    popup_motion::Style style;
+    style.inSlidePx = kInSlidePx;
+    style.outSlidePx = kOutSlidePx;
+    style.overshoot = true;
+    style.anchor = [dot = dot_] { return dot.getCentre(); };
+    return style;
+}
+
+// The dot was clicked again while the panel fades out: end the fade at once (the new panel takes over the spot).
+void ModDotPanelFrame::finishClosingNow() {
+    if (!closing_)
+        return;
+    setVisible(false); // the pending close then runs onClosed on the next turn
 }
 
 void ModDotPanelFrame::close() {

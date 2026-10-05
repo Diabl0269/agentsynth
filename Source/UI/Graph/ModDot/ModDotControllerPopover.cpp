@@ -16,8 +16,8 @@ namespace synth::ui {
 namespace {
 // The panel gets a window of its own beside the dot: not modal (a canvas pick has to reach the canvas), closed by
 // a press outside it, Esc or its owner, and deleted a turn after it is gone.
-void launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor,
-                   juce::ApplicationProperties* appProperties) {
+ModDotPanelFrame* launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor,
+                                juce::ApplicationProperties* appProperties) {
     auto* panel = dynamic_cast<ModDotPopover*>(content.get());
     const auto dot = anchor.getScreenBounds();
     const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(dot);
@@ -40,6 +40,7 @@ void launchInFrame(std::unique_ptr<juce::Component> content, juce::Component& an
     }
     frame->onClosed = [frame] { juce::MessageManager::callAsync([frame] { delete frame; }); };
     frame->showOnDesktop();
+    return frame;
 }
 
 // The timeline names a routing by uuids (a node id does not survive an undo), so the source, the target and the
@@ -75,6 +76,10 @@ ModDotController::~ModDotController() {
 }
 
 void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
+    // A dot clicked again while its panel is still fading out: the fade is cut short, the new panel takes the spot.
+    if (auto* old = dynamic_cast<ModDotPanelFrame*>(frame_.getComponent()); old != nullptr && old->isClosing())
+        old->finishClosingNow();
+    frame_ = nullptr;
     closePopover();
     if (!knobModTarget(editor_, card, destChannel).valid())
         return;
@@ -83,7 +88,7 @@ void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int d
     if (popoverLauncher)
         popoverLauncher(std::move(content), anchor);
     else
-        launchInFrame(std::move(content), anchor, host.appProperties);
+        frame_ = launchInFrame(std::move(content), anchor, host.appProperties);
 }
 
 ModDotPopover* ModDotController::getPopover() const { return static_cast<ModDotPopover*>(popover_.getComponent()); }

@@ -122,8 +122,9 @@ class Impl final
     : public juce::ComponentListener
     , private juce::Timer {
 public:
-    explicit Impl(juce::Component& window)
+    Impl(juce::Component& window, popup_motion::Style style)
         : window_(&window)
+        , style_(std::move(style))
         , updater_(&window)
         , snapshotTask_(*this) {
         registry()[&window] = this;
@@ -168,7 +169,7 @@ public:
         ghosted_ = true; // the live window is what fades: no leaving picture on top of it
         pendingClose_ = std::move(reallyClose);
         reduce_ = prefersReducedMotion();
-        dir_ = popup_motion::slideDirection(window_->getScreenBounds(), juce::Desktop::getMousePosition());
+        dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
         window_->setInterceptsMouseClicks(false, false);
 
         driver_.start(
@@ -177,7 +178,7 @@ public:
             [this, startAlpha](float e) {
                 if (!leaving_)
                     return;
-                const auto f = popup_motion::frameAt(Phase::Out, e, dir_, reduce_);
+                const auto f = popup_motion::frameAt(Phase::Out, e, dir_, reduce_, style_);
                 window_->setAlpha(startAlpha * f.alpha);
                 window_->setTopLeftPosition(restPos_ +
                                             juce::Point<int>(roundToInt(f.offset.x), roundToInt(f.offset.y)));
@@ -204,6 +205,8 @@ private:
         Impl& owner;
     };
 
+    juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : juce::Desktop::getMousePosition(); }
+
     bool canAnimate() const { return PopupMotion::isEnabled() && window_->isOnDesktop(); }
 
     bool hasNativeTitleBar() const {
@@ -212,7 +215,7 @@ private:
     }
 
     void applyFrame(Phase phase, float eased) {
-        const auto f = popup_motion::frameAt(phase, eased, dir_, reduce_);
+        const auto f = popup_motion::frameAt(phase, eased, dir_, reduce_, style_);
         window_->setAlpha(f.alpha);
         window_->setTopLeftPosition(restPos_ + juce::Point<int>(roundToInt(f.offset.x), roundToInt(f.offset.y)));
     }
@@ -227,7 +230,7 @@ private:
             restPos_ = window_->getPosition();
         }
         reduce_ = prefersReducedMotion();
-        dir_ = popup_motion::slideDirection(window_->getScreenBounds(), juce::Desktop::getMousePosition());
+        dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
         ghosted_ = false;
         cache_ = {};
         animating_ = true;
@@ -235,7 +238,7 @@ private:
         applyFrame(Phase::In, 0.0f); // frame 0 before the first VBlank can show the window whole
         driver_.start(
             updater_, popup_motion::durationMs(Phase::In, reduce_),
-            [](float t) { return popup_motion::ease(Phase::In, t); },
+            [this](float t) { return popup_motion::ease(Phase::In, t, style_); },
             [this](float e) {
                 if (animating_)
                     applyFrame(Phase::In, e);
@@ -371,6 +374,7 @@ private:
     }
 
     juce::Component* window_;
+    popup_motion::Style style_;
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver driver_;
     SnapshotTask snapshotTask_;
@@ -388,11 +392,11 @@ private:
 
 } // namespace
 
-void PopupMotion::attach(juce::Component& window) {
+void PopupMotion::attach(juce::Component& window, popup_motion::Style style) {
     if (window.getProperties().contains(kAttachedProperty))
         return;
     window.getProperties().set(kAttachedProperty, true);
-    new Impl(window); // owns itself: deleted by componentBeingDeleted
+    new Impl(window, std::move(style)); // owns itself: deleted by componentBeingDeleted
 }
 
 void PopupMotion::setEnabled(bool enabled) { enabledFlag() = enabled; }

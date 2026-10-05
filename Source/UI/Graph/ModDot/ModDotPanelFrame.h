@@ -8,6 +8,7 @@
 
 #include "ModDotPanelGeometry.h"
 #include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/PopupMotion.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -19,6 +20,8 @@ class ModDotPanelFrame final
     , private juce::ComponentListener
     , private juce::Timer {
 public:
+    static constexpr float kInSlidePx = 12.0f; // the soft entrance: out of the dot, 3% overshoot
+    static constexpr float kOutSlidePx = 6.0f;
     static constexpr int kShadow = 10; // transparent margin around the panel: the arrow and the shadow live in it
 
     /** `content` is the panel; `anchor` the dot it points at, `dot` its bounds and `area` the room the panel may use
@@ -38,6 +41,10 @@ public:
     /** Closes through the soft exit; `onClosed` runs when it is gone (at once when it has no native window). */
     void close();
     bool isClosing() const noexcept { return closing_; }
+    /** The panel was asked to open again while it fades out: cuts the fade short (it is then gone). */
+    void finishClosingNow();
+    /** The motion the frame attaches to its window (a test attaches it to a peer-less frame). */
+    popup_motion::Style motionStyle() const;
     /** The room left for the panel's own height. */
     int maxContentHeight() const;
     /** Where the panel body sits, in the frame's own coordinates. */

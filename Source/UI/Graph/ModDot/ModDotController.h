@@ -141,6 +141,7 @@ private:
 
     GraphEditor& editor_;
     juce::Component::SafePointer<juce::Component> popover_;
+    juce::Component::SafePointer<juce::Component> frame_; // the window the panel sits in (null with a test launcher)
     ModDotTooltip tooltip_;
     std::map<std::pair<juce::uint32, int>, juce::uint32> lastChosen_;
     std::optional<Gesture> gesture_;
