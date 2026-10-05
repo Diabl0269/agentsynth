@@ -22,6 +22,7 @@
 #include "Timeline/AutomationKernel.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -593,6 +594,41 @@ TEST_F(AutomationEditorMainComponentTest, AutomateFromMixerTabSwitchesDockToTime
     const auto* lane = mc.getTimelineDoc().getLaneForParam(node->properties["uuid"].toString(), "cutoff");
     ASSERT_NE(lane, nullptr);
     EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
+}
+
+// Show in timeline (the mod dot's source-row button) while a MIDI clip is open in the panel: the clip editor
+// covers the lanes, so it has to close for the focused lane to be on screen. With no clip open nothing changes.
+TEST_F(AutomationEditorMainComponentTest, RevealModulatorClosesAnOpenClipEditorSoTheLaneShows) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    auto node = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(node, nullptr);
+    auto& doc = mc.getTimelineDoc();
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "C1");
+    ASSERT_TRUE(clip.isValid());
+    auto& panel = mc.getTimelinePanel();
+    auto& reveal = mc.getGraphEditor().getModDot().host.revealModulator;
+    ASSERT_TRUE(reveal);
+
+    synth::ui::ModulatorInfo info;
+    mc.automateParameter(node->nodeID, "cutoff"); // gives the node its uuid and the lane
+    info.targetUuid = node->properties["uuid"].toString();
+    info.paramId = "cutoff";
+
+    // No clip open: the lanes are already showing and the reveal leaves that alone.
+    ASSERT_FALSE(panel.isPianoRollOpen());
+    reveal(info);
+    EXPECT_FALSE(panel.isPianoRollOpen());
+
+    panel.openPianoRoll(clip);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+    reveal(info);
+
+    const auto* lane = doc.getLaneForParam(info.targetUuid, "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_FALSE(panel.isPianoRollOpen());
+    EXPECT_FALSE(panel.getPianoRoll().isVisible());
+    EXPECT_EQ(panel.getSelectedAutomationLane(), lane->id);
 }
 
 // ============================================================================

@@ -573,7 +573,7 @@ the arrows keep working.
 * **Show in timeline** (`host.revealModulator` -> `MainComponent::revealModulatorInTimeline`) opens the Timeline tab and
   shows the lane of the knob's parameter, where its modulator rows sit. A parameter with no lane gets one the way
   "Automate" makes it (`automateParameter`, one undo step); the view scrolls to the lane row, not to the single
-  modulator row under it.
+  modulator row under it. A MIDI clip open in the timeline (piano roll) is closed first, so the lanes are showing.
 * **Closing and keys.** A press outside closes it, the edits already applied. Esc steps back: it stops a canvas pick,
   then clears the search, then folds the list, then closes; focus moves into the panel on open and back to the dot's
   button on close. Up and Down walk the rows, the split button and (with the list open) the group headers and source

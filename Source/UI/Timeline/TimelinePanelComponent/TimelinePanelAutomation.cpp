@@ -63,11 +63,14 @@ void TimelinePanelComponent::setTrackAutomationExpanded(synth::TrackId track, bo
 
 // Every way of automating a parameter ends here (the knob's "Automate", the mixer's lane choices),
 // so the lane the user just asked for is always on screen and ready for the keyboard: its track
-// opens, the view scrolls to the row, and its editor takes focus.
+// opens, the view scrolls to the row, and its editor takes focus. An open clip editor replaces the lanes in the
+// panel, so it closes first: the lane must be showing to be shown.
 void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
     const auto* track = doc_ != nullptr ? doc_->getTrackForLane(id) : nullptr;
     if (track == nullptr)
         return;
+    if (pianoRoll_.isOpen())
+        closePianoRoll();
     selectedAutomationLane_ = id;
     automationLanes_.setExpanded(track->id, true);
     syncAutomationLanes();
