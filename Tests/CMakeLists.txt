@@ -255,6 +255,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
+    UI/Graph/GraphEditor/GraphEditorMinimapSlideTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionInsertTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionPreviewTests.cpp

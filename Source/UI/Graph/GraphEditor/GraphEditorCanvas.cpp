@@ -302,22 +302,7 @@ void GraphEditor::resized() {
                                                 : juce::Rectangle<int>(getWidth(), 0, 600, getHeight());
     }
 
-    // ---- Minimap -----------------
-    // Bottom-LEFT with a 12px margin — the mod-matrix panel occupies a 600px panel on the right.
-    // Auto-hide when the editor is too small to show it without swallowing the view, but never
-    // clobber the user's preference: `minimapVisible` still reflects what they asked for, and
-    // resized() just recomputes whether that preference currently fits.
-    {
-        constexpr int kMargin = 12;
-        // Absolute floors, not a fraction of the editor: a fraction-of-self test is always
-        // satisfied (w/4 * 2 <= w for any w), so it would never actually hide anything.
-        constexpr int kMinEditorW = 480, kMinEditorH = 360;
-        const int mmW = juce::jmin(220, getWidth() / 4);
-        const int mmH = juce::jmin(150, getHeight() / 4);
-        const bool fits = getWidth() >= kMinEditorW && getHeight() >= kMinEditorH;
-        minimap.setBounds(kMargin, getHeight() - mmH - kMargin, mmW, mmH);
-        minimap.setVisible(minimapVisible && fits);
-    }
+    layoutMinimap();
 
     updateTransform();
 }
@@ -506,19 +491,6 @@ void GraphEditor::zoomAroundCentre(float wheelDelta) {
     applyZoomAt(wheelDelta, getLocalBounds().getCentre().toFloat());
 }
 
-void GraphEditor::setMinimapVisible(bool shouldBeVisible) {
-    minimapVisible = shouldBeVisible;
-    // resized() recomputes the effective (preference && fits) visibility.
-    resized();
-    // Seed the full model on the way in: updateTransform() only pushes the viewport, so without
-    // this the map would show an empty canvas until the next 30 Hz tick.
-    if (minimap.isVisible())
-        minimap.setModel(buildMinimapModel());
-}
-
-void GraphEditor::toggleMinimapVisibility() { setMinimapVisible(!minimapVisible); }
-
-// Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
 synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
     synth::ui::MinimapModel model;
 
