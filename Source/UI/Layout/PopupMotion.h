@@ -39,6 +39,28 @@ inline double durationMs(Phase phase, bool reduceMotion) noexcept {
 /** The easing a phase uses: arriving decelerates, leaving accelerates away. */
 inline float ease(Phase phase, float t) noexcept { return phase == Phase::In ? easeOutCubic(t) : easeInCubic(t); }
 
+/** Ease-out with a soft overshoot: peaks at 1.03 (3% past the end) and settles back to 1. Back-ease with
+ *  c1 = 0.9 (peak = 4 c1^3 / (27 (c1 + 1)^2)). */
+inline float easeOutBackSoft(float t) noexcept {
+    constexpr float c1 = 0.9f;
+    const float u = t - 1.0f;
+    return 1.0f + (c1 + 1.0f) * u * u * u + c1 * u * u;
+}
+
+/** Per-window look. The default is the shared popup motion; a window opts into more by passing a Style to
+ *  PopupMotion::attach. */
+struct Style {
+    float inSlidePx = kInSlidePx;
+    float outSlidePx = kOutSlidePx;
+    bool overshoot = false; // the arrival eases with easeOutBackSoft: it lands 3% past, then settles
+    /** Where the window grows out of (screen coordinates); null = the pointer. */
+    std::function<juce::Point<int>()> anchor;
+};
+
+inline float ease(Phase phase, float t, const Style& style) noexcept {
+    return phase == Phase::In && style.overshoot ? easeOutBackSoft(t) : ease(phase, t);
+}
+
 /** Unit step (one of (0,1), (0,-1), (1,0), (-1,0)) pointing from `anchor` to the window along the
  *  axis the window sits furthest off the anchor. A pointer inside the window's span on an axis has
  *  no distance on it, so a menu opened with its corner at the pointer slides down (the pointer is
@@ -62,11 +84,12 @@ struct Frame {
 /** The window's state when the phase's eased progress is `eased` (0 at the start of the phase, 1 at
  *  its end). In: alpha 0 -> 1, offset -dir * 4 px -> 0. Out: alpha 1 -> 0, offset 0 -> -dir * 2 px.
  *  `dir` is slideDirection(); Reduce motion keeps the alpha and drops the offset. */
-inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion) noexcept {
+inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion,
+                     const Style& style = {}) noexcept {
     Frame f;
-    f.alpha = phase == Phase::In ? eased : 1.0f - eased;
+    f.alpha = juce::jlimit(0.0f, 1.0f, phase == Phase::In ? eased : 1.0f - eased);
     if (!reduceMotion) {
-        const float distance = phase == Phase::In ? -kInSlidePx * (1.0f - eased) : -kOutSlidePx * eased;
+        const float distance = phase == Phase::In ? -style.inSlidePx * (1.0f - eased) : -style.outSlidePx * eased;
         f.offset = {(float)dir.x * distance, (float)dir.y * distance};
     }
     return f;
@@ -86,7 +109,7 @@ public:
      *  hidden. Safe to call many times: only the first does anything. The listener it installs
      *  deletes itself with the window. A window with no native peer, or any window while the
      *  engine is disabled, is left exactly as JUCE would show it. */
-    static void attach(juce::Component& window);
+    static void attach(juce::Component& window, popup_motion::Style style = {});
 
     /** Master switch (default on). Off: attached windows show and hide instantly. */
     static void setEnabled(bool enabled);

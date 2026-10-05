@@ -4,6 +4,8 @@
 
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
 #include "UI/Graph/ModDot/ModDotPanelGeometry.h"
+#include "UI/Layout/PopupMotion.h"
+#include <functional>
 #include <gtest/gtest.h>
 
 namespace {
@@ -12,6 +14,7 @@ namespace panel = synth::ui::modDotPanel;
 using synth::ui::ModDotPanelFrame;
 
 const juce::Rectangle<int> kScreen(0, 0, 800, 600);
+const juce::ModifierKeys kPlainMouse(juce::ModifierKeys::leftButtonModifier);
 
 } // namespace
 
@@ -137,4 +140,122 @@ TEST(ModDotPanelFrameTest, ClosingReportsOnceItIsGone) {
 
     EXPECT_EQ(closed, 1) << "a second close while closing does nothing";
     EXPECT_TRUE(frame.isClosing());
+}
+
+namespace {
+
+struct AnimateOffScreenGuard {
+    AnimateOffScreenGuard() { synth::ui::PopupMotion::setAnimateOffScreenForTest(true); }
+    ~AnimateOffScreenGuard() { synth::ui::PopupMotion::setAnimateOffScreenForTest(false); }
+};
+
+bool pumpUntil(const std::function<bool()>& done) {
+    const auto deadline = juce::Time::getMillisecondCounter() + 2000;
+    while (!done() && juce::Time::getMillisecondCounter() < deadline)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    return done();
+}
+
+struct MotionFrame {
+    juce::Component anchor;
+    std::unique_ptr<ModDotPanelFrame> frame;
+    int closed = 0;
+    MotionFrame() {
+        auto content = std::make_unique<juce::Component>();
+        content->setSize(280, 100);
+        frame = std::make_unique<ModDotPanelFrame>(std::move(content), anchor, juce::Rectangle<int>(100, 200, 12, 12),
+                                                   kScreen);
+        frame->onClosed = [this] { ++closed; };
+        synth::ui::PopupMotion::attach(*frame, frame->motionStyle());
+        frame->setVisible(true);
+    }
+};
+
+} // namespace
+
+TEST(ModDotPanelFrameTest, MotionGrowsOutOfTheDotWithASoftOvershoot) {
+    juce::Component anchor;
+    auto content = std::make_unique<juce::Component>();
+    content->setSize(280, 100);
+    ModDotPanelFrame frame(std::move(content), anchor, juce::Rectangle<int>(100, 200, 12, 12), kScreen);
+    const auto style = frame.motionStyle();
+    EXPECT_TRUE(style.overshoot);
+    EXPECT_GT(style.inSlidePx, synth::ui::popup_motion::kInSlidePx);
+    ASSERT_TRUE(style.anchor != nullptr);
+    EXPECT_EQ(style.anchor(), juce::Point<int>(106, 206)) << "the dot's centre, not the pointer";
+}
+
+TEST(ModDotPanelFrameTest, EscapeFadesTheLiveWindowOutThenClosesAndTheDotStaysReachable) {
+    AnimateOffScreenGuard seam;
+    MotionFrame m;
+    EXPECT_TRUE(m.frame->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(m.frame->isClosing());
+    EXPECT_EQ(m.closed, 0) << "the window is still there while it fades";
+    EXPECT_TRUE(synth::ui::PopupMotion::isDismissing(*m.frame));
+    bool frameClicks = true, frameChildClicks = true, anchorClicks = false, anchorChildClicks = false;
+    m.frame->getInterceptsMouseClicks(frameClicks, frameChildClicks);
+    m.anchor.getInterceptsMouseClicks(anchorClicks, anchorChildClicks);
+    EXPECT_FALSE(frameClicks) << "a fading panel takes no clicks";
+    EXPECT_TRUE(anchorClicks) << "the dot keeps taking clicks";
+    ASSERT_TRUE(pumpUntil([&] { return m.closed == 1; }));
+    EXPECT_FALSE(m.frame->isVisible());
+}
+
+TEST(ModDotPanelFrameTest, ClickingTheDotAgainMidFadeCutsTheFadeShortAndClosesOnce) {
+    AnimateOffScreenGuard seam;
+    MotionFrame m;
+    m.frame->close();
+    ASSERT_TRUE(m.frame->isClosing());
+    m.frame->finishClosingNow();
+    EXPECT_FALSE(m.frame->isVisible());
+    ASSERT_TRUE(pumpUntil([&] { return m.closed >= 1; }));
+    pumpUntil([] { return false; }); // let any second close show up
+    EXPECT_EQ(m.closed, 1);
+}
+
+TEST(ModDotPanelFrameTest, ClosesAtOnceWhenNoWindowIsOnScreen) {
+    MotionFrame m; // no animate-off-screen seam: the headless contract
+    m.frame->close();
+    EXPECT_EQ(m.closed, 1) << "final state is there before close() returns";
+}
+
+// A press on an empty canvas (another top-level component) closes the panel through ONE fade: the window stays shown,
+// only gets more transparent, and nothing re-shows or pictures it again.
+TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow) {
+    AnimateOffScreenGuard seam;
+    MotionFrame m;
+    juce::Component canvas;
+    canvas.setBounds(0, 0, 400, 300);
+    int shown = 0;
+    struct Watch : juce::ComponentListener {
+        int* count;
+        void componentVisibilityChanged(juce::Component& c) override {
+            if (c.isVisible())
+                ++*count;
+        }
+    } watch;
+    watch.count = &shown;
+    m.frame->addComponentListener(&watch);
+
+    const juce::MouseEvent press(juce::Desktop::getInstance().getMainMouseSource(), {50, 50}, kPlainMouse, 0.0f, 0.0f,
+                                 0.0f, 0.0f, 0.0f, &canvas, &canvas, juce::Time::getCurrentTime(), {50, 50},
+                                 juce::Time::getCurrentTime(), 1, false);
+    static_cast<juce::MouseListener&>(*m.frame).mouseDown(press);
+    static_cast<juce::MouseListener&>(*m.frame).mouseDown(press); // a second press while fading changes nothing
+
+    EXPECT_TRUE(m.frame->isClosing());
+    EXPECT_TRUE(synth::ui::PopupMotion::isDismissing(*m.frame));
+    float lastAlpha = 1.0f;
+    bool monotonic = true;
+    ASSERT_TRUE(pumpUntil([&] {
+        monotonic = monotonic && m.frame->getAlpha() <= lastAlpha + 1e-4f;
+        lastAlpha = m.frame->getAlpha();
+        return m.closed >= 1;
+    }));
+    EXPECT_TRUE(monotonic) << "the alpha only goes down";
+    EXPECT_EQ(shown, 0) << "nothing re-shows the window";
+    EXPECT_EQ(synth::ui::PopupMotion::getNumLeavingGhosts(), 0) << "no second, leaving picture on top of the fade";
+    pumpUntil([] { return false; });
+    EXPECT_EQ(m.closed, 1);
+    m.frame->removeComponentListener(&watch);
 }

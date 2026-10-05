@@ -1,4 +1,5 @@
 #include "ModDotPopover.h"
+#include "UI/Layout/PopupMotion.h"
 
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotButton.h"
@@ -274,6 +275,7 @@ void ModDotPopover::finishPick(juce::AudioProcessorGraph::NodeID attenuverter) {
 }
 
 void ModDotPopover::dismiss() {
+    stopTimer(); // a leaving panel must not go back for the keyboard
     if (onDismiss)
         onDismiss();
 }
@@ -301,6 +303,10 @@ bool ModDotPopover::focusIsInside() const {
 void ModDotPopover::ensureFocusInside() {
     auto* peer = getPeer();
     if (peer == nullptr || !isShowing() || focusIsInside())
+        return;
+    // A click on the canvas moves the keys to the app window while the panel fades out; pulling the panel's window
+    // to the front now would re-show it mid-fade (the double flicker on click-away).
+    if (auto* window = getTopLevelComponent(); window != nullptr && PopupMotion::isDismissing(*window))
         return;
     if (!peer->isFocused()) {
         if (auto* window = getTopLevelComponent())

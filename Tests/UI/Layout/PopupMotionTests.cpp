@@ -39,6 +39,34 @@ TEST(PopupMotionMath, InEasesOutAndOutEasesIn) {
     EXPECT_LT(ease(Phase::Out, 0.5f), 0.5f); // leaves slowly, then goes
 }
 
+TEST(PopupMotionMath, SoftOvershootPeaksThreePercentPastTheEndAndSettles) {
+    EXPECT_FLOAT_EQ(easeOutBackSoft(0.0f), 0.0f);
+    EXPECT_NEAR(easeOutBackSoft(1.0f), 1.0f, 1e-6f);
+    float peak = 0.0f;
+    for (int i = 0; i <= 1000; ++i)
+        peak = juce::jmax(peak, easeOutBackSoft((float)i / 1000.0f));
+    EXPECT_NEAR(peak, 1.03f, 0.002f);
+    Style plain;
+    EXPECT_FLOAT_EQ(ease(Phase::In, 0.5f, plain), easeOutCubic(0.5f)); // opt-in only
+    Style bounce;
+    bounce.overshoot = true;
+    EXPECT_FLOAT_EQ(ease(Phase::In, 0.5f, bounce), easeOutBackSoft(0.5f));
+    EXPECT_FLOAT_EQ(ease(Phase::Out, 0.5f, bounce), easeInCubic(0.5f)); // leaving never bounces
+}
+
+TEST(PopupMotionFrame, StyleSetsTheSlideAndAnOvershootKeepsAlphaAtMostOne) {
+    Style style;
+    style.inSlidePx = 12.0f;
+    style.outSlidePx = 6.0f;
+    style.overshoot = true;
+    const juce::Point<int> right(1, 0);
+    EXPECT_FLOAT_EQ(frameAt(Phase::In, 0.0f, right, false, style).offset.x, -12.0f);
+    EXPECT_FLOAT_EQ(frameAt(Phase::Out, 1.0f, right, false, style).offset.x, -6.0f);
+    const auto over = frameAt(Phase::In, 1.03f, right, false, style);
+    EXPECT_FLOAT_EQ(over.alpha, 1.0f);
+    EXPECT_GT(over.offset.x, 0.0f); // past rest by 3% of the slide
+}
+
 // ----------------------------------------------------------------------------------------------
 // Frames
 // ----------------------------------------------------------------------------------------------
