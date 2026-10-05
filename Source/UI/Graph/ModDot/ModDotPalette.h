@@ -21,6 +21,7 @@ struct ModDotPalette {
     juce::Colour positive = juce::Colour(0xff00E5FF); // modRingPositive
     juce::Colour negative = juce::Colour(0xffFF6E00); // modRingNegative
     float radius = 6.0f;
+    int space = 6; // the theme's base spacing unit: the gap between a row's controls
     juce::String monoFamily = juce::Font::getDefaultMonospacedFontName();
 
     juce::Colour swatchFor(float amount) const { return amount >= 0.0f ? positive : negative; }
@@ -45,6 +46,7 @@ inline ModDotPalette modDotPaletteFor(const juce::Component& comp) {
         p.positive = c.modRingPositive;
         p.negative = c.modRingNegative;
         p.radius = theme.metrics.cornerRadius;
+        p.space = theme.metrics.spacingUnit;
         p.monoFamily = theme.type.monoFamily;
     }
     return p;

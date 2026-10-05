@@ -65,7 +65,7 @@ TEST_F(ModuleComponentTest, EachRowCarriesItsAccessibleNamesAndTooltips) {
     auto& row = *f.clickDot()->sourcesPage().rowAt(0);
     const auto name = row.source().sourceName;
     EXPECT_EQ(row.bar().getTitle(), name + " amount");
-    EXPECT_EQ(row.bar().getTooltip(), "Drag to change how strongly " + name + " moves Gain");
+    EXPECT_EQ(row.bar().getTooltip(), "Drag to change " + name + " amount");
     EXPECT_EQ(row.bar().getValueText(), "+50%");
     EXPECT_EQ(row.timelineButton().getTitle(), "Show " + name + " in timeline");
     EXPECT_EQ(row.removeButton().getTitle(), "Remove " + name);
@@ -104,7 +104,7 @@ TEST_F(ModuleComponentTest, DraggingARowsBarChangesTheAmountLiveAsOneUndoStep) {
     bar.mouseDown(clickAt(bar, {(int)bar.xForValue(0.5f), 5}));
     bar.mouseDrag(clickAt(bar, {(int)bar.xForValue(0.8f), 5}));
     EXPECT_NEAR(f.amount(f.attenId), 0.8f, 0.011f) << "the amount follows the handle while it is held";
-    EXPECT_EQ(row.amountButton().getButtonText(), ModDotAmountBar::percentText(bar.getValue()));
+    EXPECT_EQ(row.amountButton().getButtonText(), ModDotAmountBar::percentText(bar.amount()));
     bar.mouseUp(clickAt(bar, {(int)bar.xForValue(0.8f), 5}));
 
     ASSERT_TRUE(f.undo.undo());
@@ -139,9 +139,9 @@ TEST_F(ModuleComponentTest, LeftAndRightStepTheBarByOnePercentAndShiftByTenEachA
 
 TEST_F(ModuleComponentTest, TheBarIsASliderThatSpeaksPercent) {
     ModDotAmountBar bar;
-    bar.setValue(-0.18f);
+    bar.setAmount(-0.18f);
     EXPECT_EQ(bar.getValueText(), "-18%");
-    bar.setValue(0.0f);
+    bar.setAmount(0.0f);
     EXPECT_EQ(bar.getValueText(), "0%");
     EXPECT_TRUE(bar.getWantsKeyboardFocus());
 }

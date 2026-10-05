@@ -286,6 +286,7 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.getModDot().host.removeModulator = [this](const synth::ui::ModulatorInfo& modulator) {
         removeModulator(modulator);
     };
+    graphEditor.getModDot().host.appProperties = &appProperties;
     graphEditor.getModDot().host.revealModulator = [this](const synth::ui::ModulatorInfo& modulator) {
         revealModulatorInTimeline(modulator);
     };

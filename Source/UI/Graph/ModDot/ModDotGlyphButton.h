@@ -14,6 +14,11 @@ namespace synth::ui {
 
 enum class ModDotGlyph { Timeline, Trash, List, Crosshair };
 
+/** The colour `glyph` is drawn in whatever the state (resting, hovered, focused, pressed): the panel's icons are
+ *  always in colour, never greyed until a state change. Remove is the negative colour, the lanes of "show in
+ *  timeline" and the crosshair the positive one, the list the accent. `hover` (0..1) only brightens it. */
+juce::Colour modDotGlyphColour(const ModDotPalette& palette, ModDotGlyph glyph, float hover = 0.0f);
+
 /** Strokes `glyph` inside `area` (a square). */
 void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<float> area, juce::Colour colour);
 /** The fold chevron: pointing right at `progress` 0 (folded), down at 1, turning 90 degrees between. */
@@ -62,6 +67,8 @@ public:
         repaint();
     }
     bool isDanger() const noexcept { return danger_; }
+    /** The colour the glyph is drawn in right now. */
+    juce::Colour glyphColour() const { return modDotGlyphColour(modDotPaletteFor(*this), glyph_, hover_.value()); }
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (isEnabled() && (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)) {
@@ -89,9 +96,7 @@ public:
             g.fillRoundedRectangle(bounds, 5.0f);
         }
         paintModDotGlyph(g, glyph_, bounds.withSizeKeepingCentre(14.0f, 14.0f),
-                         danger_ || (glyph_ == ModDotGlyph::Trash && hover_.value() > 0.5f)
-                             ? p.negative
-                             : p.muted.interpolatedWith(p.text, hover_.value()));
+                         danger_ ? p.negative.brighter(0.2f) : modDotGlyphColour(p, glyph_, hover_.value()));
         paintFocusRing(g, bounds, *this, 5.0f);
     }
 

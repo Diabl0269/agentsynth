@@ -297,6 +297,7 @@ add_executable(Tests
     UI/Graph/ModDot/ModDotAddSourceTests.cpp
     UI/Graph/ModDot/ModDotMacroRoutingTests.cpp
     UI/Graph/ModDot/ModDotPopoverTests.cpp
+    UI/Graph/ModDot/ModDotRowPolishTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
     UI/Graph/ModDot/ModDotInlineAddTests.cpp

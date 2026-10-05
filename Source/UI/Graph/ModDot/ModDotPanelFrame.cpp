@@ -22,6 +22,7 @@ ModDotPanelFrame::ModDotPanelFrame(std::unique_ptr<juce::Component> content, juc
 }
 
 ModDotPanelFrame::~ModDotPanelFrame() {
+    tooltipWindow_.reset();
     content_->removeComponentListener(this);
     if (listening_)
         juce::Desktop::getInstance().removeGlobalMouseListener(this);
@@ -49,6 +50,10 @@ void ModDotPanelFrame::reposition() {
 void ModDotPanelFrame::componentMovedOrResized(juce::Component& component, bool, bool wasResized) {
     if (&component == content_.get() && wasResized)
         reposition();
+}
+
+void ModDotPanelFrame::installTooltipWindow(juce::ApplicationProperties* appProperties) {
+    tooltipWindow_ = std::make_unique<AppTooltipWindow>(this, appProperties);
 }
 
 void ModDotPanelFrame::showOnDesktop() {

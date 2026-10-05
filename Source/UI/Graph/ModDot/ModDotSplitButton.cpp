@@ -62,7 +62,7 @@ public:
             g.setColour(p.accent.withAlpha(0.16f));
             g.fillPath(shape);
         }
-        const auto ink = lit_ ? p.accent : p.muted.interpolatedWith(p.text, hover_.value());
+        const auto ink = lit_ ? p.accent : modDotGlyphColour(p, glyph_, hover_.value());
         auto inner = getLocalBounds().reduced(10, 0);
         paintModDotGlyph(g, glyph_, inner.removeFromLeft(14).toFloat().withSizeKeepingCentre(14.0f, 14.0f), ink);
         inner.removeFromLeft(6);
@@ -87,7 +87,7 @@ ModDotSplitButton::ModDotSplitButton()
     list_->setTitle("Add source");
     list_->setTooltip("Add source from a list");
     pick_->setTitle("Pick on canvas");
-    pick_->setTooltip("Pick on canvas: click a module to add it as a source. Escape stops");
+    pick_->setTooltip("Pick a source on the canvas. Esc stops");
     list_->setSibling(pick_.get());
     pick_->setSibling(list_.get());
     addAndMakeVisible(*list_);
