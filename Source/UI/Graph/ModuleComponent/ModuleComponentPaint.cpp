@@ -14,6 +14,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <limits>
 
 using namespace detail;
 
@@ -336,10 +337,18 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
                          1.0f);
 }
 
-float ModuleComponent::macroPortNameAlpha() const {
-    // The parent is the canvas content component, whose transform is the zoom (scale + pan).
-    const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
-    return macroPortNameAlphaAtZoom(zoom);
+float ModuleComponent::macroPortNameAlpha() const { return macroPortNameAlphaAtZoom(canvasZoom()); }
+
+// The parent is the canvas content component, whose transform is the zoom (scale + pan).
+float ModuleComponent::canvasZoom() const {
+    return getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
+}
+
+// Hit tolerances are in card-local pixels, so a canvas zoomed out shrinks them on screen. Growing them by 1/zoom
+// keeps the on-screen target size of a zoom-1 card, up to double (zoom 0.5 and below) so neighbouring jacks stay
+// apart; zooming in never shrinks them below their base size.
+float ModuleComponent::hitToleranceScale() const {
+    return juce::jlimit(1.0f, 2.0f, 1.0f / juce::jmax(0.01f, canvasZoom()));
 }
 
 bool ModuleComponent::macroPortBoundaryIsOutput() const {
@@ -661,34 +670,38 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
         numOuts = mb->getVisibleOutputPortCount();
     }
 
+    const float radius = 10.0f * hitToleranceScale();
+    // The nearest jack within the tolerance wins, so the widened target never reaches a neighbour's jack.
+    auto nearest = [&](std::optional<Port>& best, float& bestDistance, juce::Point<int> p, int index, bool isInput,
+                       bool isMidi) {
+        const float d = localPoint.toFloat().getDistanceFrom(p.toFloat());
+        if (d < radius && d < bestDistance) {
+            bestDistance = d;
+            best = Port{{p.x - 5, p.y - 5, 10, 10}, index, isInput, isMidi};
+        }
+    };
     auto hitOutputs = [&]() -> std::optional<Port> {
-        if (module->producesMidi()) {
-            auto p = getMidiPortCenter(true); // Matches paint()
-            if (localPoint.getDistanceFrom(p) < 10)
-                return Port{{p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, false, true};
-        }
-        for (int i = 0; i < numOuts; ++i) {
-            auto p = getPortCenter(i, false);
-            if (localPoint.getDistanceFrom(p) < 10)
-                return Port{{p.x - 5, p.y - 5, 10, 10}, i, false, false};
-        }
-        return std::nullopt;
+        std::optional<Port> best;
+        float bestDistance = std::numeric_limits<float>::max();
+        if (module->producesMidi())
+            nearest(best, bestDistance, getMidiPortCenter(true), juce::AudioProcessorGraph::midiChannelIndex, false,
+                    true); // Matches paint()
+        for (int i = 0; i < numOuts; ++i)
+            nearest(best, bestDistance, getPortCenter(i, false), i, false, false);
+        return best;
     };
     // Inputs -- a knob-bound jack is never hit-tested here at all (it draws no gutter dot
     // to click); the knob claims that click via CardKnobSlider's own gesture wiring instead
     // (wireCardKnobModAmountGesture / wantsCablePickupGestureFor, ModuleComponent.cpp).
     auto hitInputs = [&]() -> std::optional<Port> {
-        if (module->acceptsMidi()) {
-            auto p = getMidiPortCenter(false); // Top left near header
-            if (localPoint.getDistanceFrom(p) < 10)
-                return Port{{p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true};
-        }
-        for (int i : drawnInputJackIndices()) {
-            auto p = getPortCenter(i, true);
-            if (localPoint.getDistanceFrom(p) < 10)
-                return Port{{p.x - 5, p.y - 5, 10, 10}, i, true, false};
-        }
-        return std::nullopt;
+        std::optional<Port> best;
+        float bestDistance = std::numeric_limits<float>::max();
+        if (module->acceptsMidi())
+            nearest(best, bestDistance, getMidiPortCenter(false), juce::AudioProcessorGraph::midiChannelIndex, true,
+                    true); // Top left near header
+        for (int i : drawnInputJackIndices())
+            nearest(best, bestDistance, getPortCenter(i, true), i, true, false);
+        return best;
     };
     // A docked macro-port widget zoomed out draws its two jacks as one dot: the press picks the boundary side.
     const bool outputsFirst = isMacroPortType(getType(module)) && macroPortBoundaryIsOutput();

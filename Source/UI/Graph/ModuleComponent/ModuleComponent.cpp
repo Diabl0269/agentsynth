@@ -739,10 +739,12 @@ bool ModuleComponent::pressIsOnLandingDot(juce::RangedAudioParameter* param, con
                                           const juce::MouseEvent& e) const {
     if (destChannelForBoundParam(param) < 0)
         return false;
-    constexpr float kPickupHitPad = 4.0f; // the dot is only 7px across; a pixel-perfect target is unfriendly
+    // The dot is only 7px across; a pixel-perfect target is unfriendly, more so on a zoomed-out canvas.
+    const float scale = hitToleranceScale();
+    const float kPickupHitPad = 4.0f * scale;
+    const float dotReach = kKnobLandingDotDiameter * 0.5f * scale + kPickupHitPad;
     if (const auto* fader = dynamic_cast<const synth::ui::CardFader*>(&knob))
-        return fader->landingPoint(kKnobLandingDotDiameter).getDistanceFrom(e.position) <=
-               kKnobLandingDotDiameter * 0.5f + kPickupHitPad;
+        return fader->landingPoint(kKnobLandingDotDiameter).getDistanceFrom(e.position) <= dotReach;
     const auto bounds = knob.getLocalBounds().toFloat();
     const float ringRadius = modRingRadiusFor(bounds);
     if (ringRadius <= 0.0f)
@@ -753,7 +755,7 @@ bool ModuleComponent::pressIsOnLandingDot(juce::RangedAudioParameter* param, con
 
     // The pad stays comfortably clear of the ring annulus (see knobLandingRadiusOffset's push-out
     // math): the dot sits well beyond the ring, so it never reaches back into the ring's +-5px zone.
-    return anchor.getDistanceFrom(e.position) <= (kKnobLandingDotDiameter * 0.5f + kPickupHitPad);
+    return anchor.getDistanceFrom(e.position) <= dotReach;
 }
 
 // Claims a click on the dot when this knob's CV jack is knob-bound (hidden -- getPortForPoint can no
