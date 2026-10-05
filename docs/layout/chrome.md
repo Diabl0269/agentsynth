@@ -399,6 +399,13 @@ Mixer zones channel filter, the MIDI destination picker and the card layout edit
   box that paints its own rows (library, pickers, action picker, mixer rows) uses the painter; one that only
   hides components (Preferences, Shortcuts) shares just the matcher.
 
+- `moduleSearchAliases(moduleName)`: the other names a module type goes by, appended to its name when a
+  module/source search matches (`env`, `envelope`, `eg`, `contour` find the ADSR, `vco` the Oscillator, `vcf`
+  the Filter, `amp` the VCA). It is keyed on the module's own name (a number suffix is ignored), so a renamed
+  card still matches. The module library, the mod dot's Add source page (`ModSourceItem::searchText`) and the
+  Mod Matrix source picker (`Item::searchText`) match on name plus aliases; the painter still highlights only
+  the visible name, so an alias-only hit shows the row without a highlight.
+
 A new search box must use these; do not call `containsIgnoreCase` on the query.
 
 ## Mod matrix panel

@@ -11,6 +11,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Layout/SearchMatch.h"
 #include <map>
 #include <set>
 
@@ -63,6 +64,7 @@ std::vector<ModSourceItem> enumerateModSources(juce::AudioProcessorGraph& graph)
                 item.outputLabel = output.label;
                 item.category = category;
                 item.group = groupFor(module);
+                item.aliases = moduleSearchAliases(module.getName());
                 out.push_back(std::move(item));
             }
         }

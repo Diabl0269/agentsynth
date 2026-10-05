@@ -34,11 +34,14 @@ struct ModSourceItem {
     juce::String outputLabel; // the jack's name; empty when the module offers a single entry
     ModulationCategory category = ModulationCategory::Other;
     ModSourceGroup group = ModSourceGroup::Other;
+    juce::String aliases; // other names the module goes by ("env" for an ADSR); searched, never shown
 
     /** The Mod Matrix's combo id for this source: node id and channel packed together. */
     int itemId() const noexcept { return (int)((node.uid << 8) | (juce::uint32)channel); }
     /** "LFO 1", or "Envelope 1 - Env" for a module with several outputs. */
     juce::String label() const { return outputLabel.isEmpty() ? moduleTitle : moduleTitle + " - " + outputLabel; }
+    /** What a search matches: the label plus the aliases. */
+    juce::String searchText() const { return aliases.isEmpty() ? label() : label() + " " + aliases; }
 };
 
 /** Every source in `graph`, in the Mod Matrix's order: by ModulationCategory, then graph order, then output. */

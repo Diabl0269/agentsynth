@@ -729,7 +729,7 @@ void ModMatrixComponent::ModRow::populateSourceCombo() {
     if (owner.isSourceMenuFlat) {
         for (const auto& source : sources) {
             sourceCombo.addItem(source.label(), source.itemId());
-            sourceItems.push_back({source.itemId(), {}, source.label()});
+            sourceItems.push_back({source.itemId(), {}, source.label(), source.aliases});
         }
         return;
     }
@@ -749,7 +749,7 @@ void ModMatrixComponent::ModRow::populateSourceCombo() {
                 const auto& source = sources[i];
                 categoryMenu.addItem(source.itemId(), source.moduleTitle);
                 sourceCombo.addItem(source.moduleTitle, source.itemId());
-                sourceItems.push_back({source.itemId(), categoryName, source.moduleTitle});
+                sourceItems.push_back({source.itemId(), categoryName, source.moduleTitle, source.aliases});
             } else {
                 juce::PopupMenu instanceMenu;
                 for (size_t k = i; k < end; ++k) {
@@ -758,7 +758,7 @@ void ModMatrixComponent::ModRow::populateSourceCombo() {
                     const auto label = sources[k].label();
                     instanceMenu.addItem(sources[k].itemId(), label);
                     sourceCombo.addItem(label, sources[k].itemId());
-                    sourceItems.push_back({sources[k].itemId(), categoryName, label});
+                    sourceItems.push_back({sources[k].itemId(), categoryName, label, sources[k].aliases});
                 }
                 categoryMenu.addSubMenu(sources[i].moduleTitle, instanceMenu);
             }

@@ -48,7 +48,7 @@ public:
     const juce::String& newType() const noexcept { return newType_; }
     const juce::String& usageText() const noexcept { return usage_; }
     /** What a search matches: the module's name for a "New" row (so "adsr" finds "New ADSR"), else the label. */
-    juce::String matchText() const { return isNew() ? newType_ : item_.label(); }
+    juce::String matchText() const { return isNew() ? newType_ : item_.searchText(); }
 
     const ModSourceItem& item() const noexcept { return item_; }
     bool isAdded() const noexcept { return added_; }

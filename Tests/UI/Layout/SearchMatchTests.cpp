@@ -78,3 +78,20 @@ TEST(SearchMatch, SpansAreEmptyForABlankQueryOrNoHit) {
     EXPECT_TRUE(searchHighlightSpans("Oscillator", "reverb").empty());
     EXPECT_TRUE(searchHighlightSpans({}, "osc").empty());
 }
+
+TEST(SearchMatch, ModuleAliasesNameTheEnvelopeUnderEveryOtherSynthsWord) {
+    for (const char* name : {"ADSR", "ADSR 3", "Amp Env", "Filter Env 2"}) {
+        const auto haystack = juce::String(name) + " " + synth::ui::moduleSearchAliases(name);
+        for (const char* query : {"env", "envelope", "eg", "contour"})
+            EXPECT_TRUE(searchMatches(haystack, query)) << name << " / " << query;
+    }
+    EXPECT_TRUE(searchMatches("Oscillator " + synth::ui::moduleSearchAliases("Oscillator"), "vco"));
+    EXPECT_TRUE(searchMatches("Filter " + synth::ui::moduleSearchAliases("Filter 2"), "vcf"));
+    EXPECT_TRUE(searchMatches("VCA " + synth::ui::moduleSearchAliases("VCA"), "amp"));
+}
+
+TEST(SearchMatch, ModulesWithoutAliasesAndCustomTitlesGetNone) {
+    EXPECT_TRUE(synth::ui::moduleSearchAliases("Reverb").isEmpty());
+    EXPECT_TRUE(synth::ui::moduleSearchAliases("My lead envelope").isEmpty());
+    EXPECT_TRUE(synth::ui::moduleSearchAliases({}).isEmpty());
+}

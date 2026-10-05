@@ -33,6 +33,21 @@ int wordRank(const juce::String& text, const juce::String& word) {
 
 } // namespace
 
+juce::String moduleSearchAliases(const juce::String& moduleName) {
+    auto base = moduleName.trim();
+    while (base.isNotEmpty() && juce::CharacterFunctions::isDigit(base.getLastCharacter()))
+        base = base.dropLastCharacters(1).trimEnd();
+    if (base.equalsIgnoreCase("ADSR") || base.equalsIgnoreCase("Amp Env") || base.equalsIgnoreCase("Filter Env"))
+        return "env envelope eg contour";
+    if (base.equalsIgnoreCase("Oscillator"))
+        return "vco";
+    if (base.equalsIgnoreCase("Filter"))
+        return "vcf";
+    if (base.equalsIgnoreCase("VCA"))
+        return "amp amplifier";
+    return {};
+}
+
 bool searchMatches(const juce::String& text, const juce::String& query) {
     for (const auto& word : queryWords(query))
         if (!text.containsIgnoreCase(word))
