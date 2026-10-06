@@ -21,6 +21,12 @@ struct Canvas {
     GraphEditor editor{engine, &undo};
     NodeID a, b;
 
+    // The macOS runner can report Reduce Motion as on; these tests assert the full shrink and grow.
+    struct FullMotion {
+        FullMotion() { synth::ui::setReducedMotionForTest(false); }
+        ~FullMotion() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } fullMotion;
+
     Canvas() {
         undo.setGraphEditor(&editor);
         editor.setSize(3200, 2400);
