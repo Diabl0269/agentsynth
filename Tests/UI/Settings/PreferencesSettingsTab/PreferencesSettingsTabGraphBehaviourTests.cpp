@@ -777,3 +777,32 @@ TEST_F(PreferencesSettingsTabTest, LoadMacroAutoPortPreferenceParsesWithoutATabI
     EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
               GraphEditor::MacroAutoPortPreference::Unset);
 }
+
+// "Connect side by side": Always by default (nothing written until it is changed), persisted under its own key,
+// restored by a fresh tab, and pushed to the editor's engine.
+TEST_F(PreferencesSettingsTabTest, SideBySideDefaultsToAlwaysAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSideBySideMode(), SmartConnectionEngine::SideBySideMode::Always);
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("smartConnectionSideBySide"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(), SmartConnectionEngine::SideBySideMode::Always);
+
+        tab.setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("smartConnectionSideBySide"), "OnlyWithCtrl");
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(),
+                  SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSideBySideMode(), SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(),
+                  SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+    }
+}

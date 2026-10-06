@@ -66,6 +66,8 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
+    graphEditor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::sideBySideModeFromString(
+        appProperties.getUserSettings()->getValue("smartConnectionSideBySide", "Always")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
     // Default ON -- see PreferencesSettingsTab's own toggle comment for why this is a plain on/off

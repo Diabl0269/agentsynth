@@ -248,6 +248,70 @@ void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
     persistDefaultDualIOForNewModules(enabled);
 }
 
+// The Smart connections group: the mode combo and the Connect side by side combo, built from the saved values.
+void PreferencesSettingsTab::setupSmartConnectionControls() {
+    contentHost.addAndMakeVisible(smartConnectionLabel);
+    smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
+    smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(smartConnectionCombo);
+    smartConnectionCombo.setTitle("Smart connections");
+    smartConnectionCombo.addItem("Off", 1);
+    smartConnectionCombo.addItem("New modules only", 2);
+    smartConnectionCombo.addItem("When main I/O is free", 3);
+    smartConnectionCombo.addItem("All module moves", 4);
+    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
+    // is the Control key on every platform, macOS included, precisely because Cmd already means
+    // additive selection there.
+    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
+                                    "Placing a module beside a connected one inserts it into the chain; "
+                                    "see Connect side by side below to require holding Ctrl.");
+    {
+        const auto mode = GraphEditor::smartConnectionModeFromString(
+            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
+        smartConnectionCombo.setSelectedId(comboIdFromMode(mode), juce::dontSendNotification);
+    }
+    smartConnectionCombo.onChange = [this] {
+        persistSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
+    };
+
+    contentHost.addAndMakeVisible(sideBySideLabel_);
+    sideBySideLabel_.setText("Connect side by side:", juce::dontSendNotification);
+    sideBySideLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(sideBySideCombo_);
+    sideBySideCombo_.setTitle("Connect side by side");
+    sideBySideCombo_.addItem("Always", 1);
+    sideBySideCombo_.addItem("Only while holding Ctrl", 2);
+    sideBySideCombo_.setTooltip("Whether a module dropped next to a connected one wires itself in, left to right. "
+                                "Always: no key needed, and it is inserted into the chain. Only while holding Ctrl: "
+                                "hold Ctrl while dragging to connect it. Ctrl is the Control key on every platform.");
+    sideBySideCombo_.setSelectedId(
+        comboIdFromSideBySide(SmartConnectionEngine::sideBySideModeFromString(
+            appProperties.getUserSettings()->getValue("smartConnectionSideBySide", "Always"))),
+        juce::dontSendNotification);
+    sideBySideCombo_.onChange = [this] {
+        persistSideBySideMode(sideBySideFromComboId(sideBySideCombo_.getSelectedId()));
+    };
+}
+
+SmartConnectionEngine::SideBySideMode PreferencesSettingsTab::getSideBySideMode() const {
+    return sideBySideFromComboId(sideBySideCombo_.getSelectedId());
+}
+
+void PreferencesSettingsTab::setSideBySideMode(SmartConnectionEngine::SideBySideMode mode) {
+    sideBySideCombo_.setSelectedId(comboIdFromSideBySide(mode), juce::dontSendNotification);
+    persistSideBySideMode(mode);
+}
+
+void PreferencesSettingsTab::persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode) {
+    appProperties.getUserSettings()->setValue("smartConnectionSideBySide",
+                                              SmartConnectionEngine::sideBySideModeToString(mode));
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getSmartConnections().setSideBySideMode(mode);
+}
+
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", GraphEditor::smartConnectionModeToString(mode));
     appProperties.getUserSettings()->saveIfNeeded();
@@ -534,13 +598,18 @@ void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& p
     enterCategory(Category::Graph, y);
     // Group 1: smart connections
     {
-        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
-        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
+        const bool visible =
+            groupMatches({&smartConnectionLabel, &smartConnectionCombo, &sideBySideLabel_, &sideBySideCombo_});
+        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo, &sideBySideLabel_, &sideBySideCombo_}, visible);
         beginGroup(visible);
         if (visible) {
             juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
             smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
             smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+            y += 24;
+            juce::Rectangle<int> sideRow(0, y, contentWidth, 24);
+            sideBySideLabel_.setBounds(sideRow.removeFromLeft(160));
+            sideBySideCombo_.setBounds(sideRow.removeFromLeft(220));
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

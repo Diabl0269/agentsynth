@@ -197,15 +197,15 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
             // What an already-occupied destination jack means depends on the modifier and the node:
             //
-            //   * Cmd held  -> INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
-            //                 through the ghost. This is the only way to insert; nothing inserts
-            //                 without the modifier.
-            //   * No Cmd, terminal audio sink -> plain ADDITIVE parallel connection. The sink is
+            //   * Insert allowed (Ctrl held, or the side-by-side preference is Always, the default)
+            //                 -> INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
+            //                 through the ghost.
+            //   * Insert not allowed, terminal audio sink -> plain ADDITIVE parallel connection. The sink is
             //                 wired in essentially every real patch, so a hard stop there means a
             //                 module parked next to it can never be offered anything; and summing
             //                 into the mix bus is exactly what dragging a cable there by hand does.
             //                 Existing cables are left alone.
-            //   * No Cmd, any other module -> hard stop, unchanged. Silently summing into a jack the
+            //   * Insert not allowed, any other module -> hard stop, unchanged. Silently summing into a jack the
             //                 user wired mid-patch is never something to suggest.
             //
             // insertPlan is set for the whole group, or left empty for an ordinary add.
@@ -223,7 +223,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                 // Proximity to the destination's INPUT side is already what gates us here: the
                 // jack-to-jack filter above measures the ghost's output jack against
                 // jackPoint(dstJack, isInput=true), and rejects a source sitting to the right of it.
-                if (anyOccupied && !isInsertModifierDown()) {
+                if (anyOccupied && !insertIsAllowedNow()) {
                     // Parallel add is offered at the terminal sink only.
                     if (!(ghostIsSource && isTerminalAudioSink(dstProc)))
                         return;

@@ -25,6 +25,11 @@ public:
     // library-only / free-main-I/O moves / all moves.
     enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
 
+    /** Whether a module placed beside a wired neighbour connects on its own (Always) or only while
+     *  Ctrl is held (OnlyWithCtrl). It decides what an OCCUPIED destination jack means: Always
+     *  inserts the module in series with no key, OnlyWithCtrl keeps the older hard stop. */
+    enum class SideBySideMode { Always, OnlyWithCtrl };
+
     /** One suggested cable shown as a frosted preview during drag; applied on drop.
      *
      *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into cabling
@@ -113,6 +118,15 @@ public:
     void setSmartConnectionMode(SmartConnectionMode mode) noexcept { smartConnectionMode_ = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode_; }
 
+    void setSideBySideMode(SideBySideMode mode) noexcept { sideBySideMode_ = mode; }
+    SideBySideMode getSideBySideMode() const noexcept { return sideBySideMode_; }
+    static SideBySideMode sideBySideModeFromString(const juce::String& s);
+    static juce::String sideBySideModeToString(SideBySideMode mode);
+
+    /** Whether an occupied destination may be inserted into right now: always under
+     *  SideBySideMode::Always, otherwise only while Ctrl is down. */
+    bool insertIsAllowedNow() const { return sideBySideMode_ == SideBySideMode::Always || isInsertModifierDown(); }
+
     void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride_ = down; }
 
     /** CTRL turns a proximity suggestion into an insert-in-series. Ctrl on every platform (it is
@@ -179,6 +193,7 @@ private:
     GraphCanvasHost& host_;
 
     SmartConnectionMode smartConnectionMode_ = SmartConnectionMode::NewAndUnwired;
+    SideBySideMode sideBySideMode_ = SideBySideMode::Always;
     std::optional<bool> insertModifierOverride_; // tests only; empty means read the real keyboard
     // Last modifier state the drag tick saw, so a press/release that happens WITHOUT a mouse move
     // still re-evaluates the suggestions exactly once (see refreshSuggestionsIfInsertModifierChanged).

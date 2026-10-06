@@ -52,6 +52,12 @@ std::vector<CardGlideAnimator::Captured> CardGlideAnimator::capture(const std::v
     return out;
 }
 
+void CardGlideAnimator::noteStartRect(juce::Component* comp, uint32_t nodeUid, juce::Rectangle<int> from) {
+    if (depth_ == 0 || comp == nullptr || from.isEmpty())
+        return;
+    before_.push_back({juce::Component::SafePointer<juce::Component>(comp), nodeUid, from});
+}
+
 juce::Rectangle<float> CardGlideAnimator::currentRect(const Item& item) const noexcept {
     return lerpRect(item.from, item.to, progress_);
 }

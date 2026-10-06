@@ -242,6 +242,14 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             // If they are identical, animateDropLanding is a no-op (just settles in place).
             animateDropLanding(newComp, initialPlaced, toPos);
 
+            // A drop that snapped into a connection settles from where the cursor aimed to its slot (the Scope in
+            // placeNode glides it; geometry stays final). Without a suggestion the card just appears, as before.
+            const auto aim = dragDropController_.getDragPreviewAim();
+            if (!joining && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
+                aim.getPosition() != toPos)
+                cardGlide_.noteStartRect(newComp, newNodeId.uid,
+                                         {aim.getX(), aim.getY(), newComp->getWidth(), newComp->getHeight()});
+
             // The nearest free spot can be well away from the pointer (a crowded macro hull has none beside it), and
             // a card that landed below the window would look like the drop did nothing: bring it into view.
             const auto landed = juce::Rectangle<int>(toPos.x, toPos.y, newComp->getWidth(), newComp->getHeight());
@@ -266,6 +274,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             auto node = audioEngine.getGraph().addNode(std::move(*proc));
             if (!node)
                 return;
+            CardGlideAnimator::Scope glide(cardGlide_); // a snapped drop settles into place, see finalizeNewDrop
             node->properties.set("x", initialPlaced.x);
             node->properties.set("y", initialPlaced.y);
             const auto newNodeId = node->nodeID;
@@ -391,6 +400,9 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
         finalizeOutputDockDrag(module); // vertical only; x stays derived
         return;
     }
+    // The released card settles from where it was held into its snapped slot (and the patch's make-room pushes glide
+    // too) instead of jumping; geometry is final at once. Nothing glides when the card was already on its slot.
+    CardGlideAnimator::Scope glide(cardGlide_);
     slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
     auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
     module->setTopLeftPosition(clear);

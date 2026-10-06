@@ -28,6 +28,7 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(1200, 700);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false); // no Ctrl
 
     auto& graph = engine.getGraph();
@@ -77,6 +78,7 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto& graph = engine.getGraph();
@@ -106,6 +108,7 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);

@@ -60,6 +60,11 @@ public:
     /** Bounds of every showing, non-empty card right now. */
     static std::vector<Captured> capture(const std::vector<Entry>& cards);
 
+    /** While a Scope is open: gives a card CREATED inside it (so it was not captured on entry) a starting rect, so
+     *  the Scope's exit glides it from `from` to wherever it ends up. A library drop that snaps into place uses
+     *  this to settle from where the cursor aimed. No-op outside a Scope. */
+    void noteStartRect(juce::Component* comp, uint32_t nodeUid, juce::Rectangle<int> from);
+
     /** Hides and snapshots every card whose bounds changed since `before`. Returns false (no-op) when none did. */
     bool arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
 
