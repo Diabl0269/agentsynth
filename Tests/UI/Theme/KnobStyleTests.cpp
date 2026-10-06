@@ -1,4 +1,4 @@
-// KnobStyleTests.cpp -- the knob look chosen in Settings > Appearance > Knobs: persisted ids, the six
+// KnobStyleTests.cpp -- the knob look chosen in Settings > Appearance > Controls: persisted ids, the five
 // painters (rendered into software images -- the platform default reads back zeros on the Windows CI),
 // the family colour reaching the value arc, and the theme tokens it relies on.
 
@@ -123,15 +123,30 @@ TEST(KnobStyleTest, IdsAndLabelsRoundTrip) {
         EXPECT_EQ(label, label.substring(0, 1).toUpperCase() + label.substring(1).toLowerCase())
             << "sentence case, never all caps";
     }
-    EXPECT_STREQ(knobStyleId(KnobStyle::Polished), "polished");
+    // Chunky keeps the shipped "hardware" id so saved settings still load it.
+    EXPECT_STREQ(knobStyleId(KnobStyle::Hardware), "hardware");
+    EXPECT_STREQ(knobStyleLabel(KnobStyle::Hardware), "Chunky");
+    EXPECT_STREQ(knobStyleId(KnobStyle::Analog), "analog");
 }
 
-TEST(KnobStyleTest, UnknownIdLoadsAsPolished) { EXPECT_EQ(knobStyleFromId("sparkly"), KnobStyle::Polished); }
+TEST(KnobStyleTest, UnknownIdLoadsAsClassic) { EXPECT_EQ(knobStyleFromId("sparkly"), KnobStyle::Classic); }
 
-TEST(KnobStyleTest, MissingKeysLoadPolishedWithFamilyOn) {
+TEST(KnobStyleTest, RetiredIdsLoadAsTheirSuccessors) {
+    EXPECT_EQ(knobStyleFromId("polished"), KnobStyle::Analog);
+    EXPECT_EQ(knobStyleFromId("soft"), KnobStyle::Hardware);
+    auto props = makeProps("KnobStyleRetired");
+    props->setValue(knobStyleKey(), "polished");
+    EXPECT_EQ(loadKnobAppearance(*props).style, KnobStyle::Analog);
+    props->setValue(knobStyleKey(), "soft");
+    EXPECT_EQ(loadKnobAppearance(*props).style, KnobStyle::Hardware);
+    writeKnobAppearance(*props, loadKnobAppearance(*props));
+    EXPECT_EQ(props->getValue(knobStyleKey()), "hardware") << "the next save writes the successor's id";
+}
+
+TEST(KnobStyleTest, MissingKeysLoadClassicWithFamilyOn) {
     auto props = makeProps("KnobStyleMissing");
     const auto appearance = loadKnobAppearance(*props);
-    EXPECT_EQ(appearance.style, KnobStyle::Polished);
+    EXPECT_EQ(appearance.style, KnobStyle::Classic);
     EXPECT_TRUE(appearance.colourByFamily);
 }
 
@@ -142,7 +157,7 @@ TEST(KnobStyleTest, WriteThenLoadRoundTrips) {
     EXPECT_EQ(appearance.style, KnobStyle::Neon);
     EXPECT_FALSE(appearance.colourByFamily);
     props->setValue(knobStyleKey(), "nonsense");
-    EXPECT_EQ(loadKnobAppearance(*props).style, KnobStyle::Polished);
+    EXPECT_EQ(loadKnobAppearance(*props).style, KnobStyle::Classic);
 }
 
 TEST(KnobStyleTest, EveryStylePaintsDifferently) {
@@ -167,6 +182,8 @@ TEST(KnobStyleTest, FamilyColourReachesTheValueArc) {
     const auto theme = makeObsidian();
     for (int i = 0; i < kKnobStyleCount; ++i) {
         const auto style = (KnobStyle)i;
+        if (style == KnobStyle::Analog)
+            continue; // no value arc and no value colour (KnobStyleLookTests)
         KnobRig onRig({style, true}, /*sources*/ 0);
         EXPECT_LE(channelDistance(onRig.arcPixel(), theme.colors.hueAmber), 30) << knobStyleId(style);
 

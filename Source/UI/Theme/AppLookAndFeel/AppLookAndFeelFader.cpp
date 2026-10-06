@@ -49,7 +49,7 @@ void drawSolidFill(juce::Graphics& g, juce::Colour colour, juce::Rectangle<float
     g.fillRoundedRectangle(fill, (juce::jmin(slot.getWidth(), slot.getHeight()) - 2.0f) * 0.5f);
 }
 
-// Polished: 11 dots beside the slot, lit in the fader's colour up to the value.
+// Analog: 11 dots beside the slot, lit in the fader's colour up to the value.
 void drawTickDots(juce::Graphics& g, const Theme& theme, juce::Colour colour, juce::Rectangle<float> travel,
                   float sliderPos, bool vertical, const Metrics& m) {
     constexpr int kDots = 11;
@@ -67,8 +67,8 @@ void drawTickDots(juce::Graphics& g, const Theme& theme, juce::Colour colour, ju
     }
 }
 
-void drawPolishedSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos,
-                      bool vertical, const Metrics& m, juce::Colour colour) {
+void drawAnalogSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> travel, float sliderPos,
+                    bool vertical, const Metrics& m, juce::Colour colour) {
     const auto& c = theme.colors;
     const auto slot = slotRect(travel, vertical, m.slot);
     drawSlot(g, c.bg0, c.border, slot);
@@ -125,8 +125,8 @@ void drawSlotAndFill(juce::Graphics& g, const Theme& theme, juce::Rectangle<floa
                      bool vertical, const Metrics& m, KnobStyle style, juce::Colour colour) {
     const auto& c = theme.colors;
     switch (style) {
-    case KnobStyle::Polished:
-        drawPolishedSlot(g, theme, travel, sliderPos, vertical, m, colour);
+    case KnobStyle::Analog:
+        drawAnalogSlot(g, theme, travel, sliderPos, vertical, m, colour);
         return;
     case KnobStyle::Neon:
         drawNeonSlot(g, theme, travel, sliderPos, vertical, m, colour);
@@ -137,12 +137,6 @@ void drawSlotAndFill(juce::Graphics& g, const Theme& theme, juce::Rectangle<floa
     case KnobStyle::Hardware: {
         const auto slot = slotRect(travel, vertical, m.slot);
         drawSlot(g, c.knobSkirt, c.border, slot);
-        drawSolidFill(g, colour, slot, sliderPos, vertical);
-        return;
-    }
-    case KnobStyle::Soft: {
-        const auto slot = slotRect(travel, vertical, m.slot * 1.5f); // 50 percent wider
-        drawSlot(g, c.bg0, c.border, slot);
         drawSolidFill(g, colour, slot, sliderPos, vertical);
         return;
     }
@@ -211,10 +205,7 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
     }
     g.fillRoundedRectangle(cap, m.radius);
 
-    if (state.style == KnobStyle::Soft) {
-        g.setColour(colour.withAlpha(0.22f));
-        g.fillRoundedRectangle(cap, m.radius);
-    } else if (state.style == KnobStyle::Hardware) {
+    if (state.style == KnobStyle::Hardware) {
         g.setColour(c.knobCapHighlight);
         const auto inner = cap.reduced(1.0f);
         g.fillRoundedRectangle(vertical ? inner.withHeight(cap.getHeight() * 0.45f)
@@ -223,8 +214,7 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
     }
 
     // Rest outline in textDisabled: border is too close to the cap fill on dark themes.
-    const juce::Colour rest = state.style == KnobStyle::Soft ? colour.withAlpha(0.6f) : c.textDisabled;
-    g.setColour(capOutline(theme, state, rest));
+    g.setColour(capOutline(theme, state, c.textDisabled));
     g.drawRoundedRectangle(cap.reduced(0.5f), juce::jmax(0.0f, m.radius - 0.5f), 1.0f);
 
     // Centre line: the exact value position, like the rotary knob's pointer.

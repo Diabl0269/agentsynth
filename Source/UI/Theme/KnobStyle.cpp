@@ -13,16 +13,26 @@ struct StyleInfo {
 
 constexpr std::array<StyleInfo, kKnobStyleCount> kStyles{{
     {KnobStyle::Classic, "classic", "Classic"},
-    {KnobStyle::Polished, "polished", "Polished"},
-    {KnobStyle::Hardware, "hardware", "Hardware"},
+    {KnobStyle::Hardware, "hardware", "Chunky"},
+    {KnobStyle::Analog, "analog", "Analog"},
     {KnobStyle::Neon, "neon", "Neon"},
     {KnobStyle::Ring, "ring", "Ring"},
-    {KnobStyle::Soft, "soft", "Soft"},
+}};
+
+// Styles that were removed, and the style a saved setting naming one now loads as.
+struct RetiredId {
+    const char* id;
+    KnobStyle successor;
+};
+
+constexpr std::array<RetiredId, 2> kRetired{{
+    {"polished", KnobStyle::Analog},
+    {"soft", KnobStyle::Hardware},
 }};
 
 const StyleInfo& infoFor(KnobStyle style) noexcept {
     const auto index = static_cast<size_t>(style);
-    return kStyles[index < kStyles.size() ? index : 1];
+    return kStyles[index < kStyles.size() ? index : 0];
 }
 } // namespace
 
@@ -34,7 +44,10 @@ KnobStyle knobStyleFromId(const juce::String& id) noexcept {
     for (const auto& info : kStyles)
         if (id == info.id)
             return info.style;
-    return KnobStyle::Polished;
+    for (const auto& retired : kRetired)
+        if (id == retired.id)
+            return retired.successor;
+    return KnobStyle::Classic;
 }
 
 KnobAppearance loadKnobAppearance(juce::PropertiesFile& props) {

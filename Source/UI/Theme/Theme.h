@@ -49,9 +49,9 @@ struct Colors {
     juce::Colour error{0xffE5484D};            // error / mute
     juce::Colour knobBody{0xff13161B};         // knob body gradient inner stop (outer = surfaceHi)
     juce::Colour knobPointer{0xffEAEEF3};      // knob pointer line
-    juce::Colour knobSkirt{0xff0E1014};        // Hardware knob style: the skirt disc under the cap
-    juce::Colour knobCapHighlight{0x2effffff}; // Hardware knob style: the soft highlight on top of the cap
-    // Module-family hues for knobs when "Colour knobs by module family" is on (see familyHue()).
+    juce::Colour knobSkirt{0xff0E1014};        // Chunky control style: the fader slot
+    juce::Colour knobCapHighlight{0x2effffff}; // Chunky control style: the sheen on the fader cap
+    // Module-family hues for knobs when "Colour controls by module family" is on (see familyHue()).
     juce::Colour hueAmber{0xffF5C542};  // sources
     juce::Colour hueGreen{0xff4ADE80};  // sequencing, envelopes
     juce::Colour hueRose{0xffFF6FA8};   // modulation FX, time FX, dynamics

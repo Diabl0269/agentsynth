@@ -44,8 +44,8 @@ struct PickerRig {
 } // namespace
 
 TEST(KnobStylePickerTest, StartsOnThePersistedStyle) {
-    PickerRig rig;
-    EXPECT_TRUE(rig.picker.getStyleButtonForTest((int)KnobStyle::Polished).getToggleState());
+    PickerRig rig; // nothing saved yet: the default, Classic
+    EXPECT_TRUE(rig.picker.getStyleButtonForTest((int)KnobStyle::Classic).getToggleState());
     EXPECT_TRUE(rig.picker.getFamilyToggleForTest().getToggleState());
 }
 
@@ -54,7 +54,7 @@ TEST(KnobStylePickerTest, ClickingAPreviewPersistsItsStyle) {
     click(rig.picker.getStyleButtonForTest((int)KnobStyle::Hardware));
     EXPECT_EQ(rig.props->getValue(knobStyleKey()), "hardware");
     EXPECT_TRUE(rig.picker.getStyleButtonForTest((int)KnobStyle::Hardware).getToggleState());
-    EXPECT_FALSE(rig.picker.getStyleButtonForTest((int)KnobStyle::Polished).getToggleState());
+    EXPECT_FALSE(rig.picker.getStyleButtonForTest((int)KnobStyle::Classic).getToggleState());
     EXPECT_EQ(rig.picker.getAppearance().style, KnobStyle::Hardware);
 }
 
@@ -72,18 +72,40 @@ TEST(KnobStylePickerTest, EachPreviewIsNamedHasATooltipAndTakesFocus) {
     for (int i = 0; i < kKnobStyleCount; ++i) {
         auto& button = rig.picker.getStyleButtonForTest(i);
         const juce::String label = knobStyleLabel((KnobStyle)i);
-        EXPECT_EQ(button.getTitle(), label + " knob style");
-        EXPECT_EQ(button.getTooltip(), "Use the " + label + " look for every knob");
+        EXPECT_EQ(button.getTitle(), label + " control style");
+        EXPECT_EQ(button.getTooltip(), "Use the " + label + " look for every knob and fader");
         EXPECT_TRUE(button.getWantsKeyboardFocus());
     }
-    EXPECT_EQ(rig.picker.getFamilyToggleForTest().getTitle(), "Colour knobs by module family");
+    EXPECT_EQ(rig.picker.getFamilyToggleForTest().getTitle(), "Colour controls by module family");
     EXPECT_TRUE(rig.picker.getFamilyToggleForTest().getTooltip().isNotEmpty());
 }
 
 TEST(KnobStylePickerTest, ReturnPicksTheFocusedPreview) {
     PickerRig rig;
-    juce::Component& button = rig.picker.getStyleButtonForTest((int)KnobStyle::Soft);
+    juce::Component& button = rig.picker.getStyleButtonForTest((int)KnobStyle::Analog);
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
-    EXPECT_EQ(rig.props->getValue(knobStyleKey()), "soft");
+    EXPECT_EQ(rig.props->getValue(knobStyleKey()), "analog");
+}
+
+TEST(KnobStylePickerTest, OffersTheFiveStylesInOrder) {
+    PickerRig rig;
+    ASSERT_EQ(kKnobStyleCount, 5);
+    const char* names[] = {"Classic", "Chunky", "Analog", "Neon", "Ring"};
+    for (int i = 0; i < kKnobStyleCount; ++i) {
+        auto& button = rig.picker.getStyleButtonForTest(i);
+        EXPECT_EQ(button.getTitle(), juce::String(names[i]) + " control style");
+        EXPECT_TRUE(button.isVisible());
+        EXPECT_GT(button.getWidth(), 0);
+    }
+}
+
+TEST(KnobStylePickerTest, ARetiredSavedStyleSelectsItsSuccessor) {
+    PickerRig rig;
+    rig.props->setValue(knobStyleKey(), "polished");
+    rig.picker.setAppearance(loadKnobAppearance(*rig.props));
+    EXPECT_TRUE(rig.picker.getStyleButtonForTest((int)KnobStyle::Analog).getToggleState());
+    rig.props->setValue(knobStyleKey(), "soft");
+    rig.picker.setAppearance(loadKnobAppearance(*rig.props));
+    EXPECT_TRUE(rig.picker.getStyleButtonForTest((int)KnobStyle::Hardware).getToggleState());
 }

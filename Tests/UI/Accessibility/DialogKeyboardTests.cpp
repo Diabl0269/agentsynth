@@ -403,13 +403,12 @@ TEST_F(AccessibilitySettingsTest, AppearanceTabTabOrder) {
                                                                               "Theme gallery",
                                                                               "Open Themes Folder",
                                                                               "Reload Themes",
-                                                                              "Classic knob style",
-                                                                              "Polished knob style",
-                                                                              "Hardware knob style",
-                                                                              "Neon knob style",
-                                                                              "Ring knob style",
-                                                                              "Soft knob style",
-                                                                              "Colour knobs by module family",
+                                                                              "Classic control style",
+                                                                              "Chunky control style",
+                                                                              "Analog control style",
+                                                                              "Neon control style",
+                                                                              "Ring control style",
+                                                                              "Colour controls by module family",
                                                                               "Colour cables by",
                                                                               "Cable colours",
                                                                               "Reset Cable Colours",
@@ -418,6 +417,26 @@ TEST_F(AccessibilitySettingsTest, AppearanceTabTabOrder) {
                                                                               "Meter colour stops",
                                                                               "Remove",
                                                                               "Reset to Theme"}));
+}
+
+namespace {
+bool hasLabelWithText(juce::Component& root, const juce::String& text) {
+    if (auto* label = dynamic_cast<juce::Label*>(&root); label != nullptr && label->getText() == text)
+        return true;
+    for (auto* child : root.getChildren())
+        if (hasLabelWithText(*child, text))
+            return true;
+    return false;
+}
+} // namespace
+
+// One style sets knobs and faders together, so the section is named for both.
+TEST_F(AccessibilitySettingsTest, AppearanceTabNamesTheStyleSectionControls) {
+    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
+    window.setSize(800, 600);
+    auto& tab = tabContent(window, tabIndex(window, "Appearance"));
+    EXPECT_TRUE(hasLabelWithText(tab, "Controls"));
+    EXPECT_FALSE(hasLabelWithText(tab, "Knobs"));
 }
 
 TEST_F(AccessibilitySettingsTest, KeyboardShortcutsTabTabOrderFollowsTheSectionsAndRows) {
