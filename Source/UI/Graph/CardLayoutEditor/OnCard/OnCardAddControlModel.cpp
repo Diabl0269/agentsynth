@@ -12,8 +12,14 @@ std::vector<AddableControl> addableControls(const synth::CardBody& body) {
     const auto& plan = body.getPlan();
     for (int index : plan.more) {
         const auto& item = plan.items[(size_t)index];
-        if (item.param != nullptr)
-            controls.push_back({item.param->paramID, item.captionText()});
+        if (item.param != nullptr) {
+            const auto originalName = item.param->getName(100);
+            const auto captionName = item.captionText();
+            // If there's a custom label, show "OriginalName (CustomLabel)"; otherwise just the name.
+            const auto displayName =
+                originalName != captionName ? (originalName + " (" + captionName + ")") : captionName;
+            controls.push_back({item.param->paramID, displayName});
+        }
     }
     return controls;
 }

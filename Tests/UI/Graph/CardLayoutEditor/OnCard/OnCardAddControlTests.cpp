@@ -139,6 +139,33 @@ TEST(OnCardAddControl, ThePanelListsExactlyTheHiddenAndTheUnplacedControls) {
     EXPECT_EQ(panel->getRowForTest("drive")->getTitle(), "Drive");
 }
 
+TEST(OnCardAddControl, ARenamedHiddenControlReadsItsNameThenItsCustomNameAndSearchFindsEither) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto layout = rig.card(id)->getCardBody()->explicitLayout();
+    for (auto& section : layout.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<synth::CardParamItem>(&item); param != nullptr && param->paramId == "cutoff")
+                param->label = juce::String("Brightness");
+    ASSERT_TRUE(synth::setCardLayoutOverride(rig.canvas.engine.getGraph(), nullptr, id, layout));
+    rig.canvas.editor.updateComponents();
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    hideThroughPanel(rig, *editor, "cutoff");
+    hideThroughPanel(rig, *editor, "drive");
+
+    auto* panel = openAddPanel(rig, *editor);
+    ASSERT_NE(panel, nullptr);
+    auto names = panel->getRowNamesForTest();
+    names.sort(false);
+    EXPECT_EQ(names, juce::StringArray({"Cutoff (Brightness)", "Drive"})) << "a plain name stays plain";
+    EXPECT_EQ(panel->getRowForTest("cutoff")->getTitle(), "Cutoff (Brightness)");
+    panel->setQueryForTest("bright");
+    EXPECT_EQ(panel->getRowNamesForTest(), juce::StringArray("Cutoff (Brightness)"));
+    panel->setQueryForTest("cut");
+    EXPECT_EQ(panel->getRowNamesForTest(), juce::StringArray("Cutoff (Brightness)"));
+}
+
 TEST(OnCardAddControl, TypingFiltersTheRowsAndTheCountLine) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());

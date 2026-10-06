@@ -512,7 +512,9 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     ones, which keep their settings, and parameters the layout never placed; `CardBodyPlan::more`), and the
     hint "Click to add, or drag onto the card". A row shows the control's name with the letters the search
     matched in the accent colour and semi-bold (matching is the app's one `searchMatches`, best match
-    first); Up and Down choose a row, Return adds it, typing searches, Esc closes the panel.
+    first); if the control has a custom label, the row shows the parameter's original name followed by the
+    custom label in brackets (e.g. "Cutoff (Brightness)"), and search matches either name. Up and Down choose
+    a row, Return adds it, typing searches, Esc closes the panel.
     - *Click or Return.* The control moves to the end of the last grid group that is not the footer (it keeps
       its widget, label and range, leaves `hidden` and its old place). If that group has free positions
       the control gets one: the highest, then leftmost, place inside the group that overlaps nothing and
