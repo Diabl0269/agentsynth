@@ -106,6 +106,8 @@ juce::String layoutEditorActionName(const juce::String& actionId) {
         return "Nudge the Control Up by 8 Pixels";
     if (actionId == "layoutEditorNudgeDownBig")
         return "Nudge the Control Down by 8 Pixels";
+    if (actionId == "layoutEditorRemoveControl")
+        return "Remove the Control from the Card";
     return {};
 }
 

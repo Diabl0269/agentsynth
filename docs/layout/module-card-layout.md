@@ -463,7 +463,9 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     the focused control 1 px, Shift+arrow 8 px; the control moves at once and the write waits until the
     keys stop for 250 ms, so a held arrow is one write. These are the rebindable **Layout Editor** actions
     `layoutEditorNudgeLeft`/`Right`/`Up`/`Down` and `...Big` ([shortcuts.md](../control/shortcuts.md#layout-editor)).
-    Esc ends a drag, else cancels the session. Return on a control opens its options panel (below). Each move is announced ("Cutoff moved right 8").
+    Backspace (or Delete) removes the focused control, as the panel's Hide from card does (any outlined control,
+    panel-only ones too; `layoutEditorRemoveControl`, rebindable): it shrinks away, goes to the More row, is announced
+    ("Cutoff removed") and is one undo step. Esc ends a drag, else cancels the session. Return on a control opens its options panel (below). Each move is announced ("Cutoff moved right 8").
   - *Ending.* **Done** keeps the layout; **Cancel** or Esc writes back the layout the card opened with
     (the node's raw stored value, or none) and records nothing. The editor also closes if its card's
     module is removed or the canvas goes. One session at a time: opening it on another card ends the
@@ -531,7 +533,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
       Up and Down announce the chosen row ("Drive, 1 of 2").
   - *Footer and tab controls (built, panel only).* The footer's controls and the selected tab's controls get
     an outline too, with the same dashed look and focus ring, but no grip: they cannot be dragged or nudged
-    (a press does nothing, the arrow keys are left alone), so the tooltip is "Right-click for options" and
+    (a press does nothing, the arrow keys are left alone), so the tooltip is "Backspace removes. Right-click for options" and
     the accessible title is "<name>, layout: Return for options". Right-click, double-click or Return opens
     the same per-control panel (Show as, Label, Range, Hide from card), and Hide, Label and the rest write
     through the same layout edit; a control the footer draws by itself (the Poly toggle) is listed in the
@@ -641,8 +643,8 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - On-card editor (built): the edit bar's Cancel and Done are named by their text with tooltips; each
   control's outline is one focus stop (the shared accent focus ring, a faint wash and a solid outline on
   hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
-  "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options"; the arrow keys nudge, Esc
-  cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
+  "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options"; the arrow keys
+  nudge, Backspace removes the control, Esc cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
   titled "Show as", "Label", "Minimum", "Maximum" and "Hide from card", each with a tooltip, in that Tab order
   (the text fields and buttons carry the shared accent focus ring); Esc closes it.
 - List editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
@@ -725,7 +727,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
   the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
-  nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
+  nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them
   (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.

@@ -53,6 +53,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "layoutEditorNudgeRightBig",
         "layoutEditorNudgeUpBig",
         "layoutEditorNudgeDownBig",
+        "layoutEditorRemoveControl",
         // CanvasCardKeyboard::keyPressed
         "canvasSelectCardLeft",
         "canvasSelectCardRight",

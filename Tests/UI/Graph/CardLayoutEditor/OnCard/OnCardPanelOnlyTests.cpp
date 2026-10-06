@@ -36,7 +36,7 @@ TEST(OnCardPanelOnly, ASelectedTabsControlsGetOutlinesWithNoGripAndTheirOwnToolt
     auto* outline = editor->getOutlineForTest(control);
     ASSERT_NE(outline, nullptr);
     EXPECT_TRUE(outline->isPanelOnly());
-    EXPECT_EQ(outline->getTooltip(), "Right-click for options");
+    EXPECT_EQ(outline->getTooltip(), "Backspace removes. Right-click for options");
     EXPECT_EQ(outline->getTitle(),
               cardlayouteditor_test::captionOf(*rig.card(id), control) + ", layout: Return for options");
     EXPECT_TRUE(outline->getWantsKeyboardFocus());

@@ -48,6 +48,10 @@ bool CardLayoutOnCardEditor::handleKey(const juce::String& key, const juce::KeyP
         return true;
     if (drag_.pressed)
         return false;
+    if (isRemoveKey(press)) {
+        removeControl(key);
+        return true;
+    }
     for (const auto& nudgeKey : kNudgeKeys) {
         const auto mods = nudgeKey.big ? juce::ModifierKeys::shiftModifier : juce::ModifierKeys::noModifiers;
         if (!matchesAction(press, nudgeKey.actionId, juce::KeyPress(nudgeKey.keyCode, mods, 0)))
@@ -63,6 +67,24 @@ bool CardLayoutOnCardEditor::isUndoOrRedo(const juce::KeyPress& press) const {
     const auto cmd = juce::ModifierKeys::commandModifier;
     return matchesAction(press, "undo", juce::KeyPress('z', cmd, 0)) ||
            matchesAction(press, "redo", juce::KeyPress('z', cmd | juce::ModifierKeys::shiftModifier, 0));
+}
+
+// Backspace (rebindable), or Delete.
+bool CardLayoutOnCardEditor::isRemoveKey(const juce::KeyPress& press) const {
+    return matchesAction(press, "layoutEditorRemoveControl",
+                         juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::noModifiers, 0)) ||
+           press == juce::KeyPress(juce::KeyPress::deleteKey, juce::ModifierKeys::noModifiers, 0);
+}
+
+// Takes the focused control off the card exactly as the panel's Hide from card does (it goes to the More row,
+// shrinks away, and is one undo step); every outlined control can be, panel-only ones too.
+void CardLayoutOnCardEditor::removeControl(const juce::String& paramId) {
+    const int cell = indexOfCell(paramId);
+    if (cell < 0 || closed_)
+        return;
+    const auto caption = cells_[(size_t)cell].caption;
+    hideControl(paramId);
+    announce(caption + " removed");
 }
 
 // Esc: an open panel (the control's or Add control) closes first, then a drag in progress goes back, else the session

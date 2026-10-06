@@ -214,6 +214,8 @@ private:
     bool handleKey(const juce::String& key, const juce::KeyPress& press);
     bool matchesAction(const juce::KeyPress& press, const char* actionId, const juce::KeyPress& fallback) const;
     bool isUndoOrRedo(const juce::KeyPress& press) const;
+    bool isRemoveKey(const juce::KeyPress& press) const;
+    void removeControl(const juce::String& paramId);
     void nudge(const juce::String& key, int dx, int dy);
     void flushNudge();
     void announce(const juce::String& text);

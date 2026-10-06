@@ -197,6 +197,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"layoutEditorNudgeRightBig", ShortcutCategory::LayoutEditor},
         {"layoutEditorNudgeUpBig", ShortcutCategory::LayoutEditor},
         {"layoutEditorNudgeDownBig", ShortcutCategory::LayoutEditor},
+        {"layoutEditorRemoveControl", ShortcutCategory::LayoutEditor},
     };
     return table;
 }
