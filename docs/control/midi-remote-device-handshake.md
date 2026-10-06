@@ -165,6 +165,26 @@ so a user who picks `"LCXL3 1 MIDI Out"` as the input (the popover no longer pre
 one, but a hand-edited or imported profile still could) gets a visible warning instead of a
 controller that silently never leaves standalone mode.
 
+## Feedback rides the handshake's output (FRO343)
+
+The Launch Control XL 3's encoders are endless: in DAW mode they send *absolute* CCs from an
+internal position, and "if the DAW sends them position information, they automatically pick that
+up" (programmer's reference guide, p.10 — the guide does not spell out the message shape; we send
+the encoder's own CC number on its own channel (16), the same shape it reports; never channel 1,
+where `B0h <index> <colour>` sets the LED colour instead, p.11). With nothing sent, that
+internal position never matches the parameter, so Pick-up takeover waits for a crossing that may
+never come and the knob "doesn't respond".
+
+So a profile with no explicit `output` (`hasOutput == false`) sends [controller
+feedback](midi-remote.md#controller-feedback) to **the output its handshake resolved**:
+`ControllerHandshakeCoordinator::getOpenOutputs()` (profile id → the output the open bytes went to)
+is pushed by `MidiLearnController::reconcileHandshakes()` into
+`RemoteEngine::setHandshakeFeedbackOutputs()`. A real change of that map (a device just entered DAW
+mode, or went away) resends every mapped value; the normal drain then keeps it in sync whenever the
+parameter moves from anywhere else. An explicit per-controller output still wins. Device-originated
+values are not echoed while the control is being turned (the existing feedback cooldown); the
+final value is re-sent once it goes idle, which is harmless. Standalone only, like all feedback.
+
 ## Related
 
 - [`midi-remote.md`](midi-remote.md#data-model) — the full data model `handshake` sits in, and
