@@ -18,6 +18,16 @@ juce::Colour AppLookAndFeel::knobValueColour(const juce::Component& knob) const 
     return theme.colors.accent;
 }
 
+// A range counts as symmetric when its ends are within 1% of the span of mirroring each other, so a
+// float range like -1..1 and an int range like -4..4 both qualify; 0..100 and -12..24 do not.
+float knobOriginFor(const juce::Slider& slider) {
+    const double min = slider.getMinimum();
+    const double max = slider.getMaximum();
+    if (!(min < 0.0 && max > 0.0) || std::abs(min + max) > 0.01 * (max - min))
+        return 0.0f;
+    return juce::jlimit(0.0f, 1.0f, (float)slider.getNormalisableRange().convertTo0to1(0.0));
+}
+
 void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                                       float sliderPosProportional, float /*rotaryStartAngle*/, float /*rotaryEndAngle*/,
                                       juce::Slider& slider) {
@@ -31,7 +41,8 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     if (disabled)
         g.beginTransparencyLayer(kDisabledControlAlpha);
 
-    paintKnob(g, theme, knobAppearance.style, bounds, sliderPosProportional, knobValueColour(slider));
+    paintKnob(g, theme, knobAppearance.style, bounds, sliderPosProportional, knobValueColour(slider),
+              knobOriginFor(slider));
 
     if (disabled)
         g.endTransparencyLayer();

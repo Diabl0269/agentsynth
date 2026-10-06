@@ -53,8 +53,8 @@ are also accepted.
 | `error` | `#FFE5484D` | Error / muted state |
 | `knobBody` | `#FF13161B` | Knob body gradient inner stop |
 | `knobPointer` | `#FFEAEEF3` | Knob pointer line |
-| `knobSkirt` | `#FF0E1014` | Hardware knob style: the skirt disc under the cap (Daylight `#FFADB5BD`) |
-| `knobCapHighlight` | `#2EFFFFFF` | Hardware knob style: the soft highlight on top of the cap (alpha varies per theme, `#B3FFFFFF` on Daylight) |
+| `knobSkirt` | `#FF0E1014` | Chunky control style: the fader slot (Daylight `#FFADB5BD`) |
+| `knobCapHighlight` | `#2EFFFFFF` | Chunky control style: the sheen on the fader cap (alpha varies per theme, `#B3FFFFFF` on Daylight) |
 | `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour controls by module family" is on (Daylight `#FF946200`) |
 | `hueGreen` | `#FF4ADE80` | Knob family colour for Sequencing and Envelopes |
 | `hueRose` | `#FFFF6FA8` | Knob family colour for Modulation FX, Time FX and Dynamics |
@@ -351,14 +351,30 @@ implemented in `AppLookAndFeel`:
   semi-transparent windows still get an opaque window; JUCE decides that.)
 - **Rotary sliders (the knob)** — `drawRotarySlider` (`AppLookAndFeelSliders.cpp`) keeps the disabled/dimmed
   transparency layer and the focus ring and hands the drawing to `paintKnob` (`AppLookAndFeelKnobStyles.cpp`,
-  `KnobPainter.h`), one painter per `KnobStyle`: Classic (the original look), Polished (the default: tick dots,
-  inner shadow, gradient value arc), Hardware (skirt, knurling, cap highlight, notch), Neon (bloom under the
-  arc, glowing tip; it glows in every theme, see below), Ring (no body, rider dot on the arc) and Soft (tinted body, round dot). The Neon glow is owned by the style, not the theme: its strength is
-  `max(treatment.glow, kNeonMinGlow)` (`KnobPainter.h`, `neonGlowStrength`) scaled by `0.3 + 0.7 * value`, so
-  Obsidian and Daylight (glow 0) still glow, faintly near zero and strongly at full, while a glowier theme
-  keeps its own strength; the tip dot grows with the value too, and the Neon fader's bloom follows the same
-  rule. Classic and Polished keep a theme-driven arc glow. Every style
-  shares one geometry (arc radius `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
+  `KnobPainter.h`, with Chunky and Analog in `AppLookAndFeelKnobStylesChunky.cpp` /
+  `AppLookAndFeelKnobStylesAnalog.cpp` and the shared geometry in `KnobPainterInternal.h`), one painter
+  per `KnobStyle`, in picker order: **Classic** (the default: a deep body lit from the top left with a soft
+  drop shadow and a bevel rim, a glowing tip at the end of the value arc and a small tick at 12 o'clock),
+  **Chunky** (persisted id `hardware`: a ten-lobed flower skirt in the value colour that turns with the
+  value, a cream cap with a gloss highlight and a fat dark pointer), **Analog** (a realistic machined
+  knob: knurled black skirt, brushed-metal cap and a white line over a printed eleven-tick scale; no value
+  arc and no value colour, so it ignores "Colour controls by module family"; the scale's numbers -- 0, 5,
+  10, or -5, 0, +5 when bipolar -- print only on knobs at least `kAnalogNumbersMinSize` (55 px) wide, so
+  never at card size), **Neon** (no body: a thick glowing arc, a bright tip and the value as a percentage
+  in the middle) and **Ring** (fifteen LEDs round a small dark body, lighting one by one as the value
+  rises, the leading one part lit). Neon and Ring light up gradually: arc, tip, number and LED glow are
+  dim at the origin and full at the end. The glow does not depend on the theme, so Obsidian and Daylight
+  (glow 0) still glow; a theme whose glow is above `kNeonMinGlow` brightens Neon further
+  (`neonGlowStrength`, `KnobPainter.h`, which the Neon fader's bloom also uses: `max(treatment.glow,
+  kNeonMinGlow)` scaled by `0.3 + 0.7 * value`). Classic and Chunky keep a theme-driven arc glow.
+  Saved settings from removed styles load as their successors: `polished` as Analog, `soft` as Chunky;
+  any other unknown id as Classic. **Bipolar knobs**: a rotary slider whose range is symmetric round zero
+  (pan, pitch, octave, fine tune; not detune, which is 0 to 100) is drawn bipolar: `knobOriginFor`
+  (`AppLookAndFeelSliders.cpp`) passes the slider's proportion of zero as `paintKnob`'s `origin01`, and
+  every style draws its value arc (or Ring its LEDs) from 12 o'clock out to the value's side, nothing
+  at zero, with the light growing with the distance from the centre; Ring keeps its top LED as a pale
+  zero mark and Neon's number is signed. Every style shares one geometry (arc radius
+  `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
   sweep) so the modulation ring and its anchors never move. The value colour is `accent`, or, when
   "Colour controls by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
   `ModuleComponent` sets the `knobFamily` component property (its `ModuleCategory` as an int) on itself and
@@ -382,13 +398,13 @@ implemented in `AppLookAndFeel`:
   56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap
   shrinking when the bounds are shorter. `getSliderThumbRadius` insets the travel by half the cap plus
   2 px so the cap is never clipped, and `MixerFaderSlider`'s drag maths reads the same inset through
-  `getSliderLayout`. The six knob styles each have a draw path (`fader::State::style`, the fill
-  colour in `fader::State::valueColour`; Classic is the look described here): Polished adds a soft
+  `getSliderLayout`. The five control styles each have a draw path (`fader::State::style`, the fill
+  colour in `fader::State::valueColour`; Classic is the look described here): Analog adds a soft
   inner shadow, eleven tick dots beside the slot lit up to the value, and a fill brightening from 60%
-  to full at the cap; Hardware a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
+  to full at the cap; Chunky a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
   grip lines; Neon a bloom round the fill (same glow rule as the knob) and a flat `knobBody` cap with a centre
   line in the fader's colour; Ring 2 px lines for slot and fill and a round `knobPointer` dot for the
-  cap; Soft a 50% wider slot and a cap tinted with the fader's colour. Travel, slot length, cap
+  cap. Travel, slot length, cap
   rectangle and `getSliderThumbRadius` are identical in every style, so hit-testing never moves.
   States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
   keyboard focus adds a 2 px `accent` ring 3 px outside the cap, disabled dims everything to 45% with a

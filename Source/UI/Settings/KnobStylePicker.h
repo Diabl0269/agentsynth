@@ -9,7 +9,7 @@
 
 namespace synth::ui {
 
-// Settings > Appearance > Controls: six clickable control-style previews (a style sets knobs and faders
+// Settings > Appearance > Controls: five clickable control-style previews (a style sets knobs and faders
 // together) in one radio group plus the "Colour controls by module family" switch. Previews are painted by
 // synth::theme::paintKnob, the same painter the app's knobs use. Left/Right move between the previews, Space/Return
 // picks.

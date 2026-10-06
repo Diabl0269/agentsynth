@@ -856,6 +856,7 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/OnCard/OnCardScopeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardPanelOnlyTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardTimeTempoTests.cpp
+    UI/Theme/KnobStyleLookTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

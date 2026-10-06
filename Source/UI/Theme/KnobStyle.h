@@ -7,17 +7,20 @@ namespace synth::theme {
 
 // The look every rotary knob and fader in the app takes (Settings > Appearance > Controls): one control
 // style sets both.
-enum class KnobStyle { Classic, Polished, Hardware, Neon, Ring, Soft };
+// The enum order is the picker order.
+enum class KnobStyle { Classic, Hardware, Analog, Neon, Ring };
 
-inline constexpr int kKnobStyleCount = 6;
+inline constexpr int kKnobStyleCount = 5;
 
-// Persisted ids and picker labels: never rename a shipped id. An unknown id loads as Polished.
+// Persisted ids and picker labels: never rename a shipped id (Hardware keeps "hardware" under the label
+// Chunky). The retired ids load as their successors ("polished" as Analog, "soft" as Hardware); any
+// other unknown id loads as Classic.
 const char* knobStyleId(KnobStyle style) noexcept;
 const char* knobStyleLabel(KnobStyle style) noexcept;
 KnobStyle knobStyleFromId(const juce::String& id) noexcept;
 
 struct KnobAppearance {
-    KnobStyle style = KnobStyle::Polished;
+    KnobStyle style = KnobStyle::Classic;
     bool colourByFamily = true; // value colour follows the module family when the knob sits in a card
 
     bool operator==(const KnobAppearance& other) const noexcept = default;
