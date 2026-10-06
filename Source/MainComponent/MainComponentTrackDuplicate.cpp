@@ -27,7 +27,8 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 
 // Every node at or downstream of a Master: the output dock (Master, Rec Tap, Audio Output). A lone
 // track "owns" these by reachability, but they are shared singletons and must never be copied.
-std::set<juce::uint32> outputDockNodes(const juce::AudioProcessorGraph& graph, const synth::ui::ConnectionIndex& cables) {
+std::set<juce::uint32> outputDockNodes(const juce::AudioProcessorGraph& graph,
+                                       const synth::ui::ConnectionIndex& cables) {
     std::set<juce::uint32> dock;
     std::vector<NodeID> pending;
     for (auto* node : graph.getNodes())

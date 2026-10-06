@@ -80,7 +80,8 @@ ConnectionIndex::ConnectionIndex(const juce::AudioProcessorGraph& graph) {
     }
 }
 
-const std::vector<ConnectionIndex::Connection>& ConnectionIndex::touching(juce::AudioProcessorGraph::NodeID node) const {
+const std::vector<ConnectionIndex::Connection>&
+ConnectionIndex::touching(juce::AudioProcessorGraph::NodeID node) const {
     static const std::vector<Connection> none;
     const auto it = touching_.find(node.uid);
     return it != touching_.end() ? it->second : none;
