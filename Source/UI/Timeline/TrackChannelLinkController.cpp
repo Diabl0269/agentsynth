@@ -3,7 +3,6 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
-#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -45,7 +44,21 @@ juce::AudioProcessorGraph& TrackChannelLinkController::graph() const { return en
 synth::MacroSet& TrackChannelLinkController::macros() const { return graphEditor_.getMacros(); }
 
 synth::TrackChannelLinkInfo TrackChannelLinkController::resolve(synth::TrackId track) const {
+    if (batchDepth_ > 0) {
+        if (batchMap_ == nullptr)
+            batchMap_ = std::make_unique<synth::TrackChannelLinkMap>(graph());
+        return batchMap_->resolve(doc_, track);
+    }
     return synth::resolveTrackChannelLink(graph(), doc_, track);
+}
+
+void TrackChannelLinkController::beginChannelLinkBatch() { ++batchDepth_; }
+
+void TrackChannelLinkController::endChannelLinkBatch() {
+    if (--batchDepth_ <= 0) {
+        batchDepth_ = 0;
+        batchMap_.reset(); // the graph may change again: never carry a snapshot past the batch
+    }
 }
 
 ChannelStripModule* TrackChannelLinkController::stripFor(const synth::TrackChannelLinkInfo& info) const {
@@ -54,7 +67,10 @@ ChannelStripModule* TrackChannelLinkController::stripFor(const synth::TrackChann
 }
 
 const synth::Macro* TrackChannelLinkController::macroForStrip(const juce::String& stripUuid) const {
-    return stripUuid.isNotEmpty() ? synth::nearestChannelMacro(graph(), macros(), stripUuid) : nullptr;
+    // `stripUuid` is always a Channel Strip node's uuid (from TrackChannelLinkInfo), so the macro that directly holds
+    // it IS a channel macro and nearestChannelMacro would return exactly that owner -- after an isChannelMacro scan of
+    // every graph node per call, the other per-header graph walk of a timeline rebuild. Same answer, no scan.
+    return stripUuid.isNotEmpty() ? std::as_const(macros()).findByMember(stripUuid) : nullptr;
 }
 
 synth::TrackId TrackChannelLinkController::linkedTrackForMacro(const juce::String& macroId) const {
@@ -99,9 +115,9 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
     // docs/mixer/mixer.md#channels-follow-audio-not-tracks); otherwise the shared Core rule -- the one feeding track's
     // name, else the fallback.
     const auto* macro = macroForStrip(info.stripUuid);
-    out.channelName = macro != nullptr && macro->name.isNotEmpty()
-                          ? macro->name
-                          : synth::channelDisplayName(graph(), info.stripId, doc_, kUnnamedChannel);
+    out.channelName = macro != nullptr && macro->name.isNotEmpty() ? macro->name
+                      : batchMap_ != nullptr ? batchMap_->displayName(info.stripId, doc_, kUnnamedChannel)
+                                             : synth::channelDisplayName(graph(), info.stripId, doc_, kUnnamedChannel);
 
     if (auto* strip = stripFor(info)) {
         out.channelMuted = strip->hasMuteParameter() && strip->isMuted();

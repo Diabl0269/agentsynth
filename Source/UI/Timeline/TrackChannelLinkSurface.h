@@ -44,6 +44,13 @@ struct TrackChannelLinkSurface {
 
     virtual ChannelInfo getChannelInfo(synth::TrackId track) const = 0;
 
+    /** Brackets a loop that refreshes MANY headers against an unchanged graph (a timeline rebuild): while at least one
+     *  batch is open, getChannelInfo() answers from ONE node-to-channel map built on first use instead of walking the
+     *  graph per track. Nothing inside a batch may edit the graph or the doc. Non-pure no-ops so stubs keep
+     *  compiling; use ChannelLinkBatch rather than calling these directly. */
+    virtual void beginChannelLinkBatch() {}
+    virtual void endChannelLinkBatch() {}
+
     /** JUST the chip meter's level, for the shared 15 Hz tick. Deliberately not getChannelInfo():
      *  that re-derives the whole link from the live graph (a node scan plus two BFS walks over a
      *  fresh copy of every connection), which is fine per click and far too much per frame per row.
@@ -81,6 +88,25 @@ struct TrackChannelLinkSurface {
      * When the mixer panel exists this override opens/focuses that column instead, with no change to
      * the chip or the header. */
     virtual void revealChannelForTrack(synth::TrackId track) = 0;
+};
+
+/** RAII scope for TrackChannelLinkSurface::beginChannelLinkBatch; a null surface is a no-op. */
+class ChannelLinkBatch {
+public:
+    explicit ChannelLinkBatch(TrackChannelLinkSurface* surface)
+        : surface_(surface) {
+        if (surface_ != nullptr)
+            surface_->beginChannelLinkBatch();
+    }
+    ~ChannelLinkBatch() {
+        if (surface_ != nullptr)
+            surface_->endChannelLinkBatch();
+    }
+    ChannelLinkBatch(const ChannelLinkBatch&) = delete;
+    ChannelLinkBatch& operator=(const ChannelLinkBatch&) = delete;
+
+private:
+    TrackChannelLinkSurface* surface_;
 };
 
 } // namespace synth::ui

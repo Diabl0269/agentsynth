@@ -74,4 +74,46 @@ juce::String channelDisplayName(juce::AudioProcessorGraph& graph, juce::AudioPro
     return trackName.isNotEmpty() ? trackName : fallback;
 }
 
+TrackChannelLinkMap::TrackChannelLinkMap(juce::AudioProcessorGraph& graph)
+    : graph_(graph)
+    , reach_(graph) {
+    for (auto* node : graph.getNodes()) {
+        const auto uuid = nodeUuidOf(node);
+        if (uuid.isNotEmpty())
+            nodesByUuid_.emplace(uuid, node);
+    }
+}
+
+TrackChannelLinkInfo TrackChannelLinkMap::resolve(const TimelineDoc& doc, TrackId track) const {
+    TrackChannelLinkInfo info;
+    const auto* t = doc.getTrack(track);
+    if (t == nullptr || t->kind == TrackKind::Automation || t->bindingUuid.isEmpty())
+        return info;
+    const auto found = nodesByUuid_.find(t->bindingUuid);
+    if (found == nodesByUuid_.end())
+        return info;
+    const auto sourceId = found->second->nodeID;
+
+    const auto stripId = reach_.stripFedByTrackSource(sourceId);
+    auto* stripNode = graph_.getNodeForId(stripId);
+    if (stripNode == nullptr)
+        return info;
+
+    info.hasChannel = true;
+    info.stripId = stripId;
+    info.stripUuid = nodeUuidOf(stripNode);
+    info.feedingTrackSources = reach_.trackSourcesFeedingStrip(stripId);
+    info.linked = info.feedingTrackSources.size() == 1 && info.feedingTrackSources.front() == sourceId;
+    return info;
+}
+
+juce::String TrackChannelLinkMap::displayName(juce::AudioProcessorGraph::NodeID stripId, const TimelineDoc& doc,
+                                              const juce::String& fallback) const {
+    const auto& tracks = reach_.trackSourcesFeedingStrip(stripId);
+    if (tracks.size() != 1)
+        return fallback;
+    const juce::String trackName = trackNameForNodeUuid(doc, nodeUuidOf(graph_.getNodeForId(tracks.front())));
+    return trackName.isNotEmpty() ? trackName : fallback;
+}
+
 } // namespace synth

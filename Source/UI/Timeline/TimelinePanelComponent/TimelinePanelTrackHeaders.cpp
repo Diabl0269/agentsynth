@@ -346,6 +346,9 @@ void TimelinePanelComponent::syncTrackHeaders() {
     }
 
     const auto& tracks = doc_->getTracks();
+    // Every header below reads its channel link from ONE node-to-channel map instead of a graph walk per header.
+    const synth::ui::ChannelLinkBatch linkBatch(trackHeaderHost_ != nullptr ? trackHeaderHost_->getChannelLinkSurface()
+                                                                            : nullptr);
 
     // Rebuild only when the SET of tracks changed. A mute toggle, a rename or a re-bind must not
     // destroy and re-create every row (it would drop an in-progress name edit and churn the UI).
