@@ -615,20 +615,10 @@ juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macr
     return macroController_.macroHullBounds(macroId);
 }
 
-// Whether a library drop should join a macro: Cmd held (the same modifier a canvas module drag
-// uses), or the drag-without-Cmd preference on. THE one place the drop-side modifier is read, so a
-// platform where JUCE's realtime modifier state is not live during a drag-and-drop has exactly one
-// function to change; tests drive the Cmd half through setMacroJoinCommandOverrideForTests.
-bool GraphEditor::isMacroJoinModifierDown() const {
-    const bool cmdDown = macroJoinCommandOverride_.has_value()
-                             ? *macroJoinCommandOverride_
-                             : juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
-    return cmdDown || macroDragWithoutCmdEnabled;
-}
-
+// The macro a library drop joins: the innermost expanded hull under the pointer (macroHullAt), with no modifier. A
+// library drop has nothing to disambiguate (unlike moving an existing card out of or between macros), so neither Cmd
+// nor the drag-without-Cmd preference is read.
 juce::String GraphEditor::macroJoinTargetAt(juce::Point<int> canvasCentre) const {
-    if (!isMacroJoinModifierDown())
-        return {};
     return macroController_.macroHullAt(canvasCentre);
 }
 

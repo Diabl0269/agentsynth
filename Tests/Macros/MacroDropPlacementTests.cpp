@@ -146,7 +146,6 @@ TEST(MacroDropPlacement, LibraryDropWithoutCmdOverAnOpenHullJoinsAndLandsInsideI
     const auto m2 = c.osc(700, 300);
     const auto macroId = c.group({m1, m2});
     c.ctl().setMacroCollapsed(macroId, false);
-    c.editor.setMacroJoinCommandOverrideForTests(false);
     juce::Component source;
     const auto centre = c.ctl().macroHullBounds(macroId).getCentre();
     const juce::DragAndDropTarget::SourceDetails details(juce::var("Filter"), &source, centre);

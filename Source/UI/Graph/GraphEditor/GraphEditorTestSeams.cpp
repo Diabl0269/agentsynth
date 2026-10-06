@@ -5,8 +5,6 @@
 
 #include "GraphEditor.h"
 
-void GraphEditor::setMacroJoinCommandOverrideForTests(std::optional<bool> down) { macroJoinCommandOverride_ = down; }
-
 void GraphEditor::setShowCanvasContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
     showCanvasContextMenuHook_ = std::move(hook);
 }

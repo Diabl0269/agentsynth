@@ -535,8 +535,10 @@ that gets in the way.
 ## Dropping a library module into a macro
 
 A module dragged from the library and dropped with its ghost's CENTRE over an expanded macro's hull
-joins that macro, when Cmd is held or the preference above is on
-(`GraphDragDropController::itemDropped`). Details:
+joins that macro (`GraphDragDropController::itemDropped`). No modifier is needed and the preference above is
+ignored: that preference is about moving existing cards out of or between macros, and a library drop has no such
+ambiguity. With nested macros the innermost open macro under the pointer wins; a collapsed macro is never a target
+(its interior is hidden). Details:
 
 - **Modules only.** Snippet and hosted-plugin payloads drop exactly as before and never join.
 - **Hull tested at the ghost's centre before anti-overlap** (`macroHullAt`, so the smallest expanded
@@ -550,9 +552,6 @@ joins that macro, when Cmd is held or the preference above is on
   its uuid, any smart connections and the membership (with its port splicing) are a single Cmd+Z.
 - **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
   puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
-- **One seam for the modifier.** `GraphEditor::isMacroJoinModifierDown()` (Cmd realtime state, or the
-  preference) is the only place the drop side reads the modifier; tests drive the Cmd half through
-  `setMacroJoinCommandOverrideForTests`.
 
 ## The expanded hull's collapse button
 

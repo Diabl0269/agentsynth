@@ -469,38 +469,25 @@ struct DropFixture {
 
 } // namespace
 
-TEST(MacroDragTransfer, LibraryDropWithCmdOverAHullJoinsIt) {
+TEST(MacroDragTransfer, LibraryDropOverAHullJoinsItWithThePreferenceOff) {
     DropFixture f;
     f.editor.setMacroDragWithoutCmdEnabled(false);
-    f.editor.setMacroJoinCommandOverrideForTests(true);
     const auto uuid = f.dropAt(f.hullBCentre());
     ASSERT_FALSE(uuid.isEmpty()) << "the dropped module must have a uuid";
     EXPECT_TRUE(isMemberOf(f.editor, f.macros.macroB, uuid));
 }
 
-TEST(MacroDragTransfer, LibraryDropWithPreferenceOnAndNoModifierJoinsIt) {
+TEST(MacroDragTransfer, LibraryDropOverAHullJoinsItWithThePreferenceOn) {
     DropFixture f;
     f.editor.setMacroDragWithoutCmdEnabled(true);
-    f.editor.setMacroJoinCommandOverrideForTests(false);
     const auto uuid = f.dropAt(f.hullBCentre());
     ASSERT_FALSE(uuid.isEmpty());
     EXPECT_TRUE(isMemberOf(f.editor, f.macros.macroB, uuid));
 }
 
-TEST(MacroDragTransfer, LibraryDropWithNeitherModifierNorPreferenceDoesNotJoin) {
-    DropFixture f;
-    f.editor.setMacroDragWithoutCmdEnabled(false);
-    f.editor.setMacroJoinCommandOverrideForTests(false);
-    const int nodesBefore = f.engine.getGraph().getNodes().size();
-    f.dropAt(f.hullBCentre());
-    ASSERT_EQ(f.engine.getGraph().getNodes().size(), nodesBefore + 1) << "the drop still creates the module";
-    EXPECT_EQ(f.editor.getMacros().find(f.macros.macroB)->members.size(), 2u) << "but B is untouched";
-}
-
-TEST(MacroDragTransfer, LibraryDropOutsideEveryHullNeverJoinsEvenWithTheModifier) {
+TEST(MacroDragTransfer, LibraryDropOutsideEveryHullNeverJoins) {
     DropFixture f;
     f.editor.setMacroDragWithoutCmdEnabled(true);
-    f.editor.setMacroJoinCommandOverrideForTests(true);
     const auto uuid = f.dropAt({1800, 1300});
     ASSERT_FALSE(f.engine.getGraph().getNodes().isEmpty());
     EXPECT_EQ(f.editor.getMacros().findByMember(uuid), nullptr) << "a drop outside any hull is a plain drop";
@@ -510,7 +497,6 @@ TEST(MacroDragTransfer, LibraryDropOutsideEveryHullNeverJoinsEvenWithTheModifier
 
 TEST(MacroDragTransfer, LibraryDropJoinIsOneUndoStepWithNodeCreation) {
     DropFixture f;
-    f.editor.setMacroJoinCommandOverrideForTests(true);
     const int nodesBefore = f.engine.getGraph().getNodes().size();
     const int serialBefore = f.undo.getEditSerial();
 
@@ -535,7 +521,6 @@ TEST(MacroDragTransfer, LibraryDropJoinIsOneUndoStepWithNodeCreation) {
 TEST(MacroDragTransfer, LibraryDragHighlightsTheJoinTargetAndClearsOnExitAndDrop) {
     DropFixture f;
     f.editor.setMacroDragWithoutCmdEnabled(false);
-    f.editor.setMacroJoinCommandOverrideForTests(true);
     const auto details = juce::DragAndDropTarget::SourceDetails(juce::var("Oscillator"), &f.source, f.hullBCentre());
 
     f.editor.itemDragEnter(details);
@@ -551,10 +536,4 @@ TEST(MacroDragTransfer, LibraryDragHighlightsTheJoinTargetAndClearsOnExitAndDrop
     // The real enter/move/drop flow (a live ghost that anti-overlap has moved off the cursor) still
     // joins: the hull is tested where the ghost was AIMED, not where the card finally lands.
     EXPECT_EQ(f.editor.getMacros().find(f.macros.macroB)->members.size(), 3u);
-
-    f.editor.setMacroJoinCommandOverrideForTests(false);
-    f.editor.itemDragEnter(details);
-    f.editor.itemDragMove(details);
-    EXPECT_TRUE(f.editor.getMacroDragJoinId().isEmpty()) << "no modifier and no preference: no highlight";
-    f.editor.itemDragExit(details);
 }
