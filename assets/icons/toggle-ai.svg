@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- Toolbar icon, ai group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
-  <circle cx="11" cy="13" r="7" fill="#FF00FF" fill-opacity=".45" />
-  <path d="M4.21 19.79 A9.60 9.60 0 1 1 19.31 8.20" stroke-width="2.6" fill="none" stroke="#FF00FF" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M6.2 13.4 C7.4 10.2 8.6 10.2 9.6 13.4 S11.8 16.6 13 13.4 S15.2 10.2 15.8 12.2" stroke-width="1.9" fill="none" stroke="#FFFF00" stroke-linecap="round" stroke-linejoin="round" />
-  <g id="mv">
-    <path d="M19.30 0.50 L20.22 3.78 L23.50 4.70 L20.22 5.62 L19.30 8.90 L18.38 5.62 L15.10 4.70 L18.38 3.78Z" fill="#FF00FF" />
+  <!-- Toolbar icon, ai group: a patch cable ending in a jack plug. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The metal tip keeps its own greys. The signal pulse, plug glow and spark at the plug are drawn in code (ToolbarAiSpark.cpp) so they can loop. -->
+  <path d="M3 21 C3 14 8 18 12 13" stroke="#FF00FF" stroke-width="2.4" fill="none" stroke-linecap="round" />
+  <g transform="translate(12 13) rotate(-48)">
+    <rect x="-.5" y="-2.6" width="5" height="5.2" rx="1.2" fill="#FF00FF" />
+    <rect x="4" y="-1.1" width="4.6" height="2.2" rx="1" fill="#E6E9EE" stroke="#8A93A0" stroke-width=".4" />
+    <rect x="4.9" y="-1.1" width="1" height="2.2" fill="#8A93A0" />
   </g>
 </svg>

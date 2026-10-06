@@ -317,6 +317,7 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentFoldTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentUpgradeTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentWaitingTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
     Modules/PolySequencerModuleTests.cpp
@@ -815,6 +816,7 @@ add_executable(Tests
     UI/Chrome/ToolbarTitlesTests.cpp
     UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp
     UI/Chrome/ToolbarButton/ToolbarButtonMotionTests.cpp
+    UI/Chrome/ToolbarButton/ToolbarAiSparkTests.cpp
     UI/Chrome/StatusBarAccessibilityTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp

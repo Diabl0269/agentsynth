@@ -125,6 +125,10 @@ public:
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
 
+    // Called on the message thread with true when a request goes out and false when it ends (a reply,
+    // a failure, a timeout or a cancel). The host shows "the assistant is working" from it.
+    std::function<void(bool)> onWaitingChanged;
+
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }
 
@@ -289,6 +293,7 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+    void setWaiting(bool waiting);
 
     // Wall-clock start of the in-flight wait (juce::Time::getMillisecondCounter).
     // Meaningful only while isWaitingForResponse is true.

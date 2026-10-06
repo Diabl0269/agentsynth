@@ -14,6 +14,9 @@ constexpr double kHoverOutMs = 90.0;
 constexpr double kPressMs = 80.0;
 constexpr double kLitInMs = 160.0;
 constexpr double kLitOutMs = 110.0;
+// The looping glyph fading its keyframes in and out against the rest glyph.
+constexpr double kLoopInMs = 140.0;
+constexpr double kLoopOutMs = 220.0;
 // How far the glyph lifts on hover (px) and how much the chip squashes when pressed.
 constexpr float kHoverLiftPx = 1.0f;
 constexpr float kPressSquashX = 0.08f;
@@ -29,6 +32,8 @@ ToolbarButton::~ToolbarButton() {
     hover_.driver.stop(updater_);
     press_.driver.stop(updater_);
     lit_.driver.stop(updater_);
+    loop_.driver.stop(updater_);
+    cycle_.stop(updater_);
 }
 
 void ToolbarButton::setIcon(synth::theme::Icon icon, ToolbarGroup group) {
@@ -76,6 +81,67 @@ void ToolbarButton::buttonStateChanged() {
     retarget(hover_, hoverTarget, kHoverInMs, kHoverOutMs);
     retarget(press_, enabled && getState() == buttonDown ? 1.0f : 0.0f, kPressMs, kPressMs);
     retarget(lit_, getToggleState() ? 1.0f : 0.0f, kLitInMs, kLitOutMs);
+    updateLoop();
+}
+
+void ToolbarButton::visibilityChanged() {
+    juce::DrawableButton::visibilityChanged();
+    updateLoop();
+}
+
+void ToolbarButton::parentHierarchyChanged() {
+    juce::DrawableButton::parentHierarchyChanged();
+    updateLoop();
+}
+
+void ToolbarButton::setBusy(bool busy) {
+    if (busy == busy_)
+        return;
+    busy_ = busy;
+    if (busy)
+        motionEnabled_ = !prefersReducedMotion();
+    setDescription(busy ? "Assistant is working" : juce::String());
+    setHelpText(busy ? "Assistant is working" : juce::String());
+    updateLoop();
+}
+
+// The loop wants to play while the glyph loops at all and the button is busy or hovered, unless Reduce
+// Motion is on. Its keyframes fade in over the rest glyph and out again; the cycle driver runs only
+// while some of them show, so an idle button schedules no frames.
+void ToolbarButton::updateLoop() {
+    const bool wanted = hasLoopingGlyph() && motionEnabled_ && isEnabled() && (busy_ || hover_.target > 0.5f);
+    retarget(loop_, wanted ? 1.0f : 0.0f, kLoopInMs, kLoopOutMs);
+    if (wanted && isShowing() && !cycle_.isRunning())
+        startLoopCycle();
+    if (!isLoopActive()) {
+        cycle_.stop(updater_);
+        loopPhase_ = 0.0f;
+    }
+}
+
+void ToolbarButton::startLoopCycle() {
+    cycle_.start(
+        updater_, kToolbarAiCycleMs, [](float t) { return t; },
+        [this](float t) {
+            loopPhase_ = t;
+            repaint();
+        },
+        [this] {
+            loopPhase_ = 0.0f;
+            if (isLoopActive() && isShowing())
+                startLoopCycle();
+        });
+}
+
+ToolbarAiFrame ToolbarButton::getLoopFrame() const {
+    if (!hasLoopingGlyph())
+        return {};
+    return toolbarAiBlend(toolbarAiRestFrame(), toolbarAiFrame(loopPhase_), loop_.value);
+}
+
+void ToolbarButton::setLoopPhaseForTest(float phase) {
+    loopPhase_ = phase;
+    repaint();
 }
 
 // A retarget runs from the CURRENT value, eases out arriving and in leaving, and lands at once when
@@ -101,6 +167,8 @@ void ToolbarButton::retarget(Fade& fade, float target, double inMs, double outMs
         [this, &fade] {
             fade.value = fade.target;
             repaint();
+            if (&fade == &loop_)
+                updateLoop(); // the keyframes are gone: stop the cycle
         });
 }
 

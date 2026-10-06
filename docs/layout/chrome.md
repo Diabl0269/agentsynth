@@ -92,6 +92,12 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
   [animation](animation.md#what-moves-and-how)); on hover the glyph lifts 1 px and does
   one small per-icon motion (Undo and Redo swing their arrow about its elbow and bounce past the
   swing before settling). Under Reduce Motion nothing moves; only the colours change.
+- **The AI button's loop.** Its glyph is a patch cable with a spark at the plug, and instead of a
+  hover motion a pulse runs along the cable and the spark blooms, 2.8 s a cycle, while the assistant
+  is working (`AIChatComponent::onWaitingChanged` drives `toggleAiPanelButton.setBusy`) and while the
+  button is hovered ([icons](icons.md#the-ai-button)). While busy the button's AX description and help
+  text read "Assistant is working"; nothing repaints when it is idle, and Reduce Motion keeps it
+  still.
 
 The art is rebuilt from the icon library's untinted originals on every `setIcon`/`refreshArt` (and
 on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint.
@@ -109,7 +115,8 @@ if (toolbarNarrowMode_ != prevNarrow)
 
 Tests: `Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp` (group colours on a dark and
 the Daylight theme, lit, disabled, captions, theme switch, body/part split, the Feedback slot) and
-`ToolbarButtonMotionTests.cpp` (hover, press and Reduce Motion through real mouse events).
+`ToolbarButtonMotionTests.cpp` (hover, press and Reduce Motion through real mouse events) and
+`ToolbarAiSparkTests.cpp` (the AI icon at rest, the keyframes, busy, hover and Reduce Motion).
 
 ### Toolbar keyboard access
 

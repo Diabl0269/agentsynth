@@ -237,6 +237,8 @@ void MainComponent::wireAiChatAndAccount() {
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
     // state changes that arrive from it (sign-in surface for the AI panel).
     aiChatComponent.setAccountService(&accountService);
+    // The AI button's cable pulses while a request is out.
+    aiChatComponent.onWaitingChanged = [this](bool waiting) { toggleAiPanelButton.setBusy(waiting); };
     accountService.attemptSilentSignIn();
 
     aiService.addListener(this);

@@ -79,10 +79,7 @@ std::array<ToolbarPartMotion, 2> toolbarIconMotion(Icon icon) {
     case Icon::ToggleMatrix: // the grid pulses
         m[0].scale = 1.12f;
         break;
-    case Icon::ToggleAI: // the spark twinkles
-        m[0].scale = 1.2f;
-        m[0].degrees = 15.0f;
-        break;
+    // The AI button has no moving part: its pulse and spark loop in code (ToolbarAiSpark.cpp).
     case Icon::TogglePanel: // the panel rises
         m[0].dy = -1.5f;
         break;
