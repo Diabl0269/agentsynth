@@ -208,8 +208,10 @@ bool CardBody::isSwappedOut(const juce::Component& widget) const {
     for (int i = 0; i < (int)plan_.items.size(); ++i) {
         const auto& item = plan_.items[(size_t)i];
         if (item.widget == &widget)
+            // An arriving control the swap motion still holds hidden keeps its cell (and its CV jack on it) too:
+            // its jack must not drop to the gutter, over the graph, for the length of the shrink.
             return (item.swapGroup >= 0 && !item.shown && plan_.isOnCard(i)) ||
-                   (plan_.isInAltGroup(i) && !plan_.isOnCard(i));
+                   (plan_.isInAltGroup(i) && !plan_.isOnCard(i)) || (plan_.isOnCard(i) && isHeldBySwap(widget));
     }
     return false;
 }

@@ -185,6 +185,37 @@ TEST(AdsrLooks, ACardSavedWithTheOldSeparateFormShowsOnlyTheActiveLookAndKeepsIt
     EXPECT_EQ(firstOverlap(rig.canvas, rig.id), "");
 }
 
+// The jacks the card draws in the gutter, where they are (card pixels).
+std::vector<std::pair<int, juce::Point<int>>> drawnJacks(CardCanvas& canvas, NodeID id) {
+    std::vector<std::pair<int, juce::Point<int>>> jacks;
+    auto* card = canvas.card(id);
+    for (int index : card->drawnInputJackIndices())
+        jacks.emplace_back(index, card->getPortCenter(index, true));
+    return jacks;
+}
+
+// A jack drawn inside the envelope graph covers it: none may sit there in any look of either layout, and the
+// Separate layout draws the very jacks the Shared one does (the stage CV jacks stay on their knobs in both looks).
+TEST(AdsrLooks, NoCvJackIsDrawnOverTheEnvelopeAndSeparateDrawsTheJacksSharedDoes) {
+    for (const bool tempo : {false, true}) {
+        Rig shared(adsrLayout(AdsrTimeTempo::Shared));
+        Rig separate(adsrLayout(AdsrTimeTempo::Separate));
+        if (tempo) {
+            flipSync(shared.canvas, shared.id, true);
+            flipSync(separate.canvas, separate.id, true);
+        }
+        auto* envelope = separate.body().findView(synth::CardView::Envelope);
+        ASSERT_NE(envelope, nullptr);
+        ASSERT_TRUE(envelope->isVisible());
+        for (const auto& [index, at] : drawnJacks(separate.canvas, separate.id))
+            EXPECT_FALSE(envelope->getBounds().contains(at)) << "jack " << index << " at " << at.x << "," << at.y
+                                                             << (tempo ? " in the Tempo look" : " in the Time look");
+        EXPECT_EQ(separate.canvas.card(separate.id)->drawnInputJackIndices(),
+                  shared.canvas.card(shared.id)->drawnInputJackIndices())
+            << (tempo ? "Tempo" : "Time");
+    }
+}
+
 // ---- The motion ---------------------------------------------------------------------------------------
 
 namespace {
@@ -260,6 +291,30 @@ TEST(AdsrLooksMotion, TheLeavingControlsShrinkThenTheArrivingOnesGrowNeverTogeth
         }
         for (const auto* id : kTimeIds)
             EXPECT_FALSE(shows(rig.canvas, rig.id, id)) << id;
+    }
+}
+
+// The Time look's four stage CV jacks stay on their knobs while the swap runs: an arriving knob is held hidden for the
+// shrink, and its jack must not drop to the gutter, where it would sit over the envelope graph.
+TEST(AdsrLooksMotion, NoCvJackIsDrawnOverTheEnvelopeAtAnyPointOfASwap) {
+    for (const auto mode : {AdsrTimeTempo::Shared, AdsrTimeTempo::Separate}) {
+        MotionRig rig(mode);
+        auto* envelope = rig.body().findView(synth::CardView::Envelope);
+        ASSERT_NE(envelope, nullptr);
+        const auto jacks = rig.canvas.card(rig.id)->drawnInputJackIndices();
+        const auto check = [&](const juce::String& when) {
+            EXPECT_EQ(rig.canvas.card(rig.id)->drawnInputJackIndices(), jacks) << (int)mode << " " << when;
+            for (const auto& [index, at] : drawnJacks(rig.canvas, rig.id))
+                EXPECT_FALSE(envelope->getBounds().contains(at))
+                    << (int)mode << " " << when << ": jack " << index << " at " << at.x << "," << at.y;
+        };
+        for (const bool tempo : {true, false, true, false}) {
+            flipSync(rig.canvas, rig.id, tempo);
+            for (const double ms : {0.0, 95.0, 189.0, 200.0, 300.0, 400.0}) {
+                rig.body().stepSwapMotionForTest(ms);
+                check((tempo ? "Tempo at " : "Time at ") + juce::String(ms) + " ms");
+            }
+        }
     }
 }
 
