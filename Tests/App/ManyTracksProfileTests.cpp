@@ -200,23 +200,37 @@ double pumpMs() {
 // The saved Load test project (docs/layout/rendering.md#the-load-test-project): open it, then duplicate its first track
 // N times through the real Cmd+D entry point, timing each step; a rising curve is the freeze the duplicate used to
 // cause.
-void profileProject(const juce::File& project, int duplicates) {
+void profileProject(const juce::File& original, int duplicates) {
+    // Work on a temporary copy without its autosave sidecars: the bench's MainComponent autosaves, and an autosave of
+    // the grown project left in the real bundle is what that bundle would reopen to.
+    const auto project =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    if (!original.copyDirectoryTo(project)) {
+        std::printf("[project] could not copy %s\n", original.getFullPathName().toRawUTF8());
+        return;
+    }
+    for (const auto& f : project.findChildFiles(juce::File::findFiles, false, "autosave*.json"))
+        f.deleteFile();
+    const struct RemoveCopy {
+        juce::File dir;
+        ~RemoveCopy() { dir.deleteRecursively(); }
+    } removeCopy{project};
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 1000);
     mc.getAudioEngine().suspendDeviceCallback();
     double t0 = nowMs();
     if (!mc.openProjectForTest(project)) {
-        std::printf("[project] could not open %s\n", project.getFullPathName().toRawUTF8());
+        std::printf("[project] could not open %s\n", original.getFullPathName().toRawUTF8());
         return;
     }
     const double openMs = nowMs() - t0;
     const double openPump = pumpMs();
     paintOnce(mc);
-    std::printf("[project] %s tracks=%d nodes=%d open=%.0f pump=%.0f\n", project.getFileName().toRawUTF8(),
+    std::printf("[project] %s tracks=%d nodes=%d open=%.0f pump=%.0f\n", original.getFileName().toRawUTF8(),
                 (int)mc.getTimelineDoc().getTracks().size(), (int)mc.getAudioEngine().getGraph().getNumNodes(), openMs,
                 openPump);
     std::fflush(stdout);
-    if (duplicates <= 0)
+    if (duplicates <= 0 || mc.getTimelineDoc().getTracks().empty())
         return;
     const auto first = mc.getTimelineDoc().getTracks().front().id;
     // TrackHeaderHost is a private base of MainComponent; the C-style cast is the header's own call path.
