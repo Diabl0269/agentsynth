@@ -104,9 +104,15 @@ juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipTex
     // the pointer instead: horizontally centred on it, 14 px below the hotspot (a typical cursor's
     // height), flipped to just above when there is no room. Measured with the SAME font
     // drawTooltip() renders with, so the fitted text never clips.
+    // A tip can span several lines (a macro lists its modules): the box is the widest line wide and
+    // one font height per line tall, so no line is clipped.
     const juce::Font font(juce::FontOptions(theme.type.label + 1.0f));
-    const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, tipText)) + 14;
-    const int h = (int)std::ceil(font.getHeight()) + 8;
+    const auto lines = juce::StringArray::fromLines(tipText);
+    float widest = 0.0f;
+    for (const auto& line : lines)
+        widest = juce::jmax(widest, juce::GlyphArrangement::getStringWidth(font, line));
+    const int w = (int)std::ceil(widest) + 14;
+    const int h = (int)std::ceil(font.getHeight()) * juce::jmax(1, lines.size()) + 8;
 
     const int x = screenPos.x - w / 2;
     const bool below = screenPos.y + 14 + h <= parentArea.getBottom();
@@ -124,7 +130,8 @@ void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, in
 
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 1.0f)));
-    g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred, 3);
+    g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred,
+                     juce::jmax(1, juce::StringArray::fromLines(text).size()));
 }
 
 void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,

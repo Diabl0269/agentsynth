@@ -618,6 +618,7 @@ add_executable(Tests
     UI/Layout/TabSwitchKeysTests.cpp
     UI/Layout/TabStripKeysTests.cpp
     UI/Layout/TextFieldKeysTests.cpp
+    UI/Layout/TooltipBoundsTests.cpp
     UI/Layout/ListBoxFocusRingTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
