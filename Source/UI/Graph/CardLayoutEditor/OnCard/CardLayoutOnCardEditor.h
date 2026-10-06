@@ -100,6 +100,12 @@ public:
     /** Animates as if on screen (the editor is not showing in a test). */
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
     int getShrinkGhostCountForTest() const noexcept { return ghosts_.size(); }
+    /** Puts every shrinking picture at progress `t` (0..1), as a frame would. */
+    void setShrinkGhostProgressForTest(float t);
+    /** Applies the added control's grow at progress `t` (0..1), as a frame would; nothing when none runs. */
+    void applyAddFrameForTest(float t);
+    /** A hidden control whose picture is still shrinking: the layout keeps it until then. */
+    bool hasPendingHideForTest() const noexcept { return !pendingHide_.isEmpty(); }
     /** The same as the debounce expiring. */
     void flushNudgeForTest() { flushNudge(); }
     /** Esc as a drag in progress sees it; false when no drag is live. */
@@ -171,7 +177,7 @@ private:
     void refreshPanel();
     void writeLayout(const CardLayout& layout);
     void editControl(const juce::String& paramId, const std::function<CardLayout(CardLayout)>& edit);
-    void hideControl(const juce::String& paramId);
+    void hideControl(juce::String paramId); ///< By value: the id can belong to an outline the hide deletes.
     juce::Rectangle<int> screenAreaOf(const CardLayoutOutline& outline) const;
 
     // ---- Add control (CardLayoutOnCardEditorAdd.cpp, ...AddDrop.cpp) -----------------------------
@@ -188,9 +194,12 @@ private:
     void dropAdded(const juce::String& paramId, juce::Point<int> at);
     void finishAdded(const juce::String& paramId, const juce::String& name);
     void fadeInControl(const juce::String& paramId);
-    void startShrinkGhost(const juce::String& paramId);
+    bool startShrinkGhost(const juce::String& paramId);
     void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell);
     void tickGhosts();
+    void writeHide(juce::String paramId);
+    void flushPendingHide();
+    void dropPendingHide();
     bool canAnimate() const { return forceAnimateForTest_ || isShowing(); }
     int editableSectionAt(int y) const;
     juce::Point<int> addedCellSize(int planSection, const juce::String& paramId) const;
@@ -257,8 +266,11 @@ private:
     std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
     ReorderFramePump addFadePump_{*this};
     std::function<void()> finishAddFade_; ///< Lands the added control's grow at once; empty when none.
+    std::function<void(float)> addFrame_; ///< The added control's grow at a progress; empty when none runs.
     ReorderFramePump ghostPump_{*this};
     juce::OwnedArray<control_motion::ShrinkGhost> ghosts_; ///< Removed controls shrinking away.
+    juce::String pendingHide_; ///< A hidden control not yet written: its picture is still shrinking.
+    std::vector<juce::Component::SafePointer<juce::Component>> pendingHideParts_; ///< Its widget and caption.
     bool forceAnimateForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CardLayoutOnCardEditor)

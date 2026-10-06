@@ -1,5 +1,5 @@
 // Concern: the macOS half of PopupMotion -- a picture of a whole native window, title bar included,
-// for the leaving ghost of a dialog.
+// for the leaving ghost of a dialog, and turning off AppKit's own show/hide animation of a popup window.
 #include <TargetConditionals.h>
 #if TARGET_OS_OSX
 
@@ -29,6 +29,20 @@ juce::Image captureNativeWindowImage(void* nativeView, int& topInset) {
 
     topInset = juce::jmax(0, (int)std::lround(bounds.size.height - window.contentView.frame.size.height));
     return juce::ImageFileFormat::loadFrom(png.bytes, (size_t)png.length);
+}
+
+// AppKit animates a popup window out by itself when it is ordered out (a fade and a slight shrink, ~200 ms).
+// PopupMotion has already faded the window by then; measured on the real app, the app window's own frames did
+// not reach the screen while AppKit's animation ran, so a control growing or shrinking behind it froze.
+void disableNativeWindowAnimation(void* nativeView) {
+    NSView* view = (__bridge NSView*)nativeView;
+    if (NSWindow* window = view.window)
+        window.animationBehavior = NSWindowAnimationBehaviorNone;
+}
+
+bool nativeWindowAnimationIsOff(void* nativeView) {
+    NSView* view = (__bridge NSView*)nativeView;
+    return view.window != nil && view.window.animationBehavior == NSWindowAnimationBehaviorNone;
 }
 
 } // namespace synth::ui

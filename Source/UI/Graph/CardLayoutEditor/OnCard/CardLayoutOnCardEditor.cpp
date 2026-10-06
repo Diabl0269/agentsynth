@@ -271,6 +271,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
         flushNudge();
     } else {
         nudgeKey_ = {};
+        dropPendingHide();
         source_->restoreOpeningLayout();
     }
     if (card_ != nullptr)

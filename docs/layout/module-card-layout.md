@@ -482,7 +482,9 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     own units) shows only for a float parameter drawn as a knob or fader: blank both clears it, one blank
     leaves that end at the parameter's own, each end is clamped to the parameter's range, and anything not a
     number or with a minimum not below the maximum is refused (the fields revert and a hint line says why).
-    **Hide from card** adds the control to `hidden` (it goes to the More row) and closes the panel. Every
+    **Hide from card** adds the control to `hidden` (it goes to the More row) and closes the panel; on screen the
+    control first shrinks away in place and only then does the card close the gap
+    ([animation](animation.md#controls-arriving-and-leaving-a-card)). Every
     change is written at once through the session's source, like a drop, so the card rebuilds and the panel
     stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
     the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it

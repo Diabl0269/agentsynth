@@ -256,6 +256,30 @@ every surface that animates a delete:
 - Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at
   once, or use their own collapse). They should reuse `ExitEnterTimeline`.
 
+### Controls arriving and leaving a card
+
+In the on-card layout editor ([editing a layout](module-card-layout.md#editing-a-layout)) a control that is added
+or hidden moves the same way: the pure numbers and the leaving picture are `synth::ui::control_motion`
+(`Source/UI/Layout/ControlMotion.h`), and `CardLayoutOnCardEditor` drives them with its `ReorderFramePump`s.
+
+- **Add:** the layout is written at once and the new control grows in from its centre (a fader along its length
+  only), 0 to 1.08 to 1 over 200 ms (`growScale`), its alpha rising with it. It is the real widget, scaled by a
+  component transform, so every frame goes through the card's cached image like any other repaint.
+- **Hide:** a picture of the control (`ShrinkGhost`, taken before anything changes) shrinks toward its centre over
+  150 ms (`shrinkScale`) while the control itself is made invisible under it, and the card keeps its layout until
+  then: nothing moves under the shrinking picture. When it has gone the hide is written and every control the
+  rebuilt card moved glides from where it stood, 200 ms (`kCloseGapMs`, through `startGlide`). Another edit, Done,
+  or the next Hide writes a hide still shrinking first (`flushNudge` runs `flushPendingHide`); Cancel drops it and the
+  control is shown again. Parts of the card that are not outlined controls (the card's own buttons, its jacks) take
+  their new place at once.
+- **Reduce Motion:** an 80 ms fade in place instead of the grow or shrink.
+- **Off-screen:** nothing is animated and the write is immediate; tests force the animated path with
+  `setForceAnimateForTest` and step it with `setShrinkGhostProgressForTest` / `applyAddFrameForTest`
+  (`OnCardControlMotionTests.cpp` paints the canvas at each step and checks the drawn size changes frame by frame).
+
+Both are usually started from a call-out (the control's panel, the Add control panel) that closes at the same time.
+That close must not use the platform's own window animation: see [Popup windows](#popup-windows).
+
 ### Drag-and-drop cursor
 
 Every place the user drags an item to move, reorder or drop it shows the grabbing-hand cursor,
@@ -354,6 +378,19 @@ plain window (menus, alerts, call-outs) is pictured with `createComponentSnapsho
 native title bar (the app's dialogs) is pictured, title bar included, from its `NSView` on macOS. A
 window deleted while still flagged visible leaves with the picture taken while it was open. A window
 that `dismiss` faded gets no picture (it already faded). `PopupMotion::getNumLeavingGhosts()` counts the pictures on screen, for tests (`PopupMotionLeaving`).
+The picture is always-on-top: when a menu closes, JUCE brings the app window to the front, and a picture at the
+normal window level was buried under it at once (the menu seemed to just disappear).
+
+A close that is itself asynchronous (a call-out's `dismiss()` only posts its hide) leaves the window faded out until
+it has really gone: the window is made whole again (alpha 1, rest position) one message-loop turn after
+`reallyClose`, never while it is still on screen. Restoring it straight after `reallyClose` flashed the call-out back
+at full opacity for a frame.
+
+On macOS the platform's own window animation is turned off for every attached window
+(`NSWindow.animationBehavior = None`, `PopupMotionMac.mm`). AppKit otherwise animated a closing call-out out a second
+time (a ~200 ms fade and shrink) after ours, and while it ran the app window's new frames did not reach the screen:
+a control growing or shrinking on the card behind the call-out froze on one frame and then jumped to the end
+(measured on the real app with a screen recording; the app itself painted every frame).
 
 **Not covered.**
 - Leaving, for a native-title window closed by JUCE itself (title-bar button) on Windows or Linux:

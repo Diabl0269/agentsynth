@@ -149,10 +149,12 @@ void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
             }
     };
     apply(0.0f);
+    addFrame_ = apply;
     const double ms = reduced ? kReducedMs : kGrowMs;
     const auto start = juce::Time::getMillisecondCounterHiRes();
     finishAddFade_ = [this, land] {
         addFadePump_.stop();
+        addFrame_ = nullptr;
         land();
     };
     addFadePump_.run(
@@ -163,6 +165,7 @@ void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
         [this, land] {
             land();
             finishAddFade_ = nullptr;
+            addFrame_ = nullptr;
         });
 }
 

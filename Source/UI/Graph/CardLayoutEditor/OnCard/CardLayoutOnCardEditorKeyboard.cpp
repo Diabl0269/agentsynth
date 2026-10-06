@@ -138,6 +138,7 @@ void CardLayoutOnCardEditor::timerCallback() { flushNudge(); }
 
 void CardLayoutOnCardEditor::flushNudge() {
     stopTimer();
+    flushPendingHide();
     if (nudgeKey_.isEmpty())
         return;
     const auto key = std::exchange(nudgeKey_, juce::String());
