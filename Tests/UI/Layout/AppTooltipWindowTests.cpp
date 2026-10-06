@@ -80,6 +80,21 @@ TEST(AppTooltipWindowTest, ATipThatGoesFadesOutOnAGhostThenIsGone) {
     EXPECT_EQ(h.childCount(), before);
 }
 
+TEST(AppTooltipWindowTest, ATipThatIsAlreadyHiddenStillFadesOutWhenItsWindowIsOnScreen) {
+    // The real app: juce hides the tip first, so the tip itself is no longer "showing" when the fade-out is asked
+    // for. Asking the tip instead of its window made every tooltip vanish in one frame.
+    ReducedMotionGuard motion(false);
+    Hosted h;
+    h.window->setAnimateOffScreenForTest(false);
+    h.window->setHostShowingForTest(true);
+    h.window->displayTip({100, 100}, "Remove this send");
+    h.window->applyFadeInFrameForTest(1.0f);
+    h.window->setLastTipForTest("Remove this send");
+    h.window->hideTip();
+    EXPECT_FALSE(h.window->isShowing());
+    EXPECT_TRUE(h.window->hasLeavingGhostForTest()) << "a copy fades out where it was";
+}
+
 TEST(AppTooltipWindowTest, ReduceMotionKeepsThePopupsPlainShortFade) {
     ReducedMotionGuard motion(true);
     Hosted h;

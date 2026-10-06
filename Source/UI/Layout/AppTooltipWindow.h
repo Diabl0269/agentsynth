@@ -43,6 +43,9 @@ public:
     /** Test seams: headless windows are never "showing", so nothing would animate; this lets a test start the fade
      *  anyway and apply frames by hand (`eased` in [0, 1], 1 lands), as a VBlank would. */
     void setAnimateOffScreenForTest(bool animate) noexcept { animateOffScreen_ = animate; }
+    /** Stands in for the window the tip lives in being on screen, while the tip itself is hidden: the state a tip is
+     *  in when juce has just hidden it and the fade-out has to start. */
+    void setHostShowingForTest(bool showing) noexcept { hostShowingForTest_ = showing; }
     void applyFadeInFrameForTest(float eased);
     bool hasLeavingGhostForTest() const noexcept;
     /** Stands in for the tip getTipFor last returned, which is the text the leaving ghost paints. */
@@ -59,6 +62,7 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     juce::String lastTip_; // what juce is (or was last) showing: the ghost paints it, since juce clears its own copy
     bool animateOffScreen_ = false;
+    bool hostShowingForTest_ = false;
     bool fadingIn_ = false;
     bool destroying_ = false;
     juce::VBlankAnimatorUpdater updater_;
