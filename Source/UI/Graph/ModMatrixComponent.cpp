@@ -359,7 +359,25 @@ void ModMatrixComponent::resized() {
     }
 }
 
-void ModMatrixComponent::timerCallback() { updateRowsFromGraph(); }
+void ModMatrixComponent::timerCallback() { updateRowsIfOpen(); }
+
+void ModMatrixComponent::updateRowsIfOpen() {
+    if (!isVisible()) {
+        staleWhileClosed_ = true;
+        // The tick also numbers same-type modules app-wide ("LFO 2"); that cheap check runs while closed too.
+        if (const int nodes = audioEngine.getGraph().getNumNodes(); nodes != namedNodeCount_) {
+            audioEngine.updateModuleNames();
+            namedNodeCount_ = nodes;
+        }
+        return;
+    }
+    updateRowsFromGraph();
+}
+
+void ModMatrixComponent::visibilityChanged() {
+    if (isVisible() && std::exchange(staleWhileClosed_, false))
+        updateRowsFromGraph();
+}
 
 void ModMatrixComponent::updateRowsFromGraph() {
     if (routingChangeDepth > 0)

@@ -67,6 +67,18 @@ bool ModDotController::routingsChanged(const std::vector<ModulationRouting>& rou
     return changed;
 }
 
+bool ModDotController::recountIfRoutingsChanged(const std::vector<ModulationRouting>& routings) {
+    if (!routingsChanged(routings))
+        return false;
+    knobSourceCounts_ = countKnobModSources(editor_, routings);
+    return true;
+}
+
+int ModDotController::knobSourceCount(juce::AudioProcessorGraph::NodeID card, int destChannel) const {
+    const auto it = knobSourceCounts_.find({card.uid, destChannel});
+    return it != knobSourceCounts_.end() ? it->second : 0;
+}
+
 void ModDotController::setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target) {
     const float current = attenuverterAmount(editor_.getAudioEngine().getGraph(), attenuverter, target);
     editor_.adjustModAmount(attenuverter, juce::jlimit(-1.0f, 1.0f, target) - current);

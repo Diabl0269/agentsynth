@@ -43,6 +43,8 @@ public:
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
+    /** A closed matrix does no work: it only notes that the graph moved on, and catches up when it opens. */
+    void visibilityChanged() override;
 
     void setFlatSourceMenu(bool shouldBeFlat);
 
@@ -100,11 +102,17 @@ private:
 
 public:
     void updateRowsFromGraph();
+    /** updateRowsFromGraph when the matrix is open; otherwise just remembers to on the next open. Every row
+     *  rebuild is work per routing (and every routing's combos list every module), so the closed matrix's 10 Hz
+     *  tick and the graph-change refresh must not pay it (docs/layout/rendering.md). */
+    void updateRowsIfOpen();
 
 private:
     int lastNodeCount = 0;
     int routingChangeDepth = 0; // > 0 while a row's routing change runs: rows are not rebuilt or freed under it
     bool clearPending = false;
+    bool staleWhileClosed_ = false;
+    int namedNodeCount_ = 0;       // node count the closed tick last numbered modules at (updateRowsIfOpen)
     size_t lastNamesSignature = 0; // hash of every module title the combos list; a rename changes it
     PickerLauncher pickerLauncher;
     int hoveredRow_ = -1;

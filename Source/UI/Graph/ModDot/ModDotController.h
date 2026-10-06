@@ -116,6 +116,14 @@ public:
      *  routing's kind, endpoints and attenuverter), so the 30 Hz tick re-syncs the dot buttons only then. */
     bool routingsChanged(const std::vector<ModulationRouting>& routings);
 
+    /** routingsChanged, and when they did, re-counts the sources on every knob from `routings`
+     *  (countKnobModSources): the tick calls it, so every card's dot sync is a lookup instead of a graph walk. */
+    bool recountIfRoutingsChanged(const std::vector<ModulationRouting>& routings);
+    /** Makes the next recountIfRoutingsChanged recount whatever the routings are (the graph changed under them). */
+    void forgetRoutings() noexcept { routingSignature_ = 0; }
+    /** The routings landing on (`card`, `destChannel`) as of the last recount. */
+    int knobSourceCount(juce::AudioProcessorGraph::NodeID card, int destChannel) const;
+
     // ---- tooltip ----
     ModDotTooltip& getTooltip() noexcept { return tooltip_; }
     void paintTooltip(juce::Graphics& g) { tooltip_.paint(g); }
@@ -147,6 +155,7 @@ private:
     std::optional<Gesture> gesture_;
     int lastAnnouncedPercent_ = 0;
     juce::uint64 routingSignature_ = 0;
+    std::map<std::pair<juce::uint32, int>, int> knobSourceCounts_;
     bool cancelled_ = false;
 
     // Hides the tooltip a moment after the last key step (a drag hides it on release).

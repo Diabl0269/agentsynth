@@ -91,6 +91,9 @@ void GraphEditor::updateComponents() {
         jassertfalse;
         return;
     }
+    // A cable edit can change which macro ports a routing is looked through without changing the routing itself,
+    // so the next tick recounts every knob's sources (ModDotController::recountIfRoutingsChanged).
+    modDot_->forgetRoutings();
     const juce::ScopedValueSetter<bool> reentrancyGuard(updatingComponents, true);
 
     auto& graph = audioEngine.getGraph();
@@ -206,7 +209,7 @@ void GraphEditor::updateComponents() {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
         if (auto* self = safeThis.getComponent())
-            self->modMatrix.updateRowsFromGraph();
+            self->modMatrix.updateRowsIfOpen();
     });
 
     // Let owners refresh anything that depends on which modules the patch now contains. Event-driven

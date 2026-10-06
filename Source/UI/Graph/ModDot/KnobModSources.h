@@ -4,7 +4,10 @@
 // dot (its tooltip, its keyboard stop) and its hover chip all name what the user patched rather than
 // the port the cable happens to enter by. docs/modules/modulation.md#drag-to-knob-modulation.
 
+#include "AudioEngine/ModulationRoutingTypes.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
+#include <utility>
 #include <vector>
 
 class GraphEditor;
@@ -26,6 +29,12 @@ struct KnobModSource {
  *  refreshes): for a caller that just edited the graph. Message thread only. */
 std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProcessorGraph::NodeID dest, int destChannel,
                                           bool fresh = false);
+
+/** How many AttenuverterChain routings land on each (destination node uid, channel), looking through macro ports
+ *  like knobModSources: every routing resolved once against one cable index, so the cost grows with the routing
+ *  count, never with routings x cards. */
+std::map<std::pair<juce::uint32, int>, int> countKnobModSources(GraphEditor& editor,
+                                                                const std::vector<ModulationRouting>& routings);
 
 /** The knob a destination channel drives, as the mod dot's menu words it. */
 struct KnobModTarget {

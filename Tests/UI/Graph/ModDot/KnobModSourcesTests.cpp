@@ -4,6 +4,7 @@
 #include "../ModMatrixCanvasHelpers.h"
 
 #include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
 #include <gtest/gtest.h>
 
@@ -47,4 +48,26 @@ TEST(KnobModSources, IsEmptyForAKnobNothingRoutesTo) {
     MatrixCanvas c(Boxed::DestInside);
     c.editor.timerCallback();
     EXPECT_TRUE(synth::ui::knobModSources(c.editor, c.filterOut, kCutoff).empty());
+}
+
+// The card's dot reads one count per knob, made once per routing change for the whole canvas; it must agree with the
+// full per-knob list, macro ports looked through, or a dot would show the wrong number of sources.
+TEST(KnobModSources, TheTickCountsAgreeWithTheListOnEveryKnob) {
+    MatrixCanvas c(Boxed::DestInside);
+    c.addRow();
+    c.pickSource(c.lfo);
+    c.pickDest(c.filterIn);
+    c.editor.timerCallback();
+
+    auto& dots = c.editor.getModDot();
+    EXPECT_EQ(dots.knobSourceCount(c.filterIn, kCutoff), 1);
+    EXPECT_EQ(dots.knobSourceCount(c.filterIn, kCutoff),
+              (int)synth::ui::knobModSources(c.editor, c.filterIn, kCutoff).size());
+    EXPECT_EQ(dots.knobSourceCount(c.filterOut, kCutoff), 0);
+
+    const auto counts = synth::ui::countKnobModSources(c.editor, c.editor.getCachedModRoutings());
+    for (const auto& [key, count] : counts)
+        EXPECT_EQ(
+            count,
+            (int)synth::ui::knobModSources(c.editor, juce::AudioProcessorGraph::NodeID(key.first), key.second).size());
 }

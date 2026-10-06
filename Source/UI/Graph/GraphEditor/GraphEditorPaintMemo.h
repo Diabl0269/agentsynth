@@ -27,10 +27,12 @@ private:
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
 };
 
-/** Counts since the last reset (test seam): borders computed, and whole-graph node scans by uuid or node id. */
+/** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id, and
+ *  whole-cable-set scans. */
 struct WorkCounters {
     int hullComputations = 0;
     int nodeScans = 0;
+    int cableScans = 0; // a ConnectionIndex built: one pass over every cable (ModMatrixEndpoints.h)
 };
 
 /** Message thread only. */

@@ -748,3 +748,47 @@ TEST_F(ModMatrixTest, DestinationLabelStillResolvesAfterGroupingSplicesAMacroPor
                                      "destination is a spliced macro port";
     EXPECT_TRUE(label.contains("Macro In")) << "label was: " << label;
 }
+
+// A closed matrix is hidden almost all the time, and every rebuild is work per routing, so its 10 Hz tick and the
+// graph-change refresh skip it; opening the matrix catches up at once.
+TEST_F(ModMatrixTest, AClosedMatrixDoesNoWorkAndCatchesUpWhenItOpens) {
+    ModMatrixComponent matrix(engine);
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.setVisible(false);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
+
+    matrix.timerCallback();
+    matrix.updateRowsIfOpen();
+    EXPECT_EQ(matrix.getNumRowsForTest(), 0) << "closed: no rows were built";
+
+    matrix.setVisible(true);
+    EXPECT_EQ(matrix.getNumRowsForTest(), 1) << "opening shows the routing added while closed";
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 2);
+    matrix.timerCallback();
+    EXPECT_EQ(matrix.getNumRowsForTest(), 2) << "open: the tick keeps it current";
+}
+
+// The canvas starts with the matrix closed, so the idle path above applies from launch, not only after a first close.
+TEST_F(ModMatrixTest, ACanvasStartsWithTheMatrixClosed) {
+    GraphEditor editor(engine);
+    EXPECT_FALSE(editor.isModMatrixVisible());
+    EXPECT_FALSE(editor.getModMatrix().isVisible());
+}
+
+// Numbering same-type modules ("LFO 2") rides on the matrix tick; a closed matrix still does it.
+TEST_F(ModMatrixTest, AClosedMatrixStillNumbersSameTypeModules) {
+    ModMatrixComponent matrix(engine);
+    matrix.setVisible(false);
+    auto& graph = engine.getGraph();
+    graph.clear();
+    auto a = graph.addNode(std::make_unique<LFOModule>());
+    auto b = graph.addNode(std::make_unique<LFOModule>());
+    matrix.timerCallback();
+    EXPECT_NE(a->getProcessor()->getName(), b->getProcessor()->getName());
+}

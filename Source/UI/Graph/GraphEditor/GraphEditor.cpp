@@ -24,7 +24,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     , undoManager(undoMgr)
     , cardKeyboard_(std::make_unique<CanvasCardKeyboard>(*this, undoMgr)) {
     addAndMakeVisible(content);
-    addAndMakeVisible(modMatrix);
+    addChildComponent(modMatrix); // closed until toggled (isMatrixVisible); a closed matrix does no work
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
     macroController_.setPaintedHullProvider([this](const juce::String& id) { return paintedMacroHullBounds(id); });
 
