@@ -25,6 +25,23 @@ struct ControlOptions {
         fullRange; ///< Set only when the Range row applies (a float shown as a knob or fader).
 };
 
+/** What a control is drawn as, apart from its size or direction: the panel's Show as lists these, and a knob's
+ *  Size and a fader's Direction are separate rows. */
+enum class WidgetKind { Auto, Knob, Fader, Toggle, Menu, Segmented, Stepper };
+
+WidgetKind widgetKindOf(CardWidget widget);
+/** "Knob", "Fader", "Toggle", "Menu", "Segmented", "Stepper". */
+juce::String widgetKindName(WidgetKind kind);
+/** The kinds `widgetChoices` offer, once each, in the order they first appear. */
+std::vector<WidgetKind> widgetKinds(const std::vector<CardWidget>& widgetChoices);
+/** The widget to draw when the user picks `kind`: `current` when it already is that kind (a large knob stays
+ *  large, a horizontal fader stays horizontal), else the first choice of that kind. */
+CardWidget widgetForKind(WidgetKind kind, CardWidget current, const std::vector<CardWidget>& widgetChoices);
+/** The knob size / fader direction switches apply when both of the pair are among the choices and
+ *  `current` is one of them. */
+bool offersKnobSize(const std::vector<CardWidget>& widgetChoices, CardWidget current);
+bool offersFaderDirection(const std::vector<CardWidget>& widgetChoices, CardWidget current);
+
 /** The panel's contents for `paramId`, or nothing when the card shows no such control. `params` is the
  *  source's parameters(), `layout` the layout the card draws now. */
 std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,

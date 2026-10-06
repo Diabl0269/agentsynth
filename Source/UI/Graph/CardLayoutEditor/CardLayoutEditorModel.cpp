@@ -55,7 +55,7 @@ juce::String cardLayoutWidgetName(CardWidget widget) {
     case CardWidget::Auto:
         return "Automatic";
     case CardWidget::Knob:
-        return "Knob";
+        return "Small knob";
     case CardWidget::KnobLarge:
         return "Large knob";
     case CardWidget::FaderV:

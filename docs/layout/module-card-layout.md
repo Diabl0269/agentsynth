@@ -70,7 +70,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The ADSR "Time and tempo" switch: the pure Shared/Separate conversion of the stages group, and the strip switch that writes it | `CardBody/DefaultLayouts/AdsrTimeTempo.*`; `OnCard/CardLayoutOnCardEditorTimeTempo.cpp` |
 | Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
-| The per-control panel (Show as, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
+| The per-control panel (Show as, Size or Direction, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
 | Snapping to guides, pushing a crowded neighbour aside and sending a pushed one home, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
 | The "Drop to hide" area under the card during a drag | `OnCard/CardLayoutHideZone.*` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
@@ -497,8 +497,15 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   - *The per-control panel (built).* Right-click, double-click or Return on a control opens one small panel
     with every option at once, in a `juce::CallOutBox` beside the control with its arrow pointing at it (so
     it never covers the control; it eases in and out like every popup, [animation.md](animation.md#popup-windows)).
-    **Show as** is a row of joined buttons (`CardSegmentedSwitch`) naming only the widgets that suit the
-    parameter (the list's `widgetChoicesFor`), hidden when there is one choice. **Label** renames the
+    **Show as** is a row of joined buttons (`CardSegmentedSwitch`) naming only the kinds of widget that suit the
+    parameter (Knob, Fader, Toggle, Menu, Segmented, Stepper; the list's `widgetChoicesFor` folded by
+    `widgetKindOf`), hidden when there is one kind. A knob also gets a **Size** row, Small | Large (`knob` or
+    `knobLarge`: the large one draws a 60 px dial in a taller cell, the small a 38 px dial), and a fader a
+    **Direction** row, Vertical | Horizontal (`faderV` or `faderH`); only the row that applies shows, between Show
+    as and Label, and a size or direction change is one undo step like any other field. A fader has no size row
+    yet: grid spans are not drawn, so a longer fader has nothing to ride on. The widget names are "Small knob",
+    "Large knob", "Vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
+    widget menu (`cardLayoutWidgetName`); never two sizes both called "Knob". **Label** renames the
     caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),
     and the full name stays as the caption's tooltip. **Range** (Minimum and Maximum, in the parameter's
     own units) shows only for a float parameter drawn as a knob or fader: blank both clears it, one blank
@@ -674,7 +681,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
   "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options"; the arrow keys
   nudge, Backspace removes the control, Esc cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
-  titled "Show as", "Label", "Minimum", "Maximum" and "Hide from card", each with a tooltip, in that Tab order
+  titled "Show as", "Size" (a knob) or "Direction" (a fader), "Label", "Minimum", "Maximum" and "Hide from card", each with a tooltip, in that Tab order
   (the text fields and buttons carry the shared accent focus ring); Esc closes it.
 - List editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
   a title and a tooltip naming its keys as bound now. Up/Down move between rows (fixed list keys);
