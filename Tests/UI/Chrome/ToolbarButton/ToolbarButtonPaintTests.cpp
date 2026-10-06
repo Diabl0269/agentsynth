@@ -48,9 +48,16 @@ void expectGroupColours(ToolbarButtonTest& t, const synth::theme::Theme& theme, 
         const auto img = t.render(b);
         EXPECT_TRUE(pixelNear(img, chipOnlyPixel(b), bg.overlaidWith(hue.withAlpha(restChipAlpha))))
             << theme.name << " chip of " << spec.caption;
-        EXPECT_TRUE(areaContains(img, iconArea(b), hue))
-            << theme.name << ": the glyph of " << spec.caption << " has no pixel in its group colour";
+        // Save is a floppy in its own colours, so its glyph carries no group colour.
+        if (spec.icon != Icon::ActionSave)
+            EXPECT_TRUE(areaContains(img, iconArea(b), hue))
+                << theme.name << ": the glyph of " << spec.caption << " has no pixel in its group colour";
     }
+}
+
+// The screen pixels covered by `r`, a rectangle in icon-grid units.
+juce::Rectangle<int> iconRect(const ToolbarButton& b, juce::Rectangle<float> r) {
+    return r.transformed(synth::theme::toolbarIconTransform(b)).getSmallestIntegerContainer();
 }
 
 } // namespace
@@ -77,6 +84,36 @@ TEST_F(ToolbarButtonTest, GroupsTakeTheirTokens) {
     EXPECT_EQ(synth::ui::toolbarGroupHue(theme(), ToolbarGroup::View), c.accent);
     EXPECT_EQ(synth::ui::toolbarGroupHue(theme(), ToolbarGroup::AI), c.hueRose);
     EXPECT_EQ(synth::ui::toolbarGroupHue(theme(), ToolbarGroup::Housekeeping), c.hueViolet);
+    EXPECT_EQ(synth::ui::toolbarGroupHue(theme(), ToolbarGroup::Feedback), c.hueGreen);
+}
+
+TEST_F(ToolbarButtonTest, SavePaintsAFloppyInItsOwnColoursOnEveryTheme) {
+    for (const auto& themeFn : {synth::theme::makeObsidian, synth::theme::makeDaylight}) {
+        useTheme(themeFn());
+        auto& b = make(Icon::ActionSave, ToolbarGroup::File, "Save");
+        const auto img = render(b);
+        EXPECT_TRUE(pixelNear(img, iconPixel(b, {5.0f, 12.0f}), juce::Colour(0xff1a1c20), 6))
+            << theme().name << ": black body";
+        EXPECT_TRUE(pixelNear(img, iconPixel(b, {9.0f, 7.0f}), juce::Colour(0xffc5cad2), 6))
+            << theme().name << ": silver shutter";
+        EXPECT_TRUE(areaContains(img, iconRect(b, {6.5f, 12.6f, 11.0f, 7.0f}), juce::Colours::white, 3))
+            << theme().name << ": white label";
+    }
+}
+
+TEST_F(ToolbarButtonTest, FeedbackIsAGreenRingWithAWhiteBubbleNotViolet) {
+    for (const auto& themeFn : {synth::theme::makeObsidian, synth::theme::makeDaylight}) {
+        useTheme(themeFn());
+        auto& b = make(Icon::ActionFeedback, ToolbarGroup::Feedback, "Feedback");
+        const auto img = render(b);
+        const auto& c = theme().colors;
+        EXPECT_TRUE(pixelNear(img, iconPixel(b, {12.0f, 1.8f}), c.hueGreen, 12)) << theme().name << ": ring";
+        EXPECT_TRUE(areaContains(img, iconRect(b, {9.0f, 9.5f, 6.0f, 1.5f}), c.hueGreen, 24))
+            << theme().name << ": lines";
+        EXPECT_TRUE(areaContains(img, iconRect(b, {6.5f, 7.6f, 11.0f, 7.0f}), c.iconPaper, 6))
+            << theme().name << ": bubble";
+        EXPECT_FALSE(areaContains(img, iconArea(b), c.hueViolet, 6)) << theme().name << ": no violet left";
+    }
 }
 
 TEST_F(ToolbarButtonTest, ALitToggleFillsItsChipAndDrawsTheGlyphInInk) {

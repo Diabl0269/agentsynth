@@ -17,11 +17,25 @@ juce::Colour toolbarGroupHue(const synth::theme::Theme& theme, ToolbarGroup grou
         return c.hueRose;
     case ToolbarGroup::Housekeeping:
         return c.hueViolet;
+    case ToolbarGroup::Feedback:
+        return c.hueGreen;
     case ToolbarGroup::View:
         break;
     }
     return c.accent;
 }
+
+namespace {
+// Undo's arrow turns about the middle of its curve: a fraction of the stroked arrow's bounds.
+constexpr float kArrowPivot = 0.607f;
+// The ease-out-back strength of the arrow's swing (about a 10 percent overshoot).
+constexpr float kArrowOvershoot = 1.70158f;
+
+float easeOutBack(float t, float strength) {
+    const float u = t - 1.0f;
+    return 1.0f + (strength + 1.0f) * u * u * u + strength * u * u;
+}
+} // namespace
 
 // One small motion per icon, each inside 2 icon units of its rest position. Distances are in the
 // 24-unit SVG grid, so they shrink with the 19 px glyph like the drawing does.
@@ -32,11 +46,15 @@ std::array<ToolbarPartMotion, 2> toolbarIconMotion(Icon icon) {
     case Icon::ThemeToggle:    // the half-moon turns
         m[0].degrees = 30.0f;
         break;
-    case Icon::ActionUndo: // swings back
+    case Icon::ActionUndo: // swings back with a small bounce, about the arrow's elbow
         m[0].degrees = -22.0f;
+        m[0].pivot = {kArrowPivot, kArrowPivot};
+        m[0].overshoot = kArrowOvershoot;
         break;
-    case Icon::ActionRedo: // swings forward
+    case Icon::ActionRedo: // the mirror image of Undo
         m[0].degrees = 22.0f;
+        m[0].pivot = {1.0f - kArrowPivot, kArrowPivot};
+        m[0].overshoot = kArrowOvershoot;
         break;
     case Icon::ActionSave: // the shutter slides
         m[0].dy = 1.5f;
@@ -47,8 +65,8 @@ std::array<ToolbarPartMotion, 2> toolbarIconMotion(Icon icon) {
     case Icon::ActionNew: // the plus grows
         m[0].scale = 1.2f;
         break;
-    case Icon::ActionFeedback: // the lines slide
-        m[0].dx = 1.5f;
+    case Icon::ActionFeedback: // the lines slide (inside the bubble, which is drawn at two thirds scale)
+        m[0].dx = 1.0f;
         break;
     case Icon::ActionAutoArrange: // the right-hand tiles part
         m[0].dy = -1.5f;
@@ -78,8 +96,10 @@ std::array<ToolbarPartMotion, 2> toolbarIconMotion(Icon icon) {
     return m;
 }
 
-juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce::Rectangle<float> partBounds,
-                                           float t) {
+juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce::Rectangle<float> partBounds, float t,
+                                           bool arriving) {
+    if (arriving && motion.overshoot > 0.0f)
+        t = easeOutBack(t, motion.overshoot);
     const auto pivot = partBounds.getRelativePoint(motion.pivot.x, motion.pivot.y);
     const float scale = 1.0f + (motion.scale - 1.0f) * t;
     return juce::AffineTransform::scale(scale, scale, pivot.x, pivot.y)

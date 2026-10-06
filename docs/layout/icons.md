@@ -129,6 +129,11 @@ role in a fixed placeholder colour, which `IconLibrary::createRecoloured(id, Ico
 | ink | `#00FFFF` (`kRoleInk`) | `iconInk` |
 | paper | `#FFFF00` (`kRolePaper`) | `iconPaper` |
 
+A colour that is not one of the four placeholders is left exactly as the SVG wrote it, so an icon
+can mix role colours with fixed ones. `ActionSave` is drawn entirely in fixed colours (the floppy's
+black, silver and white, with the "Agent / Synth" label as outlines); `ActionFeedback` uses the
+colour, soft and paper roles only, and the top bar gives it its own green group.
+
 The recolour is one pass over every fill and stroke that classifies a colour before writing it, so
 a role colour that equals another placeholder is never mapped twice, and any extra opacity a shape
 has (Save's shutter is paper at 70 percent) carries over. It always starts from the untinted

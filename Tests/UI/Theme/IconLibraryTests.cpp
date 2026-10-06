@@ -409,7 +409,8 @@ TEST(IconLibraryTest, RoleRecolourMapsEveryPlaceholder) {
             EXPECT_FALSE(isPlaceholder(c)) << "icon " << (int)icon << " kept " << c.toDisplayString(true);
             hasHue |= (c.getARGB() | 0xff000000u) == (roles.hue.getARGB() | 0xff000000u);
         }
-        EXPECT_TRUE(hasHue) << "icon " << (int)icon << " has no colour-role shape";
+        // Save is the floppy in its own fixed colours.
+        EXPECT_TRUE(hasHue || icon == Icon::ActionSave) << "icon " << (int)icon << " has no colour-role shape";
     }
 }
 
