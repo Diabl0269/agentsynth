@@ -809,6 +809,7 @@ which closes it; in the on-card editor Escape ends a drag, else cancels the sess
 | Return | Return | Rename the Control (`layoutEditorRename`), or the focused group's title |
 | Left / Right / Up / Down | Left / Right / Up / Down | Nudge the Control 1 pixel on the card (`layoutEditorNudgeLeft`, `layoutEditorNudgeRight`, `layoutEditorNudgeUp`, `layoutEditorNudgeDown`) |
 | Shift+Left / Right / Up / Down | Shift+Left / Right / Up / Down | Nudge the Control 8 pixels (`layoutEditorNudgeLeftBig`, `layoutEditorNudgeRightBig`, `layoutEditorNudgeUpBig`, `layoutEditorNudgeDownBig`) |
+| Backspace (also Delete) | Backspace (also Delete) | Remove the Control from the Card (`layoutEditorRemoveControl`), on the on-card editor's focused control: the same as Hide from card, one undo step |
 
 ## Command vs surface actions
 
@@ -826,7 +827,7 @@ doesn't this key do anything":
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven
-  clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the twelve `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the thirteen `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

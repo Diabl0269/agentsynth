@@ -129,10 +129,12 @@ TEST(OnCardTimeTempo, CancelRestoresTheOpeningLayoutAndRecordsNothing) {
     editor->getEditBarForTest().getCancelButton().onClick();
     EXPECT_FALSE(rig.storedLayout(id).has_value());
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Shared);
-    EXPECT_FALSE(rig.canvas.undo.canUndo());
+    ASSERT_TRUE(rig.canvas.undo.canUndo()) << "the cancel is one more step";
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Separate) << "which brings the switch back";
 }
 
-TEST(OnCardTimeTempo, DoneKeepsItAsOneUndoStep) {
+TEST(OnCardTimeTempo, DoneKeepsEachSwitchAsItsOwnUndoStep) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<ADSRModule>());
     auto* editor = rig.openOnCard(id);
@@ -143,10 +145,13 @@ TEST(OnCardTimeTempo, DoneKeepsItAsOneUndoStep) {
     editor->getEditBarForTest().getDoneButton().onClick();
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Separate);
 
-    ASSERT_TRUE(rig.canvas.undo.canUndo());
-    EXPECT_TRUE(rig.canvas.undo.undo());
-    EXPECT_FALSE(rig.canvas.undo.canUndo()) << "the whole session was one step";
+    ASSERT_TRUE(rig.canvas.undo.undo());
     EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Shared);
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Separate);
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    EXPECT_EQ(modeOf(rig, id), AdsrTimeTempo::Shared);
+    EXPECT_FALSE(rig.canvas.undo.canUndo()) << "three switches, three steps";
 }
 
 TEST(OnCardTimeTempo, AnOpenSessionOnACardAlreadySeparateShowsSeparate) {

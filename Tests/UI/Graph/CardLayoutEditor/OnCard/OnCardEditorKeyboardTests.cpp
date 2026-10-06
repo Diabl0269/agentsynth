@@ -108,3 +108,50 @@ TEST(OnCardEditorKeyboard, TheNudgeKeysAreRebindableActionsBoundToTheArrowsByDef
     EXPECT_EQ(shortcuts.getBinding("layoutEditorNudgeRightBig"),
               juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0));
 }
+
+TEST(OnCardEditorKeyboard, BackspaceRemovesTheFocusedControlLikeHideFromCardAndUndoBringsItBack) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    ASSERT_NE(editor->getOutlineForTest("drive"), nullptr);
+
+    EXPECT_TRUE(press(*editor, "drive", juce::KeyPress::backspaceKey));
+    ASSERT_TRUE(rig.storedLayout(id).has_value());
+    EXPECT_TRUE(rig.storedLayout(id)->hidden.contains("drive"));
+    EXPECT_EQ(editor->getOutlineForTest("drive"), nullptr) << "it left the card";
+    EXPECT_FALSE(widgetOf(*rig.card(id), "drive")->isVisible());
+    EXPECT_EQ(editor->getLastAnnouncementForTest(), "Drive removed");
+
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    editor->runQueuedSyncForTest();
+    EXPECT_FALSE(rig.storedLayout(id).has_value()) << "one Cmd+Z puts it back";
+    EXPECT_NE(editor->getOutlineForTest("drive"), nullptr);
+    EXPECT_TRUE(widgetOf(*rig.card(id), "drive")->isVisible());
+}
+
+TEST(OnCardEditorKeyboard, ForwardDeleteRemovesToo) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    EXPECT_TRUE(press(*editor, "resonance", juce::KeyPress::deleteKey));
+    EXPECT_TRUE(rig.storedLayout(id)->hidden.contains("resonance"));
+}
+
+TEST(OnCardEditorKeyboard, ABackspaceWithCommandHeldIsLeftAlone) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    EXPECT_FALSE(press(*editor, "drive", juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier));
+    EXPECT_FALSE(rig.storedLayout(id).has_value());
+}
+
+TEST(OnCardEditorKeyboard, RemoveControlIsARebindableActionBoundToBackspace) {
+    ShortcutManager shortcuts;
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(shortcuts.getBinding("layoutEditorRemoveControl"),
+                                                 juce::KeyPress(juce::KeyPress::backspaceKey)));
+    EXPECT_NE(ShortcutManager::getActionDescription("layoutEditorRemoveControl"),
+              juce::String("layoutEditorRemoveControl"));
+}

@@ -103,9 +103,11 @@ TEST(OnCardScope, ChoosingAllWritesTheTypeDefaultClearsThisOverrideAndEveryLater
 
     const int serial = rig.canvas.undo.getEditSerial();
     editor->done();
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial + 1) << "the override write and its clearing: one step";
-    ASSERT_TRUE(rig.canvas.undo.undo());
+    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial) << "closing records nothing of its own";
+    ASSERT_TRUE(rig.canvas.undo.undo()); // the Apply to all step: clearing the override
     ASSERT_TRUE(rig.storedLayout(first).has_value()) << "undo gives this module its own layout back";
+    ASSERT_TRUE(rig.canvas.undo.undo()); // the hide before it
+    ASSERT_TRUE(rig.storedLayout(first).has_value());
     EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(widgetOf(*rig.card(first), "outputLevel")), nullptr);
     EXPECT_TRUE(rig.card(second)->getCardBody()->hasMoreRow()) << "the type's default file is a setting: it stays";
 
@@ -144,7 +146,6 @@ TEST(OnCardScope, CancelAfterApplyToAllPutsTheTypesDefaultBackToo) {
     EXPECT_NE(rig.store.loadDefault("Filter").status, synth::ModuleCardLayoutStore::LoadStatus::Ok);
     EXPECT_FALSE(rig.card(id)->getCardBody()->hasMoreRow());
     EXPECT_FALSE(rig.card(other)->getCardBody()->hasMoreRow());
-    EXPECT_FALSE(rig.canvas.undo.canUndo());
 }
 
 TEST(OnCardScope, SavingAPresetThenLoadingItRestoresTheLayoutAndTicksTheOneInUse) {
@@ -219,7 +220,7 @@ TEST(OnCardScope, APresetSavedThroughTheSourceCanBeListedAndDeleted) {
     EXPECT_FALSE(source.listPresets().contains("Mine"));
 }
 
-TEST(OnCardScope, AWholeSessionOfAddScopeAndPresetIsOneUndoStep) {
+TEST(OnCardScope, HideAddAndPresetLoadAreEachTheirOwnUndoStep) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     const int heightBefore = rig.card(id)->getHeight();
@@ -232,12 +233,14 @@ TEST(OnCardScope, AWholeSessionOfAddScopeAndPresetIsOneUndoStep) {
     ASSERT_NE(panel, nullptr);
     clickRow(*panel->getRowForTest("drive"));
     choose(editor->buildPresetMenuForTest(), "No drive");
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial) << "nothing is recorded while the editor is open";
+    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial + 3) << "the hide, the add and the load, each as made";
 
     editor->done();
-    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial + 1) << "closing records the session once";
+    EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial + 3) << "closing records nothing of its own";
     ASSERT_TRUE(rig.canvas.undo.undo());
-    EXPECT_FALSE(rig.storedLayout(id).has_value()) << "one undo takes every edit of the session back";
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    EXPECT_FALSE(rig.storedLayout(id).has_value()) << "three undos take every edit back";
     EXPECT_EQ(rig.card(id)->getHeight(), heightBefore);
     EXPECT_FALSE(rig.canvas.undo.canUndo());
 }

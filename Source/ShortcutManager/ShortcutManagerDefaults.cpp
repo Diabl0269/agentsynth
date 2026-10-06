@@ -463,4 +463,7 @@ void ShortcutManager::addLayoutEditorDefaultBindings() {
     bindings["layoutEditorNudgeRightBig"] = arrow(juce::KeyPress::rightKey, true);
     bindings["layoutEditorNudgeUpBig"] = arrow(juce::KeyPress::upKey, true);
     bindings["layoutEditorNudgeDownBig"] = arrow(juce::KeyPress::downKey, true);
+    // Backspace takes the focused control off the card, as "Hide from card" does (Delete does too, unbound).
+    bindings["layoutEditorRemoveControl"] =
+        juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::noModifiers, 0);
 }

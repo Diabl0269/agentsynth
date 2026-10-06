@@ -433,7 +433,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   **Apply to**, **Cancel**, **Done**), and under the card a strip with a **+ Add control** button; on an ADSR, Amp Env or Filter Env card
   that strip also holds a "Time and tempo" switch with **Shared** and **Separate** segments, left of Add control
   (it shows only while the layout still has its stages) and rewrites the stages group at once,
-  like any other edit of the session, so Cancel undoes it. Every control
+  like any other edit of the session, so Cancel undoes it, and it is one undo step. Every control
   of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
   outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
   outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
@@ -463,7 +463,9 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     the focused control 1 px, Shift+arrow 8 px; the control moves at once and the write waits until the
     keys stop for 250 ms, so a held arrow is one write. These are the rebindable **Layout Editor** actions
     `layoutEditorNudgeLeft`/`Right`/`Up`/`Down` and `...Big` ([shortcuts.md](../control/shortcuts.md#layout-editor)).
-    Esc ends a drag, else cancels the session. Return on a control opens its options panel (below). Each move is announced ("Cutoff moved right 8").
+    Backspace (or Delete) removes the focused control, as the panel's Hide from card does (any outlined control,
+    panel-only ones too; `layoutEditorRemoveControl`, rebindable): it shrinks away, goes to the More row, is announced
+    ("Cutoff removed") and is one undo step. Esc ends a drag, else cancels the session. Return on a control opens its options panel (below). Each move is announced ("Cutoff moved right 8").
   - *Ending.* **Done** keeps the layout; **Cancel** or Esc writes back the layout the card opened with
     (the node's raw stored value, or none) and records nothing. The editor also closes if its card's
     module is removed or the canvas goes. One session at a time: opening it on another card ends the
@@ -484,7 +486,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     change is written at once through the session's source, like a drop, so the card rebuilds and the panel
     stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
     the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it
-    when the session ends or the control leaves the card; all of it stays inside the session's one undo step.
+    when the session ends or the control leaves the card; each field's change is its own undo step.
   - *Apply to (built).* The bar's **Apply to** opens a menu: **This module** and **All <Type> modules**, the
     one in force ticked, and a disabled note under them saying how many cards a write changes now ("Changes
     1 card", "Changes 2 cards": the GraphEditor's cards of that module type). Choosing **All** writes the
@@ -531,7 +533,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
       Up and Down announce the chosen row ("Drive, 1 of 2").
   - *Footer and tab controls (built, panel only).* The footer's controls and the selected tab's controls get
     an outline too, with the same dashed look and focus ring, but no grip: they cannot be dragged or nudged
-    (a press does nothing, the arrow keys are left alone), so the tooltip is "Right-click for options" and
+    (a press does nothing, the arrow keys are left alone), so the tooltip is "Backspace removes. Right-click for options" and
     the accessible title is "<name>, layout: Return for options". Right-click, double-click or Return opens
     the same per-control panel (Show as, Label, Range, Hide from card), and Hide, Label and the rest write
     through the same layout edit; a control the footer draws by itself (the Poly toggle) is listed in the
@@ -567,13 +569,18 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   too. The hosted source has no groups and no widget choice, and an unticked row leaves its layout
   (it lists after the ticked ones), as before. The on-card editor writes through the built-in source too
   (it adds `restoreOpeningLayout()` for Cancel).
-- **Undo:** one step per quick-path click, and one per on-card editor session on a built-in card (adds, scope changes and presets included): the
-  session takes a graph snapshot when it opens and records the difference when it closes
-  (`AppUndoManager::recordGraphChangeSince`), so the layout, its label and widget edits and the
-  neighbours a taller card pushed aside undo together. **Apply to all** writes the per-type file and
-  clears this module's override inside that same step; undo gives the override back, but the per-type
-  file is a setting, not part of the project, and stays. A session that changes nothing records
-  nothing, and a cancelled on-card session leaves the layout as it opened, so it records nothing.
+- **Undo:** one step per quick-path click, and one per change made in the on-card editor of a built-in card (a
+  drop, a settled nudge, a panel edit, an add or hide, a preset, a reset, an Apply to, a Time and tempo switch):
+  each write records the graph before against the graph after (`AppUndoManager::recordGraphChangeSince`, the
+  "before" taken at the write), so the layout, its label and widget edits and the neighbours a taller card
+  pushed aside undo together, and Cmd+Z while the editor is open steps back one change, never the earlier
+  work on the canvas first. Cmd+Z and Cmd+Shift+Z are the app's: the overlay leaves them to bubble (a nudge
+  still waiting is written first, as its own step) and re-syncs to the card the restore rebuilds, writing
+  nothing; undoing past the module's own creation closes the editor with the card. The controls glide from where they were to the restored place and a control that comes or goes grows in or shrinks out ([animation.md](animation.md#undo-and-redo-glide)). **Apply to all** writes the
+  per-type file and clears this module's override inside its step; undo gives the override back, but the
+  per-type file is a setting, not part of the project, and stays. A write that changes nothing records
+  nothing. Cancel puts the opening layout back as one more step (when it differs), so Cmd+Z after Cancel
+  brings the cancelled edits back.
   The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
 - **Later:** the list's built-in-only parts (groups, widget choice, tab rows, unticked rows staying in place) have no
   entry point now and can go once nothing needs them.
@@ -636,8 +643,8 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - On-card editor (built): the edit bar's Cancel and Done are named by their text with tooltips; each
   control's outline is one focus stop (the shared accent focus ring, a faint wash and a solid outline on
   hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
-  "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options"; the arrow keys nudge, Esc
-  cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
+  "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options"; the arrow keys
+  nudge, Backspace removes the control, Esc cancels, and each move is announced. The per-control panel is titled "<caption> options"; its fields are
   titled "Show as", "Label", "Minimum", "Maximum" and "Hide from card", each with a tooltip, in that Tab order
   (the text fields and buttons carry the shared accent focus ring); Esc closes it.
 - List editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
@@ -706,8 +713,8 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - `Tests/UI/Graph/CardLayoutEditor/` (built): `CardLayoutEditorBuiltInTests.cpp` opens the editor
   through the real right-click path (a control's menu and the module menu) and covers tick, rename,
   widget choice (only suitable kinds), + Add group with a header row on the card and measure == apply,
-  a real drag across a group header, search, one undo step per session (and none for a session that
-  changes nothing), Apply to all clearing the override in that step with another Filter re-laid out,
+  a real drag across a group header, search, one undo step per change (and none for a session that
+  changes nothing), Apply to all clearing the override in its step with another Filter re-laid out,
   a per-type default written elsewhere rebuilding only that type's cards, presets and reset;
   `CardLayoutEditorKeyboardTests.cpp` a keyboard-only session, the rebindable keys and the
   accessibility audit with no gaps; `CardLayoutEditorModelTests.cpp` the working model in both modes.
@@ -720,8 +727,9 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
   the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
-  nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done as
-  one undo step, Cancel restoring the opening layout with none. Motion is off in them
+  nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
+  step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
+  module add, and the glide back). Motion is off in them
   (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.
 - E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make
   Level a fader, save (`graphToJSON`), reload into a fresh canvas (`applyJSONToGraph`, trusted), and

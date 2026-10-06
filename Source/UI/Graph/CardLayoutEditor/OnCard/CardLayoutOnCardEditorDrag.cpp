@@ -200,7 +200,7 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
 // From where every cell stood to where it is now: the pushed ones glide aside, the dropped one settles.
 // Nothing slides under Reduce Motion or with nothing on screen.
 void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
-    if (closing_ || closed_ || !isShowing() || prefersReducedMotion())
+    if (closing_ || closed_ || !canAnimate() || prefersReducedMotion())
         return;
     std::erase_if(moves, [this](const Move& m) { return m.from == m.to || indexOfCell(m.key) < 0; });
     if (moves.empty())

@@ -45,8 +45,9 @@ TEST(OnCardEditor, EditLayoutFromTheModuleMenuOpensOverTheCardWithAnOutlinePerCo
                   cardlayouteditor_test::captionOf(*card, paramId) +
                       (panelOnly ? ", layout: Return for options" : ", layout: drag to move, Return for options"));
         EXPECT_EQ(outline->getTooltip(),
-                  panelOnly ? "Right-click for options"
-                            : "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
+                  panelOnly
+                      ? "Backspace removes. Right-click for options"
+                      : "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options");
         EXPECT_TRUE(outline->getWantsKeyboardFocus());
     }
     for (const auto* id2 : {"cutoff", "resonance", "drive", "outputLevel"})

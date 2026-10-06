@@ -213,6 +213,12 @@ path); nothing else needs to know.
   that frees a node does, e.g. the macro port a take-out created): so a module that moved between a macro and the root
   glides back and forth with its cables. A card for a node the restore creates grows in, and one it removes shrinks away
   ([delete and undo animation](#delete-and-undo-animation)); a project load never goes through `undo()` and so never glides.
+- **Edit Layout controls.** While the on-card layout editor is open, the card an undo or redo rebuilds gives the
+  editor's controls the same treatment: `CardLayoutOnCardEditor` remembers each cell's rect before the re-sync and
+  glides every control whose rect changed from there to the restored place (`startGlide`, 160 ms `easeOutCubic`, the
+  geometry final at once). A control the restore brings back grows in (`fadeInControl`) and one it takes away shrinks
+  out (`startShrinkGhostOf`, from a picture of the card taken at the previous re-sync). Nothing glides under Reduce
+  Motion or off screen.
 - **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to
   `GraphEditor::glideHullsFrom` after it, so the border a take-out or join moved glides (220 ms, `MacroHullGlide`) back
   to where it was, like it glided out.

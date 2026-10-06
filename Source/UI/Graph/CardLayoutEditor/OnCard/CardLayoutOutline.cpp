@@ -37,8 +37,9 @@ void CardLayoutOutline::setCell(juce::Rectangle<int> cell) { setBounds(cell.expa
 void CardLayoutOutline::setCaption(const juce::String& caption) {
     caption_ = caption;
     setTitle(caption + (panelOnly_ ? ", layout: Return for options" : ", layout: drag to move, Return for options"));
-    setTooltip(panelOnly_ ? "Right-click for options"
-                          : "Drag to move (arrow keys nudge, Shift for 8px). Right-click for options");
+    setTooltip(panelOnly_
+                   ? "Backspace removes. Right-click for options"
+                   : "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options");
 }
 
 void CardLayoutOutline::setPanelOnly(bool panelOnly) {

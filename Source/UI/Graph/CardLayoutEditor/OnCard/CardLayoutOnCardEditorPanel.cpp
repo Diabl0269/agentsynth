@@ -150,16 +150,20 @@ void CardLayoutOnCardEditor::hideControl(const juce::String& paramId) {
 // The removed control shrinks away where it was: a ghost of the card's picture of it (150 ms, backwards what
 // adding does), gone when it has shrunk. Nothing on screen, nothing to animate.
 void CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
-    using namespace control_motion;
     const int cell = indexOfCell(paramId);
     if (cell < 0 || card_ == nullptr || !canAnimate() || animationsOff())
         return;
     const auto rect = cells_[(size_t)cell].rect;
-    auto image = card_->createComponentSnapshot(rect, true, 2.0f);
-    if (image.isNull())
+    startShrinkGhostOf(card_->createComponentSnapshot(rect, true, 2.0f), rect);
+}
+
+// The same, from `image`, the card's picture of the cell at 2x. An undo uses it: it only finds out a control is
+// gone once the card has been rebuilt without it.
+void CardLayoutOnCardEditor::startShrinkGhostOf(juce::Image image, juce::Rectangle<int> rect) {
+    using namespace control_motion;
+    if (card_ == nullptr || !canAnimate() || image.isNull())
         return;
-    auto* ghost =
-        ghosts_.add(new ShrinkGhost(std::move(image), {}, axisFor(cells_[(size_t)cell].rect), prefersReducedMotion()));
+    auto* ghost = ghosts_.add(new ShrinkGhost(std::move(image), {}, axisFor(rect), prefersReducedMotion()));
     ghost->setBounds(rect.withPosition(getLocalPoint(card_, rect.getPosition())));
     addAndMakeVisible(ghost);
     ghost->toBack();
