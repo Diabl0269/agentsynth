@@ -6,6 +6,7 @@
 #include "CardBody.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyMoreButton.h"
+#include "CardBodySwapMotion.h"
 #include "CardBodyViews.h"
 #include "CardLayoutOverride.h"
 #include "ModuleCardLayoutResolver.h"
@@ -96,8 +97,6 @@ CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const st
     , module_(module)
     , plan_(CardBodyPlan::forModule(module, layout, dimRules))
     , layout_(layout) {}
-
-CardBody::~CardBody() { *widgetsAlive_ = false; }
 
 // The layout chain (docs/layout/module-card-layout.md#where-a-layout-comes-from): the node's own
 // override, then the type's stored default in `store` (the app binds one per GraphEditor,

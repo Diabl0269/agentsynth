@@ -12,6 +12,7 @@ namespace synth {
 
 class CardMoreButton;
 class ModuleCardLayoutStore;
+class SwapMotion;
 
 /**
  * Owns the parameter widgets, captions, attachments and views of a built-in module's card body: it
@@ -63,6 +64,23 @@ public:
     void applyDimHints();
     /** Runs a condition re-read a parameter change queued, if any, now. Message thread only. */
     void flushPendingConditionUpdate() { handleUpdateNowIfNeeded(); }
+    /** Runs after a re-read changed what the card shows, and again once a swap's motion has landed (the
+     *  on-card layout editor re-reads its outlines). */
+    std::function<void()> onConditionsApplied;
+
+    // ---- Swap motion (CardBodySwapMotion.cpp) ------------------------------------------------------
+    /** A swap of controls in place (a Sync flip) shrinks the leaving ones, THEN grows the arriving ones; the
+     *  card keeps its size and Reduce Motion swaps at once. Runs only while the card is showing. */
+    bool isSwapMotionRunning() const;
+    /** Lands a running swap motion at once. */
+    void finishSwapMotion();
+    /** True while `component` is an arriving control the swap motion keeps hidden. */
+    bool isHeldBySwap(const juce::Component& component) const;
+    /** Test seams: run the motion as if the card were showing, step it to `elapsedMs` into it, and read where
+     *  the shrinking pictures are now (card pixels). */
+    void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+    void stepSwapMotionForTest(double elapsedMs);
+    std::vector<juce::Rectangle<float>> swapGhostRectsForTest() const;
 
     // ---- Lookup ----------------------------------------------------------------------------------
     /** The widget bound to `paramId`, or null. */
@@ -128,6 +146,19 @@ private:
     void createTabStrips();
     void createMoreButton();
     void applyVisibility();
+    bool canAnimateSwap() const;
+    bool isSwapGoverned(int item) const;
+    struct SwapSnapshot {
+        struct Part {
+            int item;
+            juce::Rectangle<int> rect;
+            juce::Image image;
+        };
+        std::vector<Part> shown;
+    };
+    SwapSnapshot snapshotForSwap() const;
+    void pictureLeavingControls(SwapSnapshot& snapshot) const;
+    void startSwapMotion(SwapSnapshot& snapshot);
     void styleFooterItems();
     void startWatchingConditions();
     void stopWatchingConditions(bool processorAlive);
@@ -146,6 +177,8 @@ private:
     int builtFromRevision_ = 0;
     bool moreUnfolded_ = false;
     bool dimHintsReady_ = false;
+    bool forceAnimateForTest_ = false;
+    std::unique_ptr<SwapMotion> swap_;
     std::vector<juce::RangedAudioParameter*> watched_; ///< Parameters this body listens to; empty once released.
 
     // Widgets before attachments: members unwind in reverse, so an attachment never outlives its widget.

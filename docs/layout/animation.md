@@ -235,6 +235,21 @@ path); nothing else needs to know.
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.
 
+### Controls swapping in place
+
+When a condition on a card changes which controls show in a cell (the ADSR's Sync flipping each stage between its
+time and its note division, or Time look for Tempo look), the card keeps its size and the controls swap in two
+steps that never overlap in a frame: the leaving controls shrink to their centre over 190 ms
+(`control_motion::kSwapShrinkMs`, a picture of each shrinking as `ShrinkGhost`, `easeInCubic`), THEN the arriving
+ones grow from their centre with the 8% bounce (`kGrowMs`, `growScale`). While the shrink runs the arriving
+controls are held hidden (`CardBody::isHeldBySwap`, honoured by `applyVisibility`). `SwapMotion`
+(`CardBodySwapMotion.cpp`) runs it from a VBlank pump on the card; `CardBody::refreshConditions` pictures what
+leaves before the card re-lays out and starts it after, and skips it when the card changed height (a mode switch the
+card makes whole). Under Reduce Motion, with Animations off, or while the card is not showing, the swap is
+instant. A second flip lands the first at once. The on-card layout editor re-reads its outlines when the swap
+starts and again when it has landed (`CardBody::onConditionsApplied`). Tests step the motion by hand
+(`CardBody::setForceAnimateForTest`, `stepSwapMotionForTest`).
+
 ### Delete and undo animation
 
 Deleting a canvas card shrinks it away and Cmd+Z grows it back. The model change (delete, undo, redo) is still
@@ -436,6 +451,8 @@ shortcut.
   (160 ms in, 110 ms out); on hover its glyph lifts 1 px and does one small per-icon motion, never
   more than 2 icon units from rest. Under Reduce Motion nothing moves and only the colours change:
   [What moves, and how](#what-moves-and-how).
+- **Swapping controls.** Controls that swap in a cell (a Sync flip) shrink out over 190 ms, then the arriving ones
+  grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
 - **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its

@@ -104,20 +104,31 @@ void placeCell(const OnCardCell& cell, juce::Point<int> topLeft) {
 
 CardLayout withCellPositions(CardLayout layout, const std::vector<OnCardCell>& cells,
                              const std::vector<OnCardView>& views, int contentX, int top) {
-    std::map<juce::String, juce::Point<int>> positions;
+    struct Placed {
+        juce::Point<int> at;
+        int planSection;
+    };
+    std::map<juce::String, Placed> positions;
     for (const auto& cell : cells)
         for (const auto& id : cell.paramIds)
-            positions[id] = {cell.rect.getX() - contentX, cell.rect.getY() - top};
-    for (auto& section : layout.sections)
+            positions[id] = {{cell.rect.getX() - contentX, cell.rect.getY() - top}, cell.section};
+    int planSection = 0; // the footer comes last in the plan whatever its place in the layout
+    for (auto& section : layout.sections) {
+        const int thisSection = section.id == CardSection::kFooterId ? -1 : planSection++;
         for (auto& item : section.items)
             if (auto* param = std::get_if<CardParamItem>(&item)) {
-                if (const auto found = positions.find(param->paramId); found != positions.end())
-                    param->at = found->second;
+                // A parameter named in two looks of a card (the ADSR's Sustain) has a place in each; only the
+                // look the cell was dragged in is written.
+                if (const auto found = positions.find(param->paramId);
+                    found != positions.end() &&
+                    (found->second.planSection < 0 || found->second.planSection == thisSection))
+                    param->at = found->second.at;
             } else if (auto* view = std::get_if<CardViewItem>(&item)) {
                 for (const auto& shown : views)
                     if (shown.view == view->view)
                         view->at = juce::Point<int>(shown.rect.getX() - contentX, shown.rect.getY() - top);
             }
+    }
     return layout;
 }
 

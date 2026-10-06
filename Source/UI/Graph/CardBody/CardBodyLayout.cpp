@@ -183,12 +183,12 @@ juce::Rectangle<int> naturalCellSize(const CardBodyPlan& plan, juce::AudioProces
     return {g.contentW, factory != nullptr && view.open ? factory->preferredHeight(module) : 0};
 }
 
-std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell) {
+std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell, int section) {
     if (cell.group < 0)
-        return cell.item >= 0 ? plan.items[(size_t)cell.item].at : std::nullopt;
+        return cell.item >= 0 ? plan.atIn(cell.item, section) : std::nullopt;
     for (int member : plan.swapGroups[(size_t)cell.group].members)
-        if (plan.items[(size_t)member].at.has_value())
-            return plan.items[(size_t)member].at;
+        if (const auto at = plan.atIn(member, section))
+            return at;
     return std::nullopt;
 }
 
@@ -211,8 +211,10 @@ int layoutFreeSection(const CardBodyPlan& plan, juce::AudioProcessor& module, co
                       int top, const cardbody::BodyGeometry& g, bool apply) {
     std::vector<FreeCell> positioned;
     std::vector<FreeCell> flowing;
+    const int sectionIndex = (int)(&section - plan.sections.data());
     for (const auto& cell : cellsOf(plan, section.items, true)) {
-        FreeCell free{cell, naturalCellSize(plan, module, cell, section.columns, g), positionOf(plan, cell)};
+        FreeCell free{cell, naturalCellSize(plan, module, cell, section.columns, g),
+                      positionOf(plan, cell, sectionIndex)};
         if (free.size.isEmpty())
             continue;
         (free.at ? positioned : flowing).push_back(free);
@@ -270,6 +272,38 @@ int layoutTabGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, const
     return y + tallest;
 }
 
+// One section: its header row (a titled one), then its cells; `cellTop` and `cellBottom` are written when placing.
+int layoutOneSection(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::Section& section,
+                     int y, const cardbody::BodyGeometry& g, bool apply) {
+    if (section.hasHeader()) {
+        if (apply && section.header != nullptr)
+            section.header->setBounds(g.contentX, y, g.contentW, cardbody::kSectionHeaderHeight);
+        y += cardbody::kSectionHeaderHeight;
+    }
+    if (apply)
+        section.cellTop = y;
+    y = layoutSectionCells(plan, module, section, y, g, apply);
+    if (apply)
+        section.cellBottom = y;
+    return y;
+}
+
+// An alternative group (the ADSR's Time and Tempo looks): every member is measured from the same y and the
+// group takes the tallest, so the card keeps one size whichever look is shown; only the first member that
+// holds is placed. A member that is not shown keeps the bounds it had.
+int layoutAltGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::AltGroup& group, int y,
+                   const cardbody::BodyGeometry& g, bool apply) {
+    int tallest = 0;
+    bool placed = false;
+    for (int s : group.sections) {
+        const auto& section = plan.sections[(size_t)s];
+        const bool place = apply && section.visible && !placed;
+        placed = placed || place;
+        tallest = std::max(tallest, layoutOneSection(plan, module, section, y, g, place) - y);
+    }
+    return y + tallest;
+}
+
 } // namespace
 
 // The widths and heights the run layouts give a cell of its kind.
@@ -319,18 +353,15 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
                 y = layoutTabGroup(plan, module, group, y, g, apply);
             continue;
         }
+        if (section.altGroup >= 0) {
+            const auto& group = plan.altGroups[(size_t)section.altGroup];
+            if (group.sections.front() == s)
+                y = layoutAltGroup(plan, module, group, y, g, apply);
+            continue;
+        }
         if (!section.visible)
             continue;
-        if (section.hasHeader()) {
-            if (apply && section.header != nullptr)
-                section.header->setBounds(g.contentX, y, g.contentW, cardbody::kSectionHeaderHeight);
-            y += cardbody::kSectionHeaderHeight;
-        }
-        if (apply)
-            section.cellTop = y;
-        y = layoutSectionCells(plan, module, section, y, g, apply);
-        if (apply)
-            section.cellBottom = y;
+        y = layoutOneSection(plan, module, section, y, g, apply);
     }
     return y;
 }

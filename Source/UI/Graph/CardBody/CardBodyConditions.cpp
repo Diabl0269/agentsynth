@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 #include <set>
 
 namespace synth {
@@ -108,11 +109,34 @@ std::vector<juce::RangedAudioParameter*> CardBodyPlan::watchedParameters(juce::A
 bool CardBodyPlan::isOnCard(int item) const {
     if (item < 0 || item >= (int)items.size())
         return false;
-    const int section = items[(size_t)item].section;
-    if (section < 0 || !sections[(size_t)section].visible)
+    const auto onCard = [this](int section) {
+        if (section < 0 || !sections[(size_t)section].visible)
+            return false;
+        const int group = sections[(size_t)section].tabGroup;
+        return group < 0 || tabGroups[(size_t)group].sections[(size_t)tabGroups[(size_t)group].selected] == section;
+    };
+    const auto& planned = items[(size_t)item];
+    return onCard(planned.section) ||
+           std::any_of(planned.alsoIn.begin(), planned.alsoIn.end(), [&](const auto& p) { return onCard(p.section); });
+}
+
+bool CardBodyPlan::isInAltGroup(int item) const {
+    if (item < 0 || item >= (int)items.size())
         return false;
-    const int group = sections[(size_t)section].tabGroup;
-    return group < 0 || tabGroups[(size_t)group].sections[(size_t)tabGroups[(size_t)group].selected] == section;
+    const auto& planned = items[(size_t)item];
+    const auto inGroup = [this](int section) { return section >= 0 && sections[(size_t)section].altGroup >= 0; };
+    return inGroup(planned.section) ||
+           std::any_of(planned.alsoIn.begin(), planned.alsoIn.end(), [&](const auto& p) { return inGroup(p.section); });
+}
+
+std::optional<juce::Point<int>> CardBodyPlan::atIn(int item, int section) const {
+    const auto& planned = items[(size_t)item];
+    if (planned.section == section)
+        return planned.at;
+    for (const auto& placement : planned.alsoIn)
+        if (placement.section == section)
+            return placement.at;
+    return std::nullopt;
 }
 
 bool CardBodyPlan::isTabbed(int item) const {
@@ -161,7 +185,7 @@ void CardBody::applyVisibility() {
             if (component == nullptr)
                 continue;
             if (governed)
-                component->setVisible(visible);
+                component->setVisible(visible && !isHeldBySwap(*component)); // an arriving control waits its turn
             if (dims)
                 markDimmed(*component, item.dimmed);
         }
@@ -184,7 +208,8 @@ bool CardBody::isSwappedOut(const juce::Component& widget) const {
     for (int i = 0; i < (int)plan_.items.size(); ++i) {
         const auto& item = plan_.items[(size_t)i];
         if (item.widget == &widget)
-            return item.swapGroup >= 0 && !item.shown && plan_.isOnCard(i);
+            return (item.swapGroup >= 0 && !item.shown && plan_.isOnCard(i)) ||
+                   (plan_.isInAltGroup(i) && !plan_.isOnCard(i));
     }
     return false;
 }
@@ -214,15 +239,29 @@ void CardBody::handleAsyncUpdate() { refreshConditions(); }
 
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card
 // goes through the same resize path as any other growth (make room, and give it back on a shrink).
+// A swap in place moves nothing else: the leaving controls are pictured before the card changes and shrink away,
+// then the arriving ones grow (CardBodySwapMotion.cpp); a card that changed height lands at once.
 void CardBody::refreshConditions() {
-    if (watched_.empty() || !plan_.evaluateConditions(module_).any)
+    if (watched_.empty())
         return;
+    finishSwapMotion();
+    const bool animate = canAnimateSwap();
+    auto snapshot = animate ? snapshotForSwap() : SwapSnapshot();
+    if (!plan_.evaluateConditions(module_).any)
+        return;
+    if (animate)
+        pictureLeavingControls(snapshot);
     applyVisibility();
     const int height = card_.getHeight();
     card_.updateLayout();
-    if (card_.getHeight() != height)
+    const bool resized = card_.getHeight() != height;
+    if (resized)
         card_.owner.handleModuleResized(&card_);
     card_.repaint();
+    if (animate && !resized)
+        startSwapMotion(snapshot);
+    if (onConditionsApplied)
+        onConditionsApplied();
 }
 
 } // namespace synth

@@ -48,6 +48,10 @@ bool CardLayoutOnCardEditor::handleKey(const juce::String& key, const juce::KeyP
         return true;
     if (drag_.pressed)
         return false;
+    if (key == "tempoSync" && hasSyncLooks() && press == juce::KeyPress(juce::KeyPress::spaceKey)) {
+        flipSync();
+        return true;
+    }
     if (isRemoveKey(press)) {
         removeControl(key);
         return true;

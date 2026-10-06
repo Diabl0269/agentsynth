@@ -649,6 +649,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyMoreRow.cpp
     Source/UI/Graph/CardBody/CardBodyPlan.cpp
     Source/UI/Graph/CardBody/CardBodyPlan.h
+    Source/UI/Graph/CardBody/CardBodySwapMotion.cpp
     Source/UI/Graph/CardBody/CardBodyTabs.cpp
     Source/UI/Graph/CardBody/CardBodyViews.cpp
     Source/UI/Graph/CardBody/CardBodyViews.h
