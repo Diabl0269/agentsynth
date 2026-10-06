@@ -152,6 +152,8 @@ public:
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
 
+    void openUpgradePage();
+
     // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
     // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
     void setPatchFeedbackFileForTesting(const juce::File& file) { patchFeedbackStore = PatchFeedbackStore(file); }

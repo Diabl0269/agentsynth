@@ -133,7 +133,9 @@ instead of the flat error bubble every other kind gets:
 - The assistant bubble carries the server's message verbatim, with no `"Error: "` prefix, the same
   as `TrialExhausted` and `ServiceCapacityExceeded`, plus an **"Upgrade to Pro"** button opening
   `synth::branding::kUpgradeUrl` (`Source/Branding.h`, a static checkout link) via the injected
-  `urlOpener`. `AIChatComponent::setUrlOpenerForTesting()` swaps that for a non-browser-launching
+  `urlOpener`, with the signed-in account's email appended as `?customer_email=` by
+  `buildUpgradeUrl()` (`Source/AI/UpgradeUrl.h`), because the server activates Pro by matching the
+  Polar customer's email to the account's. The bare link is used when no email is known. `AIChatComponent::setUrlOpenerForTesting()` swaps that for a non-browser-launching
   fake in tests.
 - The button is carried on `MessageData::showUpgradeAction`, which is deliberately **not**
   reconstructed by the history-replay loop in `AIChatComponent`'s constructor: a New Chat or an app

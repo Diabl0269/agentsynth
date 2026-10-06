@@ -1,4 +1,5 @@
 #include "AIChatComponent.h"
+#include "AI/UpgradeUrl.h"
 #include "Branding.h"
 #include "UI/Layout/FocusRegion.h"
 #include <cmath>
@@ -157,9 +158,11 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // available at this point (none, at construction).
     addChildComponent(upsellButton);
     upsellButton.setButtonText("Upgrade to Pro");
-    upsellButton.setTooltip("See the Pro plan: cloud history backup and a higher request quota");
+    upsellButton.setTooltip(
+        "See the Pro plan: more hosted AI requests and cloud backup of your chat history. Hosted AI is in early "
+        "access and improves with every update.");
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
-    upsellButton.onClick = [this] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
+    upsellButton.onClick = [this] { openUpgradePage(); };
 
     // Downgrade notice — invisible until historyButtonClicked() learns a real grace-period
     // deletion date (see lastDeletionScheduledAt's doc comment); never shown speculatively.
@@ -196,6 +199,15 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     }
 
     updateChatDisplay();
+}
+
+// Opens the Pro checkout (via urlOpener) with the signed-in account's email prefilled, so the Polar
+// purchase matches the account that should become Pro. Shared by both Upgrade to Pro buttons.
+void AIChatComponent::openUpgradePage() {
+    // No AccountService (tests, or before MainComponent attaches one) or a signed-out/emailless
+    // snapshot gives an empty email, which buildUpgradeUrl() turns into the bare checkout link.
+    const juce::String email = accountServicePtr != nullptr ? accountServicePtr->getSnapshot().email : juce::String();
+    urlOpener(buildUpgradeUrl(email));
 }
 
 AIChatComponent::~AIChatComponent() {
