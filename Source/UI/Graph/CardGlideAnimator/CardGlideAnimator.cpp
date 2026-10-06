@@ -15,6 +15,14 @@
 namespace {
 constexpr double kGlideMs = 160.0;
 
+juce::Rectangle<float> lerpRect(juce::Rectangle<int> a, juce::Rectangle<int> b, float t) {
+    auto lerp = [t](int x, int y) { return static_cast<float>(x) + static_cast<float>(y - x) * t; };
+    return {lerp(a.getX(), b.getX()), lerp(a.getY(), b.getY()), lerp(a.getWidth(), b.getWidth()),
+            lerp(a.getHeight(), b.getHeight())};
+}
+} // namespace
+
+namespace card_glide_detail {
 // The part of the canvas the card's viewer shows, in canvas coordinates: the canvas (the card's parent) is a
 // transformed child of the editor that frames it. Everything when the card has no such grandparent.
 juce::Rectangle<int> visibleCanvasArea(const juce::Component& card) {
@@ -26,12 +34,8 @@ juce::Rectangle<int> visibleCanvasArea(const juce::Component& card) {
     return canvas->getLocalArea(view, view->getLocalBounds());
 }
 
-juce::Rectangle<float> lerpRect(juce::Rectangle<int> a, juce::Rectangle<int> b, float t) {
-    auto lerp = [t](int x, int y) { return static_cast<float>(x) + static_cast<float>(y - x) * t; };
-    return {lerp(a.getX(), b.getX()), lerp(a.getY(), b.getY()), lerp(a.getWidth(), b.getWidth()),
-            lerp(a.getHeight(), b.getHeight())};
-}
-} // namespace
+} // namespace card_glide_detail
+using card_glide_detail::visibleCanvasArea;
 
 CardGlideAnimator::~CardGlideAnimator() {
     if (hooks_.updater != nullptr)
@@ -78,15 +82,18 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
     if (changed.empty())
         return false;
 
-    items_.erase(std::remove_if(items_.begin(), items_.end(), [](const Item& it) { return it.comp == nullptr; }),
+    items_.erase(std::remove_if(items_.begin(), items_.end(),
+                                [](const Item& it) { return it.kind == Kind::Move && it.comp == nullptr; }),
                  items_.end());
     for (auto& item : items_)
-        item.from = currentRect(item).toNearestInt();
+        if (item.kind == Kind::Move)
+            item.from = currentRect(item).toNearestInt();
     const auto visible = visibleCanvasArea(*changed.front()->comp);
     for (size_t i = 0; i < changed.size(); ++i) {
         auto* comp = changed[i]->comp;
-        auto existing = std::find_if(items_.begin(), items_.end(),
-                                     [comp](const Item& it) { return it.comp.getComponent() == comp; });
+        auto existing = std::find_if(items_.begin(), items_.end(), [comp](const Item& it) {
+            return it.kind == Kind::Move && it.comp.getComponent() == comp;
+        });
         if (existing != items_.end()) {
             existing->to = comp->getBounds(); // `from` already rebased to the drawn position
             if (existing->snapshot.isNull() && existing->from.getUnion(existing->to).intersects(visible)) {
@@ -114,9 +121,13 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
 
 void CardGlideAnimator::applyTweenAt(float t) noexcept {
     progress_ = juce::jlimit(0.0f, 1.0f, t);
+    pruneItems();
+}
+
+void CardGlideAnimator::pruneItems() {
     // A card the user grabs mid-glide stops gliding: it is theirs now.
     for (auto& item : items_)
-        if (item.comp != nullptr && item.comp->isMouseButtonDown(true)) {
+        if (item.kind == Kind::Move && item.comp != nullptr && item.comp->isMouseButtonDown(true)) {
             item.comp->setAlpha(item.savedAlpha);
             item.comp = nullptr;
             item.snapshot = {};
@@ -133,10 +144,16 @@ void CardGlideAnimator::finish() noexcept {
             comp->setAlpha(item.savedAlpha);
     items_.clear();
     progress_ = 0.0f;
+    frame_ = {};
+    phased_ = false;
 }
 
 void CardGlideAnimator::paint(juce::Graphics& g) const {
     for (const auto& item : items_) {
+        if (item.kind != Kind::Move) {
+            paintGhost(g, item);
+            continue;
+        }
         if (item.snapshot.isNull())
             continue;
         g.drawImage(item.snapshot, currentRect(item), juce::RectanglePlacement::stretchToFit);
@@ -147,7 +164,7 @@ juce::Point<float> CardGlideAnimator::offsetFor(uint32_t nodeUid) const noexcept
     if (nodeUid == 0)
         return {};
     for (const auto& item : items_)
-        if (item.nodeUid == nodeUid) {
+        if (item.kind == Kind::Move && item.nodeUid == nodeUid) {
             const auto cur = currentRect(item);
             return {cur.getX() - static_cast<float>(item.to.getX()), cur.getY() - static_cast<float>(item.to.getY())};
         }
@@ -169,12 +186,12 @@ juce::Rectangle<int> CardGlideAnimator::dirtyArea() const noexcept {
     juce::Rectangle<int> area;
     for (const auto& item : items_)
         area = area.getUnion(item.from.getUnion(item.to));
-    return area;
+    return area.isEmpty() ? area : area.expanded(2);
 }
 
 juce::Rectangle<int> CardGlideAnimator::currentRectFor(const juce::Component* comp) const noexcept {
     for (const auto& item : items_)
-        if (item.comp.getComponent() == comp)
+        if (item.kind == Kind::Move && item.comp.getComponent() == comp)
             return currentRect(item).toNearestInt();
     return {};
 }
@@ -182,6 +199,24 @@ juce::Rectangle<int> CardGlideAnimator::currentRectFor(const juce::Component* co
 void CardGlideAnimator::startDriver() {
     if (hooks_.updater == nullptr)
         return; // no VBlank to drive it: the test seams advance and finish by hand
+    if (phased_) {
+        const double total = timeline_.totalMs();
+        driver_.start(
+            *hooks_.updater, total, [](float t) { return t; },
+            [this, total](float t) {
+                applyTimelineAtMs(static_cast<double>(t) * total);
+                ++repaintCount_;
+                if (hooks_.repaint)
+                    hooks_.repaint();
+            },
+            [this]() {
+                finish();
+                ++repaintCount_;
+                if (hooks_.repaint)
+                    hooks_.repaint();
+            });
+        return;
+    }
     driver_.start(
         *hooks_.updater, kGlideMs, synth::ui::easeOutCubic,
         [this](float t) {
@@ -198,19 +233,30 @@ void CardGlideAnimator::startDriver() {
         });
 }
 
-CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator)
+CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)
     : animator_(animator) {
-    if (animator_.depth_++ == 0 && animator_.hooks_.cards)
-        animator_.before_ = capture(animator_.hooks_.cards());
+    if (animator_.depth_++ != 0 || !animator_.hooks_.cards)
+        return;
+    animator_.before_ = capture(animator_.hooks_.cards());
+    animator_.restoring_ = restore && animator_.canAnimate();
+    animator_.candidates_.clear();
+    if (animator_.restoring_)
+        for (const auto& e : animator_.hooks_.cards())
+            if (e.nodeUid != 0)
+                animator_.noteExit(e.comp, e.nodeUid);
 }
 
 CardGlideAnimator::Scope::~Scope() {
     if (--animator_.depth_ != 0 || !animator_.hooks_.cards)
         return;
     const float scale = animator_.hooks_.snapshotScale ? animator_.hooks_.snapshotScale() : 1.0f;
-    const bool armed = animator_.arm(animator_.before_, animator_.hooks_.cards(), scale);
+    const auto now = animator_.hooks_.cards();
+    const bool moved = animator_.arm(animator_.before_, now, scale);
+    const bool ghosts = animator_.armGhosts(animator_.before_, now, scale);
     animator_.before_.clear();
-    if (!armed)
+    animator_.candidates_.clear();
+    animator_.restoring_ = false;
+    if (!moved && !ghosts)
         return;
     if (animator_.hooks_.repaint)
         animator_.hooks_.repaint();

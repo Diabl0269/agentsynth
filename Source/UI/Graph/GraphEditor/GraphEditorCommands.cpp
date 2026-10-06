@@ -410,6 +410,8 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         updateComponents();
     };
 
+    CardGlideAnimator::Scope glideScope(cardGlide_); // shrinks away (noteCardExits)
+    noteCardExits({nodeId});
     // recordUndo=false: a bigger gesture (removing a timeline modulator) already holds the undo record.
     if (undoManager && recordUndo)
         undoManager->recordGraphAndMacroChange(graph, macros, doDelete);

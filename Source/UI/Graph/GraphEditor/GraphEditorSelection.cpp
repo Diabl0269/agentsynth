@@ -144,6 +144,14 @@ void GraphEditor::pruneSelection() {
         repaintCanvas();
 }
 
+// Snapshots the cards of `ids` for the exit animation (CardGlideAnimatorGhosts.cpp); call it inside an open glide
+// Scope, before the removal. The model change itself stays immediate.
+void GraphEditor::noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) {
+    for (auto id : ids)
+        if (auto* card = moduleComponentFor(id))
+            cardGlide_.noteExit(card, id.uid);
+}
+
 // Removes every selected module as ONE undoable change, so Cmd+Z restores the whole group.
 // Also GraphCanvasHost::deleteSelection() — MacroGroupController's deleteMacroAndMembers/
 // removeMacroPort select the nodes to remove, then call this through the host.
@@ -203,6 +211,9 @@ void GraphEditor::deleteSelection() {
         for (const auto& macroId : shrunkMacros)
             macroController_.returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
     };
+
+    CardGlideAnimator::Scope glideScope(cardGlide_); // each card shrinks away, see noteCardExits
+    noteCardExits(ids);
 
     if (undoManager)
         undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
