@@ -212,6 +212,8 @@ add_executable(Tests
     AI/RemoteProvider/RemoteProviderRequestShapeTests.cpp
     AI/RemoteProvider/RemoteProviderResponseHandlingTests.cpp
     AI/RemoteProvider/RemoteProviderTransportTests.cpp
+    AI/RawHeaderParserTests.cpp
+    AI/WinHttpTransportTests.cpp
     AI/RemoteProvider/RemoteProviderCapabilityTests.cpp
     Account/AuthClient/AuthClientDeviceAuthTests.cpp
     Account/AuthClient/AuthClientAccountTests.cpp

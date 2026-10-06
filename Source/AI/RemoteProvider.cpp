@@ -3,7 +3,9 @@
 #include "../Branding.h"
 #include <algorithm>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include "WinHttpTransport.h"
+#else
 #include <curl/curl.h>
 #endif
 
@@ -176,11 +178,18 @@ RemoteProvider::HttpResult performHttpWithCurl(const juce::String& url, const ju
     return result;
 }
 #else
-RemoteProvider::HttpResult performHttpUnavailable(const juce::String&, const juce::StringPairArray&,
-                                                  const juce::String&, int, const std::atomic<bool>&) {
+/** WinHTTP-backed HttpPerformer for Windows (see WinHttpTransport.h). */
+RemoteProvider::HttpResult performHttpWithWinHttp(const juce::String& url, const juce::StringPairArray& requestHeaders,
+                                                  const juce::String& jsonBody, int timeoutMs,
+                                                  const std::atomic<bool>& cancelled) {
+    auto r = performWinHttpRequest("POST", url, requestHeaders, jsonBody, timeoutMs, cancelled);
     RemoteProvider::HttpResult result;
-    result.transportFailed = true;
-    result.errorMessage = "Error: RemoteProvider is not available on Windows yet (no libcurl backend).";
+    result.httpStatus = r.httpStatus;
+    result.body = std::move(r.body);
+    result.headers = std::move(r.headers);
+    result.transportFailed = r.transportFailed;
+    result.timedOut = r.timedOut;
+    result.errorMessage = std::move(r.errorMessage);
     return result;
 }
 #endif
@@ -196,7 +205,7 @@ RemoteProvider::RemoteProvider(const juce::String& host)
 #ifndef _WIN32
     , performHttp(performHttpWithCurl)
 #else
-    , performHttp(performHttpUnavailable)
+    , performHttp(performHttpWithWinHttp)
 #endif
 {
 }

@@ -132,3 +132,64 @@ TEST_F(KeychainTokenStoreTest, SavingAnUnchangedTokenSucceeds) {
 }
 
 #endif // JUCE_MAC
+
+#if JUCE_WINDOWS
+
+#include "Auth/KeychainTokenStore.h"
+#include "Branding.h"
+#include <gtest/gtest.h>
+
+namespace {
+// A per-test service name ending in ".test.<TestName>", so a run can never touch the real
+// credential and concurrent test shards never share one entry in the Credential Manager.
+juce::String testService() {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." +
+           (info != nullptr ? juce::String(info->name()) : juce::String("none"));
+}
+} // namespace
+
+class WindowsCredentialStoreTest : public ::testing::Test {
+protected:
+    void TearDown() override {
+        synth::KeychainTokenStore store{testService()};
+        store.clear();
+    }
+};
+
+TEST_F(WindowsCredentialStoreTest, LoadWithNothingStoredReturnsEmptyString) {
+    synth::KeychainTokenStore store{testService()};
+    store.clear();
+    EXPECT_TRUE(store.load().isEmpty());
+}
+
+TEST_F(WindowsCredentialStoreTest, SaveThenLoadRoundTrips) {
+    synth::KeychainTokenStore store{testService()};
+    ASSERT_TRUE(store.save("test-refresh-token-abc123"));
+    EXPECT_EQ(store.load(), juce::String("test-refresh-token-abc123"));
+}
+
+TEST_F(WindowsCredentialStoreTest, SaveTwiceReplacesThePreviousValue) {
+    synth::KeychainTokenStore store{testService()};
+    ASSERT_TRUE(store.save("first-token"));
+    ASSERT_TRUE(store.save("second-token"));
+    EXPECT_EQ(store.load(), juce::String("second-token"));
+}
+
+TEST_F(WindowsCredentialStoreTest, ClearRemovesTheStoredValue) {
+    synth::KeychainTokenStore store{testService()};
+    ASSERT_TRUE(store.save("to-be-cleared"));
+    store.clear();
+    EXPECT_TRUE(store.load().isEmpty());
+}
+
+TEST_F(WindowsCredentialStoreTest, AFreshStoreSeesWhatAnotherStoreSaved) {
+    {
+        synth::KeychainTokenStore writer{testService()};
+        ASSERT_TRUE(writer.save("persisted-token"));
+    }
+    synth::KeychainTokenStore reader{testService()};
+    EXPECT_EQ(reader.load(), juce::String("persisted-token"));
+}
+
+#endif // JUCE_WINDOWS

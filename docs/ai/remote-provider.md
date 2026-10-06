@@ -1,6 +1,6 @@
 # RemoteProvider
 
-`Source/AI/RemoteProvider.{h,cpp}` talks to the hosted inference service over libcurl instead of
+`Source/AI/RemoteProvider.{h,cpp}` talks to the hosted inference service over libcurl (WinHTTP on Windows) instead of
 `juce::WebInputStream`. Registration and selection are in [providers](providers.md).
 
 It reuses [OllamaProvider](ollama-provider.md)'s worker-thread, queue and cancellation architecture
@@ -171,13 +171,13 @@ transports and the one-card flow).
 ## Transport seam and platform support
 
 `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels `OllamaProvider::InputStreamFactory`:
-a constructor taking just a host installs the real libcurl-backed performer, and a second
+a constructor taking just a host installs the real platform performer (libcurl, or WinHTTP on Windows), and a second
 constructor injects a fake one for tests, with no real sockets — see
 `Tests/AI/RemoteProvider/RemoteProviderTestFixture.h`.
 
-**Windows is not supported.** `RemoteProvider.cpp`'s libcurl implementation is compiled only under
-`#ifndef _WIN32`; the `#else` branch is a stub returning `transportFailed=true` with a clear
-message, touching no curl API. The `windows-latest` CI job has no libcurl setup step. Root
-`CMakeLists.txt` requires `CURL` (`find_package(CURL REQUIRED)`) under `if(NOT WIN32)`, covering
-Linux and macOS — whose SDK ships a `curl.tbd` stub, so no Homebrew dependency is needed there — and
-deliberately does not require it on `WIN32`.
+**Per-platform transport.** macOS and Linux use libcurl (`RemoteProvider.cpp`, `AuthClient.cpp`;
+root `CMakeLists.txt` requires `CURL` there, and the macOS SDK's `curl.tbd` stub means no Homebrew
+dependency). Windows uses WinHTTP through `Source/AI/WinHttpTransport.cpp`, shared by both clients,
+with no third-party library: a watchdog thread closes the request handle when the cancel flag is set
+or the total timeout elapses, so a request blocked on a slow generation still aborts promptly.
+`RawHeaderParser.cpp` turns WinHTTP's raw header block into the same header map curl produces.

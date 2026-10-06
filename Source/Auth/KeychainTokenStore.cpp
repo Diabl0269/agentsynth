@@ -3,6 +3,19 @@
 
 #if JUCE_MAC
 #include <Security/Security.h>
+#elif JUCE_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+// <windows.h> must come first: <wincred.h> uses its types. Separate blocks keep clang-format
+// from sorting them back into alphabetical order.
+#include <windows.h>
+
+#include <wincred.h>
+#pragma comment(lib, "advapi32.lib")
 #endif
 
 namespace synth {
@@ -161,10 +174,43 @@ void KeychainTokenStore::clear() {
     cacheValid = true;
 }
 
-#else // !JUCE_MAC
+#elif JUCE_WINDOWS
 
-// `service` is only ever read on JUCE_MAC (see makeBaseQuery() above); referencing it here keeps
-// -Wunused-private-field quiet on every other platform without an #ifdef around the member itself.
+// Windows Credential Manager. The credential's target name is the service string, its user name the
+// fixed account. A generic credential's blob is capped at CRED_MAX_CREDENTIAL_BLOB_SIZE (2560
+// bytes), far above any refresh token this app stores; an oversized token makes save() return false.
+bool KeychainTokenStore::save(const juce::String& refreshToken) {
+    const auto target = service.toWideCharPointer();
+    const auto account = juce::String(kAccount);
+
+    CREDENTIALW credential{};
+    credential.Type = CRED_TYPE_GENERIC;
+    credential.TargetName = const_cast<LPWSTR>(target);
+    credential.UserName = const_cast<LPWSTR>(account.toWideCharPointer());
+    credential.CredentialBlobSize = static_cast<DWORD>(refreshToken.getNumBytesAsUTF8());
+    credential.CredentialBlob = reinterpret_cast<LPBYTE>(const_cast<char*>(refreshToken.toRawUTF8()));
+    credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
+
+    return CredWriteW(&credential, 0) != FALSE;
+}
+
+juce::String KeychainTokenStore::load() const {
+    PCREDENTIALW credential = nullptr;
+    if (!CredReadW(service.toWideCharPointer(), CRED_TYPE_GENERIC, 0, &credential) || credential == nullptr)
+        return {};
+
+    const auto value = juce::String::fromUTF8(reinterpret_cast<const char*>(credential->CredentialBlob),
+                                              static_cast<int>(credential->CredentialBlobSize));
+    CredFree(credential);
+    return value;
+}
+
+void KeychainTokenStore::clear() { CredDeleteW(service.toWideCharPointer(), CRED_TYPE_GENERIC, 0); }
+
+#else // Linux and anything else
+
+// `service` is only ever read on JUCE_MAC and JUCE_WINDOWS; referencing it here keeps
+// -Wunused-private-field quiet on the remaining platform without an #ifdef around the member itself.
 bool KeychainTokenStore::save(const juce::String& refreshToken) {
     juce::ignoreUnused(service);
     return fallback.save(refreshToken);

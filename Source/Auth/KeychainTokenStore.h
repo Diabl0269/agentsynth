@@ -8,13 +8,16 @@ namespace synth {
 
 /**
  * @class KeychainTokenStore
- * @brief Persists the refresh token in the macOS Keychain (Security.framework's SecItem* C API,
- *        kSecClassGenericPassword) under a fixed service/account pair — this is a single-account
- *        desktop app, so there is only ever one credential to store.
+ * @brief Persists the refresh token in the platform credential store under a fixed
+ *        service/account pair — this is a single-account desktop app, so there is only ever one
+ *        credential to store.
  *
  * One class, one header, works on every platform: on macOS (JUCE_MAC) the three methods talk to
- * the real Keychain; everywhere else they delegate to an internal InMemoryTokenStore, so callers
- * never need to `#ifdef` around this type.
+ * the Keychain (Security.framework's SecItem* C API, kSecClassGenericPassword); on Windows
+ * (JUCE_WINDOWS) to the Windows Credential Manager (a CRED_TYPE_GENERIC credential named after the
+ * service string, persisted per machine and readable only by the signed-in user); on Linux they
+ * delegate to an internal InMemoryTokenStore, so the user signs in again each launch there.
+ * Callers never need to `#ifdef` around this type.
  */
 class KeychainTokenStore : public TokenStore {
 public:
@@ -39,7 +42,7 @@ private:
     mutable bool cacheValid = false;
 #endif
 
-#if !JUCE_MAC
+#if !JUCE_MAC && !JUCE_WINDOWS
     InMemoryTokenStore fallback;
 #endif
 };

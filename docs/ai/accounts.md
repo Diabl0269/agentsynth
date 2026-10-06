@@ -25,6 +25,12 @@ revokes the whole token family if a consumed one reappears; a crash between "use
 would leave a dead token in the keychain and silently sign the user out on the next launch. A failed
 save publishes a SignedOut snapshot with an error rather than continuing.
 
+### Where the refresh token lives per platform
+
+macOS: the Keychain. Windows: the Windows Credential Manager (a generic credential named after the
+same service string, kept per machine for the signed-in user), so sign-in survives a restart. Linux:
+in memory only, so the user signs in again on each launch. All three sit behind `KeychainTokenStore`.
+
 ### Keychain access and permission prompts
 
 macOS pins a Keychain item to the code signature of the build that created it, so a build signed
@@ -92,7 +98,7 @@ reuses it for the lifetime of the install. If the file is missing, empty, or its
 look like a plausible id, a fresh one is generated and written rather than crashing or leaving the
 id blank — a lost or corrupted id just makes the backend see this install as new, which is harmless.
 
-**Not a secret.** Unlike the refresh token, which is Keychain-backed via `KeychainTokenStore`, the
+**Not a secret.** Unlike the refresh token, which is held by `KeychainTokenStore` (Keychain on macOS, Credential Manager on Windows), the
 device id grants no account access by itself; it is only a "this install" signal, so it is
 deliberately stored in a plain file. Both `AccountService`, for `AuthClient`, and `RemoteProvider`
 construct their own `DeviceIdStore` in their production constructors and read the same persisted
