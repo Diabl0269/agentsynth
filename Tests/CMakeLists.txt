@@ -264,6 +264,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorSmartConnectionInsertTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionPreviewTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
+    UI/Graph/GraphEditor/GraphEditorSmartConnectionSideBySideTests.cpp
     UI/Graph/GraphEditor/GraphEditorNodeActionsTests.cpp
     UI/Graph/GraphEditor/GraphEditorDeleteHealTests.cpp
     UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp

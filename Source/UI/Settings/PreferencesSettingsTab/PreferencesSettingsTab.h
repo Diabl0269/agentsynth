@@ -54,6 +54,8 @@ public:
     // Testing hooks ---------------------------------------------------------
     GraphEditor::SmartConnectionMode getSmartConnectionMode() const;
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
+    SmartConnectionEngine::SideBySideMode getSideBySideMode() const;
+    void setSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
     // Plain on/off, ON by default
@@ -279,6 +281,8 @@ private:
     void saveSectionFolds();     // remembers which sections are folded (user setting preferencesFolded)
 
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
+    void setupSmartConnectionControls();
+    void persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistReconnectChainOnDelete(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
@@ -464,6 +468,8 @@ private:
     juce::Label titleLabel;
     juce::Label smartConnectionLabel;
     juce::ComboBox smartConnectionCombo;
+    juce::Label sideBySideLabel_;
+    juce::ComboBox sideBySideCombo_; // "Connect side by side": Always | Only while holding Ctrl
     juce::ToggleButton doubleClickDisconnectToggle{"Double-click port to disconnect"};
     // Moved here from AppearanceSettingsTab: this is canvas-editing behaviour (whether the graph
     // shows snap guides while dragging), the same family as the two toggles above it, not an

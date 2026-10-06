@@ -757,13 +757,16 @@ static const MatrixRow kGestureMatrix[] = {
 struct GestureMatrixCase {
     MatrixRow row;
     bool libraryDrop;
+    SmartConnectionEngine::SideBySideMode sideBySide;
 };
 
 static std::vector<GestureMatrixCase> allGestureMatrixCases() {
     std::vector<GestureMatrixCase> cases;
     for (const auto& row : kGestureMatrix)
         for (bool libraryDrop : {true, false})
-            cases.push_back({row, libraryDrop});
+            for (auto mode :
+                 {SmartConnectionEngine::SideBySideMode::OnlyWithCtrl, SmartConnectionEngine::SideBySideMode::Always})
+                cases.push_back({row, libraryDrop, mode});
     return cases;
 }
 
@@ -776,6 +779,7 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
     GraphEditor editor(engine);
     editor.setSize(2000, 1400);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(c.sideBySide);
 
     auto& graph = engine.getGraph();
     constexpr int kDestX = 760;
@@ -882,10 +886,15 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
         break;
     }
 
-    EXPECT_EQ(actual, c.row.expected) << "gesture=" << (c.libraryDrop ? "libraryDrop" : "canvasMove")
-                                      << " dest=" << (int)c.row.dest << " modifier=" << (int)c.row.modifier
-                                      << " expected=" << outcomeName(c.row.expected)
-                                      << " actual=" << outcomeName(actual);
+    // Connect side by side: Always inserts into any occupied destination whatever the modifier is doing (the table
+    // above is the Only-while-holding-Ctrl column); a free destination is a plain cable either way.
+    const auto expected = (c.sideBySide == SmartConnectionEngine::SideBySideMode::Always && destOccupied)
+                              ? GestureOutcome::Insert
+                              : c.row.expected;
+    EXPECT_EQ(actual, expected) << "sideBySide=" << (int)c.sideBySide
+                                << " gesture=" << (c.libraryDrop ? "libraryDrop" : "canvasMove")
+                                << " dest=" << (int)c.row.dest << " modifier=" << (int)c.row.modifier
+                                << " expected=" << outcomeName(expected) << " actual=" << outcomeName(actual);
     editor.getDragDropController().endDragPreview();
 }
 

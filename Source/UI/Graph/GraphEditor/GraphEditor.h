@@ -286,6 +286,8 @@ public:
     synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
+    /** Opacity factor (0..1) of the smart-connection preview cables; 1 once they have faded in. */
+    float getSmartPreviewReveal() const noexcept { return smartPreviewReveal_; }
     SmartConnectionEngine& getSmartConnections() noexcept { return smartConnections_; }
     const SmartConnectionEngine& getSmartConnections() const noexcept { return smartConnections_; }
     GraphDragDropController& getDragDropController() noexcept { return dragDropController_; }
@@ -783,6 +785,10 @@ private:
     void requestRepaint() override { repaint(); }
     juce::LookAndFeel& lookAndFeel() override { return getLookAndFeel(); }
     void seedInsertModifierSample() override;
+    /** Runs a suggestion refresh and, when it newly shows preview cables, fades them in. */
+    void refreshSmartSuggestionsWithReveal(const std::function<void()>& refresh);
+    /** The 30 Hz drag tick's re-sample of the Ctrl modifier (no mouse move needed). */
+    void refreshSmartSuggestionsForModifierChange();
     juce::Point<int> canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const override;
     juce::Point<int> estimateModuleSizeForType(const juce::String& typeName) const override;
     juce::var resolveSnippetPayload(const juce::String& name) const override;
@@ -891,6 +897,9 @@ private:
     CanvasFrame canvasFrame_{vblankUpdater}; // growing patch frame (CanvasFrame.h)
     CanvasEdgeDrag edgeDrag_;                // a drag held at the canvas origin (CanvasEdgeDrag.h)
     synth::ui::AnimationDriver dropLandingAnim;
+    // Smart-connection preview cables fade in (0..1) when they first appear instead of popping.
+    float smartPreviewReveal_ = 1.0f;
+    synth::ui::AnimationDriver smartPreviewRevealAnim_;
 
     // Mod-matrix panel ease; modMatrixTargetBounds is the final position set on complete.
     synth::ui::AnimationDriver modMatrixAnim;

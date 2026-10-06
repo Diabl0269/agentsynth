@@ -791,11 +791,14 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
         // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
         // cable-colour mode and any user override keep applying to a preview too.
-        auto previewColour = [this](synth::ui::CableSignal signal, synth::ui::ModuleCategory category, float alpha) {
+        // Every preview alpha is scaled by the fade-in that runs when the suggestion first appears.
+        const float reveal = editor.getSmartPreviewReveal();
+        auto previewColour = [this, reveal](synth::ui::CableSignal signal, synth::ui::ModuleCategory category,
+                                            float alpha) {
             GraphEditor::VisibleCable preview;
             preview.signal = signal;
             preview.sourceCategory = category;
-            return editor.colourForCable(preview).withAlpha(alpha);
+            return editor.colourForCable(preview).withAlpha(alpha * reveal);
         };
 
         // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish

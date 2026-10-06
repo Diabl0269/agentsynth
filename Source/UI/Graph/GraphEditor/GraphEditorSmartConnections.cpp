@@ -22,6 +22,7 @@
 
 #include "Modules/MacroControlModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReducedMotion.h"
 
 GraphEditor::SmartConnectionMode GraphEditor::smartConnectionModeFromString(const juce::String& s) {
     return SmartConnectionEngine::smartConnectionModeFromString(s);
@@ -35,7 +36,47 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
 // through the host interface, so it can't move onto SmartConnectionEngine even though every
 // other forwarder in this file already has.
 void GraphEditor::refreshSmartSuggestions() {
-    smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState());
+    refreshSmartSuggestionsWithReveal(
+        [this] { smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState()); });
+}
+
+void GraphEditor::refreshSmartSuggestionsForModifierChange() {
+    refreshSmartSuggestionsWithReveal([this] {
+        smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
+    });
+}
+
+// The preview cables fade in (160 ms easeOutCubic, 80 ms under Reduce Motion) the moment a module comes within range,
+// instead of popping. Only an empty -> non-empty transition restarts the fade: a set that merely changes while the
+// module keeps moving (a different jack, an insert) keeps whatever opacity it has, so nothing flickers. Animations Off
+// lands at once.
+void GraphEditor::refreshSmartSuggestionsWithReveal(const std::function<void()>& refresh) {
+    const bool hadPreview = smartConnections_.getSmartSuggestionCount() > 0;
+    refresh();
+    const bool hasPreview = smartConnections_.getSmartSuggestionCount() > 0;
+    if (!hasPreview) {
+        smartPreviewRevealAnim_.stop(vblankUpdater);
+        smartPreviewReveal_ = 0.0f;
+        return;
+    }
+    if (hadPreview)
+        return;
+    smartPreviewReveal_ = 0.0f;
+    juce::Component::SafePointer<GraphEditor> safeEditor(this);
+    smartPreviewRevealAnim_.start(
+        vblankUpdater, synth::ui::motionMs(160.0, 80.0), synth::ui::easeOutCubic,
+        [safeEditor](float t) {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->smartPreviewReveal_ = t;
+            safeEditor->repaintCanvas();
+        },
+        [safeEditor] {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->smartPreviewReveal_ = 1.0f;
+            safeEditor->repaintCanvas();
+        });
 }
 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.

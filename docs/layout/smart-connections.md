@@ -17,8 +17,24 @@ auto-wire them on drop. The ghost and the landing rect it scores against come fr
 | **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
 Group multi-select drags never smart-connect, and snippet drops are excluded. "Dest input must be
-free" has two exceptions, both below: the terminal audio sink takes a parallel cable anyway, and
-**Ctrl** turns any occupied destination into an insert.
+free" has exceptions, all below: by default (**Connect side by side: Always**) a module placed beside a
+wired neighbour is **inserted in series** with no key held; with **Only while holding Ctrl** the
+terminal audio sink takes a parallel cable anyway and **Ctrl** turns any occupied destination into an
+insert.
+
+### Connect side by side
+
+`Settings -> Preferences -> Smart connections -> Connect side by side`, persisted as
+`smartConnectionSideBySide` (`Always` / `OnlyWithCtrl`) in `juce::ApplicationProperties`, restored in
+`MainComponent::restorePanelPreferences()` and pushed to the engine by `PreferencesSettingsTab`.
+Default: **Always**. It only decides what an **occupied** destination jack means (below); free jacks
+connect in every setting, and the 96 px proximity and left-to-right rules are unchanged. The combo has
+an accessible title, a tooltip, and the usual focus ring and keyboard reach.
+
+| Setting | No key held, beside a wired neighbour | Ctrl held |
+|---|---|---|
+| **Always** (default) | inserted in series (the sink included: no parallel add) | same insert, and the ghost may also overlap its destination (see below) |
+| **Only while holding Ctrl** | hard stop, except the terminal sink's parallel add | insert in series |
 
 ## How a suggestion is found
 
@@ -48,15 +64,21 @@ real `ModuleComponent` exists.
 
 ## Occupied destinations
 
-An already-wired destination jack is not one rule but three, depending on the modifier and the node:
+An already-wired destination jack is not one rule but several, depending on the preference, the modifier
+and the node:
 
 | Drag | Occupied destination | Result |
 |---|---|---|
-| no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — the ghost's audio out joins what is already there, existing cables untouched |
-| no modifier | any other module | **nothing** (hard stop) |
-| **Ctrl held** | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
+| **Always** (default), no modifier | **any** module, sink included | **insert in series** — the upstream cabling is rerouted *through* the ghost |
+| **Only while holding Ctrl**, no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — the ghost's audio out joins what is already there, existing cables untouched |
+| **Only while holding Ctrl**, no modifier | any other module | **nothing** (hard stop) |
+| **Ctrl held**, either setting | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
 
-**Why the sink is special without a modifier.** Audio Output is a bare
+Under **Always** the insert is found by the ordinary rule — the dragged module sits to the left of its
+neighbour within 96 px, jack to jack. Only an actual Ctrl press additionally relaxes that geometry so a
+ghost can be aimed *into* the gap or onto the doomed cable (an overlapping ghost fails the jack test).
+
+**Why the sink is special without a modifier (Only while holding Ctrl).** Audio Output is a bare
 `juce::AudioGraphIOProcessor` — never a `ModuleBase`, since the graph's output channel count is tied
 to it — and is wired in essentially every real patch, so a hard stop there meant a module parked
 next to it could never be offered anything at all. Summing into the mix bus is also exactly what
@@ -120,6 +142,18 @@ the suggestion set really changed. It is seeded at `beginDragPreview`, so a drag
 already held is not reported as a change on its first tick. Guarded by
 `SmartConnectionReleasingCtrlMidDragDowngradesTheInsert`, which flips the modifier twice without
 moving the mouse.
+
+**The preview cables fade in, and the card settles.** The frosted cables do not pop: when a suggestion
+first appears (nothing before, something now) they fade in over 160 ms `easeOutCubic` (80 ms plain fade
+under Reduce Motion, at once under Animations Off) — `GraphEditor::refreshSmartSuggestionsWithReveal`
+drives one `AnimationDriver`, and `GraphContentComponent` scales every preview alpha by
+`getSmartPreviewReveal()`. A set that merely changes while the module keeps moving does not restart the
+fade, so nothing flickers. On drop the card glides into its snapped slot through the
+[card glide](animation.md): a card released from a drag settles from where it was held
+(`finalizeModuleDrag` opens a `CardGlideAnimator::Scope`), and a library drop that snapped into a
+connection settles from where the cursor aimed (`CardGlideAnimator::noteStartRect`). Geometry is final
+at once; only a paint overlay slides. Guarded by `SideBySidePreviewFadesInWhenItAppearsAndLandsAtOnceWithAnimationsOff`
+and `SideBySideSnappedLibraryDropSettlesFromWhereTheCursorAimed`.
 
 **Insert previews are tinted.** An insert reroutes existing cabling rather than adding to it, so its
 new legs are drawn tinted toward the theme's `warning` token — interpolated over the colour

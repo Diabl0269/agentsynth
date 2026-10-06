@@ -187,7 +187,7 @@ TEST_F(PreferencesSettingsTabTest, TabFromTheFilterFieldReachesTheRowsAndShiftTa
         auto traverser = tab.createFocusTraverser();
         juce::Component* current = &filter;
         juce::Component* firstRow = nullptr;
-        for (int step = 0; step < 12 && firstRow == nullptr; ++step) {
+        for (int step = 0; step < 16 && firstRow == nullptr; ++step) {
             current = traverser->getNextComponent(current);
             ASSERT_NE(current, nullptr);
             if (current == &tab.getCategoryComboForTest())

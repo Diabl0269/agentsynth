@@ -43,6 +43,14 @@ juce::String SmartConnectionEngine::smartConnectionModeToString(SmartConnectionM
     }
 }
 
+SmartConnectionEngine::SideBySideMode SmartConnectionEngine::sideBySideModeFromString(const juce::String& s) {
+    return s == "OnlyWithCtrl" ? SideBySideMode::OnlyWithCtrl : SideBySideMode::Always;
+}
+
+juce::String SmartConnectionEngine::sideBySideModeToString(SideBySideMode mode) {
+    return mode == SideBySideMode::OnlyWithCtrl ? "OnlyWithCtrl" : "Always";
+}
+
 bool SmartConnectionEngine::isInsertModifierDown() const {
     return insertModifierOverride_.has_value() ? *insertModifierOverride_
                                                : juce::ModifierKeys::getCurrentModifiersRealtime().isCtrlDown();

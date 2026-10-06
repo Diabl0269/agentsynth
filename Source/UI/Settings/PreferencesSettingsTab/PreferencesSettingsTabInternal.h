@@ -110,6 +110,8 @@ constexpr int kPanelDetachModeBothComboId = 2;
 // inside one here could never actually resolve to the single definition living in another .cpp.
 extern int comboIdFromMode(GraphEditor::SmartConnectionMode mode);
 extern GraphEditor::SmartConnectionMode modeFromComboId(int id);
+extern int comboIdFromSideBySide(SmartConnectionEngine::SideBySideMode mode);
+extern SmartConnectionEngine::SideBySideMode sideBySideFromComboId(int id);
 extern int comboIdFromMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromComboId(int id);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juce::String& s);

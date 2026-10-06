@@ -35,7 +35,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/snippets-clipboard.md`](layout/snippets-clipboard.md) — snippets, copy/paste/duplicate, and the validate-strictly/apply-faithfully trust boundary
 - [`docs/layout/macro-cards.md`](layout/macro-cards.md) — macro containers on the canvas: collapse, the hull and its chip, the shared menu, undo and persistence
 - [`docs/layout/cables.md`](layout/cables.md) — a cable is not a graph edge: enumeration, hit-testing, hover, the menu, and colour resolution
-- [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, Ctrl to insert in series, double-click a port to disconnect
+- [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, side-by-side insert in series (Ctrl optional), double-click a port to disconnect
 - [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
 - [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut

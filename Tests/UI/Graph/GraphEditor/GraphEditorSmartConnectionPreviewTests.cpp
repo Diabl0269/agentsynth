@@ -26,6 +26,7 @@ TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false);
     editor.setDefaultDualIOForNewModules(false); // collapsed ghost: one jack owning both raw legs
 
@@ -255,6 +256,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoA
     GraphEditor editor(engine);
     editor.setSize(1400, 1000);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false); // no modifier yet
 
     auto f = makeCtrlDragFixture(engine, editor);
@@ -498,6 +500,7 @@ TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) 
     GraphEditor editor(engine);
     editor.setSize(1400, 1000);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto f = makeCtrlDragFixture(engine, editor);

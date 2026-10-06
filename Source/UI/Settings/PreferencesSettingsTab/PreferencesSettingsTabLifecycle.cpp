@@ -62,6 +62,15 @@ GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juc
     return GraphEditor::MacroAutoPortPreference::Unset;
 }
 
+int comboIdFromSideBySide(SmartConnectionEngine::SideBySideMode mode) {
+    return mode == SmartConnectionEngine::SideBySideMode::OnlyWithCtrl ? 2 : 1;
+}
+
+SmartConnectionEngine::SideBySideMode sideBySideFromComboId(int id) {
+    return id == 2 ? SmartConnectionEngine::SideBySideMode::OnlyWithCtrl
+                   : SmartConnectionEngine::SideBySideMode::Always;
+}
+
 GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     switch (id) {
     case 1:
@@ -113,30 +122,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     contentViewport.setScrollBarsShown(true, false);
     contentViewport.setWantsKeyboardFocus(false);
 
-    contentHost.addAndMakeVisible(smartConnectionLabel);
-    smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
-    smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
-
-    contentHost.addAndMakeVisible(smartConnectionCombo);
-    smartConnectionCombo.setTitle("Smart connections");
-    smartConnectionCombo.addItem("Off", 1);
-    smartConnectionCombo.addItem("New modules only", 2);
-    smartConnectionCombo.addItem("When main I/O is free", 3);
-    smartConnectionCombo.addItem("All module moves", 4);
-    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
-    // is the Control key on every platform, macOS included, precisely because Cmd already means
-    // additive selection there.
-    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
-                                    "Hold Ctrl while dragging to insert the module into an existing "
-                                    "cable instead of adding a new one.");
-    {
-        const auto mode = GraphEditor::smartConnectionModeFromString(
-            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
-        smartConnectionCombo.setSelectedId(comboIdFromMode(mode), juce::dontSendNotification);
-    }
-    smartConnectionCombo.onChange = [this] {
-        persistSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
-    };
+    setupSmartConnectionControls();
 
     contentHost.addAndMakeVisible(doubleClickDisconnectToggle);
     doubleClickDisconnectToggle.setToggleState(
@@ -487,6 +473,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     if (graphEditor == nullptr)
         return;
     graphEditor->getSmartConnections().setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
+    graphEditor->getSmartConnections().setSideBySideMode(sideBySideFromComboId(sideBySideCombo_.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setReconnectChainOnDeleteEnabled(reconnectChainOnDeleteToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());

@@ -37,6 +37,8 @@ public:
 
     bool isDragPreviewActive() const noexcept { return dragPreviewActive_; }
     juce::Rectangle<int> getDragPreviewGhost() const noexcept { return dragPreviewGhost_; }
+    /** Where the cursor pointed, before anti-overlap moved the landing rect (empty before the first move). */
+    juce::Rectangle<int> getDragPreviewAim() const noexcept { return dragPreviewAim_; }
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const noexcept { return dragPreviewSelfId_; }
 
     /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
