@@ -1,4 +1,4 @@
-// KnobStyleTests.cpp -- the knob look chosen in Settings > Appearance > Knobs: persisted ids, the six
+// KnobStyleTests.cpp -- the knob look chosen in Settings > Appearance > Controls: persisted ids, the six
 // painters (rendered into software images -- the platform default reads back zeros on the Windows CI),
 // the family colour reaching the value arc, and the theme tokens it relies on.
 

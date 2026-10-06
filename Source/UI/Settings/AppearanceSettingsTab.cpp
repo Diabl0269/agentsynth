@@ -483,18 +483,19 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     themeManager.addChangeListener(this);
 }
 
-// The Knobs section: the six style previews and the colour-by-family switch. A change is written back
-// here; MainComponent's settings listener re-reads the keys and re-skins every knob.
+// The Controls section: the style previews (one style sets knobs and faders together) and the
+// colour-by-family switch. A change is written back here; MainComponent's settings listener re-reads the
+// keys and re-skins every knob and fader.
 void AppearanceSettingsTab::buildKnobsSection(const juce::Font& sectionHeaderFont) {
     contentHost.addAndMakeVisible(knobsTitleLabel);
-    knobsTitleLabel.setText("Knobs", juce::dontSendNotification);
+    knobsTitleLabel.setText("Controls", juce::dontSendNotification);
     knobsTitleLabel.setFont(sectionHeaderFont);
     knobStylePicker = std::make_unique<synth::ui::KnobStylePicker>();
     contentHost.addAndMakeVisible(*knobStylePicker);
     knobStylePicker->setTheme(themeManager.getActiveTheme());
     knobStylePicker->setAppearance(synth::theme::loadKnobAppearance(*appProperties.getUserSettings()));
     knobStylePicker->onChanged = [this](const synth::theme::KnobAppearance& appearance) {
-        // MainComponent's settings listener re-reads these keys and re-skins every knob.
+        // MainComponent's settings listener re-reads these keys and re-skins every knob and fader.
         synth::theme::writeKnobAppearance(*appProperties.getUserSettings(), appearance);
         appProperties.getUserSettings()->saveIfNeeded();
     };

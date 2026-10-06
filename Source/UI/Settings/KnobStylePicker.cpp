@@ -29,8 +29,8 @@ public:
         setWantsKeyboardFocus(true);
         setMouseClickGrabsKeyboardFocus(false);
         const juce::String label = synth::theme::knobStyleLabel(style);
-        setTitle(label + " knob style");
-        setTooltip("Use the " + label + " look for every knob");
+        setTitle(label + " control style");
+        setTooltip("Use the " + label + " look for every knob and fader");
     }
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
@@ -98,8 +98,8 @@ KnobStylePicker::KnobStylePicker() {
 
     addAndMakeVisible(familyToggle_);
     familyToggle_.setToggleState(appearance_.colourByFamily, juce::dontSendNotification);
-    familyToggle_.setTitle("Colour knobs by module family");
-    familyToggle_.setTooltip("Tint each module card's knobs with its family colour instead of the accent");
+    familyToggle_.setTitle("Colour controls by module family");
+    familyToggle_.setTooltip("Tint each module card's knobs and faders with its family colour instead of the accent");
     familyToggle_.onClick = [this] {
         appearance_.colourByFamily = familyToggle_.getToggleState();
         for (auto& b : buttons_)

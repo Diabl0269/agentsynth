@@ -55,7 +55,7 @@ are also accepted.
 | `knobPointer` | `#FFEAEEF3` | Knob pointer line |
 | `knobSkirt` | `#FF0E1014` | Hardware knob style: the skirt disc under the cap (Daylight `#FFADB5BD`) |
 | `knobCapHighlight` | `#2EFFFFFF` | Hardware knob style: the soft highlight on top of the cap (alpha varies per theme, `#B3FFFFFF` on Daylight) |
-| `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour knobs by module family" is on (Daylight `#FF946200`) |
+| `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour controls by module family" is on (Daylight `#FF946200`) |
 | `hueGreen` | `#FF4ADE80` | Knob family colour for Sequencing and Envelopes |
 | `hueRose` | `#FFFF6FA8` | Knob family colour for Modulation FX, Time FX and Dynamics |
 | `hueViolet` | `#FFB48EF5` | Violet family hue for toolbar icons; knobs do not use it |
@@ -360,14 +360,14 @@ implemented in `AppLookAndFeel`:
   rule. Classic and Polished keep a theme-driven arc glow. Every style
   shares one geometry (arc radius `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
   sweep) so the modulation ring and its anchors never move. The value colour is `accent`, or, when
-  "Colour knobs by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
+  "Colour controls by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
   `ModuleComponent` sets the `knobFamily` component property (its `ModuleCategory` as an int) on itself and
   `AppLookAndFeel::knobValueColour` walks the parent chain for it. The choice is `KnobAppearance`
   (`KnobStyle.h`), stored under the settings keys `knobStyle` and `knobColourByFamily`, picked in
-  Settings > Appearance > Knobs (`KnobStylePicker`, whose previews call the same `paintKnob`), and pushed
+  Settings > Appearance > Controls (`KnobStylePicker`, whose previews call the same `paintKnob`), and pushed
   into the shared `AppLookAndFeel` by `MainComponent` at startup and on every settings write (a change
   re-skins the whole tree, as a card's knobs are painted into its cached image). Faders follow the same
-  choice (there is no separate fader setting): `drawLinearSlider` passes `KnobAppearance::style` and
+  choice (one control style sets knobs and faders together; there is no separate fader setting): `drawLinearSlider` passes `KnobAppearance::style` and
   `knobValueColour(slider)` into `fader::paint`, so a card fader takes its module's family hue and the
   mixer and controller surfaces keep `accent` (see the Linear sliders entry below).
 - **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in

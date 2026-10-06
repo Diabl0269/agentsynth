@@ -1,4 +1,4 @@
-# Knob styles (Settings > Appearance > Knobs): the style model and the six painters. In Core because
+# Knob styles (Settings > Appearance > Controls): the style model and the six painters. In Core because
 # AppLookAndFeel, whose rotary slider calls paintKnob, is compiled into Core.
 target_sources(Core PRIVATE
     Source/UI/Theme/KnobStyle.h

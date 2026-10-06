@@ -9,9 +9,10 @@
 
 namespace synth::ui {
 
-// Settings > Appearance > Knobs: six clickable knob previews in one radio group plus the
-// "Colour knobs by module family" switch. Previews are painted by synth::theme::paintKnob, the
-// same painter the app's knobs use. Left/Right move between the previews, Space/Return picks.
+// Settings > Appearance > Controls: six clickable control-style previews (a style sets knobs and faders
+// together) in one radio group plus the "Colour controls by module family" switch. Previews are painted by
+// synth::theme::paintKnob, the same painter the app's knobs use. Left/Right move between the previews, Space/Return
+// picks.
 class KnobStylePicker : public juce::Component {
 public:
     KnobStylePicker();
@@ -41,7 +42,7 @@ private:
     synth::theme::KnobAppearance appearance_;
     synth::theme::Theme theme_;
     std::array<std::unique_ptr<StyleButton>, synth::theme::kKnobStyleCount> buttons_;
-    juce::ToggleButton familyToggle_{"Colour knobs by module family"};
+    juce::ToggleButton familyToggle_{"Colour controls by module family"};
 };
 
 } // namespace synth::ui

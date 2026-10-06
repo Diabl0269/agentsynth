@@ -12,7 +12,7 @@ fader sits in is [`docs/mixer/panel.md`](panel.md); the meter's own, separate ta
 `AppLookAndFeel::drawLinearSlider` draws the slider: the large size (6 px slot, 30x14 pill cap with a
 centre line) because a mixer fader is at least 64 px wide. The look, its states and the size rules are
 in [`theming.md`](../layout/theming.md#themed-widgets). The dB readout is the label under the
-slider, not a bubble on the cap. The fader takes the knob style chosen in Settings > Appearance; its
+slider, not a bubble on the cap. The fader takes the control style chosen in Settings > Appearance > Controls (it sets knobs and faders together); its
 colour stays `accent` here (family colours apply only on module cards).
 
 ---

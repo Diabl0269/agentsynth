@@ -115,7 +115,7 @@ public:
     const synth::ui::MeterColourStops& getMeterColourStops() const noexcept { return meterColourStops; }
 
     // ---------- Knob appearance ----------
-    // The user's knob style and colour-by-family switch (Settings > Appearance > Knobs). Same
+    // The user's knob style and colour-by-family switch (Settings > Appearance > Controls). Same
     // contract as setMeterColourStopsOverride(): no persistence, no repaint -- the caller does both.
     void setKnobAppearance(synth::theme::KnobAppearance appearance) { knobAppearance = appearance; }
     const synth::theme::KnobAppearance& getKnobAppearance() const noexcept { return knobAppearance; }

@@ -5,7 +5,8 @@
 
 namespace synth::theme {
 
-// The look every rotary knob in the app takes (Settings > Appearance > Knobs).
+// The look every rotary knob and fader in the app takes (Settings > Appearance > Controls): one control
+// style sets both.
 enum class KnobStyle { Classic, Polished, Hardware, Neon, Ring, Soft };
 
 inline constexpr int kKnobStyleCount = 6;

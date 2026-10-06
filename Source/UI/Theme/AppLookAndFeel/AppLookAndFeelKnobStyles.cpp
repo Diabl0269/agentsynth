@@ -3,7 +3,7 @@
 
 namespace synth::theme {
 
-// Concern: the six knob looks (Settings > Appearance > Knobs). Every style shares one geometry --
+// Concern: the six knob looks (Settings > Appearance > Controls). Every style shares one geometry --
 // the arc radius, body radius and 270 degree sweep -- so the modulation ring and the mod-ring
 // anchors painted elsewhere never move when the style changes. AppLookAndFeelSliders.cpp keeps the
 // dim layer and the focus ring around this.

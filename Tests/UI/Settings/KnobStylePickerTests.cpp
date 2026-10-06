@@ -72,11 +72,11 @@ TEST(KnobStylePickerTest, EachPreviewIsNamedHasATooltipAndTakesFocus) {
     for (int i = 0; i < kKnobStyleCount; ++i) {
         auto& button = rig.picker.getStyleButtonForTest(i);
         const juce::String label = knobStyleLabel((KnobStyle)i);
-        EXPECT_EQ(button.getTitle(), label + " knob style");
-        EXPECT_EQ(button.getTooltip(), "Use the " + label + " look for every knob");
+        EXPECT_EQ(button.getTitle(), label + " control style");
+        EXPECT_EQ(button.getTooltip(), "Use the " + label + " look for every knob and fader");
         EXPECT_TRUE(button.getWantsKeyboardFocus());
     }
-    EXPECT_EQ(rig.picker.getFamilyToggleForTest().getTitle(), "Colour knobs by module family");
+    EXPECT_EQ(rig.picker.getFamilyToggleForTest().getTitle(), "Colour controls by module family");
     EXPECT_TRUE(rig.picker.getFamilyToggleForTest().getTooltip().isNotEmpty());
 }
 
