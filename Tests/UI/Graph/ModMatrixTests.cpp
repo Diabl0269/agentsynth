@@ -773,3 +773,10 @@ TEST_F(ModMatrixTest, AClosedMatrixDoesNoWorkAndCatchesUpWhenItOpens) {
     matrix.timerCallback();
     EXPECT_EQ(matrix.getNumRowsForTest(), 2) << "open: the tick keeps it current";
 }
+
+// The canvas starts with the matrix closed, so the idle path above applies from launch, not only after a first close.
+TEST_F(ModMatrixTest, ACanvasStartsWithTheMatrixClosed) {
+    GraphEditor editor(engine);
+    EXPECT_FALSE(editor.isModMatrixVisible());
+    EXPECT_FALSE(editor.getModMatrix().isVisible());
+}

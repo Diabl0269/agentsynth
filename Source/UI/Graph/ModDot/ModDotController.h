@@ -119,6 +119,8 @@ public:
     /** routingsChanged, and when they did, re-counts the sources on every knob from `routings`
      *  (countKnobModSources): the tick calls it, so every card's dot sync is a lookup instead of a graph walk. */
     bool recountIfRoutingsChanged(const std::vector<ModulationRouting>& routings);
+    /** Makes the next recountIfRoutingsChanged recount whatever the routings are (the graph changed under them). */
+    void forgetRoutings() noexcept { routingSignature_ = 0; }
     /** The routings landing on (`card`, `destChannel`) as of the last recount. */
     int knobSourceCount(juce::AudioProcessorGraph::NodeID card, int destChannel) const;
 
