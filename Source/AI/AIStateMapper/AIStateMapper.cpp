@@ -32,7 +32,7 @@ bool removePatchNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph
     if (outputDockDeleteRefusal(graph, id).isNotEmpty())
         return false;
     if (graph.getNodeForId(id) != nullptr)
-        graph.removeNode(id);
+        graph.removeNode(id, juce::AudioProcessorGraph::UpdateKind::none); // the apply rebuilds once
     return true;
 }
 
@@ -48,6 +48,24 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
         node->properties.set("uuid", uuidVar.toString());
         detail::mirrorUuidIntoProcessor(node, uuidVar.toString());
     }
+}
+
+// applyJSONToGraph issues every topology op with UpdateKind::none and rebuilds the render sequence ONCE when it
+// returns (the snapshot path's rule, AIStateMapperSnapshots.cpp). A synchronous rebuild per added node and cable made
+// pasting or duplicating cost (ops x graph size): seconds per duplicated track in a 30-track project.
+struct RebuildOnExit {
+    juce::AudioProcessorGraph& graph;
+    ~RebuildOnExit() { graph.rebuild(); }
+};
+
+bool connectDeferred(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& c) {
+    return graph.addConnection(c, juce::AudioProcessorGraph::UpdateKind::none);
+}
+
+juce::AudioProcessorGraph::Node::Ptr addNodeDeferred(juce::AudioProcessorGraph& graph,
+                                                     std::unique_ptr<juce::AudioProcessor> processor,
+                                                     std::optional<juce::AudioProcessorGraph::NodeID> id = {}) {
+    return graph.addNode(std::move(processor), id, juce::AudioProcessorGraph::UpdateKind::none);
 }
 
 } // namespace
@@ -584,6 +602,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
     }
 
     const juce::ScopedLock sl(graph.getCallbackLock());
+    const RebuildOnExit rebuildOnExit{graph}; // every op below defers its rebuild
 
     if (clearExisting) {
         graph.clear();
@@ -650,7 +669,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         }
                     }
                     if (found)
-                        graph.removeNode(nodeToRemove);
+                        graph.removeNode(nodeToRemove, juce::AudioProcessorGraph::UpdateKind::none);
                 }
             }
         }
@@ -730,7 +749,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         if (trusted && clearExisting && oldId > 0)
                             preservedId = juce::AudioProcessorGraph::NodeID((juce::uint32)oldId);
 
-                        auto node = graph.addNode(std::move(processor), preservedId);
+                        auto node = addNodeDeferred(graph, std::move(processor), preservedId);
                         if (node) {
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
@@ -789,16 +808,16 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
                         if (isModTarget) {
                             // Create attenuverter chain: source -> attenuverter -> dest
-                            auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
+                            auto attenNode = addNodeDeferred(graph, std::make_unique<AttenuverterModule>());
                             if (attenNode) {
                                 if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
                                         findParameterByID(attenNode->getProcessor(), "amount")))
                                     param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(1.0f));
-                                graph.addConnection({{idMap[srcOld], srcPort}, {attenNode->nodeID, 0}});
-                                graph.addConnection({{attenNode->nodeID, 0}, {idMap[dstOld], dstPort}});
+                                connectDeferred(graph, {{idMap[srcOld], srcPort}, {attenNode->nodeID, 0}});
+                                connectDeferred(graph, {{attenNode->nodeID, 0}, {idMap[dstOld], dstPort}});
                             }
                         } else if (isMidiConnection || (srcPort < srcPorts && dstPort < dstPorts)) {
-                            graph.addConnection({{idMap[srcOld], srcPort}, {idMap[dstOld], dstPort}});
+                            connectDeferred(graph, {{idMap[srcOld], srcPort}, {idMap[dstOld], dstPort}});
                         }
                     }
                 }
@@ -853,7 +872,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                 }
 
                 if (!hasOutgoing && node->getProcessor()->getTotalNumOutputChannels() > 0) {
-                    graph.addConnection({{newNodeId, 0}, {audioOutputNode->nodeID, 0}});
+                    connectDeferred(graph, {{newNodeId, 0}, {audioOutputNode->nodeID, 0}});
                 }
             }
         }
@@ -893,10 +912,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     }
                 }
 
-                if (!hasMidiInput && node->getProcessor()->acceptsMidi()) {
-                    graph.addConnection({{midiSourceId, juce::AudioProcessorGraph::midiChannelIndex},
-                                         {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
-                }
+                if (!hasMidiInput && node->getProcessor()->acceptsMidi())
+                    connectDeferred(graph, {{midiSourceId, juce::AudioProcessorGraph::midiChannelIndex},
+                                            {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
             }
         }
     }

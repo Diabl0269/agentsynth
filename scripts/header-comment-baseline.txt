@@ -44,4 +44,4 @@
 55 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
 24 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
-54 Source/UI/Timeline/TimelineTrackHeaderComponent.h
+47 Source/UI/Timeline/TimelineTrackHeaderComponent.h
