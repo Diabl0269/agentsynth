@@ -286,9 +286,14 @@ frame math are pure functions in `synth::ui::popup_motion`, unit-tested in
 
 | | In | Out |
 |---|---|---|
-| Opacity | 0 to 1, `easeOutCubic`, 160 ms | 1 to 0, `easeInCubic`, 110 ms |
-| Slide | starts 4 px toward the anchor, ends at rest | 2 px back toward the anchor |
+| Opacity | 0 to 1, linear in time, 160 ms | 1 to 0, linear in time, 110 ms |
+| Slide | starts 4 px toward the anchor, ends at rest (`easeOutCubic`) | 2 px back toward the anchor (`easeInCubic`) |
 | Reduce motion | plain fade, 80 ms, no slide | plain fade, 80 ms, no slide |
+
+The opacity is linear in time while the slide keeps its cubic ease (`popup_motion::alphaAt` takes the cube root of the
+eased progress). With a cubic on the opacity too, a leaving menu was still 87% opaque halfway through and vanished in
+its last third, and an arriving one was 87% there halfway: both read as a pop (measured on the real app as
+the ghost window's opacity per frame).
 
 "Anchor" is the pointer: the window slides away from `Desktop::getMousePosition()` along the axis
 it sits furthest off it (`popup_motion::slideDirection`). A menu opened with its corner at the
@@ -414,8 +419,9 @@ shortcut.
 
 One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app
 window: `MainComponent` owns one and each `DetachedPanelWindow` owns one. It is a `juce::TooltipWindow` that fades
-a tip in over 160 ms (`easeOutCubic`) and out over 110 ms (`easeInCubic`), the numbers from `popup_motion`, with no
-slide. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling that paints the same text.
+a tip in over 160 ms and out over 110 ms, linear in time, the numbers and curve from `popup_motion`, with no
+slide. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling that paints the same text; whether
+to animate is asked of the window the tip lives in, because the tip itself is already hidden by then.
 Under Reduce Motion (`prefersReducedMotion()`) a tip uses the popups' plain 80 ms fade in and out (no slide was ever
 there), and a window that is not on screen never animates. Never create a bare `juce::TooltipWindow`.
 

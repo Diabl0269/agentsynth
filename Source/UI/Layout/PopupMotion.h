@@ -12,6 +12,7 @@
 // With Reduce motion on, both are a plain 80 ms fade and nothing moves.
 
 #include "UI/Layout/UIAnimation.h"
+#include <cmath>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -81,13 +82,22 @@ struct Frame {
     juce::Point<float> offset{0, 0}; // displacement from the window's resting position
 };
 
+/** The opacity at eased progress `eased`: linear in TIME, whatever curve moves the window. The window's
+ *  slide uses a cubic ease, and a cubic ease on the opacity too front-loads the fade (an arriving menu is 87%
+ *  there halfway through; a leaving one is still 87% there halfway through and only vanishes in its last
+ *  third), so it reads as a pop. The cube root undoes the cubic, which leaves a plain linear fade. */
+inline float alphaAt(Phase phase, float eased) noexcept {
+    const float e = juce::jlimit(0.0f, 1.0f, eased);
+    return phase == Phase::In ? 1.0f - std::cbrt(1.0f - e) : 1.0f - std::cbrt(e);
+}
+
 /** The window's state when the phase's eased progress is `eased` (0 at the start of the phase, 1 at
  *  its end). In: alpha 0 -> 1, offset -dir * 4 px -> 0. Out: alpha 1 -> 0, offset 0 -> -dir * 2 px.
  *  `dir` is slideDirection(); Reduce motion keeps the alpha and drops the offset. */
 inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion,
                      const Style& style = {}) noexcept {
     Frame f;
-    f.alpha = juce::jlimit(0.0f, 1.0f, phase == Phase::In ? eased : 1.0f - eased);
+    f.alpha = alphaAt(phase, eased);
     if (!reduceMotion) {
         const float distance = phase == Phase::In ? -style.inSlidePx * (1.0f - eased) : -style.outSlidePx * eased;
         f.offset = {(float)dir.x * distance, (float)dir.y * distance};

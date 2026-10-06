@@ -101,7 +101,12 @@ bool AppTooltipWindow::isFading() const noexcept { return fadingIn_ || hasLeavin
 
 bool AppTooltipWindow::hasLeavingGhostForTest() const noexcept { return ghost_ != nullptr && ghost_->isLeaving(); }
 
-bool AppTooltipWindow::shouldAnimate() const { return PopupMotion::isEnabled() && (animateOffScreen_ || isShowing()); }
+bool AppTooltipWindow::shouldAnimate() const {
+    // Once juce has hidden the tip it is no longer "showing" itself, so ask the window it lives in.
+    const auto* host = getParentComponent();
+    return PopupMotion::isEnabled() &&
+           (animateOffScreen_ || isShowing() || hostShowingForTest_ || (host != nullptr && host->isShowing()));
+}
 
 void AppTooltipWindow::visibilityChanged() {
     if (destroying_)

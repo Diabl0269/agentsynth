@@ -83,11 +83,13 @@ TEST(PopupMotionFrame, InStartsTransparentFourPixelsTowardTheAnchorAndEndsAtRest
     EXPECT_FLOAT_EQ(end.offset.y, 0.0f);
 }
 
-TEST(PopupMotionFrame, InAlphaAtTimeFollowsTheEaseOut) {
+TEST(PopupMotionFrame, TheFadeIsLinearInTimeWhileTheSlideKeepsItsCubicEase) {
     const juce::Point<int> down(0, 1);
     const float t = 0.25f;
     const auto f = frameAt(Phase::In, ease(Phase::In, t), down, false);
-    EXPECT_FLOAT_EQ(f.alpha, easeOutCubic(0.25f));
+    EXPECT_NEAR(f.alpha, 0.25f, 1e-5f) << "a quarter of the time is a quarter of the fade";
+    const auto out = frameAt(Phase::Out, ease(Phase::Out, 0.5f), down, false);
+    EXPECT_NEAR(out.alpha, 0.5f, 1e-5f) << "halfway through leaving it is half gone, not still 87% there";
     EXPECT_FLOAT_EQ(f.offset.y, -4.0f * (1.0f - easeOutCubic(0.25f)));
 }
 
@@ -113,12 +115,12 @@ TEST(PopupMotionFrame, ReduceMotionIsAFadeOnlyInAndOut) {
     for (const juce::Point<int> dir : {juce::Point<int>(0, 1), juce::Point<int>(1, 0), juce::Point<int>(0, -1)}) {
         for (const float e : {0.0f, 0.3f, 1.0f}) {
             const auto in = frameAt(Phase::In, e, dir, true);
-            EXPECT_FLOAT_EQ(in.alpha, e);
+            EXPECT_NEAR(in.alpha, 1.0f - std::cbrt(1.0f - e), 1e-5f);
             EXPECT_FLOAT_EQ(in.offset.x, 0.0f);
             EXPECT_FLOAT_EQ(in.offset.y, 0.0f);
 
             const auto out = frameAt(Phase::Out, e, dir, true);
-            EXPECT_FLOAT_EQ(out.alpha, 1.0f - e);
+            EXPECT_NEAR(out.alpha, 1.0f - std::cbrt(e), 1e-5f);
             EXPECT_FLOAT_EQ(out.offset.x, 0.0f);
             EXPECT_FLOAT_EQ(out.offset.y, 0.0f);
         }
