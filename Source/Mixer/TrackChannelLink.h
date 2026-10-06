@@ -1,7 +1,9 @@
 #pragma once
 
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
 #include <vector>
 
 // TrackChannelLink.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the LINK RULE itself,
@@ -52,5 +54,23 @@ TrackChannelLinkInfo resolveTrackChannelLink(juce::AudioProcessorGraph& graph, c
  * to here -- macros are a UI concept Core has no access to, so that preference is applied by the caller, not here. */
 juce::String channelDisplayName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId,
                                 const TimelineDoc& doc, const juce::String& fallback);
+
+/** The same two answers as resolveTrackChannelLink / channelDisplayName, for MANY tracks of one graph state: a
+ *  node-uuid index plus a TrackChannelReachMap built once, so a timeline rebuild costs one graph scan rather than a
+ *  graph walk per track header. Results are identical to the free functions for every track. A SNAPSHOT: build one
+ *  per rebuild and drop it before the graph can change. */
+class TrackChannelLinkMap {
+public:
+    explicit TrackChannelLinkMap(juce::AudioProcessorGraph& graph);
+
+    TrackChannelLinkInfo resolve(const TimelineDoc& doc, TrackId track) const;
+    juce::String displayName(juce::AudioProcessorGraph::NodeID stripId, const TimelineDoc& doc,
+                             const juce::String& fallback) const;
+
+private:
+    juce::AudioProcessorGraph& graph_;
+    TrackChannelReachMap reach_;
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> nodesByUuid_; // first node per uuid, as the free walk
+};
 
 } // namespace synth

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
 #include <vector>
 
 namespace synth {
@@ -371,5 +372,31 @@ std::vector<MidiReachLeg> findMidiNodesReachedFrom(juce::AudioProcessorGraph& gr
  * computed once for both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
 std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                             juce::AudioProcessorGraph::NodeID stripId);
+
+/** A one-pass snapshot of the graph's track-link signal edges (the same edge rule as the two queries above), so
+ *  every track of a timeline rebuild is answered from ONE connection scan instead of two BFS walks each (every
+ *  BFS step re-scans the whole connection list: a per-track walk is quadratic in the track count).
+ *
+ *  Answers are identical to findStripFedByTrackSource / findTrackSourcesFeedingStrip (same visit order). The map
+ *  is a SNAPSHOT: valid only while the graph is not edited; build one per rebuild, never keep it across edits. */
+class TrackChannelReachMap {
+public:
+    explicit TrackChannelReachMap(juce::AudioProcessorGraph& graph);
+
+    /** Same result as findStripFedByTrackSource(graph, trackSourceId). */
+    juce::AudioProcessorGraph::NodeID stripFedByTrackSource(juce::AudioProcessorGraph::NodeID trackSourceId) const;
+
+    /** Same result as findTrackSourcesFeedingStrip(graph, stripId); computed once per strip. */
+    const std::vector<juce::AudioProcessorGraph::NodeID>&
+    trackSourcesFeedingStrip(juce::AudioProcessorGraph::NodeID stripId) const;
+
+private:
+    using NodeID = juce::AudioProcessorGraph::NodeID;
+    juce::AudioProcessorGraph& graph_;
+    std::map<NodeID, std::vector<NodeID>> out_; // signal edges, in connection order
+    std::map<NodeID, std::vector<NodeID>> in_;
+    mutable std::map<NodeID, NodeID> stripBySource_;
+    mutable std::map<NodeID, std::vector<NodeID>> feedersByStrip_;
+};
 
 } // namespace synth

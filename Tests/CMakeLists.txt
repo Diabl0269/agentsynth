@@ -148,6 +148,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
     Mixer/ChannelFlow/ChannelFlowMacroOutputPortTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp
+    Mixer/ChannelFlow/ChannelFlowTrackChannelLinkMapTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp
     Mixer/TrackPreset/TrackPresetTests.cpp
     Mixer/TrackPreset/TrackPresetCaptureTests.cpp
