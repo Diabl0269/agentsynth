@@ -496,6 +496,10 @@ add_library(Core STATIC
     Source/AI/PatchEval.cpp
     Source/AI/PatchDiff.h
     Source/AI/PatchDiff.cpp
+    Source/AI/RawHeaderParser.h
+    Source/AI/RawHeaderParser.cpp
+    Source/AI/WinHttpTransport.h
+    Source/AI/WinHttpTransport.cpp
     Source/AI/AuthClient.h
     Source/AI/AuthClient.cpp
     Source/AI/AccountService.h
@@ -587,18 +591,14 @@ if(UNIX AND NOT APPLE)
     target_include_directories(Core PUBLIC ${GTK3_INCLUDE_DIRS})
 endif()
 
-# RemoteProvider (Source/AI/RemoteProvider.cpp) needs libcurl. Required on macOS and Linux (the
-# macOS SDK ships a curl.tbd stub, so find_package(CURL) succeeds there with no Homebrew
-# dependency) but deliberately NOT on WIN32 — the windows-latest CI job
-# (.github/workflows/ci.yml) has no libcurl setup step, and RemoteProvider's Windows branch is a
-# stub that never calls into curl.
-if(NOT WIN32)
+# HTTP transport: libcurl on macOS/Linux (the macOS SDK ships curl.tbd), WinHTTP on Windows (no CURL
+# needed). Token storage: Security.framework on macOS, advapi32 (Credential Manager) on Windows.
+if(WIN32)
+    target_link_libraries(Core PUBLIC winhttp advapi32)
+else()
     find_package(CURL REQUIRED)
     target_link_libraries(Core PUBLIC CURL::libcurl)
 endif()
-
-# KeychainTokenStore (Source/Auth/KeychainTokenStore.cpp) needs Security.framework's SecItem* C
-# API on macOS; every other platform delegates to an in-memory fallback and needs nothing linked.
 if(APPLE)
     target_link_libraries(Core PUBLIC "-framework Security")
 endif()
