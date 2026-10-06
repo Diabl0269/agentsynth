@@ -10,6 +10,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include <functional>
 #include <gtest/gtest.h>
 
@@ -79,4 +80,26 @@ TEST(GraphEditorPaintWork, ACableRebuildsNodeLookupsDoNotGrowWithTheNumberOfCabl
 
     ASSERT_GT(manyCables, fewCables);
     EXPECT_EQ(many.nodeScans, few.nodeScans) << "per-cable lookups go through one map built per rebuild";
+}
+
+// A routing change re-syncs every card's mod dots on the next tick. Each card used to resolve every routing against
+// the whole cable set (cards x routings x cables: the duplicate-track freeze); the tick now resolves the routings
+// once, so the cable scans it costs do not grow with the number of modulated cards.
+TEST(GraphEditorPaintWork, ARoutingChangeTickDoesNotScanTheCablesPerModulatedCard) {
+    Canvas c;
+    const auto lfo = c.osc(200, 200);
+    std::vector<NodeID> filters;
+    for (int i = 0; i < 6; ++i)
+        filters.push_back(c.filter(900, 200 + i * 300));
+    c.engine.addModRouting(lfo, 0, filters[0], 1);
+    c.editor.updateComponents();
+    const auto few = countedDuring([&] { c.editor.timerCallback(); });
+
+    for (size_t i = 1; i < filters.size(); ++i)
+        c.engine.addModRouting(lfo, 0, filters[i], 1);
+    c.editor.updateComponents();
+    const auto many = countedDuring([&] { c.editor.timerCallback(); });
+
+    ASSERT_EQ(c.editor.getModDot().knobSourceCount(filters.back(), 1), 1) << "the tick counted the new routings";
+    EXPECT_EQ(many.cableScans, few.cableScans) << "one cable index per tick, not one per card or routing";
 }

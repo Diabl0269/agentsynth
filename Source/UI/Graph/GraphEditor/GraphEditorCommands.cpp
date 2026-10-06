@@ -952,7 +952,7 @@ void GraphEditor::timerCallback() {
     cachedModRoutings = audioEngine.getModulationRoutings();
     cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
     // Mod dots follow the routing set; layout changes re-sync from the card's own layout pass.
-    if (modDot_->routingsChanged(cachedModRoutings))
+    if (modDot_->recountIfRoutingsChanged(cachedModRoutings))
         for (auto* card : content.getModules())
             if (card != nullptr)
                 card->syncModDotButtons();

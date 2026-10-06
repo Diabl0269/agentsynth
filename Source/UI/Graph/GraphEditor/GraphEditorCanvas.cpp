@@ -206,7 +206,7 @@ void GraphEditor::updateComponents() {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
         if (auto* self = safeThis.getComponent())
-            self->modMatrix.updateRowsFromGraph();
+            self->modMatrix.updateRowsIfOpen();
     });
 
     // Let owners refresh anything that depends on which modules the patch now contains. Event-driven

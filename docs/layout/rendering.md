@@ -47,9 +47,28 @@ in those passes runs hundreds of times a frame. Three rules keep it linear:
   keeps its item, so its cables still slide. Snapshotting every moved card stalled an undo of a big Auto Arrange for
   most of a second.
 
+- **Walk cables through one index per pass.** `AudioProcessorGraph::getConnections()` copies and sorts every cable on
+  each call, so a loop over routings that asks it per routing is O(routings x cables). Build one
+  `synth::ui::ConnectionIndex` (`ModMatrixEndpoints.h`) and pass it to `resolveRouting` / `realEndpointBehindPorts`.
+  The mod dots go further: the tick counts the sources on every knob once when the routing set changes
+  (`ModDotController::recountIfRoutingsChanged`) and each card's `syncModDotButtons` only looks its knobs up. Each card
+  resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
+- **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix
+  (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up.
+
 `Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp` holds these as work counts (`graph_editor_paint::
 workCounters()`), not timings. `Tests/App/ManyTracksProfileTests.cpp` is a disabled bench that prints the real per-frame
 costs for 10 to 80 instrument tracks (`--gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'`).
+
+### The Load test project
+
+Performance work reproduces on one saved project: `~/Music/AgentSynth/Load test.agsproj` (about 270 KB; 20 instrument
+tracks, 20 macros, 264 modules, 412 cables, 39 modulation routings, no samples or hosted plugins). It is the project
+whose track duplicates froze the app. It lives on the developer's machine, not in the repository. The same bench file's
+`DISABLED_LoadTestProjectProfile` opens it (or `PROFILE_PROJECT=<bundle>`) and duplicates its first track
+`PROFILE_DUPLICATE` times (default 10) through the real Cmd+D path, printing each duplicate's own time, the message-loop
+work it leaves behind and the next paint:
+`PROFILE_DUPLICATE=10 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile*'`.
 
 ## Gated timers, not free-running ones
 

@@ -33,11 +33,12 @@ std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProces
     const auto& infos = fresh ? freshInfos : editor.getCachedModDisplayInfo();
     // The destination is looked through macro ports like the source: a knob inside a macro is fed by a chain that
     // ends on an inlet, and the Mod Matrix and the mod dot both name that routing against the knob itself.
+    const ConnectionIndex cables(graph);
     for (const auto& routing : routings) {
         if (routing.kind != ModulationRoutingKind::AttenuverterChain || routing.attenuverterNodeID.uid == 0 ||
             !routing.hasDest)
             continue;
-        const auto real = resolveRouting(graph, routing, isPort);
+        const auto real = resolveRouting(cables, routing, isPort);
         if (real.dest.node != dest || real.dest.channel != destChannel)
             continue;
         KnobModSource source;
@@ -56,6 +57,23 @@ std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProces
         out.push_back(std::move(source));
     }
     return out;
+}
+
+std::map<std::pair<juce::uint32, int>, int> countKnobModSources(GraphEditor& editor,
+                                                                const std::vector<ModulationRouting>& routings) {
+    std::map<std::pair<juce::uint32, int>, int> counts;
+    const ConnectionIndex cables(editor.getAudioEngine().getGraph());
+    const auto isPort = [&editor](juce::AudioProcessorGraph::NodeID id) {
+        return editor.getMacroController().nodeIsMacroPort(id);
+    };
+    for (const auto& routing : routings) {
+        if (routing.kind != ModulationRoutingKind::AttenuverterChain || routing.attenuverterNodeID.uid == 0 ||
+            !routing.hasDest)
+            continue;
+        const auto real = resolveRouting(cables, routing, isPort);
+        ++counts[{real.dest.node.uid, real.dest.channel}];
+    }
+    return counts;
 }
 
 } // namespace synth::ui

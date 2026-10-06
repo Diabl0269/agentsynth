@@ -748,3 +748,28 @@ TEST_F(ModMatrixTest, DestinationLabelStillResolvesAfterGroupingSplicesAMacroPor
                                      "destination is a spliced macro port";
     EXPECT_TRUE(label.contains("Macro In")) << "label was: " << label;
 }
+
+// A closed matrix is hidden almost all the time, and every rebuild is work per routing, so its 10 Hz tick and the
+// graph-change refresh skip it; opening the matrix catches up at once.
+TEST_F(ModMatrixTest, AClosedMatrixDoesNoWorkAndCatchesUpWhenItOpens) {
+    ModMatrixComponent matrix(engine);
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.setVisible(false);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
+
+    matrix.timerCallback();
+    matrix.updateRowsIfOpen();
+    EXPECT_EQ(matrix.getNumRowsForTest(), 0) << "closed: no rows were built";
+
+    matrix.setVisible(true);
+    EXPECT_EQ(matrix.getNumRowsForTest(), 1) << "opening shows the routing added while closed";
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 2);
+    matrix.timerCallback();
+    EXPECT_EQ(matrix.getNumRowsForTest(), 2) << "open: the tick keeps it current";
+}

@@ -2,6 +2,7 @@
 #include "ModMatrixEndpoints.h"
 
 #include "Modules/MacroInletModule.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -68,13 +69,37 @@ std::vector<ModulationTarget> modDestinationCandidates(ModuleBase* module) {
     return targets;
 }
 
+ConnectionIndex::ConnectionIndex(const juce::AudioProcessorGraph& graph) {
+    ++graph_editor_paint::workCounters().cableScans;
+    for (const auto& c : graph.getConnections()) {
+        in_[c.destination.nodeID.uid].push_back(c);
+        out_[c.source.nodeID.uid].push_back(c);
+    }
+}
+
+const std::vector<ConnectionIndex::Connection>& ConnectionIndex::into(juce::AudioProcessorGraph::NodeID node) const {
+    static const std::vector<Connection> none;
+    const auto it = in_.find(node.uid);
+    return it != in_.end() ? it->second : none;
+}
+
+const std::vector<ConnectionIndex::Connection>& ConnectionIndex::outOf(juce::AudioProcessorGraph::NodeID node) const {
+    static const std::vector<Connection> none;
+    const auto it = out_.find(node.uid);
+    return it != out_.end() ? it->second : none;
+}
+
 std::optional<juce::AudioProcessorGraph::Connection>
-attenuverterEdge(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID atten, bool incoming) {
-    for (const auto& c : graph.getConnections())
-        if (incoming ? (c.destination.nodeID == atten && c.destination.channelIndex == 0)
-                     : (c.source.nodeID == atten && c.source.channelIndex == 0))
+attenuverterEdge(const ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten, bool incoming) {
+    for (const auto& c : incoming ? cables.into(atten) : cables.outOf(atten))
+        if ((incoming ? c.destination.channelIndex : c.source.channelIndex) == 0)
             return c;
     return std::nullopt;
+}
+
+std::optional<juce::AudioProcessorGraph::Connection>
+attenuverterEdge(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID atten, bool incoming) {
+    return attenuverterEdge(ConnectionIndex(graph), atten, incoming);
 }
 
 void edgesAround(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
@@ -96,17 +121,22 @@ RoutingEndpoint realEndpointBehindPorts(juce::AudioProcessorGraph& graph, juce::
                                         bool incoming,
                                         const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
                                         std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts, bool allowFanOut) {
-    auto edge = attenuverterEdge(graph, atten, incoming);
+    return realEndpointBehindPorts(ConnectionIndex(graph), atten, incoming, isPort, passedPorts, allowFanOut);
+}
+
+RoutingEndpoint realEndpointBehindPorts(const ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten,
+                                        bool incoming,
+                                        const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
+                                        std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts, bool allowFanOut) {
+    auto edge = attenuverterEdge(cables, atten, incoming);
     if (!edge)
         return {};
     for (;;) {
         const auto far = incoming ? edge->source.nodeID : edge->destination.nodeID;
         if (!isPort(far))
             break;
-        std::vector<juce::AudioProcessorGraph::Connection> in, out;
-        edgesAround(graph, far, in, out);
-        const auto& followed = incoming ? in : out;
-        const auto& other = incoming ? out : in;
+        const auto& followed = incoming ? cables.into(far) : cables.outOf(far);
+        const auto& other = incoming ? cables.outOf(far) : cables.into(far);
         if (followed.size() != 1 || (!allowFanOut && other.size() != 1))
             break; // shared with another routing: it stays where it is
         if (passedPorts != nullptr)
@@ -119,14 +149,22 @@ RoutingEndpoint realEndpointBehindPorts(juce::AudioProcessorGraph& graph, juce::
 
 ResolvedRouting resolveRouting(juce::AudioProcessorGraph& graph, const ModulationRouting& routing,
                                const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort) {
+    if (routing.kind != ModulationRoutingKind::AttenuverterChain) // no walk: skip building the index
+        return resolveRouting(ConnectionIndex(), routing, isPort);
+    return resolveRouting(ConnectionIndex(graph), routing, isPort);
+}
+
+ResolvedRouting resolveRouting(const ConnectionIndex& cables, const ModulationRouting& routing,
+                               const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort) {
     ResolvedRouting resolved;
     resolved.source = {routing.sourceNodeID, routing.sourceChannelIndex};
     resolved.dest = {routing.destNodeID, routing.destChannelIndex};
     if (routing.kind == ModulationRoutingKind::AttenuverterChain) {
         const auto atten = routing.attenuverterNodeID;
-        if (const auto real = realEndpointBehindPorts(graph, atten, true, isPort, &resolved.ports, true); real.valid())
+        if (const auto real = realEndpointBehindPorts(cables, atten, true, isPort, &resolved.ports, true); real.valid())
             resolved.source = real;
-        if (const auto real = realEndpointBehindPorts(graph, atten, false, isPort, &resolved.ports, true); real.valid())
+        if (const auto real = realEndpointBehindPorts(cables, atten, false, isPort, &resolved.ports, true);
+            real.valid())
             resolved.dest = real;
         return resolved;
     }

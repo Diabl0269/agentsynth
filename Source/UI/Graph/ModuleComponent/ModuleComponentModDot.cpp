@@ -56,7 +56,7 @@ void ModuleComponent::syncModDotButtons() {
         const auto anchor = getModTargetKnobAnchor(target.channelIndex);
         if (si < 0 || !anchor.has_value())
             continue;
-        const int count = (int)synth::ui::knobModSources(owner, nodeId, target.channelIndex).size();
+        const int count = owner.getModDot().knobSourceCount(nodeId, target.channelIndex);
         if (count == 0)
             continue;
         live.insert(target.channelIndex);

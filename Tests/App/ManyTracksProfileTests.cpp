@@ -190,7 +190,63 @@ void profile(int tracks, bool expand) {
     std::fflush(stdout);
 }
 
+// Runs the message loop briefly so async work a real frame would do (graph rebuild, deferred repaints) is counted.
+double pumpMs() {
+    const double t0 = nowMs();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    return nowMs() - t0 - 20.0;
+}
+
+// The saved Load test project (docs/layout/rendering.md#the-load-test-project): open it, then duplicate its first track
+// N times through the real Cmd+D entry point, timing each step; a rising curve is the freeze the duplicate used to
+// cause.
+void profileProject(const juce::File& project, int duplicates) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 1000);
+    mc.getAudioEngine().suspendDeviceCallback();
+    double t0 = nowMs();
+    if (!mc.openProjectForTest(project)) {
+        std::printf("[project] could not open %s\n", project.getFullPathName().toRawUTF8());
+        return;
+    }
+    const double openMs = nowMs() - t0;
+    const double openPump = pumpMs();
+    paintOnce(mc);
+    std::printf("[project] %s tracks=%d nodes=%d open=%.0f pump=%.0f\n", project.getFileName().toRawUTF8(),
+                (int)mc.getTimelineDoc().getTracks().size(), (int)mc.getAudioEngine().getGraph().getNumNodes(), openMs,
+                openPump);
+    std::fflush(stdout);
+    if (duplicates <= 0)
+        return;
+    const auto first = mc.getTimelineDoc().getTracks().front().id;
+    // TrackHeaderHost is a private base of MainComponent; the C-style cast is the header's own call path.
+    auto& host = (synth::ui::TrackHeaderHost&)mc;
+    for (int i = 0; i < duplicates; ++i) {
+        t0 = nowMs();
+        host.duplicateTrack(first);
+        const double dupMs = nowMs() - t0;
+        const double pump = pumpMs();
+        t0 = nowMs();
+        paintOnce(mc);
+        const double paint = nowMs() - t0;
+        std::printf("[duplicate] #%d tracks=%d nodes=%d call=%.0f pump=%.0f paint=%.0f\n", i + 1,
+                    (int)mc.getTimelineDoc().getTracks().size(), (int)mc.getAudioEngine().getGraph().getNumNodes(),
+                    dupMs, pump, paint);
+        std::fflush(stdout);
+    }
+}
+
 } // namespace
+
+// PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj) and PROFILE_DUPLICATE=<n> (default 10).
+TEST_F(ChannelFlowTest, DISABLED_LoadTestProjectProfile) {
+    const char* path = std::getenv("PROFILE_PROJECT");
+    const auto project = path != nullptr ? juce::File(path)
+                                         : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                               .getChildFile("AgentSynth/Load test.agsproj");
+    const char* n = std::getenv("PROFILE_DUPLICATE");
+    profileProject(project, n != nullptr ? std::atoi(n) : 10);
+}
 
 TEST_F(ChannelFlowTest, DISABLED_ManyTracksProfile) {
     if (const char* n = std::getenv("PROFILE_TRACKS")) {
