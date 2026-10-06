@@ -31,8 +31,10 @@ class BuiltInCardLayoutSource;
  * pushes the one under it aside) and arrow keys to nudge it. Each drop or settled nudge writes the
  * node's layout through a BuiltInCardLayoutSource, which rebuilds the card; the overlay then re-syncs
  * to the new card, so it holds the GraphEditor and the node id and never the card it covers. Done
- * keeps the result, Cancel or Esc restores the layout the card opened with; the whole session is one
- * undo step, recorded when the source is destroyed. The bar's Preset and Apply to menus, and the "+ Add control"
+ * keeps the result, Cancel or Esc restores the layout the card opened with. Every write is its own undo
+ * step, recorded by the source as it is made, so Cmd+Z steps back one change at a time (the keys reach the
+ * app, and the overlay re-syncs to the card the restore rebuilds); Cancel is one more step, which brings the
+ * cancelled edits back. The bar's Preset and Apply to menus, and the "+ Add control"
  * strip the overlay adds under the card, are the other things it hosts; on an ADSR card the strip also holds the
  * "Time and tempo" switch, which rewrites the stages' group.
  */
@@ -207,6 +209,7 @@ private:
     // ---- Keyboard (CardLayoutOnCardEditorKeyboard.cpp) -----------------------------------------
     bool handleKey(const juce::String& key, const juce::KeyPress& press);
     bool matchesAction(const juce::KeyPress& press, const char* actionId, const juce::KeyPress& fallback) const;
+    bool isUndoOrRedo(const juce::KeyPress& press) const;
     void nudge(const juce::String& key, int dx, int dy);
     void flushNudge();
     void announce(const juce::String& text);

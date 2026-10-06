@@ -249,7 +249,7 @@ TEST(OnCardControlPanel, EscClosesThePanelFirstAndASecondEscCancelsTheSession) {
     EXPECT_TRUE(editor->isClosed());
 }
 
-TEST(OnCardControlPanel, PanelEditsAndDoneAreOneUndoStep) {
+TEST(OnCardControlPanel, EachPanelEditIsItsOwnUndoStep) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
@@ -259,12 +259,13 @@ TEST(OnCardControlPanel, PanelEditsAndDoneAreOneUndoStep) {
     chooseShowAs(*panel, CardWidget::FaderV);
     panel->getLabelEditorForTest().setText("Res", false);
     panel->commitLabelForTest();
-    EXPECT_FALSE(rig.canvas.undo.canUndo());
+    ASSERT_TRUE(rig.canvas.undo.canUndo());
 
     editor->getEditBarForTest().getDoneButton().onClick();
     EXPECT_EQ(editor->getControlPanelForTest(), nullptr) << "ending the session closes the panel";
+    EXPECT_TRUE(rig.canvas.undo.undo()); // the label
     ASSERT_TRUE(rig.canvas.undo.canUndo());
-    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_TRUE(rig.canvas.undo.undo()); // the widget
     EXPECT_FALSE(rig.canvas.undo.canUndo());
     EXPECT_FALSE(rig.storedLayout(id).has_value());
 }

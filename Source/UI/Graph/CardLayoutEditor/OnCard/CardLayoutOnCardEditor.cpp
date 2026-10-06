@@ -196,8 +196,8 @@ void CardLayoutOnCardEditor::done() { close(true); }
 
 void CardLayoutOnCardEditor::cancel() { close(false); }
 
-// Done keeps the layout the writes made; Cancel puts the opening one back. Either way the source goes:
-// that is where the session's one undo step is recorded (none when the layout is as it opened).
+// Done keeps the layout the writes made; Cancel puts the opening one back, as one more undo step (none when
+// the layout is as it opened).
 void CardLayoutOnCardEditor::close(bool keep) {
     if (closed_ || closing_)
         return;

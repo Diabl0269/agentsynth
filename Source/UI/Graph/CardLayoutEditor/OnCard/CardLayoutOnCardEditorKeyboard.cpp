@@ -59,11 +59,25 @@ bool CardLayoutOnCardEditor::handleKey(const juce::String& key, const juce::KeyP
     return false;
 }
 
+bool CardLayoutOnCardEditor::isUndoOrRedo(const juce::KeyPress& press) const {
+    const auto cmd = juce::ModifierKeys::commandModifier;
+    return matchesAction(press, "undo", juce::KeyPress('z', cmd, 0)) ||
+           matchesAction(press, "redo", juce::KeyPress('z', cmd | juce::ModifierKeys::shiftModifier, 0));
+}
+
 // Esc: an open panel (the control's or Add control) closes first, then a drag in progress goes back, else the session
 // is cancelled. It reaches here from the outlines (through handleKey) and from the bar's buttons, which leave the key
 // to bubble.
+// Undo and redo are the app's: the key is left to bubble to it (false), but a nudge still waiting to be written
+// is written first, so it is a step of its own that the undo then takes back.
 bool CardLayoutOnCardEditor::keyPressed(const juce::KeyPress& key) {
-    if (closed_ || key != juce::KeyPress::escapeKey)
+    if (closed_)
+        return false;
+    if (isUndoOrRedo(key)) {
+        flushNudge();
+        return false;
+    }
+    if (key != juce::KeyPress::escapeKey)
         return false;
     if (panel_ != nullptr || addPanel_ != nullptr)
         closePanel();

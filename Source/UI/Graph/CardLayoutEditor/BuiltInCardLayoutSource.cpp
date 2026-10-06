@@ -1,6 +1,6 @@
 // BuiltInCardLayoutSource.cpp -- a built-in module's card as the layout editor's source: parameters,
 // the live write that rebuilds the card, Apply to all through the per-type store, presets, and the
-// session's single undo step. docs/layout/module-card-layout.md#editing-a-layout.
+// per-write undo steps. docs/layout/module-card-layout.md#editing-a-layout.
 #include "BuiltInCardLayoutSource.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -58,7 +58,6 @@ std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param
 
 } // namespace
 
-// The "before" of the session's undo step is taken here, before anything is written.
 BuiltInCardLayoutSource::BuiltInCardLayoutSource(GraphEditor& editor, AppUndoManager* undo,
                                                  juce::AudioProcessorGraph::NodeID nodeId)
     : editor_(&editor)
@@ -75,17 +74,24 @@ BuiltInCardLayoutSource::BuiltInCardLayoutSource(GraphEditor& editor, AppUndoMan
                 openingDefault_ = stored.layout;
         }
     }
-    if (undo_ != nullptr)
-        sessionBefore_ = AIStateMapper::graphToJSON(graph);
 }
 
-// Closing the editor ends the session: every write it made (this card's layout, the neighbours its
-// growth pushed aside, an Apply to all clearing the override) becomes one undo step. The per-type file
-// an Apply to all wrote is a setting, not part of the graph, so undo leaves it in place.
-BuiltInCardLayoutSource::~BuiltInCardLayoutSource() {
-    if (undo_ != nullptr)
-        if (auto* g = graph())
-            undo_->recordGraphChangeSince(*g, sessionBefore_);
+// Nothing is recorded here: every write already was, so closing the editor adds no step of its own.
+BuiltInCardLayoutSource::~BuiltInCardLayoutSource() = default;
+
+// One undo step per write: the graph just before it against the graph just after, which takes in the
+// neighbours a taller card pushed aside and an Apply to all clearing the override. The "before" is taken at
+// the write, not carried from the last one, so anything else that changed the graph in between (an undo or
+// redo, a module moved) is never swept into this step. A write that changed nothing records nothing. The
+// per-type file an Apply to all wrote is a setting, not part of the graph, so undo leaves it in place.
+juce::var BuiltInCardLayoutSource::snapshotBeforeWrite() const {
+    auto* g = graph();
+    return undo_ != nullptr && g != nullptr ? AIStateMapper::graphToJSON(*g) : juce::var();
+}
+
+void BuiltInCardLayoutSource::recordSince(const juce::var& before) {
+    if (auto* g = graph(); undo_ != nullptr && g != nullptr)
+        undo_->recordGraphChangeSince(*g, before);
 }
 
 juce::AudioProcessorGraph* BuiltInCardLayoutSource::graph() const {
@@ -163,6 +169,7 @@ void BuiltInCardLayoutSource::apply(const CardLayout& layout, bool allOfType) {
     auto* g = graph();
     if (g == nullptr || !isAlive())
         return;
+    const auto before = snapshotBeforeWrite();
     auto* types = store();
     if (allOfType && types != nullptr) {
         setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
@@ -172,18 +179,21 @@ void BuiltInCardLayoutSource::apply(const CardLayout& layout, bool allOfType) {
         setCardLayoutOverride(*g, nullptr, nodeId_, layout);
     }
     refreshCard();
+    recordSince(before);
 }
 
 CardLayout BuiltInCardLayoutSource::reset(bool allOfType) {
     auto* g = graph();
     if (g == nullptr || !isAlive())
         return currentLayout();
+    const auto before = snapshotBeforeWrite();
     setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
     if (auto* types = store(); allOfType && types != nullptr) {
         defaultTouched_ = true;
         types->clearDefault(moduleType_);
     }
     refreshCard();
+    recordSince(before);
     return currentLayout();
 }
 
@@ -191,6 +201,7 @@ void BuiltInCardLayoutSource::restoreOpeningLayout() {
     auto* g = graph();
     if (g == nullptr || !isAlive())
         return;
+    const auto before = snapshotBeforeWrite();
     restoreCardLayoutOverride(*g, nodeId_, openingOverride_);
     if (auto* types = store(); defaultTouched_ && types != nullptr) {
         defaultTouched_ = false;
@@ -200,6 +211,7 @@ void BuiltInCardLayoutSource::restoreOpeningLayout() {
             types->clearDefault(moduleType_);
     }
     refreshCard();
+    recordSince(before);
 }
 
 juce::StringArray BuiltInCardLayoutSource::listPresets() const {

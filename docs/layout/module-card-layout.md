@@ -433,7 +433,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   **Apply to**, **Cancel**, **Done**), and under the card a strip with a **+ Add control** button; on an ADSR, Amp Env or Filter Env card
   that strip also holds a "Time and tempo" switch with **Shared** and **Separate** segments, left of Add control
   (it shows only while the layout still has its stages) and rewrites the stages group at once,
-  like any other edit of the session, so Cancel undoes it. Every control
+  like any other edit of the session, so Cancel undoes it, and it is one undo step. Every control
   of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
   outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
   outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
@@ -484,7 +484,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     change is written at once through the session's source, like a drop, so the card rebuilds and the panel
     stays open, re-anchored to the control's new outline, until Esc, a click outside, or Hide. Esc closes
     the panel first; a second Esc cancels the session. The panel is owned by the editor, which closes it
-    when the session ends or the control leaves the card; all of it stays inside the session's one undo step.
+    when the session ends or the control leaves the card; each field's change is its own undo step.
   - *Apply to (built).* The bar's **Apply to** opens a menu: **This module** and **All <Type> modules**, the
     one in force ticked, and a disabled note under them saying how many cards a write changes now ("Changes
     1 card", "Changes 2 cards": the GraphEditor's cards of that module type). Choosing **All** writes the
@@ -567,13 +567,18 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   too. The hosted source has no groups and no widget choice, and an unticked row leaves its layout
   (it lists after the ticked ones), as before. The on-card editor writes through the built-in source too
   (it adds `restoreOpeningLayout()` for Cancel).
-- **Undo:** one step per quick-path click, and one per on-card editor session on a built-in card (adds, scope changes and presets included): the
-  session takes a graph snapshot when it opens and records the difference when it closes
-  (`AppUndoManager::recordGraphChangeSince`), so the layout, its label and widget edits and the
-  neighbours a taller card pushed aside undo together. **Apply to all** writes the per-type file and
-  clears this module's override inside that same step; undo gives the override back, but the per-type
-  file is a setting, not part of the project, and stays. A session that changes nothing records
-  nothing, and a cancelled on-card session leaves the layout as it opened, so it records nothing.
+- **Undo:** one step per quick-path click, and one per change made in the on-card editor of a built-in card (a
+  drop, a settled nudge, a panel edit, an add or hide, a preset, a reset, an Apply to, a Time and tempo switch):
+  each write records the graph before against the graph after (`AppUndoManager::recordGraphChangeSince`, the
+  "before" taken at the write), so the layout, its label and widget edits and the neighbours a taller card
+  pushed aside undo together, and Cmd+Z while the editor is open steps back one change, never the earlier
+  work on the canvas first. Cmd+Z and Cmd+Shift+Z are the app's: the overlay leaves them to bubble (a nudge
+  still waiting is written first, as its own step) and re-syncs to the card the restore rebuilds, writing
+  nothing; undoing past the module's own creation closes the editor with the card. **Apply to all** writes the
+  per-type file and clears this module's override inside its step; undo gives the override back, but the
+  per-type file is a setting, not part of the project, and stays. A write that changes nothing records
+  nothing. Cancel puts the opening layout back as one more step (when it differs), so Cmd+Z after Cancel
+  brings the cancelled edits back.
   The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
 - **Later:** the list's built-in-only parts (groups, widget choice, tab rows, unticked rows staying in place) have no
   entry point now and can go once nothing needs them.
@@ -706,8 +711,8 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - `Tests/UI/Graph/CardLayoutEditor/` (built): `CardLayoutEditorBuiltInTests.cpp` opens the editor
   through the real right-click path (a control's menu and the module menu) and covers tick, rename,
   widget choice (only suitable kinds), + Add group with a header row on the card and measure == apply,
-  a real drag across a group header, search, one undo step per session (and none for a session that
-  changes nothing), Apply to all clearing the override in that step with another Filter re-laid out,
+  a real drag across a group header, search, one undo step per change (and none for a session that
+  changes nothing), Apply to all clearing the override in its step with another Filter re-laid out,
   a per-type default written elsewhere rebuilding only that type's cards, presets and reset;
   `CardLayoutEditorKeyboardTests.cpp` a keyboard-only session, the rebindable keys and the
   accessibility audit with no gaps; `CardLayoutEditorModelTests.cpp` the working model in both modes.
@@ -720,8 +725,9 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
   the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
-  nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done as
-  one undo step, Cancel restoring the opening layout with none. Motion is off in them
+  nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
+  step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
+  module add). Motion is off in them
   (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.
 - E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make
   Level a fader, save (`graphToJSON`), reload into a fresh canvas (`applyJSONToGraph`, trusted), and

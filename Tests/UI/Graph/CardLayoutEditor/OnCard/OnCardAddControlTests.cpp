@@ -185,7 +185,9 @@ TEST(OnCardAddControl, ClickingARowPutsTheControlBackInTheLastGroupAndWritesOnce
 
     editor->done();
     EXPECT_TRUE(rig.canvas.undo.undo());
-    EXPECT_FALSE(rig.canvas.undo.canUndo()) << "hide and add were one session, one undo step";
+    EXPECT_FALSE(widgetOf(*rig.card(id), "drive")->isVisible()) << "the add was one step: undo hides it again";
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_FALSE(rig.canvas.undo.canUndo()) << "and the hide was the other";
 }
 
 TEST(OnCardAddControl, InAPositionedGroupTheControlLandsAtAFreeSpotThatKeepsTheGap) {
