@@ -17,6 +17,7 @@
 #include <cmath>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 namespace synth::ui::popup_motion {
 
@@ -148,12 +149,19 @@ public:
     /** dismiss() whose close is `box.dismiss()` (a call-out popover). */
     static void dismissCallOut(juce::CallOutBox& box);
 
-    /** True from dismiss() until its `reallyClose` has run. */
+    /** True from dismiss() until a turn after its `reallyClose` has run. Until then the window stays faded out,
+     *  so a close that only posts its hide (a call-out's dismiss) never shows it whole again for a moment. */
     static bool isDismissing(const juce::Component& window);
 
     /** How many leaving pictures are on screen right now (a window JUCE hid or deleted that is still
      *  fading). For tests. */
     static int getNumLeavingGhosts();
+
+    /** The leaving pictures on screen right now. For tests. */
+    static std::vector<juce::Component*> getLeavingGhostsForTest();
+
+    /** True when the platform's own show/hide animation of `window` is off (always, off macOS). For tests. */
+    static bool isPlatformAnimationOffForTest(juce::Component& window);
 
     /** Test seam: lets dismiss() animate a window that has no native peer (the tween then ends on
      *  its watchdog timer, since no VBlank ever arrives). Default off. */

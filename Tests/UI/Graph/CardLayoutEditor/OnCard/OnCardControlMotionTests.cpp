@@ -48,19 +48,78 @@ TEST(ControlMotion, AKnobScalesOnBothAxesAndAFaderOnlyAlongItsLength) {
     EXPECT_NEAR(top, 100.0f, 0.001f) << "not thinner";
 }
 
-TEST(OnCardControlMotion, HidingLeavesAShrinkingGhostThatIsGoneOnceItHasShrunk) {
+static bool hiddenInStore(OnCardRig& rig, NodeID id, const juce::String& paramId) {
+    const auto stored = rig.storedLayout(id);
+    return stored.has_value() && stored->hidden.contains(paramId);
+}
+
+TEST(OnCardControlMotion, HidingShrinksTheControlAwayFirstAndOnlyThenTakesItOffTheLayout) {
     MotionRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     editor->setForceAnimateForTest(true);
+    auto* widget = widgetOf(*rig.card(id), "drive");
+    ASSERT_NE(widget, nullptr);
 
     hideThroughPanel(rig, *editor, "drive");
-    EXPECT_TRUE(rig.storedLayout(id)->hidden.contains("drive")) << "the layout write is not animated";
     EXPECT_EQ(editor->getShrinkGhostCountForTest(), 1);
+    EXPECT_TRUE(editor->hasPendingHideForTest());
+    EXPECT_FALSE(hiddenInStore(rig, id, "drive")) << "the card keeps its place while the picture shrinks";
+    EXPECT_FLOAT_EQ(widget->getAlpha(), 0.0f) << "only the shrinking picture shows";
 
     editor->finishMotionForTest();
     EXPECT_EQ(editor->getShrinkGhostCountForTest(), 0);
+    EXPECT_FALSE(editor->hasPendingHideForTest());
+    EXPECT_TRUE(hiddenInStore(rig, id, "drive"));
+}
+
+TEST(OnCardControlMotion, NothingMovesUnderTheShrinkingPicture) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->setForceAnimateForTest(true);
+    const auto before = synth::ui::collectCells(*rig.card(id));
+    const auto ghostRect = editor->getCellRectForTest("drive");
+
+    hideThroughPanel(rig, *editor, "drive");
+    for (const auto& cell : before) {
+        if (cell.key == "drive")
+            continue;
+        EXPECT_EQ(editor->getCellRectForTest(cell.key), cell.rect) << cell.key << " stays put";
+        EXPECT_FALSE(editor->getCellRectForTest(cell.key).intersects(ghostRect)) << cell.key;
+    }
+    editor->finishMotionForTest();
+}
+
+TEST(OnCardControlMotion, CancelWhileItShrinksBringsTheControlBack) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->setForceAnimateForTest(true);
+    auto* widget = widgetOf(*rig.card(id), "drive");
+    ASSERT_NE(widget, nullptr);
+    hideThroughPanel(rig, *editor, "drive");
+    editor->cancel();
+    EXPECT_FALSE(hiddenInStore(rig, id, "drive"));
+    auto* now = widgetOf(*rig.card(id), "drive");
+    ASSERT_NE(now, nullptr);
+    EXPECT_FLOAT_EQ(now->getAlpha(), 1.0f);
+}
+
+TEST(OnCardControlMotion, AnotherEditWhileItShrinksWritesTheHideFirst) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->setForceAnimateForTest(true);
+    hideThroughPanel(rig, *editor, "drive");
+    editor->flushNudgeForTest(); // what every write and Done run first
+    EXPECT_TRUE(hiddenInStore(rig, id, "drive"));
+    EXPECT_FALSE(editor->hasPendingHideForTest());
+    editor->finishMotionForTest();
 }
 
 TEST(OnCardControlMotion, UnderReduceMotionTheGhostFadesInPlace) {
@@ -118,4 +177,95 @@ TEST(OnCardControlMotion, HeadlessAddAndHideLandAtOnceWithNothingLeftOver) {
     ASSERT_NE(widget, nullptr);
     EXPECT_FLOAT_EQ(widget->getAlpha(), 1.0f);
     EXPECT_TRUE(widget->getTransform().isIdentity());
+}
+
+// ---- What the canvas actually paints, frame by frame ------------------------------------------------------------
+
+namespace {
+
+/** `area` of `canvas` (the card's parent) as it paints, through the card's cached image and the editor's overlay. */
+juce::Image paintArea(juce::Component& canvas, juce::Rectangle<int> area) {
+    juce::Image image(juce::Image::ARGB, area.getWidth(), area.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    g.setOrigin(-area.getPosition());
+    g.reduceClipRegion(area);
+    canvas.paintEntireComponent(g, true);
+    return image;
+}
+
+/** How wide the part of `frame` that differs from `empty` is, in pixels (0 when nothing differs). */
+int paintedWidth(const juce::Image& frame, const juce::Image& empty) {
+    int left = frame.getWidth(), right = -1;
+    for (int y = 0; y < frame.getHeight(); ++y)
+        for (int x = 0; x < frame.getWidth(); ++x)
+            if (frame.getPixelAt(x, y) != empty.getPixelAt(x, y)) {
+                left = std::min(left, x);
+                right = std::max(right, x);
+            }
+    return right < left ? 0 : right - left + 1;
+}
+
+/** `rect` (card pixels) on the card's parent, with room around it for an overshoot. */
+juce::Rectangle<int> onCanvas(ModuleComponent& card, juce::Rectangle<int> rect) {
+    return rect.translated(card.getX(), card.getY()).expanded(rect.getWidth() / 5, rect.getHeight() / 5);
+}
+
+} // namespace
+
+TEST(OnCardControlMotion, TheShrinkingPictureIsPaintedSmallerEachFrame) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->setForceAnimateForTest(true);
+    auto& card = *rig.card(id);
+    auto* canvas = card.getParentComponent();
+    ASSERT_NE(canvas, nullptr);
+    const auto area = onCanvas(card, editor->getCellRectForTest("drive"));
+
+    hideThroughPanel(rig, *editor, "drive");
+    editor->setShrinkGhostProgressForTest(1.0f);
+    const auto empty = paintArea(*canvas, area);
+    std::vector<int> widths;
+    // The picture carries the card's own background, so its edge only shows once it has started to shrink.
+    for (float t : {0.5f, 0.7f, 0.85f, 0.95f}) {
+        editor->setShrinkGhostProgressForTest(t);
+        widths.push_back(paintedWidth(paintArea(*canvas, area), empty));
+    }
+    EXPECT_GT(widths.back(), 0) << "still there near the end";
+    for (size_t i = 1; i < widths.size(); ++i)
+        EXPECT_LT(widths[i], widths[i - 1]) << "frame " << i << " is painted smaller than the one before";
+    editor->finishMotionForTest();
+}
+
+TEST(OnCardControlMotion, TheAddedControlIsPaintedGrowingPastItsSizeThenSettling) {
+    MotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    hideThroughPanel(rig, *editor, "drive");
+    auto* panel = openAddPanel(rig, *editor);
+    ASSERT_NE(panel, nullptr);
+    editor->setForceAnimateForTest(true);
+    clickRow(*panel->getRowForTest("drive"));
+    auto& card = *rig.card(id);
+    auto* canvas = card.getParentComponent();
+    ASSERT_NE(canvas, nullptr);
+    const auto area = onCanvas(card, editor->getCellRectForTest("drive"));
+
+    float peakT = 0.0f;
+    for (int i = 1; i < 100; ++i)
+        if (cm::growScale((float)i / 100.0f) > cm::growScale(peakT))
+            peakT = (float)i / 100.0f;
+    editor->applyAddFrameForTest(0.0f);
+    const auto empty = paintArea(*canvas, area);
+    const auto widthAt = [&](float t) {
+        editor->applyAddFrameForTest(t);
+        return paintedWidth(paintArea(*canvas, area), empty);
+    };
+    const int early = widthAt(0.15f), peak = widthAt(peakT), settled = widthAt(1.0f);
+    EXPECT_GT(early, 0);
+    EXPECT_LT(early, settled) << "it starts small";
+    EXPECT_GT(peak, settled) << "it passes its size on the way";
+    editor->finishMotionForTest();
 }

@@ -136,25 +136,74 @@ void CardLayoutOnCardEditor::editControl(const juce::String& paramId,
         writeLayout(after);
 }
 
-// Hide closes the panel first: the control leaves the card for the More row, and focus goes back to the
-// first outline left.
-void CardLayoutOnCardEditor::hideControl(const juce::String& paramId) {
+// Hide closes the panel first. On screen the control shrinks away where it was, over the card it is still
+// on; only then does the layout lose it and the rest of the card close the gap, so nothing moves under the
+// shrinking picture. Headless, or with nothing on screen, the write is immediate.
+void CardLayoutOnCardEditor::hideControl(juce::String paramId) {
     closePanel();
-    startShrinkGhost(paramId); // a picture of it, taken before the layout is rewritten
+    flushNudge(); // a control still shrinking from an earlier Hide leaves the layout first
+    if (startShrinkGhost(paramId)) {
+        pendingHide_ = paramId;
+        return;
+    }
+    writeHide(paramId);
+}
+
+// The control leaves the layout and the card closes the gap: every control it moved glides from where it stood
+// (control_motion::kCloseGapMs). Focus goes back to the first outline left.
+// By value: the caller's string can belong to an outline the write deletes.
+void CardLayoutOnCardEditor::writeHide(juce::String paramId) {
+    std::vector<std::pair<juce::String, juce::Rectangle<int>>> before;
+    for (const auto& c : cells_)
+        before.emplace_back(c.key, c.rect);
     editControl(paramId,
                 [paramId](CardLayout l) { return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide); });
+    std::vector<Move> moves;
+    for (const auto& [key, rect] : before)
+        if (const int cell = indexOfCell(key); cell >= 0 && key != paramId)
+            moves.push_back({key, rect, cells_[(size_t)cell].rect, control_motion::kCloseGapMs, false});
+    startGlide(std::move(moves));
     if (auto* first = outlines_.getFirst())
         first->grabKeyboardFocus();
 }
 
-// The removed control shrinks away where it was: a ghost of the card's picture of it (150 ms, backwards what
-// adding does), gone when it has shrunk. Nothing on screen, nothing to animate.
-void CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
+// The hide whose picture is still shrinking is written now (its picture has gone, or another edit needs the
+// layout as it will be).
+void CardLayoutOnCardEditor::flushPendingHide() {
+    if (pendingHide_.isEmpty())
+        return;
+    const auto paramId = std::exchange(pendingHide_, juce::String());
+    for (auto& part : std::exchange(pendingHideParts_, {}))
+        if (part != nullptr)
+            part->setAlpha(1.0f);
+    writeHide(paramId);
+}
+
+// Cancel: the hide is never written and the control comes back as it was.
+void CardLayoutOnCardEditor::dropPendingHide() {
+    pendingHide_ = {};
+    for (auto& part : std::exchange(pendingHideParts_, {}))
+        if (part != nullptr)
+            part->setAlpha(1.0f);
+}
+
+// The removed control shrinks away where it was: a picture of it (150 ms, backwards what adding does) over the
+// control itself, which is made invisible. False when nothing is on screen to animate.
+bool CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
     const int cell = indexOfCell(paramId);
     if (cell < 0 || card_ == nullptr || !canAnimate() || animationsOff())
-        return;
-    const auto rect = cells_[(size_t)cell].rect;
-    startShrinkGhostOf(card_->createComponentSnapshot(rect, true, 2.0f), rect);
+        return false;
+    const auto& c = cells_[(size_t)cell];
+    auto image = card_->createComponentSnapshot(c.rect, true, 2.0f);
+    if (image.isNull())
+        return false;
+    for (auto* part : {c.widget.getComponent(), c.label.getComponent()})
+        if (part != nullptr) {
+            part->setAlpha(0.0f);
+            pendingHideParts_.emplace_back(part);
+        }
+    startShrinkGhostOf(std::move(image), c.rect);
+    return true;
 }
 
 // The same, from `image`, the card's picture of the cell at 2x. An undo uses it: it only finds out a control is
@@ -167,7 +216,12 @@ void CardLayoutOnCardEditor::startShrinkGhostOf(juce::Image image, juce::Rectang
     ghost->setBounds(rect.withPosition(getLocalPoint(card_, rect.getPosition())));
     addAndMakeVisible(ghost);
     ghost->toBack();
-    ghostPump_.run(ghost->durationMs(), [this] { tickGhosts(); }, [this] { ghosts_.clear(); });
+    ghostPump_.run(
+        ghost->durationMs(), [this] { tickGhosts(); },
+        [this] {
+            ghosts_.clear();
+            flushPendingHide();
+        });
 }
 
 void CardLayoutOnCardEditor::tickGhosts() {

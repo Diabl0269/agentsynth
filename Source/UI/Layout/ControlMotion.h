@@ -12,6 +12,7 @@ namespace synth::ui::control_motion {
 
 constexpr double kGrowMs = 200.0;
 constexpr double kShrinkMs = 150.0;
+constexpr double kCloseGapMs = 200.0; ///< After a removed control has shrunk, the rest of the card closes its gap.
 constexpr double kReducedMs = 80.0;
 
 /** The axis a control scales along: a knob on both, a long fader only along its length. */

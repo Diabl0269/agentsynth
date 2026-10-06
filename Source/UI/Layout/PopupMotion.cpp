@@ -3,6 +3,7 @@
 #include "UI/Layout/ReducedMotion.h"
 
 #include <unordered_map>
+#include <vector>
 
 namespace synth::ui {
 
@@ -10,7 +11,17 @@ namespace synth::ui {
 // PopupMotionMac.mm: a picture of a whole native window, title bar included. `topInset` is how
 // many points the picture reaches above the content area.
 juce::Image captureNativeWindowImage(void* nativeView, int& topInset);
+void disableNativeWindowAnimation(void* nativeView);
+bool nativeWindowAnimationIsOff(void* nativeView);
 #endif
+
+// The app animates popups itself; the platform's own window animation must not run on top of it.
+static void disablePlatformAnimation([[maybe_unused]] juce::Component& window) {
+#if JUCE_MAC
+    if (auto* peer = window.getPeer())
+        disableNativeWindowAnimation(peer->getNativeHandle());
+#endif
+}
 
 namespace {
 
@@ -29,9 +40,9 @@ bool& enabledFlag() {
     return enabled;
 }
 
-int& ghostCounter() {
-    static int count = 0;
-    return count;
+std::vector<juce::Component*>& liveGhosts() {
+    static std::vector<juce::Component*> ghosts;
+    return ghosts;
 }
 
 int roundToInt(float v) { return (int)std::lround(v); }
@@ -63,8 +74,11 @@ public:
         setOpaque(false);
         setInterceptsMouseClicks(false, false);
         setAccessible(false);
-        ++ghostCounter();
+        liveGhosts().push_back(this);
         setBounds(screenBounds);
+        // Above every normal window: when a menu closes, juce brings the app window to the front, which would
+        // bury a picture at the normal window level before it had faded.
+        setAlwaysOnTop(true);
         addToDesktop(juce::ComponentPeer::windowIsTemporary | juce::ComponentPeer::windowIgnoresKeyPresses |
                      juce::ComponentPeer::windowIgnoresMouseClicks |
                      (styleFlags & juce::ComponentPeer::windowHasDropShadow));
@@ -78,7 +92,7 @@ public:
         startTimer((int)popup_motion::durationMs(Phase::Out, reduce_) + kWatchdogSlackMs);
     }
 
-    ~Ghost() override { --ghostCounter(); }
+    ~Ghost() override { std::erase(liveGhosts(), this); }
 
     void paint(juce::Graphics& g) override {
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
@@ -172,6 +186,7 @@ public:
         reduce_ = prefersReducedMotion();
         dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
         window_->setInterceptsMouseClicks(false, false);
+        disablePlatformAnimation(*window_);
 
         driver_.start(
             updater_, popup_motion::durationMs(Phase::Out, reduce_),
@@ -232,6 +247,7 @@ private:
         }
         reduce_ = prefersReducedMotion();
         dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
+        disablePlatformAnimation(*window_);
         ghosted_ = false;
         cache_ = {};
         animating_ = true;
@@ -296,14 +312,26 @@ private:
             close();
         if (safe == nullptr)
             return; // closed and gone
+        // A close can itself be asynchronous (a call-out's dismiss() posts its hide), so the window may
+        // still be up now: it stays faded out until a turn later shows whether it really went.
+        juce::MessageManager::callAsync([safe] {
+            auto* window = safe.getComponent();
+            if (window == nullptr)
+                return;
+            if (const auto it = registry().find(window); it != registry().end())
+                it->second->settleAfterClose();
+        });
+    }
+
+    // After a close: put back what the fade changed, so a window that lives on (closing was vetoed, or it was
+    // only hidden and is shown again) is whole.
+    void settleAfterClose() {
         leaving_ = false;
         closeScheduled_ = false;
         driver_.stop(updater_);
         window_->setInterceptsMouseClicks(true, true);
-        if (window_->isVisible() || !window_->isOnDesktop()) { // closing was vetoed or only hid it
-            window_->setAlpha(1.0f);
-            window_->setTopLeftPosition(restPos_);
-        }
+        window_->setAlpha(1.0f);
+        window_->setTopLeftPosition(restPos_);
     }
 
     void onHidden() {
@@ -404,7 +432,18 @@ void PopupMotion::setEnabled(bool enabled) { enabledFlag() = enabled; }
 
 bool PopupMotion::isEnabled() { return enabledFlag(); }
 
-int PopupMotion::getNumLeavingGhosts() { return ghostCounter(); }
+int PopupMotion::getNumLeavingGhosts() { return (int)liveGhosts().size(); }
+
+std::vector<juce::Component*> PopupMotion::getLeavingGhostsForTest() { return liveGhosts(); }
+
+bool PopupMotion::isPlatformAnimationOffForTest([[maybe_unused]] juce::Component& window) {
+#if JUCE_MAC
+    auto* peer = window.getPeer();
+    return peer != nullptr && nativeWindowAnimationIsOff(peer->getNativeHandle());
+#else
+    return true;
+#endif
+}
 
 void PopupMotion::setAnimateOffScreenForTest(bool animate) { offscreenForTestFlag() = animate; }
 

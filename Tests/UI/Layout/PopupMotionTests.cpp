@@ -406,3 +406,61 @@ TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
     EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
     EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
 }
+
+// A menu's picture outlives the menu: when juce brings the app window to the front as the menu closes, a picture
+// at the normal window level would be buried before it had faded (the menu then just vanished).
+TEST(PopupMotionLeaving, TheLeavingPictureStaysAboveTheAppWindow) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    letItSettle();
+    window->setVisible(false);
+    const auto ghosts = PopupMotion::getLeavingGhostsForTest();
+    ASSERT_EQ(ghosts.size(), 1u);
+    EXPECT_TRUE(ghosts.front()->isAlwaysOnTop());
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}
+
+// The platform's own close animation ran after ours and froze the app window's frames behind it.
+TEST(PopupMotionLeaving, ThePlatformsOwnWindowAnimationIsOff) {
+    auto window = showNativeWindow();
+    if (!window->isOnDesktop())
+        GTEST_SKIP() << "no native window in this environment";
+    EXPECT_TRUE(PopupMotion::isPlatformAnimationOffForTest(*window));
+    window->setVisible(false);
+    pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; });
+}
+
+namespace {
+
+// Every opacity the window takes while it is still shown.
+struct AlphaLog : juce::Component {
+    std::vector<float> whileShown;
+    void alphaChanged() override {
+        if (isVisible())
+            whileShown.push_back(getAlpha());
+    }
+};
+
+} // namespace
+
+// A call-out's dismiss() only posts its hide: the faded window must stay faded until it has gone, not come back
+// whole for a moment and then vanish.
+TEST(PopupMotionDismiss, AnAsynchronousCloseLeavesTheWindowFadedUntilItIsGone) {
+    AnimateOffScreenGuard seam(true);
+    AlphaLog window;
+    window.setBounds(0, 0, 50, 50);
+    PopupMotion::attach(window);
+    window.setVisible(true);
+    PopupMotion::dismiss(window, [&window] {
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<juce::Component>(&window)] {
+            if (safe != nullptr)
+                safe->setVisible(false);
+        });
+    });
+    ASSERT_TRUE(pumpUntil([&] { return !window.isVisible(); }));
+    ASSERT_FALSE(window.whileShown.empty());
+    EXPECT_FLOAT_EQ(window.whileShown.back(), 0.0f) << "faded out, and still faded when it went";
+    EXPECT_TRUE(pumpUntil([&] { return !PopupMotion::isDismissing(window); }));
+    EXPECT_FLOAT_EQ(window.getAlpha(), 1.0f) << "whole again for the next time it is shown";
+}

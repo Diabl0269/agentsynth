@@ -19,12 +19,23 @@ bool CardLayoutOnCardEditor::sendEscapeToDragForTest() {
 }
 
 void CardLayoutOnCardEditor::finishMotionForTest() {
-    if (finishGlide_)
-        std::exchange(finishGlide_, nullptr)();
     if (finishAddFade_)
         std::exchange(finishAddFade_, nullptr)();
     ghostPump_.stop();
     ghosts_.clear();
+    flushPendingHide(); // the picture has gone: the hide is written, and the gap it left may glide shut
+    if (finishGlide_)
+        std::exchange(finishGlide_, nullptr)();
+}
+
+void CardLayoutOnCardEditor::setShrinkGhostProgressForTest(float t) {
+    for (auto* ghost : ghosts_)
+        ghost->setProgress(t);
+}
+
+void CardLayoutOnCardEditor::applyAddFrameForTest(float t) {
+    if (addFrame_)
+        addFrame_(t);
 }
 
 } // namespace synth::ui
