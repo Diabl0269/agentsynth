@@ -42,7 +42,7 @@ void AutomatedMarkerFade::setAutomated(bool on, double now, bool reducedMotion) 
     from_ = level(now);
     target_ = on;
     startMs_ = now;
-    durationMs_ = reducedMotion ? kReducedMs : (on ? kInMs : kOutMs);
+    durationMs_ = animationsOff() ? 0.0 : (reducedMotion ? kReducedMs : (on ? kInMs : kOutMs));
 }
 
 float AutomatedMarkerFade::level(double now) const noexcept {

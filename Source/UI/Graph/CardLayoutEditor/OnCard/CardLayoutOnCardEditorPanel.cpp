@@ -152,7 +152,7 @@ void CardLayoutOnCardEditor::hideControl(const juce::String& paramId) {
 void CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
     using namespace control_motion;
     const int cell = indexOfCell(paramId);
-    if (cell < 0 || card_ == nullptr || !canAnimate())
+    if (cell < 0 || card_ == nullptr || !canAnimate() || animationsOff())
         return;
     const auto rect = cells_[(size_t)cell].rect;
     auto image = card_->createComponentSnapshot(rect, true, 2.0f);

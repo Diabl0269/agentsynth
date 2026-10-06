@@ -7,6 +7,7 @@
 #include "MainComponentInternal.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TrackColourPicker.h"
 #include <algorithm>
@@ -41,6 +42,10 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
+
+    // Preferences > Animations: the saved choice applies from the first frame (the Preferences tab applies changes).
+    synth::ui::setAnimationMode(synth::ui::animationModeFromString(
+        appProperties.getUserSettings()->getValue(synth::ui::kAnimationModeKey, "follow")));
 
     // The dock's own persisted-tab key, read once and written on every tab click
     // (docs/layout/chrome.md's "Panel collapse and persistence" table); the graph-topology-mutated and

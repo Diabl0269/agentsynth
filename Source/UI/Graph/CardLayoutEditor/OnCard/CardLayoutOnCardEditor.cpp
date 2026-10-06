@@ -244,7 +244,7 @@ void CardLayoutOnCardEditor::fadeTo(float target, std::function<void()> done) {
     fadePump_.stop();
     const float from = getAlpha();
     const double ms = prefersReducedMotion() ? kReducedFadeMs : (target > from ? kFadeInMs : kFadeOutMs);
-    if (!isShowing()) {
+    if (!isShowing() || animationsOff()) {
         setAlpha(target);
         if (done)
             done();

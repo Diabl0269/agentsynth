@@ -620,6 +620,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocation.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp

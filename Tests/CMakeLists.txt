@@ -438,6 +438,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltipsTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategoryTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
@@ -475,6 +476,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
+    UI/Layout/ReducedMotionTests.cpp
     UI/Layout/ScrollTweenTests.cpp
     UI/Layout/PopupMotionTests.cpp
     UI/Layout/AppTooltipWindowTests.cpp

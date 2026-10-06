@@ -45,7 +45,7 @@ the Settings window is.
 | Timeline | loop-locator toggles, ask before removing an LFO's last destination, natural scrolling, zoom direction, piano roll key labels |
 | Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |
-| Panels & Windows | panel detach mode, show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)) |
+| Panels & Windows | panel detach mode, animations (Follow system / Full / Reduced / Off; [`animation.md`](animation.md#reduced-motion)), show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)) |
 | MIDI Remote | default takeover, badges |
 
 ## How it is built
