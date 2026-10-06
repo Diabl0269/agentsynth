@@ -126,10 +126,10 @@ private:
         int cell = -1;
         bool pressed = false;
         bool moving = false;
+        int target = -1;                // the group under the pointer (plan section); the cell's own until it leaves
         bool hiding = false;            // the pointer is below the card: releasing hides the control
         juce::Point<int> pressPoint;    // editor pixels
         juce::Rectangle<int> startRect; // the cell's rect at the press
-        std::vector<int> sectionCells;  // indices of the cells sharing its section
         juce::Point<int> pressOffset;   // the pointer's offset from the cell's top-left at the press
     };
 
@@ -167,6 +167,9 @@ private:
     void refreshHomes();
     void writeSection(int section, const std::vector<std::pair<int, juce::Rectangle<int>>>& rects);
     juce::Rectangle<int> clampToSection(int cell, juce::Rectangle<int> rect) const;
+    juce::Rectangle<int> clampToTarget(int section, juce::Rectangle<int> rect) const;
+    juce::Rectangle<int> sectionArea(int section) const;
+    void commitMoveToSection(int cell, juce::Rectangle<int> dropped, int target);
     std::vector<int> cellsOfSection(int section) const;
 
     /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
@@ -270,6 +273,7 @@ private:
 
     Drag drag_;
     std::vector<oncard::Guide> guides_;
+    int dropSection_ = -1; ///< A group other than the dragged control's own that a drop would move it into.
     ReorderCancelKey escapeKey_;
     juce::String nudgeKey_; ///< The control with a nudge not yet written; empty when none.
     juce::Rectangle<int> nudgeStart_;

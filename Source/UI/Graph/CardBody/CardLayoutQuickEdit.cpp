@@ -2,10 +2,12 @@
 // the one-parameter edits on it, the undoable write that rebuilds the card and makes room, and the menu
 // items that offer them. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutQuickEdit.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardBody.h"
 #include "CardLayoutOverride.h"
+#include "DefaultCardLayouts.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <algorithm>
@@ -13,6 +15,13 @@
 namespace synth {
 
 namespace {
+
+bool hasParam(const CardSection& section, const juce::String& paramId) {
+    return std::any_of(section.items.begin(), section.items.end(), [&](const CardItem& item) {
+        const auto* param = std::get_if<CardParamItem>(&item);
+        return param != nullptr && param->paramId == paramId;
+    });
+}
 
 CardParamItem* findPlaced(CardLayout& layout, const juce::String& paramId) {
     for (auto& section : layout.sections)
@@ -23,10 +32,16 @@ CardParamItem* findPlaced(CardLayout& layout, const juce::String& paramId) {
 }
 
 // A parameter the layout never placed (a v1 layout's unnamed ones, one a later release added) goes
-// at the end of the last section when shown: the layout has no place of its own for it. The footer row
-// is never that section (it is drawn last wherever the layout lists it); a layout with only a footer
-// gets a main section first.
-CardParamItem& placeAtEnd(CardLayout& layout, const juce::String& paramId) {
+// at the end of the section the code default puts it in when shown, else of the last section: the layout has no place
+// of its own for it. The footer row is never that section (it is drawn last wherever the layout lists it); a layout
+// with only a footer gets a main section first.
+CardParamItem& placeAtEnd(CardLayout& layout, const juce::String& paramId, const CardLayout* codeDefault) {
+    if (const int home = homeSectionIndex(layout, codeDefault, paramId); home >= 0) {
+        CardParamItem item;
+        item.paramId = paramId;
+        layout.sections[(size_t)home].items.emplace_back(item);
+        return std::get<CardParamItem>(layout.sections[(size_t)home].items.back());
+    }
     auto target = std::find_if(layout.sections.rbegin(), layout.sections.rend(),
                                [](const CardSection& section) { return section.id != CardSection::kFooterId; });
     if (target == layout.sections.rend()) {
@@ -89,10 +104,31 @@ CardLayout CardBody::explicitLayout() const {
     return layout;
 }
 
+std::optional<CardLayout> CardBody::codeDefaultLayout() const {
+    if (const auto* entry = DefaultCardLayouts::builtIn().find(AIStateMapper::getFactoryTypeName(&module_)))
+        return entry->layout;
+    return std::nullopt;
+}
+
 bool CardBody::drawsFromLayout() const { return cardBodyLayoutIsDataDriven(module_); }
 
+int homeSectionIndex(const CardLayout& layout, const CardLayout* codeDefault, const juce::String& paramId) {
+    for (int i = 0; i < (int)layout.sections.size(); ++i)
+        if (hasParam(layout.sections[(size_t)i], paramId))
+            return i;
+    if (codeDefault == nullptr)
+        return -1;
+    for (const auto& section : codeDefault->sections)
+        if (hasParam(section, paramId))
+            for (int i = 0; i < (int)layout.sections.size(); ++i)
+                if (layout.sections[(size_t)i].id == section.id)
+                    return i;
+    return -1;
+}
+
 // Hiding keeps the item where it is, so showing it again puts it back exactly there.
-CardLayout applyCardQuickEdit(CardLayout layout, const juce::String& paramId, CardQuickEdit edit) {
+CardLayout applyCardQuickEdit(CardLayout layout, const juce::String& paramId, CardQuickEdit edit,
+                              const CardLayout* codeDefault) {
     switch (edit) {
     case CardQuickEdit::Hide:
         layout.hidden.addIfNotAlreadyThere(paramId);
@@ -100,13 +136,13 @@ CardLayout applyCardQuickEdit(CardLayout layout, const juce::String& paramId, Ca
     case CardQuickEdit::ShowOnCard:
         layout.hidden.removeString(paramId);
         if (findPlaced(layout, paramId) == nullptr)
-            placeAtEnd(layout, paramId);
+            placeAtEnd(layout, paramId, codeDefault);
         break;
     case CardQuickEdit::ShowAsFader:
     case CardQuickEdit::ShowAsKnob: {
         auto* item = findPlaced(layout, paramId);
         if (item == nullptr)
-            item = &placeAtEnd(layout, paramId);
+            item = &placeAtEnd(layout, paramId, codeDefault);
         item->widget = edit == CardQuickEdit::ShowAsFader ? CardWidget::FaderV : CardWidget::Knob;
         break;
     }
@@ -124,7 +160,8 @@ bool performCardQuickEdit(GraphEditor& editor, AppUndoManager* undo, juce::Audio
     if (body == nullptr || !body->drawsFromLayout())
         return false;
     const auto before = body->explicitLayout();
-    const auto after = applyCardQuickEdit(before, paramId, edit);
+    const auto codeDefault = body->codeDefaultLayout();
+    const auto after = applyCardQuickEdit(before, paramId, edit, codeDefault ? &*codeDefault : nullptr);
     if (after == before)
         return false;
 

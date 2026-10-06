@@ -38,13 +38,36 @@ std::vector<int> CardLayoutOnCardEditor::cellsOfSection(int section) const {
 
 // Inside the section's content width, never above its top, and no lower than one cell below its last
 // row, so a drop can make the section grow by a row but not fling a control off the card.
-juce::Rectangle<int> CardLayoutOnCardEditor::clampToSection(int cell, juce::Rectangle<int> rect) const {
-    const auto& c = cells_[(size_t)cell];
+juce::Rectangle<int> CardLayoutOnCardEditor::clampToTarget(int section, juce::Rectangle<int> rect) const {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (body == nullptr)
         return rect;
-    const auto clamped = oncard::clampToLimits(rect, limitsFor(*body, c.section, card_->getWidth()));
-    return clamped.withY(std::min(clamped.getY(), body->getPlan().sections[(size_t)c.section].cellBottom));
+    const auto clamped = oncard::clampToLimits(rect, limitsFor(*body, section, card_->getWidth()));
+    return clamped.withY(std::min(clamped.getY(), body->getPlan().sections[(size_t)section].cellBottom));
+}
+
+juce::Rectangle<int> CardLayoutOnCardEditor::clampToSection(int cell, juce::Rectangle<int> rect) const {
+    return clampToTarget(cells_[(size_t)cell].section, rect);
+}
+
+// The group's strip of the card: from its header down to the next group (or the card's bottom).
+juce::Rectangle<int> CardLayoutOnCardEditor::sectionArea(int section) const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr)
+        return {};
+    const auto& sections = body->getPlan().sections;
+    const auto topOf = [&sections](int i) {
+        const auto& s = sections[(size_t)i];
+        return s.cellTop - (s.hasHeader() ? cardbody::kSectionHeaderHeight : 0);
+    };
+    int bottom = cardArea().getBottom();
+    for (int i = section + 1; i < (int)sections.size(); ++i)
+        if (sections[(size_t)i].visible && !sections[(size_t)i].footer && sections[(size_t)i].tabGroup < 0) {
+            bottom = topOf(i);
+            break;
+        }
+    const int top = topOf(section);
+    return {0, top, cardArea().getWidth(), std::max(0, bottom - top)};
 }
 
 // A control's home keeps its position but takes the size the control has now (a fader swapped for a knob).
@@ -101,7 +124,7 @@ void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseE
     drag_.pressPoint = e.getEventRelativeTo(this).getPosition();
     drag_.startRect = cells_[(size_t)cell].rect;
     drag_.pressOffset = drag_.pressPoint - drag_.startRect.getPosition();
-    drag_.sectionCells = cellsOfSection(cells_[(size_t)cell].section);
+    drag_.target = cells_[(size_t)cell].section;
 }
 
 // The grab point stays under the pointer: the offset was taken once at the press, in this overlay's
@@ -133,13 +156,22 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
         repaint();
         return;
     }
+    // The control may leave its group for another one: the group under the pointer is the one it would land in.
+    const int own = cells_[(size_t)drag_.cell].section;
+    const int under = cardArea().contains(pointer) ? editableSectionAt(pointer.y) : -1;
+    drag_.target = under >= 0 ? under : own;
+    const int newDrop = drag_.target != own ? drag_.target : -1;
+    if (newDrop != dropSection_) {
+        dropSection_ = newDrop;
+        repaint();
+    }
     std::vector<juce::Rectangle<int>> others;
-    for (int i : drag_.sectionCells)
+    for (int i : cellsOfSection(drag_.target))
         if (i != drag_.cell)
             others.push_back(cells_[(size_t)i].rect);
     const auto raw = drag_.startRect.withPosition(pointer - drag_.pressOffset);
     const auto snapped = oncard::snapDraggedRect(raw, others, !e.mods.isCommandDown());
-    const auto rect = clampToSection(drag_.cell, snapped.rect);
+    const auto rect = clampToTarget(drag_.target, snapped.rect);
     guides_ = rect == snapped.rect ? snapped.guides : std::vector<oncard::Guide>{};
     moveCellTo(drag_.cell, rect);
     repaint();
@@ -158,12 +190,15 @@ void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
         return;
     const bool moved = drag_.moving;
     const bool hide = drag_.hiding;
+    const int target = drag_.target;
     const int cell = drag_.cell;
     const auto start = drag_.startRect;
     const auto dropped = cells_[(size_t)cell].rect;
     endDrag();
     if (moved && hide)
         hideDragged(cell);
+    else if (moved && target >= 0 && target != cells_[(size_t)cell].section)
+        commitMoveToSection(cell, dropped, target);
     else if (moved)
         commitMove(cell, dropped, start, true);
 }
@@ -207,6 +242,7 @@ void CardLayoutOnCardEditor::setHideZoneShown(bool shown) {
 void CardLayoutOnCardEditor::endDrag() {
     escapeKey_.disarm();
     guides_.clear();
+    dropSection_ = -1;
     if (drag_.moving)
         setHideZoneShown(false);
     if (drag_.cell >= 0 && drag_.cell < (int)cells_.size())

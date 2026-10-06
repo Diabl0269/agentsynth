@@ -851,6 +851,7 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/OnCard/OnCardControlPanelTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardEditorDragTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardEditorHideDragTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardEditorGroupTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardEditorKeyboardTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardEditorSessionTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardEditorUndoTests.cpp

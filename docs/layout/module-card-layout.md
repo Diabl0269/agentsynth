@@ -466,6 +466,12 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
     the pointer again; in-card positions keep the group clamp. Esc cancels as always
     (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`).
+  - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group gets a
+    faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
+    group's items for the target's, free-positioned at the drop, sized as the target group sizes it, with the
+    target's neighbours pushed per the home rule above. Both groups are written positioned, so nothing else
+    moves. It is one write, so one undo step, and is announced ("Level moved to Unison")
+    (`CardLayoutOnCardEditorGroups.cpp`).
   - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
     outlines (relative to the group's content origin, so a layout with positions survives a width or
     theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
@@ -531,8 +537,11 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     first); if the control has a custom label, the row shows the parameter's original name followed by the
     custom label in brackets (e.g. "Cutoff (Brightness)"), and search matches either name. Up and Down choose
     a row, Return adds it, typing searches, Esc closes the panel.
-    - *Click or Return.* The control moves to the end of the last grid group that is not the footer (it keeps
-      its widget, label and range, leaves `hidden` and its old place). If that group has free positions
+    - *Click or Return.* The control goes back to the group it belongs to: the one that still lists it (hiding
+      keeps an item in its group), else the one the module type's code default lists it in, else the last grid
+      group that is not the footer (`homeSectionIndex`; the quick "Show on card" places an unplaced control
+      the same way). It keeps its widget, label and range, leaves `hidden`, and keeps its place in the group.
+      If that group has free positions
       the control gets one: the highest, then leftmost, place inside the group that overlaps nothing and
       keeps the 8 px gap (`findFreeSpot`, sized by the cell size the group's own layout gives that kind,
       `cardBodyCellSize`); a flowing group just takes it at the end of its flow. The write is the session's
@@ -744,7 +753,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
-  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
+  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group and a drag between groups with its undo; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them

@@ -346,6 +346,10 @@ void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.setColour(theme.colors.accent);
     g.drawRoundedRectangle(cardArea().toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
+    if (dropSection_ >= 0) {
+        g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha * 0.5f));
+        g.fillRoundedRectangle(sectionArea(dropSection_).toFloat().reduced(2.0f), theme.metrics.cornerRadius);
+    }
     g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha));
     for (const auto& guide : guides_) {
         const auto p = (float)guide.position;

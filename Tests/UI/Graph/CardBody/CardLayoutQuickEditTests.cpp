@@ -125,6 +125,25 @@ TEST(CardLayoutQuickEdit, ShowOnCardPlacesAParameterTheLayoutNeverPlacedAtTheEnd
     EXPECT_EQ(std::get<synth::CardParamItem>(shown.sections.back().items.back()).paramId, "drive");
 }
 
+TEST(CardLayoutQuickEdit, ShowOnCardPutsAParameterTheLayoutNeverPlacedInTheSectionTheCodeDefaultGivesIt) {
+    synth::CardLayout layout;
+    synth::CardSection first;
+    first.id = "pitch";
+    synth::CardSection last;
+    last.id = "output";
+    layout.sections = {first, last};
+    synth::CardLayout codeDefault = layout;
+    synth::CardParamItem detune;
+    detune.paramId = "detune";
+    codeDefault.sections[0].items.emplace_back(detune);
+
+    const auto shown = synth::applyCardQuickEdit(layout, "detune", CardQuickEdit::ShowOnCard, &codeDefault);
+    EXPECT_EQ(shown.sections[0].items.size(), 1u) << "the section the code default lists it in, not the last";
+    EXPECT_TRUE(shown.sections[1].items.empty());
+    EXPECT_EQ(synth::homeSectionIndex(layout, &codeDefault, "detune"), 0);
+    EXPECT_EQ(synth::homeSectionIndex(layout, nullptr, "detune"), -1);
+}
+
 TEST(CardLayoutQuickEdit, ShowAsFaderThenShowAsKnobSwitchesTheWidgetAndMakesRoom) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<FilterModule>(), 0, 0);

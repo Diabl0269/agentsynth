@@ -3,6 +3,7 @@
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyPlan.h"
 #include <memory>
+#include <optional>
 
 class ModuleComponent;
 class ThresholdControlComponent;
@@ -77,6 +78,9 @@ public:
     /** The layout this body draws as explicit items: the resolved layout, or the automatic one
      *  written out (the same card when built from it). */
     CardLayout explicitLayout() const;
+    /** The layout the app ships for this module's type, or none: where a control the card's own layout never
+     *  placed belongs. */
+    std::optional<CardLayout> codeDefaultLayout() const;
     /** False for the bespoke cards, which always build from the automatic plan. */
     bool drawsFromLayout() const;
     /** The node's "cardLayout" JSON this body was built from; empty for none. */
