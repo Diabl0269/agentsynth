@@ -6,6 +6,7 @@
 // Geometry is already final when this is armed; the real cards are hidden (alpha 0) and snapshots are drawn gliding
 // from the old rect to the new one by GraphContentComponent::paintOverChildren. See CardGlideAnimator.cpp.
 
+#include "UI/Layout/ExitEnterTimeline.h"
 #include "UI/Layout/UIAnimation.h"
 #include <cstdint>
 #include <functional>
@@ -15,6 +16,11 @@
 namespace graph_editor_types {
 struct VisibleCable;
 }
+
+namespace card_glide_detail {
+/** The part of the canvas the card's viewer shows, in canvas coordinates; everything when it has no such viewer. */
+juce::Rectangle<int> visibleCanvasArea(const juce::Component& card);
+} // namespace card_glide_detail
 
 class CardGlideAnimator {
 public:
@@ -30,6 +36,11 @@ public:
         std::function<float()> snapshotScale;
         std::function<void()> repaint;
         juce::VBlankAnimatorUpdater* updater = nullptr;
+        /** Whether a VBlank can reach the canvas (it is showing). Exit/enter ghosts are made only when it says yes,
+         *  so a headless run lands on the final state synchronously. Unset: never. */
+        std::function<bool()> canAnimate;
+        /** The theme's accent, for the outline around a card an undo brought back. */
+        std::function<juce::Colour()> accent;
     };
 
     struct Captured {
@@ -51,6 +62,21 @@ public:
 
     /** Hides and snapshots every card whose bounds changed since `before`. Returns false (no-op) when none did. */
     bool arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
+
+    /** Delete/undo ghosts (CardGlideAnimatorGhosts.cpp). While a Scope is open, snapshots `comp` so that, if the
+     *  mutation removes its node, the card shrinks away instead of vanishing. No-op when not animating. */
+    void noteExit(juce::Component* comp, uint32_t nodeUid);
+    /** Test seam: animate even though the canvas is not showing. */
+    void setForceAnimateForTest(bool force) noexcept { forceAnimate_ = force; }
+    /** Test seam: advances the phased timeline to `elapsedMs` (what the driver does each frame). */
+    void applyTimelineAtMs(double elapsedMs);
+    /** Ghosts live right now: exits shrinking, enters growing or outlined (test seams). */
+    int exitGhostCount() const noexcept;
+    int enterGhostCount() const noexcept;
+    /** The rect an exit/enter ghost for `nodeUid` is drawn at now (empty when none or not yet visible). */
+    juce::Rectangle<float> ghostRectFor(uint32_t nodeUid) const noexcept;
+    /** The phase timeline of the live animation. */
+    const synth::ui::ExitEnterTimeline& timeline() const noexcept { return timeline_; }
 
     /** Eased progress 0..1. */
     void applyTweenAt(float t) noexcept;
@@ -77,7 +103,9 @@ public:
     /** Captures on the outermost entry; arms and starts the driver on the outermost exit. */
     class Scope {
     public:
-        explicit Scope(CardGlideAnimator& animator);
+        /** `restore`: an undo/redo, so every card is snapshotted for a possible exit and a card the restore creates
+         *  grows in. */
+        explicit Scope(CardGlideAnimator& animator, bool restore = false);
         ~Scope();
         Scope(const Scope&) = delete;
         Scope& operator=(const Scope&) = delete;
@@ -87,7 +115,15 @@ public:
     };
 
 private:
+    enum class Kind { Move, Exit, Enter };
+    struct Candidate {
+        uint32_t nodeUid = 0;
+        juce::Rectangle<int> rect;
+        juce::Image snapshot;
+    };
     struct Item {
+        Kind kind = Kind::Move;
+        bool grown = false; // an Enter item whose card is live again; only its outline remains
         juce::Component::SafePointer<juce::Component> comp;
         uint32_t nodeUid = 0;
         juce::Rectangle<int> from, to;
@@ -97,6 +133,12 @@ private:
 
     juce::Rectangle<float> currentRect(const Item& item) const noexcept;
     void startDriver();
+    bool canAnimate() const;
+    void pruneItems();
+    void landGhosts() noexcept;
+    bool armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
+    void paintGhost(juce::Graphics& g, const Item& item) const;
+    bool hasMoveItems() const noexcept;
 
     Hooks hooks_;
     std::vector<Item> items_;
@@ -105,5 +147,12 @@ private:
     float progress_ = 0.0f;
     int depth_ = 0;
     int armCount_ = 0;
+    std::vector<Candidate> candidates_;
+    synth::ui::ExitEnterTimeline timeline_;
+    synth::ui::ExitEnterTimeline::Frame frame_;
+    bool phased_ = false;
+    bool restoring_ = false;
+    bool reducedMotion_ = false;
+    bool forceAnimate_ = false;
     int repaintCount_ = 0;
 };

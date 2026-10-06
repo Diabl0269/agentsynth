@@ -4,6 +4,7 @@
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FoldAllButton.h"
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -35,9 +36,9 @@
 //     hand-laid-out row list; here the rows are real child components inside a juce::Viewport, so a
 //     fold would have to animate child bounds every frame for no benefit in a modal settings dialog.
 //     Collapsing is instant.
-//   - No PERSISTENCE of the collapse state. This tab is constructed fresh every time the Settings
-//     window opens, and nothing has asked for the folds to survive that; keeping it in memory means
-//     no new settings key to migrate.
+//   - The folds ARE remembered (user setting shortcutsFolded, the folded categories by stable name):
+//     the tab is constructed fresh each time the Settings window opens, and it restores them before
+//     its first layout, so it opens as it was left.
 //
 // ROW INDEXING IS A CONTRACT: row i is ShortcutManager::getActionIds()[i], sections or no sections.
 // The section headers are separate widgets, never entries in the row vectors, and
@@ -50,7 +51,9 @@
 // the test target in CMakeLists.txt (consolidation pass).
 class ShortcutsSettingsTab : public juce::Component {
 public:
-    explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager);
+    // appProperties (nullable) is where the folded sections are remembered; null keeps them in memory only.
+    explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager,
+                                  juce::ApplicationProperties* appProperties = nullptr);
     ~ShortcutsSettingsTab() override = default;
 
     void paint(juce::Graphics& g) override;
@@ -206,6 +209,8 @@ private:
     void paintRows(juce::Graphics& g);
 
     ShortcutManager& shortcutManager;
+    juce::ApplicationProperties* appProperties = nullptr; // weak, nullable
+    void saveFolds();
 
     juce::Label titleLabel;
     juce::TextEditor searchEditor;

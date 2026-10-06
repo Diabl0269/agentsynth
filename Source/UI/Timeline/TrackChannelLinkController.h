@@ -6,6 +6,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
+#include <memory>
 
 // TrackChannelLinkController.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half
 // of the track
@@ -53,6 +54,8 @@ public:
 
     ChannelInfo getChannelInfo(synth::TrackId track) const override;
     float getChannelMeterPeak(synth::TrackId track) const override;
+    void beginChannelLinkBatch() override;
+    void endChannelLinkBatch() override;
     bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) override;
     std::unique_ptr<ColourPickerPopup> buildOwnedMacroColourPicker(synth::TrackId track,
                                                                    juce::PropertiesFile* favourites) override;
@@ -110,6 +113,10 @@ private:
      *  TrackChannelLinkSurface::getChannelMeterPeak on why a stale entry cannot mislead. Mutable
      *  because the const display query is what keeps it warm. */
     mutable std::map<std::int64_t, juce::AudioProcessorGraph::NodeID> meterStripIds_;
+
+    /** Open ChannelLinkBatch scopes; the map below lives exactly as long as one is open. */
+    int batchDepth_ = 0;
+    mutable std::unique_ptr<synth::TrackChannelLinkMap> batchMap_;
 
     AudioEngine& engine_;
     synth::TimelineDoc& doc_;

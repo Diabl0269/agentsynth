@@ -1,5 +1,6 @@
 #include "PreferencesSettingsTab.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Settings/SettingsFoldState.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -24,6 +25,8 @@ constexpr PreferencesSettingsTab::Category kSections[] = {
     PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote};
 
 int indexOf(PreferencesSettingsTab::Category c) { return static_cast<int>(c); }
+
+constexpr const char* kFoldedKey = "preferencesFolded";
 } // namespace
 
 PreferencesSettingsTab::SectionHeader::SectionHeader(PreferencesSettingsTab& o, Category c)
@@ -69,8 +72,21 @@ void PreferencesSettingsTab::setupSectionControls() {
         header->setTooltip("Fold or unfold " + categoryName(category) + " (Left/Right)");
         contentHost.addChildComponent(*header);
     }
+    // Restored before the first layout, so the view opens folded as it was left: no fold animates in.
+    const auto folded = synth::ui::settingsfold::load(&appProperties, kFoldedKey);
+    for (auto category : kSections)
+        sectionCollapsed[indexOf(category)] = folded.contains(persistedCategoryName(category));
+    refreshSectionTitles();
     addChildComponent(foldAllButton);
     foldAllButton.onClick = [this] { setAllSectionsCollapsed(!areAllSectionsCollapsed()); };
+}
+
+void PreferencesSettingsTab::saveSectionFolds() {
+    juce::StringArray folded;
+    for (auto category : kSections)
+        if (sectionCollapsed[indexOf(category)])
+            folded.add(persistedCategoryName(category));
+    synth::ui::settingsfold::save(&appProperties, kFoldedKey, folded);
 }
 
 void PreferencesSettingsTab::refreshSectionTitles() {
@@ -87,6 +103,7 @@ void PreferencesSettingsTab::setSectionCollapsed(Category category, bool collaps
     if (category == Category::All || sectionCollapsed[indexOf(category)] == collapsed)
         return;
     sectionCollapsed[indexOf(category)] = collapsed;
+    saveSectionFolds();
     refreshSectionTitles();
     resized();
     repaint();
@@ -102,6 +119,7 @@ bool PreferencesSettingsTab::areAllSectionsCollapsed() const {
 void PreferencesSettingsTab::setAllSectionsCollapsed(bool collapsed) {
     for (auto& flag : sectionCollapsed)
         flag = collapsed;
+    saveSectionFolds();
     refreshSectionTitles();
     resized();
     repaint();

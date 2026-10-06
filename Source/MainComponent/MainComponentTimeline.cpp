@@ -116,9 +116,12 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // A LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
     // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
-    for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
-        if (auto* header = timelinePanel.getTrackHeaderAt(i))
-            header->refreshFromDoc();
+    {
+        const synth::ui::ChannelLinkBatch linkBatch(&trackChannelLink_);
+        for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+            if (auto* header = timelinePanel.getTrackHeaderAt(i))
+                header->refreshFromDoc();
+    }
     // The side pane's routing rows read the graph too (node names, MIDI destinations, the channel): same trigger.
     timelinePanel.refreshRoutingPane();
     // A lane's modulator rows are derived from the graph's routings, never stored in the doc: same trigger.

@@ -21,6 +21,7 @@ add_executable(Tests
     UI/Graph/AutoArrangeMacroTests.cpp
     UI/Graph/CardGlide/CardGlideTests.cpp
     UI/Graph/CardGlide/CardGlideUndoTests.cpp
+    UI/Graph/CardGlide/CardGlideDeleteTests.cpp
     UI/Graph/CardGlide/CardGlideMacroTakeOutUndoTests.cpp
     UI/Graph/CanvasFrame/CanvasFrameTests.cpp
     UI/Graph/CanvasFrame/CanvasEdgeDragTests.cpp
@@ -148,6 +149,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
     Mixer/ChannelFlow/ChannelFlowMacroOutputPortTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp
+    Mixer/ChannelFlow/ChannelFlowTrackChannelLinkMapTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp
     Mixer/TrackPreset/TrackPresetTests.cpp
     Mixer/TrackPreset/TrackPresetCaptureTests.cpp
@@ -409,6 +411,7 @@ add_executable(Tests
     UI/Settings/SettingsWindowTests.cpp
     UI/Settings/SettingsWindowEscapeFadeTests.cpp
     UI/Settings/SettingsWindowTabKeysTests.cpp
+    UI/Settings/SettingsWindowReopenTests.cpp
     UI/Settings/SettingsWindowTabStripTests.cpp
     UI/Settings/SettingsWindowShortcutHintsTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
@@ -475,6 +478,7 @@ add_executable(Tests
     UI/Layout/PopupMotionTests.cpp
     UI/Layout/AppTooltipWindowTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
+    UI/Layout/ExitEnterTimelineTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
     UI/Library/ModuleLibraryCollapseTests.cpp
