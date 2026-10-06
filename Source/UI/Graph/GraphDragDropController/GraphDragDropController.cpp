@@ -48,7 +48,12 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
     dragPreviewAim_ =
         juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW_, dragPreviewH_);
 
-    auto resolved = host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
+    // A card about to join an open macro lands where it is aimed (snapped) and the macro makes room for it on the
+    // drop; every other drop dodges to the nearest free slot.
+    const auto resolved =
+        dragPreviewJoinsMacro_
+            ? synth::LayoutUtil::snap({juce::jmax(0, desiredTopLeftCanvas.x), juce::jmax(0, desiredTopLeftCanvas.y)})
+            : host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
     dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
@@ -197,6 +202,7 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
 
 void GraphDragDropController::endDragPreview() {
     dragPreviewActive_ = false;
+    dragPreviewJoinsMacro_ = false;
     dragPreviewGhost_ = {};
     alignmentGuides_.clear();
     host_.clearSmartSuggestions();
@@ -272,7 +278,9 @@ void GraphDragDropController::itemDragMove(const juce::DragAndDropTarget::Source
     auto canvasPos = host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition);
     // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses. Set BEFORE the
     // ghost is placed: resolvePlacement treats the join hull as room to land in rather than an obstacle.
-    host_.setMacroDropCandidate(dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String());
+    const auto joinId = dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String();
+    host_.setMacroDropCandidate(joinId);
+    dragPreviewJoinsMacro_ = joinId.isNotEmpty();
     updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 

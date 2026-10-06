@@ -138,7 +138,7 @@ Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`)
 
 A module row drags onto the canvas as a ghost and is added where it is dropped. Dropped over an open macro it lands
 INSIDE that macro: it becomes a member (the innermost open macro under the pointer wins when macros are nested), is
-placed where it was dropped within the macro's body, and the macro's border is emphasised while the pointer is over it.
+placed where it was dropped (members it overlaps are pushed aside and the macro grows around it), and the macro's border is emphasised while the pointer is over it.
 No modifier is needed, and the node and its membership are one undo step. A collapsed macro is not a target; the card
 lands beside it as an ordinary canvas drop. Details: [dropping a library module into a macro](../macros/menu-and-membership.md#dropping-a-library-module-into-a-macro).
 

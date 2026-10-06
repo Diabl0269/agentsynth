@@ -213,12 +213,16 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
         // Use estimate for an initial snapped position; finalizeModuleDrag will re-resolve
         // using the real component size after updateComponents() creates the component.
         auto estSize = estimateModuleSize(name);
-        auto initialPlaced = resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+        // A card joining an open macro lands where it was dropped; the macro then makes room (below).
+        const bool joining = joinMacroId.isNotEmpty();
+        auto initialPlaced = joining
+                                 ? synth::LayoutUtil::snap({juce::jmax(0, dropPos.x), juce::jmax(0, dropPos.y)})
+                                 : resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
 
         // finalizeNewDrop: locate the newly created ModuleComponent, compute its
         // real final position (snapped + anti-overlapped using actual dimensions),
         // then animate it from the raw drop point to the settled position.
-        auto finalizeNewDrop = [this, initialPlaced](juce::AudioProcessorGraph::NodeID newNodeId) {
+        auto finalizeNewDrop = [this, initialPlaced, joining](juce::AudioProcessorGraph::NodeID newNodeId) {
             ModuleComponent* newComp = nullptr;
             for (auto* comp : content.getModules()) {
                 if (comp != nullptr && comp->getNodeId() == newNodeId) {
@@ -230,12 +234,19 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
                 return;
 
             // Compute final position using the real component size.
-            auto toPos = resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
-                                          newComp->getNodeId());
+            auto toPos = joining ? newComp->getPosition()
+                                 : resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
+                                                    newComp->getNodeId());
 
             // Animate from the estimated initial-placed position to the real final position.
             // If they are identical, animateDropLanding is a no-op (just settles in place).
             animateDropLanding(newComp, initialPlaced, toPos);
+
+            // The nearest free spot can be well away from the pointer (a crowded macro hull has none beside it), and
+            // a card that landed below the window would look like the drop did nothing: bring it into view.
+            const auto landed = juce::Rectangle<int>(toPos.x, toPos.y, newComp->getWidth(), newComp->getHeight());
+            if (!getVisibleCanvasRect().contains(landed.getCentre().toFloat()))
+                centreViewOn(landed.getCentre().toFloat());
 
             // Persist the final position immediately so it survives reload even if the
             // animation is still in-flight when the user saves.
@@ -262,8 +273,12 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
                 joinMacroId.isNotEmpty() ? synth::AIStateMapper::ensureNodeUuid(node.get()) : juce::String();
             updateComponents();
             finalizeNewDrop(newNodeId);
-            if (uuid.isNotEmpty())
+            if (uuid.isNotEmpty()) {
                 macroController_.addSelectionToMacro(joinMacroId, {uuid}, /*recordUndo=*/false);
+                // The card sits where it was dropped: members it overlaps are pushed aside (and the hull grows),
+                // inside this same undo record, gliding like any other push.
+                macroController_.makeRoomFor("n:" + juce::String(static_cast<juce::int64>(newNodeId.uid)));
+            }
             reflowOutputDock(); // the drop may sit right of the dock: the dock moves, inside this undo step
         };
 
