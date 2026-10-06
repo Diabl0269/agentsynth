@@ -1,5 +1,6 @@
 #include "AppLookAndFeelFader.h"
 #include "AppLookAndFeel.h"
+#include "KnobPainter.h"
 
 namespace synth::theme {
 
@@ -91,16 +92,17 @@ void drawNeonSlot(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> 
                   const Metrics& m, juce::Colour colour) {
     const auto slot = slotRect(travel, vertical, m.slot);
     drawSlot(g, theme.colors.bg0, theme.colors.border, slot);
-    const float glow = juce::jmax(theme.treatment.glow, 0.0f);
-    if (glow > 0.0f) {
-        const auto fill = fillRect(slot, sliderPos, vertical);
-        const float radius = (m.slot - 2.0f) * 0.5f;
-        const float alphas[] = {0.18f, 0.32f, 0.55f};
-        const float grows[] = {4.0f, 2.5f, 1.0f};
-        for (int i = 0; i < 3; ++i) {
-            g.setColour(colour.withAlpha(0.55f * glow * alphas[i]));
-            g.fillRoundedRectangle(fill.expanded(grows[i]), radius + grows[i]);
-        }
+    const auto fill = fillRect(slot, sliderPos, vertical);
+    const auto full = slot.reduced(1.0f);
+    const float along = vertical ? full.getHeight() : full.getWidth();
+    const float pos01 = along > 0.0f ? (vertical ? fill.getHeight() : fill.getWidth()) / along : 0.0f;
+    const float glow = neonGlowStrength(theme, pos01);
+    const float radius = (m.slot - 2.0f) * 0.5f;
+    const float alphas[] = {0.18f, 0.32f, 0.55f};
+    const float grows[] = {4.0f, 2.5f, 1.0f};
+    for (int i = 0; i < 3; ++i) {
+        g.setColour(colour.withAlpha(0.55f * glow * alphas[i]));
+        g.fillRoundedRectangle(fill.expanded(grows[i]), radius + grows[i]);
     }
     drawSolidFill(g, colour, slot, sliderPos, vertical);
 }

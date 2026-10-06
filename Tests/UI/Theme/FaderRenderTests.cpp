@@ -278,4 +278,20 @@ TEST(FaderStyleTest, FillTakesTheFamilyColourLikeAKnob) {
     }
 }
 
+// A pixel just beside the fill (inside the bloom's two inner layers, outside the slot).
+juce::Colour besideFill(synth::theme::KnobStyle style, double value) {
+    FaderRig rig(synth::theme::makeObsidian(), juce::Slider::LinearVertical, 100, 150, value);
+    rig.laf.setKnobAppearance({style, false});
+    return rig.paint().getPixelAt(rig.cx() + 4, 130);
+}
+
+TEST(FaderStyleTest, NeonFaderGlowsInObsidianAndGrowsWithTheValue) {
+    ASSERT_EQ(synth::theme::makeObsidian().treatment.glow, 0.0f);
+    EXPECT_EQ(besideFill(synth::theme::KnobStyle::Classic, 0.9).getAlpha(), 0);
+    const auto low = besideFill(synth::theme::KnobStyle::Neon, 0.2);
+    const auto high = besideFill(synth::theme::KnobStyle::Neon, 0.9);
+    EXPECT_GT(low.getAlpha(), 0);
+    EXPECT_GT(high.getAlpha(), low.getAlpha());
+}
+
 } // namespace

@@ -5,6 +5,15 @@
 
 namespace synth::theme {
 
+// The Neon style glows in every theme: the bloom strength is the theme's glow, but never below this
+// floor, and it grows with the value (faint near zero, strong at full).
+inline constexpr float kNeonMinGlow = 0.6f;
+inline float neonGlowStrength(const Theme& theme, float pos01) noexcept {
+    const float glow = theme.treatment.glow > kNeonMinGlow ? theme.treatment.glow : kNeonMinGlow;
+    const float p = pos01 < 0.0f ? 0.0f : (pos01 > 1.0f ? 1.0f : pos01);
+    return glow * (0.3f + 0.7f * p);
+}
+
 // Paints one knob in `style` inside `knobBounds` (the knob is the largest centred square).
 // `pos01` is the value 0..1 over the shared 270 degree sweep; `valueColour` colours the value arc.
 // The app's rotary sliders and the Settings picker previews both call this, so preview == app.
