@@ -14,27 +14,31 @@
 // tooltip code keep treating it like one, but it never uses DrawableButton's image children.
 namespace synth::ui {
 
-// The five colour groups of the top bar.
-enum class ToolbarGroup { File, Edit, View, AI, Housekeeping };
+// The colour groups of the top bar. Feedback keeps its place beside Settings but has its own colour.
+enum class ToolbarGroup { File, Edit, View, AI, Housekeeping, Feedback };
 
-// The group's colour in `theme`: green, amber, the accent, rose, violet.
+// The group's colour in `theme`: green, amber, the accent, rose, violet, green (Feedback).
 juce::Colour toolbarGroupHue(const synth::theme::Theme& theme, ToolbarGroup group);
 
 // One moving part's hover motion, at full hover, in icon units (the 24-unit SVG grid). Rotation and
-// scale turn about `pivot`, a fraction of the part's own bounds.
+// scale turn about `pivot`, a fraction of the part's own bounds. A non-zero `overshoot` makes the
+// part overshoot its full motion and settle back while the hover arrives (an ease-out-back curve).
 struct ToolbarPartMotion {
     float dx = 0.0f;
     float dy = 0.0f;
     float degrees = 0.0f;
     float scale = 1.0f;
     juce::Point<float> pivot{0.5f, 0.5f};
+    float overshoot = 0.0f;
 };
 
 // The hover motion of an icon's parts "mv" and "mv2"; a part an icon lacks has no motion.
 std::array<ToolbarPartMotion, 2> toolbarIconMotion(synth::theme::Icon icon);
 
-// `motion` at hover amount `t` (0..1) for a part whose icon-space bounds are `partBounds`.
-juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce::Rectangle<float> partBounds, float t);
+// `motion` at hover amount `t` (0..1) for a part whose icon-space bounds are `partBounds`. `arriving`
+// is true while the hover is growing; only then does an overshooting motion bounce.
+juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce::Rectangle<float> partBounds, float t,
+                                           bool arriving = true);
 
 // A recoloured icon split into its static body and up to two moving parts, all in icon space.
 struct ToolbarIconArt {

@@ -33,7 +33,7 @@ inline const std::vector<IconSpec>& allToolbarIcons() {
         {Icon::ActionSave, ToolbarGroup::File, "Save"},
         {Icon::ActionLoad, ToolbarGroup::File, "Load"},
         {Icon::ActionSettings, ToolbarGroup::Housekeeping, "Settings"},
-        {Icon::ActionFeedback, ToolbarGroup::Housekeeping, "Feedback"},
+        {Icon::ActionFeedback, ToolbarGroup::Feedback, "Feedback"},
         {Icon::ActionUndo, ToolbarGroup::Edit, "Undo"},
         {Icon::ActionRedo, ToolbarGroup::Edit, "Redo"},
         {Icon::ActionAutoArrange, ToolbarGroup::Edit, "Auto Arrange"},

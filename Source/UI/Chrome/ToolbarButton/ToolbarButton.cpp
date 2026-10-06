@@ -108,7 +108,7 @@ juce::AffineTransform ToolbarButton::getPartTransform(int index) const {
     const auto i = (size_t)index;
     if (!motionEnabled_ || index < 0 || index > 1 || restArt_.parts[i] == nullptr)
         return {};
-    return toolbarPartTransform(motion_[i], restArt_.partBounds[i], hover_.value);
+    return toolbarPartTransform(motion_[i], restArt_.partBounds[i], hover_.value, hover_.target > 0.5f);
 }
 
 float ToolbarButton::getIconLift() const { return motionEnabled_ ? kHoverLiftPx * hover_.value : 0.0f; }

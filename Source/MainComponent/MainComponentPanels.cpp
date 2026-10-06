@@ -512,7 +512,7 @@ void MainComponent::applyToolbarIcons() {
     saveButton.setIcon(Icon::ActionSave, Group::File);
     loadButton.setIcon(Icon::ActionLoad, Group::File);
     settingsButton.setIcon(Icon::ActionSettings, Group::Housekeeping);
-    feedbackButton.setIcon(Icon::ActionFeedback, Group::Housekeeping);
+    feedbackButton.setIcon(Icon::ActionFeedback, Group::Feedback);
     undoButton.setIcon(Icon::ActionUndo, Group::Edit);
     redoButton.setIcon(Icon::ActionRedo, Group::Edit);
     autoArrangeButton.setIcon(Icon::ActionAutoArrange, Group::Edit);

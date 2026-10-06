@@ -69,8 +69,8 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
 - **Groups and colours.** `applyToolbarIcons()` gives each button its icon and colour group
   (`ToolbarButton::setIcon(icon, group)`; `toolbarGroupHue()` resolves the token): **file** (New,
   Save, Load) `hueGreen`; **edit** (Undo, Redo, Auto Arrange) `hueAmber`; **view** (Library,
-  Minimap, Matrix, Panel) `accent`; **AI** `hueRose`; **housekeeping** (Settings, Feedback, Light
-  mode) `hueViolet`.
+  Minimap, Matrix, Panel) `accent`; **AI** `hueRose`; **housekeeping** (Settings, Light mode)
+  `hueViolet`; **Feedback** sits beside Settings but has its own group, `hueGreen`.
 - **Chip.** The icon sits on a 30 x 24 chip, radius 7, 4 px from the top of the button: the group
   colour at 16 percent at rest and 26 percent on hover (10 and 16 percent on a light theme, any
   theme with `isDark` false). A lit toggle fills the chip solid with the colour. In narrow mode
@@ -78,7 +78,10 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
 - **Glyph.** 19 px, drawn from the icon's 24-unit SVG grid in four colour roles (see
   [icons](icons.md#multi-role-icons)). On a lit chip the roles invert (colour and paper turn
   `iconInk`, soft turns ink at 40 percent, ink takes the colour), cross-fading with the chip.
-  Hide/Show panel has its own glyph (`Icon::TogglePanel`).
+  Hide/Show panel has its own glyph (`Icon::TogglePanel`). Save is the exception: a floppy in its
+  own fixed colours (black body, silver shutter, white label with a tiny "Agent / Synth" in outlines
+  that only reads at large sizes), identical on every theme. Feedback is a speech bubble (paper) with
+  group-colour lines inside a group-colour ring over a soft tint of it.
 - **Caption.** Inter semi-bold 10.5 px (`AppLookAndFeel::uiSemiBoldFont`), 2 px under the chip:
   `textMuted` at rest, `textPrimary` on hover, press and when lit, `textDisabled` when disabled.
   Captions are never coloured.
@@ -87,7 +90,8 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
 - **Disabled.** No chip; the glyph at 40 percent.
 - **Motion.** Hover, press and lit each ease (see
   [animation](animation.md#what-moves-and-how)); on hover the glyph lifts 1 px and does
-  one small per-icon motion. Under Reduce Motion nothing moves; only the colours change.
+  one small per-icon motion (Undo and Redo swing their arrow about its elbow and bounce past the
+  swing before settling). Under Reduce Motion nothing moves; only the colours change.
 
 The art is rebuilt from the icon library's untinted originals on every `setIcon`/`refreshArt` (and
 on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint.
