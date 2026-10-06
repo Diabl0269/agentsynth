@@ -6,6 +6,7 @@
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -89,8 +90,9 @@ juce::Point<int> CardLayoutOnCardEditor::freeSpotIn(int planSection, const juce:
     return {spot.x - g.contentX, spot.y - body->getPlan().sections[(size_t)planSection].cellTop};
 }
 
-// A click: the control goes to the end of the last grid group. A positioned group gets it at the next free
-// spot; a flowing one just takes it in its flow.
+// A click: the control goes back to the group it belongs to (the one it was hidden from, else the one the
+// code default puts it in, else the last grid group). A positioned group gets it at the next free spot; a
+// flowing one just takes it in its flow.
 void CardLayoutOnCardEditor::addControl(const juce::String& paramId) {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (closed_ || source_ == nullptr || body == nullptr)
@@ -99,15 +101,19 @@ void CardLayoutOnCardEditor::addControl(const juce::String& paramId) {
     const auto layout = body->explicitLayout();
     const auto& plan = body->getPlan();
     const int item = plan.findParam(paramId);
-    const int target = lastGridSectionIndex(layout);
+    const auto codeDefault = body->codeDefaultLayout();
+    const auto* defaults = codeDefault ? &*codeDefault : nullptr;
+    int target = homeSectionIndex(layout, defaults, paramId);
+    if (target < 0)
+        target = lastGridSectionIndex(layout);
     std::optional<juce::Point<int>> at;
-    if (target >= 0 && item >= 0) {
+    if (target >= 0 && item >= 0 && layout.sections[(size_t)target].id != CardSection::kFooterId) {
         const int planSection = planSectionIndexOf(layout, target);
         if (planSection < (int)plan.sections.size() && plan.sections[(size_t)planSection].freeform)
             at = freeSpotIn(planSection, paramId);
     }
     const auto name = item >= 0 ? plan.items[(size_t)item].captionText() : paramId;
-    writeLayout(withControlAdded(layout, paramId, at));
+    writeLayout(withControlAdded(layout, paramId, at, target, defaults));
     finishAdded(paramId, name);
 }
 

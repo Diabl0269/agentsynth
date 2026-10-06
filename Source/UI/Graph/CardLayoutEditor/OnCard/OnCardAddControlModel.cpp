@@ -2,6 +2,7 @@
 // layout edit that puts one on the card.
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Layout/SearchMatch.h"
 #include <algorithm>
 
@@ -89,18 +90,26 @@ CardParamItem takeItem(CardLayout& layout, const juce::String& paramId) {
 } // namespace
 
 CardLayout withControlAdded(CardLayout layout, const juce::String& paramId, std::optional<juce::Point<int>> at,
-                            int section) {
+                            int section, const CardLayout* codeDefault) {
     layout.hidden.removeString(paramId);
+    if (section < 0 || section >= (int)layout.sections.size())
+        section = homeSectionIndex(layout, codeDefault, paramId);
+    if (section < 0)
+        section = lastGridSectionIndex(layout);
+    if (section < 0) {
+        CardSection main;
+        main.id = "main";
+        layout.sections.insert(layout.sections.begin(), std::move(main));
+        section = 0;
+    }
+    for (auto& entry : layout.sections[(size_t)section].items)
+        if (auto* listed = std::get_if<CardParamItem>(&entry); listed != nullptr && listed->paramId == paramId) {
+            listed->at = at;
+            return layout;
+        }
     auto item = takeItem(layout, paramId);
     item.at = at;
-    int target = section >= 0 && section < (int)layout.sections.size() ? section : lastGridSectionIndex(layout);
-    if (target < 0) {
-        CardSection section;
-        section.id = "main";
-        layout.sections.insert(layout.sections.begin(), std::move(section));
-        target = 0;
-    }
-    layout.sections[(size_t)target].items.emplace_back(std::move(item));
+    layout.sections[(size_t)section].items.emplace_back(std::move(item));
     return layout;
 }
 

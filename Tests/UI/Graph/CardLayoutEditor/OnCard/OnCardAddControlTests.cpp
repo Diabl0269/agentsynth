@@ -53,7 +53,7 @@ TEST(OnCardAddControlModel, TheCountLineCountsTheHiddenControlsAndTheMatches) {
     EXPECT_EQ(synth::ui::addCountText(0, 3, "zzz"), "No control matches");
 }
 
-TEST(OnCardAddControlModel, AddingMovesTheItemToTheLastGridGroupKeepingItsSettingsAndUnhidesIt) {
+TEST(OnCardAddControlModel, AddingPutsTheItemBackInItsOwnGroupKeepingItsSettingsAndUnhidesIt) {
     synth::CardLayout layout;
     synth::CardSection first;
     first.id = "a";
@@ -61,7 +61,10 @@ TEST(OnCardAddControlModel, AddingMovesTheItemToTheLastGridGroupKeepingItsSettin
     drive.paramId = "drive";
     drive.widget = synth::CardWidget::FaderV;
     drive.label = "Gain";
+    synth::CardParamItem tone;
+    tone.paramId = "tone";
     first.items.emplace_back(drive);
+    first.items.emplace_back(tone);
     synth::CardSection last;
     last.id = "b";
     synth::CardSection footer;
@@ -71,13 +74,36 @@ TEST(OnCardAddControlModel, AddingMovesTheItemToTheLastGridGroupKeepingItsSettin
 
     const auto added = synth::ui::withControlAdded(layout, "drive", juce::Point<int>(4, 8));
     EXPECT_TRUE(added.hidden.isEmpty());
-    EXPECT_TRUE(added.sections[0].items.empty()) << "it left its old place";
-    ASSERT_EQ(added.sections[1].items.size(), 1u) << "the footer is never the target";
-    const auto& item = std::get<synth::CardParamItem>(added.sections[1].items[0]);
-    EXPECT_EQ(item.paramId, "drive");
+    EXPECT_TRUE(added.sections[1].items.empty()) << "not the last group: it was hidden from the first";
+    ASSERT_EQ(added.sections[0].items.size(), 2u);
+    const auto& item = std::get<synth::CardParamItem>(added.sections[0].items[0]);
+    EXPECT_EQ(item.paramId, "drive") << "and in its place";
     EXPECT_EQ(item.widget, synth::CardWidget::FaderV);
     EXPECT_EQ(item.label, std::optional<juce::String>("Gain"));
     EXPECT_EQ(item.at, std::optional<juce::Point<int>>(juce::Point<int>(4, 8)));
+}
+
+TEST(OnCardAddControlModel, AnExplicitGroupTakesTheItemFromItsOldOneAndAnUnplacedOneGoesToItsCodeDefaultGroup) {
+    synth::CardLayout layout;
+    synth::CardSection first;
+    first.id = "a";
+    synth::CardParamItem drive;
+    drive.paramId = "drive";
+    first.items.emplace_back(drive);
+    synth::CardSection last;
+    last.id = "b";
+    layout.sections = {first, last};
+    const auto moved = synth::ui::withControlAdded(layout, "drive", std::nullopt, 1);
+    EXPECT_TRUE(moved.sections[0].items.empty());
+    EXPECT_EQ(moved.sections[1].items.size(), 1u);
+
+    synth::CardLayout defaults = layout;
+    synth::CardParamItem tone;
+    tone.paramId = "tone";
+    defaults.sections[0].items.emplace_back(tone);
+    EXPECT_EQ(synth::ui::withControlAdded(layout, "tone", std::nullopt, -1, &defaults).sections[0].items.size(), 2u);
+    EXPECT_EQ(synth::ui::withControlAdded(layout, "tone", std::nullopt).sections[1].items.size(), 1u)
+        << "no code default: the last group, as before";
 }
 
 TEST(OnCardAddControlModel, ALayoutWithOnlyAFooterGetsAMainGroupFirst) {
@@ -187,7 +213,7 @@ TEST(OnCardAddControl, TypingFiltersTheRowsAndTheCountLine) {
     EXPECT_EQ(panel->getRowCountForTest(), 2);
 }
 
-TEST(OnCardAddControl, ClickingARowPutsTheControlBackInTheLastGroupAndWritesOnce) {
+TEST(OnCardAddControl, ClickingARowPutsTheControlBackInTheGroupItWasHiddenFromAndWritesOnce) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
@@ -203,8 +229,13 @@ TEST(OnCardAddControl, ClickingARowPutsTheControlBackInTheLastGroupAndWritesOnce
     ASSERT_TRUE(stored.has_value());
     EXPECT_FALSE(stored->hidden.contains("drive"));
     EXPECT_TRUE(widgetOf(*rig.card(id), "drive")->isVisible());
-    const auto& last = stored->sections[stored->sections.size() - 2]; // the footer is last
-    EXPECT_EQ(std::get<synth::CardParamItem>(last.items.back()).paramId, "drive") << "the last grid group";
+    bool inTone = false;
+    for (const auto& section : stored->sections)
+        for (const auto& item : section.items)
+            if (const auto* param = std::get_if<synth::CardParamItem>(&item);
+                param != nullptr && param->paramId == "drive")
+                inTone = section.id == "tone";
+    EXPECT_TRUE(inTone) << "Drive belongs to the tone group, not the last one";
     EXPECT_NE(editor->getOutlineForTest("drive"), nullptr) << "and it is outlined again";
     EXPECT_EQ(editor->getLastAnnouncementForTest(), "Drive added");
     EXPECT_EQ(editor->getAddPanelForTest(), nullptr) << "nothing is left to add, so the panel closed";
@@ -222,7 +253,7 @@ TEST(OnCardAddControl, InAPositionedGroupTheControlLandsAtAFreeSpotThatKeepsTheG
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    drop(*editor, "outputLevel", {0, 30}); // the last group turns positioned
+    drop(*editor, "cutoff", {0, 30}); // Drive's own group turns positioned
     hideThroughPanel(rig, *editor, "drive");
     auto* panel = openAddPanel(rig, *editor);
     ASSERT_NE(panel, nullptr);

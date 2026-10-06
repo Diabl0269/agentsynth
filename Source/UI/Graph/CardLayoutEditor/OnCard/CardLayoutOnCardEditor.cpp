@@ -54,6 +54,8 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     timeTempo_.onChange = [this](int index) { chooseTimeTempo(index); };
     timeTempo_.setVisible(false);
     addChildComponent(timeTempo_);
+    hideZone_.setVisible(false);
+    addChildComponent(hideZone_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -128,6 +130,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
     cells_ = collectCells(*card);
+    refreshHomes();
     watchTabs(*card);
     reconcileOutlines();
     toFront(false);
@@ -265,6 +268,8 @@ void CardLayoutOnCardEditor::close(bool keep) {
     ghosts_.clear();
     cancelPendingUpdate();
     escapeKey_.disarm();
+    hideZonePump_.stop();
+    hideZone_.setVisible(false);
     drag_ = {};
     guides_.clear();
     if (keep) {
@@ -341,6 +346,10 @@ void CardLayoutOnCardEditor::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.setColour(theme.colors.accent);
     g.drawRoundedRectangle(cardArea().toFloat().reduced(0.75f), theme.metrics.cornerRadius, 1.5f);
+    if (dropSection_ >= 0) {
+        g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha * 0.5f));
+        g.fillRoundedRectangle(sectionArea(dropSection_).toFloat().reduced(2.0f), theme.metrics.cornerRadius);
+    }
     g.setColour(theme.colors.accent.withAlpha(theme.metrics.guideAlpha));
     for (const auto& guide : guides_) {
         const auto p = (float)guide.position;
@@ -367,6 +376,7 @@ void CardLayoutOnCardEditor::resized() {
         strip.removeFromLeft(kBarMargin);
     }
     addControl_.setBounds(strip);
+    hideZone_.setBounds(getLocalBounds().removeFromBottom(kAddStripHeight).withTrimmedTop(kAddGap));
 }
 
 } // namespace synth::ui

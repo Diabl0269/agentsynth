@@ -3,6 +3,7 @@
 #include "CardLayoutAddPanel.h"
 #include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
+#include "CardLayoutHideZone.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -11,6 +12,7 @@
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -94,8 +96,14 @@ public:
     void savePresetForTest(const juce::String& name) { savePreset(name); }
     /** The control's cell as the Add drag's ghost shows it now (overlay pixels); empty with no add drag. */
     juce::Rectangle<int> getAddGhostForTest() const noexcept { return addDrag_.ghost; }
+    /** The control's home rect (where a push-free layout would put it); empty when it has none. */
+    juce::Rectangle<int> getHomeRectForTest(const juce::String& paramId) const;
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
+    /** The pointer is below the card mid-drag, so a release hides the control. */
+    bool isHidingDragForTest() const noexcept { return drag_.hiding; }
+    /** The "Drop to hide" area under the card, and how visible it is now (0 when no drag is live). */
+    const CardLayoutHideZone& getHideZoneForTest() const noexcept { return hideZone_; }
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
     /** Animates as if on screen (the editor is not showing in a test). */
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
@@ -118,9 +126,10 @@ private:
         int cell = -1;
         bool pressed = false;
         bool moving = false;
+        int target = -1;                // the group under the pointer (plan section); the cell's own until it leaves
+        bool hiding = false;            // the pointer is below the card: releasing hides the control
         juce::Point<int> pressPoint;    // editor pixels
         juce::Rectangle<int> startRect; // the cell's rect at the press
-        std::vector<int> sectionCells;  // indices of the cells sharing its section
         juce::Point<int> pressOffset;   // the pointer's offset from the cell's top-left at the press
     };
 
@@ -149,9 +158,18 @@ private:
     void moveCellTo(int cell, juce::Rectangle<int> rect);
     void cancelDrag();
     void endDrag();
+    void setHideZoneShown(bool shown);
+    void hideDragged(int cell);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
+    juce::Rectangle<int> homeRectOf(int cell) const;
+    std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
+                                                       juce::Rectangle<int> start) const;
+    void refreshHomes();
     void writeSection(int section, const std::vector<std::pair<int, juce::Rectangle<int>>>& rects);
     juce::Rectangle<int> clampToSection(int cell, juce::Rectangle<int> rect) const;
+    juce::Rectangle<int> clampToTarget(int section, juce::Rectangle<int> rect) const;
+    juce::Rectangle<int> sectionArea(int section) const;
+    void commitMoveToSection(int cell, juce::Rectangle<int> dropped, int target);
     std::vector<int> cellsOfSection(int section) const;
 
     /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
@@ -242,11 +260,20 @@ private:
     bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.
 
     CardLayoutEditBar editBar_;
+    CardLayoutHideZone hideZone_; ///< Fades in under the card while a control is dragged.
+    ReorderFramePump hideZonePump_{*this};
     juce::OwnedArray<CardLayoutOutline> outlines_;
     std::vector<OnCardCell> cells_;
+    /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a
+     *  restored card, moved only by the user's own drag or nudge of that control. A drop pushes its
+     *  neighbours from these, so a control pushed aside returns as soon as its home is free. */
+    std::map<juce::String, juce::Rectangle<int>> homes_;
+    std::map<juce::String, juce::Rectangle<int>> origins_; ///< Where the layout first put each control.
+    bool keepHomes_ = false; ///< A write of ours is re-syncing: pushed cells keep their homes.
 
     Drag drag_;
     std::vector<oncard::Guide> guides_;
+    int dropSection_ = -1; ///< A group other than the dragged control's own that a drop would move it into.
     ReorderCancelKey escapeKey_;
     juce::String nudgeKey_; ///< The control with a nudge not yet written; empty when none.
     juce::Rectangle<int> nudgeStart_;

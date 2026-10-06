@@ -19,8 +19,15 @@ class CardBody;
 
 enum class CardQuickEdit { Hide, ShowOnCard, ShowAsFader, ShowAsKnob };
 
-/** `layout` with `paramId` changed by `edit`. Pure. */
-CardLayout applyCardQuickEdit(CardLayout layout, const juce::String& paramId, CardQuickEdit edit);
+/** `layout` with `paramId` changed by `edit`. A control the layout never placed is shown in the section the
+ *  `codeDefault` layout (may be null) puts it in, else the last one. Pure. */
+CardLayout applyCardQuickEdit(CardLayout layout, const juce::String& paramId, CardQuickEdit edit,
+                              const CardLayout* codeDefault = nullptr);
+
+/** The index in `layout.sections` of the section `paramId` belongs to: the one that lists it (a hidden
+ *  control stays in its section), else the one with the id of the section `codeDefault` (may be null) lists
+ *  it in; -1 when neither. */
+int homeSectionIndex(const CardLayout& layout, const CardLayout* codeDefault, const juce::String& paramId);
 
 /**
  * Applies `edit` to node `nodeId`'s card as ONE undo step through `undo` (null applies without

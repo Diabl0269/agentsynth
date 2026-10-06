@@ -696,12 +696,15 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAdd.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAddDrop.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorGroups.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorScope.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTimeTempo.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTestSeams.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.h
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.h
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.h

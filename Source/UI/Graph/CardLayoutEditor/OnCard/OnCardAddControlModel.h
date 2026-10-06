@@ -39,10 +39,12 @@ int planSectionIndexOf(const CardLayout& layout, int index);
 /** The index in `layout` of the section the card's plan lists at `planIndex`, or -1. */
 int layoutSectionIndexOfPlan(const CardLayout& layout, int planIndex);
 
-/** `layout` with `paramId` shown at the end of its section `section` (-1 = the last grid group; one is made
- *  first when the layout has none), taking `at` as its free position when given. An item it already had
- *  keeps its widget, label and range; it leaves the hidden list and its old place. */
+/** `layout` with `paramId` shown in section `section` (-1 = the section it belongs to: the one that lists it,
+ *  else the one `codeDefault` (may be null) puts it in, else the last grid group; one is made first when the
+ *  layout has none), taking `at` as its free position when given. An item it already had keeps its widget,
+ *  label and range and leaves `hidden`; it keeps its place in `section` when it was listed there, else it
+ *  goes to the end of `section` and leaves its old one. */
 CardLayout withControlAdded(CardLayout layout, const juce::String& paramId, std::optional<juce::Point<int>> at,
-                            int section = -1);
+                            int section = -1, const CardLayout* codeDefault = nullptr);
 
 } // namespace synth::ui

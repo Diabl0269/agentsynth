@@ -57,6 +57,16 @@ juce::Rectangle<int> clampToLimits(juce::Rectangle<int> rect, const Limits& limi
 std::vector<juce::Rectangle<int>> pushAside(juce::Rectangle<int> dropped, juce::Rectangle<int> start,
                                             const std::vector<juce::Rectangle<int>>& others, const Limits& limits);
 
+/** `cells` (after a push) with every cell that stands away from its home put back there when the home is
+ *  free: not too close to `dropped` or to any other cell as it stands. Where the layout first put the cells
+ *  (`origins`, and `droppedOrigin` for the dropped one) it may have left less than the gap between them: a
+ *  cell returning to its origin keeps that spacing to a neighbour that stands at its own. Cells returning
+ *  can free or block each other, so it repeats until none more can. */
+std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             const std::vector<juce::Rectangle<int>>& origins,
+                                             juce::Rectangle<int> dropped, juce::Rectangle<int> droppedOrigin);
+
 /** The top-left for a new control of `size` in a group whose cells stand at `occupied`: inside `limits`,
  *  kControlGap clear of every one of them, the highest such place and then the leftmost. Always found:
  *  with no room beside or among them it lands below them all. */

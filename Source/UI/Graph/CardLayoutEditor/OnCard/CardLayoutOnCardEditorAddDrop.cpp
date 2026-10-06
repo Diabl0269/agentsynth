@@ -79,16 +79,13 @@ void CardLayoutOnCardEditor::dropAdded(const juce::String& paramId, juce::Point<
     const auto dropped = oncard::clampToLimits({at - size / 2, at - size / 2 + size}, limits);
 
     const auto indices = cellsOfSection(section);
-    std::vector<juce::Rectangle<int>> others;
-    for (int i : indices)
-        others.push_back(cells_[(size_t)i].rect);
-    const auto pushed = oncard::pushAside(dropped, kNowhere, others, limits);
+    const auto pushed = pushedNeighbours(section, -1, dropped, kNowhere);
     std::vector<OnCardCell> placed;
     std::vector<Move> moves;
     for (size_t k = 0; k < indices.size(); ++k) {
         placed.push_back(cells_[(size_t)indices[k]]);
         placed.back().rect = pushed[k];
-        moves.push_back({placed.back().key, others[k], pushed[k], kPushMs, false});
+        moves.push_back({placed.back().key, cells_[(size_t)indices[k]].rect, pushed[k], kPushMs, false});
     }
     const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
     const int top = body->getPlan().sections[(size_t)section].cellTop;
