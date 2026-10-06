@@ -93,7 +93,7 @@ void AIChatComponent::sendButtonClicked() {
 
     // Add user message to local state immediately
     messages.push_back({"user", text, ""});
-    isWaitingForResponse = true;
+    setWaiting(true);
     requestStartMs = juce::Time::getMillisecondCounter();
     updateChatDisplay();
 

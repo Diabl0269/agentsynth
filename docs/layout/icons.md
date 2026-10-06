@@ -206,3 +206,25 @@ accidental underscore collisions.
 
 `static_assert(std::size(kTable) == (size_t)Icon::kCount, ...)` guards the count: it fails to
 compile if step 3 is omitted.
+
+### The AI button
+
+`ToggleAI` is a spark on a patch cable: a short cable in the group colour (`hueRose`) ending in a jack
+plug whose body takes the colour role and whose metal tip keeps its own greys, in
+`assets/icons/toggle-ai.svg`. It has no `mv` part. The signal pulse that runs along the cable, the glow
+at the plug and the four-point spark are drawn in code (`Source/UI/Chrome/ToolbarButton/ToolbarAiSpark.cpp`)
+because they travel along a path and fade; the pulse follows `juce::Path::getPointAlongPath` on the
+cable's curve. Pulse and glow use the theme's `hueAmber` (a dark gold on Daylight, so they stay visible
+on a light chip); the spark is a fixed pink on dark themes and `hueRose` on light ones. On a lit chip
+all three turn `iconInk`.
+
+At rest the spark shows small and nothing else moves. One cycle is 2.8 s: the pulse leaves the cable's
+start and reaches the plug at 50 percent (faded in by 6, out between 50 and 58 percent), the glow
+swells from 45 to 58 percent and fades by the end, and the spark blooms from 48 to 64 percent (scale
+0.15 to 1.12, turning to 30 degrees, with a bounce), settles to 0.95 / 45 degrees at 82 percent and
+fades to 0.4 / 70 degrees at the end. It loops while the assistant is working
+(`AIChatComponent::onWaitingChanged` -> `ToolbarButton::setBusy`) and while the button is hovered; the
+keyframes cross-fade with the rest drawing over 140 ms in and 220 ms out. Under Reduce Motion it never
+plays. While busy the button's screen-reader description and help text say "Assistant is working"; its
+name and tooltip do not change.
+

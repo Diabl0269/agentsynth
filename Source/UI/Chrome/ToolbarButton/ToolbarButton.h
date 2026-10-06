@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ToolbarAiSpark.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/IconLibrary.h"
 #include "UI/Theme/Theme.h"
@@ -84,11 +85,28 @@ public:
     // The chip's press squash right now as x and y scale (1 without motion).
     juce::Point<float> getChipSquash() const;
 
+    // The AI button's looping glyph: while the assistant works (setBusy) and while hovered, a pulse
+    // runs along the cable and a spark blooms at the plug, 2.8 s a cycle. Never under Reduce Motion;
+    // nothing runs (or repaints) otherwise.
+    bool hasLoopingGlyph() const noexcept { return icon_ == synth::theme::Icon::ToggleAI; }
+    // Marks the assistant as working or idle; the screen-reader description follows.
+    void setBusy(bool busy);
+    bool isBusy() const noexcept { return busy_; }
+    // True while the loop plays (or is fading out).
+    bool isLoopActive() const noexcept { return loop_.target > 0.5f || loop_.value > 0.0f; }
+    // 0..1 through the current cycle, and the frame painted right now (the rest frame when idle).
+    float getLoopPhase() const noexcept { return loopPhase_; }
+    ToolbarAiFrame getLoopFrame() const;
+    // Test seam standing in for the VBlank frames that would advance the cycle (none reach a hidden button).
+    void setLoopPhaseForTest(float phase);
+
     void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
 
 protected:
     void buttonStateChanged() override;
     void lookAndFeelChanged() override;
+    void visibilityChanged() override;
+    void parentHierarchyChanged() override;
 
 private:
     struct Fade {
@@ -97,6 +115,8 @@ private:
         AnimationDriver driver;
     };
     void retarget(Fade& fade, float target, double inMs, double outMs);
+    void updateLoop();
+    void startLoopCycle();
 
     synth::theme::Icon icon_ = synth::theme::Icon::kCount;
     ToolbarGroup group_ = ToolbarGroup::View;
@@ -109,6 +129,10 @@ private:
     Fade hover_;
     Fade press_;
     Fade lit_;
+    Fade loop_; // how much of the loop's keyframes show, against the glyph at rest
+    AnimationDriver cycle_;
+    float loopPhase_ = 0.0f;
+    bool busy_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ToolbarButton)
 };

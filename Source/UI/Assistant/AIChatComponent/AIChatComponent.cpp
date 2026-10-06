@@ -344,8 +344,15 @@ void AIChatComponent::cancelRequest() {
     cancelButton.setVisible(false);
     sendButton.setEnabled(true);
     inputField.setReadOnly(false);
-    isWaitingForResponse = false;
     waitingStatusLabel = nullptr;
+    setWaiting(false);
+}
+
+void AIChatComponent::setWaiting(bool waiting) {
+    const bool changed = isWaitingForResponse != waiting;
+    isWaitingForResponse = waiting;
+    if (changed && onWaitingChanged)
+        onWaitingChanged(waiting);
 }
 
 void AIChatComponent::paint(juce::Graphics& g) {

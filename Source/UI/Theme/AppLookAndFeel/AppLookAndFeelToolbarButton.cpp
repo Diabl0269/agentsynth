@@ -109,6 +109,18 @@ void paintToolbarButton(juce::Graphics& g, const synth::ui::ToolbarButton& butto
     if (lit > 0.0f)
         button.getArt(true).draw(g, iconToScreen, parts, alpha * lit);
 
+    if (button.hasLoopingGlyph()) {
+        // Pulse and glow take the amber role, the spark its own pink; a lit chip is solid group colour, so they turn
+        // ink.
+        const auto& c = theme.colors;
+        const juce::Colour spark = theme.isDark ? juce::Colour(0xffff7ab6) : c.hueRose;
+        synth::ui::paintToolbarAiParts(g, iconToScreen, button.getLoopFrame(),
+                                       {c.hueAmber.interpolatedWith(c.iconInk, lit),
+                                        c.hueAmber.interpolatedWith(c.iconInk, lit),
+                                        spark.interpolatedWith(c.iconInk, lit)},
+                                       alpha);
+    }
+
     paintToolbarCaption(g, button, theme, chip);
     synth::ui::paintFocusRing(g, button.getLocalBounds().toFloat().reduced(1.0f), button, theme.metrics.pillRadius);
 }
