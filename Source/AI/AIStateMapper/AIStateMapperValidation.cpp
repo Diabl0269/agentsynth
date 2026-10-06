@@ -9,6 +9,7 @@
 
 #include "AIStateMapperInternal.h"
 
+#include <array>
 #include <cmath>
 #include <map>
 #include <set>
@@ -260,6 +261,36 @@ PatchValidationResult checkModulationEntries(const juce::Array<juce::var>& modLi
     return {};
 }
 
+// The top-level lists' size bounds, in validatePatch's order: nodes, connections, modulations, remove,
+// removeModulations. A model's patch gets the model bounds; the app's own data (allowInternalModuleTypes: a project,
+// a plugin session, a snippet) the much larger app-data bounds, which only stop a tampered file.
+PatchValidationResult checkListSizes(const std::array<const juce::Array<juce::var>*, 5>& lists, bool appData) {
+    struct Bound {
+        int model, app;
+        PatchValidationError error;
+        const char* noun;
+    };
+    static constexpr std::array<Bound, 5> bounds{{
+        {AIStateMapper::kMaxNodes, AIStateMapper::kMaxAppDataNodes, PatchValidationError::TooManyNodes, "nodes"},
+        {AIStateMapper::kMaxConnections, AIStateMapper::kMaxAppDataConnections,
+         PatchValidationError::TooManyConnections, "connections"},
+        {AIStateMapper::kMaxModulations, AIStateMapper::kMaxAppDataModulations,
+         PatchValidationError::TooManyModulations, "modulations"},
+        {AIStateMapper::kMaxRemovals, AIStateMapper::kMaxAppDataRemovals, PatchValidationError::TooManyRemovals,
+         "removals"},
+        {AIStateMapper::kMaxRemoveModulations, AIStateMapper::kMaxAppDataRemovals,
+         PatchValidationError::TooManyRemoveModulations, "modulation removals"},
+    }};
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        const int limit = appData ? bounds[i].app : bounds[i].model;
+        if (lists[i] != nullptr && lists[i]->size() > limit)
+            return {false, bounds[i].error,
+                    "Patch has " + juce::String(lists[i]->size()) + " " + bounds[i].noun + ", exceeding the limit of " +
+                        juce::String(limit) + "."};
+    }
+    return {};
+}
+
 } // namespace
 
 juce::String patchValidationErrorName(PatchValidationError error) {
@@ -474,26 +505,10 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     if (const auto reserved = checkReservedKeysNotAllowed(rootObj); !reserved.ok)
         return reserved;
 
-    if (nodesList && nodesList->size() > kMaxNodes)
-        return {false, PatchValidationError::TooManyNodes,
-                "Patch has " + juce::String(nodesList->size()) + " nodes, exceeding the limit of " +
-                    juce::String(kMaxNodes) + "."};
-    if (connList && connList->size() > kMaxConnections)
-        return {false, PatchValidationError::TooManyConnections,
-                "Patch has " + juce::String(connList->size()) + " connections, exceeding the limit of " +
-                    juce::String(kMaxConnections) + "."};
-    if (modList && modList->size() > kMaxModulations)
-        return {false, PatchValidationError::TooManyModulations,
-                "Patch has " + juce::String(modList->size()) + " modulations, exceeding the limit of " +
-                    juce::String(kMaxModulations) + "."};
-    if (removeList && removeList->size() > kMaxRemovals)
-        return {false, PatchValidationError::TooManyRemovals,
-                "Patch has " + juce::String(removeList->size()) + " removals, exceeding the limit of " +
-                    juce::String(kMaxRemovals) + "."};
-    if (removeModList && removeModList->size() > kMaxRemoveModulations)
-        return {false, PatchValidationError::TooManyRemoveModulations,
-                "Patch has " + juce::String(removeModList->size()) + " modulation removals, exceeding the limit of " +
-                    juce::String(kMaxRemoveModulations) + "."};
+    if (const auto sizes =
+            checkListSizes({nodesList, connList, modList, removeList, removeModList}, allowInternalModuleTypes);
+        !sizes.ok)
+        return sizes;
 
     // Ids this patch may legally reference: nodes it creates, plus (in merge mode) nodes that
     // already exist in the live graph and any plan ids the scope binds. Populated fully before any

@@ -73,6 +73,14 @@ std::set<juce::String> nodeUuids(juce::AudioProcessorGraph& graph) {
     return uuids;
 }
 
+// One filter laid out on a grid by its index (audio in to audio out chains plainly, no modulation wrap).
+juce::AudioProcessorGraph::Node::Ptr addFilterAt(juce::AudioProcessorGraph& graph, int index) {
+    auto node = graph.addNode(std::make_unique<FilterModule>());
+    node->properties.set("x", (index % 20) * 300);
+    node->properties.set("y", (index / 20) * 300);
+    return node;
+}
+
 // A known-only patch (schemaVersion/nodes/connections), the same base PatchDocumentTests.cpp
 // uses, for probing what a PatchDocument stash merges into a fresh save.
 juce::var makeKnownOnlyPatch() {
@@ -906,4 +914,35 @@ TEST_F(ProjectBundleTest, LoadWithNoOutPanLawStillDetachesTheKeyFromTheStash) {
 
     EXPECT_FALSE(freshPatchDoc.toVar(synth::AIStateMapper::graphToJSON(freshGraph)).hasProperty("mixerPanLaw"))
         << "the key must never survive into the unknown-top-level-key stash";
+}
+
+// A project past the AI-patch bounds (256 nodes) is the user's own data: it saves and opens again. An 80-track project
+// is over a thousand nodes; before, it saved and then refused to open.
+TEST_F(ProjectBundleTest, AProjectPastTheModelPatchLimitsSavesAndOpensAgain) {
+    juce::AudioProcessorGraph originalGraph;
+    const int count = synth::AIStateMapper::kMaxNodes + 44;
+    juce::AudioProcessorGraph::Node::Ptr previous;
+    for (int i = 0; i < count; ++i) {
+        auto node = addFilterAt(originalGraph, i);
+        if (previous != nullptr)
+            ASSERT_TRUE(originalGraph.addConnection({{previous->nodeID, 0}, {node->nodeID, 0}}));
+        previous = node;
+    }
+    TimelineDoc timeline;
+    PatchDocument patchDoc;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+    const auto dir = bundleDir("PastModelLimits");
+    ASSERT_TRUE(ProjectBundle::save(dir, originalGraph, timeline, patchDoc, macros, midiRemote).ok);
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    synth::MacroSet freshMacros;
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    const auto result =
+        ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(freshGraph.getNumNodes(), count);
+    EXPECT_EQ(freshGraph.getConnections().size(), originalGraph.getConnections().size());
 }

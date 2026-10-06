@@ -98,6 +98,13 @@ public:
     static constexpr int kMaxModulations = 512;
     static constexpr int kMaxRemovals = 256;
     static constexpr int kMaxRemoveModulations = 256;
+    // The same bounds for the app's own data (a project, a plugin session, a snippet: the callers that pass
+    // allowInternalModuleTypes). A big project goes past the model bounds legitimately (80 tracks is over a thousand
+    // nodes), so these only bound a tampered file; they are not a cap on how big a project may grow.
+    static constexpr int kMaxAppDataNodes = 16384;
+    static constexpr int kMaxAppDataConnections = 65536;
+    static constexpr int kMaxAppDataModulations = 32768;
+    static constexpr int kMaxAppDataRemovals = 16384;
     static constexpr int kMaxTypeNameLength = 64;
     // No module in this codebase exposes anywhere near this many raw channels (poly buses top
     // out at 16 — see PolyMidiModule); this just bounds how large a port index we'll accept.

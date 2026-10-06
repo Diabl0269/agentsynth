@@ -524,14 +524,14 @@ TEST_F(AgentSynthAudioProcessorJunkStateTest, IgnoresValidJSONThatIsNotAnObject)
 TEST_F(AgentSynthAudioProcessorJunkStateTest, RejectsPatchExceedingValidationLimitsWithoutPartiallyApplying) {
     const int nodesBefore = processor->getAudioEngine().getGraph().getNumNodes();
 
-    // One node entry over AIStateMapper::kMaxNodes — trusted=false on the processor's
-    // setStateInformation path means this must be rejected wholesale by validatePatch(), never
-    // partially applied. Mirrors the TooManyNodes case in AIPatchValidationTests.cpp.
+    // One node entry over AIStateMapper::kMaxAppDataNodes (a host session is app data) — trusted=false on the
+    // processor's setStateInformation path means this must be rejected wholesale by validatePatch(), never partially
+    // applied. Mirrors the TooManyNodes case in AIPatchValidationTests.cpp.
     juce::DynamicObject::Ptr n = new juce::DynamicObject();
     n->setProperty("id", 1);
     n->setProperty("type", "Oscillator");
     juce::Array<juce::var> nodes;
-    for (int i = 0; i < synth::AIStateMapper::kMaxNodes + 1; ++i)
+    for (int i = 0; i < synth::AIStateMapper::kMaxAppDataNodes + 1; ++i)
         nodes.add(juce::var(n.get()));
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("nodes", nodes);
