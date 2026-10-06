@@ -13,13 +13,6 @@
 
 namespace synth::ui {
 
-namespace {
-
-constexpr double kFadeInMs = 160.0;
-constexpr double kReducedFadeMs = 80.0;
-
-} // namespace
-
 // The panel opens from the button, in a call-out like the per-control panel's. It lists what the card does
 // not show, and the button is off when that is nothing.
 void CardLayoutOnCardEditor::openAddPanel() {
@@ -123,32 +116,54 @@ void CardLayoutOnCardEditor::finishAdded(const juce::String& paramId, const juce
     announce(name + " added");
 }
 
-// The added control fades in at its spot: 160 ms, 80 ms under Reduce Motion. Nothing on screen, nothing to fade.
+// The added control grows in at its spot: from its centre (a fader along its length) with an 8% bounce, 200 ms;
+// a plain 80 ms fade under Reduce Motion. Nothing on screen, nothing to animate.
 void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
+    using namespace control_motion;
     const int cell = indexOfCell(paramId);
-    if (cell < 0 || !isShowing())
+    if (cell < 0 || !canAnimate())
         return;
-    const std::vector<juce::Component::SafePointer<juce::Component>> parts{cells_[(size_t)cell].widget,
-                                                                           cells_[(size_t)cell].label};
-    const auto setAlpha = [parts](float alpha) {
-        for (const auto& part : parts)
-            if (part != nullptr)
-                part->setAlpha(alpha);
+    struct Part {
+        juce::Component::SafePointer<juce::Component> comp;
+        juce::Rectangle<int> bounds;
     };
-    setAlpha(0.0f);
-    const double ms = prefersReducedMotion() ? kReducedFadeMs : kFadeInMs;
+    std::vector<Part> parts;
+    for (auto* c : {cells_[(size_t)cell].widget.getComponent(), cells_[(size_t)cell].label.getComponent()})
+        if (c != nullptr)
+            parts.push_back({c, c->getBounds()});
+    const auto axis = axisFor(cells_[(size_t)cell].rect);
+    const bool reduced = prefersReducedMotion();
+    const auto apply = [parts, axis, reduced](float t) {
+        for (const auto& part : parts) {
+            if (part.comp == nullptr)
+                continue;
+            part.comp->setAlpha(juce::jlimit(0.0f, 1.0f, easeOutCubic(t)));
+            part.comp->setTransform(reduced ? juce::AffineTransform() : scaleAbout(part.bounds, growScale(t), axis));
+        }
+    };
+    const auto land = [parts] {
+        for (const auto& part : parts)
+            if (part.comp != nullptr) {
+                part.comp->setAlpha(1.0f);
+                part.comp->setTransform({});
+            }
+    };
+    apply(0.0f);
+    const double ms = reduced ? kReducedMs : kGrowMs;
     const auto start = juce::Time::getMillisecondCounterHiRes();
-    finishAddFade_ = [this, setAlpha] {
+    finishAddFade_ = [this, land] {
         addFadePump_.stop();
-        setAlpha(1.0f);
+        land();
     };
     addFadePump_.run(
         ms,
-        [setAlpha, start, ms] {
-            const auto t = (float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / ms);
-            setAlpha(easeOutCubic(t));
+        [apply, start, ms] {
+            apply((float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / ms));
         },
-        [this] { finishAddFade_ = nullptr; });
+        [this, land] {
+            land();
+            finishAddFade_ = nullptr;
+        });
 }
 
 } // namespace synth::ui

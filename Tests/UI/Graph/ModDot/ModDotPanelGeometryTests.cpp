@@ -236,6 +236,8 @@ TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow)
     } watch;
     watch.count = &shown;
     m.frame->addComponentListener(&watch);
+    // Let the intro fade finish first: a slow runner can still be mid fade-in at the press.
+    ASSERT_TRUE(pumpUntil([&] { return m.frame->getAlpha() >= 0.999f; }));
 
     const juce::MouseEvent press(juce::Desktop::getInstance().getMainMouseSource(), {50, 50}, kPlainMouse, 0.0f, 0.0f,
                                  0.0f, 0.0f, 0.0f, &canvas, &canvas, juce::Time::getCurrentTime(), {50, 50},
