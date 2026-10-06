@@ -167,3 +167,79 @@ TEST(OnCardEditorUndo, APlainZIsNotUndo) {
     EXPECT_FALSE(editor->getOutlineForTest("cutoff")->keyPressed(juce::KeyPress('z', juce::ModifierKeys(), 0)));
     EXPECT_TRUE(editor->hasPendingNudgeForTest());
 }
+
+namespace {
+
+/** The rig with full motion (the editor is told to animate as if on screen by each test). */
+struct UndoMotionRig : OnCardRig {
+    UndoMotionRig() { synth::ui::setReducedMotionForTest(false); }
+};
+
+} // namespace
+
+TEST(OnCardEditorUndoMotion, UndoGlidesTheControlBackFromWhereItWasToTheRestoredPlace) {
+    UndoMotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const auto restored = editor->getCellRectForTest("cutoff");
+    drop(*editor, "cutoff", {40, 0});
+    const auto moved = editor->getCellRectForTest("cutoff");
+    ASSERT_NE(moved, restored);
+    editor->setForceAnimateForTest(true);
+
+    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
+    EXPECT_EQ(editor->getCellRectForTest("cutoff"), moved) << "it starts from where it was, not at the new place";
+    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getX(), moved.getX()) << "the real widget moves with it";
+
+    editor->finishMotionForTest();
+    EXPECT_EQ(editor->getCellRectForTest("cutoff"), restored);
+    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getX(), restored.getX());
+
+    ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "cutoff"));
+    EXPECT_EQ(editor->getCellRectForTest("cutoff"), restored) << "redo glides from the restored place";
+    editor->finishMotionForTest();
+    EXPECT_EQ(editor->getCellRectForTest("cutoff"), moved);
+}
+
+TEST(OnCardEditorUndoMotion, UnderReduceMotionOrOffScreenUndoJustSnapsBack) {
+    UndoMotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const auto restored = editor->getCellRectForTest("cutoff");
+    drop(*editor, "cutoff", {40, 0});
+
+    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
+    EXPECT_EQ(editor->getCellRectForTest("cutoff"), restored) << "not on screen: nothing glides";
+
+    editor->setForceAnimateForTest(true);
+    synth::ui::setReducedMotionForTest(true);
+    ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "cutoff"));
+    EXPECT_EQ(editor->getCellRectForTest("cutoff").getX(), restored.getX() + 40) << "Reduce Motion: no glide";
+}
+
+TEST(OnCardEditorUndoMotion, AControlUndoBringsBackGrowsInAndOneItTakesAwayShrinksOut) {
+    UndoMotionRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    hideThroughPanel(rig, *editor, "drive");
+    ASSERT_EQ(editor->getOutlineForTest("drive"), nullptr);
+    editor->setForceAnimateForTest(true);
+
+    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff")); // the hide is undone: Drive is back
+    auto* widget = widgetOf(*rig.card(id), "drive");
+    ASSERT_NE(widget, nullptr);
+    EXPECT_NE(editor->getOutlineForTest("drive"), nullptr);
+    EXPECT_FLOAT_EQ(widget->getAlpha(), 0.0f) << "it grows in from nothing";
+    editor->finishMotionForTest();
+    EXPECT_FLOAT_EQ(widget->getAlpha(), 1.0f);
+    EXPECT_TRUE(widget->getTransform().isIdentity());
+
+    ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "cutoff")); // the hide is redone: Drive leaves again
+    EXPECT_EQ(editor->getOutlineForTest("drive"), nullptr);
+    EXPECT_EQ(editor->getShrinkGhostCountForTest(), 1) << "from the card's picture of it before the redo";
+    editor->finishMotionForTest();
+    EXPECT_EQ(editor->getShrinkGhostCountForTest(), 0);
+}

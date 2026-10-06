@@ -128,6 +128,9 @@ private:
     ModuleComponent* findCard() const;
     void attachTo(ModuleComponent& card);
     void syncToCard();
+    void syncAfterOutsideChange();
+    void animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage, bool rebuilt);
+    void rememberCardImage();
     void reconcileOutlines();
     void watchTabs(ModuleComponent& card);
     void wireOutline(CardLayoutOutline& outline);
@@ -186,6 +189,7 @@ private:
     void finishAdded(const juce::String& paramId, const juce::String& name);
     void fadeInControl(const juce::String& paramId);
     void startShrinkGhost(const juce::String& paramId);
+    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell);
     void tickGhosts();
     bool canAnimate() const { return forceAnimateForTest_ || isShowing(); }
     int editableSectionAt(int y) const;
@@ -224,6 +228,8 @@ private:
     bool closing_ = false;                          ///< close() is running: no write may glide.
     bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool writing_ = false;
+    bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
+    juce::Image cardImage_; ///< The card as of the last re-sync (2x), for a control an undo takes away to shrink from.
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
     juce::String panelParamId_;

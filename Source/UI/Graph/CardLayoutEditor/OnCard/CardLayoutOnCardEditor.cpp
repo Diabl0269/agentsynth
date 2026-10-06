@@ -134,6 +134,57 @@ void CardLayoutOnCardEditor::syncToCard() {
     repaint();
     refreshPanel();
     refreshAddPanel();
+    rememberCardImage();
+}
+
+// A picture of the card as it is now, taken only when it could be animated, so a control an undo takes away
+// can shrink from it after the rebuild has already dropped the control itself.
+void CardLayoutOnCardEditor::rememberCardImage() {
+    cardImage_ = canAnimate() && card_ != nullptr ? card_->createComponentSnapshot(card_->getLocalBounds(), true, 2.0f)
+                                                  : juce::Image();
+}
+
+// The card changed under the editor (an undo or redo, a tab switch): re-sync to it without writing, then let
+// the controls glide from where they were to where the restore put them. A control the card gained grows in,
+// one it lost shrinks away, but only when the card was rebuilt: a tab switch just swaps what is shown.
+void CardLayoutOnCardEditor::syncAfterOutsideChange() {
+    const auto before = cells_;
+    const auto beforeImage = cardImage_;
+    const bool rebuilt = std::exchange(cardRebuilt_, false);
+    syncToCard();
+    if (!closed_)
+        animateRestore(before, beforeImage, rebuilt);
+}
+
+void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage,
+                                            bool rebuilt) {
+    if (!canAnimate())
+        return;
+    const auto rectBefore = [&before](const juce::String& key) -> const OnCardCell* {
+        for (const auto& c : before)
+            if (c.key == key)
+                return &c;
+        return nullptr;
+    };
+    std::vector<Move> moves;
+    std::vector<juce::String> arrived;
+    for (const auto& cell : cells_) {
+        const auto* was = rectBefore(cell.key);
+        if (was == nullptr)
+            arrived.push_back(cell.key);
+        else if (was->rect != cell.rect)
+            moves.push_back({cell.key, was->rect, cell.rect, 160.0, false});
+    }
+    startGlide(std::move(moves));
+    if (!rebuilt)
+        return;
+    for (const auto& key : arrived)
+        fadeInControl(key);
+    for (const auto& was : before)
+        if (indexOfCell(was.key) < 0)
+            startShrinkGhostOf(beforeImage.getClippedImage({was.rect.getX() * 2, was.rect.getY() * 2,
+                                                            was.rect.getWidth() * 2, was.rect.getHeight() * 2}),
+                               was.rect);
 }
 
 // A tab switch changes which controls are on the card without resizing it: the card says so, and the
@@ -275,13 +326,15 @@ void CardLayoutOnCardEditor::componentBeingDeleted(juce::Component& component) {
     if (&component != cardIdentity_)
         return;
     cardIdentity_ = nullptr;
-    if (!writing_ && !closed_)
+    if (!writing_ && !closed_) {
+        cardRebuilt_ = true;
         triggerAsyncUpdate();
+    }
 }
 
 void CardLayoutOnCardEditor::handleAsyncUpdate() {
     if (!closed_ && !writing_ && !drag_.moving)
-        syncToCard();
+        syncAfterOutsideChange();
 }
 
 void CardLayoutOnCardEditor::paint(juce::Graphics& g) {

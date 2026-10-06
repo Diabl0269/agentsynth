@@ -574,7 +574,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   pushed aside undo together, and Cmd+Z while the editor is open steps back one change, never the earlier
   work on the canvas first. Cmd+Z and Cmd+Shift+Z are the app's: the overlay leaves them to bubble (a nudge
   still waiting is written first, as its own step) and re-syncs to the card the restore rebuilds, writing
-  nothing; undoing past the module's own creation closes the editor with the card. **Apply to all** writes the
+  nothing; undoing past the module's own creation closes the editor with the card. The controls glide from where they were to the restored place and a control that comes or goes grows in or shrinks out ([animation.md](animation.md#undo-and-redo-glide)). **Apply to all** writes the
   per-type file and clears this module's override inside its step; undo gives the override back, but the
   per-type file is a setting, not part of the project, and stays. A write that changes nothing records
   nothing. Cancel puts the opening layout back as one more step (when it differs), so Cmd+Z after Cancel
@@ -727,7 +727,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
-  module add). Motion is off in them
+  module add, and the glide back). Motion is off in them
   (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.
 - E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make
   Level a fader, save (`graphToJSON`), reload into a fresh canvas (`applyJSONToGraph`, trusted), and
