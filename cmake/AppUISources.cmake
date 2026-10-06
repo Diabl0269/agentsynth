@@ -420,6 +420,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     Source/UI/Graph/GraphEditor/GraphEditorTestSeams.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorWheel.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDeleteHeal.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.h

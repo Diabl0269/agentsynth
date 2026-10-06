@@ -17,10 +17,11 @@ namespace {
 
 // Hand-built MouseEvent, same pattern as MinimapComponentTests.cpp — no OS mouse source exists
 // headlessly, but MouseInputSource is copyable and Desktop always exposes one.
-juce::MouseEvent makeGraphEditorMouseEvent(juce::Component& comp, juce::Point<float> position) {
-    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, juce::ModifierKeys(), 0.0f,
-                            0.0f, 0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), position,
-                            juce::Time::getCurrentTime(), 1, false);
+juce::MouseEvent makeGraphEditorMouseEvent(juce::Component& comp, juce::Point<float> position,
+                                           juce::ModifierKeys mods = juce::ModifierKeys()) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, &comp, &comp, juce::Time::getCurrentTime(), position, juce::Time::getCurrentTime(), 1,
+                            false);
 }
 
 // Maps a GraphEditor-local screen point to the canvas point currently under it, derived purely
@@ -148,15 +149,12 @@ TEST_F(GraphEditorTest, ZoomAroundCentreStaysClampedUnderRepeatedCalls) {
     EXPECT_NEAR(editor.getVisibleCanvasRect().getWidth(), 800.0f / 0.1f, 1.0f) << "zoom must clamp at 0.1";
 }
 
-// Regression guard for the applyZoomAt extraction (shared by mouseWheelMove and
-// zoomAroundCentre): a wheel event at an arbitrary screen position must still keep the canvas
-// point under the cursor fixed, and must still actually change the zoom.
-TEST_F(GraphEditorTest, WheelZoomKeepsCanvasPointUnderCursorFixed) {
+// Cmd/Ctrl+wheel is the mouse user's zoom: it must still keep the canvas point under the cursor
+// fixed and actually change the zoom (the applyZoomAt extraction shared with zoomAroundCentre).
+TEST_F(GraphEditorTest, CommandWheelZoomsAroundTheCursor) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
-
-    // Start from a non-trivial pan so this isn't only exercising the identity case.
     editor.centreViewOn({300.0f, 250.0f});
 
     const juce::Point<float> cursor(150.0f, 400.0f);
@@ -165,12 +163,95 @@ TEST_F(GraphEditorTest, WheelZoomKeepsCanvasPointUnderCursorFixed) {
 
     juce::MouseWheelDetails wheel{}; // value-init: the struct has no default member initialisers
     wheel.deltaY = 1.5f;
-    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, cursor), wheel);
+    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, cursor, juce::ModifierKeys::commandModifier), wheel);
 
     const auto canvasAfter = screenToCanvas(editor, cursor);
     EXPECT_NEAR(canvasAfter.x, canvasBefore.x, 0.5f);
     EXPECT_NEAR(canvasAfter.y, canvasBefore.y, 0.5f);
-    EXPECT_LT(editor.getVisibleCanvasRect().getWidth(), widthBefore) << "the wheel event must still have zoomed";
+    EXPECT_LT(editor.getVisibleCanvasRect().getWidth(), widthBefore) << "Cmd+wheel must zoom";
+}
+
+// A plain wheel / two-finger swipe pans (content follows the fingers) and never zooms.
+TEST_F(GraphEditorTest, PlainWheelPansAndLeavesZoomUnchanged) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto before = editor.getVisibleCanvasRect();
+
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaX = 0.1f; // fingers move right: content follows, so the visible rect moves left
+    wheel.deltaY = 0.2f; // fingers move down: the visible rect moves up
+    wheel.isSmooth = true;
+    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, {400.0f, 300.0f}), wheel);
+
+    const auto after = editor.getVisibleCanvasRect();
+    EXPECT_NEAR(after.getWidth(), before.getWidth(), 0.01f) << "a swipe must not zoom";
+    EXPECT_NEAR(after.getHeight(), before.getHeight(), 0.01f);
+    EXPECT_LT(after.getX(), before.getX());
+    EXPECT_LT(after.getY(), before.getY());
+    EXPECT_NEAR(before.getX() - after.getX(), 0.1f * 200.0f, 0.5f);
+    EXPECT_NEAR(before.getY() - after.getY(), 0.2f * 200.0f, 0.5f);
+}
+
+// A mouse notch (not smooth, not inertial) pans too; headless it applies at once.
+TEST_F(GraphEditorTest, MouseNotchPansVertically) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto before = editor.getVisibleCanvasRect();
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.1f;
+    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, {400.0f, 300.0f}), wheel);
+
+    const auto after = editor.getVisibleCanvasRect();
+    EXPECT_NEAR(after.getWidth(), before.getWidth(), 0.01f);
+    EXPECT_GT(after.getY(), before.getY());
+    EXPECT_NEAR(after.getX(), before.getX(), 0.01f);
+}
+
+// Shift+wheel pans sideways when the OS leaves the motion on deltaY.
+TEST_F(GraphEditorTest, ShiftWheelPansHorizontally) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto before = editor.getVisibleCanvasRect();
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.1f;
+    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, {400.0f, 300.0f}, juce::ModifierKeys::shiftModifier),
+                          wheel);
+
+    const auto after = editor.getVisibleCanvasRect();
+    EXPECT_GT(after.getX(), before.getX());
+    EXPECT_NEAR(after.getY(), before.getY(), 0.01f);
+}
+
+// A trackpad pinch zooms around the pinch point and does not pan the point under it.
+TEST_F(GraphEditorTest, MagnifyZoomsAroundThePinchPoint) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.centreViewOn({300.0f, 250.0f});
+
+    const juce::Point<float> pinch(150.0f, 400.0f);
+    const auto canvasBefore = screenToCanvas(editor, pinch);
+    const auto widthBefore = editor.getVisibleCanvasRect().getWidth();
+
+    editor.mouseMagnify(makeGraphEditorMouseEvent(editor, pinch), 1.2f);
+    const auto widthIn = editor.getVisibleCanvasRect().getWidth();
+    EXPECT_NEAR(widthIn, widthBefore / 1.2f, 0.5f);
+    const auto canvasAfter = screenToCanvas(editor, pinch);
+    EXPECT_NEAR(canvasAfter.x, canvasBefore.x, 0.5f);
+    EXPECT_NEAR(canvasAfter.y, canvasBefore.y, 0.5f);
+
+    editor.mouseMagnify(makeGraphEditorMouseEvent(editor, pinch), 0.5f);
+    EXPECT_GT(editor.getVisibleCanvasRect().getWidth(), widthIn) << "a shrinking pinch zooms out";
+
+    const auto widthKept = editor.getVisibleCanvasRect().getWidth();
+    editor.mouseMagnify(makeGraphEditorMouseEvent(editor, pinch), -1.0f); // junk factor is ignored
+    EXPECT_NEAR(editor.getVisibleCanvasRect().getWidth(), widthKept, 0.01f);
 }
 
 // buildMinimapModel() returns one node per rendered ModuleComponent, and a viewport equal to

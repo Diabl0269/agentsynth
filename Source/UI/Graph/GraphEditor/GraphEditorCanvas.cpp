@@ -384,6 +384,7 @@ void GraphEditor::updateTransform() {
 // [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
 // screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
 void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
+    wheelPanTween_.stop();
     float oldZoom = zoomLevel;
     zoomLevel += wheelDelta * 0.1f * zoomLevel;
     zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, zoomLevel);
@@ -422,6 +423,7 @@ synth::ViewDoc GraphEditor::getViewDoc() const {
 }
 
 void GraphEditor::applyViewDoc(const synth::ViewDoc& view) {
+    wheelPanTween_.stop();
     const float oldZoom = zoomLevel;
     zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, view.zoom);
     panOffset = {view.panX, view.panY};
@@ -466,10 +468,6 @@ void GraphEditor::endZoomGesture() {
     setModuleRasterFrozen(false);
 }
 
-void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
-    applyZoomAt(wheel.deltaY, e.position);
-}
-
 // The canvas rect currently visible in the editor — the inverse of the content transform
 // applied to getLocalBounds().
 juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
@@ -481,6 +479,7 @@ juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
 
 // Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged.
 void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
+    wheelPanTween_.stop();
     panOffset = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel;
     updateTransform();
 }

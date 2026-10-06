@@ -56,7 +56,7 @@ a drop target by Component identity, so the override itself can't move off `Grap
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 
-- **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseDrag` on the canvas.
+- **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseMagnify` / `mouseDrag` on the canvas (`GraphEditorWheel.cpp`). A trackpad two-finger swipe or a mouse wheel **pans** (content follows the fingers; the OS's natural-scrolling choice is already in the deltas; Shift+wheel pans sideways; a mouse notch eases in over ~120 ms through `ScrollTweenRunner`, trackpad and inertial events apply at once). A trackpad **pinch zooms** around the point between the fingers; **Cmd/Ctrl+wheel** zooms at the cursor for mouse users. The controller surface canvas uses the same mapping; the minimap's own wheel still zooms.
 - **Wire drawing** — poly-bus wires (collapsed N-voice `DirectCV` connections) rendered with an "xN" badge; wire endpoints anchored to visible jacks via `ModuleBase`'s logical-port API.
 - **Drag-to-connect** — `beginConnectionDrag` / `dragConnection` / `endConnectionDrag`; resolves the dragged jacks through the logical-port API (`resolvePolyLink`) and creates one connection per voice when both ends front an equally-wide poly fan, so a single drag between two poly jacks wires the whole fan at once. `disconnectPort` removes every raw channel a jack owns, including all voices of a fan.
 - **Poly toggle rewire** — `rewireForPolyChange` re-anchors a module's existing cables to its new channel layout when its `poly` parameter changes (mono <-> fan), driven by `ModuleComponent`'s `"poly"` parameter listener.

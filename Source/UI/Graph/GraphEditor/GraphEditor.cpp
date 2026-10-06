@@ -7,6 +7,7 @@
 
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
@@ -38,9 +39,10 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
-    setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
-                                             "Scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod "
-                                             "knob to remove"));
+    setTooltip(synth::ui::formatShortcutHint(
+        "Patch canvas - drag modules here to build your patch",
+        "Swipe or scroll to pan | Pinch or " + platformCommandKeyName() +
+            "+scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod knob to remove"));
 
     // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
     setWantsKeyboardFocus(true);
