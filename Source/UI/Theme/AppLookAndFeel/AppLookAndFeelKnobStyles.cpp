@@ -208,7 +208,7 @@ void drawBloomDot(juce::Graphics& g, juce::Point<float> p, float radius, juce::C
 
 void paintNeon(juce::Graphics& g, const Geo& geo, const Theme& theme, juce::Colour valueColour) {
     const auto& c = theme.colors;
-    const float glow = juce::jmax(theme.treatment.glow, 0.0f);
+    const float glow = neonGlowStrength(theme, geo.pos);
 
     const auto body = geo.discBounds(geo.bodyRadius);
     g.setColour(c.knobBody);
@@ -218,22 +218,19 @@ void paintNeon(juce::Graphics& g, const Geo& geo, const Theme& theme, juce::Colo
 
     // A soft bloom under the arc: a few wider strokes at falling alpha stand in for a blur.
     const auto value = arcPath(geo, geo.startAngle, geo.valueAngle);
-    if (glow > 0.0f) {
-        g.setColour(valueColour.withAlpha(0.55f * glow * 0.18f));
-        g.strokePath(value, roundedStroke(5.0f * 2.6f));
-        g.setColour(valueColour.withAlpha(0.55f * glow * 0.32f));
-        g.strokePath(value, roundedStroke(5.0f * 1.9f));
-        g.setColour(valueColour.withAlpha(0.55f * glow * 0.55f));
-        g.strokePath(value, roundedStroke(5.0f * 1.3f));
-    }
+    g.setColour(valueColour.withAlpha(0.55f * glow * 0.18f));
+    g.strokePath(value, roundedStroke(5.0f * 2.6f));
+    g.setColour(valueColour.withAlpha(0.55f * glow * 0.32f));
+    g.strokePath(value, roundedStroke(5.0f * 1.9f));
+    g.setColour(valueColour.withAlpha(0.55f * glow * 0.55f));
+    g.strokePath(value, roundedStroke(5.0f * 1.3f));
     drawTrack(g, geo, theme, geo.trackWidth);
     g.setColour(valueColour);
     g.strokePath(value, roundedStroke(geo.trackWidth));
 
     drawPointer(g, geo, valueColour, 0.0f, geo.bodyRadius * 0.92f, 2.0f);
     const auto tip = geo.pointAt(geo.bodyRadius * 0.92f, geo.valueAngle);
-    if (glow > 0.0f)
-        drawBloomDot(g, tip, 3.0f * geo.scale, valueColour.withAlpha(0.6f * glow));
+    drawBloomDot(g, tip, (2.4f + 1.2f * geo.pos) * geo.scale, valueColour.withAlpha(juce::jmin(1.0f, 0.6f * glow)));
     drawBloomDot(g, tip, 1.8f * geo.scale, valueColour);
 }
 

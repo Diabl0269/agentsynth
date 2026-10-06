@@ -353,7 +353,11 @@ implemented in `AppLookAndFeel`:
   transparency layer and the focus ring and hands the drawing to `paintKnob` (`AppLookAndFeelKnobStyles.cpp`,
   `KnobPainter.h`), one painter per `KnobStyle`: Classic (the original look), Polished (the default: tick dots,
   inner shadow, gradient value arc), Hardware (skirt, knurling, cap highlight, notch), Neon (bloom under the
-  arc, glowing tip), Ring (no body, rider dot on the arc) and Soft (tinted body, round dot). Every style
+  arc, glowing tip; it glows in every theme, see below), Ring (no body, rider dot on the arc) and Soft (tinted body, round dot). The Neon glow is owned by the style, not the theme: its strength is
+  `max(treatment.glow, kNeonMinGlow)` (`KnobPainter.h`, `neonGlowStrength`) scaled by `0.3 + 0.7 * value`, so
+  Obsidian and Daylight (glow 0) still glow, faintly near zero and strongly at full, while a glowier theme
+  keeps its own strength; the tip dot grows with the value too, and the Neon fader's bloom follows the same
+  rule. Classic and Polished keep a theme-driven arc glow. Every style
   shares one geometry (arc radius `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
   sweep) so the modulation ring and its anchors never move. The value colour is `accent`, or, when
   "Colour knobs by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
@@ -382,7 +386,7 @@ implemented in `AppLookAndFeel`:
   colour in `fader::State::valueColour`; Classic is the look described here): Polished adds a soft
   inner shadow, eleven tick dots beside the slot lit up to the value, and a fill brightening from 60%
   to full at the cap; Hardware a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
-  grip lines; Neon a `treatment.glow` bloom round the fill and a flat `knobBody` cap with a centre
+  grip lines; Neon a bloom round the fill (same glow rule as the knob) and a flat `knobBody` cap with a centre
   line in the fader's colour; Ring 2 px lines for slot and fill and a round `knobPointer` dot for the
   cap; Soft a 50% wider slot and a cap tinted with the fader's colour. Travel, slot length, cap
   rectangle and `getSliderThumbRadius` are identical in every style, so hit-testing never moves.

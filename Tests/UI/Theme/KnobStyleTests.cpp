@@ -83,6 +83,36 @@ struct KnobRig {
     juce::Slider slider;
 };
 
+// A pixel 1 px outside the arc stroke's outer edge, at the given fraction of the sweep.
+juce::Colour outsideArcPixel(const juce::Image& img, const Theme& theme, float at) {
+    const float angle = AppLookAndFeel::kRotaryStart + at * (AppLookAndFeel::kRotaryEnd - AppLookAndFeel::kRotaryStart);
+    const float radius = 30.0f - theme.metrics.knobTrackWidth * 0.5f + 1.0f;
+    return img.getPixelAt((int)std::lround(30.0f + std::sin(angle) * radius),
+                          (int)std::lround(30.0f - std::cos(angle) * radius));
+}
+
+TEST(KnobStyleTest, NeonGlowsInObsidianWhereClassicDoesNot) {
+    const auto theme = makeObsidian();
+    ASSERT_EQ(theme.treatment.glow, 0.0f) << "the test needs a theme with no glow of its own";
+    const auto neon = outsideArcPixel(renderKnob(theme, KnobStyle::Neon, 0.9f), theme, 0.1f);
+    const auto classic = outsideArcPixel(renderKnob(theme, KnobStyle::Classic, 0.9f), theme, 0.1f);
+    EXPECT_EQ(classic.getAlpha(), 0);
+    EXPECT_GT(neon.getAlpha(), 0);
+    EXPECT_LT(neon.getAlpha(), 255); // a partially transparent bloom, not a solid stroke
+    // Tinted by the value colour.
+    const auto accent = theme.colors.accent;
+    EXPECT_GT(neon.getRed() * accent.getGreen() * accent.getBlue() + 1, 0);
+    EXPECT_LE(channelDistance(neon.withAlpha(1.0f), accent), 24); // premultiplied rounding at low alpha
+}
+
+TEST(KnobStyleTest, NeonGlowGrowsWithTheValue) {
+    const auto theme = makeObsidian();
+    const auto low = outsideArcPixel(renderKnob(theme, KnobStyle::Neon, 0.2f), theme, 0.1f);
+    const auto high = outsideArcPixel(renderKnob(theme, KnobStyle::Neon, 0.9f), theme, 0.1f);
+    EXPECT_GT(low.getAlpha(), 0) << "a faint glow remains at low values";
+    EXPECT_GT(high.getAlpha(), low.getAlpha());
+}
+
 } // namespace
 
 TEST(KnobStyleTest, IdsAndLabelsRoundTrip) {
