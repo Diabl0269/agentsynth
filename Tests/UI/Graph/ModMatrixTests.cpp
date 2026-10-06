@@ -780,3 +780,15 @@ TEST_F(ModMatrixTest, ACanvasStartsWithTheMatrixClosed) {
     EXPECT_FALSE(editor.isModMatrixVisible());
     EXPECT_FALSE(editor.getModMatrix().isVisible());
 }
+
+// Numbering same-type modules ("LFO 2") rides on the matrix tick; a closed matrix still does it.
+TEST_F(ModMatrixTest, AClosedMatrixStillNumbersSameTypeModules) {
+    ModMatrixComponent matrix(engine);
+    matrix.setVisible(false);
+    auto& graph = engine.getGraph();
+    graph.clear();
+    auto a = graph.addNode(std::make_unique<LFOModule>());
+    auto b = graph.addNode(std::make_unique<LFOModule>());
+    matrix.timerCallback();
+    EXPECT_NE(a->getProcessor()->getName(), b->getProcessor()->getName());
+}

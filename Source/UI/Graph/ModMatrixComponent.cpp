@@ -364,6 +364,11 @@ void ModMatrixComponent::timerCallback() { updateRowsIfOpen(); }
 void ModMatrixComponent::updateRowsIfOpen() {
     if (!isVisible()) {
         staleWhileClosed_ = true;
+        // The tick also numbers same-type modules app-wide ("LFO 2"); that cheap check runs while closed too.
+        if (const int nodes = audioEngine.getGraph().getNumNodes(); nodes != namedNodeCount_) {
+            audioEngine.updateModuleNames();
+            namedNodeCount_ = nodes;
+        }
         return;
     }
     updateRowsFromGraph();
