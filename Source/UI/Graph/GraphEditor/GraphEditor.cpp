@@ -38,9 +38,10 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
-    setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
-                                             "Scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod "
-                                             "knob to remove"));
+    setTooltip(synth::ui::formatShortcutHint(
+        "Patch canvas - drag modules here to build your patch",
+        "Swipe or scroll to pan | Pinch or Cmd+scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod "
+        "knob to remove"));
 
     // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
     setWantsKeyboardFocus(true);

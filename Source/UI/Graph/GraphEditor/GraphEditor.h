@@ -20,6 +20,7 @@
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -616,7 +617,10 @@ public:
     juce::Point<int> getViewportCentreInCanvasSpace() const;
 
     // Mouse Overrides
+    /** Wheel / two-finger swipe PANS the canvas (a mouse notch eases in); Cmd/Ctrl+wheel zooms at the cursor. */
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+    /** Trackpad pinch zooms around the pinch point. */
+    void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
@@ -927,6 +931,10 @@ private:
     std::map<juce::String, bool> dualIOPerModuleOverrides;
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
+    // Wheel-pan tween (a mouse notch eases over ~120 ms; trackpad events apply at once). Axis 0 = x, 1 = y of
+    // panOffset.
+    synth::ui::ScrollTweenRunner wheelPanTween_;
+    void panByWheel(int axis, float amountPx, bool eased);
     void configureCardGlide();
     void noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
     void configureCanvasFrame();
