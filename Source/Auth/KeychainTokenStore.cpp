@@ -10,8 +10,11 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <wincred.h>
+// <windows.h> must come first: <wincred.h> uses its types. Separate blocks keep clang-format
+// from sorting them back into alphabetical order.
 #include <windows.h>
+
+#include <wincred.h>
 #pragma comment(lib, "advapi32.lib")
 #endif
 
