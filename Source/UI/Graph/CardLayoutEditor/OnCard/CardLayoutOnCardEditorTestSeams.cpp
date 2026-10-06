@@ -18,6 +18,8 @@ void CardLayoutOnCardEditor::finishMotionForTest() {
         std::exchange(finishGlide_, nullptr)();
     if (finishAddFade_)
         std::exchange(finishAddFade_, nullptr)();
+    ghostPump_.stop();
+    ghosts_.clear();
 }
 
 } // namespace synth::ui

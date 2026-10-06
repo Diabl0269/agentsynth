@@ -210,6 +210,8 @@ void CardLayoutOnCardEditor::close(bool keep) {
         std::exchange(finishGlide_, nullptr)();
     if (finishAddFade_)
         std::exchange(finishAddFade_, nullptr)();
+    ghostPump_.stop();
+    ghosts_.clear();
     cancelPendingUpdate();
     escapeKey_.disarm();
     drag_ = {};

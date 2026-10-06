@@ -52,6 +52,14 @@ inline float easeOutBack(float t) noexcept {
     return 1.0f + c3 * u * u * u + c1 * u * u;
 }
 
+/** Ease-out-back with a gentle overshoot: peaks at 1.08 (8% past the end), then settles to 1. Things the
+ *  user adds grow in with it. */
+inline float easeOutBackGrow(float t) noexcept {
+    constexpr float c1 = 1.5f;
+    const float u = t - 1.0f;
+    return 1.0f + (c1 + 1.0f) * u * u * u + c1 * u * u;
+}
+
 // ============================================================================
 // Section 2 — AnimationDriver
 //

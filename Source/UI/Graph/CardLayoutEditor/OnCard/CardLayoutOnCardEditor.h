@@ -6,6 +6,7 @@
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
@@ -94,6 +95,9 @@ public:
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
+    /** Animates as if on screen (the editor is not showing in a test). */
+    void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+    int getShrinkGhostCountForTest() const noexcept { return ghosts_.size(); }
     /** The same as the debounce expiring. */
     void flushNudgeForTest() { flushNudge(); }
     /** Esc as a drag in progress sees it; false when no drag is live. */
@@ -179,6 +183,9 @@ private:
     void dropAdded(const juce::String& paramId, juce::Point<int> at);
     void finishAdded(const juce::String& paramId, const juce::String& name);
     void fadeInControl(const juce::String& paramId);
+    void startShrinkGhost(const juce::String& paramId);
+    void tickGhosts();
+    bool canAnimate() const { return forceAnimateForTest_ || isShowing(); }
     int editableSectionAt(int y) const;
     juce::Point<int> addedCellSize(int planSection, const juce::String& paramId) const;
     std::vector<juce::Rectangle<int>> occupiedIn(int planSection) const;
@@ -238,7 +245,10 @@ private:
     ReorderFramePump glidePump_{*this};
     std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
     ReorderFramePump addFadePump_{*this};
-    std::function<void()> finishAddFade_; ///< Lands the added control's fade-in at once; empty when none.
+    std::function<void()> finishAddFade_; ///< Lands the added control's grow at once; empty when none.
+    ReorderFramePump ghostPump_{*this};
+    juce::OwnedArray<control_motion::ShrinkGhost> ghosts_; ///< Removed controls shrinking away.
+    bool forceAnimateForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CardLayoutOnCardEditor)
 };

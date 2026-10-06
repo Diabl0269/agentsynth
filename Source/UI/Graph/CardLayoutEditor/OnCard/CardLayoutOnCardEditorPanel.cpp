@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <utility>
 
 namespace synth::ui {
@@ -139,10 +140,40 @@ void CardLayoutOnCardEditor::editControl(const juce::String& paramId,
 // first outline left.
 void CardLayoutOnCardEditor::hideControl(const juce::String& paramId) {
     closePanel();
+    startShrinkGhost(paramId); // a picture of it, taken before the layout is rewritten
     editControl(paramId,
                 [paramId](CardLayout l) { return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide); });
     if (auto* first = outlines_.getFirst())
         first->grabKeyboardFocus();
+}
+
+// The removed control shrinks away where it was: a ghost of the card's picture of it (150 ms, backwards what
+// adding does), gone when it has shrunk. Nothing on screen, nothing to animate.
+void CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
+    using namespace control_motion;
+    const int cell = indexOfCell(paramId);
+    if (cell < 0 || card_ == nullptr || !canAnimate())
+        return;
+    const auto rect = cells_[(size_t)cell].rect;
+    auto image = card_->createComponentSnapshot(rect, true, 2.0f);
+    if (image.isNull())
+        return;
+    auto* ghost =
+        ghosts_.add(new ShrinkGhost(std::move(image), {}, axisFor(cells_[(size_t)cell].rect), prefersReducedMotion()));
+    ghost->setBounds(rect.withPosition(getLocalPoint(card_, rect.getPosition())));
+    addAndMakeVisible(ghost);
+    ghost->toBack();
+    ghostPump_.run(ghost->durationMs(), [this] { tickGhosts(); }, [this] { ghosts_.clear(); });
+}
+
+void CardLayoutOnCardEditor::tickGhosts() {
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    for (int i = ghosts_.size(); --i >= 0;) {
+        auto* ghost = ghosts_[i];
+        ghost->setProgress((float)((now - ghost->startMs()) / ghost->durationMs()));
+        if (ghost->progress() >= 1.0f)
+            ghosts_.remove(i);
+    }
 }
 
 } // namespace synth::ui
