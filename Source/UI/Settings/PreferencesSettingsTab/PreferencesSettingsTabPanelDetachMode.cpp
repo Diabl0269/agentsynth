@@ -37,7 +37,7 @@ void PreferencesSettingsTab::setupPanelDetachModeControls() {
     // this to one code path -- same idiom setupMixerPlacementControls() uses.
     setPanelDetachMode(appProperties.getUserSettings()->getValue(kPanelDetachModeKey, "move"));
     panelDetachModeCombo.onChange = [this] { persistPanelDetachMode(getPanelDetachMode()); };
-    setupInfoTooltipsControls(); // Chained here, the constructor is baselined
+    setupAnimationModeControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutPanelDetachModeGroup(
@@ -48,10 +48,10 @@ void PreferencesSettingsTab::layoutPanelDetachModeGroup(
     const std::initializer_list<juce::Component*> panelDetachModeComps = {&panelDetachModeLabel, &panelDetachModeCombo};
     const bool visible = groupMatches(panelDetachModeComps);
     setGroupVisible(panelDetachModeComps, visible);
-    // The "Show info tooltips" row and then the MIDI Remote group follow; chained here for the same
-    // baselined-layoutContent reason.
+    // The "Animations" row, the "Show info tooltips" row and then the MIDI Remote group follow; chained here for the
+    // same baselined-layoutContent reason.
     const auto chainNext = [&] {
-        layoutInfoTooltipsGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
+        layoutAnimationModeGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
     };
     if (!visible) {
         chainNext();

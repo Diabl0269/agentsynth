@@ -153,7 +153,8 @@ public:
         if (leaving_)
             return;
         const bool offscreenOk = offscreenForTestFlag();
-        if (!PopupMotion::isEnabled() || !window_->isVisible() || (!window_->isOnDesktop() && !offscreenOk)) {
+        if (!PopupMotion::isEnabled() || animationsOff() || !window_->isVisible() ||
+            (!window_->isOnDesktop() && !offscreenOk)) {
             reallyClose();
             return;
         }
@@ -190,7 +191,7 @@ public:
     void componentBeingDeleted(juce::Component&) override {
         // Dismissed menus, alerts and dialogs are usually deleted while still flagged visible, with
         // nothing left to draw: the picture taken while they were open is all there is.
-        if (window_->isVisible() && !ghosted_ && PopupMotion::isEnabled())
+        if (window_->isVisible() && !ghosted_ && PopupMotion::isEnabled() && !animationsOff())
             startOut(/*fresh=*/false);
         registry().erase(window_);
         window_ = nullptr;
@@ -207,7 +208,7 @@ private:
 
     juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : juce::Desktop::getMousePosition(); }
 
-    bool canAnimate() const { return PopupMotion::isEnabled() && window_->isOnDesktop(); }
+    bool canAnimate() const { return PopupMotion::isEnabled() && !animationsOff() && window_->isOnDesktop(); }
 
     bool hasNativeTitleBar() const {
         auto* peer = window_->getPeer();
@@ -348,7 +349,7 @@ private:
     // `fresh`: the window was just hidden and is still intact. Otherwise it is being deleted and
     // must not be touched, only pictured from what was cached while it was open.
     void startOut(bool fresh) {
-        if (!PopupMotion::isEnabled() || ghosted_)
+        if (!PopupMotion::isEnabled() || animationsOff() || ghosted_)
             return;
         const float startAlpha = animating_ ? window_->getAlpha() : 1.0f;
         const auto slideOffset = window_->getPosition() - restPos_;

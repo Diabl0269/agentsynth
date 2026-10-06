@@ -9,8 +9,10 @@
 //
 // In: the window fades from 0 to 1 while sliding 4 px AWAY from its anchor (the pointer),
 // 160 ms ease-out. Out: it fades to 0 while sliding 2 px back toward the anchor, 110 ms ease-in.
-// With Reduce motion on, both are a plain 80 ms fade and nothing moves.
+// With Reduce motion on, both are a plain 80 ms fade and nothing moves; with Animations set to Off the window
+// shows and hides at once.
 
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include <cmath>
 #include <functional>
@@ -30,8 +32,10 @@ constexpr float kOutSlidePx = 2.0f;
 
 enum class Phase { In, Out };
 
-/** How long a phase runs. Reduce motion is 80 ms both ways. */
+/** How long a phase runs. Reduce motion is 80 ms both ways; Animations: Off is 0. */
 inline double durationMs(Phase phase, bool reduceMotion) noexcept {
+    if (animationsOff())
+        return 0.0;
     if (reduceMotion)
         return kReducedMs;
     return phase == Phase::In ? kInMs : kOutMs;

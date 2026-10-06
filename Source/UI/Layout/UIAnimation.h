@@ -15,6 +15,7 @@
 // Section 2 requires juce_animation + juce_gui_basics (VBlankAttachment).
 // ============================================================================
 
+#include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -131,6 +132,15 @@ public:
                std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
         // Stop / remove previous animation if any.
         stop(updater);
+
+        // Animations: Off lands on the final frame at once; nothing is left running.
+        if (animationsOff()) {
+            if (onUpdate)
+                onUpdate(easingFn ? easingFn(1.0f) : 1.0f);
+            if (onComplete)
+                onComplete();
+            return;
+        }
 
         animator = juce::ValueAnimatorBuilder{}
                        .withDurationMs(durationMs)

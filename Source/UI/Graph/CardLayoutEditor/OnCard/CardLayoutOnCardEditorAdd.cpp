@@ -121,7 +121,7 @@ void CardLayoutOnCardEditor::finishAdded(const juce::String& paramId, const juce
 void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
     using namespace control_motion;
     const int cell = indexOfCell(paramId);
-    if (cell < 0 || !canAnimate())
+    if (cell < 0 || !canAnimate() || animationsOff())
         return;
     struct Part {
         juce::Component::SafePointer<juce::Component> comp;

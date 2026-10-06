@@ -225,7 +225,7 @@ path); nothing else needs to know.
   rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
   `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
   removes the row at once, like deleting a track.
-- **Off-screen.** Same check as the forward move (the app has no Reduce Motion setting): the timeline glide runs only
+- **Off-screen.** Same check as the forward move: the timeline glide runs only
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.
 
@@ -300,7 +300,7 @@ it sits furthest off it (`popup_motion::slideDirection`). A menu opened with its
 pointer, a dropdown under its combo box and a popover under its button slide down; a menu flipped
 above its anchor slides up; a submenu beside its parent row slides sideways; a window with the
 pointer inside it, or a dialog opened from the keyboard, slides down. Reduce motion is
-`synth::ui::prefersReducedMotion()` (`ReducedMotion.h`): macOS Reduce motion; other platforms do not read a setting yet and answer false. It is read each time a popup shows or hides.
+`synth::ui::prefersReducedMotion()` (`ReducedMotion.h`): the Animations preference (below), which follows macOS Reduce motion by default; other platforms do not read a system setting yet and answer false. It is read each time a popup shows or hides.
 
 The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
 window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
@@ -452,12 +452,29 @@ recolour and the mixer's colour dot.
 
 ### Reduced motion
 
-`synth::ui::prefersReducedMotion()` (`Source/UI/Layout/ReducedMotion.h`) answers whether the OS asks apps to cut
-non-essential motion: macOS Reduce Motion (`NSWorkspace.accessibilityDisplayShouldReduceMotion`, read each time in
-`ReducedMotionMac.mm`). Windows and Linux answer false for now -- their settings are not read yet. `CalloutReveal` is the
-first consumer: with the preference on, the popup is never hidden and nothing animates; it also lands at once when the
-callout is not on screen (no VBlank reaches it). The other animations in this document are still unconditional; a new
-non-essential one asks this before it starts. `setReducedMotionForTest` forces the answer.
+Preferences > Panels & Windows > "Animations" (user setting `animationMode`, `synth::ui::AnimationMode` in
+`Source/UI/Layout/ReducedMotion.h`) chooses how much the app animates. It applies at once, app-wide; the saved choice is
+applied at launch by `MainComponent`.
+
+| Choice (stored value) | What happens |
+|---|---|
+| Follow system (`follow`, default) | macOS Reduce Motion decides (`NSWorkspace.accessibilityDisplayShouldReduceMotion`, read each time in `ReducedMotionMac.mm`). Windows and Linux answer "full motion" for now -- their settings are not read yet. An unknown stored value reads as this. |
+| Full (`full`) | Always full motion, even with macOS Reduce Motion on. |
+| Reduced (`reduced`) | As if Reduce Motion were on: short plain fades, nothing slides or grows. |
+| Off (`off`) | Nothing animates: popups, panels, glides and settles run for 0 ms and land on their final state; things still appear and disappear, just without motion. |
+
+`synth::ui::prefersReducedMotion()` answers true for Reduced and Off, false for Full, and the OS's answer for Follow
+system, so every animation that already has a Reduce Motion branch (most of the ones in this document) follows the
+setting. `synth::ui::animationsOff()` is true only for Off. `synth::ui::motionMs(full, reduced)` is the helper for a
+duration that branches on the mode (full, reduced, or 0 under Off). Off is instant at the shared seams:
+`AnimationDriver::start` runs `onUpdate` with the final eased value and `onComplete` before it returns,
+`popup_motion::durationMs` is 0 and `PopupMotion` shows, hides and `dismiss()`es windows with no fade or leaving picture
+(`reallyClose` runs at once), and the self-clocked motions (the Card Layout Editor's fades and shrink ghost, the
+automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
+`AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
+`CalloutReveal` is the first consumer of the reduced answer: with it on, the popup is never hidden and nothing animates;
+it also lands at once when the callout is not on screen (no VBlank reaches it). Tests: `setAnimationMode` sets the mode
+(restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer under Follow system.
 
 ## formatShortcutHint
 

@@ -6,6 +6,7 @@
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FoldAllButton.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -143,6 +144,10 @@ public:
 
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
+    // "Animations" (Panels & Windows): Follow system (default) / Full / Reduced / Off. Setting it persists the choice
+    // and applies it to the whole app at once (synth::ui::setAnimationMode).
+    synth::ui::AnimationMode getAnimationMode() const;
+    void setAnimationMode(synth::ui::AnimationMode mode);
     // Where patch save/open dialogs start (Files & Autosave): with the project (default), the shared
     // Patches folder, or a chosen folder. Read at use time by MainComponent through
     // synth::PatchSaveLocation; see docs/layout/settings-preferences.md.
@@ -300,6 +305,7 @@ private:
     void persistMixerPlacement(const juce::String& placement);
     void persistPanelDetachMode(const juce::String& mode);
     void persistShowInfoTooltips(bool enabled);
+    void persistAnimationMode(synth::ui::AnimationMode mode);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
@@ -323,7 +329,9 @@ private:
     // The panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
     // for the same baselined-constructor reason.
     void setupPanelDetachModeControls();
-    // The "Show info tooltips" row, chained from the tail of setupPanelDetachModeControls() before the MIDI Remote
+    // The "Animations" combo, chained from the tail of setupPanelDetachModeControls() before the info tooltips row.
+    void setupAnimationModeControls();
+    // The "Show info tooltips" row, chained from the tail of setupAnimationModeControls() before the MIDI Remote
     // group.
     void setupInfoTooltipsControls();
     // The MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
@@ -389,7 +397,14 @@ private:
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // Lays out the "Show info tooltips" row, chained from layoutPanelDetachModeGroup() and chaining on to the MIDI
+    // Lays out the "Animations" row, chained from layoutPanelDetachModeGroup() and chaining on to the info tooltips
+    // row.
+    void
+    layoutAnimationModeGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                             const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                             const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the "Show info tooltips" row, chained from layoutAnimationModeGroup() and chaining on to the MIDI
     // Remote group.
     void
     layoutInfoTooltipsGroup(int& y, int contentWidth, bool previousGroupWasVisible,
@@ -537,6 +552,9 @@ private:
     // it in both places (2) (see docs/mixer/panel.md#placement-and-detachable-windows).
     juce::Label panelDetachModeLabel;
     juce::ComboBox panelDetachModeCombo;
+    // "Animations" -- Follow system (default, combo id 1) / Full / Reduced / Off.
+    juce::Label animationModeLabel;
+    juce::ComboBox animationModeCombo;
     // "Show info tooltips" (default on) and its one-line hint.
     juce::ToggleButton showInfoTooltipsToggle{"Show info tooltips"};
     juce::Label showInfoTooltipsHint;
