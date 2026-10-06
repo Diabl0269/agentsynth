@@ -450,6 +450,13 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     then pushes what it lands on). A neighbour that was already flush with the control before the drag is
     left alone unless the drop overlaps it, so moving a control one pixel does not shove the flush rows
     around it. Esc during a drag puts the control back and writes nothing.
+    A pushed control remembers its **home**, where it stood before any push, for as long as the session
+    lasts (it is reset when the session opens and when an undo or redo restores the card). Every drop
+    first pushes the crowded neighbours from where they stand, then sends each one that stands away from
+    its home back there if the home is free (not within 8 px of the dropped control or of another
+    control), so a control pushed out of a full row returns the moment the room is free again, at its
+    original rect. Only the user's own drag or nudge of a control gives it a new home. Cells the
+    layout itself placed flush against each other may return flush.
   - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
     outlines (relative to the group's content origin, so a layout with positions survives a width or
     theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
@@ -723,12 +730,12 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   The hosted source keeps `Tests/UI/Graph/PluginKnobPicker/` (search, tick, reorder, label, scope,
   presets, reset, touch-to-add, the entry points).
 - `Tests/UI/Graph/CardLayoutEditor/OnCard/` (built): `OnCardLayoutMathTests.cpp` snapping (4 px, centres,
-  Cmd) and pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions;
+  Cmd) and pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions, with a pushed cell returning home (`returnHome`);
   `OnCardEditorTests.cpp` opens the editor through the real module and control menus over a Filter with
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
-  the pointer, guides and Cmd, a drop onto a neighbour, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
+  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them

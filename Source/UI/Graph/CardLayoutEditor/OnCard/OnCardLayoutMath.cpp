@@ -141,6 +141,30 @@ std::vector<juce::Rectangle<int>> pushAside(juce::Rectangle<int> dropped, juce::
     return result;
 }
 
+std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             const std::vector<juce::Rectangle<int>>& origins,
+                                             juce::Rectangle<int> dropped, juce::Rectangle<int> droppedOrigin) {
+    const auto free = [&](size_t i) {
+        const bool atOrigin = homes[i] == origins[i];
+        if (tooClose(homes[i], dropped) && !(atOrigin && dropped == droppedOrigin))
+            return false;
+        for (size_t j = 0; j < cells.size(); ++j)
+            if (j != i && tooClose(homes[i], cells[j]) && !(atOrigin && cells[j] == origins[j]))
+                return false;
+        return true;
+    };
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (size_t i = 0; i < cells.size(); ++i)
+            if (cells[i] != homes[i] && free(i)) {
+                cells[i] = homes[i];
+                changed = true;
+            }
+    }
+    return cells;
+}
+
 // The candidate corners are the limits' own and every occupied rectangle's right and bottom edge plus the
 // gap: any free place can slide up and left until it rests on one of them.
 juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,

@@ -142,3 +142,60 @@ TEST(OnCardLayoutMath, AControlWiderThanTheGroupStillGetsAPlaceBelowEverything) 
     EXPECT_EQ(spot.x, kLimits.minX);
     EXPECT_GE(spot.y, 116 + kControlGap);
 }
+
+// A row of three cells with `slack` spare pixels: where the other two stand when the first is dropped
+// `shift` px to the right of its place.
+namespace {
+std::vector<Rectangle<int>> pushedRow(int shift, int slack) {
+    const Limits limits{12, 12 + 3 * 80 + 2 * 8 + slack, 40};
+    const Rectangle<int> first{12, 40, 80, 76};
+    const std::vector<Rectangle<int>> homes{{100, 40, 80, 76}, {188, 40, 80, 76}};
+    return pushAside(first.translated(shift, 0), first, homes, limits);
+}
+} // namespace
+
+TEST(OnCardLayoutMath, NeighboursShiftSidewaysWhileTheRowHasRoomForThem) {
+    const auto pushed = pushedRow(40, 60);
+    ASSERT_EQ(pushed.size(), 2u);
+    EXPECT_EQ(pushed[0].getY(), 40) << "still on the row";
+    EXPECT_EQ(pushed[1].getY(), 40) << "still on the row";
+    EXPECT_GT(pushed[0].getX(), 100);
+    EXPECT_GT(pushed[1].getX(), 188);
+}
+
+TEST(OnCardLayoutMath, AFullRowWrapsTheNeighbourThatHasNoRoomLeft) {
+    const auto pushed = pushedRow(40, 0);
+    EXPECT_GT(pushed[0].getY() + pushed[1].getY(), 80) << "one of them goes to a new row";
+    EXPECT_FALSE(tooClose(Rectangle<int>(52, 40, 80, 76), pushed[0]));
+    EXPECT_FALSE(tooClose(Rectangle<int>(52, 40, 80, 76), pushed[1]));
+}
+
+TEST(OnCardLayoutMath, APushedCellReturnsHomeOnceTheDropMovesAwayAndOtherwiseStaysPushed) {
+    const Rectangle<int> first{12, 40, 80, 76};
+    const std::vector<Rectangle<int>> homes{{100, 40, 80, 76}, {188, 40, 80, 76}};
+    const std::vector<Rectangle<int>> pushed{{100, 124, 80, 76}, {188, 40, 80, 76}};
+    EXPECT_EQ(returnHome(pushed, homes, homes, first, first), homes) << "the drop is back at its place: home is free";
+    EXPECT_EQ(returnHome(pushed, homes, homes, first.translated(40, 0), first), pushed)
+        << "the drop still covers the home";
+}
+
+TEST(OnCardLayoutMath, AHomeThatAMovedControlNowCoversIsNotReturnedTo) {
+    const std::vector<Rectangle<int>> origins{{100, 40, 80, 76}, {188, 40, 80, 76}};
+    const std::vector<Rectangle<int>> homes{{100, 40, 80, 76}, {120, 40, 80, 76}}; // the second chose its place
+    const std::vector<Rectangle<int>> standing{{100, 124, 80, 76}, {120, 40, 80, 76}};
+    EXPECT_EQ(returnHome(standing, homes, origins, {12, 300, 80, 76}, {12, 300, 80, 76})[0], standing[0]);
+}
+
+TEST(OnCardLayoutMath, CellsTheLayoutPlacedFlushToEachOtherMayReturnFlush) {
+    const std::vector<Rectangle<int>> homes{{12, 40, 80, 76}, {12, 116, 80, 76}}; // abut, as a default layout has it
+    const std::vector<Rectangle<int>> standing{{12, 300, 80, 76}, {12, 116, 80, 76}};
+    const Rectangle<int> dropped{100, 40, 80, 76};
+    EXPECT_EQ(returnHome(standing, homes, homes, dropped, dropped), homes);
+    const Rectangle<int> flushDrop{92, 40, 80, 76}; // the dropped control back at the origin, flush to a home
+    const std::vector<Rectangle<int>> next{{100, 124, 80, 76}};
+    const std::vector<Rectangle<int>> nextHomes{{172, 40, 80, 76}};
+    EXPECT_EQ(returnHome(next, nextHomes, nextHomes, flushDrop, flushDrop), nextHomes)
+        << "its own origin keeps the flush";
+    EXPECT_EQ(returnHome(next, nextHomes, nextHomes, flushDrop, flushDrop.translated(-50, 0)), next)
+        << "not at its origin: the gap applies";
+}

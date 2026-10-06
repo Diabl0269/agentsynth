@@ -18,6 +18,8 @@ namespace {
 constexpr int kDragThreshold = 3;
 constexpr double kPushMs = 160.0;
 constexpr double kSettleMs = 140.0;
+// The origin of a control new to the card: it was never anywhere.
+const juce::Rectangle<int> kNowhereRect(-100000, -100000, 0, 0);
 
 juce::Rectangle<int> lerpRect(juce::Rectangle<int> from, juce::Rectangle<int> to, float t) {
     return AnimationDriver::lerpBounds(from, to, t);
@@ -42,6 +44,47 @@ juce::Rectangle<int> CardLayoutOnCardEditor::clampToSection(int cell, juce::Rect
         return rect;
     const auto clamped = oncard::clampToLimits(rect, limitsFor(*body, c.section, card_->getWidth()));
     return clamped.withY(std::min(clamped.getY(), body->getPlan().sections[(size_t)c.section].cellBottom));
+}
+
+// A control's home keeps its position but takes the size the control has now (a fader swapped for a knob).
+juce::Rectangle<int> CardLayoutOnCardEditor::homeRectOf(int cell) const {
+    const auto& c = cells_[(size_t)cell];
+    const auto home = homes_.find(c.key);
+    return home == homes_.end() ? c.rect : c.rect.withPosition(home->second.getPosition());
+}
+
+// After a write of our own the controls keep their homes (the push it made is not a choice of the user's);
+// after anything else (opening, an undo or redo, a tab switch) every control's home is where it stands.
+void CardLayoutOnCardEditor::refreshHomes() {
+    std::map<juce::String, juce::Rectangle<int>> homes, origins;
+    for (const auto& c : cells_) {
+        const auto kept = homes_.find(c.key);
+        const auto first = origins_.find(c.key);
+        homes[c.key] = keepHomes_ && kept != homes_.end() ? kept->second : c.rect;
+        origins[c.key] = keepHomes_ && first != origins_.end() ? first->second : c.rect;
+    }
+    homes_ = std::move(homes);
+    origins_ = std::move(origins);
+}
+
+// Where the other cells of `section` stand once `dropped` lands (`start` is where the dropped control stood;
+// `except` its cell, or -1 for a control new to the card): crowded cells are pushed aside from where they
+// stand now, then every cell that was pushed away from its home goes back when the home is free.
+std::vector<juce::Rectangle<int>> CardLayoutOnCardEditor::pushedNeighbours(int section, int except,
+                                                                           juce::Rectangle<int> dropped,
+                                                                           juce::Rectangle<int> start) const {
+    std::vector<juce::Rectangle<int>> standing, homes, origins;
+    for (int i : cellsOfSection(section))
+        if (i != except) {
+            standing.push_back(cells_[(size_t)i].rect);
+            homes.push_back(homeRectOf(i));
+            origins.push_back(origins_.at(cells_[(size_t)i].key)
+                                  .withSize(cells_[(size_t)i].rect.getWidth(), cells_[(size_t)i].rect.getHeight()));
+        }
+    const auto limits = limitsFor(*card_->getCardBody(), section, card_->getWidth());
+    const auto droppedOrigin = except >= 0 ? origins_.at(cells_[(size_t)except].key) : kNowhereRect;
+    return oncard::returnHome(oncard::pushAside(dropped, start, standing, limits), homes, origins, dropped,
+                              droppedOrigin);
 }
 
 void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseEvent& e) {
@@ -142,12 +185,7 @@ void CardLayoutOnCardEditor::commitMove(int cell, juce::Rectangle<int> dropped, 
         return;
     const int section = cells_[(size_t)cell].section;
     const auto indices = cellsOfSection(section);
-    std::vector<juce::Rectangle<int>> others;
-    for (int i : indices)
-        if (i != cell)
-            others.push_back(cells_[(size_t)i].rect);
-    const auto limits = limitsFor(*card_->getCardBody(), section, card_->getWidth());
-    const auto pushed = oncard::pushAside(dropped, start, others, limits);
+    const auto pushed = pushedNeighbours(section, cell, dropped, start);
 
     std::vector<std::pair<int, juce::Rectangle<int>>> finals;
     std::vector<Move> moves;
@@ -165,6 +203,8 @@ void CardLayoutOnCardEditor::commitMove(int cell, juce::Rectangle<int> dropped, 
         moveCellTo(cell, start);
         return;
     }
+    if (dropped != start)
+        homes_[cells_[(size_t)cell].key] = dropped;
     writeSection(section, finals);
     if (announceMove)
         announce(oncard::describeMove(caption, dropped.getX() - start.getX(), dropped.getY() - start.getY()));
@@ -194,7 +234,9 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
     writing_ = true;
     source_->apply(layout, applyToAll_);
     writing_ = false;
+    keepHomes_ = true;
     syncToCard();
+    keepHomes_ = false;
 }
 
 // From where every cell stood to where it is now: the pushed ones glide aside, the dropped one settles.

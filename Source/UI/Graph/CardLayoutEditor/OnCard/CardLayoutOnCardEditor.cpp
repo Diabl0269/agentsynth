@@ -128,6 +128,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
     cells_ = collectCells(*card);
+    refreshHomes();
     watchTabs(*card);
     reconcileOutlines();
     toFront(false);

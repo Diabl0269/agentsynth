@@ -11,6 +11,7 @@
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -94,6 +95,8 @@ public:
     void savePresetForTest(const juce::String& name) { savePreset(name); }
     /** The control's cell as the Add drag's ghost shows it now (overlay pixels); empty with no add drag. */
     juce::Rectangle<int> getAddGhostForTest() const noexcept { return addDrag_.ghost; }
+    /** The control's home rect (where a push-free layout would put it); empty when it has none. */
+    juce::Rectangle<int> getHomeRectForTest(const juce::String& paramId) const;
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
@@ -150,6 +153,10 @@ private:
     void cancelDrag();
     void endDrag();
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
+    juce::Rectangle<int> homeRectOf(int cell) const;
+    std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
+                                                       juce::Rectangle<int> start) const;
+    void refreshHomes();
     void writeSection(int section, const std::vector<std::pair<int, juce::Rectangle<int>>>& rects);
     juce::Rectangle<int> clampToSection(int cell, juce::Rectangle<int> rect) const;
     std::vector<int> cellsOfSection(int section) const;
@@ -244,6 +251,12 @@ private:
     CardLayoutEditBar editBar_;
     juce::OwnedArray<CardLayoutOutline> outlines_;
     std::vector<OnCardCell> cells_;
+    /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a
+     *  restored card, moved only by the user's own drag or nudge of that control. A drop pushes its
+     *  neighbours from these, so a control pushed aside returns as soon as its home is free. */
+    std::map<juce::String, juce::Rectangle<int>> homes_;
+    std::map<juce::String, juce::Rectangle<int>> origins_; ///< Where the layout first put each control.
+    bool keepHomes_ = false; ///< A write of ours is re-syncing: pushed cells keep their homes.
 
     Drag drag_;
     std::vector<oncard::Guide> guides_;

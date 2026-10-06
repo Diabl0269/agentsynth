@@ -2,6 +2,7 @@
 // drop writes it, guides and Cmd, the neighbour a drop lands on being pushed aside, Esc mid-drag.
 
 #include "Modules/ADSRModule.h"
+#include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.h"
@@ -185,4 +186,59 @@ TEST(OnCardEditorDrag, AControlStaysInsideItsGroupsContentWidthAndBelowItsTop) {
     const int sectionTop = open.rig.card(open.id)->getCardBody()->getPlan().sections[1].cellTop;
     EXPECT_GE(rect.getY(), sectionTop) << "Cutoff's group is the second section";
     pointer.release();
+}
+
+// Regression test for FRO639: a neighbour pushed out of a full row stayed out for good.
+TEST(OnCardEditorDrag, DraggingUnisonBackReturnsThePushedNeighboursToTheirOriginalRects) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<OscillatorModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const auto unison = editor->getCellRectForTest("unison");
+    const auto detune = editor->getCellRectForTest("detune");
+    ASSERT_EQ(unison.getY(), detune.getY()) << "one row";
+    const int dx = unison.getWidth() / 2 + 6;
+
+    {
+        Pointer pointer(*editor, "unison");
+        pointer.moveBy({dx, 0}, kCommand);
+        pointer.release();
+    }
+    EXPECT_EQ(editor->getCellRectForTest("unison").getX(), unison.getX() + dx);
+    EXPECT_NE(editor->getCellRectForTest("detune"), detune) << "Detune made way";
+    EXPECT_EQ(editor->getHomeRectForTest("detune"), detune) << "but its home is where it stood";
+
+    {
+        Pointer pointer(*editor, "unison");
+        pointer.moveBy({-dx, 0}, kCommand);
+        pointer.release();
+    }
+    EXPECT_EQ(editor->getCellRectForTest("unison"), unison);
+    EXPECT_EQ(editor->getCellRectForTest("detune"), detune) << "back on the row, where it was";
+}
+
+TEST(OnCardEditorDrag, AControlTheUserMovedKeepsItsNewHomeWhenAnotherIsDroppedOnIt) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<OscillatorModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const auto detune = editor->getCellRectForTest("detune");
+    const int unisonDx = detune.getX() - editor->getCellRectForTest("unison").getX();
+
+    {
+        Pointer pointer(*editor, "detune");
+        pointer.moveBy({0, 30}, kCommand);
+        pointer.release();
+    }
+    const auto moved = editor->getCellRectForTest("detune");
+    ASSERT_EQ(moved.getY(), detune.getY() + 30);
+    EXPECT_EQ(editor->getHomeRectForTest("detune").getPosition(), moved.getPosition()) << "the user's own move";
+
+    {
+        Pointer pointer(*editor, "unison"); // dropped near it, Unison makes Detune give way
+        pointer.moveBy({unisonDx, 0}, kCommand);
+        pointer.release();
+    }
+    EXPECT_EQ(editor->getHomeRectForTest("detune").getPosition(), moved.getPosition())
+        << "pushed, not moved by the user: the home stays";
 }
