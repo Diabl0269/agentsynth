@@ -7,6 +7,7 @@
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 
 using namespace oncard_test;
@@ -42,10 +43,10 @@ void relabel(OnCardRig& rig, CardLayoutOnCardEditor& editor, const juce::String&
 void showAsFader(OnCardRig& rig, CardLayoutOnCardEditor& editor, const juce::String& key) {
     auto* panel = openControlPanel(rig, editor, key);
     ASSERT_NE(panel, nullptr);
-    const auto& choices = panel->getOptions().widgetChoices;
-    const auto at = std::find(choices.begin(), choices.end(), CardWidget::FaderV);
-    ASSERT_NE(at, choices.end());
-    panel->getShowAsForTest()->setSelectedIndex((int)(at - choices.begin()), juce::sendNotificationSync);
+    const auto kinds = synth::ui::widgetKinds(panel->getOptions().widgetChoices);
+    const auto at = std::find(kinds.begin(), kinds.end(), synth::ui::WidgetKind::Fader);
+    ASSERT_NE(at, kinds.end());
+    panel->getShowAsForTest()->setSelectedIndex((int)(at - kinds.begin()), juce::sendNotificationSync);
 }
 
 } // namespace

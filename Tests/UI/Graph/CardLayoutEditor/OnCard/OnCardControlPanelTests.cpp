@@ -5,8 +5,11 @@
 #include "../../../Accessibility/AccessibilityAudit.h"
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "OnCardTestHelpers.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
+#include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 
 using namespace oncard_test;
@@ -32,10 +35,19 @@ CardLayoutControlPanel* openPanel(OnCardRig& rig, CardLayoutOnCardEditor& editor
 }
 
 void chooseShowAs(CardLayoutControlPanel& panel, CardWidget widget) {
-    const auto& choices = panel.getOptions().widgetChoices;
-    const auto at = std::find(choices.begin(), choices.end(), widget);
-    ASSERT_NE(at, choices.end());
-    panel.getShowAsForTest()->setSelectedIndex((int)(at - choices.begin()), juce::sendNotificationSync);
+    const auto kinds = synth::ui::widgetKinds(panel.getOptions().widgetChoices);
+    const auto at = std::find(kinds.begin(), kinds.end(), synth::ui::widgetKindOf(widget));
+    ASSERT_NE(at, kinds.end());
+    panel.getShowAsForTest()->setSelectedIndex((int)(at - kinds.begin()), juce::sendNotificationSync);
+}
+
+// A click on one segment of a panel switch, the way a user picks it.
+void clickSegment(synth::ui::CardSegmentedSwitch* panelSwitch, int index) {
+    ASSERT_NE(panelSwitch, nullptr);
+    ASSERT_TRUE(panelSwitch->isVisible());
+    const auto at = panelSwitch->getSegment(index)->getBounds().getCentre().toFloat();
+    panelSwitch->mouseDown(
+        cardbody_test::mouseAt(*panelSwitch, at, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier)));
 }
 
 void typeRange(CardLayoutControlPanel& panel, const juce::String& lo, const juce::String& hi) {
@@ -85,6 +97,11 @@ TEST(OnCardControlPanel, EveryFieldIsNamedTooltippedAndReachedByTabInTheBriefsOr
     ASSERT_NE(panel, nullptr);
 
     EXPECT_EQ(panel->getShowAsForTest()->getTitle(), "Show as");
+    EXPECT_EQ(panel->getSizeForTest()->getTitle(), "Size");
+    EXPECT_FALSE(panel->getSizeForTest()->getTooltip().isEmpty());
+    EXPECT_TRUE(panel->getSizeForTest()->getWantsKeyboardFocus());
+    EXPECT_EQ(panel->getDirectionForTest()->getTitle(), "Direction");
+    EXPECT_FALSE(panel->getDirectionForTest()->getTooltip().isEmpty());
     EXPECT_EQ(panel->getLabelEditorForTest().getTitle(), "Label");
     EXPECT_EQ(panel->getMinimumEditorForTest().getTitle(), "Minimum");
     EXPECT_EQ(panel->getMaximumEditorForTest().getTitle(), "Maximum");
@@ -96,7 +113,7 @@ TEST(OnCardControlPanel, EveryFieldIsNamedTooltippedAndReachedByTabInTheBriefsOr
         EXPECT_FALSE(c->getTooltip().isEmpty());
 
     const auto walk = synth::test::walkTabOrder(*panel);
-    EXPECT_EQ(walk.names(), juce::StringArray({"Show as", "Label", "Minimum", "Maximum", "Hide from card"}));
+    EXPECT_EQ(walk.names(), juce::StringArray({"Show as", "Size", "Label", "Minimum", "Maximum", "Hide from card"}));
     const auto gaps = synth::test::auditAccessibility(*panel);
     EXPECT_TRUE(gaps.empty()) << "gaps: " << gaps.size();
 }
@@ -288,4 +305,86 @@ TEST(OnCardControlOptions, RangeEntryRules) {
     EXPECT_FALSE(parseRangeEntry("30000", "40000", full).ok);
     EXPECT_EQ(synth::ui::formatRangeValue(2000.0), "2000");
     EXPECT_EQ(synth::ui::formatRangeValue(0.25), "0.25");
+}
+
+TEST(OnCardControlPanel, ShowAsListsKindsOnlyAndNoTwoSizesAreBothCalledKnob) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "resonance");
+    ASSERT_NE(panel, nullptr);
+    auto* showAs = panel->getShowAsForTest();
+    ASSERT_NE(showAs, nullptr);
+    EXPECT_EQ(showAs->getNumSegments(), 2) << "Knob and Fader, not four widgets";
+    EXPECT_EQ(showAs->getSegment(0)->getButtonText(), "Knob");
+    EXPECT_EQ(showAs->getSegment(1)->getButtonText(), "Fader");
+    EXPECT_EQ(synth::ui::cardLayoutWidgetName(CardWidget::Knob), "Small knob");
+    EXPECT_EQ(synth::ui::cardLayoutWidgetName(CardWidget::KnobLarge), "Large knob");
+}
+
+TEST(OnCardControlPanel, SizeSwitchesAKnobBetweenSmallAndLargeAndTheCellGrowsOnTheRealCard) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "resonance");
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(panel->isSizeRowShownForTest());
+    EXPECT_FALSE(panel->isDirectionRowShownForTest());
+    EXPECT_EQ(panel->getSizeForTest()->getSelectedIndex(), 0);
+    EXPECT_EQ(panel->getSizeForTest()->getSegment(0)->getButtonText(), "Small");
+    EXPECT_EQ(panel->getSizeForTest()->getSegment(1)->getButtonText(), "Large");
+    const int smallHeight = widgetOf(*rig.card(id), "resonance")->getHeight();
+    EXPECT_EQ(smallHeight, synth::cardbody::kKnobHeight);
+
+    clickSegment(panel->getSizeForTest(), 1);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "resonance")->widget, CardWidget::KnobLarge);
+    EXPECT_EQ(panel->getOptions().widget, CardWidget::KnobLarge);
+    EXPECT_EQ(panel->getSizeForTest()->getSelectedIndex(), 1);
+    EXPECT_GT(widgetOf(*rig.card(id), "resonance")->getHeight(), smallHeight);
+    EXPECT_EQ(widgetOf(*rig.card(id), "resonance")->getHeight(), synth::cardbody::kKnobLargeHeight);
+    EXPECT_EQ(editor->getControlPanelForTest(), panel) << "the panel stays open";
+
+    // Left on the focused switch goes back to Small, and each change is one undo step.
+    EXPECT_TRUE(panel->getSizeForTest()->keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "resonance")->widget, CardWidget::Knob);
+    EXPECT_EQ(widgetOf(*rig.card(id), "resonance")->getHeight(), smallHeight);
+    editor->getEditBarForTest().getDoneButton().onClick();
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_FALSE(rig.canvas.undo.canUndo());
+}
+
+TEST(OnCardControlPanel, ShowAsKeepsTheSizeAndTheDirectionRowFollowsAFader) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "resonance");
+    ASSERT_NE(panel, nullptr);
+    clickSegment(panel->getSizeForTest(), 1);
+    chooseShowAs(*panel, CardWidget::Knob);
+    EXPECT_EQ(panel->getOptions().widget, CardWidget::KnobLarge) << "picking Knob again keeps a large knob large";
+
+    chooseShowAs(*panel, CardWidget::FaderV);
+    EXPECT_EQ(panel->getOptions().widget, CardWidget::FaderV);
+    EXPECT_FALSE(panel->isSizeRowShownForTest());
+    ASSERT_TRUE(panel->isDirectionRowShownForTest());
+    clickSegment(panel->getDirectionForTest(), 1);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "resonance")->widget, CardWidget::FaderH);
+    EXPECT_EQ(panel->getDirectionForTest()->getSelectedIndex(), 1);
+    EXPECT_FALSE(dynamic_cast<synth::ui::CardFader*>(widgetOf(*rig.card(id), "resonance"))->isVerticalFader());
+}
+
+TEST(OnCardControlOptions, KindsFoldTheWidgetChoicesAndPairsNeedBothHalves) {
+    using synth::ui::WidgetKind;
+    const std::vector<CardWidget> choices{CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV,
+                                          CardWidget::FaderH};
+    EXPECT_EQ(synth::ui::widgetKinds(choices), (std::vector<WidgetKind>{WidgetKind::Knob, WidgetKind::Fader}));
+    EXPECT_TRUE(synth::ui::offersKnobSize(choices, CardWidget::Knob));
+    EXPECT_FALSE(synth::ui::offersKnobSize(choices, CardWidget::FaderV));
+    EXPECT_FALSE(synth::ui::offersKnobSize({CardWidget::Knob, CardWidget::Choice}, CardWidget::Knob));
+    EXPECT_EQ(synth::ui::widgetForKind(WidgetKind::Fader, CardWidget::KnobLarge, choices), CardWidget::FaderV);
+    EXPECT_EQ(synth::ui::widgetForKind(WidgetKind::Knob, CardWidget::FaderH, choices), CardWidget::Knob);
 }

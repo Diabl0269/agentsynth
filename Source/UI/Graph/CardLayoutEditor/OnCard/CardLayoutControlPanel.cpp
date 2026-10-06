@@ -19,6 +19,15 @@ constexpr int kMaxWidth = 440;
 constexpr int kToWidth = 22;
 constexpr int kFocusTries = 60;
 
+// A segmented switch's width for its segment texts.
+int switchWidth(const juce::StringArray& names) {
+    float widest = 0.0f;
+    const juce::Font font{juce::FontOptions(13.0f)};
+    for (const auto& name : names)
+        widest = std::max(widest, font.getStringWidthFloat(name));
+    return (int)widest * names.size() + 20 * names.size();
+}
+
 void styleCaption(juce::Label& label) {
     label.setFont(juce::Font(juce::FontOptions(12.0f)));
     label.setInterceptsMouseClicks(false, false);
@@ -29,7 +38,8 @@ void styleCaption(juce::Label& label) {
 
 CardLayoutControlPanel::CardLayoutControlPanel() {
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
-    for (auto* caption : {&showAsCaption_, &labelCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
+    for (auto* caption :
+         {&showAsCaption_, &sizeCaption_, &directionCaption_, &labelCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
         styleCaption(*caption);
         addAndMakeVisible(*caption);
     }
@@ -37,9 +47,9 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     styleEditor(label_, "Label", "The control's name on the card. Empty puts the parameter's own name back");
     styleEditor(minimum_, "Minimum", "The lowest value the control reaches, in the parameter's own units");
     styleEditor(maximum_, "Maximum", "The highest value the control reaches, in the parameter's own units");
-    label_.setExplicitFocusOrder(2);
-    minimum_.setExplicitFocusOrder(3);
-    maximum_.setExplicitFocusOrder(4);
+    label_.setExplicitFocusOrder(4);
+    minimum_.setExplicitFocusOrder(5);
+    maximum_.setExplicitFocusOrder(6);
     label_.onReturnKey = [this] { commitLabel(); };
     label_.onFocusLost = [this] { commitLabel(); };
     for (auto* field : {&minimum_, &maximum_}) {
@@ -48,7 +58,7 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     }
     hide_.setTitle("Hide from card");
     hide_.setTooltip("Hide this control from the card. It goes to the More row");
-    hide_.setExplicitFocusOrder(5);
+    hide_.setExplicitFocusOrder(7);
     hide_.onClick = [this] {
         if (onHide)
             onHide();
@@ -68,40 +78,67 @@ void CardLayoutControlPanel::styleEditor(juce::TextEditor& editor, const juce::S
     addAndMakeVisible(editor);
 }
 
+// Show as lists the kinds only (Knob, Fader, ...): a knob's size and a fader's direction have their own rows.
 void CardLayoutControlPanel::buildShowAs() {
     juce::StringArray names;
-    float widest = 0.0f;
-    const juce::Font font{juce::FontOptions(13.0f)};
-    for (auto widget : options_.widgetChoices) {
-        names.add(cardLayoutWidgetName(widget));
-        widest = std::max(widest, font.getStringWidthFloat(names[names.size() - 1]));
-    }
+    for (auto kind : kinds_)
+        names.add(widgetKindName(kind));
     showAs_ = std::make_unique<CardSegmentedSwitch>("Show as", names);
     showAs_->setTooltip("How this control is drawn on the card");
     showAs_->setExplicitFocusOrder(1);
     showAs_->onChange = [this](int index) {
-        if (index >= 0 && index < (int)options_.widgetChoices.size() && onShowAs)
-            onShowAs(options_.widgetChoices[(size_t)index]);
+        if (index >= 0 && index < (int)kinds_.size() && onShowAs)
+            onShowAs(widgetForKind(kinds_[(size_t)index], options_.widget, options_.widgetChoices));
     };
     addAndMakeVisible(*showAs_);
-    showAsWidth_ = (int)widest * names.size() + 20 * names.size();
+    showAsWidth_ = std::max(showAsWidth_, switchWidth(names));
+}
+
+// Size and Direction pick between two widgets of one kind: segment 0 is `first`, segment 1 `second`.
+void CardLayoutControlPanel::buildPairSwitch(std::unique_ptr<CardSegmentedSwitch>& target, const juce::String& title,
+                                             const juce::String& tooltip, const juce::StringArray& values,
+                                             int focusOrder, CardWidget first, CardWidget second) {
+    target = std::make_unique<CardSegmentedSwitch>(title, values);
+    target->setTooltip(tooltip);
+    target->setExplicitFocusOrder(focusOrder);
+    target->onChange = [this, first, second](int index) {
+        if ((index == 0 || index == 1) && onShowAs)
+            onShowAs(index == 0 ? first : second);
+    };
+    addChildComponent(*target);
 }
 
 void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
-    const bool rebuild = showAs_ == nullptr || options.widgetChoices != options_.widgetChoices;
+    const auto kinds = widgetKinds(options.widgetChoices);
+    const bool rebuild = (showAs_ == nullptr && kinds.size() >= 2) || kinds != kinds_;
     options_ = options;
     setTitle(options_.caption + " options");
     if (rebuild) {
         showAs_.reset();
-        showAsWidth_ = 0;
-        if (options_.widgetChoices.size() >= 2)
+        showAsWidth_ = switchWidth({"Vertical", "Horizontal"}); // the widest pair row
+        kinds_ = kinds;
+        if (kinds_.size() >= 2)
             buildShowAs();
     }
+    if (size_ == nullptr) {
+        buildPairSwitch(size_, "Size", "How big this knob is drawn. A large knob takes a bigger dial",
+                        {"Small", "Large"}, 2, CardWidget::Knob, CardWidget::KnobLarge);
+        buildPairSwitch(direction_, "Direction", "Whether this fader stands up or lies down",
+                        {"Vertical", "Horizontal"}, 3, CardWidget::FaderV, CardWidget::FaderH);
+    }
     if (showAs_ != nullptr)
-        for (int i = 0; i < (int)options_.widgetChoices.size(); ++i)
-            if (options_.widgetChoices[(size_t)i] == options_.widget)
+        for (int i = 0; i < (int)kinds_.size(); ++i)
+            if (kinds_[(size_t)i] == widgetKindOf(options_.widget))
                 showAs_->setSelectedIndex(i, juce::dontSendNotification);
     showAsCaption_.setVisible(showAs_ != nullptr);
+    const bool hasSize = offersKnobSize(options_.widgetChoices, options_.widget);
+    const bool hasDirection = offersFaderDirection(options_.widgetChoices, options_.widget);
+    size_->setVisible(hasSize);
+    sizeCaption_.setVisible(hasSize);
+    direction_->setVisible(hasDirection);
+    directionCaption_.setVisible(hasDirection);
+    size_->setSelectedIndex(options_.widget == CardWidget::KnobLarge ? 1 : 0, juce::dontSendNotification);
+    direction_->setSelectedIndex(options_.widget == CardWidget::FaderH ? 1 : 0, juce::dontSendNotification);
     const bool hasRange = options_.fullRange.has_value();
     for (auto* c : std::initializer_list<juce::Component*>{&rangeCaption_, &rangeTo_, &minimum_, &maximum_})
         c->setVisible(hasRange);
@@ -129,6 +166,13 @@ int CardLayoutControlPanel::arrange() {
     if (showAs_ != nullptr) {
         showAsCaption_.setBounds(kPad, y, width, kCaptionH);
         showAs_->setBounds(kPad, y + kCaptionH, width, kSwitchH);
+        y += kCaptionH + kSwitchH + kGap;
+    }
+    if (size_ != nullptr && (size_->isVisible() || direction_->isVisible())) {
+        auto& caption = size_->isVisible() ? sizeCaption_ : directionCaption_;
+        auto& pair = size_->isVisible() ? *size_ : *direction_;
+        caption.setBounds(kPad, y, width, kCaptionH);
+        pair.setBounds(kPad, y + kCaptionH, width, kSwitchH);
         y += kCaptionH + kSwitchH + kGap;
     }
     labelCaption_.setBounds(kPad, y, width, kCaptionH);
@@ -190,7 +234,8 @@ bool CardLayoutControlPanel::keyPressed(const juce::KeyPress& key) {
 
 void CardLayoutControlPanel::applyColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
-    for (auto* caption : {&showAsCaption_, &labelCaption_, &rangeCaption_, &rangeTo_})
+    for (auto* caption :
+         {&showAsCaption_, &sizeCaption_, &directionCaption_, &labelCaption_, &rangeCaption_, &rangeTo_})
         caption->setColour(juce::Label::textColourId, colours.textMuted);
     hint_.setColour(juce::Label::textColourId, colours.warning);
 }

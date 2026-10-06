@@ -1,8 +1,8 @@
 #pragma once
 
-// The on-card editor's per-control panel: every option of one control in one small panel (Show as, Label,
-// Range, Hide from card). It lives in a call-out the editor launches and holds no layout of its own: each
-// change goes out through a callback, and the editor hands back the control's new state.
+// The on-card editor's per-control panel: every option of one control in one small panel (Show as, Size or
+// Direction, Label, Range, Hide from card). It lives in a call-out the editor launches and holds no layout of its own:
+// each change goes out through a callback, and the editor hands back the control's new state.
 // docs/layout/module-card-layout.md#editing-a-layout.
 
 #include "OnCardControlOptions.h"
@@ -38,6 +38,10 @@ public:
 
     // ---- Test seams ---------------------------------------------------------------------------------
     CardSegmentedSwitch* getShowAsForTest() const noexcept { return showAs_.get(); }
+    CardSegmentedSwitch* getSizeForTest() const noexcept { return size_.get(); }
+    CardSegmentedSwitch* getDirectionForTest() const noexcept { return direction_.get(); }
+    bool isSizeRowShownForTest() const { return size_ != nullptr && size_->isVisible(); }
+    bool isDirectionRowShownForTest() const { return direction_ != nullptr && direction_->isVisible(); }
     juce::TextEditor& getLabelEditorForTest() noexcept { return label_; }
     juce::TextEditor& getMinimumEditorForTest() noexcept { return minimum_; }
     juce::TextEditor& getMaximumEditorForTest() noexcept { return maximum_; }
@@ -50,6 +54,9 @@ public:
 
 private:
     void buildShowAs();
+    void buildPairSwitch(std::unique_ptr<CardSegmentedSwitch>& target, const juce::String& title,
+                         const juce::String& tooltip, const juce::StringArray& values, int focusOrder, CardWidget first,
+                         CardWidget second);
     void styleEditor(juce::TextEditor& editor, const juce::String& title, const juce::String& tooltip);
     void commitLabel();
     void commitRange();
@@ -61,7 +68,12 @@ private:
     juce::Component* firstFocusStop() const;
 
     ControlOptions options_;
+    std::vector<WidgetKind> kinds_; ///< What each Show as segment stands for.
     std::unique_ptr<CardSegmentedSwitch> showAs_;
+    std::unique_ptr<CardSegmentedSwitch> size_;      ///< Small | Large, for a knob.
+    std::unique_ptr<CardSegmentedSwitch> direction_; ///< Vertical | Horizontal, for a fader.
+    juce::Label sizeCaption_{{}, "Size"};
+    juce::Label directionCaption_{{}, "Direction"};
     juce::Label showAsCaption_{{}, "Show as"};
     juce::Label labelCaption_{{}, "Label"};
     juce::Label rangeCaption_{{}, "Range"};

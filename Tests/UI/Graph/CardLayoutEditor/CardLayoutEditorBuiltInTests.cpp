@@ -88,7 +88,8 @@ TEST(CardLayoutEditorBuiltIn, TheWidgetChoiceOffersOnlyWidgetsThatSuitTheParamet
             items.add(combo.getItemText(i));
         return combo.isVisible() ? items : juce::StringArray();
     };
-    EXPECT_EQ(choicesOf("outputLevel"), juce::StringArray("Knob", "Large knob", "Vertical fader", "Horizontal fader"));
+    EXPECT_EQ(choicesOf("outputLevel"),
+              juce::StringArray("Small knob", "Large knob", "Vertical fader", "Horizontal fader"));
     EXPECT_EQ(choicesOf("filterType"), juce::StringArray()) << "seven values: a menu only, no choice to offer";
     EXPECT_EQ(choicesOf("poly"), juce::StringArray()) << "a switch is only ever a toggle";
 

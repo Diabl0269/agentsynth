@@ -4,6 +4,7 @@
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
@@ -41,6 +42,84 @@ std::optional<double> parseNumber(const juce::String& text) {
 }
 
 } // namespace
+
+WidgetKind widgetKindOf(CardWidget widget) {
+    switch (widget) {
+    case CardWidget::Auto:
+        return WidgetKind::Auto;
+    case CardWidget::Knob:
+    case CardWidget::KnobLarge:
+        return WidgetKind::Knob;
+    case CardWidget::FaderV:
+    case CardWidget::FaderH:
+        return WidgetKind::Fader;
+    case CardWidget::Toggle:
+        return WidgetKind::Toggle;
+    case CardWidget::Choice:
+        return WidgetKind::Menu;
+    case CardWidget::Segmented:
+        return WidgetKind::Segmented;
+    case CardWidget::Stepper:
+        return WidgetKind::Stepper;
+    }
+    return WidgetKind::Auto;
+}
+
+juce::String widgetKindName(WidgetKind kind) {
+    switch (kind) {
+    case WidgetKind::Auto:
+        return "Automatic";
+    case WidgetKind::Knob:
+        return "Knob";
+    case WidgetKind::Fader:
+        return "Fader";
+    case WidgetKind::Toggle:
+        return "Toggle";
+    case WidgetKind::Menu:
+        return "Menu";
+    case WidgetKind::Segmented:
+        return "Segmented";
+    case WidgetKind::Stepper:
+        return "Stepper";
+    }
+    return "Automatic";
+}
+
+std::vector<WidgetKind> widgetKinds(const std::vector<CardWidget>& widgetChoices) {
+    std::vector<WidgetKind> kinds;
+    for (auto widget : widgetChoices) {
+        const auto kind = widgetKindOf(widget);
+        if (std::find(kinds.begin(), kinds.end(), kind) == kinds.end())
+            kinds.push_back(kind);
+    }
+    return kinds;
+}
+
+CardWidget widgetForKind(WidgetKind kind, CardWidget current, const std::vector<CardWidget>& widgetChoices) {
+    if (widgetKindOf(current) == kind)
+        return current;
+    for (auto widget : widgetChoices)
+        if (widgetKindOf(widget) == kind)
+            return widget;
+    return current;
+}
+
+namespace {
+
+bool offersPair(const std::vector<CardWidget>& choices, CardWidget current, CardWidget a, CardWidget b) {
+    const auto has = [&](CardWidget w) { return std::find(choices.begin(), choices.end(), w) != choices.end(); };
+    return (current == a || current == b) && has(a) && has(b);
+}
+
+} // namespace
+
+bool offersKnobSize(const std::vector<CardWidget>& widgetChoices, CardWidget current) {
+    return offersPair(widgetChoices, current, CardWidget::Knob, CardWidget::KnobLarge);
+}
+
+bool offersFaderDirection(const std::vector<CardWidget>& widgetChoices, CardWidget current) {
+    return offersPair(widgetChoices, current, CardWidget::FaderV, CardWidget::FaderH);
+}
 
 std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
                                                  const std::vector<CardLayoutEditorParam>& params,
