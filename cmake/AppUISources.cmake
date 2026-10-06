@@ -702,6 +702,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTimeTempo.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTestSeams.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.h
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.h
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.h

@@ -3,6 +3,7 @@
 #include "CardLayoutAddPanel.h"
 #include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
+#include "CardLayoutHideZone.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -99,6 +100,10 @@ public:
     juce::Rectangle<int> getHomeRectForTest(const juce::String& paramId) const;
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
+    /** The pointer is below the card mid-drag, so a release hides the control. */
+    bool isHidingDragForTest() const noexcept { return drag_.hiding; }
+    /** The "Drop to hide" area under the card, and how visible it is now (0 when no drag is live). */
+    const CardLayoutHideZone& getHideZoneForTest() const noexcept { return hideZone_; }
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
     /** Animates as if on screen (the editor is not showing in a test). */
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
@@ -121,6 +126,7 @@ private:
         int cell = -1;
         bool pressed = false;
         bool moving = false;
+        bool hiding = false;            // the pointer is below the card: releasing hides the control
         juce::Point<int> pressPoint;    // editor pixels
         juce::Rectangle<int> startRect; // the cell's rect at the press
         std::vector<int> sectionCells;  // indices of the cells sharing its section
@@ -152,6 +158,8 @@ private:
     void moveCellTo(int cell, juce::Rectangle<int> rect);
     void cancelDrag();
     void endDrag();
+    void setHideZoneShown(bool shown);
+    void hideDragged(int cell);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
     juce::Rectangle<int> homeRectOf(int cell) const;
     std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
@@ -249,6 +257,8 @@ private:
     bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.
 
     CardLayoutEditBar editBar_;
+    CardLayoutHideZone hideZone_; ///< Fades in under the card while a control is dragged.
+    ReorderFramePump hideZonePump_{*this};
     juce::OwnedArray<CardLayoutOutline> outlines_;
     std::vector<OnCardCell> cells_;
     /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a

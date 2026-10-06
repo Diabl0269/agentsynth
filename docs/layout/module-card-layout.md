@@ -71,7 +71,8 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
-| Snapping to guides and pushing a crowded neighbour aside, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
+| Snapping to guides, pushing a crowded neighbour aside and sending a pushed one home, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
+| The "Drop to hide" area under the card during a drag | `OnCard/CardLayoutHideZone.*` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
 
@@ -457,6 +458,14 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
     control), so a control pushed out of a full row returns the moment the room is free again, at its
     original rect. Only the user's own drag or nudge of a control gives it a new home. Cells the
     layout itself placed flush against each other may return flush.
+  - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
+    over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
+    dashes. With the pointer below the card's bottom edge the area gets a stronger wash, the control stays
+    where it last was inside the card, and releasing hides it exactly as Hide from card or Backspace does
+    (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
+    "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
+    the pointer again; in-card positions keep the group clamp. Esc cancels as always
+    (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`).
   - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
     outlines (relative to the group's content origin, so a layout with positions survives a width or
     theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
@@ -735,7 +744,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
-  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorKeyboardTests.cpp` the
+  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them

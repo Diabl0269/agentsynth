@@ -54,6 +54,8 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     timeTempo_.onChange = [this](int index) { chooseTimeTempo(index); };
     timeTempo_.setVisible(false);
     addChildComponent(timeTempo_);
+    hideZone_.setVisible(false);
+    addChildComponent(hideZone_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -266,6 +268,8 @@ void CardLayoutOnCardEditor::close(bool keep) {
     ghosts_.clear();
     cancelPendingUpdate();
     escapeKey_.disarm();
+    hideZonePump_.stop();
+    hideZone_.setVisible(false);
     drag_ = {};
     guides_.clear();
     if (keep) {
@@ -368,6 +372,7 @@ void CardLayoutOnCardEditor::resized() {
         strip.removeFromLeft(kBarMargin);
     }
     addControl_.setBounds(strip);
+    hideZone_.setBounds(getLocalBounds().removeFromBottom(kAddStripHeight).withTrimmedTop(kAddGap));
 }
 
 } // namespace synth::ui

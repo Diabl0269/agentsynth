@@ -18,6 +18,7 @@ namespace {
 constexpr int kDragThreshold = 3;
 constexpr double kPushMs = 160.0;
 constexpr double kSettleMs = 140.0;
+constexpr double kHideZoneFadeMs = 120.0;
 // The origin of a control new to the card: it was never anywhere.
 const juce::Rectangle<int> kNowhereRect(-100000, -100000, 0, 0);
 
@@ -114,10 +115,23 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
             return;
         drag_.moving = true;
         escapeKey_.arm(*this, [this] { cancelDrag(); });
+        setHideZoneShown(true);
         if (auto* outline = getOutlineForTest(cells_[(size_t)drag_.cell].key)) {
             outline->setLift(1.0f);
             showDragCursor(*outline);
         }
+    }
+    // Below the card the control stays where it last was (in the card) and a release hides it; back above the
+    // edge it follows the pointer again.
+    const bool below = pointer.y > cardArea().getBottom();
+    if (below != drag_.hiding) {
+        drag_.hiding = below;
+        hideZone_.setActive(below);
+    }
+    if (below) {
+        guides_.clear();
+        repaint();
+        return;
     }
     std::vector<juce::Rectangle<int>> others;
     for (int i : drag_.sectionCells)
@@ -143,17 +157,58 @@ void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
     if (!drag_.pressed)
         return;
     const bool moved = drag_.moving;
+    const bool hide = drag_.hiding;
     const int cell = drag_.cell;
     const auto start = drag_.startRect;
     const auto dropped = cells_[(size_t)cell].rect;
     endDrag();
-    if (moved)
+    if (moved && hide)
+        hideDragged(cell);
+    else if (moved)
         commitMove(cell, dropped, start, true);
+}
+
+// A control let go below the card goes the way Backspace takes it: shrinking away from where it was let go, to
+// the More row, as one undo step.
+void CardLayoutOnCardEditor::hideDragged(int cell) {
+    if (cell < 0 || cell >= (int)cells_.size() || closed_)
+        return;
+    const auto caption = cells_[(size_t)cell].caption;
+    hideControl(cells_[(size_t)cell].key);
+    announce(caption + " hidden");
+}
+
+// The "Drop to hide" area fades in when a drag starts and out when it ends: 120 ms, none under Reduce Motion.
+void CardLayoutOnCardEditor::setHideZoneShown(bool shown) {
+    hideZonePump_.stop();
+    hideZone_.setActive(false);
+    if (shown) {
+        hideZone_.setVisible(true);
+        hideZone_.toFront(false);
+    }
+    const float from = hideZone_.getAlpha();
+    const float to = shown ? 1.0f : 0.0f;
+    if (prefersReducedMotion() || !canAnimate() || from == to) {
+        hideZone_.setAlpha(to);
+        hideZone_.setVisible(shown);
+        return;
+    }
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    hideZonePump_.run(
+        kHideZoneFadeMs,
+        [this, from, to, start] {
+            const auto t =
+                (float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / kHideZoneFadeMs);
+            hideZone_.setAlpha(from + (to - from) * easeOutCubic(t));
+        },
+        [this, shown] { hideZone_.setVisible(shown); });
 }
 
 void CardLayoutOnCardEditor::endDrag() {
     escapeKey_.disarm();
     guides_.clear();
+    if (drag_.moving)
+        setHideZoneShown(false);
     if (drag_.cell >= 0 && drag_.cell < (int)cells_.size())
         if (auto* outline = getOutlineForTest(cells_[(size_t)drag_.cell].key)) {
             outline->setLift(0.0f);
