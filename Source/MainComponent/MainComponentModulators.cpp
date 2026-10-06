@@ -15,6 +15,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 #include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
+#include <map>
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
@@ -62,36 +63,58 @@ std::optional<AudioEngine::ModulationRouting> findAttenuverterRouting(AudioEngin
 // an undo snapshot would see.
 std::vector<synth::ui::ModulatorInfo> MainComponent::getModulators(const juce::String& nodeUuid,
                                                                    const juce::String& paramId) {
-    std::vector<synth::ui::ModulatorInfo> result;
-    auto* target = findNodeByUuid(nodeUuid);
-    const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
-    if (raw < 0)
-        return result;
+    return getModulatorsForLanes({{nodeUuid, paramId}}).front();
+}
+
+// One pass for every lane: the nodes indexed by uuid, the cables indexed once, and each ModCV routing resolved once
+// and filed under its real destination, so each lane is a lookup (a lane by lane walk made every timeline refresh
+// cost lanes x routings x cables).
+std::vector<std::vector<synth::ui::ModulatorInfo>>
+MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, juce::String>>& lanes) {
     auto& graph = audioEngine.getGraph();
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> byUuid;
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->properties["uuid"].toString().isNotEmpty())
+            byUuid.emplace(node->properties["uuid"].toString(), node); // the first, as findNodeByUuid answers
+
+    using Resolved = std::pair<AudioEngine::ModulationRouting, synth::ui::ResolvedRouting>;
+    std::map<std::pair<juce::uint32, int>, std::vector<Resolved>> byDest;
     const synth::ui::ConnectionIndex cables(graph);
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
             continue;
         const auto real = resolveThroughPorts(cables, graphEditor, r);
-        if (real.dest.node != target->nodeID || real.dest.channel != raw)
-            continue;
-        auto* source = graph.getNodeForId(real.source.node);
-        if (source == nullptr)
-            continue;
-        synth::ui::ModulatorInfo info;
-        info.sourceUuid = uuidOf(source);
-        info.sourceTitle = synth::moduleTitle(*source);
-        info.sourceChannel = real.source.channel;
-        info.isLfo = dynamic_cast<LFOModule*>(source->getProcessor()) != nullptr;
-        if (r.kind == AudioEngine::RoutingKind::AttenuverterChain)
-            info.attenuverterUuid = uuidOf(graph.getNodeForId(r.attenuverterNodeID));
-        info.targetUuid = nodeUuid;
-        info.paramId = paramId;
-        info.targetChannel = raw;
-        info.colour = graphEditor.modulationWireColour(real.source.node);
-        result.push_back(std::move(info));
+        byDest[{real.dest.node.uid, real.dest.channel}].emplace_back(r, real);
     }
-    return result;
+
+    std::vector<std::vector<synth::ui::ModulatorInfo>> out(lanes.size());
+    for (size_t i = 0; i < lanes.size(); ++i) {
+        const auto& [nodeUuid, paramId] = lanes[i];
+        const auto found = nodeUuid.isNotEmpty() ? byUuid.find(nodeUuid) : byUuid.end();
+        auto* target = found != byUuid.end() ? found->second : nullptr;
+        const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
+        const auto bucket = raw >= 0 ? byDest.find({target->nodeID.uid, raw}) : byDest.end();
+        if (bucket == byDest.end())
+            continue;
+        for (const auto& [r, real] : bucket->second) {
+            auto* source = graph.getNodeForId(real.source.node);
+            if (source == nullptr)
+                continue;
+            synth::ui::ModulatorInfo info;
+            info.sourceUuid = uuidOf(source);
+            info.sourceTitle = synth::moduleTitle(*source);
+            info.sourceChannel = real.source.channel;
+            info.isLfo = dynamic_cast<LFOModule*>(source->getProcessor()) != nullptr;
+            if (r.kind == AudioEngine::RoutingKind::AttenuverterChain)
+                info.attenuverterUuid = uuidOf(graph.getNodeForId(r.attenuverterNodeID));
+            info.targetUuid = nodeUuid;
+            info.paramId = paramId;
+            info.targetChannel = raw;
+            info.colour = graphEditor.modulationWireColour(real.source.node);
+            out[i].push_back(std::move(info));
+        }
+    }
+    return out;
 }
 
 bool MainComponent::canModulate(const juce::String& nodeUuid, const juce::String& paramId) {

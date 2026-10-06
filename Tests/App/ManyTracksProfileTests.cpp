@@ -234,11 +234,14 @@ void profileProject(const juce::File& project, int duplicates) {
                     dupMs, pump, paint);
         std::fflush(stdout);
     }
+    if (const char* save = std::getenv("PROFILE_SAVE")) // keep the grown project for the next size's runs
+        std::printf("[project] saved %s: %d\n", save, mc.saveProjectForTest(juce::File(save)) ? 1 : 0);
 }
 
 } // namespace
 
-// PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj) and PROFILE_DUPLICATE=<n> (default 10).
+// PROFILE_PROJECT=<bundle> (default ~/Music/AgentSynth/Load test.agsproj), PROFILE_DUPLICATE=<n> (default 10) and
+// PROFILE_SAVE=<bundle> to save the grown project (how the 80 and 200 track sizes are made).
 TEST_F(ChannelFlowTest, DISABLED_LoadTestProjectProfile) {
     const char* path = std::getenv("PROFILE_PROJECT");
     const auto project = path != nullptr ? juce::File(path)

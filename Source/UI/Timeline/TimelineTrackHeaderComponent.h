@@ -19,6 +19,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace juce {
@@ -258,6 +259,16 @@ struct TrackHeaderHost {
     virtual std::vector<ModulatorInfo> getModulators(const juce::String& /*nodeUuid*/,
                                                      const juce::String& /*paramId*/) {
         return {};
+    }
+    /** getModulators for every (nodeUuid, paramId) in `lanes`, in order. A host answers all of them from one pass
+     *  over the graph, so refreshing every lane does not cost lanes x routings; the default asks lane by lane. */
+    virtual std::vector<std::vector<ModulatorInfo>>
+    getModulatorsForLanes(const std::vector<std::pair<juce::String, juce::String>>& lanes) {
+        std::vector<std::vector<ModulatorInfo>> out;
+        out.reserve(lanes.size());
+        for (const auto& [nodeUuid, paramId] : lanes)
+            out.push_back(getModulators(nodeUuid, paramId));
+        return out;
     }
     /** True when the parameter has a CV jack an LFO can be cabled into. */
     virtual bool canModulate(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) { return false; }

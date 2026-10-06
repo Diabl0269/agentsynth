@@ -74,7 +74,16 @@ ConnectionIndex::ConnectionIndex(const juce::AudioProcessorGraph& graph) {
     for (const auto& c : graph.getConnections()) {
         in_[c.destination.nodeID.uid].push_back(c);
         out_[c.source.nodeID.uid].push_back(c);
+        touching_[c.source.nodeID.uid].push_back(c);
+        if (c.destination.nodeID != c.source.nodeID)
+            touching_[c.destination.nodeID.uid].push_back(c);
     }
+}
+
+const std::vector<ConnectionIndex::Connection>& ConnectionIndex::touching(juce::AudioProcessorGraph::NodeID node) const {
+    static const std::vector<Connection> none;
+    const auto it = touching_.find(node.uid);
+    return it != touching_.end() ? it->second : none;
 }
 
 const std::vector<ConnectionIndex::Connection>& ConnectionIndex::into(juce::AudioProcessorGraph::NodeID node) const {

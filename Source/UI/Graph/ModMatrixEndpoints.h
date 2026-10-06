@@ -44,9 +44,11 @@ public:
     explicit ConnectionIndex(const juce::AudioProcessorGraph& graph);
     const std::vector<Connection>& into(juce::AudioProcessorGraph::NodeID node) const;
     const std::vector<Connection>& outOf(juce::AudioProcessorGraph::NodeID node) const;
+    /** Every cable into or out of `node` (a self-cable once), in getConnections() order. */
+    const std::vector<Connection>& touching(juce::AudioProcessorGraph::NodeID node) const;
 
 private:
-    std::unordered_map<juce::uint32, std::vector<Connection>> in_, out_;
+    std::unordered_map<juce::uint32, std::vector<Connection>> in_, out_, touching_;
 };
 /** The attenuverter's channel-0 edge in (`incoming`) or out, if it has one. */
 std::optional<juce::AudioProcessorGraph::Connection>
