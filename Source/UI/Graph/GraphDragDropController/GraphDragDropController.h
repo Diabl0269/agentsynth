@@ -101,6 +101,7 @@ private:
     // True only for a plain factory-module library payload (not a snippet or a plugin), the one kind
     // that can join a macro on drop.
     bool dragPreviewIsPlainModule_ = false;
+    bool dragPreviewJoinsMacro_ = false; // the ghost sits at the pointer: a join drop makes room instead of dodging
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe_;
 
     std::vector<AlignmentGuide> alignmentGuides_;

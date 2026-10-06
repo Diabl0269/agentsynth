@@ -535,24 +535,25 @@ that gets in the way.
 ## Dropping a library module into a macro
 
 A module dragged from the library and dropped with its ghost's CENTRE over an expanded macro's hull
-joins that macro, when Cmd is held or the preference above is on
-(`GraphDragDropController::itemDropped`). Details:
+joins that macro (`GraphDragDropController::itemDropped`). No modifier is needed and the preference above is
+ignored: that preference is about moving existing cards out of or between macros, and a library drop has no such
+ambiguity. With nested macros the innermost open macro under the pointer wins; a collapsed macro is never a target
+(its interior is hidden). Details:
 
 - **Modules only.** Snippet and hosted-plugin payloads drop exactly as before and never join.
-- **Hull tested at the ghost's centre before anti-overlap** (`macroHullAt`, so the smallest expanded
-  hull wins) — which is the cursor, since the ghost is centred on it. Not at the card's final landing
-  slot: a hull is mostly member cards, so the free slot the card is pushed to is usually outside it,
-  and testing that would fail exactly when the macro is tight. The card lands at the free slot and,
-  as a member, pulls the live hull out to include it. Dropping outside every hull is an ordinary
-  drop, modifier or not.
+- **Hull tested at the ghost's centre** (`macroHullAt`, so the innermost expanded hull wins) — which is the
+  cursor, since the ghost is centred on it. Dropping outside every hull is an ordinary drop.
+- **Lands where it was dropped.** A joining card is NOT moved to the nearest free slot (an open hull is mostly
+  member cards, so that slot was often far away, even off screen). The drag ghost sits at the snapped pointer spot
+  and so does the card; the members it overlaps are pushed aside by `MacroGroupController::makeRoomFor` (inside the
+  same undo record, gliding like any push) and the hull grows around it. Other drops keep the nearest-free-slot
+  placement. If the landing spot is still off screen the view pans to it (an instant jump; there is no animated
+  pan helper yet).
 - **One undo step.** `GraphEditor::addModuleAtCanvasPosition` takes an optional macro id; with one it
   records through `recordGraphAndMacroChange` instead of `recordStructuralChange`, so node creation,
   its uuid, any smart connections and the membership (with its port splicing) are a single Cmd+Z.
 - **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
   puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
-- **One seam for the modifier.** `GraphEditor::isMacroJoinModifierDown()` (Cmd realtime state, or the
-  preference) is the only place the drop side reads the modifier; tests drive the Cmd half through
-  `setMacroJoinCommandOverrideForTests`.
 
 ## The expanded hull's collapse button
 
