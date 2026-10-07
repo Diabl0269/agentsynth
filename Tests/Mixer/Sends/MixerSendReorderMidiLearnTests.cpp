@@ -16,6 +16,7 @@
 //   2. ReorderIsOneUndoStepAndUndoRestoresTheMidiMappingToo -- one undo() restores cables, the
 //      lane AND the MIDI mapping together; redo() re-applies all three together.
 
+#include "../../UI/Layout/BottomDockActiveTabResetGuard.h"
 #include "../../UI/MidiRemote/MidiRemoteMockProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -67,6 +68,7 @@ void settleLearn(MainComponent& mc, synth::midi::MidiLearnController& controller
 } // namespace
 
 TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
@@ -139,6 +141,7 @@ TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder
 }
 
 TEST(MixerSendReorderMidiLearnTest, ReorderIsOneUndoStepAndUndoRestoresTheMidiMappingToo) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
