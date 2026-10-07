@@ -432,12 +432,7 @@ void MainComponent::startFreshUndoHistory() { undoManager.clearUndoHistory(); }
 
 // The graph node carrying this uuid, or nullptr.
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
-    if (uuid.isEmpty())
-        return nullptr;
-    for (auto* node : audioEngine.getGraph().getNodes())
-        if (node != nullptr && node->properties["uuid"].toString() == uuid)
-            return node;
-    return nullptr;
+    return nodeUuidCache.find(audioEngine.getGraph(), uuid);
 }
 
 // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single

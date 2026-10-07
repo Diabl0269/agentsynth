@@ -66,6 +66,9 @@ public:
     TrackChannelLinkInfo resolve(const TimelineDoc& doc, TrackId track) const;
     juce::String displayName(juce::AudioProcessorGraph::NodeID stripId, const TimelineDoc& doc,
                              const juce::String& fallback) const;
+    /** The first node carrying `uuid`, or null (nothing for an empty uuid). */
+    juce::AudioProcessorGraph::Node* nodeByUuid(const juce::String& uuid) const;
+    const TrackChannelReachMap& reach() const noexcept;
 
 private:
     juce::AudioProcessorGraph& graph_;

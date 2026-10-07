@@ -3,6 +3,7 @@
 
 #include "MixerSends.h"
 
+#include "AudioEngine/ConnectionIndex.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -45,11 +46,10 @@ std::vector<int> keyInputChannels(juce::AudioProcessorGraph& graph, NodeID modul
 
 /** The module whose Key input `conn` lands on, looking through macro ports (a send into a keyed
  *  module inside a macro enters through an auto-created port); an invalid id when it lands on none. */
-NodeID keyModuleOf(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
-                   const Connection& conn) {
+NodeID keyModuleOf(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables, const Connection& conn) {
     if (conn.destination.isMIDI())
         return {};
-    const auto pin = resolveThroughPorts(graph, connections, conn.destination);
+    const auto pin = resolveThroughPorts(graph, cables, conn.destination);
     auto* module = moduleAt(graph, pin.nodeID);
     const bool isKey = module != nullptr && module->mapInputChannel(pin.channelIndex).role == PortRole::Sidechain;
     return isKey ? pin.nodeID : NodeID{};
@@ -154,11 +154,19 @@ bool targetIsLegal(juce::AudioProcessorGraph& graph, NodeID sourceStrip, const S
 } // namespace
 
 std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
+    if (stripAt(graph, stripId) == nullptr)
+        return {};
+    return findStripsFeedingStrip(graph, ConnectionIndex(graph), stripId);
+}
+
+// Each step asks the index for the node's own incoming cables (in the full list's order), so a whole mixer snapshot
+// shares one cable scan instead of re-sorting every cable per column.
+std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                                           NodeID stripId) {
     std::vector<NodeID> sources;
     if (stripAt(graph, stripId) == nullptr)
         return sources;
 
-    const auto connections = graph.getConnections();
     std::vector<NodeID> queue{stripId};
     std::set<NodeID> visited{stripId};
 
@@ -166,8 +174,8 @@ std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, Nod
         const auto nodeId = queue.front();
         queue.erase(queue.begin());
 
-        for (const auto& conn : connections) {
-            if (conn.destination.nodeID != nodeId || !isSignalEdge(graph, connections, conn))
+        for (const auto& conn : cables.into(nodeId)) {
+            if (!isSignalEdge(graph, cables, conn))
                 continue;
             const auto sourceId = conn.source.nodeID;
             if (!visited.insert(sourceId).second)
@@ -220,26 +228,33 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || !strip->isSendActive(slot))
         return {};
+    return resolveSendTarget(graph, ConnectionIndex(graph), sourceStrip, slot);
+}
 
-    const auto connections = graph.getConnections();
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables, NodeID sourceStrip,
+                             int slot) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return {};
+
     std::vector<SendTarget> queue; // key == true entries are Key hits, never expanded
     std::set<NodeID> visited{sourceStrip};
     std::set<NodeID> keyHits;
     const auto follow = [&](const Connection& conn) {
-        if (const auto keyed = keyModuleOf(graph, connections, conn); keyed != NodeID{}) {
+        if (const auto keyed = keyModuleOf(graph, cables, conn); keyed != NodeID{}) {
             if (keyHits.insert(keyed).second)
                 queue.push_back({keyed, true});
             return;
         }
-        if (!isSignalEdge(graph, connections, conn))
+        if (!isSignalEdge(graph, cables, conn))
             return;
         if (visited.insert(conn.destination.nodeID).second)
             queue.push_back({conn.destination.nodeID, false});
     };
 
     const int leg = ChannelStripModule::sendLeftChannel(slot);
-    for (const auto& conn : connections)
-        if (conn.source.nodeID == sourceStrip && conn.source.channelIndex == leg)
+    for (const auto& conn : cables.outOf(sourceStrip))
+        if (conn.source.channelIndex == leg)
             follow(conn);
 
     for (size_t head = 0; head < queue.size(); ++head) {
@@ -252,9 +267,8 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
         if (isReachTerminal(processor))
             continue; // the send left the patch without ever reaching a bus
 
-        for (const auto& conn : connections)
-            if (conn.source.nodeID == entry.node)
-                follow(conn);
+        for (const auto& conn : cables.outOf(entry.node))
+            follow(conn);
     }
     return {};
 }

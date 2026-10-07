@@ -7,9 +7,11 @@
 // (docs/layout/layout.md#making-room-when-something-grows)
 
 #include "MacroGroupController.h"
+#include "MacroGroupControllerInternal.h"
 #include "MacroNesting.h"
 #include "ModelCardBounds.h"
 
+#include "MacroOwnerIndex.h"
 #include "Mixer/MasterSplice.h"
 
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
@@ -29,32 +31,37 @@ juce::String macroKey(const juce::String& macroId) { return "m:" + macroId; }
 
 // Units are the things that move as one: a loose module, or a whole macro (open: its hull, collapsed: its card).
 // A module hidden inside a collapsed macro is never a unit -- the card stands in for it -- and a macro's port
-// widgets live docked inside its hull, so they never are either.
+// widgets live docked inside its hull, so they never are either. The pass runs on every edit and canvas frame, so
+// each card's owner comes from one MacroOwnerIndex and every hull is measured against one card map, rather than a
+// search of every macro per card and a fresh card map per hull.
 std::vector<synth::LayoutUtil::LayoutUnit>
 MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
     const auto& macros = host_.getMacros();
     if (containerId.isNotEmpty() && (macros.find(containerId) == nullptr || macros.isEffectivelyCollapsed(containerId)))
         return {};
 
+    const synth::MacroOwnerIndex owners(macros);
     std::vector<LayoutUnit> units;
     for (auto* comp : host_.modules()) {
         if (comp == nullptr || comp->getModule() == nullptr || !comp->isVisible())
             continue;
         const auto uuid = nodeUuidFor(comp->getNodeId());
-        const auto* owner = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+        const auto* owner = uuid.isEmpty() ? nullptr : owners.ownerOf(uuid);
         if ((owner != nullptr ? owner->id : juce::String()) != containerId)
             continue;
-        if (owner != nullptr && (owner->memberIsPort(uuid) || macros.outermostCollapsedAncestorOf(uuid).isNotEmpty()))
+        if (owner != nullptr && (owner->memberIsPort(uuid) || owners.hiddenByCollapse(uuid)))
             continue;
         // The output dock (Master / Rec Tap / Audio Output) is pinned: makeRoomFor never pushes it, the dock is
         // re-derived to the right of whatever grew instead (GraphEditor::reflowOutputDock).
         units.push_back(
             {nodeKey(comp->getNodeId()), comp->getBounds(), synth::isOutputDockProcessor(comp->getModule())});
     }
+    const auto cards = macro_geometry::cardsByNodeUid(host_);
     for (const auto& macro : macros.getAll()) {
         if (macro.parentId != containerId)
             continue;
-        const auto rect = macro.collapsed ? macroCableAnchorBounds(macro) : macroHullBounds(macro.id);
+        const auto rect =
+            macro.collapsed ? macroCableAnchorBounds(macro) : macro_geometry::openHullBounds(host_, cards, macro.id);
         if (!rect.isEmpty())
             units.push_back({macroKey(macro.id), rect, false});
     }

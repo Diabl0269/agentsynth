@@ -7,6 +7,7 @@
 
 namespace synth {
 
+class ConnectionIndex;
 class MacroSet;
 struct Macro;
 
@@ -293,12 +294,19 @@ bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c);
 
+/** The same, asking a ConnectionIndex built once for the caller's whole pass. */
+bool isSignalEdge(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                  const juce::AudioProcessorGraph::Connection& c);
+
 /** The pin a cable into `pin` ultimately lands on, following macro port nodes (at most 16 hops);
  *  `pin` itself when it is not a port. Pure query over `connections`. */
 juce::AudioProcessorGraph::NodeAndChannel
 resolveThroughPorts(juce::AudioProcessorGraph& graph,
                     const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                     juce::AudioProcessorGraph::NodeAndChannel pin);
+juce::AudioProcessorGraph::NodeAndChannel resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                                                              const ConnectionIndex& cables,
+                                                              juce::AudioProcessorGraph::NodeAndChannel pin);
 
 /** The BACKWARD twin of resolveThroughPorts: the pin that ultimately drives `pin`, following macro
  *  port nodes upstream (each passes channel k straight to channel k; at most 16 hops). `pin` itself

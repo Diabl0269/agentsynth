@@ -1,10 +1,13 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManagerSnapshotSize.h"
 #include "MacroSet.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+
+using undo_size::sizedOnce;
 
 /**
  * @class SnapshotAction
@@ -34,10 +37,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     /**
@@ -85,6 +85,7 @@ private:
 
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     juce::AudioProcessorGraph& graph;
     std::function<void()> preRestore;
     std::function<void()> postRestore;
@@ -133,10 +134,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
@@ -154,6 +152,7 @@ private:
     synth::TimelineDoc& doc;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
     bool firstPerform = true;
@@ -198,10 +197,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
@@ -215,6 +211,7 @@ private:
     synth::MidiRemoteProjectDoc& doc;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> postRestore;
     bool firstPerform = true;
 
@@ -249,10 +246,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
@@ -271,6 +265,7 @@ private:
     synth::MacroSet& macros;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> postRestore;
     bool firstPerform = true;
 
@@ -330,9 +325,7 @@ public:
     bool undo() override { return restore(graphBefore, macrosBefore); }
 
     int getSizeInUnits() override {
-        return static_cast<int>(juce::JSON::toString(graphBefore).length() + juce::JSON::toString(graphAfter).length() +
-                                juce::JSON::toString(macrosBefore).length() +
-                                juce::JSON::toString(macrosAfter).length());
+        return sizedOnce(sizeInUnits, {&graphBefore, &graphAfter, &macrosBefore, &macrosAfter});
     }
 
 private:
@@ -374,6 +367,7 @@ private:
     juce::var graphAfter;
     juce::var macrosBefore;
     juce::var macrosAfter;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> preRestore;
     std::function<void()> postRestore;
     std::function<void()> beforeRestore;
@@ -947,11 +941,11 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
     const juce::var macrosAfter = macros.toVar();
     const juce::var midiRemoteAfter = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
-    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
-    const bool midiRemoteChanged =
-        midiRemoteDoc != nullptr && juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
+    undo_size::MeasuredJson measured; // the steps pushed below are sized from these lengths
+    const bool graphChanged = measured.differs(graphBefore, graphAfter);
+    const bool timelineChanged = measured.differs(timelineBefore, timelineAfter);
+    const bool macrosChanged = measured.differs(macrosBefore, macrosAfter);
+    const bool midiRemoteChanged = midiRemoteDoc != nullptr && measured.differs(midiRemoteBefore, midiRemoteAfter);
 
     if (!graphChanged && !timelineChanged && !macrosChanged && !midiRemoteChanged)
         return false; // no domain changed: no transaction pushed

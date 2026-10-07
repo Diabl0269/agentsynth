@@ -8,6 +8,10 @@
 #include "AIStateMapper.h"
 
 #include "AIStateMapperInternal.h"
+#include "AudioEngine/ConnectionIndex.h"
+#include <algorithm>
+#include <set>
+#include <tuple>
 
 namespace synth {
 namespace detail {
@@ -72,32 +76,59 @@ std::optional<int> modulationDestPort(const juce::DynamicObject& modulation, juc
 
 namespace {
 
-// Whether an attenuverter already carries source:sourcePort -> dest:destPort (e.g. one the same
-// patch's nodes/connections arrays restated), so the modulation is not doubled.
-bool routingExists(const juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID source, int sourcePort,
-                   juce::AudioProcessorGraph::NodeID dest, int destPort) {
-    for (auto* existingNode : graph.getNodes()) {
-        if (dynamic_cast<AttenuverterModule*>(existingNode->getProcessor()) == nullptr)
+// One attenuverter routing: source:sourcePort -> (attenuverter) -> dest:destPort.
+using RoutingKey = std::tuple<juce::uint32, int, juce::uint32, int>;
+
+// Every routing an attenuverter already carries (e.g. one the same patch's nodes/connections arrays restated), so a
+// modulation is not doubled. Built from one ConnectionIndex for the whole modulations array: asking the live graph per
+// modulation scanned every node and re-sorted every cable for each one, O(modulations x nodes x cables) per paste.
+std::set<RoutingKey> existingRoutings(const juce::AudioProcessorGraph& graph) {
+    const ConnectionIndex cables(graph);
+    std::set<RoutingKey> routings;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
             continue;
-        bool srcMatch = false, dstMatch = false;
-        for (const auto& conn : graph.getConnections()) {
-            if (conn.destination.nodeID == existingNode->nodeID && conn.destination.channelIndex == 0 &&
-                conn.source.nodeID == source && conn.source.channelIndex == sourcePort)
-                srcMatch = true;
-            if (conn.source.nodeID == existingNode->nodeID && conn.source.channelIndex == 0 &&
-                conn.destination.nodeID == dest && conn.destination.channelIndex == destPort)
-                dstMatch = true;
+        for (const auto& in : cables.into(node->nodeID)) {
+            if (in.destination.channelIndex != 0)
+                continue;
+            for (const auto& out : cables.outOf(node->nodeID))
+                if (out.source.channelIndex == 0)
+                    routings.insert({in.source.nodeID.uid, in.source.channelIndex, out.destination.nodeID.uid,
+                                     out.destination.channelIndex});
         }
-        if (srcMatch && dstMatch)
-            return true;
     }
-    return false;
+    return routings;
 }
 
 } // namespace
 
+// The cables are indexed once per entry rather than re-sorted per attenuverter; the first match in graph node order
+// wins, as it always has.
+std::optional<juce::AudioProcessorGraph::NodeID> findModulationAttenuverter(const juce::AudioProcessorGraph& graph,
+                                                                            juce::AudioProcessorGraph::NodeID source,
+                                                                            juce::AudioProcessorGraph::NodeID dest,
+                                                                            int destPort) {
+    const ConnectionIndex cables(graph);
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
+            continue;
+        const auto& in = cables.into(node->nodeID);
+        const auto& out = cables.outOf(node->nodeID);
+        const bool sourceMatch = std::any_of(in.begin(), in.end(), [&](const auto& c) {
+            return c.destination.channelIndex == 0 && c.source.nodeID == source;
+        });
+        const bool destMatch = std::any_of(out.begin(), out.end(), [&](const auto& c) {
+            return c.source.channelIndex == 0 && c.destination.nodeID == dest && c.destination.channelIndex == destPort;
+        });
+        if (sourceMatch && destMatch)
+            return node->nodeID;
+    }
+    return std::nullopt;
+}
+
 void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
                             NodeIdMap& idMap) {
+    auto routings = existingRoutings(graph); // kept current as routings are added below
     for (const auto& modVar : modulations) {
         auto* modObj = modVar.getDynamicObject();
         if (modObj == nullptr)
@@ -118,7 +149,8 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
         if (!destPort.has_value())
             continue;
 
-        if (routingExists(graph, mappedSource, sourcePort, mappedDest, *destPort))
+        const RoutingKey key{mappedSource.uid, sourcePort, mappedDest.uid, *destPort};
+        if (routings.count(key) != 0)
             continue;
 
         auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>(), std::nullopt,
@@ -133,10 +165,12 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
                     dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenNode->getProcessor(), "bypassed")))
                 bp->setValueNotifyingHost(1.0f);
 
-        graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}},
-                            juce::AudioProcessorGraph::UpdateKind::none);
-        graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, *destPort}},
-                            juce::AudioProcessorGraph::UpdateKind::none);
+        const bool in = graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}},
+                                            juce::AudioProcessorGraph::UpdateKind::none);
+        const bool out = graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, *destPort}},
+                                             juce::AudioProcessorGraph::UpdateKind::none);
+        if (in && out)
+            routings.insert(key);
     }
 }
 

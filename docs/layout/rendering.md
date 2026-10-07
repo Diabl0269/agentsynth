@@ -60,7 +60,9 @@ passes runs hundreds of times a frame. These rules keep it linear, and keep anim
 
 - **Walk cables through one index per pass.** `AudioProcessorGraph::getConnections()` copies and sorts every cable on
   each call, so a loop over routings that asks it per routing is O(routings x cables). Build one
-  `synth::ui::ConnectionIndex` (`ModMatrixEndpoints.h`) and pass it to `resolveRouting` / `realEndpointBehindPorts`.
+  `synth::ui::ConnectionIndex` (`ModMatrixEndpoints.h`, the Core `synth::ConnectionIndex` counted as one cable scan)
+  and pass it to `resolveRouting` / `realEndpointBehindPorts`. The per-edit passes follow the same rule
+  ([graph-queries.md](../architecture/graph-queries.md)).
   The mod dots go further: the tick counts the sources on every knob once when the routing set changes
   (`ModDotController::recountIfRoutingsChanged`) and each card's `syncModDotButtons` only looks its knobs up. Each card
   resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
