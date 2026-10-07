@@ -14,6 +14,7 @@
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -167,6 +168,9 @@ protected:
         options.applicationName = "SettingsTest";
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
+        // Inside this process's settings root, so CI's parallel test shards (each with its own root) never share
+        // this file: one shard's TearDown clear() used to wipe another's saved tab mid-test.
+        options.folderName = synth::userSettingsRootDirectory().getChildFile("SettingsWindowTest").getFullPathName();
         appProperties.setStorageParameters(options);
 
         // Initialize AI service with mock provider

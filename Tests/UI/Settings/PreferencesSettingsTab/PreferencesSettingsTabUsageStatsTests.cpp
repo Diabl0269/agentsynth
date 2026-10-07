@@ -146,8 +146,10 @@ TEST_F(UsageStatsTabTest, WhatWeCollectOpensThePrivacyPage) {
 TEST_F(UsageStatsTabTest, CopyIdPutsTheIdOnTheClipboard) {
     auto tab = makeTab();
     tab->setShareUsageStatsEnabled(true);
+    juce::String copied;
+    tab->setClipboardWriterForTest([&copied](const juce::String& text) { copied = text; });
     click(*findButtonByText(*tab, "Copy ID"));
-    EXPECT_EQ(juce::SystemClipboard::getTextFromClipboard(), storedId());
+    EXPECT_EQ(copied, storedId());
 }
 
 TEST_F(UsageStatsTabTest, EveryControlIsReachableNamedAndHasATooltip) {

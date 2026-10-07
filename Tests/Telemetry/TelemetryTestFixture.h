@@ -13,7 +13,7 @@ protected:
     void SetUp() override {
         dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
                   .getChildFile("TelemetryTest")
-                  .getNonexistentChildFile("run", "", false);
+                  .getChildFile("run-" + juce::Uuid().toString()); // unique across CI's parallel test shards
         dir.createDirectory();
         setDay(2026, 10, 7);
     }

@@ -170,6 +170,10 @@ public:
     void setShareUsageStatsEnabled(bool enabled);
     // Opens "What we collect" through the owner's URL seam; defaults to the system browser.
     void setUrlOpener(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+    // Tests swap the system clipboard out: parallel test shards share it.
+    void setClipboardWriterForTest(std::function<void(const juce::String&)> writer) {
+        clipboardWriter = std::move(writer);
+    }
 
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
@@ -593,6 +597,9 @@ private:
     juce::Label usageStatsIdLabel;
     juce::TextButton usageStatsCopyIdButton{"Copy ID"};
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& url) { url.launchInDefaultBrowser(); };
+    std::function<void(const juce::String&)> clipboardWriter = [](const juce::String& text) {
+        juce::SystemClipboard::copyTextToClipboard(text);
+    };
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

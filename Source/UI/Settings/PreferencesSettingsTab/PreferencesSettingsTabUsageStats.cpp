@@ -70,9 +70,7 @@ void PreferencesSettingsTab::setupUsageStatsControls() {
     usageStatsCopyIdButton.setTitle("Copy usage statistics ID");
     usageStatsCopyIdButton.setTooltip("Copies your usage statistics ID, so you can quote it when asking for your "
                                       "data to be deleted.");
-    usageStatsCopyIdButton.onClick = [] {
-        juce::SystemClipboard::copyTextToClipboard(synth::telemetry::TelemetryIdStore().load());
-    };
+    usageStatsCopyIdButton.onClick = [this] { clipboardWriter(synth::telemetry::TelemetryIdStore().load()); };
 
     refreshUsageStatsIdRow();
     setupCategorySelector(); // Chained here, the constructor is baselined
