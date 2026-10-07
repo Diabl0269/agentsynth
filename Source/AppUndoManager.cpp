@@ -8,6 +8,39 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 using undo_size::sizedOnce;
+using NodeIDs = std::vector<juce::AudioProcessorGraph::NodeID>;
+
+namespace {
+/**
+ * Restores the graph half of a step, keeping every node the target state still contains.
+ *
+ * The node-preserving apply is tried first: it reaches the same state by diffing, so modules that survive the edit keep
+ * their processor instance and all its runtime state (sequencer position, envelope stage, sounding voices) and an undo
+ * of a parameter-only change performs no topology operation at all. It refuses -- without touching the graph -- any
+ * snapshot whose node identities it cannot establish, and then the original destroy-and-rebuild apply runs, which is
+ * always correct.
+ *
+ * Detaching UI from processors about to be freed is lazy. On the preserving path it happens only when a node is
+ * actually removed, and then only for those nodes: `preRemove` gets exactly them, so an undo of a duplicate tears down
+ * the copy's cards and keeps every other card (rebuilding all of them was most of that undo's cost). A step with no
+ * `preRemove` (an AI patch, whose hook is the AI listeners') and the fallback, which frees everything, run
+ * `preRestore`, which detaches all of it.
+ */
+void restoreGraph(const juce::var& state, juce::AudioProcessorGraph& graph, const std::function<void()>& preRestore,
+                  const std::function<void(const NodeIDs&)>& preRemove) {
+    auto beforeRemoval = [&preRestore, &preRemove](const NodeIDs& doomed) {
+        if (preRemove)
+            preRemove(doomed);
+        else if (preRestore)
+            preRestore();
+    };
+    if (!synth::AIStateMapper::applySnapshotPreservingNodes(state, graph, beforeRemoval)) {
+        if (preRestore)
+            preRestore();
+        synth::AIStateMapper::applyJSONToGraph(state, graph, true, true);
+    }
+}
+} // namespace
 
 /**
  * @class SnapshotAction
@@ -17,14 +50,16 @@ class SnapshotAction : public juce::UndoableAction {
 public:
     SnapshotAction(const juce::var& beforeState, const juce::var& afterState, juce::AudioProcessorGraph& graph,
                    std::function<void()> preRestore, std::function<void()> postRestore,
-                   std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
+                   std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {},
+                   std::function<void(const NodeIDs&)> preRemove = {})
         : beforeState(beforeState)
         , afterState(afterState)
         , graph(graph)
         , preRestore(preRestore)
         , postRestore(postRestore)
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , preRemove(std::move(preRemove)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -40,41 +75,15 @@ public:
     int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
-    /**
-     * Restores one snapshot, keeping every node the target state still contains.
-     *
-     * The node-preserving apply is tried first: it reaches the same state by diffing, so modules
-     * that survive the edit keep their processor instance and all its runtime state (sequencer
-     * position, envelope stage, sounding voices) and an undo of a parameter-only change performs
-     * no topology operation at all. It refuses — without touching the graph — any snapshot whose
-     * node identities it cannot establish, and then the original destroy-and-rebuild apply runs,
-     * which is always correct.
-     *
-     * preRestore is what detaches graph-referencing UI before processors are freed, so it fires
-     * lazily: on the fallback (which frees everything) and, on the preserving path, only if a node
-     * is actually being removed. When nothing is freed there is nothing to detach from, and
-     * GraphEditor::updateComponents reconciles the rest — so a parameter-only undo no longer
-     * destroys and re-creates every ModuleComponent either.
-     */
+    // One snapshot back into the graph through restoreGraph (above); GraphEditor::updateComponents (postRestore)
+    // reconciles the cards afterwards.
     bool restore(const juce::var& state) {
-        // Unconditional, unlike preRestore below — see AppUndoManager::setRestoreHooks for why the
-        // lazy hook is the wrong place for a programmatic-write guard.
+        // Unconditional, unlike preRestore/preRemove -- see AppUndoManager::setRestoreHooks for why the lazy hook is
+        // the wrong place for a programmatic-write guard.
         if (beforeRestore)
             beforeRestore();
 
-        bool preRestoreFired = false;
-        auto firePreRestore = [this, &preRestoreFired] {
-            if (preRestoreFired)
-                return;
-            preRestoreFired = true;
-            if (preRestore)
-                preRestore();
-        };
-
-        if (!synth::AIStateMapper::applySnapshotPreservingNodes(state, graph, firePreRestore)) {
-            firePreRestore();
-            synth::AIStateMapper::applyJSONToGraph(state, graph, true, true);
-        }
+        restoreGraph(state, graph, preRestore, preRemove);
 
         if (postRestore)
             postRestore();
@@ -91,6 +100,7 @@ private:
     std::function<void()> postRestore;
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void(const NodeIDs&)> preRemove;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SnapshotAction)
@@ -302,7 +312,7 @@ public:
                                 const juce::var& graphAfter, const juce::var& macrosBefore,
                                 const juce::var& macrosAfter, std::function<void()> preRestore,
                                 std::function<void()> postRestore, std::function<void()> beforeRestore,
-                                std::function<void()> afterRestore)
+                                std::function<void()> afterRestore, std::function<void(const NodeIDs&)> preRemove)
         : graph(graph)
         , macros(macros)
         , graphBefore(graphBefore)
@@ -312,7 +322,8 @@ public:
         , preRestore(std::move(preRestore))
         , postRestore(std::move(postRestore))
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , preRemove(std::move(preRemove)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -333,21 +344,8 @@ private:
         if (beforeRestore)
             beforeRestore();
 
-        bool preRestoreFired = false;
-        auto firePreRestore = [this, &preRestoreFired] {
-            if (preRestoreFired)
-                return;
-            preRestoreFired = true;
-            if (preRestore)
-                preRestore();
-        };
-
-        // Graph FIRST — see the class comment. Same node-preserving-then-fallback strategy
-        // SnapshotAction::restore uses.
-        if (!synth::AIStateMapper::applySnapshotPreservingNodes(graphState, graph, firePreRestore)) {
-            firePreRestore();
-            synth::AIStateMapper::applyJSONToGraph(graphState, graph, true, true);
-        }
+        // Graph FIRST — see the class comment. Same restore SnapshotAction uses.
+        restoreGraph(graphState, graph, preRestore, preRemove);
 
         // Macros SECOND, now that the graph this snapshot pairs with is the live state — the one
         // ordering guarantee the whole class exists to provide.
@@ -372,6 +370,7 @@ private:
     std::function<void()> postRestore;
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void(const NodeIDs&)> preRemove;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphAndMacroSnapshotAction)
@@ -620,7 +619,11 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
             if (ge)
                 refreshCanvasAfterRestore(*ge);
         },
-        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
+        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+        [ge](const NodeIDs& doomed) {
+            if (ge)
+                ge->detachModuleComponentsFor(doomed);
+        });
 }
 
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
@@ -871,7 +874,11 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
                 if (ge)
                     refreshCanvasAfterRestore(*ge);
             },
-            [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [ge](const NodeIDs& doomed) {
+                if (ge)
+                    ge->detachModuleComponentsFor(doomed);
+            }));
     } else if (graphChanged) {
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     } else if (macrosChanged) {

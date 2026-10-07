@@ -74,7 +74,7 @@ void applyPositionToNode(juce::AudioProcessorGraph::Node* node, const juce::Dyna
 } // namespace
 
 bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
-                                                 std::function<void()> beforeNodeRemoval) {
+                                                 NodeRemovalHook beforeNodeRemoval) {
     auto* rootObj = snapshot.isObject() ? snapshot.getDynamicObject() : nullptr;
     if (rootObj == nullptr)
         return false;
@@ -194,14 +194,6 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
     // correct, instead of a hazard the plan has to anticipate.
     // ---------------------------------------------------------------------------------------
     bool topologyChanged = false;
-    bool teardownNotified = false;
-    auto notifyBeforeNodeRemoval = [&beforeNodeRemoval, &teardownNotified] {
-        if (teardownNotified)
-            return;
-        teardownNotified = true;
-        if (beforeNodeRemoval)
-            beforeNodeRemoval();
-    };
     auto resolve = [&graph](const SnapshotTargetNode& t) {
         return t.hasLiveId ? graph.getNodeForId(t.liveId) : nullptr;
     };
@@ -233,7 +225,8 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
             doomed.push_back(node->nodeID);
 
     if (!doomed.empty()) {
-        notifyBeforeNodeRemoval();
+        if (beforeNodeRemoval)
+            beforeNodeRemoval(doomed);
         for (auto nodeId : doomed)
             graph.removeNode(nodeId, juce::AudioProcessorGraph::UpdateKind::none);
         topologyChanged = true;

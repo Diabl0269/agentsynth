@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 namespace synth {
 
@@ -89,6 +90,8 @@ struct PatchIdScope {
  */
 class AIStateMapper {
 public:
+    using NodeRemovalHook = std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)>;
+
     // Limits enforced against untrusted (network/AI-authored) patches — see validatePatch().
     // Chosen generously above anything this app would author itself, while still bounding the
     // worst case an adversarial or misbehaving remote model could throw at applyJSONToGraph
@@ -195,16 +198,16 @@ public:
      * verbatim by "nodes" and "connections". For the same reason no auto-promotion, auto-connect
      * or value rescaling happens here — a snapshot is reproduced exactly, not interpreted.
      *
-     * @param beforeNodeRemoval Invoked at most once, immediately before the first node is removed,
-     *        i.e. before any processor is freed. This is the caller's only chance to detach UI that
-     *        points into those processors (GraphEditor::detachAllModuleComponents). It is NOT
-     *        called when the restore removes no nodes, which is exactly when the UI has nothing to
-     *        detach from and can keep its components.
+     * @param beforeNodeRemoval Invoked at most once, with the nodes about to go, immediately before
+     *        the first is removed, i.e. before any processor is freed: the caller's only chance to
+     *        detach UI that points into exactly those processors (GraphEditor::detachModuleComponentsFor).
+     *        It is NOT called when the restore removes no nodes, which is exactly when the UI has
+     *        nothing to detach from and can keep its components.
      *
      * @return true if the snapshot was applied; false if the caller must fall back (graph untouched).
      */
     static bool applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
-                                             std::function<void()> beforeNodeRemoval = {});
+                                             NodeRemovalHook beforeNodeRemoval = {});
 
     /**
      * @brief Validates a patch JSON without applying it, returning a reason on failure.

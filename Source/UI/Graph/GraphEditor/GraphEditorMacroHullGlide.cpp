@@ -4,11 +4,30 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 namespace graph_editor_paint {
 namespace {
 HullMemoScope* activeMemo = nullptr; // innermost open scope; message thread only, like paint itself
+CardMapScope* activeCardMap = nullptr;
 } // namespace
+
+// A pass that measures every border (the snapshot before a restore and the glide armed after it) used to build a
+// map of every card per border, so it cost macros x cards; it opens one of these and every border reads one map.
+CardMapScope::CardMapScope(GraphCanvasHost& host)
+    : host_(host)
+    , previous_(activeCardMap) {
+    for (auto* comp : host.modules())
+        if (comp != nullptr)
+            cards_[comp->getNodeId().uid] = comp;
+    activeCardMap = this;
+}
+
+CardMapScope::~CardMapScope() { activeCardMap = previous_; }
+
+const std::unordered_map<uint32_t, ModuleComponent*>* CardMapScope::cardsFor(const GraphCanvasHost& host) {
+    return activeCardMap != nullptr && &activeCardMap->host_ == &host ? &activeCardMap->cards_ : nullptr;
+}
 
 // A paint pass asks for the same border many times (outline, chip, collapse button, '+'/'-', each port strip
 // row), and each ask unions the members' live bounds. Nothing moves a card during one paint(), so the first
@@ -44,6 +63,7 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
 
 // Collapsed macros draw a card, not a border, so they never glide.
 MacroHullGlide::Hulls GraphEditor::snapshotPaintedHulls() const {
+    const graph_editor_paint::CardMapScope oneCardMap(const_cast<GraphEditor&>(*this));
     MacroHullGlide::Hulls hulls;
     for (const auto& macro : macros.getAll())
         if (!macros.isEffectivelyCollapsed(macro.id))
@@ -58,9 +78,12 @@ MacroHullGlide::Hulls GraphEditor::snapshotPaintedHulls() const {
 void GraphEditor::glideHullsFrom(const MacroHullGlide::Hulls& before) {
     canvasMemo_->layoutChanged();
     MacroHullGlide::Hulls after;
-    for (const auto& [id, rect] : before)
-        if (macros.find(id) != nullptr && !macros.isEffectivelyCollapsed(id))
-            after[id] = macroHullTargetBounds(id);
+    {
+        const graph_editor_paint::CardMapScope oneCardMap(*this);
+        for (const auto& [id, rect] : before)
+            if (macros.find(id) != nullptr && !macros.isEffectivelyCollapsed(id))
+                after[id] = macroHullTargetBounds(id);
+    }
     if (!hullGlide_.arm(before, after))
         return;
 

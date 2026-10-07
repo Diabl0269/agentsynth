@@ -377,6 +377,7 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoScenarioTests.cpp
     Project/UndoRedo/UndoRedoEditSerialTests.cpp
     Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
+    Project/UndoRedo/UndoRedoCardTeardownTests.cpp
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteModelPagesTests.cpp
     MidiRemote/RemoteModelFocusBankTests.cpp

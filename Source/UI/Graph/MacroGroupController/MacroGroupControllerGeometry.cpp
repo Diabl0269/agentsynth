@@ -223,7 +223,10 @@ juce::Rectangle<int> openHullBounds(GraphCanvasHost& host, const CardsByNodeUid&
 
 } // namespace macro_geometry
 
+// Inside a graph_editor_paint::CardMapScope every border reads the scope's card map instead of building its own.
 juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
+    if (const auto* cards = graph_editor_paint::CardMapScope::cardsFor(host_))
+        return macro_geometry::openHullBounds(host_, *cards, macroId);
     return macro_geometry::openHullBounds(host_, macro_geometry::cardsByNodeUid(host_), macroId);
 }
 

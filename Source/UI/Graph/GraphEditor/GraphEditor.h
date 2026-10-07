@@ -68,6 +68,7 @@ public:
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
     std::function<void()> onBeforeDetachAllModuleComponents; // fires here AND from deleteSelection()
     void detachAllModuleComponents();
+    void detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed); // before they go
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;

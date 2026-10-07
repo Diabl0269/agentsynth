@@ -23,6 +23,9 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace detail;
 
@@ -87,6 +90,37 @@ void GraphEditor::detachAllModuleComponents() {
     modMatrix.clearRows();
 }
 
+// detachAllModuleComponents for a restore that frees only `doomed` (an undo of a duplicate or an add, a redo of a
+// delete): the same unbinding, but only those nodes' cards are pictured, detached and dropped. Every other card stays
+// bound to a processor that survives, so updateComponents() only has new nodes left to build cards for; rebuilding
+// every card on such an undo made it grow with the project. Unbinding the owner's UI (the mixer columns, MIDI Learn,
+// the pick overlay) and the mod matrix rows stays wholesale: those are rebuilt from the graph after every restore
+// anyway.
+void GraphEditor::detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+    std::set<juce::uint32> gone;
+    for (auto id : doomed)
+        gone.insert(id.uid);
+    auto& modules = content.getModules();
+    for (auto* comp : modules) // pictured while still bound; a no-op outside a restore's glide Scope
+        if (gone.count(comp->getNodeId().uid) != 0)
+            cardGlide_.noteExit(comp, comp->getNodeId().uid);
+    fireBeforeDetachAllModuleComponents();
+    for (int i = modules.size(); --i >= 0;) {
+        auto* comp = modules.getUnchecked(i);
+        const auto id = comp->getNodeId();
+        if (gone.count(id.uid) == 0)
+            continue;
+        if (dragDropController_.isDragPreviewActive() && id == dragDropController_.getDragPreviewSelfId())
+            cancelLiveDragGestures();
+        macroController_.forgetModuleDisplacements(id);
+        comp->detachFromProcessor();
+        content.removeChildComponent(comp);
+        modules.remove(i);
+    }
+    modMatrix.detachAllRows();
+    modMatrix.clearRows();
+}
+
 void GraphEditor::updateComponents() {
     // Not re-entrant: a card constructed below is not in `modules` until this pass adds it, so a nested pass
     // would not see it and would build a second card for the same node, and so on without end. Nothing may
@@ -112,17 +146,14 @@ void GraphEditor::updateComponents() {
     // whose nodes are gone BEFORE anything reads the selection again.
     pruneSelection();
 
-    // 1. Remove components for nodes that no longer exist
+    // 1. Remove components for nodes that no longer exist. Both steps look cards and processors up in sets built
+    // once: a scan of the other list per card made every reconcile (each edit, each undo) cards x nodes.
+    std::unordered_set<const juce::AudioProcessor*> liveProcessors;
+    for (auto* node : graph.getNodes())
+        liveProcessors.insert(node->getProcessor());
     for (int i = modules.size(); --i >= 0;) {
         auto* comp = modules.getUnchecked(i);
-        bool stillExists = false;
-        for (auto* node : graph.getNodes()) {
-            if (node->getProcessor() == comp->getModule()) {
-                stillExists = true;
-                break;
-            }
-        }
-        if (!stillExists) {
+        if (liveProcessors.count(comp->getModule()) == 0) {
             // The node this component tracked just vanished (undo, a doc removal) — if it was the
             // one live-dragging (dragPreviewSelfId), no mouseUp is ever coming to reset the flags it
             // armed; cancel now, before the component itself is destroyed below. A
@@ -139,6 +170,9 @@ void GraphEditor::updateComponents() {
     }
 
     // 2. Add components for new nodes
+    std::unordered_map<const juce::AudioProcessor*, ModuleComponent*> cardOf;
+    for (auto* comp : modules)
+        cardOf.emplace(comp->getModule(), comp);
     int moduleIndex = 0;
     for (auto* node : graph.getNodes()) {
         auto* processor = node->getProcessor();
@@ -148,14 +182,8 @@ void GraphEditor::updateComponents() {
         if (dynamic_cast<AttenuverterModule*>(processor) != nullptr)
             continue;
 
-        // Check if we already have a component for this module
-        ModuleComponent* existingComp = nullptr;
-        for (auto* comp : modules) {
-            if (comp->getModule() == processor) {
-                existingComp = comp;
-                break;
-            }
-        }
+        const auto known = cardOf.find(processor);
+        ModuleComponent* existingComp = known != cardOf.end() ? known->second : nullptr;
 
         if (existingComp == nullptr) {
             auto* newComp = modules.add(new ModuleComponent(processor, node->nodeID, *this, undoManager));
