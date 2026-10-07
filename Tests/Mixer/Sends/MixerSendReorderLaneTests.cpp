@@ -13,6 +13,7 @@
 //      round trip (the real save/reload path) and the TimelineDoc's toVar/fromVar round trip both
 //      keep the swapped slots' cables, values and the lane's new paramId.
 
+#include "../../UI/Layout/BottomDockActiveTabResetGuard.h"
 #include "../../UI/MidiRemote/MidiRemoteMockProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -66,6 +67,7 @@ int findAddLaneMenuId(const synth::ui::TimelinePanelComponent& panel, const juce
 } // namespace
 
 TEST(MixerSendReorderLaneTest, LaneFollowsItsSendAcrossAReorder) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
@@ -120,6 +122,7 @@ TEST(MixerSendReorderLaneTest, LaneFollowsItsSendAcrossAReorder) {
 }
 
 TEST(MixerSendReorderLaneTest, ReorderIsOneUndoStepAndUndoRestoresEverything) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
@@ -164,6 +167,7 @@ TEST(MixerSendReorderLaneTest, ReorderIsOneUndoStepAndUndoRestoresEverything) {
 }
 
 TEST(MixerSendReorderLaneTest, SaveReloadRoundTripKeepsTheNewOrder) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();

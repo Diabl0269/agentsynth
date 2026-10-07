@@ -82,7 +82,10 @@ protected:
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
-            s->removeValue("aiRequestTimeoutMs");      // default: AIChatComponent::kDefaultRequestTimeoutMs
+            // default: dock closed. Any earlier test that opens the bottom dock persists "1", which
+            // would steal canvas height from every layout-sensitive test that follows.
+            s->setValue("bottomDockVisible", "0");
+            s->removeValue("aiRequestTimeoutMs"); // default: AIChatComponent::kDefaultRequestTimeoutMs
             // Autosave defaults ON in the app, but every test that dirties a doc and drives
             // timerCallback()/runAutosaveTickForTest() shares this SAME real settings file — leaving
             // it on would make an unrelated test start writing autosave.json into its temp bundle
