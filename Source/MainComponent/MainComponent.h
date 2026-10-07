@@ -482,6 +482,8 @@ private:
     // Modulators under an automation lane (MainComponentModulators.cpp).
     std::vector<synth::ui::ModulatorInfo> getModulators(const juce::String& nodeUuid,
                                                         const juce::String& paramId) override;
+    std::vector<std::vector<synth::ui::ModulatorInfo>>
+    getModulatorsForLanes(const std::vector<std::pair<juce::String, juce::String>>& lanes) override;
     bool canModulate(const juce::String& nodeUuid, const juce::String& paramId) override;
     juce::String addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) override;
     std::vector<synth::ui::TrackHeaderHost::LfoChoice> getLfoChoices(const juce::String& nodeUuid,

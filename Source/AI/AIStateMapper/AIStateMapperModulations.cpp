@@ -121,7 +121,8 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
         if (routingExists(graph, mappedSource, sourcePort, mappedDest, *destPort))
             continue;
 
-        auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
+        auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>(), std::nullopt,
+                                       juce::AudioProcessorGraph::UpdateKind::none);
         if (!attenNode)
             continue;
         if (auto* param =
@@ -132,8 +133,10 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
                     dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenNode->getProcessor(), "bypassed")))
                 bp->setValueNotifyingHost(1.0f);
 
-        graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}});
-        graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, *destPort}});
+        graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}},
+                            juce::AudioProcessorGraph::UpdateKind::none);
+        graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, *destPort}},
+                            juce::AudioProcessorGraph::UpdateKind::none);
     }
 }
 

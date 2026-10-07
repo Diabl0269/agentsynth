@@ -13,6 +13,7 @@
 #include "Modules/MasterModule.h"
 #include "SnippetManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Timeline/TrackColour.h"
 #include <map>
@@ -26,7 +27,8 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 
 // Every node at or downstream of a Master: the output dock (Master, Rec Tap, Audio Output). A lone
 // track "owns" these by reachability, but they are shared singletons and must never be copied.
-std::set<juce::uint32> outputDockNodes(const juce::AudioProcessorGraph& graph) {
+std::set<juce::uint32> outputDockNodes(const juce::AudioProcessorGraph& graph,
+                                       const synth::ui::ConnectionIndex& cables) {
     std::set<juce::uint32> dock;
     std::vector<NodeID> pending;
     for (auto* node : graph.getNodes())
@@ -37,9 +39,8 @@ std::set<juce::uint32> outputDockNodes(const juce::AudioProcessorGraph& graph) {
         pending.pop_back();
         if (!dock.insert(id.uid).second)
             continue;
-        for (const auto& c : graph.getConnections())
-            if (c.source.nodeID == id)
-                pending.push_back(c.destination.nodeID);
+        for (const auto& c : cables.outOf(id))
+            pending.push_back(c.destination.nodeID);
     }
     return dock;
 }
@@ -63,8 +64,9 @@ juce::RangedAudioParameter* amountParameter(juce::AudioProcessorGraph::Node* nod
 // adopts a free-standing patch that feeds Audio Output as a "feeder" of the lone track that reaches the dock, so
 // ownership alone would copy it; a node only joins when a cable path through owned nodes (or a hidden
 // attenuverter) links it to the track's start, never through Master or what follows it.
-std::vector<NodeID> attachedToTrack(const juce::AudioProcessorGraph& graph, NodeID start,
-                                    const std::set<juce::uint32>& owned, const std::set<juce::uint32>& dock) {
+std::vector<NodeID> attachedToTrack(const juce::AudioProcessorGraph& graph, const synth::ui::ConnectionIndex& cables,
+                                    NodeID start, const std::set<juce::uint32>& owned,
+                                    const std::set<juce::uint32>& dock) {
     std::set<juce::uint32> seen;
     std::vector<NodeID> pending{start};
     std::vector<NodeID> attached;
@@ -77,10 +79,10 @@ std::vector<NodeID> attachedToTrack(const juce::AudioProcessorGraph& graph, Node
             continue;
         if (owned.count(id.uid) != 0)
             attached.push_back(id);
-        for (const auto& c : graph.getConnections()) {
+        for (const auto& c : cables.touching(id)) {
             if (c.source.nodeID == id)
                 pending.push_back(c.destination.nodeID);
-            else if (c.destination.nodeID == id)
+            else
                 pending.push_back(c.source.nodeID);
         }
     }
@@ -155,7 +157,8 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
     // The nodes this track plays and no other track does (the ownership rule automation lanes use),
     // minus the shared output dock.
     const auto owners = resolveAutomationOwners();
-    const auto dock = outputDockNodes(graph);
+    const synth::ui::ConnectionIndex cables(graph); // read-only walks below; the insert and rewire come after
+    const auto dock = outputDockNodes(graph, cables);
     std::set<juce::uint32> owned;
     for (auto* node : graph.getNodes()) {
         const auto owner = owners.find(detail::ownershipKey(*node));
@@ -165,7 +168,7 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
     std::vector<NodeID> originals;
     for (auto* node : graph.getNodes())
         if (node->properties["uuid"].toString() == source->bindingUuid && source->bindingUuid.isNotEmpty())
-            originals = attachedToTrack(graph, node->nodeID, owned, dock);
+            originals = attachedToTrack(graph, cables, node->nodeID, owned, dock);
 
     std::map<juce::String, juce::String> uuidRemap;
     if (!originals.empty()) {

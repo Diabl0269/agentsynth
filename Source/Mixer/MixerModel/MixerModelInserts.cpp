@@ -46,15 +46,15 @@ int signalPredecessorCount(juce::AudioProcessorGraph& graph, const std::vector<C
     return (int)sources.size();
 }
 
-// This track's own bound source node, resolved to a live node id -- same lookup
-// MixerModelColumns.cpp's resolveTrackSourceNode does; kept file-local here rather than shared,
-// since the two call sites want it for different tracks and neither is on a hot path.
+// This track's own bound source node, resolved to a live node id -- the same lookup as MixerModelColumns.cpp's
+// NodesByUuid, one scan per linked column. The key is pooled once: a string literal key pools it on every node.
 NodeID resolveTrackSourceNode(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, TrackId trackId) {
+    static const juce::Identifier uuidKey("uuid");
     const auto* track = doc.getTrack(trackId);
     if (track == nullptr || track->bindingUuid.isEmpty())
         return {};
     for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == track->bindingUuid)
+        if (node->properties[uuidKey].toString() == track->bindingUuid)
             return node->nodeID;
     return {};
 }

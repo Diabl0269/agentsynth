@@ -38,10 +38,16 @@ int TimelineAutomationLanes::modulatorRowHeight() const {
 // the set of such lanes changed, i.e. when the lane pools and the layout must follow.
 bool TimelineAutomationLanes::deriveRoutings() {
     routings_.clear();
+    std::vector<synth::LaneId> ids;
+    std::vector<std::pair<juce::String, juce::String>> lanes;
     for (const auto& track : doc_->getTracks())
-        for (const auto& lane : track.lanes)
-            routings_[lane.id] =
-                host_ != nullptr ? host_->getModulators(lane.nodeUuid, lane.paramId) : std::vector<ModulatorInfo>{};
+        for (const auto& lane : track.lanes) {
+            ids.push_back(lane.id);
+            lanes.emplace_back(lane.nodeUuid, lane.paramId);
+        }
+    auto infos = host_ != nullptr ? host_->getModulatorsForLanes(lanes) : std::vector<std::vector<ModulatorInfo>>{};
+    for (size_t i = 0; i < ids.size(); ++i)
+        routings_[ids[i]] = i < infos.size() ? std::move(infos[i]) : std::vector<ModulatorInfo>{};
 
     std::set<synth::LaneId> amounts;
     for (const auto& [laneId, infos] : routings_) {

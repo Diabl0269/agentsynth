@@ -12,23 +12,34 @@
 #include "MixerModelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include <algorithm>
+#include <map>
 
 namespace synth {
 
 namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
 
-// This track's bound source node, resolved to a live node id -- the same uuid lookup
-// MainComponent::findNodeByUuid does, duplicated here because Core has no MainComponent to call
-// into (Source/Mixer/CLAUDE.md: this layer never depends on AppUI).
-NodeID resolveTrackSourceNode(juce::AudioProcessorGraph& graph, const Track& track) {
-    if (track.bindingUuid.isEmpty())
-        return {};
-    for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == track.bindingUuid)
-            return node->nodeID;
-    return {};
-}
+// Every node by uuid, built once per snapshot -- the same lookup MainComponent::findNodeByUuid does (the first node
+// with the uuid), duplicated here because Core has no MainComponent to call into (Source/Mixer/CLAUDE.md: this layer
+// never depends on AppUI). A scan per track, and again per column for its colour, made a snapshot O(tracks x nodes)
+// with a string-pooled property key per step (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch).
+class NodesByUuid {
+public:
+    explicit NodesByUuid(juce::AudioProcessorGraph& graph) {
+        static const juce::Identifier uuidKey("uuid");
+        for (auto* node : graph.getNodes())
+            if (const auto uuid = node->properties[uuidKey].toString(); uuid.isNotEmpty())
+                ids_.emplace(uuid, node->nodeID);
+    }
+    // This track's bound source node, resolved to a live node id.
+    NodeID trackSource(const Track& track) const {
+        const auto it = track.bindingUuid.isNotEmpty() ? ids_.find(track.bindingUuid) : ids_.end();
+        return it != ids_.end() ? it->second : NodeID{};
+    }
+
+private:
+    std::map<juce::String, NodeID> ids_;
+};
 
 struct StripEntry {
     NodeID stripId;
@@ -44,9 +55,10 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
     // call per track (cheap: a bounded forward walk) rather than the fuller resolveTrackChannelLink
     // (a node scan plus two BFS walks) -- that heavier query is only for "is this ONE track linked",
     // not for building the whole column set.
+    const NodesByUuid nodes(graph);
     std::vector<StripEntry> stripEntries;
     for (const auto& track : doc.getTracks()) {
-        const auto sourceId = resolveTrackSourceNode(graph, track);
+        const auto sourceId = nodes.trackSource(track);
         if (sourceId == NodeID{})
             continue;
         const auto stripId = findStripFedByTrackSource(graph, sourceId);
@@ -102,7 +114,7 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         // linkedToTrack, so this stays independent of how the column kind is derived.
         if (feeders.size() == 1 && !isBusStrip(graph, entry.stripId))
             for (const auto& track : doc.getTracks())
-                if (resolveTrackSourceNode(graph, track) == feeders[0]) {
+                if (nodes.trackSource(track) == feeders[0]) {
                     column.colour = juce::Colour(track.colourArgb);
                     break;
                 }
