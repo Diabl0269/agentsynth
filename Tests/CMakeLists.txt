@@ -234,6 +234,7 @@ add_executable(Tests
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
     App/ManyTracksProfileTests.cpp
+    App/EditRefreshWorkTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
@@ -691,6 +692,7 @@ add_executable(Tests
     UI/Layout/SidePane/SidePaneShortcutTests.cpp
     Mixer/MixerViewDocTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
+    UI/Mixer/MixerPanelIncrementalRebuildTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp

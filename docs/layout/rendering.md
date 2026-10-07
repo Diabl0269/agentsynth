@@ -64,7 +64,9 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
-  tracks.
+  tracks. The card of each node is found through a processor -> node map, and a macro port's owner through one
+  member map (`graph_editor_paint::MacroOwnerScope`), never a search of every macro per cable end. The retract diff
+  after a disconnect, undo or redo looks the cables still drawn up in a sorted list, not a scan per cable.
 - **A paint computes each macro border once.** The outline, chip, collapse and '+'/'-' buttons and every port-strip row
   all ask `paintedMacroHullBounds()`; `GraphContentComponent::paint` opens a `graph_editor_paint::HullMemoScope`
   (`GraphEditorPaintMemo.h`) so the first answer per macro serves the rest of that paint. Nothing moves a card during

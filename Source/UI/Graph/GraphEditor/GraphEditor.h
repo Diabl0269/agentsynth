@@ -67,6 +67,7 @@ public:
     ModMatrixComponent& getModMatrix() { return modMatrix; }
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
     std::function<void()> onBeforeDetachAllModuleComponents; // fires here AND from deleteSelection()
+    std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)> onBeforeDetachModuleComponentsFor;
     void detachAllModuleComponents();
     void detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed); // before they go
     void paint(juce::Graphics& g) override;
@@ -355,8 +356,7 @@ public:
     juce::var extractSelectionSnippet(const juce::String& name);
     bool insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) override;
 
-    // Prompts for a name and persists the snippet; invoked from the canvas context menu.
-    // GraphEditor deliberately owns no file dialogs.
+    // Prompts for a name and persists the snippet (canvas context menu); GraphEditor owns no file dialogs.
     std::function<void()> onSaveSnippetRequested;
     // Resolves a snippet name (from a library drag payload) to its JSON.
     std::function<juce::var(const juce::String&)> snippetProvider;

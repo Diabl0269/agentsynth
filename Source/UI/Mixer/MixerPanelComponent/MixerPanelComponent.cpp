@@ -241,9 +241,10 @@ void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
 
-    // Every column below is built and bound fresh, so whatever unbindAllColumns() detached is
-    // live again once this returns.
+    // Every column below is either still bound or built and bound fresh (an unbound one is never kept), so whatever
+    // unbindAllColumns() or unbindColumnsFor() detached is live again once this returns.
     columnsUnbound_ = false;
+    masterColumnUnbound_ = false;
     // A drag still held would be left waiting on a header that is about to be destroyed; a drop
     // settling in (or being committed by endColumnDrag) survives, its columns are re-found by uuid.
     if (!committingColumnDrag_ && (columnReorder_.isDragging() || columnReorder_.isPressed()))
@@ -263,7 +264,9 @@ void MixerPanelComponent::rebuild() {
     applySavedBusOrder(snapshot);
     trackColoursSeen_ = currentTrackColours(*doc_);
 
-    stripColumns_.clear();
+    // A strip column whose column did not change is kept as it is (MixerPanelColumnReuse.cpp): re-creating every
+    // column made each edit and undo grow with the number of channels.
+    auto previous = releaseStripColumns();
     for (const auto& column : snapshot.columns) {
         // Strips AND buses: a bus is an ordinary strip column with a BUS badge and a feeding-strips
         // source line (docs/mixer/sends-and-buses.md), not a column kind of its own with its own widget.
@@ -273,65 +276,7 @@ void MixerPanelComponent::rebuild() {
         const auto channelId = channelIdFor(column);
         if (viewDoc_->isHidden(channelId))
             continue;
-        auto widget = std::make_unique<MixerColumnComponent>();
-        widget->setSectionLayout(sectionLayout_);
-        widget->configure(*graph_, *undoManager_, *macros_, *graphEditor_, *audioEngine_, meterReader_);
-
-        juce::StringArray sourceNames;
-        if (column.kind == synth::MixerColumn::Kind::Bus) {
-            for (const auto& name : column.busSources)
-                sourceNames.add(name);
-        } else {
-            for (auto trackId : column.feedingTracks)
-                if (const auto* track = doc_->getTrack(trackId))
-                    sourceNames.add(track->name);
-        }
-        widget->setColumn(column, sourceNames.joinIntoString(", "));
-        widget->setCreateBusProvider([this] { return createBus(); });
-        widget->setMoveSendRowProvider([this](juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow) {
-            return moveSendRow(stripNodeId, fromRow, toRow);
-        });
-
-        widget->setSendSettlePendingHandler([this, stripId = column.nodeId](int finalRow, float fromY) {
-            pendingSendSettle_ = {stripId, finalRow, fromY};
-        });
-
-        widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
-        widget->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
-        widget->onMutated = [this] {
-            if (onGraphMutated)
-                onGraphMutated();
-        };
-        widget->onLiveStateChanged = [this] {
-            if (onLiveMixerStateChanged)
-                onLiveMixerStateChanged();
-        };
-        widget->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
-        // Forwards this panel's single set of Solo-learn callbacks down to the column,
-        // filling in the nodeId each column already knows about itself -- see this class's own
-        // onSoloMidiLearnRequested/onSoloMidiForgetRequested/onQuerySoloMidiMapping doc comments.
-        widget->onSoloMidiLearnRequested = [this, nodeId = column.nodeId] {
-            if (onSoloMidiLearnRequested)
-                onSoloMidiLearnRequested(nodeId);
-        };
-        widget->onSoloMidiForgetRequested = [this, nodeId = column.nodeId] {
-            if (onSoloMidiForgetRequested)
-                onSoloMidiForgetRequested(nodeId);
-        };
-        widget->onQuerySoloMidiMapping = [this, nodeId = column.nodeId]() -> juce::String {
-            return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
-        };
-        widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
-        widget->setColourEditable(colourRouteFor(column.feedingTracks, column.uuid) != ColourRoute::None);
-        widget->onColourPickRequested = [this, uuid = column.uuid](juce::Rectangle<int> dotScreenBounds) {
-            openColourPicker(uuid, dotScreenBounds);
-        };
-        widget->getInsertList().bypassShortcutText = [this] { return bypassShortcutText(); };
-        widget->getSendList().bypassShortcutText = [this] { return bypassShortcutText(); };
-        content_.addAndMakeVisible(*widget);
-        // Only the scrolling group reorders: a pinned column stays where the zone puts it.
-        if (viewDoc_->getZone(channelId) == synth::MixerZone::Scrolling)
-            wireColumnReorder(*widget, column.uuid);
+        auto widget = takeOrBuildStripColumn(previous, column, channelId);
 
         ColumnEntry entry;
         entry.kind = ColumnEntry::Kind::Strip;
@@ -346,6 +291,9 @@ void MixerPanelComponent::rebuild() {
 
         stripColumns_.push_back(std::move(widget));
     }
+    for (const auto& [uuid, widget] : previous) // the columns no longer shown
+        stripColumnState_.erase(widget.get());
+    previous.clear();
 
     if (directColumn_ != nullptr) {
         const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);
@@ -502,8 +450,10 @@ bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNod
 
 void MixerPanelComponent::unbindAllColumns() {
     for (auto& column : stripColumns_)
-        if (column != nullptr)
+        if (column != nullptr) {
             column->unbindFromGraph();
+            stripColumnState_[column.get()].unbound = true;
+        }
     if (masterColumn_ != nullptr)
         masterColumn_->unbindFromGraph();
     // directColumn_ binds no parameters (no fader/pan/M-S -- MixerDirectColumn.h's own comment),
@@ -513,7 +463,7 @@ void MixerPanelComponent::unbindAllColumns() {
 }
 
 void MixerPanelComponent::rebuildIfUnbound() {
-    if (columnsUnbound_)
+    if (columnsUnbound_ || anyStripColumnUnbound())
         rebuild();
 }
 

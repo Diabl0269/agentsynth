@@ -10,6 +10,9 @@
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cstdint>
+#include <map>
+#include <memory>
 
 namespace synth::ui {
 
@@ -362,9 +365,13 @@ void TimelinePanelComponent::syncTrackHeaders() {
         }
     }
 
+    // Inside an edit whose reconcile re-reads every header (TrackHeaderHost::everyHeaderRefreshFollows), the rows are
+    // not re-read here as well: the edit would pay for every row twice.
+    const bool refreshFollows = trackHeaderHost_ != nullptr && trackHeaderHost_->everyHeaderRefreshFollows();
     if (sameTracks) {
-        for (auto* header : trackHeaderList_.headers)
-            header->refreshFromDoc();
+        if (!refreshFollows)
+            for (auto* header : trackHeaderList_.headers)
+                header->refreshFromDoc();
         return;
     }
 
@@ -380,7 +387,14 @@ void TimelinePanelComponent::syncTrackHeaders() {
     auto reorderedRows = rowsToGlideAfterUndo();
     if (reorderedRows.empty())
         reorderedRows = rowsToGlideAfterDuplicate();
-    trackHeaderList_.headers.clear();
+    // A row whose track is still there is kept (its state, keyboard focus included, goes with it) and only re-read:
+    // re-creating every row made a duplicate, a delete or an undo of either cost a new row per track.
+    std::map<std::int64_t, std::unique_ptr<TimelineTrackHeaderComponent>> previous;
+    while (!trackHeaderList_.headers.isEmpty()) {
+        std::unique_ptr<TimelineTrackHeaderComponent> header(
+            trackHeaderList_.headers.removeAndReturn(trackHeaderList_.headers.size() - 1));
+        previous.emplace(header->getTrackId().value, std::move(header));
+    }
     focusedTrackIndex_ = -1;
     // A drag's OWN commit (commitTrackDrag) sets committingTrackDrag_ and finishes the gesture
     // itself after this rebuild. Any OTHER rebuild (an AI patch apply, an undo) landing mid-drag
@@ -389,42 +403,57 @@ void TimelinePanelComponent::syncTrackHeaders() {
     if (!committingTrackDrag_)
         discardTrackDrag();
     for (const auto& track : tracks) {
-        auto* header =
-            trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
-        header->setShortcutManager(shortcuts_);
-        // The header only reports a fold-arrow press; this panel owns the fold state.
-        const auto trackId = track.id;
-        header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
-        // The header menu's "Add automation...": the picker opens anchored on the header row.
-        header->onAddAutomationRequested = [this, header](synth::TrackId track) {
-            openAddAutomationPicker(track, *header);
-        };
-        // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
-        // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
-        // focusGained() round trip.
-        header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
-        header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
-        header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
-        // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
-        // own comment for the division of labour (the row detects the gesture, this panel resolves
-        // screen Y against the ordered header list). The row hands us raw screen Y rather than
-        // computing an insertion index itself because it doesn't know where its siblings are;
-        // trackHeaderList_.headers is the ordered list and this panel is the one place that owns it.
-        header->onRowPressed = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
-        header->onRowDragStarted = [this](int screenY) { updateTrackDrag(screenY); };
-        header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
-        header->onRowDragEnded = [this](int) { endTrackDrag(); };
-        header->isRowDragging = [this] { return trackReorder_.isDragging(); };
-        header->onHeightDragStarted = [this](synth::TrackId id) { beginTrackHeightDrag(id); };
-        header->onHeightDragged = [this](synth::TrackId id, int delta) { dragTrackHeight(id, delta); };
-        header->onHeightDragEnded = [this](synth::TrackId id) { endTrackHeightDrag(id); };
-        header->onHeightStepRequested = [this](synth::TrackId id, int direction) { stepTrackHeight(id, direction); };
-        if (trackId == previouslyFocusedTrackId)
+        TimelineTrackHeaderComponent* header = nullptr;
+        if (const auto kept = previous.find(track.id.value); kept != previous.end()) {
+            header = trackHeaderList_.headers.add(kept->second.release());
+            previous.erase(kept);
+            if (!refreshFollows)
+                header->refreshFromDoc();
+        } else {
+            header = trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
+            wireTrackHeader(*header);
+            ++trackHeadersBuilt_;
+        }
+        if (track.id == previouslyFocusedTrackId)
             focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);
     }
+    previous.clear(); // the rows of tracks that are gone
     layoutTrackHeaders();
     glideTrackRowsFrom(reorderedRows);
+}
+
+// The callbacks a new row needs; a kept row already has them.
+void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) {
+    auto* header = &row;
+    const auto trackId = row.getTrackId();
+    header->setShortcutManager(shortcuts_);
+    // The header only reports a fold-arrow press; this panel owns the fold state.
+    header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+    // The header menu's "Add automation...": the picker opens anchored on the header row.
+    header->onAddAutomationRequested = [this, header](synth::TrackId track) {
+        openAddAutomationPicker(track, *header);
+    };
+    // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
+    // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
+    // focusGained() round trip.
+    header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
+    header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
+    header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
+    // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
+    // own comment for the division of labour (the row detects the gesture, this panel resolves
+    // screen Y against the ordered header list). The row hands us raw screen Y rather than
+    // computing an insertion index itself because it doesn't know where its siblings are;
+    // trackHeaderList_.headers is the ordered list and this panel is the one place that owns it.
+    header->onRowPressed = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
+    header->onRowDragStarted = [this](int screenY) { updateTrackDrag(screenY); };
+    header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
+    header->onRowDragEnded = [this](int) { endTrackDrag(); };
+    header->isRowDragging = [this] { return trackReorder_.isDragging(); };
+    header->onHeightDragStarted = [this](synth::TrackId id) { beginTrackHeightDrag(id); };
+    header->onHeightDragged = [this](synth::TrackId id, int delta) { dragTrackHeight(id, delta); };
+    header->onHeightDragEnded = [this](synth::TrackId id) { endTrackHeightDrag(id); };
+    header->onHeightStepRequested = [this](synth::TrackId id, int direction) { stepTrackHeight(id, direction); };
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {

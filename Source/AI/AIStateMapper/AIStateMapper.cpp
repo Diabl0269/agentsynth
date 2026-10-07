@@ -533,10 +533,12 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
         p->setValueNotifyingHost(normalised);
     };
 
+    // Each parameter's value is found with one Identifier (one string-pool lookup), not one for the presence test and
+    // another for the read: a snapshot restore asks this of every parameter of every node in the project.
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-            if (paramsObj->hasProperty(p->paramID)) {
-                auto jsonValue = paramsObj->getProperty(p->paramID);
+            if (const auto* found = paramsObj->getProperties().getVarPointer(juce::Identifier(p->paramID))) {
+                const auto& jsonValue = *found;
 
                 if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p)) {
                     if (jsonValue.isString()) {

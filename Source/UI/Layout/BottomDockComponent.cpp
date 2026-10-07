@@ -329,6 +329,11 @@ void BottomDockComponent::unbindAllMixerViews() {
     mixerMirror_.unbindIfOpen();
 }
 
+void BottomDockComponent::unbindMixerViewsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+    mixer_->unbindColumnsFor(doomed);
+    mixerMirror_.unbindIfOpenFor(doomed);
+}
+
 void BottomDockComponent::rebuildIfUnboundMixerViews() {
     mixer_->rebuildIfUnbound();
     mixerMirror_.rebuildIfUnboundIfOpen();

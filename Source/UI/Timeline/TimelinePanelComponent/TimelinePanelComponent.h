@@ -489,6 +489,8 @@ public:
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+    /** Track header rows constructed since this panel was made (a row kept across a sync is not counted). */
+    int getTrackHeadersBuiltForTest() const noexcept { return trackHeadersBuilt_; }
     /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "+ Track".
      */
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
@@ -538,6 +540,8 @@ private:
     // Rebuilds the header components when the set of track ids changed, and otherwise just
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
+    void wireTrackHeader(TimelineTrackHeaderComponent& header);
+    int trackHeadersBuilt_ = 0; // getTrackHeadersBuiltForTest()
     // Ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
     // before the app wires one up) and defined in TimelinePanelTrackHeaders.cpp.
     void timerCallback() override;

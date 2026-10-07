@@ -2,6 +2,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "MacroOwnerIndex.h"
 #include "MacroSet.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
@@ -58,6 +59,7 @@ void TrackChannelLinkController::endChannelLinkBatch() {
     if (--batchDepth_ <= 0) {
         batchDepth_ = 0;
         batchMap_.reset(); // the graph may change again: never carry a snapshot past the batch
+        batchOwners_.reset();
     }
 }
 
@@ -70,7 +72,16 @@ const synth::Macro* TrackChannelLinkController::macroForStrip(const juce::String
     // `stripUuid` is always a Channel Strip node's uuid (from TrackChannelLinkInfo), so the macro that directly holds
     // it IS a channel macro and nearestChannelMacro would return exactly that owner -- after an isChannelMacro scan of
     // every graph node per call, the other per-header graph walk of a timeline rebuild. Same answer, no scan.
-    return stripUuid.isNotEmpty() ? std::as_const(macros()).findByMember(stripUuid) : nullptr;
+    if (stripUuid.isEmpty())
+        return nullptr;
+    // Inside a batch every header asks this, and findByMember searches every macro's members: one member map serves
+    // the batch instead (no macro is added or removed while a batch is open).
+    if (batchDepth_ > 0) {
+        if (batchOwners_ == nullptr)
+            batchOwners_ = std::make_unique<synth::MacroOwnerIndex>(std::as_const(macros()));
+        return batchOwners_->ownerOf(stripUuid);
+    }
+    return std::as_const(macros()).findByMember(stripUuid);
 }
 
 synth::TrackId TrackChannelLinkController::linkedTrackForMacro(const juce::String& macroId) const {

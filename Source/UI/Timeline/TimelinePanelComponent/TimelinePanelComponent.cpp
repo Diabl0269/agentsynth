@@ -428,6 +428,9 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     selectedAutomationLane_ = {};
     automationLanes_.setTimelineDoc(doc_);
     routingPane_.setDoc(doc_);
+    // A row reads the doc it was built against, and syncTrackHeaders() keeps rows by track id, which a new doc can
+    // reuse: every row is built afresh against the new one.
+    trackHeaderList_.headers.clear();
     syncTrackHeaders();
     refreshRoutingPane();
     clipLaneArea_.setTimelineDoc(doc_);

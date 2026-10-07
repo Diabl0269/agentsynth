@@ -8,6 +8,10 @@
 #include <map>
 #include <memory>
 
+namespace synth {
+class MacroOwnerIndex;
+}
+
 // TrackChannelLinkController.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half
 // of the track
 // <-> channel link. The rule itself is Core (Source/Mixer/TrackChannelLink.h, a pure query); this
@@ -114,9 +118,10 @@ private:
      *  because the const display query is what keeps it warm. */
     mutable std::map<std::int64_t, juce::AudioProcessorGraph::NodeID> meterStripIds_;
 
-    /** Open ChannelLinkBatch scopes; the map below lives exactly as long as one is open. */
+    /** Open ChannelLinkBatch scopes; the maps below live exactly as long as one is open. */
     int batchDepth_ = 0;
     mutable std::unique_ptr<synth::TrackChannelLinkMap> batchMap_;
+    mutable std::unique_ptr<synth::MacroOwnerIndex> batchOwners_;
 
     AudioEngine& engine_;
     synth::TimelineDoc& doc_;

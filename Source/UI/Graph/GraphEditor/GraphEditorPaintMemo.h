@@ -8,12 +8,16 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_graphics/juce_graphics.h>
+#include <memory>
 #include <optional>
 #include <unordered_map>
 
 class GraphEditor;
 class GraphCanvasHost;
 class ModuleComponent;
+namespace synth {
+class MacroOwnerIndex;
+}
 
 namespace graph_editor_paint {
 
@@ -81,6 +85,23 @@ private:
     const GraphCanvasHost& host_;
     CardMapScope* previous_ = nullptr;
     std::unordered_map<uint32_t, ModuleComponent*> cards_;
+};
+
+/** Message thread only. While alive, MacroGroupController::macroPortOwnerFor for `host` answers from one member map
+ *  built when the scope opened; the host's macros must not change while it is open. */
+class MacroOwnerScope {
+public:
+    explicit MacroOwnerScope(GraphCanvasHost& host);
+    ~MacroOwnerScope();
+    MacroOwnerScope(const MacroOwnerScope&) = delete;
+    MacroOwnerScope& operator=(const MacroOwnerScope&) = delete;
+    /** The innermost open scope's index when it was opened for `host`, else null. */
+    static const synth::MacroOwnerIndex* ownersFor(const GraphCanvasHost& host);
+
+private:
+    const GraphCanvasHost& host_;
+    MacroOwnerScope* previous_ = nullptr;
+    std::unique_ptr<synth::MacroOwnerIndex> owners_;
 };
 
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,

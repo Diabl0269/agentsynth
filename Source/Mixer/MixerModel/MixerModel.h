@@ -20,6 +20,8 @@ struct MixerInsertEntry {
     juce::String uuid;
     juce::String name;
     bool bypassed = false;
+
+    bool operator==(const MixerInsertEntry&) const = default;
 };
 
 /** One of a source column's active send slots, in slot order (docs/mixer/sends-and-buses.md). The slot index is
@@ -40,6 +42,8 @@ struct MixerSendEntry {
     /** `targetNodeId` is a module whose Key input this send feeds, not a strip. */
     bool keyTarget = false;
     juce::String targetName;
+
+    bool operator==(const MixerSendEntry&) const = default;
 };
 
 /** One column of the mixer panel: a ChannelStrip, a group/send bus (also a ChannelStrip --
@@ -101,6 +105,9 @@ struct MixerColumn {
     /** Set only when `insertChainIsLinear` is false: the owning macro's id when the branching/
      *  shared node is boxed, else that node's own uuid. Empty otherwise. */
     juce::String editOnCanvasTargetUuid;
+
+    /** Every field equal: a column the panel already shows for an equal column is kept rather than rebuilt. */
+    bool operator==(const MixerColumn&) const = default;
 };
 
 struct MixerSnapshot {

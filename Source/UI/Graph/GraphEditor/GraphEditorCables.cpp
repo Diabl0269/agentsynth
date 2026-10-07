@@ -206,22 +206,21 @@ void GraphEditor::repaintCanvas() {
 
 // The actual enumeration; buildVisibleCables() is the memoized public entry point above.
 std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
+    const graph_editor_paint::MacroOwnerScope oneOwnerMap(*this); // every macro port's owner from one map
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
     auto& moduleComponents = content.getModules();
 
-    // nodeID -> component, so both passes resolve port positions in O(1).
+    // nodeID -> component, so both passes resolve port positions in O(1); built through a processor -> node map, not a
+    // scan of every node per card.
+    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
+    for (auto* node : graph.getNodes())
+        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
     std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
-    for (auto* comp : moduleComponents) {
-        if (comp == nullptr)
-            continue;
-        for (auto* node : graph.getNodes()) {
-            if (node->getProcessor() == comp->getModule()) {
-                nodeCompMap[node->nodeID.uid] = comp;
-                break;
-            }
-        }
-    }
+    for (auto* comp : moduleComponents)
+        if (comp != nullptr)
+            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
+                nodeCompMap[it->second] = comp;
     auto compFor = [&](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
         auto it = nodeCompMap.find(id.uid);
         return it == nodeCompMap.end() ? nullptr : it->second;

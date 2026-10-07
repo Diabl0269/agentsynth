@@ -263,6 +263,8 @@ public:
     bool undo();
     bool redo();
     bool isRestoring() const noexcept { return restoring_; }
+    /** True inside an undo/redo step whose after-restore hook will run (an action has fired fireBeforeRestore()). */
+    bool isRestoringWithAfterHook() const noexcept { return restoring_ && stepHooksOpen_; }
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
 

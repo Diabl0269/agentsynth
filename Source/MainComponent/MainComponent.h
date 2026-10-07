@@ -367,6 +367,10 @@ private:
     void publishTimelineAndRebindRecorder();
     void reconcileTimelineAfterGraphChange();
     void reconcileTimelineBindingsOnly();
+    /** True while a full reconcileTimelineAfterGraphChange() is certain to follow (an undo/redo step, a duplicate). */
+    bool fullReconcileFollows() const;
+    int fullReconcileFollowsDepth_ = 0; // see MainComponentTimeline.cpp's fullReconcileFollows()
+    bool fullReconcileRunning_ = false;
     // Which track plays which node (MainComponentAutomationOwner.cpp): where an automation lane goes.
     std::map<juce::String, synth::TrackId> resolveAutomationOwners() const;
     synth::TrackId trackForNewLane(const juce::String& nodeUuid);
@@ -510,6 +514,7 @@ private:
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
+    bool everyHeaderRefreshFollows() const override;
 
     juce::String createTrackInNode();
     juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);

@@ -17,8 +17,10 @@
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 class AppUndoManager;
@@ -206,10 +208,9 @@ public:
     /** Re-reads the section toggles' shortcut hints after a rebind. */
     void refreshShortcutHints() { toolbar_.refresh(); }
 
-    /** Re-runs buildMixerSnapshot() and rebuilds the column set. Cheap enough to call on every
-     *  graph/timeline/macro change (a handful of strips, never per-frame) -- see MixerModel.h.
-     *  Also re-resolves focusedColumnIndex_ by NodeID/uuid across the rebuild -- see
-     *  MixerPanelKeyboard.cpp's resolveFocusAfterRebuild() for the by-identity match rule. */
+    /** Re-runs buildMixerSnapshot() and brings the column set in line with it, keeping every strip column whose
+     *  column did not change (MixerPanelColumnReuse.cpp). Also re-resolves focusedColumnIndex_ by NodeID/uuid across
+     *  the rebuild -- see MixerPanelKeyboard.cpp's resolveFocusAfterRebuild() for the by-identity match rule. */
     void rebuild();
 
     /** Unbinds every strip column's + Master's fader/pan/mute/solo/meter from whatever
@@ -221,6 +222,9 @@ public:
      *  and buildMixerSnapshot()'s eventual re-bind against the NEW graph both then run afterwards,
      *  from the after-restore hook -- see docs/mixer/panel.md#unbinding-before-a-graph-change. */
     void unbindAllColumns();
+    /** unbindAllColumns() for a restore that frees only `doomed`: only the strip columns (and Master) bound to one of
+     *  them are unbound, and only those are rebuilt. */
+    void unbindColumnsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
 
     /** Rebuild ONLY if unbindAllColumns() has left the columns detached since the last
      *  rebuild. The graph-replacing paths (undo/redo restore, New Patch, Load, AI apply) already
@@ -243,6 +247,8 @@ public:
         return index >= 0 && index < (int)stripColumns_.size() ? stripColumns_[(size_t)index].get() : nullptr;
     }
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
+    /** Strip columns constructed since this panel was made (a kept column is not counted). */
+    int getStripColumnsBuiltForTest() const noexcept { return stripColumnsBuilt_; }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
     /** True from the first drag step of a column reorder until its drop has finished settling. */
     /** A dropped send row's settle is waiting for the rebuild that will consume it. */
@@ -368,6 +374,30 @@ private:
         bool linkedToTrack = false;                // Strip only
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
+
+    // ---- Incremental column rebuild -- implemented in MixerPanelColumnReuse.cpp -------------------
+    /** What the panel itself gave a strip column; with MixerColumnComponent::showsColumn it decides reuse. */
+    struct StripColumnState {
+        bool colourEditable = false;
+        synth::MixerZone zone = synth::MixerZone::Scrolling;
+        bool unbound = false; // released by unbindColumnsFor(): rebuilt, never kept
+    };
+    using StripColumnsByUuid = std::map<juce::String, std::unique_ptr<MixerColumnComponent>>;
+    /** Moves every strip column out of stripColumns_, keyed by uuid, for rebuild() to take back. */
+    StripColumnsByUuid releaseStripColumns();
+    /** The column rebuild() shows for `column`: the one in `previous` when it is still bound and was built from the
+     *  same inputs, else a fresh one. */
+    std::unique_ptr<MixerColumnComponent> takeOrBuildStripColumn(StripColumnsByUuid& previous,
+                                                                 const synth::MixerColumn& column,
+                                                                 const juce::String& channelId);
+    std::unique_ptr<MixerColumnComponent> buildStripColumn(const synth::MixerColumn& column,
+                                                           const juce::String& channelId, const juce::String& sources,
+                                                           const StripColumnState& state);
+    juce::String sourcesTextFor(const synth::MixerColumn& column) const;
+    bool anyStripColumnUnbound() const;
+    std::unordered_map<const MixerColumnComponent*, StripColumnState> stripColumnState_;
+    int stripColumnsBuilt_ = 0;
+    bool masterColumnUnbound_ = false; // released by unbindColumnsFor(); the next rebuild() re-binds it
 
     // ---- Keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------------
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;

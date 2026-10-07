@@ -34,6 +34,11 @@ void MainComponent::addCanvasAndPanels() {
         // publish callbacks installed on it, and this is the one hook every path that adds a node
         // already runs through. Idempotent — re-assigning the same two slots costs nothing.
         installHostedPluginObservers();
+        // The passes below are part of the full reconcile; skipped when one follows (fullReconcileFollows()).
+        if (fullReconcileFollows()) {
+            bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
+            return;
+        }
         // Safety net for graph changes with no explicit post-apply site of their own — the
         // canonical one being "the user deleted the Track In node from the canvas", which goes
         // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).

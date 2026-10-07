@@ -4,12 +4,14 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
+#include "MacroOwnerIndex.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 namespace graph_editor_paint {
 namespace {
 HullMemoScope* activeMemo = nullptr; // innermost open scope; message thread only, like paint itself
 CardMapScope* activeCardMap = nullptr;
+MacroOwnerScope* activeOwners = nullptr;
 } // namespace
 
 // A pass that measures every border (the snapshot before a restore and the glide armed after it) used to build a
@@ -27,6 +29,22 @@ CardMapScope::~CardMapScope() { activeCardMap = previous_; }
 
 const std::unordered_map<uint32_t, ModuleComponent*>* CardMapScope::cardsFor(const GraphCanvasHost& host) {
     return activeCardMap != nullptr && &activeCardMap->host_ == &host ? &activeCardMap->cards_ : nullptr;
+}
+
+// The cable rebuild places every cable end on its card's jack, and a macro port card's jack asks which macro owns the
+// port: MacroSet::findByMember searches every macro's members, so asking it per cable end made the rebuild cost
+// cables x macro members. The rebuild opens one of these and every end reads one map.
+MacroOwnerScope::MacroOwnerScope(GraphCanvasHost& host)
+    : host_(host)
+    , previous_(activeOwners)
+    , owners_(std::make_unique<synth::MacroOwnerIndex>(host.getMacros())) {
+    activeOwners = this;
+}
+
+MacroOwnerScope::~MacroOwnerScope() { activeOwners = previous_; }
+
+const synth::MacroOwnerIndex* MacroOwnerScope::ownersFor(const GraphCanvasHost& host) {
+    return activeOwners != nullptr && &activeOwners->host_ == &host ? activeOwners->owners_.get() : nullptr;
 }
 
 // A paint pass asks for the same border many times (outline, chip, collapse button, '+'/'-', each port strip

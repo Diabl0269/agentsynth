@@ -33,7 +33,10 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   `outermostCollapsedAncestorOf` from one member map, for a pass over every card or node (the canvas's layout units,
   macro-card sync, the modulator rows' port test). `MacroSet::findByMember` searches every macro's members per call.
 - **`ChannelLinkBatch`** (`TrackChannelLinkSurface.h`): a run of per-track link questions answered from one
-  `TrackChannelLinkMap`.
+  `TrackChannelLinkMap`, and each channel's macro from one `MacroOwnerIndex`. `reconcileTimelineAfterGraphChange` holds
+  one batch for the whole reconcile (linked tracks, every header), so the map is built once per edit.
+- **`graph_editor_paint::MacroOwnerScope`** (`GraphEditorPaintMemo.h`): the cable rebuild asks which macro owns each
+  macro port card's jack; inside the scope `MacroGroupController::macroPortOwnerFor` reads one `MacroOwnerIndex`.
 - **The canvas's macro geometry** (`MacroGroupControllerInternal.h`): a pass over many hulls (layout units, port
   docking) measures them against one card map; the undo step's border snapshot and glide open a
   `graph_editor_paint::CardMapScope` (`GraphEditorPaintMemo.h`) so `MacroGroupController::macroHullBounds` reads one
@@ -44,18 +47,26 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
 The undo step no longer does. `AppUndoManager` captures through `synth::GraphSnapshotCache`, which re-writes only the
 nodes an edit changed and shares the rest with the previous snapshot; snapshots are compared with `synth::sameJson` and
 sized by counting, never written out as text
-([module-base.md](module-base.md#a-snapshot-costs-what-the-edit-changed-not-the-project)). A restore that frees nodes tears down only their cards, and runs the restore hooks (timeline reconcile,
-mixer rebuild, republish) once per step. `SnippetManager::extractSnippet` writes only the copied nodes. What is left
-per edit is a set of whole-project passes, each linear and none per item, with the time each takes on the Load test
-project at 200 tracks (a duplicate is about 155 ms, its undo about 185 ms, a knob undo about 130 ms):
+([module-base.md](module-base.md#a-snapshot-costs-what-the-edit-changed-not-the-project)). A restore that frees nodes
+tears down only their cards and unbinds only the mixer columns bound to them, and the UI refresh after an edit rebuilds
+only what changed: the mixer keeps every column whose column is unchanged
+([panel.md](../mixer/panel.md#a-rebuild-keeps-the-columns-that-did-not-change)), the timeline keeps the header row of
+every track still there ([tracks.md](../timeline/tracks.md)), and inside an undo step or a duplicate each whole-project
+pass runs once, in the reconcile after it ([app-wiring.md](app-wiring.md)). `SnippetManager::extractSnippet` writes only
+the copied nodes. What is left per edit is a set of whole-project passes, each linear and none per item, with the share
+each takes on the Load test project at 200 tracks (a duplicate is about 105 ms, its undo about 110 ms, a knob undo about
+95 ms; the 30 Hz canvas work is apart):
 
-- the mixer rebuild (`MixerPanelComponent::rebuild` builds a snapshot and re-creates every column; about a third of a
-  knob undo), and its track-colour refresh;
-- the timeline reconcile and its side passes (`reconcileTimelineAfterGraphChange`: linked tracks, every header's
-  `refreshFromDoc`, the automation lanes' `deriveRoutings`, the republish);
-- the canvas: `updateComponents`' walk over every node, the visible-cable rebuild an undo diffs for its retract
-  animation, and the paint;
-- the timeline and macro documents' own `toVar` / `fromVar` for the steps that carry them.
+- the visible-cable rebuild an undo diffs for its retract animation (about a quarter of a knob undo, most of it each
+  cable end's `ModuleComponent::getPortCenter`), and the rest of the canvas: `updateComponents`' walk (output-dock
+  reflow, canvas frame, macro cards, port docking, together about a sixth) and the macro border glide;
+- the restore re-applying every node's parameters (about a tenth);
+- the mixer snapshot (`buildMixerSnapshot`, about a tenth; the columns themselves are kept);
+- the reconcile's timeline passes: linked tracks and macro colours, every header's `refreshFromDoc`, the modulator rows'
+  `deriveRoutings` (once per knob undo; twice for a duplicate and for its undo, the doc change's own sync and the
+  reconcile), the republish;
+- for a duplicate, the ownership rule (`resolveAutomationOwners`) and the undo capture; for its undo and redo, the
+  timeline and macro documents' own `toVar` / `fromVar`.
 
 Two constant costs are still kept to once: a step keeps the size it was first given (`AppUndoManagerSnapshotSize.h`) and
 `AppLookAndFeel::uiTextWidth` remembers each label's width.
