@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <utility>
 #include <vector>
 
 namespace graph_editor_types {
@@ -34,7 +35,12 @@ public:
     struct Hooks {
         std::function<std::vector<Entry>()> cards;
         std::function<float()> snapshotScale;
+        /** Repaints the whole canvas and drops its cable memo. */
         std::function<void()> repaint;
+        /** Repaints only `area` (canvas coordinates) and keeps the cable memo. Unset: every frame uses `repaint`. */
+        std::function<void(juce::Rectangle<int>)> repaintArea;
+        /** The canvas's cable memo while it is valid, else nullptr. Unset: every frame uses `repaint`. */
+        std::function<std::vector<graph_editor_types::VisibleCable>*()> liveCables;
         juce::VBlankAnimatorUpdater* updater = nullptr;
         /** Whether a VBlank can reach the canvas (it is showing). Exit/enter ghosts are made only when it says yes,
          *  so a headless run lands on the final state synchronously. Unset: never. */
@@ -68,6 +74,9 @@ public:
     /** Hides and snapshots every card whose bounds changed since `before`. Returns false (no-op) when none did. */
     bool arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
 
+    /** While a restore Scope is open: snapshots every on-screen card for a possible exit. Call it before tearing all
+     * the cards down; a restore that frees no node never does, so it snapshots nothing. No-op otherwise. */
+    void noteExitsBeforeTeardown();
     /** Delete/undo ghosts (CardGlideAnimatorGhosts.cpp). While a Scope is open, snapshots `comp` so that, if the
      *  mutation removes its node, the card shrinks away instead of vanishing. No-op when not animating. */
     void noteExit(juce::Component* comp, uint32_t nodeUid);
@@ -83,6 +92,9 @@ public:
     /** The phase timeline of the live animation. */
     const synth::ui::ExitEnterTimeline& timeline() const noexcept { return timeline_; }
 
+    /** Test seam: one driver frame at driver value `t` (the eased glide, or the phased timeline's linear 0..1),
+     *  including the repaint request, exactly as the VBlank runs it. */
+    void stepFrameForTest(float t);
     /** Eased progress 0..1. */
     void applyTweenAt(float t) noexcept;
     /** Restores every hidden card and drops all state. */
@@ -94,12 +106,18 @@ public:
     /** Current minus final position of the gliding module card `nodeUid`; zero when it is not gliding. */
     juce::Point<float> offsetFor(uint32_t nodeUid) const noexcept;
     /** Shifts the endpoints of cables touching a gliding card. */
-    void applyTo(std::vector<graph_editor_types::VisibleCable>& cables) const;
+    void applyTo(std::vector<graph_editor_types::VisibleCable>& cables);
     /** Union of every gliding rect's from/to, for repaint. */
     juce::Rectangle<int> dirtyArea() const noexcept;
 
     /** The rect a gliding card is painted at right now, or empty when it is not gliding (test seam). */
     juce::Rectangle<int> currentRectFor(const juce::Component* comp) const noexcept;
+    /** Card pictures taken for a glide or ghost, and how many of them had to be rendered rather than taken from the
+     *  card's own raster cache (test seams). */
+    int snapshotCount() const noexcept { return snapshotCount_; }
+    int renderedSnapshotCount() const noexcept { return renderedSnapshotCount_; }
+    /** The canvas area the last driver frame repainted; empty when it repainted the whole canvas (test seam). */
+    juce::Rectangle<int> lastFrameArea() const noexcept { return lastFrameArea_; }
     /** How many times arm() started a glide (test seam). */
     int armCount() const noexcept { return armCount_; }
     /** Repaint requests the driver made (test seam). */
@@ -108,8 +126,8 @@ public:
     /** Captures on the outermost entry; arms and starts the driver on the outermost exit. */
     class Scope {
     public:
-        /** `restore`: an undo/redo, so every card is snapshotted for a possible exit and a card the restore creates
-         *  grows in. */
+        /** `restore`: an undo/redo, so a card the restore removes shrinks away (see noteExitsBeforeTeardown) and one
+         *  it creates grows in. */
         explicit Scope(CardGlideAnimator& animator, bool restore = false);
         ~Scope();
         Scope(const Scope&) = delete;
@@ -122,6 +140,7 @@ public:
 private:
     enum class Kind { Move, Exit, Enter };
     struct Candidate {
+        juce::Component::SafePointer<juce::Component> comp;
         uint32_t nodeUid = 0;
         juce::Rectangle<int> rect;
         juce::Image snapshot;
@@ -138,6 +157,13 @@ private:
 
     juce::Rectangle<float> currentRect(const Item& item) const noexcept;
     void startDriver();
+    void frameAt(float t);
+    void finishFrame();
+    void requestFrameRepaint(juce::Rectangle<int> drawnBefore);
+    juce::Rectangle<int> followCables(std::vector<graph_editor_types::VisibleCable>& cables);
+    std::vector<std::pair<uint32_t, juce::Point<float>>> currentOffsets() const;
+    juce::Image snapshotOf(juce::Component& comp, float scale);
+    void noteRestoreExits(const std::vector<Entry>& now);
     bool canAnimate() const;
     void pruneItems();
     void landGhosts() noexcept;
@@ -160,4 +186,9 @@ private:
     bool reducedMotion_ = false;
     bool forceAnimate_ = false;
     int repaintCount_ = 0;
+    int snapshotCount_ = 0;
+    int renderedSnapshotCount_ = 0;
+    juce::Rectangle<int> lastFrameArea_;
+    // The glide offsets the cable memo holds right now, so a frame moves each cable by the change only.
+    std::vector<std::pair<uint32_t, juce::Point<float>>> applied_;
 };

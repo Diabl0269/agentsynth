@@ -8,6 +8,8 @@
 #include "CardGlideAnimator.h"
 
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include "UI/Layout/CableCurve.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 
 #include <algorithm>
 #include <limits>
@@ -103,7 +105,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         if (existing != items_.end()) {
             existing->to = comp->getBounds(); // `from` already rebased to the drawn position
             if (existing->snapshot.isNull() && existing->from.getUnion(existing->to).intersects(visible)) {
-                existing->snapshot = comp->createComponentSnapshot(comp->getLocalBounds(), true, snapshotScale);
+                existing->snapshot = snapshotOf(*comp, snapshotScale);
                 comp->setAlpha(0.0f); // was off-screen, now crosses the view: its alpha was never touched
             }
             continue;
@@ -115,7 +117,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         item.to = comp->getBounds();
         item.savedAlpha = comp->getAlpha();
         if (item.from.getUnion(item.to).intersects(visible)) {
-            item.snapshot = comp->createComponentSnapshot(comp->getLocalBounds(), true, snapshotScale);
+            item.snapshot = snapshotOf(*comp, snapshotScale);
             comp->setAlpha(0.0f);
         }
         items_.push_back(std::move(item));
@@ -179,13 +181,61 @@ juce::Point<float> CardGlideAnimator::offsetFor(uint32_t nodeUid) const noexcept
 
 // Every chain endpoint is a real src/dst node (an attenuverter chain carries its hidden node in attenUid only), so
 // shifting p1/p2 by the card offset keeps both the jack anchor and a knob-landing anchor on the gliding card.
-void CardGlideAnimator::applyTo(std::vector<graph_editor_types::VisibleCable>& cables) const {
+void CardGlideAnimator::applyTo(std::vector<graph_editor_types::VisibleCable>& cables) {
+    applied_.clear();
     if (items_.empty())
         return;
     for (auto& c : cables) {
         c.p1 += offsetFor(c.id.srcUid);
         c.p2 += offsetFor(c.id.dstUid);
     }
+    applied_ = currentOffsets();
+}
+
+// The offset of every gliding module card that has one, by node id.
+std::vector<std::pair<uint32_t, juce::Point<float>>> CardGlideAnimator::currentOffsets() const {
+    std::vector<std::pair<uint32_t, juce::Point<float>>> out;
+    for (const auto& item : items_)
+        if (item.kind == Kind::Move && item.nodeUid != 0)
+            if (const auto offset = offsetFor(item.nodeUid); offset != juce::Point<float>())
+                out.emplace_back(item.nodeUid, offset);
+    return out;
+}
+
+// Moves the cables in the memo that touch a gliding card from the offsets it holds (applied_) to this frame's, and
+// returns the area they were drawn in before and are drawn in now. A card that stopped gliding (landed, grabbed)
+// goes back to its own place, so its cables move by minus what they held. Only the moved cables are touched: the
+// memo is not rebuilt, which on a big patch costs more than the whole partial repaint.
+juce::Rectangle<int> CardGlideAnimator::followCables(std::vector<graph_editor_types::VisibleCable>& cables) {
+    auto now = currentOffsets();
+    std::vector<std::pair<uint32_t, juce::Point<float>>> delta;
+    for (const auto& [uid, offset] : applied_)
+        delta.emplace_back(uid, -offset);
+    for (const auto& [uid, offset] : now) {
+        auto it = std::find_if(delta.begin(), delta.end(), [uid = uid](const auto& d) { return d.first == uid; });
+        if (it == delta.end())
+            delta.emplace_back(uid, offset);
+        else
+            it->second += offset;
+    }
+    applied_ = std::move(now);
+    auto deltaFor = [&delta](uint32_t uid) {
+        for (const auto& [id, d] : delta)
+            if (id == uid)
+                return d;
+        return juce::Point<float>();
+    };
+    juce::Rectangle<float> area;
+    for (auto& c : cables) {
+        const auto d1 = deltaFor(c.id.srcUid), d2 = deltaFor(c.id.dstUid);
+        if (d1.isOrigin() && d2.isOrigin())
+            continue;
+        area = area.getUnion(synth::ui::cablePaintBounds(c.p1, c.p2));
+        c.p1 += d1;
+        c.p2 += d2;
+        area = area.getUnion(synth::ui::cablePaintBounds(c.p1, c.p2));
+    }
+    return area.getSmallestIntegerContainer();
 }
 
 juce::Rectangle<int> CardGlideAnimator::dirtyArea() const noexcept {
@@ -202,41 +252,56 @@ juce::Rectangle<int> CardGlideAnimator::currentRectFor(const juce::Component* co
     return {};
 }
 
+// One frame as the VBlank runs it: `t` is the driver's eased value, the timeline's linear progress when phased.
+void CardGlideAnimator::frameAt(float t) {
+    const auto drawnBefore = dirtyArea();
+    if (phased_)
+        applyTimelineAtMs(static_cast<double>(t) * timeline_.totalMs());
+    else
+        applyTweenAt(t);
+    ++repaintCount_;
+    requestFrameRepaint(drawnBefore);
+}
+
+void CardGlideAnimator::stepFrameForTest(float t) { frameAt(t); }
+
+void CardGlideAnimator::finishFrame() {
+    const auto drawnBefore = dirtyArea();
+    finish();
+    ++repaintCount_;
+    requestFrameRepaint(drawnBefore);
+}
+
+// A frame repaints only what it can change (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch):
+// every ghost and snapshot's whole path before and after the step (a card grabbed mid-glide drops its item, so the
+// place it was drawn must still be cleared) and the cables that follow a gliding card, moved in the memo rather than
+// rebuilt. Repainting the whole canvas and rebuilding every cable each frame cost as much as the idle tick's full
+// paint, at 60 to 120 frames a second, on a patch of hundreds of cables. When the memo is not valid, a full repaint
+// is pending anyway, so this frame joins it.
+void CardGlideAnimator::requestFrameRepaint(juce::Rectangle<int> drawnBefore) {
+    auto* cables = hooks_.liveCables ? hooks_.liveCables() : nullptr;
+    if (cables == nullptr || !hooks_.repaintArea) {
+        lastFrameArea_ = {};
+        if (hooks_.repaint)
+            hooks_.repaint();
+        return;
+    }
+    lastFrameArea_ = drawnBefore.getUnion(dirtyArea()).getUnion(followCables(*cables));
+    if (!lastFrameArea_.isEmpty())
+        hooks_.repaintArea(lastFrameArea_);
+}
+
 void CardGlideAnimator::startDriver() {
     if (hooks_.updater == nullptr)
         return; // no VBlank to drive it: the test seams advance and finish by hand
-    if (phased_) {
-        const double total = timeline_.totalMs();
+    if (phased_)
         driver_.start(
-            *hooks_.updater, total, [](float t) { return t; },
-            [this, total](float t) {
-                applyTimelineAtMs(static_cast<double>(t) * total);
-                ++repaintCount_;
-                if (hooks_.repaint)
-                    hooks_.repaint();
-            },
-            [this]() {
-                finish();
-                ++repaintCount_;
-                if (hooks_.repaint)
-                    hooks_.repaint();
-            });
-        return;
-    }
-    driver_.start(
-        *hooks_.updater, kGlideMs, synth::ui::easeOutCubic,
-        [this](float t) {
-            applyTweenAt(t);
-            ++repaintCount_;
-            if (hooks_.repaint)
-                hooks_.repaint();
-        },
-        [this]() {
-            finish();
-            ++repaintCount_;
-            if (hooks_.repaint)
-                hooks_.repaint();
-        });
+            *hooks_.updater, timeline_.totalMs(), [](float t) { return t; }, [this](float t) { frameAt(t); },
+            [this]() { finishFrame(); });
+    else
+        driver_.start(
+            *hooks_.updater, kGlideMs, synth::ui::easeOutCubic, [this](float t) { frameAt(t); },
+            [this]() { finishFrame(); });
 }
 
 CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)
@@ -246,10 +311,6 @@ CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)
     animator_.before_ = capture(animator_.hooks_.cards());
     animator_.restoring_ = restore && animator_.canAnimate();
     animator_.candidates_.clear();
-    if (animator_.restoring_)
-        for (const auto& e : animator_.hooks_.cards())
-            if (e.nodeUid != 0)
-                animator_.noteExit(e.comp, e.nodeUid);
 }
 
 CardGlideAnimator::Scope::~Scope() {

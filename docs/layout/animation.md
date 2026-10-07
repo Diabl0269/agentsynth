@@ -263,9 +263,18 @@ every surface that animates a delete:
 - The phases never overlap, so no frame shows two cards on top of each other.
 - **Reduce Motion** (`prefersReducedMotion()`): a plain fade in place instead of the shrink or grow.
 - **Opt-in snapshot:** the delete paths (`GraphEditor::deleteSelection`, `requestDeleteModule`) open a
-  `CardGlideAnimator::Scope` and call `noteExit()` for each card before the removal; an undo/redo scope
-  (`Scope(animator, restore=true)`) snapshots every on-screen card, then a card that is gone afterwards exits and a card
-  that is new enters. A card that survives under the same node id is never a ghost.
+  `CardGlideAnimator::Scope` and call `noteExit()` for each card before the removal. An undo/redo scope
+  (`Scope(animator, restore=true)`) pictures nothing up front: a restore that frees a node tears every card down in
+  `GraphEditor::detachAllModuleComponents()`, which first calls `noteExitsBeforeTeardown()`, and a card the restore only
+  hid is pictured when the scope closes. A card that is gone afterwards exits and a card that is new enters; a card
+  that survives under the same node id is never a ghost. So a parameter-only undo, or one that only moves cards,
+  pictures no card at all.
+- **Pictures come from the card's raster:** a ghost or glide snapshot is the card's own `ZoomFrozenCachedImage` raster
+  (`lastRaster()`, shared, no paint) whenever it has one at the card's size; only a card never painted at that size is
+  rendered. Rendering every on-screen card when an undo scope opened stalled each undo of a big project for the
+  length of a full repaint of every card.
+- **A frame repaints only what moves** (see [rendering](rendering.md#per-frame-work-does-not-grow-with-the-patch)):
+  the ghosts and snapshots, the cables on gliding cards, and the retracting cable ghosts, never the whole canvas.
 - **Off-screen:** ghosts are made only while the canvas is showing (`Hooks::canAnimate`), so headless tests see the
   final state synchronously; tests force it with `setForceAnimateForTest` and step `applyTimelineAtMs`.
 - Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at

@@ -23,6 +23,7 @@ add_executable(Tests
     UI/Graph/CardGlide/CardGlideUndoTests.cpp
     UI/Graph/CardGlide/CardGlideDeleteTests.cpp
     UI/Graph/CardGlide/CardGlideMacroTakeOutUndoTests.cpp
+    UI/Graph/CardGlide/CardGlideFrameCostTests.cpp
     UI/Graph/CanvasFrame/CanvasFrameTests.cpp
     UI/Graph/CanvasFrame/CanvasEdgeDragTests.cpp
     UI/Graph/MacroHullGlideTests.cpp

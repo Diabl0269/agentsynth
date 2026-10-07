@@ -10,6 +10,7 @@
 #include "CardGlideAnimator.h"
 
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 
 #include <algorithm>
 
@@ -19,9 +20,51 @@ void CardGlideAnimator::noteExit(juce::Component* comp, uint32_t nodeUid) {
     if (depth_ == 0 || comp == nullptr || nodeUid == 0 || !canAnimate() || !comp->isVisible() ||
         comp->getBounds().isEmpty() || !comp->getBounds().intersects(card_glide_detail::visibleCanvasArea(*comp)))
         return;
+    if (std::any_of(candidates_.begin(), candidates_.end(),
+                    [nodeUid](const Candidate& c) { return c.nodeUid == nodeUid; }))
+        return;
     const float scale = hooks_.snapshotScale ? hooks_.snapshotScale() : 1.0f;
-    candidates_.push_back(
-        {nodeUid, comp->getBounds(), comp->createComponentSnapshot(comp->getLocalBounds(), true, scale)});
+    candidates_.push_back({comp, nodeUid, comp->getBounds(), snapshotOf(*comp, scale)});
+}
+
+// A restore only tears the cards down when it frees a node, so this is where a card it removes can still be
+// pictured; a parameter-only undo, or one that only moves cards, never gets here and pictures nothing. Snapshotting
+// every card when the Scope opened made each such undo stall for the length of a full repaint of every card on screen.
+void CardGlideAnimator::noteExitsBeforeTeardown() {
+    if (depth_ == 0 || !restoring_ || !hooks_.cards)
+        return;
+    for (const auto& e : hooks_.cards())
+        noteExit(e.comp, e.nodeUid);
+}
+
+// A card a restore hid without tearing it down (it is still alive, so noteExitsBeforeTeardown never saw it) is
+// pictured now, from where it stood when the Scope opened.
+void CardGlideAnimator::noteRestoreExits(const std::vector<Entry>& now) {
+    const float scale = hooks_.snapshotScale ? hooks_.snapshotScale() : 1.0f;
+    for (const auto& c : before_) {
+        auto* comp = c.comp.getComponent();
+        if (comp == nullptr || c.nodeUid == 0 || !c.bounds.intersects(card_glide_detail::visibleCanvasArea(*comp)))
+            continue;
+        const bool known = std::any_of(candidates_.begin(), candidates_.end(),
+                                       [&c](const Candidate& cand) { return cand.nodeUid == c.nodeUid; });
+        const bool survives = std::any_of(now.begin(), now.end(), [&c](const Entry& e) {
+            return e.nodeUid == c.nodeUid && e.comp != nullptr && e.comp->isVisible();
+        });
+        if (!known && !survives)
+            candidates_.push_back({comp, c.nodeUid, c.bounds, snapshotOf(*comp, scale)});
+    }
+}
+
+// The card's own raster (ZoomFrozenCachedImage) is a full picture of it at the canvas zoom, so taking it costs nothing;
+// only a card with none (never painted, or resized since) is rendered. The raster can be one paint stale where the
+// card invalidated it since, which a shrinking or growing ghost does not show.
+juce::Image CardGlideAnimator::snapshotOf(juce::Component& comp, float scale) {
+    ++snapshotCount_;
+    if (auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(comp.getCachedComponentImage()))
+        if (auto raster = cache->lastRaster(); raster.isValid())
+            return raster;
+    ++renderedSnapshotCount_;
+    return comp.createComponentSnapshot(comp.getLocalBounds(), true, scale);
 }
 
 bool CardGlideAnimator::hasMoveItems() const noexcept {
@@ -43,6 +86,8 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
     landGhosts();
     phased_ = false;
     bool anyExit = false, anyEnter = false;
+    if (restoring_)
+        noteRestoreExits(now);
 
     for (auto& cand : candidates_) {
         const bool survives = std::any_of(now.begin(), now.end(), [&cand](const Entry& e) {
@@ -75,7 +120,7 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
             item.nodeUid = e.nodeUid;
             item.from = item.to = e.comp->getBounds();
             item.savedAlpha = e.comp->getAlpha();
-            item.snapshot = e.comp->createComponentSnapshot(e.comp->getLocalBounds(), true, snapshotScale);
+            item.snapshot = snapshotOf(*e.comp, snapshotScale);
             e.comp->setAlpha(0.0f);
             items_.push_back(std::move(item));
             anyEnter = true;

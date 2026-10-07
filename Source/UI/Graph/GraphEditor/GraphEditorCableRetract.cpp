@@ -4,10 +4,23 @@
 
 #include "GraphEditor.h"
 
+#include "UI/Layout/CableCurve.h"
+
 std::vector<GraphEditor::VisibleCable> GraphEditor::snapshotCablesForRetract() { return buildVisibleCables(); }
 
+namespace {
+// Where the retracting ghosts are drawn now, in canvas coordinates.
+juce::Rectangle<int> ghostArea(const CableRetractAnimator& retract) {
+    juce::Rectangle<float> area;
+    for (const auto& ghost : retract.ghosts())
+        area = area.getUnion(synth::ui::cablePaintBounds(ghost.p1, ghost.p2));
+    return area.getSmallestIntegerContainer();
+}
+} // namespace
+
 // Called after a disconnect, an undo or a redo with the cables drawn before it. Every cable no longer drawn is
-// kept as a ghost for one short retract, so a removal never just blinks out.
+// kept as a ghost for one short retract, so a removal never just blinks out. Each frame repaints only where the ghosts
+// were and are drawn, never the whole canvas.
 void GraphEditor::retractCablesGoneSince(const std::vector<VisibleCable>& before) {
     if (!cableRetract_.arm(before, buildVisibleCables()))
         return;
@@ -17,14 +30,16 @@ void GraphEditor::retractCablesGoneSince(const std::vector<VisibleCable>& before
         [safeEditor](float t) {
             if (safeEditor == nullptr)
                 return;
+            const auto drawnBefore = ghostArea(safeEditor->cableRetract_);
             safeEditor->cableRetract_.applyTweenAt(t);
-            safeEditor->content.repaint();
+            safeEditor->content.repaint(drawnBefore.getUnion(ghostArea(safeEditor->cableRetract_)));
         },
         [safeEditor] {
             if (safeEditor == nullptr)
                 return;
+            const auto drawnBefore = ghostArea(safeEditor->cableRetract_);
             safeEditor->cableRetract_.finish();
-            safeEditor->content.repaint();
+            safeEditor->content.repaint(drawnBefore);
         });
     content.repaint();
 }
