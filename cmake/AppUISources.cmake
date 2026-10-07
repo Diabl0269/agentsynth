@@ -15,6 +15,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentSetupTimeline.cpp
     Source/MainComponent/MainComponentCallbacks.cpp
     Source/MainComponent/MainComponentFileIO.cpp
+    Source/MainComponent/MainComponentTelemetry.cpp
     Source/MainComponent/MainComponentTransportDoc.cpp
     Source/MainComponent/MainComponentExportMidi.cpp
     Source/MainComponent/MainComponentExportMidiSeams.h
@@ -627,6 +628,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabSections.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h

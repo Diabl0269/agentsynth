@@ -74,6 +74,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
         markDocumentClean();
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+        countUsage(synth::telemetry::Feature::PresetSaved); // a user save of a project bundle succeeded
         return true;
     }
 
@@ -82,6 +83,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+    countUsage(synth::telemetry::Feature::PresetSaved); // a user save of a plain patch succeeded
     return true;
 }
 
@@ -116,6 +118,7 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
 
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadPreset(file, append);
+    countUsage(synth::telemetry::Feature::PresetLoaded); // a user opened a plain patch file
     reconcileTimelineAfterGraphChange();
     // A legacy patch is not a bundle, so the document that is now open has no bundle to resave to;
     // leaving the previous bundle's path installed would make the next Cmd+S overwrite a project
@@ -212,6 +215,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // Covers both the welcome screen's "Open an existing project" bundle path AND its
     // recent-project rows (both go through openFromFile -> here).
     hideWelcomeScreen();
+    countUsage(synth::telemetry::Feature::ProjectOpened); // a user opened a project bundle (not during startup wiring)
     return true;
 }
 
@@ -277,6 +281,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // The autosave-recovery Restore arm is one more way a recent-project row (or "Open
     // an existing project") can finish opening a bundle — see openFromFile's own comment.
     hideWelcomeScreen();
+    countUsage(synth::telemetry::Feature::ProjectOpened); // a user restored a project from its autosave
     return true;
 }
 

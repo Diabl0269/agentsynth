@@ -128,6 +128,8 @@ public:
     // Called on the message thread with true when a request goes out and false when it ends (a reply,
     // a failure, a timeout or a cancel). The host shows "the assistant is working" from it.
     std::function<void(bool)> onWaitingChanged;
+    // Called on the message thread when a message is actually sent to the assistant.
+    std::function<void()> onMessageSent;
 
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }

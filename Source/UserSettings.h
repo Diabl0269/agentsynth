@@ -86,4 +86,9 @@ inline constexpr const char* kMidiRemoteShowBadgesSettingKey = "midiRemoteShowBa
  *  the piano roll's scale assist persist through (see those members' own comments). */
 inline constexpr const char* kModDropHintShownSettingKey = "modDropHintShown";
 
+/** "Share anonymous usage statistics" (bool, default false). The one source of truth for whether usage
+ *  statistics are recorded and sent: written by PreferencesSettingsTab, read by MainComponent, which hands
+ *  it to TelemetryService (docs/development/usage-statistics.md). */
+inline constexpr const char* kShareUsageStatsSettingKey = "shareUsageStats";
+
 } // namespace synth

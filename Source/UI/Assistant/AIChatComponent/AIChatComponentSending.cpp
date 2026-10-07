@@ -91,6 +91,10 @@ void AIChatComponent::sendButtonClicked() {
     const bool projectPlan = aiService.hasTimelineContext() && (editRequest || aiService.isCurrentProviderHosted());
     const bool wantsPlan = projectPlan || editRequest;
 
+    // A message is going out to the assistant (usage statistics count requests, never their text).
+    if (onMessageSent)
+        onMessageSent();
+
     // Add user message to local state immediately
     messages.push_back({"user", text, ""});
     setWaiting(true);

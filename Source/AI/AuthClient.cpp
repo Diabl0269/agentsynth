@@ -178,6 +178,14 @@ AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, HttpPerform
     , deviceId(std::move(deviceIdIn))
     , performHttp(std::move(performer)) {}
 
+AuthClient::HttpPerformer AuthClient::defaultHttpPerformer() {
+#ifndef _WIN32
+    return performHttpWithCurl;
+#else
+    return performHttpWithWinHttp;
+#endif
+}
+
 AuthClient::DeviceCodeResult AuthClient::requestDeviceCode(const std::atomic<bool>& cancelled) const {
     DeviceCodeResult result;
 

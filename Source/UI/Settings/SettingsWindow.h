@@ -16,6 +16,7 @@
 #include <vector>
 
 class ShortcutManager;
+class PreferencesSettingsTab;
 
 class SettingsWindow
     : public juce::Component
@@ -50,6 +51,9 @@ public:
     ~SettingsWindow() override;
 
     void resized() override;
+
+    // Routes the Preferences tab's "What we collect" link through the owner's URL opener.
+    void setUrlOpener(std::function<void(const juce::URL&)> opener);
 
     // Escape closes the window, from any control inside it (a text field passes it up). Fires
     // onRequestClose when set; otherwise closes the juce::DialogWindow hosting this content.
@@ -94,6 +98,7 @@ private:
     void globalFocusChanged(juce::Component* focused) override { redirectWindowFocusToTabStrip(focused); }
 
     juce::ApplicationProperties& appProperties;
+    PreferencesSettingsTab* preferencesTab = nullptr; // owned by `tabs`
     ShortcutManager& shortcutManager;
     synth::theme::ThemeManager& themeManager;
     SettingsTabs tabs{juce::TabbedButtonBar::TabsAtTop};

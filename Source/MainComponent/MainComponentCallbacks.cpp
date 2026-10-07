@@ -118,6 +118,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
         applyMidiRemotePreferences();
+        applyTelemetryPreference();
         // A live Preferences placement change applies immediately, no restart --
         // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
         // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
@@ -528,6 +529,7 @@ void MainComponent::loadPresetGuarded(int index, bool isNewDocument) {
             audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
         setCurrentPatchName(presets[(size_t)index].name);
         statusBar.showMessage("Loaded: " + presets[(size_t)index].name);
+        countUsage(synth::telemetry::Feature::PresetLoaded); // a user loaded a factory preset
         hideWelcomeScreen();
     });
 }
@@ -666,6 +668,7 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
 // open.
 void MainComponent::exportPatchOnly(const juce::File& file) {
     graphEditor.savePreset(file);
+    countUsage(synth::telemetry::Feature::PresetSaved); // a user exported a patch file
     statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
 }
 

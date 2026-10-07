@@ -114,6 +114,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, snapshot references
 - [`docs/development/test-layers.md`](development/test-layers.md) — what each suite in the test binary covers, grouped by layer
 - [`docs/development/test-patterns.md`](development/test-patterns.md) — the conventions every test follows: the real mouse path, headless seams, settings isolation, sanitizers
+- [`docs/development/usage-statistics.md`](development/usage-statistics.md) — the opt-in anonymous daily usage summary: what it holds, where the id and queue live per OS, the send and opt-out rules, how the vendored contract is refreshed
 - [`docs/development/accessibility.md`](development/accessibility.md) — the accessibility rule for every control (keyboard path, focus ring, screen-reader name, tooltip), which focus-ring helper to use, and the coverage test's strict ratchet baseline
 - [`docs/development/gain-staging.md`](development/gain-staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
 - [`docs/development/ai-harnesses.md`](development/ai-harnesses.md) — `AIPatchHarness` and `AIEvalHarness`: measurement, not tests, and the corpus the offline replay suite is built from

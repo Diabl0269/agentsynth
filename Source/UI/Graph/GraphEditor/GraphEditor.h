@@ -67,6 +67,7 @@ public:
     ModMatrixComponent& getModMatrix() { return modMatrix; }
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
     std::function<void()> onBeforeDetachAllModuleComponents; // fires here AND from deleteSelection()
+    std::function<void(const juce::String&)> onModuleAdded;  // a user placed a module; its factory type name
     std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)> onBeforeDetachModuleComponentsFor;
     void detachAllModuleComponents();
     void detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed); // before they go

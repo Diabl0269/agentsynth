@@ -105,6 +105,9 @@ public:
     // the transport to beat 0. Not a MIDI Learn target: the four glyph buttons above are the only ones.
     std::function<void()> onReturnToStart;
 
+    // Fired after the Play / Stop button (or Space, which clicks it) starts the transport; not on stop.
+    std::function<void()> onPlayStarted;
+
     // ---- test accessors ----
     juce::Button& getReturnToStartButton() noexcept { return returnToStartButton_; }
     juce::Button& getMetronomeButton() noexcept { return metronomeButton_; }

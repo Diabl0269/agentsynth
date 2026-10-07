@@ -785,8 +785,10 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          {},
          [](MainComponent& m) {
              auto& transport = m.audioEngine.getTransport();
-             if (!transport.getPositionSnapshot().playing)
+             if (!transport.getPositionSnapshot().playing) {
                  transport.play();
+                 m.countUsage(synth::telemetry::Feature::TimelineUsed); // the user started the timeline transport
+             }
              return true;
          }},
         {AppCommands::transportStop,

@@ -230,6 +230,11 @@ add_executable(Tests
     Account/AccountServiceTests.cpp
     Account/KeychainTokenStoreTests.cpp
     Account/DeviceIdStoreTests.cpp
+    Telemetry/TelemetryIdStoreTests.cpp
+    Telemetry/TelemetryJsonTests.cpp
+    Telemetry/TelemetryRecorderTests.cpp
+    Telemetry/TelemetrySenderTests.cpp
+    Telemetry/TelemetryWiringTests.cpp
     AI/PatchFeedbackStoreTests.cpp
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
@@ -456,6 +461,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltipsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStatsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategoryTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp

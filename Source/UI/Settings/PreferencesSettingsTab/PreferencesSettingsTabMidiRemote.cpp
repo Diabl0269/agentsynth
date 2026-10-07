@@ -96,18 +96,19 @@ void PreferencesSettingsTab::layoutMidiRemoteGroup(
                                                            &midiRemoteShowBadgesToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
-    if (!visible)
-        return;
-    if (previousGroupWasVisible) {
-        y += 10;
-        dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
-        y += 11;
+    if (visible) {
+        if (previousGroupWasVisible) {
+            y += 10;
+            dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
+            y += 11;
+        }
+        juce::Rectangle<int> row(0, y, contentWidth, 24);
+        midiRemoteTakeoverLabel.setBounds(row.removeFromLeft(190));
+        row.removeFromLeft(4);
+        midiRemoteTakeoverCombo.setBounds(row.removeFromLeft(140));
+        y += 28;
+        midiRemoteShowBadgesToggle.setBounds(0, y, contentWidth, 24);
+        y += 24;
     }
-    juce::Rectangle<int> row(0, y, contentWidth, 24);
-    midiRemoteTakeoverLabel.setBounds(row.removeFromLeft(190));
-    row.removeFromLeft(4);
-    midiRemoteTakeoverCombo.setBounds(row.removeFromLeft(140));
-    y += 28;
-    midiRemoteShowBadgesToggle.setBounds(0, y, contentWidth, 24);
-    y += 24;
+    layoutUsageStatsGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
 }

@@ -182,6 +182,9 @@ public:
     // defaults to empty (omitted from requests) so existing 3-arg call sites keep compiling.
     AuthClient(juce::String host, juce::String clientId, HttpPerformer performer, juce::String deviceId = "");
 
+    /** The platform transport (libcurl, or WinHTTP on Windows) the production constructor installs. */
+    static HttpPerformer defaultHttpPerformer();
+
     /** POST /v1/auth/device/code — starts a device-code flow. */
     DeviceCodeResult requestDeviceCode(const std::atomic<bool>& cancelled) const;
 

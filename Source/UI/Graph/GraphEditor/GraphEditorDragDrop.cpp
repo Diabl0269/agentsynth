@@ -269,12 +269,14 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
         // Shared by the undo and no-undo paths; the node is handed over through a shared_ptr so the
         // lambda stays copyable (std::function requires it).
         auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-        auto placeNode = [this, proc, initialPlaced, finalizeNewDrop, joinMacroId] {
+        auto placeNode = [this, proc, initialPlaced, finalizeNewDrop, joinMacroId, name] {
             if (!*proc)
                 return;
             auto node = audioEngine.getGraph().addNode(std::move(*proc));
             if (!node)
                 return;
+            if (onModuleAdded) // a user dropped or inserted this module from the library (usage statistics)
+                onModuleAdded(name);
             CardGlideAnimator::Scope glide(cardGlide_); // a snapped drop settles into place, see finalizeNewDrop
             node->properties.set("x", initialPlaced.x);
             node->properties.set("y", initialPlaced.y);

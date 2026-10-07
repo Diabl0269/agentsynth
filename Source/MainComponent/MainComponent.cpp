@@ -4,6 +4,7 @@
 #include "Branding.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "Telemetry/TelemetryService.h"
 #include "Timeline/AssetManager.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Layout/TextFieldKeys.h"
@@ -221,6 +222,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     configureAiProvider(std::move(provider), std::move(registry)); // ORDER: nothing earlier may write appProperties
     wireAiChatAndAccount(); // ORDER: after setProvider; account before attemptSilentSignIn
     wireGraphEditorCallbacks();
+    startTelemetry();           // ORDER: after the settings file is open; standalone only
     wirePluginScanAndRecents(); // ORDER: HostMode-dependent (ownedAudioEngine == nullptr)
     wireCommandsAndShortcuts(); // ORDER: keep the "no KeyListener" comment
     // ORDER: after commandManager exists (the action invoker dispatches through it) and BEFORE the
@@ -327,6 +329,11 @@ MainComponent::~MainComponent() {
     // half-torn-down members.
     undoManager.getUndoManager().removeChangeListener(this);
     stopTimer();
+    // Flush the usage statistics queue and stop counting before the editors that report to it go away.
+    graphEditor.onModuleAdded = nullptr;
+    graphEditor.getMacroController().onMacroCreated = nullptr;
+    aiChatComponent.onMessageSent = nullptr;
+    telemetry_.reset();
     aiService.removeListener(this);
     // Order matters: stop listening to the doc first (nothing may republish while we tear down),
     // drop the panel's view of it, unhook the engine from the recorder's audio-visible state, and

@@ -288,6 +288,11 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
                            *themeManager, &graphEditor, &accountService,
                            /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices));
     settingsComp->setSize(SettingsWindow::kDefaultWidth, SettingsWindow::kDefaultHeight);
+    // The Preferences "What we collect" link opens through the same seam as the Help menu's pages.
+    settingsComp->setUrlOpener([safeThis = juce::Component::SafePointer<MainComponent>(this)](const juce::URL& url) {
+        if (auto* self = safeThis.getComponent())
+            self->urlOpener_(url);
+    });
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(settingsComp);

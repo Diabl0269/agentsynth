@@ -38,6 +38,9 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    timelinePanel.getTransportBar().onPlayStarted = [this] {
+        countUsage(synth::telemetry::Feature::TimelineUsed); // Play / Stop button or Space started the timeline
+    };
     // The cursor glide accumulates with the cursor nudge actions through one shared state.
     timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());
@@ -428,4 +431,5 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
 
     // Lit regardless of arming — a bare "record" is still record-on.
     timelinePanel.getTransportBar().setRecordingState(true);
+    countUsage(synth::telemetry::Feature::TimelineUsed); // a take started: every early return above is a refusal
 }
