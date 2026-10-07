@@ -457,3 +457,27 @@ TEST(AIPatchValidationTest, SchemaChoiceParamIdsAreUnambiguous) {
             << "choice parameter \"" << paramId << "\" is not constrained in the schema";
     }
 }
+
+// The model bounds stay for a model's patch; the app's own data (a project, a plugin session, a snippet) gets the
+// larger app-data bounds, so a big project is not refused.
+TEST(AIPatchValidation, AppDataPastTheModelNodeLimitIsAcceptedAndAModelPatchIsNot) {
+    juce::Array<juce::var> nodes;
+    for (int i = 1; i <= AIStateMapper::kMaxNodes + 1; ++i) {
+        juce::DynamicObject::Ptr n = new juce::DynamicObject();
+        n->setProperty("id", i);
+        n->setProperty("type", "Oscillator");
+        nodes.add(juce::var(n.get()));
+    }
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty("nodes", nodes);
+    const juce::var patch(root.get());
+    juce::AudioProcessorGraph graph;
+
+    const auto model = AIStateMapper::validatePatch(patch, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_FALSE(model.ok);
+    EXPECT_EQ(model.error, PatchValidationError::TooManyNodes);
+
+    const auto appData = AIStateMapper::validatePatch(patch, graph, /*clearExisting=*/true, /*trusted=*/false,
+                                                      /*allowInternalModuleTypes=*/true);
+    EXPECT_TRUE(appData.ok) << appData.message;
+}
