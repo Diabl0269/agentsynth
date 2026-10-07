@@ -127,6 +127,18 @@ TEST_F(TelemetryWiringTest, StartingTheTransportCountsTimelineUseOnlyWhenItActua
     EXPECT_EQ(featureCount(*service, Feature::TimelineUsed), 1);
 }
 
+TEST_F(TelemetryWiringTest, ThePlayStopButtonCountsTimelineUseWhenItStartsTheTransport) {
+    setShareSetting(true);
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto* service = mc.getTelemetryServiceForTest();
+    // Space runs togglePlayback, which clicks the transport bar's Play / Stop button; triggerClick() posts the
+    // click, so pump the message loop before reading the counter.
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::togglePlayback, false));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(featureCount(*service, Feature::TimelineUsed), 1);
+}
+
 TEST_F(TelemetryWiringTest, TheSettingSwitchesRecordingOnAndOffWhileRunning) {
     MainComponent mc(std::make_unique<MockProvider>());
     auto* service = mc.getTelemetryServiceForTest();

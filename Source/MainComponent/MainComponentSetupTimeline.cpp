@@ -38,6 +38,9 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    timelinePanel.getTransportBar().onPlayStarted = [this] {
+        countUsage(synth::telemetry::Feature::TimelineUsed); // Play / Stop button or Space started the timeline
+    };
     // The cursor glide accumulates with the cursor nudge actions through one shared state.
     timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());

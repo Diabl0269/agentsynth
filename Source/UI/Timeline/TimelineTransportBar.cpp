@@ -105,10 +105,13 @@ TimelineTransportBar::TimelineTransportBar() {
     playStopButton_.onClick = [this] {
         if (transport_ == nullptr)
             return;
-        if (transport_->getPositionSnapshot().playing)
+        if (transport_->getPositionSnapshot().playing) {
             transport_->stop();
-        else
+        } else {
             transport_->play();
+            if (onPlayStarted)
+                onPlayStarted();
+        }
     };
 
     addAndMakeVisible(recordButton_);
