@@ -134,7 +134,8 @@ indefinitely.** Two ways that happens, and what closes each:
    `GraphEditor::cancelLiveDragGestures()`, which cancels `selectionDragActive` and
    `dragPreviewActive` together, is called from all three sites: unconditionally in
    `detachAllModuleComponents()`, where every component is going so cancelling is always correct;
-   and, in `updateComponents()` / `syncMacroCards()`, only when the SPECIFIC component being removed
+   and, in `updateComponents()` / `syncMacroCards()` / `detachModuleComponentsFor()` (an undo or redo
+   that frees some nodes), only when the SPECIFIC component being removed
    is the drag's own initiator (`dragPreviewSelfId` for a module drag,
    `MacroCardComponent::isBodyDragActive()` for a card drag). A non-initiating group member
    vanishing on its own is harmless: the initiator survives, its real `mouseUp` is still coming, and

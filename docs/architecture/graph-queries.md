@@ -35,22 +35,38 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
 - **`ChannelLinkBatch`** (`TrackChannelLinkSurface.h`): a run of per-track link questions answered from one
   `TrackChannelLinkMap`.
 - **The canvas's macro geometry** (`MacroGroupControllerInternal.h`): a pass over many hulls (layout units, port
-  docking) measures them against one card map.
+  docking) measures them against one card map; the undo step's border snapshot and glide open a
+  `graph_editor_paint::CardMapScope` (`GraphEditorPaintMemo.h`) so `MacroGroupController::macroHullBounds` reads one
+  map for every border. `GraphEditor::updateComponents` matches cards to processors through sets built once.
 
 ## What still grows with the project
 
-The undo step itself: `AppUndoManager` snapshots the whole graph before and after an edit (`graphToJSON`) and compares
-the two as JSON text, and an undo restores a whole snapshot and rebuilds every card. That is linear in the project by
-design; a flat curve needs undo steps that record a diff rather than a whole snapshot. Two constant costs on top of it
-are kept to once: a step is sized for the undo history from the lengths the change check already measured, and keeps
-that size (`AppUndoManagerSnapshotSize.h`; the history re-sizes the oldest step it drops on every edit once full), and
-`AppLookAndFeel::uiTextWidth` remembers each label's width (every rebuilt card measures its footer labels).
-`SnippetManager::extractSnippet` serialises the whole graph to copy one track's modules, and every edit rebuilds the
-mixer snapshot and the track-ownership rule once each: linear passes, not per-item ones.
+The undo step no longer does. `AppUndoManager` captures through `synth::GraphSnapshotCache`, which re-writes only the
+nodes an edit changed and shares the rest with the previous snapshot; snapshots are compared with `synth::sameJson` and
+sized by counting, never written out as text
+([module-base.md](module-base.md#a-snapshot-costs-what-the-edit-changed-not-the-project)). A restore that frees nodes tears down only their cards, and runs the restore hooks (timeline reconcile,
+mixer rebuild, republish) once per step. `SnippetManager::extractSnippet` writes only the copied nodes. What is left
+per edit is a set of whole-project passes, each linear and none per item, with the time each takes on the Load test
+project at 200 tracks (a duplicate is about 155 ms, its undo about 185 ms, a knob undo about 130 ms):
+
+- the mixer rebuild (`MixerPanelComponent::rebuild` builds a snapshot and re-creates every column; about a third of a
+  knob undo), and its track-colour refresh;
+- the timeline reconcile and its side passes (`reconcileTimelineAfterGraphChange`: linked tracks, every header's
+  `refreshFromDoc`, the automation lanes' `deriveRoutings`, the republish);
+- the canvas: `updateComponents`' walk over every node, the visible-cable rebuild an undo diffs for its retract
+  animation, and the paint;
+- the timeline and macro documents' own `toVar` / `fromVar` for the steps that carry them.
+
+Two constant costs are still kept to once: a step keeps the size it was first given (`AppUndoManagerSnapshotSize.h`) and
+`AppLookAndFeel::uiTextWidth` remembers each label's width.
 
 ## Measuring
 
 `DISABLED_LoadTestProjectProfile` (`Tests/App/ManyTracksProfileTests.cpp`) duplicates the first track N times and
 prints each duplicate's time, then times three undos:
-`PROFILE_DUPLICATE=180 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile'`. Attach
-`sample <pid> 20` past 120 tracks to see which pass grows.
+`PROFILE_DUPLICATE=180 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile'`. At each size
+in `PROFILE_CHECKPOINTS` (default `22,80,200` tracks) it prints a `[checkpoint]` line: the duplicate, its undo and
+redo, and a knob edit recorded the way a card knob records it and its undo. `PROFILE_SAVE=<bundle>` keeps the grown
+project, so `PROFILE_PROJECT=<bundle> PROFILE_DUPLICATE=1 PROFILE_CHECKPOINTS=1` measures one size quickly, and
+`PROFILE_SPIN_CHECKPOINT=<s>` loops undo/redo, then knob edit/undo, for that long at each checkpoint to attach
+`sample <pid> 10` to.

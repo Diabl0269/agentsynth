@@ -264,9 +264,10 @@ every surface that animates a delete:
 - **Reduce Motion** (`prefersReducedMotion()`): a plain fade in place instead of the shrink or grow.
 - **Opt-in snapshot:** the delete paths (`GraphEditor::deleteSelection`, `requestDeleteModule`) open a
   `CardGlideAnimator::Scope` and call `noteExit()` for each card before the removal. An undo/redo scope
-  (`Scope(animator, restore=true)`) pictures nothing up front: a restore that frees a node tears every card down in
-  `GraphEditor::detachAllModuleComponents()`, which first calls `noteExitsBeforeTeardown()`, and a card the restore only
-  hid is pictured when the scope closes. A card that is gone afterwards exits and a card that is new enters; a card
+  (`Scope(animator, restore=true)`) pictures nothing up front: a restore that frees nodes tears down only those nodes'
+  cards in `GraphEditor::detachModuleComponentsFor()`, which pictures each with `noteExit()` first (the
+  destroy-and-rebuild fallback tears every card down in `detachAllModuleComponents()`, through
+  `noteExitsBeforeTeardown()`), and a card the restore only hid is pictured when the scope closes. A card that is gone afterwards exits and a card that is new enters; a card
   that survives under the same node id is never a ghost. So a parameter-only undo, or one that only moves cards,
   pictures no card at all.
 - **Pictures come from the card's raster:** a ghost or glide snapshot is the card's own `ZoomFrozenCachedImage` raster

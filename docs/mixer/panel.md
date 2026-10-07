@@ -478,7 +478,8 @@ already has a real `content_->button` to apply it to.
 
 **A UI object holding a raw pointer into one graph node must let go of it before that node's processor
 is freed.** Every graph-replacing mutation funnels through
-`GraphEditor::detachAllModuleComponents()`, which fires `onBeforeDetachAllModuleComponents` at its
+`GraphEditor::detachAllModuleComponents()` (or, for an undo or redo that frees only some nodes,
+`GraphEditor::detachModuleComponentsFor()`), which fires `onBeforeDetachAllModuleComponents` at its
 top; `MainComponent` wires that to `MixerPanelComponent::unbindAllColumns()`, which unbinds every
 strip column's and Master's fader, pan, mute, solo, meter and EQ thumbnail and clears their raw
 pointers **without destroying anything** (`MixerColumnComponent::unbindFromGraph()` /

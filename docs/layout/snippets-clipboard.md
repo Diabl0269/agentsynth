@@ -30,9 +30,11 @@ and a macro is kept when it has any direct member, or (a container) a surviving 
 Graph I/O nodes (Audio In/Out, MIDI In) are never captured — they are singletons that already exist
 in the target patch.
 
-Extraction **filters `graphToJSON` output** rather than re-deriving the per-node JSON shape, so the
+Extraction **is built from `graphToJSON`'s own pieces** (`AIStateMapper::nodeToJSON`,
+`connectionsToJSON`, `modulationsToJSON`) rather than re-deriving the per-node JSON shape, so the
 params encoding, the MIDI port sentinel and the attenuverter-to-`modulations` folding keep exactly
-one owner.
+one owner. Only the selected nodes, and the cables between them, are written: copying one track of a
+large project costs the track, not the project.
 
 ## Id renumbering is mandatory
 

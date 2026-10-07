@@ -286,7 +286,7 @@ private:
     // Undo or redo one step, retracting the cables it takes away.
     bool applyHistoryStep(bool redoStep);
     bool performAction(juce::UndoableAction* action); // THE one push: nothing else calls undoManager.perform()
-    juce::var captureGraph(juce::AudioProcessorGraph& graph) { return graphSnapshots_.capture(graph); } // every one
+    juce::var captureGraph(juce::AudioProcessorGraph& graph) { return graphSnapshots_.capture(graph); } // all of them
 
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
