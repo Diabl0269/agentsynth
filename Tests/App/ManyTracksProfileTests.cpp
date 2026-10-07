@@ -11,6 +11,7 @@
 
 #include "AppUndoManager.h"
 #include "MacroSet.h"
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -219,6 +220,63 @@ double pumpMs() {
     return nowMs() - t0 - 20.0;
 }
 
+// At a checkpoint size: undo and redo the duplicate just made, then a knob edit recorded the way a card knob records
+// it (captureBeforeState / pushSnapshotFromCapture) and its undo. One line per size, for the before/after table.
+void profileCheckpoint(MainComponent& mc, double dupMs) {
+    auto& undo = mc.getUndoManager();
+    double t0 = nowMs();
+    undo.undo();
+    const double undoDup = nowMs() - t0;
+    pumpMs();
+    t0 = nowMs();
+    undo.redo();
+    const double redoDup = nowMs() - t0;
+    pumpMs();
+    auto& graph = mc.getAudioEngine().getGraph();
+    juce::AudioProcessorParameter* param = nullptr;
+    for (auto* node : graph.getNodes())
+        if (param == nullptr && dynamic_cast<ModuleBase*>(node->getProcessor()) != nullptr &&
+            !node->getProcessor()->getParameters().isEmpty())
+            param = node->getProcessor()->getParameters()[0];
+    double edit = 0.0, editUndo = 0.0;
+    if (param != nullptr) {
+        t0 = nowMs();
+        undo.captureBeforeState(graph);
+        param->setValueNotifyingHost(param->getValue() > 0.5f ? 0.1f : 0.9f);
+        undo.pushSnapshotFromCapture(graph);
+        edit = nowMs() - t0;
+        t0 = nowMs();
+        undo.undo();
+        editUndo = nowMs() - t0;
+        pumpMs();
+    }
+    if (const char* spin = std::getenv("PROFILE_SPIN_CHECKPOINT")) { // for `sample`: undo/redo, then knob edit/undo
+        std::printf("[spin]\n");
+        std::fflush(stdout);
+        for (int phase = 0; phase < 2; ++phase) {
+            const double until = nowMs() + 1000.0 * std::atof(spin);
+            while (nowMs() < until) {
+                if (phase == 0) {
+                    undo.undo();
+                    undo.redo();
+                } else if (param != nullptr) {
+                    undo.captureBeforeState(graph);
+                    param->setValueNotifyingHost(param->getValue() > 0.5f ? 0.1f : 0.9f);
+                    undo.pushSnapshotFromCapture(graph);
+                    undo.undo();
+                }
+            }
+            std::printf("[spin] phase %d done\n", phase);
+            std::fflush(stdout);
+        }
+    }
+    std::printf("[checkpoint] tracks=%d nodes=%d duplicate=%.1f undoDuplicate=%.1f redoDuplicate=%.1f knobEdit=%.1f "
+                "knobUndo=%.1f\n",
+                (int)mc.getTimelineDoc().getTracks().size(), graph.getNumNodes(), dupMs, undoDup, redoDup, edit,
+                editUndo);
+    std::fflush(stdout);
+}
+
 // The saved Load test project (docs/layout/rendering.md#the-load-test-project): open it, then duplicate its first track
 // N times through the real Cmd+D entry point, timing each step; a rising curve is the freeze the duplicate used to
 // cause.
@@ -257,6 +315,12 @@ void profileProject(const juce::File& original, int duplicates) {
     const auto first = mc.getTimelineDoc().getTracks().front().id;
     // TrackHeaderHost is a private base of MainComponent; the C-style cast is the header's own call path.
     auto& host = (synth::ui::TrackHeaderHost&)mc;
+    std::vector<int> checkpoints = {22, 80, 200}; // PROFILE_CHECKPOINTS=a,b,c: time undo/redo and a knob edit there
+    if (const char* list = std::getenv("PROFILE_CHECKPOINTS")) {
+        checkpoints.clear();
+        for (const auto& token : juce::StringArray::fromTokens(list, ",", ""))
+            checkpoints.push_back(token.getIntValue());
+    }
     for (int i = 0; i < duplicates; ++i) {
         t0 = nowMs();
         host.duplicateTrack(first);
@@ -269,6 +333,11 @@ void profileProject(const juce::File& original, int duplicates) {
                     (int)mc.getTimelineDoc().getTracks().size(), (int)mc.getAudioEngine().getGraph().getNumNodes(),
                     dupMs, pump, paint);
         std::fflush(stdout);
+        const int tracks = (int)mc.getTimelineDoc().getTracks().size();
+        if (!checkpoints.empty() && tracks >= checkpoints.front()) {
+            checkpoints.erase(checkpoints.begin());
+            profileCheckpoint(mc, dupMs);
+        }
     }
     for (int i = 0; i < 3; ++i) { // undo the last duplicates: each restores a snapshot of the whole project
         t0 = nowMs();
