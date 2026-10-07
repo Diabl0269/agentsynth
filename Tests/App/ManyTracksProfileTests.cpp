@@ -334,21 +334,28 @@ void profileDeleteUndo(MainComponent& mc, const char* label) {
     editor.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
     const double deleteMs = nowMs() - t0;
     const int exits = glide.exitGhostCount();
+    // Other drivers that repaint the whole canvas on their own frames while the ghost runs.
+    const bool deleteHull = editor.isHullGlideLiveForTest(), deleteRetract = editor.getCableRetractForTest().isLive();
     t0 = nowMs();
     paintOnce(editor); // the one whole-canvas repaint arming asks for
     const double deletePaint = nowMs() - t0;
     const double deleteFrame = ghostFrameMs(editor, glide);
     editor.finishCardGlideForTest();
+    editor.finishHullGlideForTest();
+    editor.finishCableRetractForTest();
 
     t0 = nowMs();
     mc.getUndoManager().undo();
     const double undoMs = nowMs() - t0;
     const int enters = glide.enterGhostCount();
+    const bool undoHull = editor.isHullGlideLiveForTest(), undoRetract = editor.getCableRetractForTest().isLive();
     t0 = nowMs();
     paintOnce(editor);
     const double undoPaint = nowMs() - t0;
     const double undoFrame = ghostFrameMs(editor, glide);
     editor.finishCardGlideForTest();
+    editor.finishHullGlideForTest();
+    editor.finishCableRetractForTest();
 
     auto& graph = mc.getAudioEngine().getGraph();
     juce::AudioProcessorParameter* param = nullptr;
@@ -367,11 +374,13 @@ void profileDeleteUndo(MainComponent& mc, const char* label) {
         paramArmed = glide.isLive();
         editor.finishCardGlideForTest();
     }
-    std::printf("[delete-undo] %s cables=%d | delete=%.1f paint=%.1f exits=%d frame=%.2f | undo=%.1f paint=%.1f "
-                "enters=%d frame=%.2f | paramUndo=%.1f armed=%d snapshots=%d rendered=%d\n",
-                label, (int)editor.buildVisibleCables().size(), deleteMs, deletePaint, exits, deleteFrame, undoMs,
-                undoPaint, enters, undoFrame, paramUndoMs, paramArmed ? 1 : 0, glide.snapshotCount(),
-                glide.renderedSnapshotCount());
+    std::printf(
+        "[delete-undo] %s cables=%d | delete=%.1f paint=%.1f exits=%d frame=%.2f | undo=%.1f paint=%.1f "
+        "enters=%d frame=%.2f | paramUndo=%.1f armed=%d snapshots=%d rendered=%d | hull/retract live: delete=%d/%d "
+        "undo=%d/%d\n",
+        label, (int)editor.buildVisibleCables().size(), deleteMs, deletePaint, exits, deleteFrame, undoMs, undoPaint,
+        enters, undoFrame, paramUndoMs, paramArmed ? 1 : 0, glide.snapshotCount(), glide.renderedSnapshotCount(),
+        deleteHull ? 1 : 0, deleteRetract ? 1 : 0, undoHull ? 1 : 0, undoRetract ? 1 : 0);
     std::fflush(stdout);
     glide.setForceAnimateForTest(false);
     synth::ui::setReducedMotionForTest(std::nullopt);
