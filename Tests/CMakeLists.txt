@@ -258,6 +258,7 @@ add_executable(Tests
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     App/MainComponent/KnobStyleSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
+    UI/Chrome/WelcomeScreenUsageStatsTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintLayoutTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintTextTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp

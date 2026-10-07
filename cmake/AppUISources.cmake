@@ -567,6 +567,8 @@ set(APPUI_SOURCES
     Source/UI/Settings/SettingsTabs.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
+    Source/UI/Chrome/UsageStatsPromptComponent.cpp
+    Source/UI/Chrome/UsageStatsPromptComponent.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
     Source/UI/Chrome/WelcomeScreenComponent.h
     Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.h

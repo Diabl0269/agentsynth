@@ -27,7 +27,7 @@ Where to find the id (the Preferences row shows it too, with a Copy ID button):
 
 | OS | Folder |
 | --- | --- |
-| macOS | `~/Library/Application Support/Agent Synth/` |
+| macOS | `~/Library/Agent Synth/` |
 | Windows | `%APPDATA%\Agent Synth\` |
 | Linux | `~/.config/Agent Synth/` |
 
@@ -62,12 +62,25 @@ setting is off.
 | Launch-time send | `Source/Telemetry/TelemetrySender.h` |
 | Owner: minute timer, flush, delayed send | `Source/Telemetry/TelemetryService.h` |
 | Wiring | `Source/MainComponent/MainComponentTelemetry.cpp` |
-| The setting key | `kShareUsageStatsSettingKey` in `Source/UserSettings.h` |
+| The setting keys | `kShareUsageStatsSettingKey` and `kUsageStatsAskedSettingKey` in `Source/UserSettings.h` |
+| The one write of the choice (both places) | `applyShareUsageStatsChoice()` in `Source/Telemetry/UsageStatsChoice.h` |
+| The Welcome screen card | `Source/UI/Chrome/UsageStatsPromptComponent.h`, placed by `WelcomeScreenComponent` |
 | The Preferences rows | `Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp` |
 
-The setting `shareUsageStats` is the single source of truth for "on". The Preferences toggle writes it and, at
-once, creates or deletes the id and queue file; `MainComponent` re-reads it on every settings-file change and
+The setting `shareUsageStats` is the single source of truth for "on". The Preferences toggle and the Welcome
+screen's card both write it through `applyShareUsageStatsChoice()`, which also creates or deletes the id and queue
+file at once and sets `usageStatsAsked`; `MainComponent` re-reads it on every settings-file change and
 calls `TelemetryService::applySetting`, which is idempotent with what the toggle already did.
+
+### The Welcome screen card
+
+Standalone only. A card under the Welcome screen's subtitle asks once: "Help make Agent Synth better", with Share
+and No thanks as two equal buttons and a "What we collect" link to `https://agentsynth.app/privacy#telemetry`
+(through the same URL seam as Contribute). It shows while `usageStatsAsked` is false **and** `shareUsageStats`
+is false, so an existing user sees it once after updating and an existing opt-in never does. Either button, and
+either way of turning the Preferences toggle, sets `usageStatsAsked`, so it never returns. It has no close
+control and never blocks the start buttons. After an answer it collapses out (180 ms, height and fade); Share
+first shows "Thanks. You can change this in Preferences." for about a second. Reduced Motion removes both.
 
 ### Counting
 

@@ -1,5 +1,6 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
+#include "UI/Layout/ReducedMotion.h"
 
 namespace synth::ui {
 
@@ -7,6 +8,8 @@ namespace {
 constexpr int kCardWidth = 600;
 constexpr int kRecentRowHeight = 28;
 constexpr int kContributeRowHeight = 36;
+constexpr double kPromptCollapseMs = 180.0; // leaving: easeInCubic
+constexpr double kThanksHoldMs = 1100.0;    // Share's one-line thanks, faded over its last third
 } // namespace
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
@@ -24,6 +27,13 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     subtitleLabel.setJustificationType(juce::Justification::centred);
     subtitleLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(subtitleLabel);
+
+    addChildComponent(usageStatsPrompt_);
+    usageStatsPrompt_.onChoice = [this](bool share) { handleUsageStatsChoice(share); };
+    usageStatsPrompt_.onLearnMoreRequested = [this] {
+        if (onUsageStatsLearnMoreRequested)
+            onUsageStatsLearnMoreRequested();
+    };
 
     newProjectButton.setTooltip("Start with an empty project");
     addAndMakeVisible(newProjectButton);
@@ -86,6 +96,78 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     rebuildRecentProjectButtons();
 }
 
+int WelcomeScreenComponent::promptSlotHeight() const {
+    return juce::roundToInt((float)(UsageStatsPromptComponent::kHeight + kPromptGap) * promptFraction_);
+}
+
+void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) {
+    if (shown && promptState_ == PromptState::hidden) {
+        promptState_ = PromptState::asking;
+        promptFraction_ = 1.0f;
+        usageStatsPrompt_.setAlpha(1.0f);
+        usageStatsPrompt_.setVisible(true);
+        resized();
+        repaint();
+    } else if (!shown && promptState_ == PromptState::asking) {
+        promptState_ = PromptState::answered;
+        collapseUsageStatsPrompt();
+    }
+}
+
+void WelcomeScreenComponent::handleUsageStatsChoice(bool share) {
+    if (promptState_ != PromptState::asking)
+        return;
+    promptState_ = PromptState::answered; // a second click while the thanks shows does nothing
+    if (onUsageStatsChoice)
+        onUsageStatsChoice(share);
+    // The pressed button is about to go; a keyboard user lands on the first start button instead of nowhere.
+    if (usageStatsPrompt_.hasKeyboardFocus(true))
+        newProjectButton.grabKeyboardFocus();
+
+    const bool animate = isShowing() && !synth::ui::prefersReducedMotion();
+    if (!share || !animate) {
+        collapseUsageStatsPrompt();
+        return;
+    }
+    // Share only: the buttons give way to a thanks that holds, then fades, then the card collapses.
+    usageStatsPrompt_.showConfirmation(true);
+    promptAnim_.start(
+        vblank_, kThanksHoldMs, [](float t) { return t; },
+        [this](float t) { usageStatsPrompt_.setConfirmationAlpha(t < 0.67f ? 1.0f : 1.0f - (t - 0.67f) / 0.33f); },
+        [safe = juce::Component::SafePointer<WelcomeScreenComponent>(this)] {
+            // Not collapsed from inside this animator's own completion: starting a driver stops the running one.
+            juce::MessageManager::callAsync([safe] {
+                if (safe != nullptr)
+                    safe->collapseUsageStatsPrompt();
+            });
+        });
+}
+
+void WelcomeScreenComponent::collapseUsageStatsPrompt() {
+    if (!isShowing() || synth::ui::prefersReducedMotion()) {
+        promptAnim_.stop(vblank_);
+        finishUsageStatsCollapse();
+        return;
+    }
+    promptAnim_.start(
+        vblank_, kPromptCollapseMs, synth::ui::easeInCubic,
+        [this](float e) {
+            promptFraction_ = 1.0f - e;
+            usageStatsPrompt_.setAlpha(promptFraction_);
+            resized();
+        },
+        [this] { finishUsageStatsCollapse(); });
+}
+
+void WelcomeScreenComponent::finishUsageStatsCollapse() {
+    promptFraction_ = 0.0f;
+    usageStatsPrompt_.setVisible(false);
+    usageStatsPrompt_.showConfirmation(false);
+    usageStatsPrompt_.setAlpha(1.0f);
+    resized();
+    repaint();
+}
+
 void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& recents) {
     recentFiles_ = recents;
     if ((int)recentFiles_.size() > kMaxVisibleRecents)
@@ -126,12 +208,13 @@ void WelcomeScreenComponent::rebuildRecentProjectButtons() {
 
 juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
     const int recentsHeight = recentFiles_.empty() ? kRecentRowHeight : (int)recentFiles_.size() * kRecentRowHeight;
-    // Mirrors resized() row for row (pad, title, subtitle, three action buttons, recents header,
-    // recents rows, contribute row, footer, pad) so the drawn card and its children always agree.
-    // Fixed heights rather than FlexBox: a small, static layout whose only variable is the recents count.
+    // Mirrors resized() row for row (pad, title, subtitle, the usage statistics card slot, three action buttons,
+    // recents header, recents rows, contribute row, footer, pad) so the drawn card and its children always agree. Fixed
+    // heights rather than FlexBox: a small, static layout whose only variable is the recents count.
     const int cardHeight = 20 /*top pad*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 + 36 /*New*/ + 10 +
                            36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 + 20 /*recents header*/ + 6 +
-                           recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ + 20 /*bottom pad*/;
+                           recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ + 20 /*bottom pad*/ +
+                           promptSlotHeight() /*usage statistics card + gap, 0 once answered*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -158,6 +241,13 @@ void WelcomeScreenComponent::resized() {
     area.removeFromTop(4);
     subtitleLabel.setBounds(area.removeFromTop(22));
     area.removeFromTop(20);
+
+    // The card's slot is its panel plus the gap to the buttons; both shrink together, so the buttons below
+    // rise by exactly what getCardBounds() took off the card height.
+    if (const int slot = promptSlotHeight(); slot > 0) {
+        const int gapPart = juce::roundToInt((float)kPromptGap * promptFraction_);
+        usageStatsPrompt_.setBounds(area.removeFromTop(slot).withTrimmedBottom(gapPart));
+    }
 
     newProjectButton.setBounds(area.removeFromTop(36));
     area.removeFromTop(10);

@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Telemetry/TelemetryService.h"
+#include "Telemetry/UsageStatsChoice.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace {
@@ -42,6 +43,9 @@ void MainComponent::startTelemetry() {
 void MainComponent::applyTelemetryPreference() {
     if (telemetry_ != nullptr)
         telemetry_->applySetting(shareUsageStatsSettingIsOn(appProperties.getUserSettings()));
+    // The question was answered somewhere else (the Preferences toggle): the Welcome screen's card goes away too.
+    if (welcomeScreen_ != nullptr && !synth::telemetry::shouldAskAboutUsageStats(appProperties.getUserSettings()))
+        welcomeScreen_->setUsageStatsPromptShown(false);
 }
 
 void MainComponent::countUsage(synth::telemetry::Feature feature) {
