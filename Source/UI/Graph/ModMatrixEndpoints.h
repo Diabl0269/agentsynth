@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/ConnectionIndex.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "Modules/ModuleBase.h"
 #include <functional>
@@ -34,27 +35,18 @@ struct RoutingEndpoint {
     bool valid() const noexcept { return node.uid != 0; }
 };
 
-/** Every cable of a graph, indexed once by the node it enters and the node it leaves, in getConnections() order.
- *  getConnections() copies and sorts the whole cable set on every call, so a walk over many routings builds one
- *  index and asks it instead (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch). */
-class ConnectionIndex {
+/** The Core cable index (synth::ConnectionIndex) that also counts itself as one cable scan in the canvas's work
+ *  counters (graph_editor_paint::workCounters), so a test can hold a tick to one index. */
+class ConnectionIndex : public synth::ConnectionIndex {
 public:
-    using Connection = juce::AudioProcessorGraph::Connection;
     ConnectionIndex() = default; // no cables
     explicit ConnectionIndex(const juce::AudioProcessorGraph& graph);
-    const std::vector<Connection>& into(juce::AudioProcessorGraph::NodeID node) const;
-    const std::vector<Connection>& outOf(juce::AudioProcessorGraph::NodeID node) const;
-    /** Every cable into or out of `node` (a self-cable once), in getConnections() order. */
-    const std::vector<Connection>& touching(juce::AudioProcessorGraph::NodeID node) const;
-
-private:
-    std::unordered_map<juce::uint32, std::vector<Connection>> in_, out_, touching_;
 };
 /** The attenuverter's channel-0 edge in (`incoming`) or out, if it has one. */
 std::optional<juce::AudioProcessorGraph::Connection>
 attenuverterEdge(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID atten, bool incoming);
 std::optional<juce::AudioProcessorGraph::Connection>
-attenuverterEdge(const ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten, bool incoming);
+attenuverterEdge(const synth::ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten, bool incoming);
 
 /** Appends every edge landing on `node` to `in` and every edge leaving it to `out`. */
 void edgesAround(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
@@ -72,7 +64,7 @@ RoutingEndpoint realEndpointBehindPorts(juce::AudioProcessorGraph& graph, juce::
                                         const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
                                         std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts = nullptr,
                                         bool allowFanOut = false);
-RoutingEndpoint realEndpointBehindPorts(const ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten,
+RoutingEndpoint realEndpointBehindPorts(const synth::ConnectionIndex& cables, juce::AudioProcessorGraph::NodeID atten,
                                         bool incoming,
                                         const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
                                         std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts = nullptr,
@@ -90,7 +82,7 @@ struct ResolvedRouting {
 ResolvedRouting resolveRouting(juce::AudioProcessorGraph& graph, const ModulationRouting& routing,
                                const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort);
 /** The same, against an index built once for a walk over many routings. */
-ResolvedRouting resolveRouting(const ConnectionIndex& cables, const ModulationRouting& routing,
+ResolvedRouting resolveRouting(const synth::ConnectionIndex& cables, const ModulationRouting& routing,
                                const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort);
 
 } // namespace synth::ui

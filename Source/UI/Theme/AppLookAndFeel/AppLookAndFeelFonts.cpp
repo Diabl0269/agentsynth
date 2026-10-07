@@ -1,5 +1,7 @@
 #include "AppLookAndFeel.h"
 #include "AppLookAndFeelInternal.h"
+#include <map>
+#include <tuple>
 
 #ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
@@ -109,8 +111,22 @@ juce::Font AppLookAndFeel::uiSemiBoldFont(float height) {
     return juce::Font(juce::FontOptions(height).withStyle("Bold"));
 }
 
+// Measuring lays the glyphs out, and every card measures its footer labels each time it is built: rebuilding all the
+// cards after an undo spent most of its time here, on the same few labels at the same few heights. So each (face,
+// height, text) is measured once. The face is part of the key, so a typeface that arrives later is measured afresh;
+// the memo is cleared rather than grown past a bound. Message thread only, like the typeface it reads.
 int AppLookAndFeel::uiTextWidth(const juce::String& text, float height) {
-    return juce::GlyphArrangement::getStringWidthInt(uiFont(height), text);
+    using Key = std::tuple<const juce::Typeface*, float, juce::String>;
+    static std::map<Key, int> widths;
+    const auto face = EmbeddedUiTypeface::get();
+    Key key{face.get(), height, text};
+    if (const auto known = widths.find(key); known != widths.end())
+        return known->second;
+    if (widths.size() >= 4096)
+        widths.clear();
+    const int width = juce::GlyphArrangement::getStringWidthInt(uiFont(height), text);
+    widths.emplace(std::move(key), width);
+    return width;
 }
 
 void AppLookAndFeel::refreshTypefaces() {

@@ -7,8 +7,10 @@
 // MacroGroupController.h's class comment for why it stays on GraphEditor.
 
 #include "MacroGroupController.h"
+#include "MacroGroupControllerInternal.h"
 #include "ModelCardBounds.h"
 
+#include "AudioEngine/NodeUuidCache.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
@@ -25,6 +27,23 @@ const juce::Identifier& uuidKey() {
     static const juce::Identifier key("uuid");
     return key;
 }
+
+// The node carrying `memberUuid`. Every hull, port row and port dock resolves its members through here, many times per
+// edit and per paint; a whole-graph scan per member made each pass O(macros x members x nodes). One cache serves every
+// graph on the message thread (NodeUuidCache refills when the graph or a remembered node changes, and never answers a
+// node that does not carry the uuid). An empty uuid keeps the plain scan's answer: the first node with no uuid.
+juce::AudioProcessorGraph::NodeID memberNodeId(juce::AudioProcessorGraph& graph, const juce::String& memberUuid) {
+    ++graph_editor_paint::workCounters().nodeScans;
+    if (memberUuid.isEmpty()) {
+        for (auto* node : graph.getNodes())
+            if (node->properties[uuidKey()].toString().isEmpty())
+                return node->nodeID;
+        return {};
+    }
+    static synth::NodeUuidCache cache;
+    auto* node = cache.find(graph, memberUuid);
+    return node != nullptr ? node->nodeID : juce::AudioProcessorGraph::NodeID{};
+}
 } // namespace
 
 juce::String MacroGroupController::nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -34,12 +53,7 @@ juce::String MacroGroupController::nodeUuidFor(juce::AudioProcessorGraph::NodeID
 }
 
 juce::AudioProcessorGraph::NodeID MacroGroupController::resolveMemberNodeId(const juce::String& memberUuid) const {
-    ++graph_editor_paint::workCounters().nodeScans;
-    for (auto* node : host_.graph().getNodes()) {
-        if (node->properties[uuidKey()].toString() == memberUuid)
-            return node->nodeID;
-    }
-    return {};
+    return memberNodeId(host_.graph(), memberUuid);
 }
 
 MacroGroupController::MacroPortOwner
@@ -89,11 +103,7 @@ namespace {
 // Free-function twin of MacroGroupController::resolveMemberNodeId, for computeMacroHullBounds
 // below (a free function itself, taking GraphCanvasHost& rather than a live `this`).
 juce::AudioProcessorGraph::NodeID resolveMemberNodeIdIn(GraphCanvasHost& host, const juce::String& memberUuid) {
-    ++graph_editor_paint::workCounters().nodeScans;
-    for (auto* node : host.graph().getNodes())
-        if (node->properties[uuidKey()].toString() == memberUuid)
-            return node->nodeID;
-    return {};
+    return memberNodeId(host.graph(), memberUuid);
 }
 
 // Rows a port's docked widget takes: one, except a Stereo port whose widget has two jack rows.
@@ -111,7 +121,7 @@ int macroPortRowCountIn(GraphCanvasHost& host, const juce::String& portUuid) {
     return 1;
 }
 
-using CompByNodeUid = std::unordered_map<uint32_t, ModuleComponent*>;
+using CompByNodeUid = macro_geometry::CardsByNodeUid;
 
 juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid, const synth::Macro& macro,
                                   const juce::String& extraExcludedUuid);
@@ -166,11 +176,7 @@ juce::Rectangle<int> memberUnionIn(GraphCanvasHost& host, const CompByNodeUid& c
 // exclusion is passed down into nested children, so a member of a child is excluded too.
 juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::Macro& macro,
                                             const juce::String& extraExcludedUuid) {
-    CompByNodeUid compByNodeUid;
-    for (auto* comp : host.modules())
-        if (comp != nullptr)
-            compByNodeUid[comp->getNodeId().uid] = comp;
-    return hullBoundsIn(host, compByNodeUid, macro, extraExcludedUuid);
+    return hullBoundsIn(host, macro_geometry::cardsByNodeUid(host), macro, extraExcludedUuid);
 }
 
 juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid, const synth::Macro& macro,
@@ -197,12 +203,28 @@ juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& co
 }
 } // namespace
 
-juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
-    // Effective collapse: a macro inside a collapsed ancestor has no hull either, whatever its own flag says.
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr || host_.getMacros().isEffectivelyCollapsed(macroId))
+namespace macro_geometry {
+
+CardsByNodeUid cardsByNodeUid(GraphCanvasHost& host) {
+    CardsByNodeUid cards;
+    for (auto* comp : host.modules())
+        if (comp != nullptr)
+            cards[comp->getNodeId().uid] = comp;
+    return cards;
+}
+
+// Effective collapse: a macro inside a collapsed ancestor has no hull either, whatever its own flag says.
+juce::Rectangle<int> openHullBounds(GraphCanvasHost& host, const CardsByNodeUid& cards, const juce::String& macroId) {
+    const auto* macro = host.getMacros().find(macroId);
+    if (macro == nullptr || host.getMacros().isEffectivelyCollapsed(macroId))
         return {};
-    return computeMacroHullBounds(host_, *macro, {});
+    return hullBoundsIn(host, cards, *macro, {});
+}
+
+} // namespace macro_geometry
+
+juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
+    return macro_geometry::openHullBounds(host_, macro_geometry::cardsByNodeUid(host_), macroId);
 }
 
 juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::String& macroId,
@@ -544,11 +566,15 @@ MacroGroupController::macroHullPortButtonAt(juce::Point<int> canvasPos, float zo
     return std::nullopt;
 }
 
+// The layout against a card map the caller already holds: dockMacroPortWidgets docks every macro's ports in one pass
+// and builds the map once for all of them.
+namespace {
 std::vector<MacroGroupController::MacroHullPort>
-MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
+hullPortLayoutIn(GraphCanvasHost& host, const macro_geometry::CardsByNodeUid& cards, const juce::String& macroId) {
+    using MacroHullPort = MacroGroupController::MacroHullPort;
     std::vector<MacroHullPort> result;
-    const auto* macro = host_.getMacros().find(macroId);
-    const auto hull = macroHullBounds(macroId);
+    const auto* macro = host.getMacros().find(macroId);
+    const auto hull = macro_geometry::openHullBounds(host, cards, macroId);
     if (macro == nullptr || hull.isEmpty() || macro->ports.empty())
         return result;
 
@@ -564,7 +590,7 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
         MacroHullPort entry;
         entry.nodeUuid = port.nodeUuid;
         entry.isInput = port.isInput;
-        entry.rows = macroPortRowCountIn(host_, port.nodeUuid);
+        entry.rows = macroPortRowCountIn(host, port.nodeUuid);
         int& row = nextRow[port.isInput ? 1 : 0];
         entry.row = row;
         row += entry.rows;
@@ -588,19 +614,22 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
     }
     return result;
 }
+} // namespace
+
+std::vector<MacroGroupController::MacroHullPort>
+MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
+    return hullPortLayoutIn(host_, macro_geometry::cardsByNodeUid(host_), macroId);
+}
 
 void MacroGroupController::dockMacroPortWidgets() {
-    std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
-    for (auto* comp : host_.modules())
-        if (comp != nullptr)
-            compByNodeUid[comp->getNodeId().uid] = comp;
+    const auto compByNodeUid = macro_geometry::cardsByNodeUid(host_);
 
     auto& graph = host_.graph();
     for (const auto& macro : host_.getMacros().getAll()) {
         if (macro.ports.empty() || host_.getMacros().isEffectivelyCollapsed(macro.id))
             continue; // hidden with the rest of its members; the collapsed CARD draws its jacks
 
-        for (const auto& entry : macroHullPortLayout(macro.id)) {
+        for (const auto& entry : hullPortLayoutIn(host_, compByNodeUid, macro.id)) {
             auto nodeId = resolveMemberNodeId(entry.nodeUuid);
             auto it = compByNodeUid.find(nodeId.uid);
             if (it == compByNodeUid.end())

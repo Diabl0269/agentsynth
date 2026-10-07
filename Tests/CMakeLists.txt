@@ -73,6 +73,8 @@ add_executable(Tests
     Modules/ModuleBaseTests.cpp
     Modules/ModulationTargetBindingTests.cpp
     Engine/VisualBufferTests.cpp
+    Engine/ConnectionIndexTests.cpp
+    App/UndoSnapshotSizeTests.cpp
     Modules/AntiClickTests.cpp
     Timeline/AutomationZipperTests.cpp
     Modules/MidiKeyboardModuleTests.cpp
@@ -163,6 +165,7 @@ add_executable(Tests
     Mixer/MixerModel/MixerModelColumnColourTests.cpp
     Mixer/MixerModel/MixerModelInsertTests.cpp
     Mixer/MixerModel/MixerModelBusColumnTests.cpp
+    Mixer/MixerModel/MixerGraphIndexTests.cpp
     Mixer/Sends/MixerSendLevelTests.cpp
     Mixer/Sends/MixerSendBypassTests.cpp
     Mixer/Sends/MixerSendFlowTests.cpp
@@ -197,6 +200,7 @@ add_executable(Tests
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperValidationTests.cpp
     AI/AIStateMapper/AIStateMapperDestParamTests.cpp
+    AI/AIStateMapper/AIStateMapperModulationEntriesTests.cpp
     AI/AIStateMapper/AIStateMapperIdScopeTests.cpp
     AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp
     AI/AIStateMapper/AIStateMapperPatchFormatTests.cpp
@@ -470,6 +474,7 @@ add_executable(Tests
     UI/Theme/ModuleCardTitleTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/FaderRenderTests.cpp
+    UI/Theme/UiTextWidthTests.cpp
     UI/Theme/KnobStyleTests.cpp
     UI/Theme/MenuCornerTests.cpp
     UI/Theme/IconLibraryTests.cpp
@@ -509,6 +514,7 @@ add_executable(Tests
     UI/Graph/ModuleStepOrderTests.cpp
     UI/Graph/CardNavigationTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
+    Macros/MacroOwnerIndexTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
     Macros/MacroContainer/MacroContainerInteractionTests.cpp

@@ -107,6 +107,13 @@ TrackChannelLinkInfo TrackChannelLinkMap::resolve(const TimelineDoc& doc, TrackI
     return info;
 }
 
+juce::AudioProcessorGraph::Node* TrackChannelLinkMap::nodeByUuid(const juce::String& uuid) const {
+    const auto found = uuid.isNotEmpty() ? nodesByUuid_.find(uuid) : nodesByUuid_.end();
+    return found != nodesByUuid_.end() ? found->second : nullptr;
+}
+
+const TrackChannelReachMap& TrackChannelLinkMap::reach() const noexcept { return reach_; }
+
 juce::String TrackChannelLinkMap::displayName(juce::AudioProcessorGraph::NodeID stripId, const TimelineDoc& doc,
                                               const juce::String& fallback) const {
     const auto& tracks = reach_.trackSourcesFeedingStrip(stripId);

@@ -4,6 +4,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/NodeUuidCache.h"
 #include "Branding.h"
 #include "MainComponentCollectArchiveSeams.h"
 #include "MainComponentExportMidiSeams.h"
@@ -645,6 +646,7 @@ private:
 
     std::unique_ptr<AudioEngine> ownedAudioEngine; // standalone paths only
     AudioEngine& audioEngine;                      // the single access point either way
+    mutable synth::NodeUuidCache nodeUuidCache;    // findNodeByUuid's lookups
 
     synth::PluginCardLayoutStore pluginCardLayoutStore; // declared before graphEditor: outlives its listeners
     synth::ModuleCardLayoutStore moduleCardLayoutStore; // likewise: every built-in card resolves against it

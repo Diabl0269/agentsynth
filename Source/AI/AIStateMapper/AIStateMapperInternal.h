@@ -331,6 +331,12 @@ std::optional<juce::AudioProcessorGraph::NodeID> removalTarget(const NodeIdMap& 
 // "destPort" (0 when absent). nullopt when "destParam" does not resolve.
 std::optional<int> modulationDestPort(const juce::DynamicObject& modulation, juce::AudioProcessor* destProcessor);
 
+// The attenuverter carrying source -> dest:destPort (a "removeModulations" entry's target), if any.
+std::optional<juce::AudioProcessorGraph::NodeID> findModulationAttenuverter(const juce::AudioProcessorGraph& graph,
+                                                                            juce::AudioProcessorGraph::NodeID source,
+                                                                            juce::AudioProcessorGraph::NodeID dest,
+                                                                            int destPort);
+
 // The "modulations" step of applyJSONToGraph: one attenuverter per entry, skipping an existing routing.
 void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
                             NodeIdMap& idMap);

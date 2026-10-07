@@ -233,6 +233,8 @@ add_library(Core STATIC
     Source/AppUndoManagerMixerView.cpp
     Source/AppUndoManagerTransport.cpp
     Source/AppUndoManagerHistory.cpp
+    Source/AppUndoManagerSnapshotSize.h
+    Source/AppUndoManagerSnapshotSize.cpp
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h
@@ -312,11 +314,6 @@ add_library(Core STATIC
     Source/Mixer/PeakMeterLatch.h
     Source/Mixer/MixerViewDoc.h
     Source/Mixer/MixerViewDoc.cpp
-    Source/Mixer/MixerModel/MixerModel.h
-    Source/Mixer/MixerModel/MixerModelInternal.h
-    Source/Mixer/MixerModel/MixerModelColumns.cpp
-    Source/Mixer/MixerModel/MixerModelInserts.cpp
-    Source/Mixer/MixerModel/MixerModelSends.cpp
     Source/Mixer/MixerSends/MixerSends.h
     Source/Mixer/MixerSends/MixerSends.cpp
     # Transport
@@ -574,6 +571,7 @@ include(cmake/PopupMotionSources.cmake)
 include(cmake/KnobStyleSources.cmake)
 include(cmake/ToolbarButtonSources.cmake)
 include(cmake/AiSources.cmake)
+include(cmake/GraphQuerySources.cmake)
 # TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
 # which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions

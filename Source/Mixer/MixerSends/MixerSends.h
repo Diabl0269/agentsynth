@@ -18,6 +18,7 @@
 
 namespace synth {
 
+class ConnectionIndex;
 class MacroSet;
 
 // ---- Buses -------------------------------------------------------------------------------------
@@ -29,6 +30,10 @@ class MacroSet;
 /** The strips feeding `stripId`, ascending NodeID: a backward walk along signal edges that stops AT
  *  the first strip it meets (that strip IS a source, not something to expand through). Pure query. */
 std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
+                                                                      juce::AudioProcessorGraph::NodeID stripId);
+/** The same over an index built once for the caller's pass (the graph must not change while it is used). */
+std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
+                                                                      const ConnectionIndex& cables,
                                                                       juce::AudioProcessorGraph::NodeID stripId);
 
 /** True when `stripId` is a group/send bus: its "isBus" flag, or strips among its signal predecessors
@@ -55,6 +60,9 @@ juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& grap
 
 /** Strip or Key target of slot `slot` (findSendTarget is its strip-only view). Invalid when unwired. */
 SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
+/** The same over an index built once for the caller's pass (the graph must not change while it is used). */
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                             juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
 /** The first strip `module`'s own output reaches -- the channel a Key target sits on. Invalid if none. */
 juce::AudioProcessorGraph::NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph,

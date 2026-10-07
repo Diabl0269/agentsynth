@@ -14,6 +14,7 @@
 #include "GraphEditor.h"
 
 #include "GraphEditorInternal.h"
+#include "MacroOwnerIndex.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -68,12 +69,14 @@ void GraphEditor::syncMacroCards() {
     }
 
     // 3. A member's own ModuleComponent is hidden exactly while any macro in its owner chain is
-    //    collapsed — kept alive (not removed), so its position keeps tracking a card drag underneath.
+    //    collapsed — kept alive (not removed), so its position keeps tracking a card drag underneath. Owners come from
+    //    one index for the pass: a search of every macro per card made each sync O(cards x macros x members).
+    const synth::MacroOwnerIndex owners(macros);
     for (auto* comp : content.getModules()) {
         if (comp == nullptr)
             continue;
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
-        comp->setVisible(uuid.isEmpty() || macros.outermostCollapsedAncestorOf(uuid).isEmpty());
+        comp->setVisible(uuid.isEmpty() || !owners.hiddenByCollapse(uuid));
     }
 }
 

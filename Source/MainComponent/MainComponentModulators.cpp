@@ -6,6 +6,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ModuleTitle.h"
+#include "MacroOwnerIndex.h"
 #include "MainComponent.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -16,19 +17,40 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 #include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
 #include <map>
+#include <set>
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
 }
 
+// The macro port nodes, found once per pass by MacroGroupController::nodeIsMacroPort's rule (a node is a port when the
+// first macro holding it lists it as one). Asking the controller per hop searched every macro's members each time, so
+// each timeline refresh cost routings x macros x members (docs/architecture/graph-queries.md).
+class PortNodes {
+public:
+    PortNodes(juce::AudioProcessorGraph& graph, const synth::MacroSet& macros) {
+        static const juce::Identifier uuidKey("uuid");
+        const synth::MacroOwnerIndex owners(macros);
+        for (auto* node : graph.getNodes()) {
+            const auto uuid = node->properties[uuidKey].toString();
+            const auto* owner = uuid.isNotEmpty() ? owners.ownerOf(uuid) : nullptr;
+            if (owner != nullptr && owner->memberIsPort(uuid))
+                ids_.insert(node->nodeID.uid);
+        }
+    }
+    bool contains(juce::AudioProcessorGraph::NodeID id) const { return ids_.count(id.uid) != 0; }
+
+private:
+    std::set<juce::uint32> ids_;
+};
+
 // A routing with the macro ports between its modulator and its parameter looked through, so a row names the
 // real LFO and the real parameter however the cable crosses macro boundaries.
-synth::ui::ResolvedRouting resolveThroughPorts(const synth::ui::ConnectionIndex& cables, GraphEditor& editor,
+synth::ui::ResolvedRouting resolveThroughPorts(const synth::ui::ConnectionIndex& cables, const PortNodes& ports,
                                                const AudioEngine::ModulationRouting& routing) {
-    return synth::ui::resolveRouting(cables, routing, [&editor](juce::AudioProcessorGraph::NodeID id) {
-        return editor.getMacroController().nodeIsMacroPort(id);
-    });
+    return synth::ui::resolveRouting(cables, routing,
+                                     [&ports](juce::AudioProcessorGraph::NodeID id) { return ports.contains(id); });
 }
 
 // "<module title> <parameter>" for a routing's real destination ("Pad oscillator detune").
@@ -80,10 +102,11 @@ MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, j
     using Resolved = std::pair<AudioEngine::ModulationRouting, synth::ui::ResolvedRouting>;
     std::map<std::pair<juce::uint32, int>, std::vector<Resolved>> byDest;
     const synth::ui::ConnectionIndex cables(graph);
+    const PortNodes ports(graph, graphEditor.getMacros());
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
             continue;
-        const auto real = resolveThroughPorts(cables, graphEditor, r);
+        const auto real = resolveThroughPorts(cables, ports, r);
         byDest[{real.dest.node.uid, real.dest.channel}].emplace_back(r, real);
     }
 
@@ -140,6 +163,7 @@ std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getLfoChoices(
     auto* target = findNodeByUuid(nodeUuid);
     const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
     const synth::ui::ConnectionIndex cables(graph);
+    const PortNodes ports(graph, graphEditor.getMacros());
     for (auto* node : graph.getNodes()) {
         if (dynamic_cast<LFOModule*>(node->getProcessor()) == nullptr)
             continue;
@@ -151,7 +175,7 @@ std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getLfoChoices(
         for (const auto& r : audioEngine.getModulationRoutings()) {
             if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
                 continue;
-            const auto real = resolveThroughPorts(cables, graphEditor, r);
+            const auto real = resolveThroughPorts(cables, ports, r);
             if (real.source.node != node->nodeID)
                 continue;
             if (target != nullptr && real.dest.node == target->nodeID && real.dest.channel == raw)
@@ -248,8 +272,9 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
 bool MainComponent::lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID lfoId) {
     int count = 0;
     const synth::ui::ConnectionIndex cables(audioEngine.getGraph());
+    const PortNodes ports(audioEngine.getGraph(), graphEditor.getMacros());
     for (const auto& r : audioEngine.getModulationRoutings())
-        if (r.hasSource && r.hasDest && resolveThroughPorts(cables, graphEditor, r).source.node == lfoId)
+        if (r.hasSource && r.hasDest && resolveThroughPorts(cables, ports, r).source.node == lfoId)
             ++count;
     return count > 1;
 }
@@ -276,8 +301,9 @@ void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modul
             });
     };
     const synth::ui::ConnectionIndex cables(graph); // the loop below edits the graph only to return at once
+    const PortNodes ports(graph, graphEditor.getMacros());
     for (const auto& r : audioEngine.getModulationRoutings()) {
-        const auto real = resolveThroughPorts(cables, graphEditor, r);
+        const auto real = resolveThroughPorts(cables, ports, r);
         if (real.dest.node != target->nodeID || real.dest.channel != modulator.targetChannel)
             continue;
         const bool sameChain = modulator.attenuverterUuid.isNotEmpty() &&
@@ -391,8 +417,9 @@ void MainComponent::migrateSectionsLane(synth::LaneId levelId, synth::TrackId tr
     auto& graph = audioEngine.getGraph();
     std::vector<juce::AudioProcessorGraph::Node*> attenuverters;
     const synth::ui::ConnectionIndex cables(graph);
+    const PortNodes ports(graph, graphEditor.getMacros());
     for (const auto& r : audioEngine.getModulationRoutings()) {
-        if (resolveThroughPorts(cables, graphEditor, r).source.node != lfo->nodeID)
+        if (resolveThroughPorts(cables, ports, r).source.node != lfo->nodeID)
             continue;
         auto* atten =
             r.kind == AudioEngine::RoutingKind::AttenuverterChain ? graph.getNodeForId(r.attenuverterNodeID) : nullptr;

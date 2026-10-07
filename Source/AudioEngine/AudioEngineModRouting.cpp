@@ -2,14 +2,17 @@
 // cable rendering, plus module auto-naming.
 
 #include "AudioEngine.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "Modules/AttenuverterModule.h"
 #include <algorithm>
 #include <map>
 #include <set>
 
+// The cables are taken once (synth::ConnectionIndex): a scan of getConnections() per attenuverter made every caller --
+// the canvas tick, the timeline's modulator rows, each edit's track-ownership pass -- O(routings x cables log cables).
 std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings() const {
     std::vector<ModulationRouting> routings;
-
+    const synth::ConnectionIndex cables(mainProcessorGraph);
     // --- Pass 1: AttenuverterChain routings (unchanged) ---
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* atten = dynamic_cast<AttenuverterModule*>(node->getProcessor())) {
@@ -20,8 +23,8 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
             r.role = PortRole::ModCV;
 
             // Find source: first connection whose destination is (node, channel 0)
-            for (auto& conn : mainProcessorGraph.getConnections()) {
-                if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0) {
+            for (auto& conn : cables.into(node->nodeID)) {
+                if (conn.destination.channelIndex == 0) {
                     r.sourceNodeID = conn.source.nodeID;
                     r.sourceChannelIndex = conn.source.channelIndex;
                     r.hasSource = true;
@@ -30,8 +33,8 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
             }
 
             // Find dest: first connection whose source is (node, channel 0)
-            for (auto& conn : mainProcessorGraph.getConnections()) {
-                if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0) {
+            for (auto& conn : cables.outOf(node->nodeID)) {
+                if (conn.source.channelIndex == 0) {
                     r.destNodeID = conn.destination.nodeID;
                     r.destChannelIndex = conn.destination.channelIndex;
                     r.hasDest = true;
@@ -76,7 +79,7 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
     };
     std::vector<CandidateEdge> candidates;
 
-    for (auto& conn : mainProcessorGraph.getConnections()) {
+    for (auto& conn : cables.all()) {
         if (conn.source.isMIDI())
             continue;
 

@@ -17,13 +17,12 @@ namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
 } // namespace
 
-juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
-                             NodeID stripId) {
-    auto* node = graph.getNodeForId(stripId);
+juce::String stripColumnName(const MixerGraphView& view, const TimelineDoc& doc, NodeID stripId) {
+    auto* node = view.graph.getNodeForId(stripId);
     if (node == nullptr)
         return {};
     const juce::String uuid = node->properties["uuid"].toString();
-    if (const auto* macro = nearestChannelMacro(graph, macros, uuid))
+    if (const auto* macro = view.channelMacros.nearest(uuid))
         return macro->name;
     // A strip's own persisted name comes right after the macro (a boxed strip's name IS its
     // macro's -- see the mixer header's inline-rename comment on why there are never two competing
@@ -32,18 +31,17 @@ juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc
     if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
         strip != nullptr && strip->getStripName().isNotEmpty())
         return strip->getStripName();
-    if (isBusStrip(graph, stripId))
-        return busFallbackName(graph, stripId); // a bus has no feeding track to name it
-    return channelDisplayName(graph, stripId, doc, "Channel");
+    if (view.isBus(stripId))
+        return view.busName(stripId); // a bus has no feeding track to name it
+    return view.links.displayName(stripId, doc, "Channel");
 }
 
-void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
-                              MixerColumn& column) {
+void buildBusSourcesForColumn(const MixerGraphView& view, const TimelineDoc& doc, MixerColumn& column) {
     if (column.kind != MixerColumn::Kind::Bus && column.kind != MixerColumn::Kind::Strip)
         return;
     auto& names = column.kind == MixerColumn::Kind::Bus ? column.busSources : column.receivesFrom;
-    for (const auto sourceId : findStripsFeedingStrip(graph, column.nodeId))
-        names.push_back(stripColumnName(graph, doc, macros, sourceId));
+    for (const auto sourceId : findStripsFeedingStrip(view.graph, view.cables, column.nodeId))
+        names.push_back(stripColumnName(view, doc, sourceId));
 }
 
 namespace {
@@ -51,22 +49,20 @@ namespace {
 /** A row's target text: the column name a strip target shows, or "Key: Compressor 1 on
  *  <that column name>" for a Key target -- the column name, not sendTargetName's doc-less one, so
  *  the row reads the same channel name its column header does. */
-juce::String sendEntryTargetName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
-                                 const SendTarget& target) {
+juce::String sendEntryTargetName(const MixerGraphView& view, const TimelineDoc& doc, const SendTarget& target) {
     if (!target.isValid())
         return "No target";
     if (!target.key)
-        return stripColumnName(graph, doc, macros, target.node);
-    const auto channel = findKeyTargetChannel(graph, target.node);
-    return keySendTargetName(graph, target.node,
-                             channel != NodeID{} ? stripColumnName(graph, doc, macros, channel) : juce::String());
+        return stripColumnName(view, doc, target.node);
+    const auto channel = view.stripFedBy(target.node); // findKeyTargetChannel's walk
+    return keySendTargetName(view.graph, target.node,
+                             channel != NodeID{} ? stripColumnName(view, doc, channel) : juce::String());
 }
 
 } // namespace
 
-void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
-                         MixerColumn& column) {
-    auto* node = graph.getNodeForId(column.nodeId);
+void buildSendsForColumn(const MixerGraphView& view, const TimelineDoc& doc, MixerColumn& column) {
+    auto* node = view.graph.getNodeForId(column.nodeId);
     auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
     if (strip == nullptr)
         return;
@@ -80,10 +76,10 @@ void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& do
         entry.muted = strip->isSendMuted(slot);
         entry.bypassed = strip->isSendBypassed(slot);
         entry.mono = strip->isSendMono(slot);
-        const auto target = resolveSendTarget(graph, column.nodeId, slot);
+        const auto target = resolveSendTarget(view.graph, view.cables, column.nodeId, slot);
         entry.targetNodeId = target.node;
         entry.keyTarget = target.key;
-        entry.targetName = sendEntryTargetName(graph, doc, macros, target);
+        entry.targetName = sendEntryTargetName(view, doc, target);
         column.sends.push_back(std::move(entry));
     }
 }

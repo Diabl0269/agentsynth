@@ -3,6 +3,7 @@
 #include "ChannelFlows.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "ChannelFlowsInternal.h"
 #include "MacroSet.h"
 #include "Modules/AttenuverterModule.h"
@@ -82,19 +83,51 @@ resolveSourceThroughPorts(juce::AudioProcessorGraph& graph,
     return pin;
 }
 
-bool isSignalEdge(juce::AudioProcessorGraph& graph,
-                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
-                  const juce::AudioProcessorGraph::Connection& c) {
+// The same follow over a ConnectionIndex: the node's own outgoing cables, in the order the full list holds them, so the
+// first match is the full scan's first match.
+juce::AudioProcessorGraph::NodeAndChannel resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                                                              const ConnectionIndex& cables,
+                                                              juce::AudioProcessorGraph::NodeAndChannel pin) {
+    using Connection = juce::AudioProcessorGraph::Connection;
+    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
+        const auto& out = cables.outOf(pin.nodeID);
+        const auto next = std::find_if(out.begin(), out.end(),
+                                       [&](const Connection& c) { return c.source.channelIndex == pin.channelIndex; });
+        if (next == out.end())
+            break;
+        pin = next->destination;
+    }
+    return pin;
+}
+
+namespace {
+// One body for both cable sources: `Cables` is the full connection list or a ConnectionIndex, which only changes how
+// resolveThroughPorts finds a port's onward cable.
+template <typename Cables>
+bool signalEdgeOver(juce::AudioProcessorGraph& graph, const Cables& cables,
+                    const juce::AudioProcessorGraph::Connection& c) {
     auto* src = processorFor(graph, c.source.nodeID);
     auto* dst = processorFor(graph, c.destination.nodeID);
     if (src == nullptr || dst == nullptr || isAttenuverter(src) || isAttenuverter(dst))
         return false;
     if (c.source.isMIDI())
         return true;
-    const auto pin = resolveThroughPorts(graph, connections, c.destination);
+    const auto pin = resolveThroughPorts(graph, cables, c.destination);
     if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, pin.nodeID)))
         return isSignalPathInputRole(module->mapInputChannel(pin.channelIndex).role);
     return true;
+}
+} // namespace
+
+bool isSignalEdge(juce::AudioProcessorGraph& graph,
+                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                  const juce::AudioProcessorGraph::Connection& c) {
+    return signalEdgeOver(graph, connections, c);
+}
+
+bool isSignalEdge(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                  const juce::AudioProcessorGraph::Connection& c) {
+    return signalEdgeOver(graph, cables, c);
 }
 
 namespace {

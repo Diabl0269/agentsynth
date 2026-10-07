@@ -265,10 +265,14 @@ void TrackChannelLinkController::installMacroColourHooks() {
     };
 }
 
+// Inside one channel-link batch, so every track's resolve() answers from one link map: a fresh graph walk per track
+// made each sync -- run on every edit -- O(tracks x cables log cables). Only macro colours are written here, never the
+// graph, so the batch's snapshot stays true throughout.
 void TrackChannelLinkController::syncMacroColoursToTracks() {
     juce::StringArray seen;
     bool changed = false;
     int index = 0;
+    const ChannelLinkBatch batch(this);
     for (const auto& track : doc_.getTracks()) {
         const int trackIndex = index++;
         const auto* macro = macroForTrack(track);

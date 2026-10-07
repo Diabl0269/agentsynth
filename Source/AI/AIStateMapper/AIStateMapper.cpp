@@ -8,6 +8,7 @@
 #include "AIStateMapper.h"
 
 #include "AIStateMapperInternal.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "AudioEngine/SamplerMidiWiring.h"
 #include "Mixer/MasterSplice.h"
 
@@ -343,8 +344,11 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
     }
     root->setProperty("nodes", nodes);
 
+    // The cables are taken once: a scan of getConnections() per attenuverter below made every undo snapshot
+    // O(attenuverters x cables log cables).
+    const ConnectionIndex cables(graph);
     juce::Array<juce::var> connections;
-    for (const auto& conn : graph.getConnections()) {
+    for (const auto& conn : cables.all()) {
         juce::DynamicObject::Ptr c = new juce::DynamicObject();
         c->setProperty("src", (int)conn.source.nodeID.uid);
 
@@ -371,8 +375,8 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             bool hasSource = false;
             juce::AudioProcessorGraph::NodeID sourceNodeID;
             int sourceChannel = 0;
-            for (const auto& conn : graph.getConnections()) {
-                if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0) {
+            for (const auto& conn : cables.into(node->nodeID)) {
+                if (conn.destination.channelIndex == 0) {
                     sourceNodeID = conn.source.nodeID;
                     sourceChannel = conn.source.channelIndex;
                     hasSource = true;
@@ -384,8 +388,8 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             bool hasDest = false;
             juce::AudioProcessorGraph::NodeID destNodeID;
             int destChannel = 0;
-            for (const auto& conn : graph.getConnections()) {
-                if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0) {
+            for (const auto& conn : cables.outOf(node->nodeID)) {
+                if (conn.source.channelIndex == 0) {
                     destNodeID = conn.destination.nodeID;
                     destChannel = conn.destination.channelIndex;
                     hasDest = true;
@@ -645,31 +649,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     auto mappedDest =
                         idMap.count(destId) ? idMap[destId] : juce::AudioProcessorGraph::NodeID((juce::uint32)destId);
 
-                    juce::AudioProcessorGraph::NodeID nodeToRemove;
-                    bool found = false;
-                    for (auto* node : graph.getNodes()) {
-                        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
-                            continue;
-
-                        bool sourceMatch = false;
-                        bool destMatch = false;
-                        for (const auto& conn : graph.getConnections()) {
-                            if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0 &&
-                                conn.source.nodeID == mappedSource)
-                                sourceMatch = true;
-                            if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0 &&
-                                conn.destination.nodeID == mappedDest && conn.destination.channelIndex == destPort)
-                                destMatch = true;
-                        }
-
-                        if (sourceMatch && destMatch) {
-                            nodeToRemove = node->nodeID;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found)
-                        graph.removeNode(nodeToRemove, juce::AudioProcessorGraph::UpdateKind::none);
+                    if (const auto atten =
+                            detail::findModulationAttenuverter(graph, mappedSource, mappedDest, destPort))
+                        graph.removeNode(*atten, juce::AudioProcessorGraph::UpdateKind::none);
                 }
             }
         }
@@ -846,6 +828,10 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             }
         }
 
+        // One index for the three checks below: each only ever asks about a node before that node's own cable is
+        // added, and the audio cables added in between are never MIDI, so a snapshot answers exactly as the live
+        // graph would.
+        const ConnectionIndex cables(graph);
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
@@ -864,8 +850,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     continue;
 
                 bool hasOutgoing = false;
-                for (const auto& conn : graph.getConnections()) {
-                    if (conn.source.nodeID == newNodeId && !conn.source.isMIDI()) {
+                for (const auto& conn : cables.outOf(newNodeId)) {
+                    if (!conn.source.isMIDI()) {
                         hasOutgoing = true;
                         break;
                     }
@@ -886,7 +872,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
         // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
         std::set<juce::AudioProcessorGraph::NodeID> midiSources;
-        for (const auto& conn : graph.getConnections()) {
+        for (const auto& conn : cables.all()) {
             if (conn.source.isMIDI() && newlyCreatedNodes.find(conn.source.nodeID) == newlyCreatedNodes.end()) {
                 midiSources.insert(conn.source.nodeID);
             }
@@ -905,8 +891,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
                 // Check if this node already has incoming MIDI
                 bool hasMidiInput = false;
-                for (const auto& conn : graph.getConnections()) {
-                    if (conn.destination.nodeID == newNodeId && conn.destination.isMIDI()) {
+                for (const auto& conn : cables.into(newNodeId)) {
+                    if (conn.destination.isMIDI()) {
                         hasMidiInput = true;
                         break;
                     }
