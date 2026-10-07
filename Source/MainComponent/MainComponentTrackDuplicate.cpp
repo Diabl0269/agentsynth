@@ -217,9 +217,13 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
 
     synth::TrackId copy;
     timelinePanel.armTrackDuplicateGlide(trackId);
-    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
-        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
-        [this, trackId, &copyName, &copy] { copy = duplicateTrackBody(trackId, copyName); });
+    bool pushed = false;
+    {
+        const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
+        pushed = undoManager.recordGraphTimelineAndMacroChange(
+            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+            [this, trackId, &copyName, &copy] { copy = duplicateTrackBody(trackId, copyName); });
+    }
 
     reconcileTimelineAfterGraphChange();
     if (copy.isValid() && pushed) {

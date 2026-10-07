@@ -367,6 +367,10 @@ private:
     void publishTimelineAndRebindRecorder();
     void reconcileTimelineAfterGraphChange();
     void reconcileTimelineBindingsOnly();
+    /** True while a full reconcileTimelineAfterGraphChange() is certain to follow (an undo/redo step, a duplicate). */
+    bool fullReconcileFollows() const;
+    int fullReconcileFollowsDepth_ = 0; // see MainComponentTimeline.cpp's fullReconcileFollows()
+    bool fullReconcileRunning_ = false;
     // Which track plays which node (MainComponentAutomationOwner.cpp): where an automation lane goes.
     std::map<juce::String, synth::TrackId> resolveAutomationOwners() const;
     synth::TrackId trackForNewLane(const juce::String& nodeUuid);

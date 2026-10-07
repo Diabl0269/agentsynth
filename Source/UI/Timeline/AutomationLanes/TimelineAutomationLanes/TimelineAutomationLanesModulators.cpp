@@ -37,6 +37,7 @@ int TimelineAutomationLanes::modulatorRowHeight() const {
 // Folded tracks are asked too: their fold arrow's lane count leaves the amount lanes out. Returns true when
 // the set of such lanes changed, i.e. when the lane pools and the layout must follow.
 bool TimelineAutomationLanes::deriveRoutings() {
+    ++routingDerivations_;
     routings_.clear();
     std::vector<synth::LaneId> ids;
     std::vector<std::pair<juce::String, juce::String>> lanes;

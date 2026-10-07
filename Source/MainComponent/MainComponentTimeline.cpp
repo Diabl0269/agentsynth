@@ -36,6 +36,10 @@ constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
 // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
 void MainComponent::timelineChanged(const synth::TimelineDoc&) {
+    // Inside an undo step or a duplicate the full reconcile that follows republishes and rebuilds the mixer (whose
+    // columns take the track colours), so a doc change in the middle of one leaves both to it.
+    if (fullReconcileFollows())
+        return;
     publishTimelineAndRebindRecorder();
     // a track colour edit (including the picker's live preview, which never reaches a rebuild) re-tints the
     // mixer columns in place; a no-op for every other doc change.
@@ -86,6 +90,11 @@ void MainComponent::publishTimelineAndRebindRecorder() {
 // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
 // mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
+    // This is the reconcile the deferred passes wait for: a doc change it makes itself is handled in full.
+    const juce::ScopedValueSetter<bool> running(fullReconcileRunning_, true);
+    // Every pass below asks which channel each track plays into; nothing here changes the graph's cables or adds or
+    // removes a macro, so one link map serves the whole reconcile rather than one per pass.
+    const synth::ui::ChannelLinkBatch linkBatch(&trackChannelLink_);
     // docs/mixer/mixer.md#channels-follow-audio-not-tracks: a link forming around an already-muted/soloed track
     // moves that state onto its channel (and a link can only form or break via a graph change, which is exactly what
     // reaches here). Runs FIRST so the reconcile/publish below already sees the transferred doc flags. Deliberately not
@@ -116,12 +125,9 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // A LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
     // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
-    {
-        const synth::ui::ChannelLinkBatch linkBatch(&trackChannelLink_);
-        for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
-            if (auto* header = timelinePanel.getTrackHeaderAt(i))
-                header->refreshFromDoc();
-    }
+    for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+        if (auto* header = timelinePanel.getTrackHeaderAt(i))
+            header->refreshFromDoc();
     // The side pane's routing rows read the graph too (node names, MIDI destinations, the channel): same trigger.
     timelinePanel.refreshRoutingPane();
     // A lane's modulator rows are derived from the graph's routings, never stored in the doc: same trigger.
@@ -133,6 +139,16 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // to call on every change" contract buildMixerSnapshot documents (a handful of strips, never
     // per-frame).
     bottomDock.rebuildMixer();
+}
+
+// GraphEditor::onGraphStructureChanged's catch-all passes (bindings, modulator rows, the mixer re-bind) and
+// timelineChanged()'s republish and mixer re-tint are each part of reconcileTimelineAfterGraphChange(), and each walks
+// the whole project. While a full reconcile is certain to follow -- inside an undo or redo step, whose after-restore
+// hook runs it once the step has restored everything, or inside an edit that runs it itself (a track duplicate) --
+// they are skipped, so an edit pays for each pass once. The reconcile itself is never deferred: a doc change it makes
+// (an orphan flag flipping) republishes as usual.
+bool MainComponent::fullReconcileFollows() const {
+    return !fullReconcileRunning_ && (undoManager.isRestoring() || fullReconcileFollowsDepth_ > 0);
 }
 
 // The cheap half of the above, with no republish of its own: installed on

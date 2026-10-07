@@ -122,7 +122,12 @@ and calls `TimelinePanelComponent::ensureTrackVisible()`, which scrolls the SAME
 zoom writer in this class treats as ground truth, never `trackHeaderViewport_.getViewArea()`, which
 is only a cached snapshot of the last layout pass.
 
-`syncTrackHeaders()`'s rebuild branch preserves `focusedTrackIndex_` **by `TrackId`**, not by
+`syncTrackHeaders()` keeps the row of every track that is still there when the set of tracks changes: rows are
+matched by `TrackId`, re-read (`refreshFromDoc()`) and put in the doc's order, and only a new track's row is built and
+only a removed track's row is destroyed. Re-creating every row made a duplicate, a delete and an undo of either cost a
+new row per track (`EditRefreshWorkTests.cpp` counts the rows built: one for a duplicate, none for its undo).
+
+The rebuild branch preserves `focusedTrackIndex_` **by `TrackId`**, not by
 numeric index, across a track add, remove or reorder: a track deleted ABOVE the focused one must
 not silently hand focus to whatever now sits at the old index, so the focused track's id is
 resolved back to whatever new index it occupies, or cleared to `-1` if it was the one removed. The
@@ -219,9 +224,10 @@ threshold it is a plain click-to-select.
 
 **Ordering hazard — read before touching this code.** A reorder changes which `TrackId` sits at
 each index, which makes `syncTrackHeaders()`'s "rebuild only when the SET of tracks changed" check
-trip (same ids, different order at each slot) and rebuild the ENTIRE header column — destroying
-every `TimelineTrackHeaderComponent`, *including the one whose `mouseUp()` is still on the call
-stack* that triggered the mutation in the first place (`mouseUp` → `onRowDragEnded` →
+trip (same ids, different order at each slot) and re-order the header column. The rows are kept by
+id, but a header must still never assume it survives the call: a track removed by its own row (the
+row menu's Delete) destroys the very `TimelineTrackHeaderComponent` whose handler is still on the call
+stack, and the drag commit runs through the same synchronous chain (`mouseUp` → `onRowDragEnded` →
 `endTrackDrag` → `commitTrackDrag` → `performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all
 synchronous). Both `TimelineTrackHeaderComponent::mouseUp()` and
 `TimelinePanelComponent::commitTrackDrag()` are written so every member write happens BEFORE the call

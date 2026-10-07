@@ -33,7 +33,10 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   `outermostCollapsedAncestorOf` from one member map, for a pass over every card or node (the canvas's layout units,
   macro-card sync, the modulator rows' port test). `MacroSet::findByMember` searches every macro's members per call.
 - **`ChannelLinkBatch`** (`TrackChannelLinkSurface.h`): a run of per-track link questions answered from one
-  `TrackChannelLinkMap`.
+  `TrackChannelLinkMap`, and each channel's macro from one `MacroOwnerIndex`. `reconcileTimelineAfterGraphChange` holds
+  one batch for the whole reconcile (linked tracks, every header), so the map is built once per edit.
+- **`graph_editor_paint::MacroOwnerScope`** (`GraphEditorPaintMemo.h`): the cable rebuild asks which macro owns each
+  macro port card's jack; inside the scope `MacroGroupController::macroPortOwnerFor` reads one `MacroOwnerIndex`.
 - **The canvas's macro geometry** (`MacroGroupControllerInternal.h`): a pass over many hulls (layout units, port
   docking) measures them against one card map; the undo step's border snapshot and glide open a
   `graph_editor_paint::CardMapScope` (`GraphEditorPaintMemo.h`) so `MacroGroupController::macroHullBounds` reads one

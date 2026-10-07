@@ -132,6 +132,8 @@ public:
     bool isLaneReorderActive() const noexcept { return laneDrag_.isReordering(); }
     /** Esc through the same listener a real key press reaches. */
     bool sendLaneDragEscapeForTest() { return laneDrag_.sendEscapeForTest(); }
+    /** How many times the modulator routings were asked of the graph since this was made. */
+    int getRoutingDerivationsForTest() const noexcept { return routingDerivations_; }
     /** The lane whose header is drawn lifted, or an invalid id. */
     synth::LaneId liftedLane() const noexcept { return laneDrag_.isReordering() ? liftedLane_ : synth::LaneId(); }
 
@@ -178,6 +180,7 @@ private:
 
     bool isVisibleLane(const synth::Track& track) const;
     bool deriveRoutings();
+    int routingDerivations_ = 0;
     bool syncModulators();
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
                            const juce::String& parameterName);
