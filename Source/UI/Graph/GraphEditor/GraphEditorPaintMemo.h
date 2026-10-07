@@ -12,6 +12,8 @@
 #include <unordered_map>
 
 class GraphEditor;
+class GraphCanvasHost;
+class ModuleComponent;
 
 namespace graph_editor_paint {
 
@@ -62,6 +64,23 @@ private:
     juce::uint64 routingSignature_ = 0;
     juce::Rectangle<int> lastTickArea_;
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
+};
+
+/** Message thread only. While alive, MacroGroupController::macroHullBounds for `host` measures every border against
+ *  one card map built when the scope opened; no card may be added or removed while it is open. */
+class CardMapScope {
+public:
+    explicit CardMapScope(GraphCanvasHost& host);
+    ~CardMapScope();
+    CardMapScope(const CardMapScope&) = delete;
+    CardMapScope& operator=(const CardMapScope&) = delete;
+    /** The innermost open scope's cards by node uid when it was opened for `host`, else null. */
+    static const std::unordered_map<uint32_t, ModuleComponent*>* cardsFor(const GraphCanvasHost& host);
+
+private:
+    const GraphCanvasHost& host_;
+    CardMapScope* previous_ = nullptr;
+    std::unordered_map<uint32_t, ModuleComponent*> cards_;
 };
 
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,

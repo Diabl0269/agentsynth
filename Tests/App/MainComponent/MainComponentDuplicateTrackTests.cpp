@@ -254,3 +254,30 @@ TEST_F(DuplicateTrackTest, AnUnboundTrackIsCopiedWithItsClipsAlone) {
     EXPECT_TRUE(doc().getTracks()[1].bindingUuid.isEmpty());
     EXPECT_EQ(graph().getNodes().size(), nodesBefore);
 }
+
+// Undo lands exactly on the document before the duplicate (graph, timeline and macros as written out) and redo on the
+// one after it, in a small project and a grown one: the snapshots behind the step reuse every untouched node, and
+// that must never change what the step restores.
+TEST_F(DuplicateTrackTest, UndoAndRedoRestoreTheExactDocumentAtAnySize) {
+    const auto state = [this] {
+        return juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph())) + juce::JSON::toString(doc().toVar()) +
+               juce::JSON::toString(mc->getGraphEditor().getMacros().toVar());
+    };
+    for (int tracks : {1, 12}) {
+        while ((int)doc().getTracks().size() < tracks)
+            addInstrumentTrack();
+        const auto before = state();
+        auto* header = mc->getTimelinePanel().getTrackHeaderAt(0);
+        ASSERT_NE(header, nullptr);
+        ASSERT_TRUE(header->keyPressed(kCmdD));
+        const auto after = state();
+        ASSERT_NE(after, before);
+
+        ASSERT_TRUE(mc->getUndoManager().undo());
+        EXPECT_EQ(state(), before) << tracks << " tracks";
+        ASSERT_TRUE(mc->getUndoManager().redo());
+        EXPECT_EQ(state(), after) << tracks << " tracks";
+        ASSERT_TRUE(mc->getUndoManager().undo());
+        EXPECT_EQ(state(), before) << tracks << " tracks";
+    }
+}

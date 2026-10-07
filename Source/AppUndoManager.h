@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/GraphSnapshotCache.h"
 #include "Mixer/MixerPanLaw.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -34,11 +35,9 @@ public:
      *
      * Captures before/after JSON snapshots of the graph and pushes a SnapshotAction.
      * The mutation lambda performs the actual graph change.
-     * postRestore is called after undo/redo to refresh UI (e.g., updateComponents()).
      *
      * @param graph Reference to the audio processor graph
      * @param mutation Lambda that performs the actual graph mutation
-     * @param postRestore Lambda called after undo/redo to refresh UI
      */
     void recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation);
 
@@ -280,33 +279,26 @@ public:
      *  one is harmless. See `MainComponent::markDocumentClean`. */
     int getEditSerial() const { return editSerial_; }
 
-    // Called by the undoable actions this manager creates — never by anything else.
-    void fireBeforeRestore() {
-        if (beforeRestore_)
-            beforeRestore_();
-    }
-    void fireAfterRestore() {
-        if (afterRestore_)
-            afterRestore_();
-    }
+    void fireBeforeRestore(); // called by the undoable actions this manager creates, never by anything else
+    void fireAfterRestore();
 
 private:
     // Undo or redo one step, retracting the cables it takes away.
     bool applyHistoryStep(bool redoStep);
-    // THE one wrapper every push goes through, so the serial below can never drift from what the
-    // undo stack actually holds - nothing outside this class calls undoManager.perform().
-    bool performAction(juce::UndoableAction* action) {
-        ++editSerial_;
-        return undoManager.perform(action);
+    bool performAction(juce::UndoableAction* action); // THE one push: nothing else calls undoManager.perform()
+    juce::var captureGraph(juce::AudioProcessorGraph& graph) {
+        return graphSnapshots_.capture(graph); // every graph snapshot, never a fresh graphToJSON
     }
 
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
+    synth::GraphSnapshotCache graphSnapshots_;
     // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
     int editSerial_ = 0;
     bool restoring_ = false;
-    std::shared_ptr<void> glideScope_; // a CardGlideAnimator::Scope, see beginRestore()
+    bool stepHooksOpen_ = false, stepAfterRestorePending_ = false; // see fireBeforeRestore()
+    std::shared_ptr<void> glideScope_;                             // a CardGlideAnimator::Scope, see beginRestore()
     void beginRestore();
     void endRestore(bool did);
 

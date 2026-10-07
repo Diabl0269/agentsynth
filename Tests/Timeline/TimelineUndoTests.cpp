@@ -288,3 +288,39 @@ TEST_F(TimelineUndoTest, InterleavedDomainsUndoInOrder) {
 
     EXPECT_FALSE(undoManager.canUndo()) << "three undos should have unwound exactly the three recorded steps";
 }
+
+// A combined step restores two domains but runs the restore hooks (the timeline reconcile, the mixer rebuild, the
+// republish) once, after the last restore and against the finished state; each action fired them once, so a duplicate's
+// undo did all of that twice, the first time against a half-restored document.
+TEST_F(TimelineUndoTest, ACombinedStepRunsTheRestoreHooksOnceForTheWholeStep) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Lead");
+    int before = 0, after = 0, nodesSeenAfter = -1;
+    juce::String nameSeenAfter;
+    undoManager.setRestoreHooks([&] { ++before; },
+                                [&] {
+                                    ++after;
+                                    nodesSeenAfter = graph.getNumNodes();
+                                    nameSeenAfter = doc.getTrack(track)->name;
+                                });
+    ASSERT_TRUE(undoManager.recordCombinedChange(graph, doc, [&] {
+        graph.addNode(std::make_unique<FilterModule>());
+        doc.setTrackName(track, "Renamed");
+    }));
+
+    ASSERT_TRUE(undoManager.undo());
+    EXPECT_EQ(before, 1);
+    EXPECT_EQ(after, 1);
+    EXPECT_EQ(nodesSeenAfter, 0) << "the hook sees both domains restored";
+    EXPECT_EQ(nameSeenAfter, "Lead");
+
+    ASSERT_TRUE(undoManager.redo());
+    EXPECT_EQ(before, 2);
+    EXPECT_EQ(after, 2);
+    EXPECT_EQ(nodesSeenAfter, 1);
+    EXPECT_EQ(nameSeenAfter, "Renamed");
+
+    // Driven through juce::UndoManager directly there is no step around the actions: each fires its own pair.
+    ASSERT_TRUE(undoManager.getUndoManager().undo());
+    EXPECT_EQ(before, 4);
+    EXPECT_EQ(after, 4);
+}

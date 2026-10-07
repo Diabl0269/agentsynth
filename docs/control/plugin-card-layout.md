@@ -204,8 +204,9 @@ module's destructor with the node already out of the graph); live rebuilds from 
 `WeakReference`; if the module or the bound instance is already gone the attachments are abandoned rather
 than detached, so no freed parameter is ever touched. Which paths reach which half:
 
-- undo/redo restore, Load, New Patch, AI apply: `GraphEditor::detachAllModuleComponents` calls every
-  card's `detachFromProcessor` before the nodes are freed;
+- Load, New Patch, AI apply, and the undo/redo fallback: `GraphEditor::detachAllModuleComponents` calls every
+  card's `detachFromProcessor` before the nodes are freed; an ordinary undo/redo that frees nodes calls it on
+  just those nodes' cards (`GraphEditor::detachModuleComponentsFor`), also before they are freed;
 - `deleteSelection`, `requestDeleteModule`, `replaceModule` ("Replace with..."): these fire
   `onBeforeDetachAllModuleComponents` (the mixer's seam) but free the node **before** the card is torn
   down in `updateComponents()` and do not call the card's `detachFromProcessor` first; the module's own

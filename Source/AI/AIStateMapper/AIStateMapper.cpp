@@ -271,84 +271,100 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
     root->setProperty("schemaVersion", kSchemaVersion);
 
     juce::Array<juce::var> nodes;
-    for (auto* node : graph.getNodes()) {
-        if (auto* processor = node->getProcessor()) {
-            juce::DynamicObject::Ptr n = new juce::DynamicObject();
-            n->setProperty("id", (int)node->nodeID.uid);
-            n->setProperty("type", getFactoryTypeName(processor));
-
-            // Stable per-node identity, generated on first save and persisted back onto the node so
-            // every later save of the same node emits the same string. The integer "id" cannot
-            // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
-            // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
-            n->setProperty("uuid", ensureNodeUuid(node));
-
-            // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
-            // processor's own name: "type" carries the factory type, and the processor's getName()
-            // is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes
-            // wholesale on every graph change (it even strips trailing digits to renumber). Storing
-            // a custom name there would be clobbered on the next node add. Emitted only when set, so
-            // every un-renamed node's JSON stays byte-identical to before.
-            const auto displayName = node->properties["displayName"].toString();
-            if (displayName.isNotEmpty())
-                n->setProperty("displayName", displayName);
-
-            // The user's per-instance card layout (a built-in module's own layout, not the hosted
-            // plugin's extra-state key of the same name). Emitted only when set, so every other node's
-            // JSON is byte-identical to before; trusted-apply only (see applyCardLayoutToNode).
-            const auto& cardLayout = node->properties[kCardLayoutNodeProperty];
-            if (cardLayout.isObject())
-                n->setProperty(kCardLayoutNodeProperty, cardLayout.clone());
-
-            // Params — store denormalized values to match applyJSONToGraph expectations
-            juce::DynamicObject::Ptr params = new juce::DynamicObject();
-            for (auto* param : processor->getParameters()) {
-                if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
-                    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                        // Store choice as string name for readability
-                        params->setProperty(choice->paramID, choice->getCurrentChoiceName());
-                    } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                        params->setProperty(boolParam->paramID, boolParam->get());
-                    } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-                        // Store denormalized value
-                        float denormalized = ranged->getNormalisableRange().convertFrom0to1(ranged->getValue());
-                        params->setProperty(ranged->paramID, denormalized);
-                    } else {
-                        params->setProperty(p->paramID, p->getValue());
-                    }
-                }
-            }
-            n->setProperty("params", juce::var(params.get()));
-
-            // Non-parameter module state (e.g. the Sampler's loaded file). Emitted only when the
-            // module has some, so every other node's JSON is byte-identical to before.
-            if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
-                juce::var extraState = mb->getExtraState();
-                if (!extraState.isVoid())
-                    n->setProperty("state", extraState);
-                // Which card panels are open (scope / response / spectrum): presentation only, so it has
-                // its own key ("cardView") rather than sharing "state", whose shape each module type owns.
-                const juce::var view = mb->getCardViewState().toVar();
-                if (!view.isVoid())
-                    n->setProperty("cardView", view);
-            }
-
-            // Position
-            juce::DynamicObject::Ptr pos = new juce::DynamicObject();
-            pos->setProperty("x", node->properties["x"]);
-            pos->setProperty("y", node->properties["y"]);
-            n->setProperty("position", juce::var(pos.get()));
-
-            nodes.add(juce::var(n.get()));
-        }
-    }
+    for (auto* node : graph.getNodes())
+        if (auto n = nodeToJSON(*node); !n.isVoid())
+            nodes.add(n);
     root->setProperty("nodes", nodes);
 
-    // The cables are taken once: a scan of getConnections() per attenuverter below made every undo snapshot
+    // The cables are taken once: a scan of getConnections() per attenuverter made every undo snapshot
     // O(attenuverters x cables log cables).
     const ConnectionIndex cables(graph);
+    root->setProperty("connections", connectionsToJSON(cables));
+    root->setProperty("modulations", modulationsToJSON(graph, cables));
+    return juce::var(root.get());
+}
+
+// graphToJSON's per-node shape, and the one the undo history's snapshot cache (GraphSnapshotCache) builds a node
+// from: a field added here must be added to that cache's freshness check too, or a snapshot reuses a stale entry.
+juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node) {
+    auto* processor = node.getProcessor();
+    if (processor == nullptr)
+        return {};
+    juce::DynamicObject::Ptr n = new juce::DynamicObject();
+    n->setProperty("id", (int)node.nodeID.uid);
+    n->setProperty("type", getFactoryTypeName(processor));
+
+    // Stable per-node identity, generated on first save and persisted back onto the node so
+    // every later save of the same node emits the same string. The integer "id" cannot
+    // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
+    // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
+    n->setProperty("uuid", ensureNodeUuid(&node));
+
+    // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
+    // processor's own name: "type" carries the factory type, and the processor's getName()
+    // is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes
+    // wholesale on every graph change (it even strips trailing digits to renumber). Storing
+    // a custom name there would be clobbered on the next node add. Emitted only when set, so
+    // every un-renamed node's JSON stays byte-identical to before.
+    const auto displayName = node.properties["displayName"].toString();
+    if (displayName.isNotEmpty())
+        n->setProperty("displayName", displayName);
+
+    // The user's per-instance card layout (a built-in module's own layout, not the hosted
+    // plugin's extra-state key of the same name). Emitted only when set, so every other node's
+    // JSON is byte-identical to before; trusted-apply only (see applyCardLayoutToNode).
+    const auto& cardLayout = node.properties[kCardLayoutNodeProperty];
+    if (cardLayout.isObject())
+        n->setProperty(kCardLayoutNodeProperty, cardLayout.clone());
+
+    // Params — store denormalized values to match applyJSONToGraph expectations
+    juce::DynamicObject::Ptr params = new juce::DynamicObject();
+    for (auto* param : processor->getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                // Store choice as string name for readability
+                params->setProperty(choice->paramID, choice->getCurrentChoiceName());
+            } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
+                params->setProperty(boolParam->paramID, boolParam->get());
+            } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
+                // Store denormalized value
+                float denormalized = ranged->getNormalisableRange().convertFrom0to1(ranged->getValue());
+                params->setProperty(ranged->paramID, denormalized);
+            } else {
+                params->setProperty(p->paramID, p->getValue());
+            }
+        }
+    }
+    n->setProperty("params", juce::var(params.get()));
+
+    // Non-parameter module state (e.g. the Sampler's loaded file). Emitted only when the
+    // module has some, so every other node's JSON is byte-identical to before.
+    if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
+        juce::var extraState = mb->getExtraState();
+        if (!extraState.isVoid())
+            n->setProperty("state", extraState);
+        // Which card panels are open (scope / response / spectrum): presentation only, so it has
+        // its own key ("cardView") rather than sharing "state", whose shape each module type owns.
+        const juce::var view = mb->getCardViewState().toVar();
+        if (!view.isVoid())
+            n->setProperty("cardView", view);
+    }
+
+    // Position
+    juce::DynamicObject::Ptr pos = new juce::DynamicObject();
+    pos->setProperty("x", node.properties["x"]);
+    pos->setProperty("y", node.properties["y"]);
+    n->setProperty("position", juce::var(pos.get()));
+    return juce::var(n.get());
+}
+
+juce::var
+AIStateMapper::connectionsToJSON(const ConnectionIndex& cables,
+                                 const std::function<bool(const juce::AudioProcessorGraph::Connection&)>& include) {
     juce::Array<juce::var> connections;
     for (const auto& conn : cables.all()) {
+        if (include && !include(conn))
+            continue;
         juce::DynamicObject::Ptr c = new juce::DynamicObject();
         c->setProperty("src", (int)conn.source.nodeID.uid);
 
@@ -365,8 +381,10 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
         c->setProperty("isMidi", conn.source.isMIDI());
         connections.add(juce::var(c.get()));
     }
-    root->setProperty("connections", connections);
+    return connections;
+}
 
+juce::var AIStateMapper::modulationsToJSON(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables) {
     // Scan for AttenuverterModule nodes and emit modulations array
     juce::Array<juce::var> modulations;
     for (auto* node : graph.getNodes()) {
@@ -418,9 +436,7 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             }
         }
     }
-    root->setProperty("modulations", modulations);
-
-    return juce::var(root.get());
+    return modulations;
 }
 
 juce::String AIStateMapper::getModuleSchema() {

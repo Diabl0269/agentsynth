@@ -1,6 +1,7 @@
-// AppUndoManager's snapshot steps are sized once, from the lengths the record call's change check measured when it can
-// (AppUndoManagerSnapshotSize.cpp): the size is always the states' JSON length, measured or not.
+// AppUndoManager's snapshot steps are sized once, by counting their states (synth::estimateJsonSize), and take the size
+// of anything the graph snapshot cache already counted from it (AppUndoManagerSnapshotSize.cpp).
 #include "AppUndoManagerSnapshotSize.h"
+#include "AudioEngine/GraphSnapshotCache.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -18,22 +19,14 @@ juce::var state(int nodes) {
     return juce::var(root.get());
 }
 
-int jsonLength(const juce::var& v) { return juce::JSON::toString(v).length(); }
-
 } // namespace
 
-TEST(UndoSnapshotSizeTest, ASizeIsTheStatesJsonLengthWithOrWithoutAMeasuredCheck) {
+TEST(UndoSnapshotSizeTest, ASizeIsTheStatesCountedSize) {
     const auto before = state(3), after = state(4);
-    const int expected = jsonLength(before) + jsonLength(after);
-
-    int unmeasured = -1;
-    EXPECT_EQ(undo_size::sizedOnce(unmeasured, {&before, &after}), expected);
-
-    undo_size::MeasuredJson measured;
-    EXPECT_TRUE(measured.differs(before, after));
-    EXPECT_EQ(undo_size::MeasuredJson::lengthOf(before), jsonLength(before));
-    int fromCheck = -1;
-    EXPECT_EQ(undo_size::sizedOnce(fromCheck, {&before, &after}), expected);
+    int memo = -1;
+    EXPECT_EQ(undo_size::sizedOnce(memo, {&before, &after}),
+              synth::estimateJsonSize(before) + synth::estimateJsonSize(after));
+    EXPECT_LT(synth::estimateJsonSize(before), synth::estimateJsonSize(after)) << "it grows with what a state holds";
 }
 
 TEST(UndoSnapshotSizeTest, AStepKeepsTheSizeItFirstTook) {
@@ -44,19 +37,22 @@ TEST(UndoSnapshotSizeTest, AStepKeepsTheSizeItFirstTook) {
     EXPECT_EQ(undo_size::sizedOnce(memo, {&before, &after}), first);
 }
 
-TEST(UndoSnapshotSizeTest, OnlyALiveCheckOffersItsLengthsAndChecksNest) {
-    const auto a = state(1), b = state(5);
-    EXPECT_EQ(undo_size::MeasuredJson::lengthOf(a), -1) << "no check is live";
+TEST(UndoSnapshotSizeTest, AKnownObjectIsNotCountedAgainAndScopesNest) {
+    const auto s = state(5);
+    const auto* firstNode = s["nodes"][0].getDynamicObject();
+    int plain = -1;
+    const int counted = undo_size::sizedOnce(plain, {&s});
     {
-        undo_size::MeasuredJson outer;
-        EXPECT_FALSE(outer.differs(a, a));
+        const undo_size::KnownSizes outer([firstNode](const void* id) { return id == firstNode ? 1000 : -1; });
         {
-            undo_size::MeasuredJson inner;
-            EXPECT_EQ(undo_size::MeasuredJson::lengthOf(a), -1) << "the innermost check is the one asked";
-            inner.differs(b, b);
-            EXPECT_EQ(undo_size::MeasuredJson::lengthOf(b), jsonLength(b));
+            const undo_size::KnownSizes inner([](const void*) { return -1; });
+            int memo = -1;
+            EXPECT_EQ(undo_size::sizedOnce(memo, {&s}), counted) << "the innermost scope is the one asked";
         }
-        EXPECT_EQ(undo_size::MeasuredJson::lengthOf(a), jsonLength(a)) << "the outer check is live again";
+        int memo = -1;
+        EXPECT_EQ(undo_size::sizedOnce(memo, {&s}), counted - synth::estimateJsonSize(s["nodes"][0]) + 1000)
+            << "the outer scope is live again";
     }
-    EXPECT_EQ(undo_size::MeasuredJson::lengthOf(a), -1) << "a finished check offers nothing";
+    int memo = -1;
+    EXPECT_EQ(undo_size::sizedOnce(memo, {&s}), counted) << "a finished scope offers nothing";
 }

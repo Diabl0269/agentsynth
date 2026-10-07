@@ -1,5 +1,6 @@
 #include "SnippetManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/CardLayout.h"
@@ -342,11 +343,27 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
             keep.insert((int)id.uid);
     }
 
-    // Serialise the whole graph once and filter it, rather than re-deriving the per-node JSON
-    // shape here — graphToJSON is the single source of truth for that shape (params encoding,
-    // MIDI port sentinel, attenuverter → modulations folding) and must not be duplicated.
-    auto full = AIStateMapper::graphToJSON(graph);
-    auto* fullObj = full.getDynamicObject();
+    // graphToJSON's own pieces, filtered below, rather than re-deriving the per-node JSON shape here: it is the single
+    // source of truth for that shape (params encoding, MIDI port sentinel, attenuverter -> modulations folding). Only
+    // the kept nodes are written: serialising every node to copy one track made each paste and duplicate grow with
+    // the project. Every node still gets its uuid, as the whole-graph write gave it.
+    juce::Array<juce::var> keptNodes;
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor() == nullptr)
+            continue;
+        AIStateMapper::ensureNodeUuid(node);
+        if (keep.count((int)node->nodeID.uid) != 0)
+            keptNodes.add(AIStateMapper::nodeToJSON(*node));
+    }
+    const ConnectionIndex cables(graph);
+    juce::DynamicObject::Ptr full = new juce::DynamicObject();
+    full->setProperty("nodes", keptNodes);
+    full->setProperty("connections", AIStateMapper::connectionsToJSON(cables, [&keep](const auto& c) {
+                          return keep.count((int)c.source.nodeID.uid) != 0 &&
+                                 keep.count((int)c.destination.nodeID.uid) != 0;
+                      }));
+    full->setProperty("modulations", AIStateMapper::modulationsToJSON(graph, cables));
+    auto* fullObj = full.get();
 
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("name", name);

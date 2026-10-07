@@ -6,8 +6,10 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 namespace synth {
+class ConnectionIndex; // Source/AudioEngine/ConnectionIndex.h
 
 /** Hard cap on a module's user-set card title, applied wherever a "displayName" is accepted —
  *  including the untrusted patch path, where it is the only thing stopping a hostile patch from
@@ -89,6 +91,8 @@ struct PatchIdScope {
  */
 class AIStateMapper {
 public:
+    using NodeRemovalHook = std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)>;
+
     // Limits enforced against untrusted (network/AI-authored) patches — see validatePatch().
     // Chosen generously above anything this app would author itself, while still bounding the
     // worst case an adversarial or misbehaving remote model could throw at applyJSONToGraph
@@ -125,6 +129,15 @@ public:
      * apply can renumber — is what long-lived references (automation lanes, track bindings) key on.
      */
     static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
+    /** One node's entry in graphToJSON's "nodes" (assigning its uuid the same way); void for a node with no processor.
+     */
+    static juce::var nodeToJSON(juce::AudioProcessorGraph::Node& node);
+    /** graphToJSON's "connections" array from one index of the graph's cables; only those `include` accepts, if set. */
+    static juce::var
+    connectionsToJSON(const ConnectionIndex& cables,
+                      const std::function<bool(const juce::AudioProcessorGraph::Connection&)>& include = {});
+    /** graphToJSON's "modulations" array (every attenuverter wired at both ends), from the same cable index. */
+    static juce::var modulationsToJSON(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables);
 
     /** Returns `node`'s persistent "uuid", generating and persisting a fresh one first if it
      *  doesn't have one yet — the same lazy-generation graphToJSON above uses, exposed so a
@@ -195,16 +208,16 @@ public:
      * verbatim by "nodes" and "connections". For the same reason no auto-promotion, auto-connect
      * or value rescaling happens here — a snapshot is reproduced exactly, not interpreted.
      *
-     * @param beforeNodeRemoval Invoked at most once, immediately before the first node is removed,
-     *        i.e. before any processor is freed. This is the caller's only chance to detach UI that
-     *        points into those processors (GraphEditor::detachAllModuleComponents). It is NOT
-     *        called when the restore removes no nodes, which is exactly when the UI has nothing to
-     *        detach from and can keep its components.
+     * @param beforeNodeRemoval Invoked at most once, with the nodes about to go, immediately before
+     *        the first is removed, i.e. before any processor is freed: the caller's only chance to
+     *        detach UI that points into exactly those processors (GraphEditor::detachModuleComponentsFor).
+     *        It is NOT called when the restore removes no nodes, which is exactly when the UI has
+     *        nothing to detach from and can keep its components.
      *
      * @return true if the snapshot was applied; false if the caller must fall back (graph untouched).
      */
     static bool applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
-                                             std::function<void()> beforeNodeRemoval = {});
+                                             NodeRemovalHook beforeNodeRemoval = {});
 
     /**
      * @brief Validates a patch JSON without applying it, returning a reason on failure.

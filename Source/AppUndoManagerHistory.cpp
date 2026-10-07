@@ -38,6 +38,9 @@ void AppUndoManager::beginRestore() {
 }
 
 void AppUndoManager::endRestore(bool did) {
+    if (stepAfterRestorePending_ && afterRestore_)
+        afterRestore_(); // still inside the restore, as each action's own call was
+    stepHooksOpen_ = stepAfterRestorePending_ = false;
     glideScope_.reset(); // arms the slide from the captured bounds to the restored ones
     restoring_ = false;
     if (did)
@@ -56,6 +59,29 @@ void AppUndoManager::endRestore(bool did) {
 //    restore can strand a track/lane binding, and a timeline restore comes back out of
 //    TimelineDoc::fromVar with every orphan flag reset to false (it is runtime-derived state),
 //    so BOTH domains need the same pass.
+// Inside an undo() or redo() step the pair fires once for the whole step, however many actions it restores: before
+// the first restore and after the last. A combined step (a duplicate: graph + macros, then timeline) used to reconcile
+// the timeline, rebuild the mixer and republish once per action, each a whole-project pass, the first against a
+// half-restored document. A restore run outside a step (juce::UndoManager driven directly) fires per action.
+void AppUndoManager::fireBeforeRestore() {
+    if (restoring_) {
+        if (stepHooksOpen_)
+            return;
+        stepHooksOpen_ = true;
+    }
+    if (beforeRestore_)
+        beforeRestore_();
+}
+
+void AppUndoManager::fireAfterRestore() {
+    if (restoring_) {
+        stepAfterRestorePending_ = true;
+        return;
+    }
+    if (afterRestore_)
+        afterRestore_();
+}
+
 void AppUndoManager::setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore) {
     beforeRestore_ = std::move(beforeRestore);
     afterRestore_ = std::move(afterRestore);
