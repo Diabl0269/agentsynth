@@ -83,7 +83,9 @@ This is the definitive hook inventory. There are eight kinds, and nothing else i
 | 7 | **MIDI device reconcile** | `AudioEngine::changeListenerCallback` -> `reconcileMidiInputs()` (`Source/AudioEngine/AudioEngineMidi.cpp`, FRO262), firing `onMidiDevicesChanged` -> `MidiLearnController::refreshSources()`, wired in `wireMidiRemoteEngine()` | Opens any MIDI input the Audio tab has ticked that isn't open yet (a controller plugged in, or ticked, after `initialiseDevices()`'s one-shot launch loop already ran) and closes one that has physically disconnected; never closes on an unticked checkbox alone (see [`docs/architecture/audio-engine.md#audioengine`](audio-engine.md#audioengine)). `refreshSources()` republishes `getOpenMidiInputIdentifiers()` to `RemoteEngine::setSources()` so a newly-opened device's messages reach MIDI Learn/Controllers immediately rather than waiting for the next Learn arm. Structurally unreachable in `HostMode::Hosted` — the same `isHosted()` guard that fronts hook-1's persistence call. |
 
 **Hooks 1 and 2b wait for hook 2 when it is certain to follow** (`MainComponent::fullReconcileFollows()`): inside an
-undo or redo step, whose post-restore hook runs hook 2 once the step has restored everything, and inside an edit that
+undo or redo step whose post-restore hook runs hook 2 once the step has restored everything
+(`AppUndoManager::isRestoringWithAfterHook()`: a step of only hook-less actions, such as a macro-only change, a card
+move or a MIDI Remote edit, runs no hook 2 and defers nothing), and inside an edit that
 calls hook 2 itself (a track duplicate, `fullReconcileFollowsDepth_`). There hook 1's republish and mixer re-tint,
 2b's reconcile, modulator rows and mixer re-bind, and the timeline panel's own re-read of every track header
 (`TrackHeaderHost::everyHeaderRefreshFollows()`) are skipped: each walks the whole project, and hook 2 runs every one of

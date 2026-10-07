@@ -145,10 +145,11 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 // timelineChanged()'s republish and mixer re-tint are each part of reconcileTimelineAfterGraphChange(), and each walks
 // the whole project. While a full reconcile is certain to follow -- inside an undo or redo step, whose after-restore
 // hook runs it once the step has restored everything, or inside an edit that runs it itself (a track duplicate) --
-// they are skipped, so an edit pays for each pass once. The reconcile itself is never deferred: a doc change it makes
-// (an orphan flag flipping) republishes as usual.
+// they are skipped, so an edit pays for each pass once. A step of actions that fire no restore hooks (a macro-only
+// change, a card move, a MIDI Remote edit) runs no reconcile afterwards, so nothing is skipped in it. The reconcile
+// itself is never deferred: a doc change it makes (an orphan flag flipping) republishes as usual.
 bool MainComponent::fullReconcileFollows() const {
-    return !fullReconcileRunning_ && (undoManager.isRestoring() || fullReconcileFollowsDepth_ > 0);
+    return !fullReconcileRunning_ && (undoManager.isRestoringWithAfterHook() || fullReconcileFollowsDepth_ > 0);
 }
 
 // The reconcile re-reads every track header, so the timeline panel leaves its own re-read to it.

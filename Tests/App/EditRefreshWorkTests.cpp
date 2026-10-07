@@ -5,8 +5,10 @@
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
@@ -142,4 +144,23 @@ TEST(EditRefreshWork, ADuplicateAndItsUndoReReadEachKeptRowOnce) {
     ASSERT_TRUE(rig.mc.getUndoManager().undo());
     for (const auto& [id, header] : rig.headers())
         EXPECT_EQ(header->getRefreshCountForTest() - refreshes[id], 1) << "and once for the undo step";
+}
+
+// An undo step of actions that fire no restore hooks (here a macro-only change) has no reconcile after it, so the
+// catch-all after its canvas refresh must still run its passes rather than wait for one.
+TEST(EditRefreshWork, AMacroOnlyUndoStillRunsTheCatchAll) {
+    EditRig rig;
+    auto& macros = rig.mc.getGraphEditor().getMacros();
+    ASSERT_FALSE(macros.getAll().empty()) << "each audio track is boxed in its channel macro";
+    const auto macroId = macros.getAll().front().id;
+    auto& undo = rig.mc.getUndoManager();
+    undo.recordGraphAndMacroChange(rig.mc.getAudioEngine().getGraph(), macros, [&] {
+        if (auto* macro = macros.find(macroId))
+            macro->name = "Renamed";
+    });
+
+    const int before = rig.derivations();
+    ASSERT_TRUE(undo.undo());
+    EXPECT_NE(macros.find(macroId)->name, juce::String("Renamed"));
+    EXPECT_EQ(rig.derivations() - before, 1) << "the catch-all re-derived the modulator rows; no reconcile follows";
 }
