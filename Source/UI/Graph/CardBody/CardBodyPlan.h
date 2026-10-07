@@ -25,10 +25,18 @@ struct CardBodyItem {
     std::optional<juce::Range<double>> range;    ///< The layout item's narrowed range; nullopt = the full one.
     int section = -1;                            ///< Index into CardBodyPlan::sections; -1 = More or unplaced.
     int swapGroup = -1;                          ///< Index into CardBodyPlan::swapGroups; -1 = none.
-    bool shown = true;                           ///< A `show` condition's current result.
-    bool dimmed = false;                         ///< A `dim` condition or a code dim rule greys it out now.
-    bool pill = false;                           ///< A footer toggle, drawn as the small pill.
-    bool open = true; ///< A view only: shown now (the layout's `open`, then the card's toggle).
+    /** Where else the item sits: one parameter named again in a section that is the other look of the same
+     *  alternative group (the ADSR's Sustain, which has no note division, stands in both its looks). The one
+     *  widget is placed by whichever of its sections is shown. */
+    struct Placement {
+        int section = -1;
+        std::optional<juce::Point<int>> at;
+    };
+    std::vector<Placement> alsoIn;
+    bool shown = true;   ///< A `show` condition's current result.
+    bool dimmed = false; ///< A `dim` condition or a code dim rule greys it out now.
+    bool pill = false;   ///< A footer toggle, drawn as the small pill.
+    bool open = true;    ///< A view only: shown now (the layout's `open`, then the card's toggle).
 
     /** The text the card shows for this parameter: the override, else the parameter's name. */
     juce::String captionText() const;
@@ -51,6 +59,7 @@ struct CardBodyPlan {
         bool footer = false;   ///< The footer row (CardSection::kFooterId), always laid out last.
         bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
+        int altGroup = -1;     ///< Index into CardBodyPlan::altGroups; -1 = none.
         /** Where the last applied layout put this section's cells: the y below its header and the y
          *  below its last cell, in card pixels. Written by a live layout pass only (a free position is
          *  relative to cellTop); stale for a tab section, whose controls the on-card editor outlines but never moves.
@@ -70,6 +79,13 @@ struct CardBodyPlan {
         std::vector<int> sections;        ///< Indices into `sections`, in tab order.
         int selected = 0;                 ///< Index into `sections`: the tab shown now (per card, not saved).
         juce::Component* strip = nullptr; ///< The tab strip; null until built.
+    };
+
+    /** Consecutive sections whose `visibleWhen` test one parameter for values no two share (the ADSR's Time and
+     *  Tempo looks): they take the same area, the card keeps the tallest one's height, and only the one that
+     *  holds is placed. */
+    struct AltGroup {
+        std::vector<int> sections; ///< Indices into `sections`, in layout order.
     };
 
     /** Consecutive `show` items testing one parameter: they share one cell, so a swap never resizes. */
@@ -97,6 +113,7 @@ struct CardBodyPlan {
     std::vector<int> more;           ///< Hidden or unplaced parameter items, in declaration order.
     std::vector<SwapGroup> swapGroups;
     std::vector<TabGroup> tabGroups;
+    std::vector<AltGroup> altGroups;
     std::vector<DimRule> dimRules;
 
     /** `layout` nullopt = the automatic layout; `dimRules` apply only with a layout. Conditions are
@@ -116,6 +133,11 @@ struct CardBodyPlan {
     bool isOnCard(int item) const;
     /** True when the item sits in a tab section, selected or not. */
     bool isTabbed(int item) const;
+    /** True when the item sits in a look of an alternative group: out of view in the other look it still keeps its
+     *  cell and its knob-bound CV jack, so the gutter never changes with the look. */
+    bool isInAltGroup(int item) const;
+    /** The item's free position in `section` (its own, or one it was named again in); nullopt = flows. */
+    std::optional<juce::Point<int>> atIn(int item, int section) const;
     /** The text on a tab section's tab: its title, else its id. */
     juce::String tabTitle(int section) const;
     bool hasFooter() const;

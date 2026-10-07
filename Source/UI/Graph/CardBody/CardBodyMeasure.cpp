@@ -31,7 +31,7 @@ bool targetHasShownKnob(const CardBodyPlan& plan, ModuleBase& module, const Modu
     const auto* bound = module.parameterForModTarget(target);
     for (int i = 0; i < (int)plan.items.size(); ++i) {
         const auto& item = plan.items[(size_t)i];
-        if (!isContinuousKind(item.kind) || !plan.isOnCard(i) || plan.isTabbed(i))
+        if (!isContinuousKind(item.kind) || !(plan.isOnCard(i) || plan.isInAltGroup(i)) || plan.isTabbed(i))
             continue;
         if (bound != nullptr ? item.param == bound : item.param->getName(100) == target.name)
             return true;

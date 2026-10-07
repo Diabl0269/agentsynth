@@ -67,7 +67,8 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
 | The layout list: the panel, its rows, its working model, and the two sources (built-in module, hosted plugin). Only a hosted plugin's "Edit Layout..." opens it now | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentHostedPluginCard.cpp` opens it |
 | The on-card editor ("Edit Layout...", the editor of every built-in card): the overlay, one outline per control (a grip on the movable ones), the edit bar (Preset, Apply to, Cancel, Done), the drag, drop and nudge, and its owner on the GraphEditor | `Source/UI/Graph/CardLayoutEditor/OnCard/` (`CardLayoutOnCardEditor*.cpp`, `CardLayoutOutline.*`, `CardLayoutEditBar.*`, `OnCardEditorOwner.*`) |
-| The ADSR "Time and tempo" switch: the pure Shared/Separate conversion of the stages group, and the strip switch that writes it | `CardBody/DefaultLayouts/AdsrTimeTempo.*`; `OnCard/CardLayoutOnCardEditorTimeTempo.cpp` |
+| The ADSR "Controls" switch: the pure Shared/Separate conversion of the stages group, and the strip switch that writes it | `CardBody/DefaultLayouts/AdsrTimeTempo.*`; `OnCard/CardLayoutOnCardEditorTimeTempo.cpp` |
+| The swap of controls in place when a condition flips (Sync), and the alternative group that keeps the card's size | `CardBody/CardBodySwapMotion.*`; `CardBody/CardBodyLayout.cpp` (`layoutAltGroup`); `CardBody/CardBodyPlan.cpp` (`groupAlternatives`) |
 | Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Size or Direction, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
@@ -381,13 +382,24 @@ Time/Tempo switch is the layout's `segmented` item on the `tempoSync` bool, and 
 division are a swap group, so the one mechanism is the card body's conditions. A layout that leaves the
 envelope view out draws no graph and no toggle.
 
-The stages come in two modes. **Shared** (the default above) shows each stage once: its time while the
-Time/Tempo switch is on Time, its note division while it is on Tempo. **Separate** replaces the stages group
-with two titled groups, **Time** (Atk, Hold, Dec, Sus, Rel faders) and **Tempo** (the four divisions with the
-same captions), both always visible: each time is dimmed while Tempo is on and each division while Time is on.
-`withAdsrTimeTempo` (`AdsrTimeTempo.cpp`) converts either way in place, keeping each control's label, widget and
-range, and going Shared, Separate, Shared returns the default group exactly. The on-card editor's
-"Time and tempo" switch (below) writes it.
+The stages come in two modes, picked by the on-card editor's **Controls** switch (below). **Shared** (the default
+above) is one set of controls for both looks: each stage shows once, its time while the card's Sync (Time/Tempo)
+switch is on Time, its note division while it is on Tempo. **Separate** gives each look its own controls and
+positions, starting as a copy of the other: two sections in the same area of the card, `stages-time` (Atk, Hold,
+Dec, Sus, Rel faders) shown while Sync is Time and `stages-tempo` (the four divisions as faders with the same
+captions, and Sus) shown while it is Tempo, each by its `visibleWhen` on `tempoSync`. Only the active look's controls
+show, on the card and in Edit Layout. The two sections form an **alternative group** in the plan
+(`CardBodyPlan::AltGroup`, found by `groupAlternatives`: consecutive sections whose `visibleWhen` test one parameter
+for values they do not share): they take the same area, `layoutAltGroup` measures every member and reserves the
+tallest, and places only the one that holds, so the card keeps its size whichever look is on (a knob in the look not shown stays knob-bound, `CardBodyPlan::isInAltGroup`, so the port gutter never changes either). A parameter named again
+in the other look of an alternative group (Sustain, which has no division) is the one widget standing in both looks,
+each at its own `at` (`CardBodyItem::alsoIn`); anywhere else a second naming is ignored, as before. Sync flipping
+swaps the controls with a motion ([animation.md](animation.md#controls-swapping-in-place)); under Reduce Motion
+it is instant. `withAdsrTimeTempo` (`AdsrTimeTempo.cpp`) converts either way in place, keeping each control's label,
+span and range, and going Shared, Separate, Shared returns the default group exactly. A layout saved by the first
+Separate form (both groups always shown, each dimmed while the other mode was on, Sustain in the Time group only) is
+read in the current form when it is resolved (`withAdsrSeparateLooks`, called from `resolveModuleCardLayout`): each
+group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Sustain.
 
 ### Decisions (2026-10-01)
 
@@ -432,9 +444,12 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
 - **Edit Layout... (built): the card is the editor, and the only editor of a built-in card.** From a control's menu or the module menu (in the
   block after Bypass Module), the card gets an accent outline and an edit bar in its header (**Preset**,
   **Apply to**, **Cancel**, **Done**), and under the card a strip with a **+ Add control** button; on an ADSR, Amp Env or Filter Env card
-  that strip also holds a "Time and tempo" switch with **Shared** and **Separate** segments, left of Add control
+  that strip also holds a "Controls" switch with **Shared** and **Separate** segments, left of Add control
   (it shows only while the layout still has its stages) and rewrites the stages group at once,
-  like any other edit of the session, so Cancel undoes it, and it is one undo step. Every control
+  like any other edit of the session, so Cancel undoes it, and it is one undo step. The card's own Sync switch
+  stays usable under the overlay (its outline lets the mouse through, and Space on it flips it) and picks which look you
+  are editing: only that look's controls are outlined, and Done or Cancel puts Sync back as it was when the editor
+  opened (not an undo step). Every control
   of a grid group gets a dashed accent outline (7 px corners, drawn just inside its cell so neighbouring
   outlines never touch) and a small grip in its bottom-right corner; section titles stay outside every
   outline; the footer row and tab groups are outlined panel-only (below). A swap group is one outline, on its shown
@@ -563,7 +578,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
       Released outside the card or over the panel, nothing is added.
     - *Motion and speech.* The added control fades in at its spot over 160 ms (80 ms under Reduce Motion);
       "Drive added" is announced. The panel eases in and out like every call-out.
-    - *Keys.* Tab order in the bar is Preset, Apply to, Cancel, Done; then the outlines, then (on an ADSR card) the Time and tempo switch and the Add control button. Each has the accent focus ring, an accessible name ("Preset", "Apply to", "Add control") and a
+    - *Keys.* Tab order in the bar is Preset, Apply to, Cancel, Done; then the outlines, then (on an ADSR card) the Controls switch and the Add control button. Each has the accent focus ring, an accessible name ("Preset", "Apply to", "Add control") and a
       tooltip ("Save, load or reset this card's layout", "Choose which cards this layout changes", "Add a
       hidden control"). The panel's rows are named buttons but not Tab stops: the search field keeps focus and
       Up and Down announce the chosen row ("Drive, 1 of 2").
@@ -606,7 +621,7 @@ range, and going Shared, Separate, Shared returns the default group exactly. The
   (it lists after the ticked ones), as before. The on-card editor writes through the built-in source too
   (it adds `restoreOpeningLayout()` for Cancel).
 - **Undo:** one step per quick-path click, and one per change made in the on-card editor of a built-in card (a
-  drop, a settled nudge, a panel edit, an add or hide, a preset, a reset, an Apply to, a Time and tempo switch):
+  drop, a settled nudge, a panel edit, an add or hide, a preset, a reset, an Apply to, a Controls switch):
   each write records the graph before against the graph after (`AppUndoManager::recordGraphChangeSince`, the
   "before" taken at the write), so the layout, its label and widget edits and the neighbours a taller card
   pushed aside undo together, and Cmd+Z while the editor is open steps back one change, never the earlier

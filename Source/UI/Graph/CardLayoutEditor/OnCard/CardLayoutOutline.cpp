@@ -36,6 +36,11 @@ void CardLayoutOutline::setCell(juce::Rectangle<int> cell) { setBounds(cell.expa
 
 void CardLayoutOutline::setCaption(const juce::String& caption) {
     caption_ = caption;
+    if (passThrough_) {
+        setTitle(caption + ", layout: Space switches the look being edited, Return for options");
+        setTooltip("Switches between the Time and Tempo looks you are editing. Right-click for options");
+        return;
+    }
     setTitle(caption + (panelOnly_ ? ", layout: Return for options" : ", layout: drag to move, Return for options"));
     setTooltip(panelOnly_
                    ? "Backspace removes. Right-click for options"
@@ -46,6 +51,14 @@ void CardLayoutOutline::setPanelOnly(bool panelOnly) {
     if (panelOnly == panelOnly_)
         return;
     panelOnly_ = panelOnly;
+    setCaption(caption_);
+    repaint();
+}
+
+void CardLayoutOutline::setPassThrough(bool passThrough) {
+    if (passThrough == passThrough_)
+        return;
+    passThrough_ = passThrough;
     setCaption(caption_);
     repaint();
 }
@@ -68,7 +81,7 @@ juce::Rectangle<float> CardLayoutOutline::getGripArea() const {
 }
 
 // Only the drawn outline takes the mouse, so the padding of two neighbouring outlines never competes.
-bool CardLayoutOutline::hitTest(int x, int y) { return getOutlineArea().contains((float)x, (float)y); }
+bool CardLayoutOutline::hitTest(int x, int y) { return !passThrough_ && getOutlineArea().contains((float)x, (float)y); }
 
 void CardLayoutOutline::paintButton(juce::Graphics& g, bool, bool) {
     const auto& theme = synth::theme::themeOf(*this);
@@ -99,7 +112,7 @@ void CardLayoutOutline::paintButton(juce::Graphics& g, bool, bool) {
     }
     paintFocusRing(g, area, *this, kCornerRadius);
 
-    if (panelOnly_)
+    if (panelOnly_ || passThrough_)
         return;
     const auto grip = getGripArea();
     g.setColour(theme.colors.surfaceHi);

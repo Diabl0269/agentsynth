@@ -38,7 +38,8 @@ class BuiltInCardLayoutSource;
  * app, and the overlay re-syncs to the card the restore rebuilds); Cancel is one more step, which brings the
  * cancelled edits back. The bar's Preset and Apply to menus, and the "+ Add control"
  * strip the overlay adds under the card, are the other things it hosts; on an ADSR card the strip also holds the
- * "Time and tempo" switch, which rewrites the stages' group.
+ * "Controls" switch (Shared or Separate), which rewrites the stages' group; the card's own Sync switch
+ * stays usable and picks the look being edited, and ending the session puts it back as it was.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -71,6 +72,8 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
+    /** The card's own Sync switch stays reachable under the overlay: the mouse passes through its cell. */
+    bool hitTest(int x, int y) override;
 
     /** Test seam: takes each control panel instead of a call-out, as ModuleComponent's launcher takes the
      *  editor. The panel is the test's to keep; the editor only points at it while it is open. */
@@ -233,9 +236,14 @@ private:
     void savePreset(const juce::String& name);
     void resetLayout();
 
-    // ---- Time and tempo (CardLayoutOnCardEditorTimeTempo.cpp) ------------------------------------
+    // ---- Controls: Shared | Separate (CardLayoutOnCardEditorTimeTempo.cpp) -----------------------
     void refreshTimeTempo();
     void chooseTimeTempo(int index);
+    bool hasSyncLooks() const;
+    juce::RangedAudioParameter* syncParameter() const;
+    void rememberSync();
+    void restoreSync();
+    void flipSync();
 
     // ---- Keyboard (CardLayoutOnCardEditorKeyboard.cpp) -----------------------------------------
     bool handleKey(const juce::String& key, const juce::KeyPress& press);
@@ -264,7 +272,8 @@ private:
     juce::String panelParamId_;
     juce::Component::SafePointer<CardLayoutAddPanel> addPanel_;
     juce::TextButton addControl_{"+ Add control"};
-    CardSegmentedSwitch timeTempo_{"Time and tempo", juce::StringArray{"Shared", "Separate"}};
+    CardSegmentedSwitch timeTempo_{"Controls", juce::StringArray{"Shared", "Separate"}};
+    std::optional<float> openingSync_; ///< The card's Sync (0..1) as the session opened; put back when it ends.
     AddDrag addDrag_;
     bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.
 

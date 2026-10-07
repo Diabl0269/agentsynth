@@ -30,6 +30,10 @@ public:
     /** A footer or tab control: no grip, no drag; it only opens its options (Return, double-click, right-click). */
     void setPanelOnly(bool panelOnly);
     bool isPanelOnly() const noexcept { return panelOnly_; }
+    /** The card's own Sync switch on an ADSR card: the mouse goes through to the switch under it (it picks the look
+     *  being edited); the outline still takes the keyboard (Space flips the switch, Return asks for options). */
+    void setPassThrough(bool passThrough);
+    bool isPassThrough() const noexcept { return passThrough_; }
     /** 0..1: how far the control is lifted off the card while it is dragged. */
     void setLift(float lift);
 
@@ -61,6 +65,7 @@ private:
     juce::String paramId_;
     juce::String caption_;
     bool panelOnly_ = false;
+    bool passThrough_ = false;
     float hover_ = 0.0f;
     float lift_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};

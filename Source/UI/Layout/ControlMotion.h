@@ -14,6 +14,8 @@ constexpr double kGrowMs = 200.0;
 constexpr double kShrinkMs = 150.0;
 constexpr double kCloseGapMs = 200.0; ///< After a removed control has shrunk, the rest of the card closes its gap.
 constexpr double kReducedMs = 80.0;
+/** An in-place swap (the ADSR's Time/Tempo): the leaving controls shrink for this long, then the arriving ones grow. */
+constexpr double kSwapShrinkMs = 190.0;
 
 /** The axis a control scales along: a knob on both, a long fader only along its length. */
 enum class Axis { both, horizontal, vertical };

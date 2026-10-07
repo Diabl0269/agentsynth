@@ -239,18 +239,60 @@ struct SectionPlacer {
     }
 };
 
+// True when the two sections are alternatives: both shown by tests of one parameter, for values they do not share.
+bool areAlternatives(const CardBodyPlan::Section& a, const CardBodyPlan::Section& b) {
+    if (!a.visibleWhen.has_value() || !b.visibleWhen.has_value() || a.footer || b.footer)
+        return false;
+    const auto& x = *a.visibleWhen;
+    const auto& y = *b.visibleWhen;
+    if (x.param != y.param || x.effect != CardConditionEffect::Show || y.effect != CardConditionEffect::Show)
+        return false;
+    for (const auto& value : x.is)
+        if (y.is.contains(value))
+            return false;
+    return true;
+}
+
+// A parameter named again in the other look of an alternative group is one widget standing in both looks, each
+// at its own place; anywhere else a second naming is ignored.
+void placeAlternate(CardBodyPlan& plan, int index, const CardParamItem& source, int sectionIndex) {
+    auto& planned = plan.items[(size_t)index];
+    if (planned.section < 0 || planned.section == sectionIndex || plan.sections[(size_t)sectionIndex].footer ||
+        !areAlternatives(plan.sections[(size_t)planned.section], plan.sections[(size_t)sectionIndex]))
+        return;
+    for (const auto& placement : planned.alsoIn)
+        if (placement.section == sectionIndex)
+            return;
+    planned.alsoIn.push_back({sectionIndex, source.at});
+    auto& section = plan.sections[(size_t)sectionIndex];
+    section.items.push_back(index);
+    if (source.at)
+        section.freeform = true;
+}
+
 // One layout item: a parameter (its widget, caption, and place unless hidden) or a view. An id the
-// module does not have, or one named a second time, is ignored.
+// module does not have, or one named a second time (but in an alternative look), is ignored.
 void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const CardItem& item, SectionPlacer& placer,
                std::set<int>& named) {
     auto& plan = placer.plan;
     if (const auto* p = std::get_if<CardParamItem>(&item)) {
         const int index = plan.findParam(p->paramId);
-        if (index < 0 || !named.insert(index).second)
+        if (index < 0)
             return;
+        if (!named.insert(index).second) {
+            if (!layout.hidden.contains(p->paramId))
+                placeAlternate(plan, index, *p, placer.sectionIndex);
+            return;
+        }
         // The widget applies to a hidden parameter too: it shows that way in the More row.
         auto& planned = plan.items[(size_t)index];
         planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
+        // A choice in a look of an alternative group (the ADSR's note division in its Tempo look) may be a stepped
+        // fader, as it is beside its time in a swap cell; a fader on a choice anywhere else falls back.
+        if (p->widget == CardWidget::FaderV && planned.kind == CardBodyItem::Kind::Choice &&
+            placer.section.visibleWhen.has_value() &&
+            dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
+            planned.kind = CardBodyItem::Kind::FaderV;
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
         if (!layout.hidden.contains(p->paramId))
@@ -283,6 +325,26 @@ void placePolyInFooter(const CardLayout& layout, CardBodyPlan& plan, const std::
         SectionPlacer placer{plan, section, s, {}};
         placer.place(poly, CardParamItem{});
         return;
+    }
+}
+
+// Consecutive sections that are alternatives of each other take one area (CardBodyPlan::AltGroup).
+void groupAlternatives(CardBodyPlan& plan) {
+    const int count = (int)plan.sections.size();
+    for (int s = 0; s < count;) {
+        int end = s + 1;
+        while (end < count && plan.sections[(size_t)end].tabGroup < 0 &&
+               areAlternatives(plan.sections[(size_t)s], plan.sections[(size_t)end]))
+            ++end;
+        if (end - s >= 2 && plan.sections[(size_t)s].tabGroup < 0) {
+            CardBodyPlan::AltGroup group;
+            for (int i = s; i < end; ++i) {
+                plan.sections[(size_t)i].altGroup = (int)plan.altGroups.size();
+                group.sections.push_back(i);
+            }
+            plan.altGroups.push_back(std::move(group));
+        }
+        s = end;
     }
 }
 
@@ -328,6 +390,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
             placeItem(module, layout, item, placer, named);
     }
     placePolyInFooter(layout, plan, named);
+    groupAlternatives(plan);
     for (int i = 0; i < (int)plan.items.size(); ++i)
         if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&
             plan.items[(size_t)i].section < 0)

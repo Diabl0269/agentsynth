@@ -1,6 +1,7 @@
 // ModuleCardLayoutResolver.cpp -- which layout a built-in module's card is drawn from.
 // See docs/layout/module-card-layout.md#where-a-layout-comes-from.
 #include "ModuleCardLayoutResolver.h"
+#include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
 
 namespace synth {
 
@@ -48,6 +49,10 @@ ResolvedModuleCardLayout resolveModuleCardLayout(const juce::String& moduleType,
         resolved.layout = entry->layout;
         resolved.defaultRevision = entry->defaultRevision;
     }
+    // A saved ADSR layout in the first Separate form (both groups always shown) is read in the current one.
+    if (resolved.layout.has_value() && resolved.source != ResolvedModuleCardLayout::Source::CodeDefault &&
+        hasAdsrTimeTempo(moduleType))
+        resolved.layout = withAdsrSeparateLooks(std::move(*resolved.layout));
     // A dim rule states what the module does (Detune does nothing at one voice), not where a control
     // sits, so it applies to whichever layout the card draws; the card binds only the rules whose
     // parameter it shows.

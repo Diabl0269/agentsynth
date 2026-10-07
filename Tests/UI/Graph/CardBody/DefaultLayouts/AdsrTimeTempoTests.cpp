@@ -4,6 +4,7 @@
 
 #include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutResolver.h"
 #include <gtest/gtest.h>
 
 using namespace synth;
@@ -58,7 +59,7 @@ TEST(AdsrTimeTempo, TheDefaultIsSharedAndOnlyTheThreeAdsrTypesHaveTheSwitch) {
     EXPECT_FALSE(hasAdsrTimeTempo("LFO"));
 }
 
-TEST(AdsrTimeTempo, SeparateNamesTimeAndTempoGroupsInPlaceOfTheStages) {
+TEST(AdsrTimeTempo, SeparateNamesTimeAndTempoLooksInPlaceOfTheStages) {
     const auto shared = adsrDefault();
     const auto separate = withAdsrTimeTempo(shared, AdsrTimeTempo::Separate);
     EXPECT_EQ(adsrTimeTempoOf(separate), AdsrTimeTempo::Separate);
@@ -68,32 +69,30 @@ TEST(AdsrTimeTempo, SeparateNamesTimeAndTempoGroupsInPlaceOfTheStages) {
 
     const auto& time = *sectionNamed(separate, "stages-time");
     const auto& tempo = *sectionNamed(separate, "stages-tempo");
-    EXPECT_EQ(time.title, std::optional<juce::String>("Time"));
-    EXPECT_EQ(tempo.title, std::optional<juce::String>("Tempo"));
     EXPECT_EQ(idsOf(time), juce::StringArray({"attack", "hold", "decay", "sustain", "release"}));
-    EXPECT_EQ(idsOf(tempo), juce::StringArray({"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}));
-    EXPECT_FALSE(time.visibleWhen.has_value());
-    EXPECT_FALSE(tempo.visibleWhen.has_value());
+    EXPECT_EQ(idsOf(tempo), juce::StringArray({"attackDiv", "holdDiv", "decayDiv", "sustain", "releaseDiv"}))
+        << "Sustain has no note division, so it stands in the Tempo look too";
+    EXPECT_EQ(time.visibleWhen, std::optional(CardCondition{"tempoSync", {"false"}, CardConditionEffect::Show}));
+    EXPECT_EQ(tempo.visibleWhen, std::optional(CardCondition{"tempoSync", {"true"}, CardConditionEffect::Show}));
 }
 
-TEST(AdsrTimeTempo, EachGroupDimsItsItemsByTempoSyncAndKeepsTheCaptions) {
+TEST(AdsrTimeTempo, EachLookHasNoItemConditionsKeepsTheCaptionsAndDrawsTheDivisionsAsFaders) {
     const auto separate = withAdsrTimeTempo(adsrDefault(), AdsrTimeTempo::Separate);
-    const CardCondition dimWhenTempo{"tempoSync", {"false"}, CardConditionEffect::Dim};
-    const CardCondition dimWhenTime{"tempoSync", {"true"}, CardConditionEffect::Dim};
     const std::pair<const char*, const char*> captions[] = {
         {"attack", "Atk"}, {"hold", "Hold"}, {"decay", "Dec"}, {"sustain", "Sus"}, {"release", "Rel"}};
     for (const auto& [id, caption] : captions) {
         const auto* item = itemIn(separate, id);
         ASSERT_NE(item, nullptr) << id;
-        EXPECT_EQ(item->when, std::optional(dimWhenTempo)) << id;
+        EXPECT_FALSE(item->when.has_value()) << id << ": the look decides, not the item";
         EXPECT_EQ(item->label, std::optional<juce::String>(caption)) << id;
         EXPECT_EQ(item->widget, CardWidget::FaderV) << id;
         if (juce::String(id) == "sustain")
             continue;
         const auto* division = itemIn(separate, juce::String(id) + "Div");
         ASSERT_NE(division, nullptr) << id;
-        EXPECT_EQ(division->when, std::optional(dimWhenTime)) << id;
+        EXPECT_FALSE(division->when.has_value()) << id;
         EXPECT_EQ(division->label, std::optional<juce::String>(caption)) << id;
+        EXPECT_EQ(division->widget, CardWidget::FaderV) << id << "Div defaults to a fader in the Tempo look";
     }
 }
 
@@ -109,7 +108,7 @@ TEST(AdsrTimeTempo, AConversionToTheModeTheLayoutIsInChangesNothing) {
     EXPECT_EQ(withAdsrTimeTempo(separate, AdsrTimeTempo::Separate), separate);
 }
 
-TEST(AdsrTimeTempo, LabelsWidgetsRangesAndSpansCarryOverAndPositionsAreDropped) {
+TEST(AdsrTimeTempo, LabelsRangesAndSpansCarryOverAndPositionsAreDropped) {
     auto shared = adsrDefault();
     auto& stages = shared.sections[2];
     ASSERT_EQ(stages.id, "stages");
@@ -171,4 +170,56 @@ TEST(AdsrTimeTempo, DetectionTellsTheModesAndAnUnrelatedLayoutApart) {
     EXPECT_FALSE(adsrTimeTempoOf(filter).has_value());
     EXPECT_FALSE(adsrTimeTempoOf(CardLayout{}).has_value());
     EXPECT_EQ(withAdsrTimeTempo(filter, AdsrTimeTempo::Separate), filter);
+}
+
+// What the first Separate form saved: both groups always shown, each item dimmed while the other mode is on,
+// Sustain in the Time group only.
+CardLayout firstSeparateForm() {
+    auto layout = withAdsrTimeTempo(adsrDefault(), AdsrTimeTempo::Separate);
+    for (auto& section : layout.sections) {
+        if (section.id != "stages-time" && section.id != "stages-tempo")
+            continue;
+        const bool tempo = section.id == "stages-tempo";
+        section.visibleWhen = std::nullopt;
+        section.title = tempo ? "Tempo" : "Time";
+        std::erase_if(section.items, [&](const CardItem& item) {
+            return tempo && std::get<CardParamItem>(item).paramId == "sustain";
+        });
+        for (auto& item : section.items) {
+            auto& param = std::get<CardParamItem>(item);
+            param.widget = tempo ? CardWidget::Auto : param.widget;
+            param.when = CardCondition{"tempoSync", {tempo ? "true" : "false"}, CardConditionEffect::Dim};
+        }
+    }
+    return layout;
+}
+
+TEST(AdsrTimeTempo, AnOldSeparateLayoutIsReadWithEachLooksConditionAndNoDims) {
+    const auto old = firstSeparateForm();
+    ASSERT_FALSE(sectionNamed(old, "stages-time")->visibleWhen.has_value());
+    const auto read = withAdsrSeparateLooks(old);
+    const auto& time = *sectionNamed(read, "stages-time");
+    const auto& tempo = *sectionNamed(read, "stages-tempo");
+    EXPECT_EQ(time.visibleWhen, std::optional(CardCondition{"tempoSync", {"false"}, CardConditionEffect::Show}));
+    EXPECT_EQ(tempo.visibleWhen, std::optional(CardCondition{"tempoSync", {"true"}, CardConditionEffect::Show}));
+    for (const auto* section : {&time, &tempo})
+        for (const auto& item : paramsOf(*section))
+            EXPECT_FALSE(item.when.has_value()) << item.paramId;
+    EXPECT_EQ(idsOf(tempo), juce::StringArray({"attackDiv", "holdDiv", "decayDiv", "sustain", "releaseDiv"}))
+        << "Sustain stays reachable in the Tempo look";
+    EXPECT_EQ(adsrTimeTempoOf(read), AdsrTimeTempo::Separate);
+    EXPECT_EQ(withAdsrSeparateLooks(read), read) << "reading is idempotent";
+}
+
+TEST(AdsrTimeTempo, AnOldSeparateLayoutStillConvertsBackToTheDefaultStages) {
+    EXPECT_EQ(withAdsrTimeTempo(firstSeparateForm(), AdsrTimeTempo::Shared), adsrDefault());
+}
+
+TEST(AdsrTimeTempo, AnOldSeparateLayoutSavedForTheTypeOrTheNodeIsResolvedInTheCurrentForm) {
+    const auto stored = firstSeparateForm().toVar();
+    const auto resolved = resolveModuleCardLayout("ADSR", stored, nullptr, DefaultCardLayouts::builtIn());
+    ASSERT_TRUE(resolved.layout.has_value());
+    EXPECT_EQ(resolved.source, ResolvedModuleCardLayout::Source::Instance);
+    EXPECT_TRUE(sectionNamed(*resolved.layout, "stages-time")->visibleWhen.has_value());
+    EXPECT_TRUE(sectionNamed(*resolved.layout, "stages-tempo")->visibleWhen.has_value());
 }

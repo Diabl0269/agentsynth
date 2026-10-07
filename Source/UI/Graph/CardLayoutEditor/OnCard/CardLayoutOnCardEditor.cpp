@@ -49,8 +49,8 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     addControl_.setTooltip("Add a hidden control");
     addControl_.onClick = [this] { openAddPanel(); };
     addAndMakeVisible(addControl_);
-    timeTempo_.setTooltip("Show each stage once (its time or tempo control follows the card's Time/Tempo switch), "
-                          "or as separate Time and Tempo groups");
+    timeTempo_.setTooltip("Shared: one set of controls for the Time and Tempo looks. Separate: each look has its "
+                          "own controls and positions");
     timeTempo_.onChange = [this](int index) { chooseTimeTempo(index); };
     timeTempo_.setVisible(false);
     addChildComponent(timeTempo_);
@@ -89,6 +89,7 @@ std::unique_ptr<CardLayoutOnCardEditor> CardLayoutOnCardEditor::open(GraphEditor
             return nullptr;
         std::unique_ptr<CardLayoutOnCardEditor> opened(new CardLayoutOnCardEditor(editor, undo, nodeId, shortcuts));
         opened->attachTo(*comp);
+        opened->rememberSync();
         opened->syncToCard();
         if (opened->isShowing()) {
             opened->setAlpha(0.0f);
@@ -190,14 +191,17 @@ void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& befor
                                was.rect);
 }
 
-// A tab switch changes which controls are on the card without resizing it: the card says so, and the
-// outlines are read again.
+// A tab switch or a Sync flip changes which controls are on the card without resizing it: the card says so,
+// and the outlines are read again.
 void CardLayoutOnCardEditor::watchTabs(ModuleComponent& card) {
-    if (auto* body = card.getCardBody())
-        body->onTabSelected = [self = juce::Component::SafePointer<CardLayoutOnCardEditor>(this)] {
+    if (auto* body = card.getCardBody()) {
+        const auto resync = [self = juce::Component::SafePointer<CardLayoutOnCardEditor>(this)] {
             if (self != nullptr)
                 self->triggerAsyncUpdate();
         };
+        body->onTabSelected = resync;
+        body->onConditionsApplied = resync; // a Sync flip swaps the looks (and again when its motion has landed)
+    }
 }
 
 int CardLayoutOnCardEditor::indexOfCell(const juce::String& key) const {
@@ -221,6 +225,7 @@ void CardLayoutOnCardEditor::reconcileOutlines() {
             addAndMakeVisible(outline);
         }
         outline->setPanelOnly(cell.panelOnly);
+        outline->setPassThrough(hasSyncLooks() && cell.key == "tempoSync");
         outline->setCaption(cell.caption);
         outline->setCell(cell.rect);
     }
@@ -279,6 +284,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
         dropPendingHide();
         source_->restoreOpeningLayout();
     }
+    restoreSync();
     if (card_ != nullptr)
         card_->removeComponentListener(this);
     source_.reset();
@@ -316,6 +322,15 @@ void CardLayoutOnCardEditor::fadeTo(float target, std::function<void()> done) {
             setAlpha(from + (target - from) * ease(t));
         },
         std::move(done));
+}
+
+bool CardLayoutOnCardEditor::hitTest(int x, int y) {
+    for (auto* outline : outlines_)
+        if (outline->isPassThrough() && outline->getOutlineArea()
+                                            .translated((float)outline->getX(), (float)outline->getY())
+                                            .contains((float)x, (float)y))
+            return false;
+    return juce::Component::hitTest(x, y);
 }
 
 void CardLayoutOnCardEditor::componentMovedOrResized(juce::Component& component, bool, bool wasResized) {
