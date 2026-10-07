@@ -155,8 +155,11 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
     else
         doGroup();
 
-    if (!newId.isEmpty())
+    if (!newId.isEmpty()) {
         selectMacro(newId, false);
+        if (onMacroCreated) // a user grouped a selection into a macro (usage statistics)
+            onMacroCreated();
+    }
 
     host_.requestRepaint();
     return newId;

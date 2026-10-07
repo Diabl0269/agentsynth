@@ -100,7 +100,7 @@ void PreferencesSettingsTab::setupPatchSaveLocationControls() {
     contentHost.addAndMakeVisible(patchSaveHint);
     styleMutedHintLabel(patchSaveHint);
     updatePatchSaveHint();
-    setupCategorySelector(); // Chained here, the constructor is baselined
+    setupUsageStatsControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutPatchSaveLocationGroup(int& y, int contentWidth, bool& pendingDivider,

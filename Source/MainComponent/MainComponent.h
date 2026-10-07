@@ -25,6 +25,7 @@
 #include "RecentProjects.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
+#include "Telemetry/TelemetryDay.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -65,6 +66,9 @@ class GraphEditor;
 namespace synth {
 struct CollectResult;          // Project/ProjectCollector.h
 class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
+namespace telemetry {
+class TelemetryService; // Telemetry/TelemetryService.h
+}
 } // namespace synth
 class MainComponent
     : public juce::Component
@@ -144,6 +148,14 @@ public:
 
     /** Re-reads the two MIDI Remote preferences and pushes them into the engine / badge painter; idempotent. */
     void applyMidiRemotePreferences();
+
+    /** Creates the usage statistics service (standalone only) and hands it to the editors that count; see
+     * MainComponentTelemetry.cpp. */
+    void startTelemetry();
+    /** Re-reads kShareUsageStatsSettingKey and switches recording on or off to match; idempotent. */
+    void applyTelemetryPreference();
+    /** Counts one use of a feature for usage statistics; a no-op while they are off or in a plugin. */
+    void countUsage(synth::telemetry::Feature feature);
 
     /** Per-press zoom step for the four zoom commands; the out factor is the exact reciprocal. */
     static constexpr double kZoomInFactor = 1.25;
@@ -242,6 +254,7 @@ public:
     // ---- Test-only hooks: see MainComponentTestSeams.cpp for what each one bypasses ----
     synth::midi::MidiLearnController& getMidiLearnControllerForTest() noexcept { return midiLearnController_; }
     synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
+    synth::telemetry::TelemetryService* getTelemetryServiceForTest() noexcept { return telemetry_.get(); }
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
     // The "Add automation..." host calls (TrackHeaderHost is a private base): what a track offers, and creating the
@@ -768,6 +781,8 @@ private:
 #endif
 
     std::function<void(const juce::URL&)> urlOpener_ = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
+
+    std::unique_ptr<synth::telemetry::TelemetryService> telemetry_; // null in a plugin build
 
     // ---- Panel slide animations: each panel owns a [0..1] open fraction that resized() derives its size from ----
     juce::VBlankAnimatorUpdater vblankUpdater{this};

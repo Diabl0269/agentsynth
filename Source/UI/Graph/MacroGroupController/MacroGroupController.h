@@ -174,6 +174,8 @@ public:
     std::function<bool(const juce::String& macroId, const juce::String& newName,
                        const std::function<void()>& renameMutation)>
         recordMacroRenameHook;
+    /** Fired once when the user groups a selection into a new macro. Unset by default. */
+    std::function<void()> onMacroCreated;
     /** Called once when the macro card's colour picker opens. Returns a function that writes a colour onto the
      *  track that owns the macro, with no undo step (the picker calls it on every preview frame and to put the
      *  original back), or an empty function when no track plays the macro. Unset by default. */

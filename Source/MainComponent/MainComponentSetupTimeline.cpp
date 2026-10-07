@@ -428,4 +428,5 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
 
     // Lit regardless of arming — a bare "record" is still record-on.
     timelinePanel.getTransportBar().setRecordingState(true);
+    countUsage(synth::telemetry::Feature::TimelineUsed); // a take started: every early return above is a refusal
 }

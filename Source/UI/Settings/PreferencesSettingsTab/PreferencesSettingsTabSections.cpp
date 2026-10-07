@@ -22,7 +22,8 @@ constexpr float kHeaderRuleAlpha = 0.12f;
 constexpr PreferencesSettingsTab::Category kSections[] = {
     PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
     PreferencesSettingsTab::Category::Files,  PreferencesSettingsTab::Category::Mixer,
-    PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote};
+    PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote,
+    PreferencesSettingsTab::Category::Privacy};
 
 int indexOf(PreferencesSettingsTab::Category c) { return static_cast<int>(c); }
 

@@ -39,8 +39,8 @@ public:
     // one category (its rows), so a new row goes into the unit named for its category.
     // All is last in the enum (so the other ids stay put) but first in the drop-down; it is never a
     // layoutCategory, only a selection that shows every category under a collapsible header.
-    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, All };
-    static constexpr int kNumSections = 6; // every Category before All
+    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, Privacy, All };
+    static constexpr int kNumSections = 7; // every Category before All
     static juce::String categoryName(Category category);
     // The stable name a category is saved under (never the display text or the enum value).
     static juce::String persistedCategoryName(Category category);
@@ -163,6 +163,13 @@ public:
     void setMidiRemoteDefaultTakeover(synth::Takeover takeover);
     bool isMidiRemoteShowBadgesEnabled() const;
     void setMidiRemoteShowBadgesEnabled(bool enabled);
+
+    // Privacy group (docs/development/usage-statistics.md). The toggle writes kShareUsageStatsSettingKey and, at once,
+    // creates or deletes the usage statistics id and queue file; MainComponent also hears it through the settings file.
+    bool isShareUsageStatsEnabled() const;
+    void setShareUsageStatsEnabled(bool enabled);
+    // Opens "What we collect" through the owner's URL seam; defaults to the system browser.
+    void setUrlOpener(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
 
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
@@ -315,6 +322,11 @@ private:
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
     void persistMidiRemoteShowBadges(bool enabled);
     void persistPatchSaveMode(synth::PatchSaveMode mode);
+    void persistShareUsageStats(bool enabled);
+    void refreshUsageStatsIdRow();
+    void setupUsageStatsControls(); // chained from setupPatchSaveLocationControls(); the constructor is baselined
+    void layoutUsageStatsGroup(int& y, int contentWidth, bool previousGroupWasVisible, const GroupMatchFn& groupMatches,
+                               const SetVisibleFn& setGroupVisible);
     // The patch-save-location row: constructs its controls (chained from setupMidiRemoteControls(),
     // the constructor is baselined), refreshes the hint for the current mode, and lays it out.
     void setupPatchSaveLocationControls();
@@ -575,6 +587,12 @@ private:
     juce::TextButton patchSaveChooseButton{"Choose..."};
     juce::Label patchSaveHint;
     std::unique_ptr<juce::FileChooser> patchSaveChooser;
+    // Privacy: opt-in toggle, the "What we collect" link, and the id row shown only while opted in.
+    juce::ToggleButton shareUsageStatsToggle{"Share anonymous usage statistics"};
+    juce::TextButton usageStatsLearnMoreButton{"What we collect"};
+    juce::Label usageStatsIdLabel;
+    juce::TextButton usageStatsCopyIdButton{"Copy ID"};
+    std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& url) { url.launchInDefaultBrowser(); };
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

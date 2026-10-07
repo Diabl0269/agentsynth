@@ -7,8 +7,8 @@
 
 namespace {
 using Category = PreferencesSettingsTab::Category;
-constexpr Category kSections[] = {Category::Graph, Category::Timeline, Category::Files,
-                                  Category::Mixer, Category::Panels,   Category::MidiRemote};
+constexpr Category kSections[] = {Category::Graph,  Category::Timeline,   Category::Files,  Category::Mixer,
+                                  Category::Panels, Category::MidiRemote, Category::Privacy};
 
 juce::Component* mixerRow(PreferencesSettingsTab& t) {
     for (auto* child : descendantsOf(t))

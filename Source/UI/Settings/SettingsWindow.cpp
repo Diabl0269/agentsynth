@@ -427,6 +427,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     auto* preferencesSettingsTab = new PreferencesSettingsTab(appProperties);
     preferencesSettingsTab->setGraphEditor(graphEditor);
+    preferencesTab = preferencesSettingsTab;
     tabs.addTab("Preferences", juce::Colours::transparentBlack, preferencesSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
@@ -503,6 +504,11 @@ void SettingsWindow::timerCallback() {
     if (shortcutHints != nullptr)
         shortcutHints->sample(hasKeyboardFocus(true) ? juce::ModifierKeys::getCurrentModifiersRealtime()
                                                      : juce::ModifierKeys());
+}
+
+void SettingsWindow::setUrlOpener(std::function<void(const juce::URL&)> opener) {
+    if (preferencesTab != nullptr)
+        preferencesTab->setUrlOpener(std::move(opener));
 }
 
 SettingsWindow::~SettingsWindow() {
