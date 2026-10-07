@@ -367,6 +367,15 @@ correctly positioned and stacked:
   stale rect from before the last window resize can never show through the instant
   `showWelcomeScreen()` makes it visible again.
 
+**Usage statistics card.** While `usageStatsAsked` and `shareUsageStats` are both false, an inset panel
+(`UsageStatsPromptComponent`, accent border and fill from the theme) sits between the subtitle and the three start
+buttons: heading, a plain-words body, Share and No thanks as equal buttons, and a "What we collect" link. All
+three are Tab-reachable inside the overlay's focus container and show the shared focus ring. The card height
+(`getCardBounds()`) and `resized()` both add `promptSlotHeight()`, the panel plus its 14 px gap scaled by the
+open fraction, so after an answer the panel collapses (180 ms, `easeInCubic`, height and fade) and the card
+re-forms with it instead of jumping; Share shows a one-line thanks first, and Reduced Motion lands at once.
+Details: [usage statistics](../development/usage-statistics.md#the-welcome-screen-card).
+
 App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s
 Welcome screen subsection for the gating rationale and the guard-before-hide ordering that keeps a
 Cancel answer from dismissing it. It always shows at launch in the standalone app (never in the

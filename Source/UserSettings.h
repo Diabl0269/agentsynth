@@ -91,4 +91,9 @@ inline constexpr const char* kModDropHintShownSettingKey = "modDropHintShown";
  *  it to TelemetryService (docs/development/usage-statistics.md). */
 inline constexpr const char* kShareUsageStatsSettingKey = "shareUsageStats";
 
+/** The Welcome screen's usage statistics card has been answered (bool, default false). Set by the card's two
+ *  buttons and by the Preferences toggle (synth::telemetry::applyShareUsageStatsChoice); the card shows only
+ *  while this and kShareUsageStatsSettingKey are both false, so it asks once. */
+inline constexpr const char* kUsageStatsAskedSettingKey = "usageStatsAsked";
+
 } // namespace synth

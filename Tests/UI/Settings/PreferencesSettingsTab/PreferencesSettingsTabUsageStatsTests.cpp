@@ -182,3 +182,17 @@ TEST_F(UsageStatsTabTest, TheFilterFindsTheToggleFromAnyCategory) {
     ASSERT_NE(toggle, nullptr);
     EXPECT_TRUE(toggle->isVisible());
 }
+
+// An answer given here is an answer: the Welcome screen's card never asks after it, either way.
+TEST_F(UsageStatsTabTest, TurningTheToggleEitherWayMarksTheWelcomeQuestionAnswered) {
+    auto tab = makeTab();
+    auto* toggle = findToggleByText(*tab, "Share anonymous usage statistics");
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_FALSE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+    click(*toggle);
+    EXPECT_TRUE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+    appProperties.getUserSettings()->setValue(synth::kUsageStatsAskedSettingKey, false);
+    click(*toggle);
+    EXPECT_FALSE(settingIsOn());
+    EXPECT_TRUE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+}

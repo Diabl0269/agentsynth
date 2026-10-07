@@ -6,6 +6,7 @@
 #include "Branding.h"
 #include "MainComponent.h"
 #include "MainComponentShortcutHints.h"
+#include "Telemetry/UsageStatsChoice.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/SettingsWindow.h"
@@ -404,6 +405,16 @@ void MainComponent::createWelcomeScreen() {
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };
         welcomeScreen_->onContributeRequested = [this] { openContributePage(); };
+        // The card writes through the same function as the Preferences toggle; the settings change that write
+        // broadcasts reaches applyTelemetryPreference() like any other, so the running service follows.
+        welcomeScreen_->onUsageStatsChoice = [this](bool share) {
+            synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), share);
+        };
+        welcomeScreen_->onUsageStatsLearnMoreRequested = [this] {
+            urlOpener_(juce::URL(synth::telemetry::kUsageStatsPrivacyUrl));
+        };
+        welcomeScreen_->setUsageStatsPromptShown(
+            synth::telemetry::shouldAskAboutUsageStats(appProperties.getUserSettings()));
         welcomeScreen_->onWhatsNewRequested = [this] {
             // Deliberately does NOT hide the welcome screen — the user should be able to read
             // What's New and still see/use the overlay's other options afterward.

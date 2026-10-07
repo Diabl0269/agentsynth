@@ -14,4 +14,6 @@ target_sources(Core PRIVATE
     Source/Telemetry/TelemetrySender.cpp
     Source/Telemetry/TelemetryService.h
     Source/Telemetry/TelemetryService.cpp
+    Source/Telemetry/UsageStatsChoice.h
+    Source/Telemetry/UsageStatsChoice.cpp
 )

@@ -407,6 +407,7 @@ TEST(AccessibilityCoverageTest, WelcomeScreen) {
     synth::ui::WelcomeScreenComponent welcome;
     welcome.setSize(900, 700);
     welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
+    welcome.setUsageStatsPromptShown(true); // the usage statistics card, with its Share / No thanks / link
     EXPECT_TRUE(matchesBaseline("WelcomeScreen", auditAccessibility(welcome)));
 }
 

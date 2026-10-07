@@ -1,7 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "Telemetry/TelemetryIdStore.h"
-#include "Telemetry/TelemetryRecorder.h"
+#include "Telemetry/UsageStatsChoice.h"
 #include "UserSettings.h"
 
 // Concern: the Privacy group -- the opt-in "Share anonymous usage statistics" toggle, the "What we collect" link
@@ -10,10 +10,6 @@
 // opt-out promise hold even where no TelemetryService is running (a plugin build). Chained after the patch save
 // location row in the setup chain and after the MIDI Remote group in the layout chain.
 
-namespace {
-constexpr const char* kPrivacyPolicyUrl = "https://agentsynth.app/privacy#telemetry";
-} // namespace
-
 bool PreferencesSettingsTab::isShareUsageStatsEnabled() const { return shareUsageStatsToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setShareUsageStatsEnabled(bool enabled) {
@@ -21,20 +17,11 @@ void PreferencesSettingsTab::setShareUsageStatsEnabled(bool enabled) {
     persistShareUsageStats(enabled);
 }
 
-/** On: the id file appears now (only if there is none), so the row can show it at once. Off: the id and the unsent
-    queue are deleted before this returns; the running service empties its memory when the settings change reaches it.
- */
+/** The shared choice (also made by the Welcome screen's card): the setting and the answered flag are written, the
+    id file appears at once on (only if there is none) so the row can show it, and off deletes the id and the unsent
+    queue before this returns; the running service empties its memory when the settings change reaches it. */
 void PreferencesSettingsTab::persistShareUsageStats(bool enabled) {
-    appProperties.getUserSettings()->setValue(synth::kShareUsageStatsSettingKey, enabled);
-    appProperties.getUserSettings()->saveIfNeeded();
-    synth::telemetry::TelemetryIdStore idStore;
-    if (enabled) {
-        if (idStore.load().isEmpty())
-            idStore.create();
-    } else {
-        idStore.erase();
-        synth::telemetry::TelemetryRecorder::defaultQueueFile().deleteFile();
-    }
+    synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), enabled);
     refreshUsageStatsIdRow();
     resized();
 }
@@ -59,7 +46,7 @@ void PreferencesSettingsTab::setupUsageStatsControls() {
     contentHost.addAndMakeVisible(usageStatsLearnMoreButton);
     usageStatsLearnMoreButton.setTitle("What we collect");
     usageStatsLearnMoreButton.setTooltip("Opens the privacy page that lists exactly what a usage summary holds.");
-    usageStatsLearnMoreButton.onClick = [this] { urlOpener(juce::URL(kPrivacyPolicyUrl)); };
+    usageStatsLearnMoreButton.onClick = [this] { urlOpener(juce::URL(synth::telemetry::kUsageStatsPrivacyUrl)); };
 
     contentHost.addAndMakeVisible(usageStatsIdLabel);
     usageStatsIdLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
