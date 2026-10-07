@@ -430,7 +430,8 @@ juce::MouseEvent mouseEventOn(juce::Component& s, juce::Point<float> pos, juce::
 // trackpad pan step, a zoom step, a knob drag step through the slider's own mouse handlers and a timeline scroll step,
 // each followed by the paint it needs (the whole editor for the tick, pan and zoom, the dragged card's area for the
 // knob, the panel for the timeline). "memo" counts the cable rebuilds a knob drag caused. PROFILE_SPIN_FRAME=<s> with
-// PROFILE_SPIN_KIND=tick|pan|zoom|knob|timeline loops one of them for that long, to attach `sample` to.
+// PROFILE_SPIN_KIND=tick|pan|zoom|knob|timeline loops one of them for that long, to attach `sample` to;
+// PROFILE_SNAPSHOT=<png> saves the window as the frames left it.
 void profileInteractions(MainComponent& mc, const char* label) {
     auto& editor = mc.getGraphEditor();
     editor.finishCardGlideForTest();
@@ -499,6 +500,11 @@ void profileInteractions(MainComponent& mc, const char* label) {
     }
     if (slider != nullptr)
         slider->mouseUp(mouseEventOn(*slider, down, down));
+    if (const char* png = std::getenv("PROFILE_SNAPSHOT")) { // the canvas as the frames left it, to look at
+        juce::FileOutputStream out{juce::File(png)};
+        if (out.openedOk() && out.setPosition(0) && out.truncate().wasOk())
+            juce::PNGImageFormat().writeImageToStream(mc.createComponentSnapshot(mc.getLocalBounds(), true, 1.0f), out);
+    }
     std::printf("[interactions] %s cables=%d | tick+paint=%.2f paint=%.2f | pan=%.2f zoom=%.2f | knob=%.2f (memo "
                 "rebuilds %d of 11) | timeline=%.2f\n",
                 label, (int)editor.buildVisibleCables().size(), ms["tick"], avgMs(10, [&] { paintOnce(editor); }),
