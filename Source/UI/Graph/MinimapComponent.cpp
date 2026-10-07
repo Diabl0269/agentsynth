@@ -27,6 +27,8 @@ void MinimapComponent::updateTooltip() {
 void MinimapComponent::setModel(MinimapModel model) {
     if (model_ == model)
         return;
+    if (model.nodes != model_.nodes || model.cables != model_.cables)
+        thumbnailValid_ = false;
     model_ = std::move(model);
     repaint();
 }
@@ -121,6 +123,45 @@ void MinimapComponent::paint(juce::Graphics& g) {
     const auto world = computeWorldBounds(model_);
     const auto transform = computeWorldToMap(world, mapArea);
 
+    // The nodes and cables are drawn into an image and reused: the map sits over the canvas, so every canvas tick and
+    // pan frame repaints it, and drawing every card and cable each time made those frames cost in proportion to the
+    // patch. The image is redrawn when they change, or the mapping, the pixel scale or the accent colour does.
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    const auto imageArea = (bounds * scale).getSmallestIntegerContainer();
+    if (!thumbnailValid_ || thumbnail_.getBounds() != imageArea.withZeroOrigin() || transform != thumbnailTransform_ ||
+        accent != thumbnailAccent_) {
+        thumbnail_ = juce::Image(juce::Image::ARGB, juce::jmax(1, imageArea.getWidth()),
+                                 juce::jmax(1, imageArea.getHeight()), true);
+        juce::Graphics ig(thumbnail_);
+        ig.addTransform(juce::AffineTransform::scale(scale));
+        paintNodesAndCables(ig, transform);
+        thumbnailTransform_ = transform;
+        thumbnailAccent_ = accent;
+        thumbnailValid_ = true;
+        ++thumbnailRenders_;
+    }
+    g.drawImageTransformed(thumbnail_, juce::AffineTransform::scale(1.0f / scale));
+
+    // Viewport: dim everything outside it with a translucent wash (even-odd fill between the map
+    // area and the viewport rect leaves a "hole" over the viewport), then stroke the viewport.
+    const auto viewportMap = model_.viewport.transformedBy(transform).getIntersection(mapArea);
+
+    juce::Path wash;
+    wash.addRectangle(mapArea);
+    if (!viewportMap.isEmpty())
+        wash.addRectangle(viewportMap);
+    wash.setUsingNonZeroWinding(false); // even-odd: the viewport rect punches a hole in the wash
+    g.setColour(bg0.withAlpha(0.45f));
+    g.fillPath(wash);
+
+    if (!viewportMap.isEmpty()) {
+        g.setColour(accent);
+        g.drawRect(viewportMap, 1.5f);
+    }
+}
+
+void MinimapComponent::paintNodesAndCables(juce::Graphics& g, const juce::AffineTransform& transform) const {
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     // Cables: thin straight lines (this is a thumbnail, not the bezier the canvas draws).
     for (const auto& cable : model_.cables) {
         const auto p1 = cable.p1.transformedBy(transform);
@@ -148,23 +189,6 @@ void MinimapComponent::paint(juce::Graphics& g) {
             g.setColour(accent);
             g.drawRoundedRectangle(r, kNodeCornerRadius, 1.5f);
         }
-    }
-
-    // Viewport: dim everything outside it with a translucent wash (even-odd fill between the map
-    // area and the viewport rect leaves a "hole" over the viewport), then stroke the viewport.
-    const auto viewportMap = model_.viewport.transformedBy(transform).getIntersection(mapArea);
-
-    juce::Path wash;
-    wash.addRectangle(mapArea);
-    if (!viewportMap.isEmpty())
-        wash.addRectangle(viewportMap);
-    wash.setUsingNonZeroWinding(false); // even-odd: the viewport rect punches a hole in the wash
-    g.setColour(bg0.withAlpha(0.45f));
-    g.fillPath(wash);
-
-    if (!viewportMap.isEmpty()) {
-        g.setColour(accent);
-        g.drawRect(viewportMap, 1.5f);
     }
 }
 

@@ -103,6 +103,8 @@ public:
     static constexpr float kWorldMargin = 80.0f;
 
     void paint(juce::Graphics& g) override;
+    /** How many times the nodes and cables were drawn rather than reused (test seam). */
+    int getThumbnailRenderCountForTest() const noexcept { return thumbnailRenders_; }
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
@@ -120,8 +122,15 @@ private:
     /** Rebuilds the tooltip from the fixed description plus the current shortcut display. */
     void updateTooltip();
 
+    void paintNodesAndCables(juce::Graphics& g, const juce::AffineTransform& transform) const;
+
     MinimapModel model_;
     juce::String shortcutDisplay_;
+    juce::Image thumbnail_; // nodes and cables as last drawn, reused while they, the mapping and the scale hold
+    juce::AffineTransform thumbnailTransform_;
+    juce::Colour thumbnailAccent_;
+    bool thumbnailValid_ = false;
+    int thumbnailRenders_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MinimapComponent)
 };

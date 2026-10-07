@@ -79,7 +79,11 @@ advertising the pre-rebind key until some unrelated toggle happens to refresh it
 
 Follows [rendering](rendering.md). `setModel()` and `setViewport()` only `repaint()` when the
 incoming data actually differs from the current model (`MinimapModel::operator==`, a field-wise
-comparison over nodes, cables and viewport).
+comparison over nodes, cables and viewport). The nodes and cables themselves are drawn into an image and reused
+(`MinimapComponent::paint`): the map sits over the canvas, so every 30 Hz canvas tick and every pan frame repaints it,
+and redrawing every card and cable each time made those frames cost in proportion to the patch. The image is redrawn
+only when the nodes or cables change, or the world-to-map mapping, the pixel scale or the accent colour does; the
+viewport wash and outline are drawn live on top.
 
 `GraphEditor::timerCallback()` — the existing 30 Hz tick that already drives the connection-flow
 animation — pushes a freshly built model via `buildMinimapModel()` **only while the minimap is

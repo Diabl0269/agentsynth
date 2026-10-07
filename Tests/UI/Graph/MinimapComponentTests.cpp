@@ -448,3 +448,29 @@ TEST(MinimapComponentTest, MouseAndWheelEventsAreSafeWithoutCallbacks) {
     wheel.deltaY = 0.5f;
     EXPECT_NO_THROW(comp.mouseWheelMove(event, wheel));
 }
+
+// The map sits over the canvas, so every canvas tick and pan frame repaints it: drawing every card and cable each time
+// made those frames cost in proportion to the patch (docs/layout/minimap.md#repaint-discipline).
+TEST(MinimapThumbnail, ARepaintOrAPanReusesTheDrawnNodesAndCables) {
+    synth::ui::MinimapComponent map;
+    map.setSize(200, 140);
+    synth::ui::MinimapModel model;
+    for (int i = 0; i < 20; ++i)
+        model.nodes.push_back({juce::Rectangle<float>(i * 300.0f, 200.0f, 240.0f, 160.0f), juce::Colours::red, false});
+    model.cables.push_back({{240.0f, 280.0f}, {300.0f, 280.0f}, juce::Colours::green});
+    model.viewport = {0.0f, 0.0f, 1600.0f, 1000.0f};
+    map.setModel(model);
+    auto paint = [&map] { (void)map.createComponentSnapshot(map.getLocalBounds(), true, 1.0f); };
+
+    paint();
+    const int drawn = map.getThumbnailRenderCountForTest();
+    paint();
+    map.setViewport({800.0f, 0.0f, 1600.0f, 1000.0f}); // a pan inside the patch keeps the mapping
+    paint();
+    EXPECT_EQ(map.getThumbnailRenderCountForTest(), drawn) << "nothing on the map moved";
+
+    model.nodes.front().bounds.translate(40.0f, 0.0f);
+    map.setModel(model);
+    paint();
+    EXPECT_EQ(map.getThumbnailRenderCountForTest(), drawn + 1) << "a card moved";
+}
