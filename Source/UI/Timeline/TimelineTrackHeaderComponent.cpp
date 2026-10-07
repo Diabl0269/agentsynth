@@ -324,6 +324,7 @@ void TimelineTrackHeaderComponent::openMidiDestinationsPicker() {
 
 //==============================================================================
 void TimelineTrackHeaderComponent::refreshFromDoc() {
+    ++refreshCount_;
     const auto* t = track();
     if (t == nullptr)
         return;

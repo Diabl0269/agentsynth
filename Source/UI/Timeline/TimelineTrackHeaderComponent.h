@@ -394,6 +394,10 @@ struct TrackHeaderHost {
      *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
      *  simply has no channel behaviour, and every existing implementer keeps compiling. */
     virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
+
+    /** True while the host is certain to re-read every header before anything is painted (a full reconcile follows
+     *  the current edit), so a doc change in the middle of the edit need not refresh the rows itself. */
+    virtual bool everyHeaderRefreshFollows() const { return false; }
 };
 
 class TimelineTrackHeaderComponent
@@ -440,6 +444,8 @@ public:
     /** Re-reads every displayed value from the doc. Called by TimelinePanelComponent whenever the
      *  doc notifies — the ONLY thing that refreshes a header. */
     void refreshFromDoc();
+    /** How many times refreshFromDoc() ran on this row. */
+    int getRefreshCountForTest() const noexcept { return refreshCount_; }
 
     void paint(juce::Graphics& g) override;
     // The per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
@@ -760,6 +766,7 @@ private:
 
     // The app's channel surface, or null (no host, or a host that wires none -- a test
     // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.
+    int refreshCount_ = 0;
     synth::ui::TrackChannelLinkSurface* linkSurface() const {
         return host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
     }

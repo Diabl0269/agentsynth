@@ -151,6 +151,9 @@ bool MainComponent::fullReconcileFollows() const {
     return !fullReconcileRunning_ && (undoManager.isRestoring() || fullReconcileFollowsDepth_ > 0);
 }
 
+// The reconcile re-reads every track header, so the timeline panel leaves its own re-read to it.
+bool MainComponent::everyHeaderRefreshFollows() const { return fullReconcileFollows(); }
+
 // The cheap half of the above, with no republish of its own: installed on
 // GraphEditor::onGraphStructureChanged as the catch-all for graph edits that have no explicit
 // post-apply site (a module deleted from the canvas). See the call site for why publishing

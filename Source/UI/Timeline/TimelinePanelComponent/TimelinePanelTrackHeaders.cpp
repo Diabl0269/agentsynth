@@ -365,9 +365,13 @@ void TimelinePanelComponent::syncTrackHeaders() {
         }
     }
 
+    // Inside an edit whose reconcile re-reads every header (TrackHeaderHost::everyHeaderRefreshFollows), the rows are
+    // not re-read here as well: the edit would pay for every row twice.
+    const bool refreshFollows = trackHeaderHost_ != nullptr && trackHeaderHost_->everyHeaderRefreshFollows();
     if (sameTracks) {
-        for (auto* header : trackHeaderList_.headers)
-            header->refreshFromDoc();
+        if (!refreshFollows)
+            for (auto* header : trackHeaderList_.headers)
+                header->refreshFromDoc();
         return;
     }
 
@@ -403,7 +407,8 @@ void TimelinePanelComponent::syncTrackHeaders() {
         if (const auto kept = previous.find(track.id.value); kept != previous.end()) {
             header = trackHeaderList_.headers.add(kept->second.release());
             previous.erase(kept);
-            header->refreshFromDoc();
+            if (!refreshFollows)
+                header->refreshFromDoc();
         } else {
             header = trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
             wireTrackHeader(*header);

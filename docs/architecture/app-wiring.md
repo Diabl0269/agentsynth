@@ -84,8 +84,9 @@ This is the definitive hook inventory. There are eight kinds, and nothing else i
 
 **Hooks 1 and 2b wait for hook 2 when it is certain to follow** (`MainComponent::fullReconcileFollows()`): inside an
 undo or redo step, whose post-restore hook runs hook 2 once the step has restored everything, and inside an edit that
-calls hook 2 itself (a track duplicate, `fullReconcileFollowsDepth_`). There hook 1's republish and mixer re-tint and
-2b's reconcile, modulator rows and mixer re-bind are skipped: each walks the whole project, and hook 2 runs every one of
+calls hook 2 itself (a track duplicate, `fullReconcileFollowsDepth_`). There hook 1's republish and mixer re-tint,
+2b's reconcile, modulator rows and mixer re-bind, and the timeline panel's own re-read of every track header
+(`TrackHeaderHost::everyHeaderRefreshFollows()`) are skipped: each walks the whole project, and hook 2 runs every one of
 them, so an edit pays for each pass once instead of once per restored action or per `updateComponents()`. Hook 2 itself
 is never deferred (`fullReconcileRunning_`): an orphan flag it flips republishes through hook 1 as usual.
 `EditRefreshWorkTests.cpp` counts it (one derivation of the modulator rows per knob undo).

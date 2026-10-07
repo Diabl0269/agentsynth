@@ -125,7 +125,9 @@ is only a cached snapshot of the last layout pass.
 `syncTrackHeaders()` keeps the row of every track that is still there when the set of tracks changes: rows are
 matched by `TrackId`, re-read (`refreshFromDoc()`) and put in the doc's order, and only a new track's row is built and
 only a removed track's row is destroyed. Re-creating every row made a duplicate, a delete and an undo of either cost a
-new row per track (`EditRefreshWorkTests.cpp` counts the rows built: one for a duplicate, none for its undo).
+new row per track (`EditRefreshWorkTests.cpp` counts the rows built: one for a duplicate, none for its undo). Inside
+an edit whose reconcile re-reads every row anyway (`TrackHeaderHost::everyHeaderRefreshFollows()`: an undo or redo
+step, a track duplicate), the sync leaves the re-read to it, so each row is read once per edit.
 
 The rebuild branch preserves `focusedTrackIndex_` **by `TrackId`**, not by
 numeric index, across a track add, remove or reorder: a track deleted ABOVE the focused one must

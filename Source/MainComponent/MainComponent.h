@@ -514,6 +514,7 @@ private:
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
+    bool everyHeaderRefreshFollows() const override;
 
     juce::String createTrackInNode();
     juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);

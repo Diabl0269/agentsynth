@@ -112,15 +112,34 @@ TEST(EditRefreshWork, ADuplicateAndItsUndoBuildOnlyTheCopysHeaderRow) {
             << "rows in track order";
 }
 
-TEST(EditRefreshWork, ADuplicateDerivesRoutingsAtMostTwiceAndEndsPublished) {
+TEST(EditRefreshWork, ADuplicateDerivesRoutingsTwiceAndEndsPublished) {
     EditRig rig;
     const int before = rig.derivations();
     rig.duplicateFirst();
-    EXPECT_LE(rig.derivations() - before, 2) << "the doc change's sync and the reconcile, never per updateComponents";
+    EXPECT_EQ(rig.derivations() - before, 2) << "the doc change's sync and the reconcile, never per updateComponents";
     EXPECT_EQ(rig.publishedTracks(), rig.mc.getTimelineDoc().getTracks().size()) << "the reconcile published the copy";
 
     ASSERT_TRUE(rig.mc.getUndoManager().undo());
     EXPECT_EQ(rig.publishedTracks(), 3u) << "the undo's doc change is published by the reconcile after the step";
     ASSERT_TRUE(rig.mc.getUndoManager().redo());
     EXPECT_EQ(rig.publishedTracks(), 4u);
+}
+
+TEST(EditRefreshWork, ADuplicateAndItsUndoReReadEachKeptRowOnce) {
+    EditRig rig;
+    std::map<std::int64_t, int> refreshes;
+    for (const auto& [id, header] : rig.headers())
+        refreshes[id] = header->getRefreshCountForTest();
+
+    rig.duplicateFirst();
+    for (const auto& [id, header] : rig.headers())
+        if (refreshes.count(id) != 0)
+            EXPECT_EQ(header->getRefreshCountForTest() - refreshes[id], 1)
+                << "the reconcile re-reads each row; the doc change in the middle of the edit does not";
+
+    for (const auto& [id, header] : rig.headers())
+        refreshes[id] = header->getRefreshCountForTest();
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    for (const auto& [id, header] : rig.headers())
+        EXPECT_EQ(header->getRefreshCountForTest() - refreshes[id], 1) << "and once for the undo step";
 }
