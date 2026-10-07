@@ -71,6 +71,17 @@ namespace {
 // GraphContentComponent::paint (rather than inlined there) to keep that function under the
 // check-function-sizes.sh ratchet — this is its own named step, not a collaborator with state of
 // its own, so a free function beside paint() rather than a new class earns its keep here.
+// Whether a repaint of `clip` touches anything paintExpandedMacroHulls draws for the macro: everything sits inside its
+// border except a name chip wider than the border, which only the chip row can reach. A glide frame repaints a small
+// area, and dashing every border and measuring every chip's name for it cost as much as the rest of that paint.
+bool intersectsHullOrChip(juce::Rectangle<int> clip, juce::Rectangle<int> hull, GraphEditor& editor,
+                          const juce::String& macroId) {
+    if (clip.intersects(hull.expanded(4)))
+        return true;
+    const bool inChipRow = clip.getBottom() >= hull.getY() && clip.getY() <= hull.getY() + 24;
+    return inChipRow && clip.intersects(editor.getMacroController().macroChipBounds(macroId).expanded(2));
+}
+
 void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
     if (editor.getMacros().empty())
         return;
@@ -88,8 +99,9 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // only in that one case (a member being pulled out must visibly shrink the hull away from
         // it, which the live union alone can never do).
         const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty())
+        if (hull.isEmpty() || !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
             continue;
+        ++graph_editor_paint::workCounters().hullsPainted;
 
         // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
         // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
@@ -612,8 +624,14 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // ---- Draw cables ----
     // One list, built by GraphEditor::buildVisibleCables(), drives both what is painted and what
     // the mouse can hit. Colour comes from GraphEditor::colourForCable so the active mode and any
-    // user overrides are applied in exactly one place.
+    // user overrides are applied in exactly one place. A cable wholly outside the area being repainted is skipped
+    // before its path is built: a glide frame repaints a small area, and stroking every cable on a big patch only to
+    // have it clipped away cost more than the rest of that paint.
+    const auto clip = g.getClipBounds().toFloat();
     for (const auto& cable : editor.buildVisibleCables()) {
+        if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
+            continue;
+        ++graph_editor_paint::workCounters().cablesPainted;
         const bool hovered = editor.isCableHovered(cable);
         const juce::Colour colour = editor.colourForCable(cable);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;

@@ -26,13 +26,16 @@ text layout and parameter reads on every animation frame. **Do not reintroduce u
 
 `buildVisibleCables()` is memoized, and `GraphEditor::repaintCanvas()` is the single "canvas
 changed" seam that drops the memo and repaints (`content.repaint()`). **Any new repaint of the
-canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.**
+canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.** The exceptions are animation
+frames that change no cable or move cables themselves: the card glide's `Hooks::repaintArea` (it moves the cables of
+gliding cards inside the memo, see below) and the cable retract, which repaint only their own area with
+`content.repaint(area)` and keep the memo.
 
 ## Per-frame work does not grow with the patch
 
-The 30 Hz tick rebuilds the cable list (the memo above is dropped every tick so cable activity stays live) and every
-glide frame rebuilds and repaints it, so on a project with dozens of tracks anything per cable, per card or per macro
-in those passes runs hundreds of times a frame. Three rules keep it linear:
+The 30 Hz tick rebuilds the cable list (the memo above is dropped every tick so cable activity stays live) and
+repaints the whole canvas, so on a project with dozens of tracks anything per cable, per card or per macro in those
+passes runs hundreds of times a frame. These rules keep it linear, and keep animation frames off that path:
 
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
@@ -42,6 +45,14 @@ in those passes runs hundreds of times a frame. Three rules keep it linear:
   all ask `paintedMacroHullBounds()`; `GraphContentComponent::paint` opens a `graph_editor_paint::HullMemoScope`
   (`GraphEditorPaintMemo.h`) so the first answer per macro serves the rest of that paint. Nothing moves a card during
   one paint, so the memo never goes stale; it does not outlive the paint.
+- **An animation frame repaints only what it moves.** A card glide or delete/undo ghost frame
+  (`CardGlideAnimator::requestFrameRepaint`) repaints the ghosts' and snapshots' paths plus the cables touching a
+  gliding card, before and after the step, and moves those cables in the memo by the change in their card's offset
+  (`followCables`) instead of rebuilding every cable; a cable retract frame repaints only where its ghosts are drawn.
+  A partial paint then skips every cable (`synth::ui::cablePaintBounds`, `CableCurve.h`) and macro border whose box
+  misses the clip, before building its path. Repainting the whole canvas and rebuilding every cable per frame made
+  a one-card delete or undo cost as much as the idle tick's full paint at every frame (about 16 ms on the Load test
+  project, 49 ms at 80 tracks).
 - **A glide only snapshots what can be seen.** `CardGlideAnimator::arm` renders a snapshot (a full card paint) only for
   a card whose old-to-new path crosses the visible canvas; an off-screen card is neither hidden nor snapshotted but
   keeps its item, so its cables still slide. Snapshotting every moved card stalled an undo of a big Auto Arrange for
@@ -56,7 +67,8 @@ in those passes runs hundreds of times a frame. Three rules keep it linear:
 - **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix
   (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up.
 
-`Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp` holds these as work counts (`graph_editor_paint::
+`Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp` and `Tests/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp`
+hold these as work counts (`graph_editor_paint::
 workCounters()`), not timings. `Tests/App/ManyTracksProfileTests.cpp` is a disabled bench that prints the real per-frame
 costs for 10 to 80 instrument tracks (`--gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'`).
 
@@ -69,6 +81,10 @@ whose track duplicates froze the app. It lives on the developer's machine, not i
 `PROFILE_DUPLICATE` times (default 10) through the real Cmd+D path, printing each duplicate's own time, the message-loop
 work it leaves behind and the next paint:
 `PROFILE_DUPLICATE=10 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile*'`.
+`DISABLED_LoadTestDeleteUndoProfile` opens a temporary copy of it (autosaves left out, the copy deleted afterwards)
+and prints the cost of deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
+call, the one full repaint it asks for, and the average ghost frame (`profile()` prints the same at N tracks):
+`./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestDeleteUndoProfile*'`.
 
 ## Gated timers, not free-running ones
 

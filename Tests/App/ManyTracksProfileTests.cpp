@@ -12,15 +12,18 @@
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <map>
 
 namespace {
 
 double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+void profileDeleteUndo(MainComponent& mc, const char* label); // below the Load test bench
 
 double avgMs(int reps, const std::function<void()>& fn) {
     fn(); // warm-up: the first paint rasterizes the card caches
@@ -35,15 +38,30 @@ void paintOnce(juce::Component& c) {
         (void)c.createComponentSnapshot(c.getLocalBounds(), true, 1.0f);
 }
 
-// One glide frame as the VBlank runs it: tween + repaintCanvas (drops the cable memo) + a paint of the canvas.
+// Paints what the glide's last frame asked to repaint: its area, or the whole editor when it asked for everything.
+void paintGlideFrame(GraphEditor& editor) {
+    const auto area = editor.getCardGlideForTest().lastFrameArea();
+    auto* canvas =
+        editor.getModuleComponents().isEmpty() ? nullptr : editor.getModuleComponents()[0]->getParentComponent();
+    if (area.isEmpty() || canvas == nullptr) {
+        paintOnce(editor);
+        return;
+    }
+    const auto r = editor.getLocalArea(canvas, area).getIntersection(editor.getLocalBounds());
+    if (!r.isEmpty())
+        (void)editor.createComponentSnapshot(r, true, 1.0f);
+}
+
+// One glide frame as the VBlank runs it: the animator's frame (tween, cables, repaint request) + the paint it asked
+// for.
 double glideFrameMs(GraphEditor& editor, bool withPaint) {
     const double t0 = nowMs();
     int frames = 0;
     for (float t = 0.1f; t < 1.0f; t += 0.1f, ++frames) {
-        editor.advanceCardGlideForTest(t);
+        editor.getCardGlideForTest().stepFrameForTest(t);
         (void)editor.buildVisibleCables();
         if (withPaint)
-            paintOnce(editor);
+            paintGlideFrame(editor);
     }
     return (nowMs() - t0) / frames;
 }
@@ -188,6 +206,7 @@ void profile(int tracks, bool expand) {
         arrangeFrameNoPaint, arrangeFrame, undoMs, undoFrame, redoMs, redoFrame, docMut, mcTick, tlPaint, tlStrip,
         tlScroll, mixPaint);
     std::fflush(stdout);
+    profileDeleteUndo(mc, ("tracks=" + juce::String(tracks) + " expand=" + juce::String(expand ? 1 : 0)).toRawUTF8());
 }
 
 // Runs the message loop briefly so async work a real frame would do (graph rebuild, deferred repaints) is counted.
@@ -263,6 +282,134 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestProjectProfile) {
                                                .getChildFile("AgentSynth/Load test.agsproj");
     const char* n = std::getenv("PROFILE_DUPLICATE");
     profileProject(project, n != nullptr ? std::atoi(n) : 10);
+}
+
+namespace {
+
+// A glide or ghost frame as the VBlank runs it (the animator's own frame, its repaint request) plus the paint.
+double ghostFrameMs(GraphEditor& editor, CardGlideAnimator& glide) {
+    if (!glide.isLive())
+        return 0.0;
+    const double t0 = nowMs();
+    int frames = 0;
+    for (float t = 0.1f; t < 1.0f; t += 0.1f, ++frames) {
+        glide.stepFrameForTest(t);
+        paintGlideFrame(editor);
+    }
+    return (nowMs() - t0) / frames;
+}
+
+// The on-screen card with the most cables: the card a delete takes the most with it.
+ModuleComponent* busiestVisibleCard(GraphEditor& editor) {
+    std::map<uint32_t, int> cablesOf;
+    for (const auto& c : editor.buildVisibleCables()) {
+        ++cablesOf[c.id.srcUid];
+        ++cablesOf[c.id.dstUid];
+    }
+    ModuleComponent* best = nullptr;
+    for (auto* m : editor.getModuleComponents())
+        if (m != nullptr && m->isVisible() && m->getBounds().intersects(card_glide_detail::visibleCanvasArea(*m)) &&
+            (best == nullptr || cablesOf[m->getNodeId().uid] > cablesOf[best->getNodeId().uid]))
+            best = m;
+    return best;
+}
+
+// Deletes the busiest on-screen card with the Delete key, undoes it, then makes and undoes a parameter-only change:
+// the one-off cost of each call (the model change plus arming the animation) and the per-frame cost of its frames.
+void profileDeleteUndo(MainComponent& mc, const char* label) {
+    auto& editor = mc.getGraphEditor();
+    auto& glide = editor.getCardGlideForTest();
+    synth::ui::setReducedMotionForTest(false);
+    glide.setForceAnimateForTest(true);
+    editor.finishCardGlideForTest();
+    paintOnce(editor); // the card caches are warm, as on screen
+    auto* card = busiestVisibleCard(editor);
+    if (card == nullptr) {
+        std::printf("[delete-undo] %s no card on screen\n", label);
+        return;
+    }
+    const auto id = card->getNodeId();
+    editor.setSelectedNodes({id});
+    double t0 = nowMs();
+    editor.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
+    const double deleteMs = nowMs() - t0;
+    const int exits = glide.exitGhostCount();
+    // Other drivers that repaint the whole canvas on their own frames while the ghost runs.
+    const bool deleteHull = editor.isHullGlideLiveForTest(), deleteRetract = editor.getCableRetractForTest().isLive();
+    t0 = nowMs();
+    paintOnce(editor); // the one whole-canvas repaint arming asks for
+    const double deletePaint = nowMs() - t0;
+    const double deleteFrame = ghostFrameMs(editor, glide);
+    editor.finishCardGlideForTest();
+    editor.finishHullGlideForTest();
+    editor.finishCableRetractForTest();
+
+    t0 = nowMs();
+    mc.getUndoManager().undo();
+    const double undoMs = nowMs() - t0;
+    const int enters = glide.enterGhostCount();
+    const bool undoHull = editor.isHullGlideLiveForTest(), undoRetract = editor.getCableRetractForTest().isLive();
+    t0 = nowMs();
+    paintOnce(editor);
+    const double undoPaint = nowMs() - t0;
+    const double undoFrame = ghostFrameMs(editor, glide);
+    editor.finishCardGlideForTest();
+    editor.finishHullGlideForTest();
+    editor.finishCableRetractForTest();
+
+    auto& graph = mc.getAudioEngine().getGraph();
+    juce::AudioProcessorParameter* param = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node->nodeID == id && !node->getProcessor()->getParameters().isEmpty())
+            param = node->getProcessor()->getParameters()[0];
+    double paramUndoMs = 0.0;
+    bool paramArmed = false;
+    if (param != nullptr) {
+        mc.getUndoManager().captureBeforeState(graph);
+        param->setValueNotifyingHost(param->getValue() > 0.5f ? 0.1f : 0.9f);
+        mc.getUndoManager().pushSnapshotFromCapture(graph);
+        t0 = nowMs();
+        mc.getUndoManager().undo();
+        paramUndoMs = nowMs() - t0;
+        paramArmed = glide.isLive();
+        editor.finishCardGlideForTest();
+    }
+    std::printf(
+        "[delete-undo] %s cables=%d | delete=%.1f paint=%.1f exits=%d frame=%.2f | undo=%.1f paint=%.1f "
+        "enters=%d frame=%.2f | paramUndo=%.1f armed=%d snapshots=%d rendered=%d | hull/retract live: delete=%d/%d "
+        "undo=%d/%d\n",
+        label, (int)editor.buildVisibleCables().size(), deleteMs, deletePaint, exits, deleteFrame, undoMs, undoPaint,
+        enters, undoFrame, paramUndoMs, paramArmed ? 1 : 0, glide.snapshotCount(), glide.renderedSnapshotCount(),
+        deleteHull ? 1 : 0, deleteRetract ? 1 : 0, undoHull ? 1 : 0, undoRetract ? 1 : 0);
+    std::fflush(stdout);
+    glide.setForceAnimateForTest(false);
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+} // namespace
+
+// The Load test project's delete and undo animation costs (docs/layout/rendering.md#the-load-test-project), on a
+// temporary copy without its autosave sidecars so the bundle itself is never opened or written.
+TEST_F(ChannelFlowTest, DISABLED_LoadTestDeleteUndoProfile) {
+    const char* path = std::getenv("PROFILE_PROJECT");
+    const auto original = path != nullptr ? juce::File(path)
+                                          : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                                .getChildFile("AgentSynth/Load test.agsproj");
+    const auto copy =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    ASSERT_TRUE(original.copyDirectoryTo(copy)) << original.getFullPathName();
+    for (const auto& f : copy.findChildFiles(juce::File::findFiles, false, "autosave*.json"))
+        f.deleteFile();
+    const struct RemoveCopy {
+        juce::File dir;
+        ~RemoveCopy() { dir.deleteRecursively(); }
+    } removeCopy{copy};
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 1000);
+    mc.getAudioEngine().suspendDeviceCallback();
+    ASSERT_TRUE(mc.openProjectForTest(copy));
+    pumpMs();
+    profileDeleteUndo(mc, original.getFileNameWithoutExtension().toRawUTF8());
 }
 
 TEST_F(ChannelFlowTest, DISABLED_ManyTracksProfile) {

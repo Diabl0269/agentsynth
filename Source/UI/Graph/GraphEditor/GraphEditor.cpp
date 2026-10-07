@@ -59,7 +59,7 @@ GraphEditor::~GraphEditor() {
 }
 
 // Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
-// repaint that also drops the cable memo, and the VBlank updater that drives it.
+// repaint that also drops the cable memo, a partial one that keeps it, and the VBlank updater that drives it.
 void GraphEditor::configureCardGlide() {
     CardGlideAnimator::Hooks hooks;
     hooks.cards = [this] {
@@ -77,6 +77,10 @@ void GraphEditor::configureCardGlide() {
         return zoomLevel * (display != nullptr ? static_cast<float>(display->scale) : 1.0f);
     };
     hooks.repaint = [this] { repaintCanvas(); };
+    // A glide frame repaints only what it moves and moves the cables in the memo instead of rebuilding it
+    // (CardGlideAnimator::requestFrameRepaint); a memo already dropped means a full repaint is pending anyway.
+    hooks.repaintArea = [this](juce::Rectangle<int> area) { content.repaint(area); };
+    hooks.liveCables = [this]() -> std::vector<VisibleCable>* { return cablesCacheValid ? &cablesCache : nullptr; };
     hooks.updater = &vblankUpdater;
     hooks.canAnimate = [this] { return isShowing(); };
     hooks.accent = [this] { return synth::theme::themeOf(*this).colors.accent; };

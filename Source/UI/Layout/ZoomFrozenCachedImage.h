@@ -81,6 +81,13 @@ public:
     }
     bool isFrozen() const noexcept { return frozen; }
 
+    /** The last raster of the whole card at its raster scale, or a null image when there is none at the card's
+     *  current size. Shares pixels with the cache, so it shows what the card paints next; a part the card invalidated
+     *  since its last paint is one paint stale. */
+    juce::Image lastRaster() const {
+        return image.isValid() && image.getBounds() == owner.getLocalBounds() * scale ? image : juce::Image();
+    }
+
     // Test seam (docs/layout/animation.md's paint-count pattern): how many times the owner's paint tree
     // has actually been re-run into this image.
     int getRasterCountForTest() const noexcept { return rasterCount; }
