@@ -1,6 +1,7 @@
 // Concern: MixerPanelComponent's rebuild-from-snapshot and click-to-select-macro
 // routing (shared by every column kind's onColumnClicked/onEditOnCanvas/onMakeChannelRequested).
 #include "MixerPanelComponent.h"
+#include <unordered_map>
 #include <utility>
 
 #include "AppUndoManager.h"
@@ -197,13 +198,15 @@ void MixerPanelComponent::refreshTrackColours() {
         return;
     trackColoursSeen_ = std::move(colours);
 
+    // Each column's widget is found through one map, not a scan of every column per column.
+    std::unordered_map<juce::uint32, MixerColumnComponent*> widgetOf;
+    for (const auto& entry : columnEntries_)
+        if (entry.kind == ColumnEntry::Kind::Strip)
+            widgetOf.emplace(entry.nodeId.uid, static_cast<MixerColumnComponent*>(entry.component));
     const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
     for (const auto& column : snapshot.columns)
-        for (const auto& entry : columnEntries_)
-            if (entry.kind == ColumnEntry::Kind::Strip && entry.nodeId == column.nodeId) {
-                static_cast<MixerColumnComponent*>(entry.component)->setHeaderColour(column.colour);
-                break;
-            }
+        if (const auto it = widgetOf.find(column.nodeId.uid); it != widgetOf.end())
+            it->second->setHeaderColour(column.colour);
 }
 
 // The snapshot is the one source both the columns and the side pane read, so ordering it here keeps them
