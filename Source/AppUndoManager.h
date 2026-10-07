@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/GraphSnapshotCache.h"
 #include "Mixer/MixerPanLaw.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -293,16 +294,15 @@ public:
 private:
     // Undo or redo one step, retracting the cables it takes away.
     bool applyHistoryStep(bool redoStep);
-    // THE one wrapper every push goes through, so the serial below can never drift from what the
-    // undo stack actually holds - nothing outside this class calls undoManager.perform().
-    bool performAction(juce::UndoableAction* action) {
-        ++editSerial_;
-        return undoManager.perform(action);
-    }
+    // THE one wrapper every push goes through - nothing outside this class calls undoManager.perform().
+    bool performAction(juce::UndoableAction* action);
+    // Every graph snapshot this manager takes; message thread only, like the rest of the class.
+    juce::var captureGraph(juce::AudioProcessorGraph& graph) { return graphSnapshots_.capture(graph); }
 
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
+    synth::GraphSnapshotCache graphSnapshots_;
     // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
     int editSerial_ = 0;
     bool restoring_ = false;

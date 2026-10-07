@@ -7,7 +7,7 @@
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
 31 Source/AI/AIIntegrationService/AIIntegrationService.h
 24 Source/AI/AIProvider.h
-89 Source/AI/AIStateMapper/AIStateMapper.h
+87 Source/AI/AIStateMapper/AIStateMapper.h
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h

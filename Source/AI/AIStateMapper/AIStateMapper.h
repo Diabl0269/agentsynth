@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace synth {
+class ConnectionIndex; // Source/AudioEngine/ConnectionIndex.h
 
 /** Hard cap on a module's user-set card title, applied wherever a "displayName" is accepted —
  *  including the untrusted patch path, where it is the only thing stopping a hostile patch from
@@ -128,6 +129,15 @@ public:
      * apply can renumber — is what long-lived references (automation lanes, track bindings) key on.
      */
     static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
+    /** One node's entry in graphToJSON's "nodes" (assigning its uuid the same way); void for a node with no processor.
+     */
+    static juce::var nodeToJSON(juce::AudioProcessorGraph::Node& node);
+    /** graphToJSON's "connections" array from one index of the graph's cables; only those `include` accepts, if set. */
+    static juce::var
+    connectionsToJSON(const ConnectionIndex& cables,
+                      const std::function<bool(const juce::AudioProcessorGraph::Connection&)>& include = {});
+    /** graphToJSON's "modulations" array (every attenuverter wired at both ends), from the same cable index. */
+    static juce::var modulationsToJSON(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables);
 
     /** Returns `node`'s persistent "uuid", generating and persisting a fresh one first if it
      *  doesn't have one yet — the same lazy-generation graphToJSON above uses, exposed so a

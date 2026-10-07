@@ -1,8 +1,11 @@
-# The shared per-pass graph lookups and the mixer model built on them (docs/architecture/graph-queries.md), added to
-# Core outside the main list in CMakeLists.txt, which sits at the repository's file-size cap.
+# The shared per-pass graph lookups, the undo history's graph snapshot cache and the mixer model built on them
+# (docs/architecture/graph-queries.md), added to Core outside the main list in CMakeLists.txt, which sits at the
+# repository's file-size cap.
 target_sources(Core PRIVATE
     Source/AudioEngine/ConnectionIndex.h
     Source/AudioEngine/ConnectionIndex.cpp
+    Source/AudioEngine/GraphSnapshotCache.h
+    Source/AudioEngine/GraphSnapshotCache.cpp
     Source/AudioEngine/NodeUuidCache.h
     Source/AudioEngine/NodeUuidCache.cpp
     Source/MacroOwnerIndex.h

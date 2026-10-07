@@ -605,6 +605,14 @@ void refreshCanvasAfterRestore(GraphEditor& ge) {
 
 AppUndoManager::AppUndoManager() {}
 
+// The serial counts here so it can never drift from what the undo stack actually holds. The step is sized inside
+// perform(), against the graph snapshot cache's counts, so a graph step costs only the nodes its edit changed.
+bool AppUndoManager::performAction(juce::UndoableAction* action) {
+    ++editSerial_;
+    const undo_size::KnownSizes known([this](const void* id) { return graphSnapshots_.knownSize(id); });
+    return undoManager.perform(action);
+}
+
 juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
                                                                 const juce::var& beforeState,
                                                                 const juce::var& afterState) {
@@ -627,13 +635,13 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
 }
 
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
-    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
+    auto beforeState = captureGraph(graph);
 
     undoManager.beginNewTransaction();
 
     mutation();
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
     performAction(createGraphSnapshotAction(graph, beforeState, afterState));
 }
@@ -658,7 +666,7 @@ void AppUndoManager::recordNodeExtraStateChange(juce::AudioProcessorGraph& graph
                                                 juce::AudioProcessorGraph::NodeID nodeId,
                                                 const juce::var& beforeExtraState, const juce::var& afterExtraState) {
     // Same no-op rule as recordTimelineChange: an edit that left the state as it was is not an undo step.
-    if (juce::JSON::toString(beforeExtraState) == juce::JSON::toString(afterExtraState))
+    if (synth::sameJson(beforeExtraState, afterExtraState))
         return;
 
     undoManager.beginNewTransaction();
@@ -680,14 +688,14 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     if (!mutation)
         return false;
 
-    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
+    auto beforeState = captureGraph(graph);
 
     // The mutation performs the apply itself (including its own listener notifications). If the patch is
     // rejected the graph is untouched — return without pushing so the undo stack keeps no no-op entry.
     if (!mutation())
         return false;
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
     undoManager.beginNewTransaction(actionName);
     performAction(new SnapshotAction(
@@ -696,17 +704,15 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     return true;
 }
 
-void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
-    capturedBeforeState = synth::AIStateMapper::graphToJSON(graph);
-}
+void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) { capturedBeforeState = captureGraph(graph); }
 
 void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     if (capturedBeforeState.isVoid())
         return;
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
-    if (juce::JSON::toString(capturedBeforeState) != juce::JSON::toString(afterState)) {
+    if (!synth::sameJson(capturedBeforeState, afterState)) {
         undoManager.beginNewTransaction();
         performAction(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
     }
@@ -720,8 +726,8 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
 bool AppUndoManager::recordGraphChangeSince(juce::AudioProcessorGraph& graph, const juce::var& beforeState) {
     if (beforeState.isVoid())
         return false;
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
-    if (juce::JSON::toString(beforeState) == juce::JSON::toString(afterState))
+    auto afterState = captureGraph(graph);
+    if (synth::sameJson(beforeState, afterState))
         return false;
     undoManager.beginNewTransaction();
     performAction(createGraphSnapshotAction(graph, beforeState, afterState));
@@ -756,7 +762,7 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
 
     const juce::var afterState = doc.toVar();
 
-    if (juce::JSON::toString(beforeState) == juce::JSON::toString(afterState))
+    if (synth::sameJson(beforeState, afterState))
         return false; // no-op mutation: don't create an undo step
 
     undoManager.beginNewTransaction();
@@ -771,7 +777,7 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
 // `doc` must outlive this AppUndoManager, or clearUndoHistory() must run before it is destroyed.
 bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
                                             const juce::var& afterJson, std::function<void()> postRestore) {
-    if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
+    if (synth::sameJson(beforeJson, afterJson))
         return false; // no-op edit: don't create an undo step
 
     undoManager.beginNewTransaction();
@@ -786,16 +792,16 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
 
     undoManager.beginNewTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var timelineAfter = doc.toVar();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool timelineChanged = !synth::sameJson(timelineBefore, timelineAfter);
 
     if (!graphChanged && !timelineChanged)
         return false; // neither domain changed: no transaction pushed
@@ -828,16 +834,16 @@ bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& g
 
     undoManager.beginNewTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var midiRemoteBefore = doc.toVar();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var midiRemoteAfter = doc.toVar();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool midiRemoteChanged = juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool midiRemoteChanged = !synth::sameJson(midiRemoteBefore, midiRemoteAfter);
 
     if (!graphChanged && !midiRemoteChanged)
         return false; // neither domain changed: no transaction pushed
@@ -903,17 +909,16 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     // before this ever runs (typically ModuleComponent's own captureBeforeState(), handed back via
     // takeCapturedGraphBeforeState() just above — see its own comment for why a fresh capture here
     // would be too late). Every other caller passes the default and keeps today's behaviour exactly.
-    const juce::var graphBefore =
-        graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
+    const juce::var graphBefore = graphBeforeOverride.isVoid() ? captureGraph(graph) : graphBeforeOverride;
     const juce::var macrosBefore = macrosBeforeOverride.isVoid() ? macros.toVar() : macrosBeforeOverride;
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var macrosAfter = macros.toVar();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool macrosChanged = !synth::sameJson(macrosBefore, macrosAfter);
 
     if (!graphChanged && !macrosChanged)
         return false; // neither domain changed: no transaction pushed
@@ -936,23 +941,22 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
 
     undoManager.beginNewTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();
     const juce::var macrosBefore = macros.toVar();
     const juce::var midiRemoteBefore = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var timelineAfter = doc.toVar();
     const juce::var macrosAfter = macros.toVar();
     const juce::var midiRemoteAfter = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
-    undo_size::MeasuredJson measured; // the steps pushed below are sized from these lengths
-    const bool graphChanged = measured.differs(graphBefore, graphAfter);
-    const bool timelineChanged = measured.differs(timelineBefore, timelineAfter);
-    const bool macrosChanged = measured.differs(macrosBefore, macrosAfter);
-    const bool midiRemoteChanged = midiRemoteDoc != nullptr && measured.differs(midiRemoteBefore, midiRemoteAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool timelineChanged = !synth::sameJson(timelineBefore, timelineAfter);
+    const bool macrosChanged = !synth::sameJson(macrosBefore, macrosAfter);
+    const bool midiRemoteChanged = midiRemoteDoc != nullptr && !synth::sameJson(midiRemoteBefore, midiRemoteAfter);
 
     if (!graphChanged && !timelineChanged && !macrosChanged && !midiRemoteChanged)
         return false; // no domain changed: no transaction pushed

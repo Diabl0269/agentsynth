@@ -74,6 +74,7 @@ add_executable(Tests
     Modules/ModulationTargetBindingTests.cpp
     Engine/VisualBufferTests.cpp
     Engine/ConnectionIndexTests.cpp
+    Engine/GraphSnapshotCacheTests.cpp
     App/UndoSnapshotSizeTests.cpp
     Modules/AntiClickTests.cpp
     Timeline/AutomationZipperTests.cpp
