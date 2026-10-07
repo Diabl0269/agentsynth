@@ -517,11 +517,29 @@ std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack
     return std::nullopt;
 }
 
+namespace {
+juce::uint32 activeJackLayoutPass = 0; // 0: no pass open; message thread only
+juce::uint32 lastJackLayoutPass = 0;
+} // namespace
+
+// A cable rebuild asks every card for the position of each of its cable ends, and each answer re-derived the whole
+// jack column through getModulationTargets() (allocating every target's name): the rebuild cost grew with ports x
+// cables and took most of a zoom frame at 80 tracks. Within one pass nothing changes a card, so each card's column is
+// worked out once; the pass ends with the rebuild, so nothing is cached across one.
+ModuleComponent::JackLayoutPass::JackLayoutPass() {
+    jassert(activeJackLayoutPass == 0); // passes do not nest
+    activeJackLayoutPass = ++lastJackLayoutPass;
+}
+
+ModuleComponent::JackLayoutPass::~JackLayoutPass() { activeJackLayoutPass = 0; }
+
 // paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
 // THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never
-// disagree about what's actually on screen. Never cached across a call -- isInputJackKnobBound
-// recomputes live off current slider visibility every time (poly toggle, Dual I/O, the More row).
+// disagree about what's actually on screen. Never cached across a call outside a JackLayoutPass --
+// isInputJackKnobBound recomputes live off current slider visibility every time (poly toggle, Dual I/O, the More row).
 std::vector<int> ModuleComponent::drawnInputJackIndices() const {
+    if (activeJackLayoutPass != 0 && drawnJacksPass_ == activeJackLayoutPass)
+        return drawnJacksMemo_;
     std::vector<int> drawn;
     if (module == nullptr)
         return drawn;
@@ -534,6 +552,10 @@ std::vector<int> ModuleComponent::drawnInputJackIndices() const {
     for (int i = 0; i < visible; ++i)
         if (!isInputJackKnobBound(i))
             drawn.push_back(i);
+    if (activeJackLayoutPass != 0) {
+        drawnJacksMemo_ = drawn;
+        drawnJacksPass_ = activeJackLayoutPass;
+    }
     return drawn;
 }
 

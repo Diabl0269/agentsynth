@@ -17,6 +17,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorPaintMemo.h"
 #include <utility>
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -625,7 +626,9 @@ void GraphEditor::clearMacroDragCandidate(bool keepFrozenBorders) {
 // frozen at press while the drag is still staying inside (macroDragLeaveId_ empty), and the hull
 // without that member once a LEAVE is armed, so the macro visibly lets go of it. A macro the drag
 // might JOIN holds none of the dragged module, so it keeps its live bounds. Without a frozen
-// snapshot (a drag that never went through a press) the excluding hull is painted from the first tick.
+// snapshot (a drag that never went through a press) the excluding hull is painted from the first tick. The live hull
+// is measured once per layout generation (CanvasMemo): measuring every border on every paint and tick made each frame
+// of a canvas with many open macros cost in proportion to the patch, though nothing had moved.
 juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
@@ -639,7 +642,12 @@ juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macr
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
     }
-    return macroController_.macroHullBounds(macroId);
+    if (const auto stored = canvasMemo_->hull(macroId))
+        return *stored;
+    ++graph_editor_paint::workCounters().hullComputations;
+    const auto hull = macroController_.macroHullBounds(macroId);
+    canvasMemo_->storeHull(macroId, hull);
+    return hull;
 }
 
 // The macro a library drop joins: the innermost expanded hull under the pointer (macroHullAt), with no modifier. A

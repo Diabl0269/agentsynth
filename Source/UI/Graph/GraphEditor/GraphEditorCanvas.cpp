@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
@@ -102,9 +103,10 @@ void GraphEditor::updateComponents() {
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
 
-    // Nodes appear/disappear here, so the cable memo can go stale from this call alone (a repaint
-    // is not guaranteed to follow immediately).
+    // Nodes appear/disappear here, so the cable memo and the measured macro borders can go stale from this call alone
+    // (a repaint is not guaranteed to follow immediately).
     cablesCacheValid = false;
+    canvasMemo_->layoutChanged();
 
     // Any reconcile can follow a node removal (delete, undo/redo, preset load). Drop selected ids
     // whose nodes are gone BEFORE anything reads the selection again.
@@ -365,11 +367,13 @@ void GraphEditor::updateTransform() {
     t = t.scaled(zoomLevel, zoomLevel);
     t = t.translated(panOffset);
 
+    const bool zoomChanged = content.getTransform().getScaleFactor() != t.getScaleFactor();
     applyContentBounds();
     content.setTransform(t);
     // A zoomed-out macro port's interior jack slides onto its boundary jack (getPortCenter reads the zoom), so the
-    // memoized cable endpoints go stale with the zoom itself; the strips/widgets repaint live.
-    if (!getMacros().empty())
+    // memoized cable endpoints go stale with the zoom itself; the strips/widgets repaint live. A pan moves no cable
+    // end: rebuilding every cable per pan frame made a pan cost in proportion to the patch.
+    if (zoomChanged && !getMacros().empty())
         cablesCacheValid = false;
     repaint();
 

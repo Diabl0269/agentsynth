@@ -36,7 +36,6 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
     if (memo != nullptr && &memo->editor_ == this)
         if (const auto it = memo->hulls_.find(macroId); it != memo->hulls_.end())
             return it->second;
-    ++graph_editor_paint::workCounters().hullComputations;
     const auto hull = hullGlide_.apply(macroId, macroHullTargetBounds(macroId));
     if (memo != nullptr && &memo->editor_ == this)
         memo->hulls_.emplace(macroId, hull);

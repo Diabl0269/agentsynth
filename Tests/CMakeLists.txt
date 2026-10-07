@@ -262,6 +262,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp
     UI/Graph/GraphEditor/GraphEditorModHoverTests.cpp
     UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp
+    UI/Graph/GraphEditor/GraphEditorCanvasTickTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp

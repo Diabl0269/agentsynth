@@ -44,6 +44,9 @@ class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 namespace synth::ui {
 class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
 }
+namespace graph_editor_paint {
+class CanvasMemo;
+} // namespace graph_editor_paint
 #include "UI/Graph/MinimapComponent.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -101,10 +104,8 @@ public:
     // ---- Locate Master ---- See GraphEditorTypes.h for the LocateMasterResult enum.
     using LocateMasterResult = graph_editor_types::LocateMasterResult;
     bool hasLocatableMasterOrOutput() const;
-
     /** Selects Master, falling back to Audio Output when there is none yet, and pans into view. */
     LocateMasterResult locateMasterOrOutput();
-
     // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
@@ -112,12 +113,10 @@ public:
     void endConnectionDrag(juce::Point<int> screenPos);
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
-
     // ---- Mod-amount drag gesture (the one path both the cable knob and a card knob's ring use) ----
     void beginModAmountGesture();
     void adjustModAmount(juce::AudioProcessorGraph::NodeID attenuverterNodeID, float delta);
     void commitModAmountGesture();
-
     // See GraphEditorTypes.h for the PolyLink struct's full field-level doc.
     using PolyLink = graph_editor_types::PolyLink;
 
@@ -720,6 +719,7 @@ private:
         void paint(juce::Graphics& g) override;
         void paintOverChildren(juce::Graphics& g) override;
         void resized() override;
+        void childBoundsChanged(juce::Component* child) override; // a card moved or resized
 
         juce::OwnedArray<ModuleComponent>& getModules() { return moduleComponents; }
         juce::OwnedArray<MacroCardComponent>& getMacroCards() { return macroCardComponents; }
@@ -970,6 +970,8 @@ private:
     bool updatingComponents = false; // guards updateComponents() against re-entry
     int cableRebuildCount = 0;       // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
+    std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
+    friend class graph_editor_paint::CanvasMemo;
 
     // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
     // Post-passes of rebuildVisibleCables(); the knob re-anchor MUST run before the collapsed-macro pass.
@@ -994,6 +996,5 @@ public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
 
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

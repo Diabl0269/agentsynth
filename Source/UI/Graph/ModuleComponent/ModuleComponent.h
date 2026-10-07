@@ -67,6 +67,7 @@ public:
     void paint(juce::Graphics&) override;
     void paintOverChildren(juce::Graphics&) override; // hover chip, above the knob labels
     void resized() override;
+    void childBoundsChanged(juce::Component* child) override;
     void timerCallback() override;
 
     void mouseDown(const juce::MouseEvent& e) override;
@@ -184,6 +185,14 @@ public:
 
     /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
+    /** Message thread only. While alive, each card works out drawnInputJackIndices() once; nothing may change a card's
+     *  controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+    struct JackLayoutPass {
+        JackLayoutPass();
+        ~JackLayoutPass();
+        JackLayoutPass(const JackLayoutPass&) = delete;
+        JackLayoutPass& operator=(const JackLayoutPass&) = delete;
+    };
 
     /** True when visible input `index` renders as a knob's landing dot, not a gutter jack. See .cpp. */
     bool isInputJackKnobBound(int index) const;
@@ -427,6 +436,8 @@ private:
     bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
+    mutable std::vector<int> drawnJacksMemo_; // drawnInputJackIndices() for drawnJacksPass_ (JackLayoutPass)
+    mutable juce::uint32 drawnJacksPass_ = 0;
     juce::ComponentDragger dragger;
 
     // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).

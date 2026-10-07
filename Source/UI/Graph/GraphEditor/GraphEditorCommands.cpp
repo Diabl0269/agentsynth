@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -960,8 +961,7 @@ void GraphEditor::timerCallback() {
     content.connectionAnimPhase += 0.02f;
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
-    repaintCanvas();
-    refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // live drags only grow; update() early-outs when unchanged
+    canvasMemo_->tick(); // keeps the cable memo, refreshes cable activity, repaints, refits the frame if cards moved
 
     // Pressing or RELEASING Ctrl is not a mouse move, and suggestions were only recomputed from
     // updateDragPreview — so a drag that stopped moving kept showing a stale insert preview after
