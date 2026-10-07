@@ -500,15 +500,35 @@ void profileInteractions(MainComponent& mc, const char* label) {
     }
     if (slider != nullptr)
         slider->mouseUp(mouseEventOn(*slider, down, down));
+
+    // Zoomed in on the knob's card, as when dragging it: the idle tick with the paint of the area it asked for.
+    double zoomedTick = 0.0;
+    if (card != nullptr) {
+        for (int i = 0; i < 4; ++i)
+            editor.zoomAroundCentre(1.0f);
+        editor.settleZoomNowForTest();
+        editor.centreViewOn(card->getBounds().getCentre().toFloat());
+        paintOnce(editor);
+        zoomedTick = avgMs(10, [&] {
+            static_cast<juce::Timer&>(editor).timerCallback();
+            const auto area = editor.getLocalArea(card->getParentComponent(), editor.getLastTickRepaintAreaForTest())
+                                  .getIntersection(editor.getLocalBounds());
+            if (!area.isEmpty())
+                (void)editor.createComponentSnapshot(area, true, 1.0f);
+        });
+        const auto a = editor.getLocalArea(card->getParentComponent(), editor.getLastTickRepaintAreaForTest());
+        std::printf("[zoomed] zoom area %dx%d of %dx%d, full paint %.2f\n", a.getWidth(), a.getHeight(),
+                    editor.getWidth(), editor.getHeight(), avgMs(5, [&] { paintOnce(editor); }));
+    }
     if (const char* png = std::getenv("PROFILE_SNAPSHOT")) { // the canvas as the frames left it, to look at
         juce::FileOutputStream out{juce::File(png)};
         if (out.openedOk() && out.setPosition(0) && out.truncate().wasOk())
             juce::PNGImageFormat().writeImageToStream(mc.createComponentSnapshot(mc.getLocalBounds(), true, 1.0f), out);
     }
     std::printf("[interactions] %s cables=%d | tick+paint=%.2f paint=%.2f | pan=%.2f zoom=%.2f | knob=%.2f (memo "
-                "rebuilds %d of 11) | timeline=%.2f\n",
+                "rebuilds %d of 11) | timeline=%.2f | zoomed-in tick+paint=%.2f\n",
                 label, (int)editor.buildVisibleCables().size(), ms["tick"], avgMs(10, [&] { paintOnce(editor); }),
-                ms["pan"], ms["zoom"], ms["knob"], memo, ms["timeline"]);
+                ms["pan"], ms["zoom"], ms["knob"], memo, ms["timeline"], zoomedTick);
     std::fflush(stdout);
 }
 
