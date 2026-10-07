@@ -119,11 +119,9 @@ public:
     void commitModAmountGesture();
     // See GraphEditorTypes.h for the PolyLink struct's full field-level doc.
     using PolyLink = graph_editor_types::PolyLink;
-
     /** Which raw channels a cable dropped between two visible jacks should wire. */
     static PolyLink resolvePolyLink(const ModuleBase* source, int sourceVisibleJack, const ModuleBase* dest,
                                     int destVisibleJack);
-
     /** Re-evaluates every connection touching `module` after its poly parameter changed. */
     void rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                              const std::vector<LogicalPort>& previousOutputMap);
@@ -143,7 +141,6 @@ public:
      *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge it —
      *  GraphEditor owns no file dialogs, and MainComponent owns no PatchDocument. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
-
     /** GraphEditor's live set of Macros for the current patch (Source/MacroSet.h). Exposed for the
      *  same reason as getPatchDocument() above. */
     synth::MacroSet& getMacros() noexcept override { return macros; }
@@ -188,7 +185,6 @@ public:
 
     // ---- Multi-select (gesture contract: GraphEditorSelection.cpp) ----
     const synth::ui::SelectionModel& getSelection() const override { return selection; }
-
     void selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive);
     void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) override;
     void clearSelection();
@@ -200,7 +196,6 @@ public:
     bool isNodeSelected(juce::AudioProcessorGraph::NodeID nodeId) const { return selection.contains(nodeId); }
     int getSelectionCount() const { return selection.size(); }
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
-
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
     void pruneSelection();

@@ -77,6 +77,19 @@ TEST(GraphEditorCanvasTick, AnIdleTickAndItsPaintRebuildNoCable) {
     EXPECT_EQ(c.editor.getVisibleCableCount(), 1);
 }
 
+TEST(GraphEditorCanvasTick, TheCardsOwnTimersDropNoCable) {
+    Canvas c;
+    const int before = c.rebuilds();
+    for (int i = 0; i < 3; ++i) {
+        for (auto* card : c.editor.getModuleComponents())
+            static_cast<juce::Timer&>(*card).timerCallback(); // meters, step highlight, mod rings
+        c.tick();
+        c.paint();
+    }
+    (void)c.editor.buildVisibleCables();
+    EXPECT_EQ(c.rebuilds(), before);
+}
+
 TEST(GraphEditorCanvasTick, ATickRefreshesTheAttenuverterAmountInPlace) {
     Canvas c;
     const auto lfo = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 200, 900);

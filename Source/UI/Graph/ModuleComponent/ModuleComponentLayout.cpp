@@ -16,9 +16,14 @@ using namespace detail;
 static_assert(ModuleComponent::kMacroPortWidgetRowStep == kMacroPortRowHeight,
               "a docked port widget's jack rows are the sidebar's rows");
 
-// A control that moves inside the card (a layout pass, the on-card layout editor) can carry a cable's knob landing with
-// it. The canvas keeps its cables between frames rather than rebuilding them every tick, so it has to hear of it.
-void ModuleComponent::childBoundsChanged(juce::Component*) { owner.notifyModuleContentChanged(); }
+// A knob that moves inside the card (a layout pass, the on-card layout editor) carries a cable's knob landing with it.
+// The canvas keeps its cables between frames rather than rebuilding them every tick, so it has to hear of it. Only a
+// knob: anything else moving on the card (a swap ghost, a header button) lands no cable, and telling the canvas would
+// rebuild every cable for it.
+void ModuleComponent::childBoundsChanged(juce::Component* child) {
+    if (dynamic_cast<juce::Slider*>(child) != nullptr)
+        owner.notifyModuleContentChanged();
+}
 
 void ModuleComponent::updateLayout() {
     if (isMacroPortType(getType(module))) {

@@ -41,9 +41,9 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   refreshes the values a cable is drawn with (signal activity, bypass, an attenuverter's amount) on the memo's cables in
   place; it drops the memo only when the routing set moved (a DirectCV or PolyBus cable appeared, went or changed jack).
   Every other change reaches the memo through `repaintCanvas()`: the editor's own edits, a card that moves or resizes
-  (`GraphContentComponent::childBoundsChanged`), a control that moves inside a card (`ModuleComponent::
+  (`GraphContentComponent::childBoundsChanged`), a knob that moves inside a card (`ModuleComponent::
   childBoundsChanged`, so a knob landing follows the on-card layout editor) and the graph's own change broadcast (a cable
-  edited behind the editor's back). So **a change that moves a cable end without moving a card, a card's control or a
+  edited behind the editor's back). So **a change that moves a cable end without moving a card, a knob or a
   graph edge must call `repaintCanvas()`** (`notifyModuleContentChanged()` from a card); the tick no longer catches it.
   Rebuilding every cable on every tick cost about 10 ms a tick at 80 tracks.
 - **Macro borders and the canvas frame are measured once per layout.** `CanvasMemo` keeps a layout generation that
