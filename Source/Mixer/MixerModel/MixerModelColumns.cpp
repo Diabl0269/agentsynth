@@ -35,10 +35,14 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
     const MixerGraphView view(graph, macros);
     std::vector<StripEntry> stripEntries;
     std::map<juce::uint32, size_t> entryByStrip;
+    // The first track (in track order) each source node belongs to, for a linked column's colour below: asking every
+    // track per column made a snapshot grow with tracks x columns.
+    std::map<juce::uint32, juce::uint32> firstTrackColourBySource;
     for (const auto& track : doc.getTracks()) {
         const auto sourceId = view.trackSource(track);
         if (sourceId == NodeID{})
             continue;
+        firstTrackColourBySource.emplace(sourceId.uid, track.colourArgb);
         const auto stripId = view.stripFedBy(sourceId);
         if (stripId == NodeID{})
             continue;
@@ -86,11 +90,9 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         // colour; a bus, a shared channel or an orphan keeps the macro colour. Read from `feeders` itself, not from
         // linkedToTrack, so this stays independent of how the column kind is derived.
         if (feeders.size() == 1 && !view.isBus(entry.stripId))
-            for (const auto& track : doc.getTracks())
-                if (view.trackSource(track) == feeders[0]) {
-                    column.colour = juce::Colour(track.colourArgb);
-                    break;
-                }
+            if (const auto first = firstTrackColourBySource.find(feeders[0].uid);
+                first != firstTrackColourBySource.end())
+                column.colour = juce::Colour(first->second);
 
         buildInsertsForColumn(view, doc, column);
         buildBusSourcesForColumn(view, doc, column);

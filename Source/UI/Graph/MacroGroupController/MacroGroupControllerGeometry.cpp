@@ -11,6 +11,7 @@
 #include "ModelCardBounds.h"
 
 #include "AudioEngine/NodeUuidCache.h"
+#include "MacroOwnerIndex.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
@@ -61,7 +62,8 @@ MacroGroupController::macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId
     const juce::String uuid = nodeUuidFor(nodeId);
     if (uuid.isEmpty())
         return {};
-    const auto* macro = host_.getMacros().findByMember(uuid);
+    const auto* owners = graph_editor_paint::MacroOwnerScope::ownersFor(host_);
+    const auto* macro = owners != nullptr ? owners->ownerOf(uuid) : host_.getMacros().findByMember(uuid);
     if (macro == nullptr)
         return {};
     for (const auto& p : macro->ports)
