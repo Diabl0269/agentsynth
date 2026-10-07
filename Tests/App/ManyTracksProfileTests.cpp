@@ -267,6 +267,14 @@ void profileProject(const juce::File& original, int duplicates) {
                     dupMs, pump, paint);
         std::fflush(stdout);
     }
+    for (int i = 0; i < 3; ++i) { // undo the last duplicates: each restores a snapshot of the whole project
+        t0 = nowMs();
+        mc.getUndoManager().undo();
+        const double undoMs = nowMs() - t0;
+        std::printf("[undo] #%d tracks=%d call=%.0f pump=%.0f\n", i + 1, (int)mc.getTimelineDoc().getTracks().size(),
+                    undoMs, pumpMs());
+        std::fflush(stdout);
+    }
     if (const char* save = std::getenv("PROFILE_SAVE")) // keep the grown project for the next size's runs
         std::printf("[project] saved %s: %d\n", save, mc.saveProjectForTest(juce::File(save)) ? 1 : 0);
 }

@@ -9,6 +9,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/architecture/timeline.md`](architecture/timeline.md) — TimelineDoc, TimelineSnapshot, AutomationKernel/Applier/Recorder, UI reflection
 - [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, bundle-relative module file refs, recent projects, dirty state, autosave, welcome screen
 - [`docs/architecture/module-base.md`](architecture/module-base.md) — ModuleBase (logical-port API, bypass/mute contract, output level stage) + supporting components (LayoutUtil, ModuleComponent, AppUndoManager, LookAndFeel)
+- [`docs/architecture/graph-queries.md`](architecture/graph-queries.md) — per-edit passes ask the graph through lookups built once (ConnectionIndex, NodeUuidCache, MixerGraphView), and what still grows with the project
 - [`docs/architecture/graph-editor.md`](architecture/graph-editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
 - [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management, Collect & Archive
 - [`docs/architecture/plugin-layer.md`](architecture/plugin-layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
