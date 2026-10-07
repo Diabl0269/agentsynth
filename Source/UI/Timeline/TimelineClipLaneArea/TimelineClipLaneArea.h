@@ -408,6 +408,7 @@ public:
     // Test hook: how many times updateLiveRecording() has actually issued a repaint (as opposed to
     // being called) — the same idiom TimelineTransportBar::getReadoutRepaintCountForTest() uses.
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
+    int getClipsPaintedForTest() const noexcept { return clipsPainted_; } // clips drawn since construction
 
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
     // Every tool action is ALSO a menu item; see TimelineClipLaneEditTools.cpp for why Rename is
@@ -791,6 +792,7 @@ private:
     std::vector<std::pair<float, float>> livePeaks_;
     juce::Rectangle<int> liveStripRect_;
     int liveStripRepaintCount_ = 0;
+    int clipsPainted_ = 0;
 
     // ---- Authoring / file drop ----
     // Registered with the basic formats once, in the constructor: it answers "can this extension be

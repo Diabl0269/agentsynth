@@ -434,8 +434,12 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     const auto rect =
         computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
     const int rowHeight = rect.getHeight(); // the row it is drawn in (a dragged clip's target row)
-    if (rect.getRight() < 0 || rect.getX() > getWidth())
-        return; // cheap offscreen cull — same reasoning as the panel's own bar-line loop
+    // Cull against the area being painted, in both directions: rows scrolled above or below the panel are laid out at
+    // negative or far y, and drawing every note of every track made a scroll frame cost in proportion to the project.
+    // The margin covers the selection outline drawn on the clip's edge.
+    if (!rect.expanded(2).intersects(g.getClipBounds()))
+        return;
+    ++clipsPainted_;
 
     const bool selected = selection_.contains(clip.id);
     // A clip is dimmed when EITHER its track or the clip itself is muted — the two flags are

@@ -1,5 +1,6 @@
 // TimelineClipLanePaintingTests.cpp — waveform painting from PeaksFile data, the peaks cache and
-// its invalidation, the missing-asset placeholder, and the live-recording strip.
+// its invalidation, the missing-asset placeholder, the live-recording strip, and that a paint draws only the clips
+// it can show.
 #include "Timeline/PeaksFile.h"
 #include "TimelineClipLaneTestFixture.h"
 
@@ -253,4 +254,29 @@ TEST(TimelineClipLaneWaveformTest, NoResolverInstalledAssumesAssetExists) {
     // No crash, no assertion failure — the absence of a resolver is itself the thing under test.
     const auto snapshot = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
     EXPECT_FALSE(snapshot.isNull());
+}
+
+// A scroll frame repaints the lane: drawing the notes of every track, the rows scrolled out of view included, made it
+// cost in proportion to the project (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch).
+TEST(TimelineClipLanePaintCost, APaintDrawsOnlyTheClipsOnRowsInView) {
+    ClipLaneFixture f;
+    constexpr int kTracks = 60;
+    for (int i = 0; i < kTracks; ++i) {
+        const auto track = f.doc.addTrack(TrackKind::Midi, "Track " + juce::String(i + 1));
+        const auto clip = f.doc.addClip(track, 0.0, 8.0, "Clip");
+        for (int n = 0; n < 16; ++n)
+            f.doc.addNote(clip, makeNote(n * 0.5, 48 + n));
+    }
+    f.lane.setSize(1200, 200);
+    const int before = f.lane.getClipsPaintedForTest();
+    (void)f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    const int painted = f.lane.getClipsPaintedForTest() - before;
+    EXPECT_GT(painted, 0);
+    EXPECT_LT(painted, kTracks / 4) << "only the rows a 200 px lane shows";
+
+    f.state.trackScrollY = 30.0 * 40;
+    f.lane.repaint();
+    const int scrolledBefore = f.lane.getClipsPaintedForTest();
+    (void)f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_LT(f.lane.getClipsPaintedForTest() - scrolledBefore, kTracks / 4) << "scrolled down, still only those";
 }
