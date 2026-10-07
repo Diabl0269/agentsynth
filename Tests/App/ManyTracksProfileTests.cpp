@@ -23,7 +23,8 @@
 namespace {
 
 double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
-void profileDeleteUndo(MainComponent& mc, const char* label); // below the Load test bench
+void profileDeleteUndo(MainComponent& mc, const char* label);   // below the Load test bench
+void profileInteractions(MainComponent& mc, const char* label); // below the Load test bench
 
 double avgMs(int reps, const std::function<void()>& fn) {
     fn(); // warm-up: the first paint rasterizes the card caches
@@ -206,7 +207,9 @@ void profile(int tracks, bool expand) {
         arrangeFrameNoPaint, arrangeFrame, undoMs, undoFrame, redoMs, redoFrame, docMut, mcTick, tlPaint, tlStrip,
         tlScroll, mixPaint);
     std::fflush(stdout);
-    profileDeleteUndo(mc, ("tracks=" + juce::String(tracks) + " expand=" + juce::String(expand ? 1 : 0)).toRawUTF8());
+    const auto label = "tracks=" + juce::String(tracks) + " expand=" + juce::String(expand ? 1 : 0);
+    profileInteractions(mc, label.toRawUTF8());
+    profileDeleteUndo(mc, label.toRawUTF8());
 }
 
 // Runs the message loop briefly so async work a real frame would do (graph rebuild, deferred repaints) is counted.
@@ -394,6 +397,141 @@ void profileDeleteUndo(MainComponent& mc, const char* label) {
     synth::ui::setReducedMotionForTest(std::nullopt);
 }
 
+// The first slider showing on an on-screen card, and that card.
+std::pair<ModuleComponent*, juce::Slider*> firstVisibleKnob(GraphEditor& editor) {
+    for (auto* m : editor.getModuleComponents()) {
+        if (m == nullptr || !m->isVisible() || !m->getBounds().intersects(card_glide_detail::visibleCanvasArea(*m)))
+            continue;
+        std::function<juce::Slider*(juce::Component&)> find = [&find](juce::Component& c) -> juce::Slider* {
+            for (auto* child : c.getChildren()) {
+                if (!child->isVisible())
+                    continue;
+                if (auto* s = dynamic_cast<juce::Slider*>(child); s != nullptr && s->getWidth() > 0)
+                    return s;
+                if (auto* s = find(*child))
+                    return s;
+            }
+            return nullptr;
+        };
+        if (auto* s = find(*m))
+            return {m, s};
+    }
+    return {nullptr, nullptr};
+}
+
+juce::MouseEvent mouseEventOn(juce::Component& s, juce::Point<float> pos, juce::Point<float> down) {
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    const auto now = juce::Time::getCurrentTime();
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &s, &s, now, down, now, 1, false);
+}
+
+// The interactions a user feels as lag, each one frame as the app runs it: the idle canvas tick with its paint, a
+// trackpad pan step, a zoom step, a knob drag step through the slider's own mouse handlers and a timeline scroll step,
+// each followed by the paint it needs (the whole editor for the tick, pan and zoom, the dragged card's area for the
+// knob, the panel for the timeline). "memo" counts the cable rebuilds a knob drag caused. PROFILE_SPIN_FRAME=<s> with
+// PROFILE_SPIN_KIND=tick|pan|zoom|knob|timeline loops one of them for that long, to attach `sample` to;
+// PROFILE_SNAPSHOT=<png> saves the window as the frames left it.
+void profileInteractions(MainComponent& mc, const char* label) {
+    auto& editor = mc.getGraphEditor();
+    editor.finishCardGlideForTest();
+    paintOnce(editor);
+    int step = 0;
+    const auto centre = editor.getLocalBounds().getCentre().toFloat();
+    std::map<juce::String, std::function<void()>> frames;
+    frames["tick"] = [&] {
+        static_cast<juce::Timer&>(editor).timerCallback();
+        paintOnce(editor);
+    };
+    frames["pan"] = [&] {
+        juce::MouseWheelDetails wheel{};
+        wheel.deltaY = (++step % 2 == 0) ? 0.1f : -0.1f;
+        wheel.isSmooth = true;
+        editor.mouseWheelMove(mouseEventOn(editor, centre, centre), wheel);
+        paintOnce(editor);
+    };
+    frames["zoom"] = [&] {
+        editor.zoomAroundCentre((++step % 2 == 0) ? 0.5f : -0.5f);
+        paintOnce(editor);
+    };
+    const auto knobOnCard = firstVisibleKnob(editor);
+    auto* card = knobOnCard.first;
+    auto* slider = knobOnCard.second;
+    const auto down = slider != nullptr ? slider->getLocalBounds().getCentre().toFloat() : juce::Point<float>();
+    if (slider != nullptr)
+        frames["knob"] = [&] {
+            slider->mouseDrag(mouseEventOn(*slider, down.translated(0.0f, -2.0f * (float)(++step % 40)), down));
+            const auto area = editor.getLocalArea(card->getParentComponent(), card->getBounds())
+                                  .getIntersection(editor.getLocalBounds());
+            (void)editor.createComponentSnapshot(area, true, 1.0f);
+        };
+    auto& panel = mc.getTimelinePanel();
+    auto& vp = panel.getTrackHeaderViewport();
+    int y = 0;
+    if (panel.isVisible() && panel.getHeight() > 0)
+        frames["timeline"] = [&] {
+            y = (y + 40) % juce::jmax(1, vp.getViewedComponent()->getHeight());
+            vp.setViewPosition(0, y);
+            paintOnce(panel);
+        };
+
+    if (slider != nullptr)
+        slider->mouseDown(mouseEventOn(*slider, down, down));
+    if (const char* spin = std::getenv("PROFILE_SPIN_FRAME")) {
+        const char* kind = std::getenv("PROFILE_SPIN_KIND");
+        if (const auto it = frames.find(kind != nullptr ? kind : "tick"); it != frames.end()) {
+            std::printf("[spin]\n");
+            std::fflush(stdout);
+            for (const double until = nowMs() + 1000.0 * std::atof(spin); nowMs() < until;)
+                it->second();
+        }
+    }
+    std::map<juce::String, double> ms;
+    int memo = 0;
+    for (const auto& [name, frame] : frames) {
+        (void)editor.buildVisibleCables();
+        const int rebuildsBefore = editor.getCableRebuildCountForTest();
+        ms[name] = avgMs(10, frame);
+        (void)editor.buildVisibleCables();
+        if (name == "knob")
+            memo = editor.getCableRebuildCountForTest() - rebuildsBefore;
+        if (name == "zoom")
+            editor.settleZoomNowForTest();
+    }
+    if (slider != nullptr)
+        slider->mouseUp(mouseEventOn(*slider, down, down));
+
+    // Zoomed in on the knob's card, as when dragging it: the idle tick with the paint of the area it asked for.
+    double zoomedTick = 0.0;
+    if (card != nullptr) {
+        for (int i = 0; i < 4; ++i)
+            editor.zoomAroundCentre(1.0f);
+        editor.settleZoomNowForTest();
+        editor.centreViewOn(card->getBounds().getCentre().toFloat());
+        paintOnce(editor);
+        zoomedTick = avgMs(10, [&] {
+            static_cast<juce::Timer&>(editor).timerCallback();
+            const auto area = editor.getLocalArea(card->getParentComponent(), editor.getLastTickRepaintAreaForTest())
+                                  .getIntersection(editor.getLocalBounds());
+            if (!area.isEmpty())
+                (void)editor.createComponentSnapshot(area, true, 1.0f);
+        });
+        const auto a = editor.getLocalArea(card->getParentComponent(), editor.getLastTickRepaintAreaForTest());
+        std::printf("[zoomed] zoom area %dx%d of %dx%d, full paint %.2f\n", a.getWidth(), a.getHeight(),
+                    editor.getWidth(), editor.getHeight(), avgMs(5, [&] { paintOnce(editor); }));
+    }
+    if (const char* png = std::getenv("PROFILE_SNAPSHOT")) { // the canvas as the frames left it, to look at
+        juce::FileOutputStream out{juce::File(png)};
+        if (out.openedOk() && out.setPosition(0) && out.truncate().wasOk())
+            juce::PNGImageFormat().writeImageToStream(mc.createComponentSnapshot(mc.getLocalBounds(), true, 1.0f), out);
+    }
+    std::printf("[interactions] %s cables=%d | tick+paint=%.2f paint=%.2f | pan=%.2f zoom=%.2f | knob=%.2f (memo "
+                "rebuilds %d of 11) | timeline=%.2f | zoomed-in tick+paint=%.2f\n",
+                label, (int)editor.buildVisibleCables().size(), ms["tick"], avgMs(10, [&] { paintOnce(editor); }),
+                ms["pan"], ms["zoom"], ms["knob"], memo, ms["timeline"], zoomedTick);
+    std::fflush(stdout);
+}
+
 } // namespace
 
 // The Load test project's delete and undo animation costs (docs/layout/rendering.md#the-load-test-project), on a
@@ -417,6 +555,9 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestDeleteUndoProfile) {
     mc.getAudioEngine().suspendDeviceCallback();
     ASSERT_TRUE(mc.openProjectForTest(copy));
     pumpMs();
+    if (mc.getTimelinePanel().getHeight() == 0)
+        mc.simulateToggleBottomPanelClick();
+    profileInteractions(mc, original.getFileNameWithoutExtension().toRawUTF8());
     profileDeleteUndo(mc, original.getFileNameWithoutExtension().toRawUTF8());
 }
 

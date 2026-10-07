@@ -13,6 +13,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <memory>
@@ -47,13 +48,24 @@ private:
 } // namespace synth::test
 
 class AccessibilitySettingsTest : public ::testing::Test {
-protected:
-    void SetUp() override {
+public:
+    // Kept in this run's own settings folder: CI runs shards in parallel, and a file in the shared
+    // Application Support folder let one shard's clear() land between another's save and reload.
+    // An absolute folder makes the "all users" file the same file, so it is detached as the
+    // fallback: otherwise a cleared key would still read back through it.
+    static void useRunSettingsFile(juce::ApplicationProperties& props) {
         juce::PropertiesFile::Options options;
         options.applicationName = "AccessibilityCoverageTest";
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
-        appProperties.setStorageParameters(options);
+        options.folderName = synth::userSettingsRootDirectory().getFullPathName();
+        props.setStorageParameters(options);
+        props.getUserSettings()->setFallbackPropertySet(nullptr);
+    }
+
+protected:
+    void SetUp() override {
+        useRunSettingsFile(appProperties);
         engine = std::make_unique<AudioEngine>();
         aiService = std::make_unique<synth::AIIntegrationService>(engine->getGraph());
         aiService->setProvider(std::make_unique<synth::test::MockProviderACT>());

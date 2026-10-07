@@ -42,8 +42,9 @@ cables use a handle of the full backward run clamped to 50 to 300 px (`kCableMax
 the loop out of the output visibly to the right of its card, so a cable never leaves over its own card or arrives from below.
 
 `buildVisibleCables()` returns a **memoized `const&`**: it is rebuilt only when
-`GraphEditor::repaintCanvas()` invalidates the memo (see [rendering](rendering.md)), not on every
-call. **The returned reference must never be stored across a `repaintCanvas()`, a `timerCallback()`
+`GraphEditor::repaintCanvas()` invalidates the memo or the routing set changes (see
+[rendering](rendering.md#per-frame-work-does-not-grow-with-the-patch)), not on every call and not on every tick; the
+tick refreshes cable activity in place. **The returned reference must never be stored across a `repaintCanvas()`, a `timerCallback()`
 or a graph edit** — any of those can invalidate and rebuild the backing vector.
 
 A collapsed macro re-anchors the cables crossing its boundary in a post-process pass at the end of
@@ -134,7 +135,8 @@ attenuverter routing (a direct or poly cable, or a bare knob's drop spot) still 
 on a plain press.
 
 **Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
-moved/resized card automatically (both already call `repaintCanvas()`). A Wavetable tab-page switch
+moved/resized card automatically (both already call `repaintCanvas()`), and a knob moved inside its card (the on-card
+layout editor) through `ModuleComponent::childBoundsChanged`. A Wavetable tab-page switch
 changes which knob is visible without moving or resizing the card, so it explicitly calls
 `GraphEditor::notifyModuleContentChanged()` (a public wrapper around the otherwise-private
 `repaintCanvas()`) to invalidate the memo too.

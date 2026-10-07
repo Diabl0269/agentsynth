@@ -182,7 +182,10 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 // across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
-        cablesCache = rebuildVisibleCables();
+        {
+            const ModuleComponent::JackLayoutPass jackLayoutPass; // each card's jack column is worked out once
+            cablesCache = rebuildVisibleCables();
+        }
         macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
         cardGlide_.applyTo(cablesCache);         // endpoints follow gliding cards, see CardGlideAnimator.h
         cablesCacheValid = true;
@@ -191,10 +194,13 @@ const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() 
     return cablesCache;
 }
 
-// The single "the canvas changed" seam: drops the cable memo, then repaints. Every former
-// `content.repaint()` in this file goes through here. Also GraphCanvasHost::repaintCanvas().
+// The single "the canvas changed" seam: drops the cable memo and the macro borders measured since the last change
+// (CanvasMemo::layoutChanged), then repaints. Every former `content.repaint()` in this file goes through here. Also
+// GraphCanvasHost::repaintCanvas(). Null-checked: cards laid out while the editor is built and torn down land here.
 void GraphEditor::repaintCanvas() {
     cablesCacheValid = false;
+    if (canvasMemo_ != nullptr)
+        canvasMemo_->layoutChanged();
     content.repaint();
 }
 

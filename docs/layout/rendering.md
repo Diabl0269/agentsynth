@@ -33,10 +33,34 @@ gliding cards inside the memo, see below) and the cable retract, which repaint o
 
 ## Per-frame work does not grow with the patch
 
-The 30 Hz tick rebuilds the cable list (the memo above is dropped every tick so cable activity stays live) and
-repaints the whole canvas, so on a project with dozens of tracks anything per cable, per card or per macro in those
-passes runs hundreds of times a frame. These rules keep it linear, and keep animation frames off that path:
+The 30 Hz tick repaints the visible cables (the signal-flow dots move along every cable), so on a project with dozens
+of tracks anything per cable, per card or per macro in that paint runs hundreds of times a frame. These rules keep the
+tick's own work flat and the paint linear in what is on screen, and keep animation frames off that path:
 
+- **The tick keeps the cable memo.** `graph_editor_paint::CanvasMemo::tick()` (`GraphEditorCanvasTick.cpp`) only
+  refreshes the values a cable is drawn with (signal activity, bypass, an attenuverter's amount) on the memo's cables in
+  place; it drops the memo only when the routing set moved (a DirectCV or PolyBus cable appeared, went or changed jack).
+  Every other change reaches the memo through `repaintCanvas()`: the editor's own edits, a card that moves or resizes
+  (`GraphContentComponent::childBoundsChanged`), a knob that moves inside a card (`ModuleComponent::
+  childBoundsChanged`, so a knob landing follows the on-card layout editor) and the graph's own change broadcast (a cable
+  edited behind the editor's back). So **a change that moves a cable end without moving a card, a knob or a
+  graph edge must call `repaintCanvas()`** (`notifyModuleContentChanged()` from a card); the tick no longer catches it.
+  Rebuilding every cable on every tick cost about 10 ms a tick at 80 tracks.
+- **The tick repaints only the visible cables' area** (`CanvasMemo::tick`: the union of `cablePaintBounds` over the
+  cables reaching the visible canvas, cut to it; the whole canvas when the memo was dropped). So **anything else on the
+  canvas that changes over time requests its own repaint** (its driver's frame, or `repaintCanvas()`); the tick no longer
+  repaints it by accident. Zoomed out on a busy patch the area is most of the view; zoomed in on a few cards the cards
+  away from the cables are no longer redrawn every tick.
+- **Macro borders and the canvas frame are measured once per layout.** `CanvasMemo` keeps a layout generation that
+  `repaintCanvas()` and `updateComponents()` bump; `macroHullTargetBounds` measures a border once per generation, and the
+  tick refits the canvas frame (which measures every border) only when the generation moved. Measuring all 80 borders
+  on every tick and every paint cost about 5 ms a tick at 80 tracks, and made a knob drag's small repaint cost 6 ms.
+- **A pan rebuilds no cable.** `updateTransform()` drops the memo only when the zoom changed (an open macro's port jack
+  slides with the zoom); a pan moves nothing in canvas space.
+- **A cable rebuild works out each card's jack column once.** `buildVisibleCables()` opens a
+  `ModuleComponent::JackLayoutPass`, inside which `drawnInputJackIndices()` is memoized per card; outside a pass it is
+  recomputed live, as before. Re-deriving the column (through `getModulationTargets()`) for every cable end made a
+  rebuild, and so a zoom frame, grow with ports x cables.
 - **Look nodes up through a map built once per pass**, never a scan per item. `rebuildVisibleCables()` and its
   re-anchor passes map node id -> card and uuid -> node once; a per-cable `moduleComponentForNode()` (or a per-member
   `resolveMemberNodeId()`, a whole-graph scan) made the tick O(cables x cards x nodes) and took over 100 ms at 80
@@ -68,9 +92,12 @@ passes runs hundreds of times a frame. These rules keep it linear, and keep anim
   resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
 - **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix
   (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up.
+- **A scrolled list paints only what is in view.** The timeline's clip lanes are laid out for every track and scrolled
+  by offset, so `TimelineClipLaneArea::paintClip` culls each clip against the area being painted, in both directions;
+  drawing every track's notes made a timeline scroll frame cost in proportion to the project.
 
-`Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp` and `Tests/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp`
-hold these as work counts (`graph_editor_paint::
+`Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp`, `GraphEditorCanvasTickTests.cpp` (same folder) and
+`Tests/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp` hold these as work counts (`graph_editor_paint::
 workCounters()`), not timings. `Tests/App/ManyTracksProfileTests.cpp` is a disabled bench that prints the real per-frame
 costs for 10 to 80 instrument tracks (`--gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'`).
 
@@ -84,7 +111,10 @@ whose track duplicates froze the app. It lives on the developer's machine, not i
 work it leaves behind and the next paint:
 `PROFILE_DUPLICATE=10 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile*'`.
 `DISABLED_LoadTestDeleteUndoProfile` opens a temporary copy of it (autosaves left out, the copy deleted afterwards)
-and prints the cost of deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
+and prints the frames a user feels as lag (the idle tick, a pan, a zoom and a knob drag step, a timeline scroll, the
+tick zoomed in on a card; `profileInteractions`, also run by `profile()` at N tracks, with
+`PROFILE_SPIN_FRAME=<s> PROFILE_SPIN_KIND=tick|pan|zoom|knob|timeline` to loop one for `sample`), then the cost of
+deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
 call, the one full repaint it asks for, and the average ghost frame (`profile()` prints the same at N tracks):
 `./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestDeleteUndoProfile*'`.
 Its audio-side counterpart, the per-block render cost of the same project, is `Tests/App/ModuleCpuProfileTests.cpp`

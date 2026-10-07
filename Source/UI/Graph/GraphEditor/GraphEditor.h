@@ -44,6 +44,9 @@ class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 namespace synth::ui {
 class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
 }
+namespace graph_editor_paint {
+class CanvasMemo;
+} // namespace graph_editor_paint
 #include "UI/Graph/MinimapComponent.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -101,10 +104,8 @@ public:
     // ---- Locate Master ---- See GraphEditorTypes.h for the LocateMasterResult enum.
     using LocateMasterResult = graph_editor_types::LocateMasterResult;
     bool hasLocatableMasterOrOutput() const;
-
     /** Selects Master, falling back to Audio Output when there is none yet, and pans into view. */
     LocateMasterResult locateMasterOrOutput();
-
     // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
@@ -112,19 +113,15 @@ public:
     void endConnectionDrag(juce::Point<int> screenPos);
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
-
     // ---- Mod-amount drag gesture (the one path both the cable knob and a card knob's ring use) ----
     void beginModAmountGesture();
     void adjustModAmount(juce::AudioProcessorGraph::NodeID attenuverterNodeID, float delta);
     void commitModAmountGesture();
-
     // See GraphEditorTypes.h for the PolyLink struct's full field-level doc.
     using PolyLink = graph_editor_types::PolyLink;
-
     /** Which raw channels a cable dropped between two visible jacks should wire. */
     static PolyLink resolvePolyLink(const ModuleBase* source, int sourceVisibleJack, const ModuleBase* dest,
                                     int destVisibleJack);
-
     /** Re-evaluates every connection touching `module` after its poly parameter changed. */
     void rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                              const std::vector<LogicalPort>& previousOutputMap);
@@ -144,7 +141,6 @@ public:
      *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge it —
      *  GraphEditor owns no file dialogs, and MainComponent owns no PatchDocument. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
-
     /** GraphEditor's live set of Macros for the current patch (Source/MacroSet.h). Exposed for the
      *  same reason as getPatchDocument() above. */
     synth::MacroSet& getMacros() noexcept override { return macros; }
@@ -189,7 +185,6 @@ public:
 
     // ---- Multi-select (gesture contract: GraphEditorSelection.cpp) ----
     const synth::ui::SelectionModel& getSelection() const override { return selection; }
-
     void selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive);
     void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) override;
     void clearSelection();
@@ -201,7 +196,6 @@ public:
     bool isNodeSelected(juce::AudioProcessorGraph::NodeID nodeId) const { return selection.contains(nodeId); }
     int getSelectionCount() const { return selection.size(); }
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
-
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
     void pruneSelection();
@@ -674,6 +668,7 @@ public:
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
     int getCableRebuildCountForTest() const noexcept { return cableRebuildCount; }
+    juce::Rectangle<int> getLastTickRepaintAreaForTest() const; // canvas coordinates
 
     // ---- Zoom gesture (raster freeze) test seams ----
     bool isZoomGestureActive() const noexcept { return zoomGestureActive; }
@@ -720,6 +715,7 @@ private:
         void paint(juce::Graphics& g) override;
         void paintOverChildren(juce::Graphics& g) override;
         void resized() override;
+        void childBoundsChanged(juce::Component* child) override; // a card moved or resized
 
         juce::OwnedArray<ModuleComponent>& getModules() { return moduleComponents; }
         juce::OwnedArray<MacroCardComponent>& getMacroCards() { return macroCardComponents; }
@@ -970,6 +966,8 @@ private:
     bool updatingComponents = false; // guards updateComponents() against re-entry
     int cableRebuildCount = 0;       // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
+    std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
+    friend class graph_editor_paint::CanvasMemo;
 
     // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
     // Post-passes of rebuildVisibleCables(); the knob re-anchor MUST run before the collapsed-macro pass.
@@ -994,6 +992,5 @@ public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
 
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

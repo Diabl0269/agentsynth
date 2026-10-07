@@ -7,6 +7,7 @@
 
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
+#include "GraphEditorPaintMemo.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -23,6 +24,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     , modMatrix(engine, undoMgr, this)
     , undoManager(undoMgr)
     , cardKeyboard_(std::make_unique<CanvasCardKeyboard>(*this, undoMgr)) {
+    canvasMemo_ = std::make_unique<graph_editor_paint::CanvasMemo>(*this);
     addAndMakeVisible(content);
     addChildComponent(modMatrix); // closed until toggled (isMatrixVisible); a closed matrix does no work
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
