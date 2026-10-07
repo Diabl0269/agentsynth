@@ -80,8 +80,7 @@ public:
         // Push the Sum output into the visual buffer.
         if (auto* vb = getVisualBuffer()) {
             if (ch[0] != nullptr)
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(ch[0][s]);
+                vb->pushBlock(ch[0], numSamples);
         }
     }
 

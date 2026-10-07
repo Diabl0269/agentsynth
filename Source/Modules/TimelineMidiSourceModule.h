@@ -549,8 +549,7 @@ private:
     void pushActivity(int numSamples) {
         if (auto* vb = getVisualBuffer()) {
             const float activity = numActive_ > 0 ? 1.0f : 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(activity);
+            vb->pushConstant(activity, numSamples);
         }
     }
 

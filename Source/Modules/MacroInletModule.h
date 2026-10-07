@@ -96,8 +96,7 @@ public:
             return;
 
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(buffer.getReadPointer(0)[i]); // ch0 is active in every shape
+            vb->pushBlock(buffer.getReadPointer(0), numSamples); // ch0 is active in every shape
     }
 
     bool acceptsMidi() const override { return false; }

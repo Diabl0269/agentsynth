@@ -250,8 +250,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(outL[i]);
+            vb->pushBlock(outL, numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules

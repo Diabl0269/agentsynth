@@ -52,8 +52,7 @@ public:
 
         if (auto* vb = getVisualBuffer()) {
             const float activity = midiMessages.isEmpty() ? 0.0f : 1.0f;
-            for (int i = 0; i < buffer.getNumSamples(); ++i)
-                vb->pushSample(activity);
+            vb->pushConstant(activity, buffer.getNumSamples());
         }
     }
 

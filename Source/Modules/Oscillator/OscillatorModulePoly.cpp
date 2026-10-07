@@ -85,9 +85,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
 
     // Push voice 0 to visual buffer
     if (auto* vb = getVisualBuffer()) {
-        const float* ch0 = buffer.getReadPointer(0);
-        for (int s = 0; s < numSamples; ++s)
-            vb->pushSample(ch0[s]);
+        vb->pushBlock(buffer.getReadPointer(0), numSamples);
     }
 }
 
@@ -170,10 +168,12 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, int numSam
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
 
-    // Pre-compute unison offset cents (avoid recomputing per-sample)
-    float uniOffsetCents[MAX_UNISON];
-    for (int u = 0; u < unisonCount; ++u)
-        uniOffsetCents[u] = (unisonCount > 1) ? set.detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
+    // Pre-compute each unison voice's detune ratio (a block constant, so never per sample)
+    float uniMultipliers[MAX_UNISON];
+    for (int u = 0; u < unisonCount; ++u) {
+        const float offsetCents = (unisonCount > 1) ? set.detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
+        uniMultipliers[u] = std::pow(2.0f, offsetCents / 1200.0f);
+    }
 
     if (hasWaveCV)
         voices[v].previousWaveform = wf;
@@ -205,7 +205,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, int numSam
 
         float sample = 0.0f;
         for (int u = 0; u < unisonCount; ++u) {
-            const float uniDtS = dtS * std::pow(2.0f, uniOffsetCents[u] / 1200.0f);
+            const float uniDtS = dtS * uniMultipliers[u];
             float g;
             if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0) {
                 const float alpha = (float)voices[v].crossfadeSamplesRemaining / (float)CROSSFADE_SAMPLES;

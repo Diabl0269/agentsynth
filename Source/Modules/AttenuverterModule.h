@@ -45,18 +45,21 @@ public:
         }
         smoothedAmount.setTargetValue(*amountParam);
 
-        for (int sample = 0; sample < numSamples; ++sample) {
-            float amount = smoothedAmount.getNextValue();
-            if (cvAmountActive)
-                amount = juce::jlimit(-1.0f, 1.0f, amount + cvAmountData[sample]);
-            audioData[sample] *= amount;
+        if (!cvAmountActive && !smoothedAmount.isSmoothing()) {
+            // A steady Amount with no CV: one vector multiply, the same product per sample as the loop.
+            juce::FloatVectorOperations::multiply(audioData, smoothedAmount.getCurrentValue(), numSamples);
+        } else {
+            for (int sample = 0; sample < numSamples; ++sample) {
+                float amount = smoothedAmount.getNextValue();
+                if (cvAmountActive)
+                    amount = juce::jlimit(-1.0f, 1.0f, amount + cvAmountData[sample]);
+                audioData[sample] *= amount;
+            }
         }
 
         // Track output for UI visualization
-        float peak = 0.0f;
-        for (int s = 0; s < numSamples; ++s)
-            peak = std::max(peak, std::abs(audioData[s]));
-        lastOutputPeak.store(peak, std::memory_order_relaxed);
+        const auto range = juce::FloatVectorOperations::findMinAndMax(audioData, numSamples);
+        lastOutputPeak.store(std::max({0.0f, -range.getStart(), range.getEnd()}), std::memory_order_relaxed);
         lastModValue.store(numSamples > 0 ? audioData[numSamples / 2] : 0.0f, std::memory_order_relaxed);
 
         // Clear CV channels to prevent leaking to downstream modules

@@ -85,6 +85,8 @@ work it leaves behind and the next paint:
 and prints the cost of deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
 call, the one full repaint it asks for, and the average ghost frame (`profile()` prints the same at N tracks):
 `./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestDeleteUndoProfile*'`.
+Its audio-side counterpart, the per-block render cost of the same project, is `Tests/App/ModuleCpuProfileTests.cpp`
+([audio-engine.md](../architecture/audio-engine.md#measuring-render-cost)).
 
 ## Gated timers, not free-running ones
 

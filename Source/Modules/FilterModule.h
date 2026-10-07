@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FrequencyText.h"
+#include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"
 #include "ParameterText.h"
 #include <atomic>
@@ -82,6 +83,7 @@ public:
         for (int leg = 0; leg < kLegCount; ++leg) {
             for (int v = 0; v < MAX_VOICES; ++v) {
                 ladders[leg][v].prepare(monoSpec);
+                ladderSetters[leg][v] = {};
                 ladders[leg][v].setEnabled(true);
                 svfsForNotch[leg][v].prepare(monoSpec);
             }
@@ -143,9 +145,7 @@ public:
 
         // Push voice 0 to visual buffer
         if (auto* vb = getVisualBuffer()) {
-            auto* ch = buffer.getReadPointer(0);
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(ch[i]);
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules. Bounded at kRightBase: the
@@ -342,19 +342,19 @@ private:
             if (cutoffCVActive || keyTracked != f)
                 modulatedCutoff.store(keyTracked, std::memory_order_relaxed);
             f = keyTracked;
-            ladders[0][0].setCutoffFrequencyHz(f);
+            ladderSetters[0][0].setCutoff(ladders[0][0], f);
 
             float totalResMod = cvResCh ? cvResCh[i] : 0.0f;
             totalResMod = juce::jlimit(-1.0f, 1.0f, totalResMod);
             float res = juce::jlimit(0.0f, 1.0f, baseRes + totalResMod);
             if (resCVActive)
                 modulatedResonance.store(res, std::memory_order_relaxed);
-            ladders[0][0].setResonance(res);
+            ladderSetters[0][0].setResonance(ladders[0][0], res);
 
             float totalDriveMod = cvDriveCh ? cvDriveCh[i] : 0.0f;
             totalDriveMod = juce::jlimit(-1.0f, 1.0f, totalDriveMod);
             float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (totalDriveMod * 9.0f));
-            ladders[0][0].setDrive(drive);
+            ladderSetters[0][0].setDrive(ladders[0][0], drive);
 
             // Stash the coefficients this sample resolved to so the right leg gets the identical
             // treatment without re-advancing smoothedCutoff — a second getNextValue() walk would
@@ -402,9 +402,9 @@ private:
             const float f = cutoffCoeffCache[idx];
             const float res = resCoeffCache[idx];
 
-            ladders[1][0].setCutoffFrequencyHz(f);
-            ladders[1][0].setResonance(res);
-            ladders[1][0].setDrive(driveCoeffCache[idx]);
+            ladderSetters[1][0].setCutoff(ladders[1][0], f);
+            ladderSetters[1][0].setResonance(ladders[1][0], res);
+            ladderSetters[1][0].setDrive(ladders[1][0], driveCoeffCache[idx]);
 
             if (isNotchMode) {
                 svfsForNotch[1][0].setCutoffFrequency(f);
@@ -485,9 +485,9 @@ private:
                 // Key Track moves each voice's cutoff by its own pitch (the value its Pitch channel
                 // ends the block on); both legs of a voice share it.
                 const float voiceF = keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, v));
-                ladders[leg][v].setCutoffFrequencyHz(voiceF);
-                ladders[leg][v].setResonance(res);
-                ladders[leg][v].setDrive(drive);
+                ladderSetters[leg][v].setCutoff(ladders[leg][v], voiceF);
+                ladderSetters[leg][v].setResonance(ladders[leg][v], res);
+                ladderSetters[leg][v].setDrive(ladders[leg][v], drive);
 
                 if (isNotchMode) {
                     svfsForNotch[leg][v].setCutoffFrequency(voiceF);
@@ -554,6 +554,7 @@ private:
     // One independent ladder (and notch SVF) per audio leg per voice: a stereo filter has to keep
     // L and R separate all the way through, or the image collapses at the VCF.
     juce::dsp::LadderFilter<float> ladders[kLegCount][MAX_VOICES];
+    synth::LadderCoefficientSetter ladderSetters[kLegCount][MAX_VOICES];
     juce::dsp::StateVariableTPTFilter<float> svfsForNotch[kLegCount][MAX_VOICES];
     bool isNotchMode = false;
     double lastSampleRate = 44100.0;

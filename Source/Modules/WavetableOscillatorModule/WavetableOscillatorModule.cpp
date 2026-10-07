@@ -915,11 +915,8 @@ void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffe
 }
 
 void WavetableOscillatorModule::pushToVisualBuffer(const juce::AudioBuffer<float>& buffer, int numSamples) {
-    if (auto* vb = getVisualBuffer()) {
-        const float* ch0 = buffer.getReadPointer(0);
-        for (int i = 0; i < numSamples; ++i)
-            vb->pushSample(ch0[i]);
-    }
+    if (auto* vb = getVisualBuffer())
+        vb->pushBlock(buffer.getReadPointer(0), numSamples);
 }
 
 const juce::String* WavetableOscillatorModule::jackLabels() {

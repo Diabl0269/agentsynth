@@ -131,9 +131,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(outL[i]);
-            }
+            vb->pushBlock(outL, numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)

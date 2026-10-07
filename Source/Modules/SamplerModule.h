@@ -444,8 +444,7 @@ public:
         playingFlag.store(envelope > 0.0f || envelopeTarget > 0.0f);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(outL[i]);
+            vb->pushBlock(outL, numSamples);
         }
     }
 
@@ -754,8 +753,7 @@ private:
 
     void pushSilenceToVisualBuffer(int numSamples) {
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(0.0f);
+            vb->pushConstant(0.0f, numSamples);
         }
     }
 

@@ -262,8 +262,7 @@ public:
                 buffer.clear(ch, 0, numSamples);
 
             if (auto* vb = getVisualBuffer())
-                for (int smp = 0; smp < numSamples; ++smp)
-                    vb->pushSample(envOut[smp]);
+                vb->pushBlock(envOut, numSamples);
         } else {
             float* voiceData[MAX_VOICES] = {};
             const int voices = std::min(MAX_VOICES, numChannels);
@@ -303,8 +302,7 @@ public:
                 buffer.clear(ch, 0, numSamples);
 
             if (auto* vb = getVisualBuffer())
-                for (int smp = 0; smp < numSamples; ++smp)
-                    vb->pushSample(buffer.getSample(0, smp));
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
 
         meterLevel.store(meterPeak, std::memory_order_relaxed);

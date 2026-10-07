@@ -109,8 +109,7 @@ public:
             triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer())
-            for (int s = 0; s < numSamples; ++s)
-                vb->pushSample(gateOut[s]);
+            vb->pushBlock(gateOut, numSamples);
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override { return {{"Threshold", 1, "trigThreshold"}}; }
