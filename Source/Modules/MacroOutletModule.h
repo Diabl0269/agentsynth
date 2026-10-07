@@ -49,8 +49,7 @@ public:
             return;
 
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(buffer.getReadPointer(0)[i]);
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
     }
 
     bool acceptsMidi() const override { return false; }

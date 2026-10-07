@@ -244,3 +244,49 @@ jumped up to +6 dB. **Render-time only, never a graph edge.**
   separate behaviour change. Hosted plugins report no right leg (`rightAudioLegChannel()` is -1), so
   their L/R outputs into one jack still sum.
 - Pinned by `Tests/Engine/StereoDownMixTests.cpp`.
+
+### Measuring render cost
+
+`Tests/App/ModuleCpuProfileTests.cpp` is a disabled bench: `DISABLED_ModuleCpuProfile` opens a temporary copy of the
+[Load test project](../layout/rendering.md#the-load-test-project) (never the bundle itself, and without its autosave
+sidecars), plays it through `audioDeviceIOCallbackWithContext` on the shared `FakeAudioIODevice` (48 kHz, 512-sample
+blocks) and prints the mean / median / p99 block time plus an FNV-1a hash of every output sample. The hash is the
+bit-identity check for a CPU change: same hash, same sound.
+
+```
+./Tests --gtest_also_run_disabled_tests --gtest_filter='*ModuleCpuProfile*:*GraphNodeOverhead*'
+PROFILE_SPIN=14 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*DISABLED_ModuleCpuProfile*'  # then: sample $(pgrep -n Tests) 10
+```
+
+`PROFILE_BLOCKS` (default 2000) sets the timed length, `PROFILE_PROJECT` another bundle, and `PROFILE_SPIN=<s>` keeps
+rendering afterwards so `sample` can split the time per `processModuleBlock`.
+`DISABLED_GraphNodeOverheadProfile` times `juce::AudioProcessorGraph` chains of do-nothing processors and of
+Attenuverters.
+
+What it found on the Load test project (264 nodes; an A/B of the two binaries run interleaved while other builds shared
+the machine, so the ratios hold but an idle machine shows lower absolute times; per-module rows are `sample`
+percentages times the mean block):
+
+| | before | after |
+|---|---|---|
+| mean block | 930 µs (8.7 % of the 10.7 ms budget) | 560 µs (5.3 %) |
+| p99 block | 1115 µs | 740 µs |
+| ADSR (20) | 237 µs | 150 µs |
+| Filter (11) | 204 µs | 159 µs |
+| Oscillator (20) | 185 µs | 112 µs |
+| VCA (20) | 128 µs | 41 µs |
+| Track In / timeline MIDI source (20) | 56 µs | 12 µs |
+| Attenuverter (39, one per modulation) | 40 µs | 11 µs |
+| Channel Strip, LFO, EQ, Compressor, Gate | < 25 µs each | unchanged |
+
+- **The graph itself is cheap**: about 0.03 µs per node per block. What scales with the node count is per-sample work
+  inside modules, so that is where the fixes went (see [`Source/Modules/CLAUDE.md`](../../Source/Modules/CLAUDE.md)).
+- **The scope feed was the largest single per-node term**: `VisualBuffer::pushSample` per sample (a seq_cst
+  load/store pair and a modulo) cost ~2.5 µs per module per block — a timeline MIDI source did nothing else. Modules now
+  push a block at a time ([module-base.md](module-base.md#visualbuffer)).
+- **Unchanged ladder coefficients** are no longer re-set per sample ([Filter](../modules/modules.md#filter-module));
+  the **Oscillator**'s mono path no longer allocates six buffers per block or recomputes its unison detune ratios per
+  sample; a steady **Attenuverter** is one vector multiply.
+- Left as they are: the ADSR curve's per-sample `pow` (exact output depends on it), a modulated cutoff's per-sample
+  `exp`, and the graph's per-node clears of unconnected declared channels (JUCE-side, ~5 %). Skipping silent modules
+  would save little here — every track plays — and the cheap FX already total under 4 %.

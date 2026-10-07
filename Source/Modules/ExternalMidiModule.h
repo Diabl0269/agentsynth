@@ -76,9 +76,7 @@ public:
                     activity = 1.0f;
                 }
             }
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(activity);
-            }
+            vb->pushConstant(activity, numSamples);
         }
     }
 

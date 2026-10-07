@@ -108,9 +108,12 @@ void RecordTapModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce:
     }
 
     // Activity LED: the block's peak, same shape as every other audio module's meter feed.
-    if (auto* vb = getVisualBuffer())
-        for (int i = 0; i < numSamples; ++i)
-            vb->pushSample(buffer.getNumChannels() > 0 ? buffer.getReadPointer(0)[i] : 0.0f);
+    if (auto* vb = getVisualBuffer()) {
+        if (buffer.getNumChannels() > 0)
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        else
+            vb->pushConstant(0.0f, numSamples);
+    }
 }
 
 // ------------------------------------------------------------------ message thread --

@@ -30,9 +30,11 @@ add_executable(Tests
     UI/Graph/CableRetractTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
+    Modules/OscillatorMonoCVInPlaceTests.cpp
     Modules/OscillatorPulseWidthGlideTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
+    Modules/LadderCoefficientSetterTests.cpp
     Modules/FilterKeyTrackTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
@@ -227,6 +229,7 @@ add_executable(Tests
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
     App/ManyTracksProfileTests.cpp
+    App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
     App/MainComponent/MainComponentDocumentTests.cpp

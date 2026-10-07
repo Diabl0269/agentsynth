@@ -45,6 +45,8 @@ A graph node's `"uuid"` property (see `AIStateMapper::graphToJSON`) is the app's
 
 Modules may opt in to a thread-safe `VisualBuffer` (circular buffer of `std::atomic<float>`) for scope visualization. Enabled/disabled via `enableVisualBuffer(bool)` and accessed via `getVisualBuffer()`.
 
+A module feeds it a block at a time — `pushBlock(samples, n)`, or `pushConstant(value, n)` for an activity LED — never `pushSample` in a per-sample loop. The audio thread is its only writer, so a block publishes its write position once (a release store) instead of a seq_cst load/store pair and an integer modulo per sample; on the Load test project the per-sample form cost about as much as the modules' own DSP ([audio-engine.md](audio-engine.md#measuring-render-cost)). The ring ends up exactly as the same samples pushed one at a time would leave it (`VisualBufferTest.PushBlockMatchesPushSample`).
+
 ### Logical-Port API
 
 Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.

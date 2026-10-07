@@ -247,9 +247,7 @@ private:
         }
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(ch0[i]);
-            }
+            vb->pushBlock(ch0, numSamples);
         }
     }
 
@@ -295,9 +293,7 @@ private:
 
         if (auto* vb = getVisualBuffer()) {
             if (numChannels > 0) {
-                const float* ch0 = buffer.getReadPointer(0);
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(ch0[s]);
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
             }
         }
     }

@@ -314,8 +314,7 @@ private:
 
     void pushActivity(int numSamples, float level) {
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(level);
+            vb->pushConstant(level, numSamples);
     }
 
     // Per-clip mixing scratch, sized once in the constructor. processBlock never resizes it.

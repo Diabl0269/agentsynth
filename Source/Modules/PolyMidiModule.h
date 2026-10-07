@@ -97,9 +97,13 @@ public:
 
         // Push to visual buffer (Pitch Channel 0)
         if (auto* vb = getVisualBuffer()) {
-            auto* ch = buffer.getWritePointer(0); // Pitch Voice 0
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(ch[i] > 20.0f ? ch[i] / 1000.0f : 0.0f); // Scale for viz
+            const auto* ch = buffer.getReadPointer(0); // Pitch Voice 0
+            float scaled[64];                          // scaled for viz, a chunk at a time
+            for (int start = 0; start < numSamples; start += 64) {
+                const int n = std::min(64, numSamples - start);
+                for (int i = 0; i < n; ++i)
+                    scaled[i] = ch[start + i] > 20.0f ? ch[start + i] / 1000.0f : 0.0f;
+                vb->pushBlock(scaled, n);
             }
         }
 

@@ -84,3 +84,40 @@ TEST(VisualBufferTest, Overflow) {
     EXPECT_EQ(dest[0], 2.0f);
     EXPECT_EQ(dest[4], 6.0f);
 }
+
+// pushBlock / pushConstant publish a whole block at once; the ring must end up exactly as the same samples pushed one
+// at a time would leave it — across the wrap, and for a block longer than the ring.
+TEST(VisualBufferTest, PushBlockMatchesPushSample) {
+    for (int blockLen : {3, 7, 12, 25}) {
+        VisualBuffer perSample(10), perBlock(10);
+        std::vector<float> samples;
+        for (int i = 0; i < 4 * blockLen; ++i)
+            samples.push_back((float)i + 0.5f);
+        for (int start = 0; start < (int)samples.size(); start += blockLen) {
+            for (int i = start; i < start + blockLen; ++i)
+                perSample.pushSample(samples[(size_t)i]);
+            perBlock.pushBlock(samples.data() + start, blockLen);
+        }
+        std::vector<float> expected(10), actual(10);
+        perSample.copyTo(expected);
+        perBlock.copyTo(actual);
+        EXPECT_EQ(actual, expected) << "block length " << blockLen;
+    }
+}
+
+TEST(VisualBufferTest, PushConstantMatchesPushSample) {
+    VisualBuffer perSample(8), perBlock(8);
+    for (int i = 0; i < 3; ++i)
+        perSample.pushSample(0.25f);
+    perBlock.pushConstant(0.25f, 3);
+    for (int i = 0; i < 13; ++i)
+        perSample.pushSample(1.0f);
+    perBlock.pushConstant(1.0f, 13);
+    for (int i = 0; i < 2; ++i)
+        perSample.pushSample(0.0f);
+    perBlock.pushConstant(0.0f, 2);
+    std::vector<float> expected(8), actual(8);
+    perSample.copyTo(expected);
+    perBlock.copyTo(actual);
+    EXPECT_EQ(actual, expected);
+}

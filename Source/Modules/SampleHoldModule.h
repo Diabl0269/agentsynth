@@ -215,8 +215,7 @@ public:
             triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int s = 0; s < numSamples; ++s)
-                vb->pushSample(out[s]);
+            vb->pushBlock(out, numSamples);
         }
     }
 

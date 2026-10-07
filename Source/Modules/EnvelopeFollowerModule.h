@@ -113,8 +113,7 @@ public:
         currentEnvelope.store(out[numSamples - 1], std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(out[i]);
+            vb->pushBlock(out, numSamples);
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override {

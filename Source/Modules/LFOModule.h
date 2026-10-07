@@ -251,11 +251,11 @@ public:
                 fadeSamplesElapsed += 1.0;
             }
             channelData0[sample] = outputSample;
-
-            // Push to visual buffer for scope display
-            if (auto* vb = getVisualBuffer())
-                vb->pushSample(outputSample);
         }
+
+        // The scope shows exactly what was written out.
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(channelData0, buffer.getNumSamples());
 
         // ch1-4 (Level/Glide/Phase/Fade In CV in) are silent pass-throughs on the way out, same as Sample &
         // Hold's ch1-6 — clearing them stops the raw CV values leaking downstream as output.

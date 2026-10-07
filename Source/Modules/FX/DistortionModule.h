@@ -214,10 +214,7 @@ public:
 
         // Push to scope
         if (auto* vb = getVisualBuffer()) {
-            const float* ch0 = buffer.getReadPointer(0);
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(ch0[i]);
-            }
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules

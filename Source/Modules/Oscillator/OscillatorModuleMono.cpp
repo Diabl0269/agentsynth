@@ -37,58 +37,34 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
 
     int numSamples = buffer.getNumSamples();
 
-    // Save CV channel data before clearing the buffer.
-    // Channel 0 is shared between CV pitch input and audio output;
-    // in mono mode we ignore pitch CV (it may contain Hz from PolyMidi).
+    // The mod-CV inputs (ch1-5, Pan on ch6) share raw channels with outputs this module must leave
+    // silent. The render below writes only ch0 and the Audio R block (ch14+), so it reads the CV in
+    // place and clears ch1-6 afterwards; an unpatched jack (the 64-sample RMS guard) reads as null,
+    // which every consumer treats exactly like a block of zeros. No per-block copy or allocation.
     int numCh = buffer.getNumChannels();
-    juce::HeapBlock<float> cvWaveformSaved(numSamples);
-    juce::HeapBlock<float> cvOctaveSaved(numSamples);
-    juce::HeapBlock<float> cvCoarseSaved(numSamples);
-    juce::HeapBlock<float> cvFineSaved(numSamples);
-    juce::HeapBlock<float> cvLevelSaved(numSamples);
-    juce::HeapBlock<float> cvPanSaved(numSamples);
-
-    // Zero them initially
-    juce::FloatVectorOperations::clear(cvWaveformSaved, numSamples);
-    juce::FloatVectorOperations::clear(cvOctaveSaved, numSamples);
-    juce::FloatVectorOperations::clear(cvCoarseSaved, numSamples);
-    juce::FloatVectorOperations::clear(cvFineSaved, numSamples);
-    juce::FloatVectorOperations::clear(cvLevelSaved, numSamples);
-    juce::FloatVectorOperations::clear(cvPanSaved, numSamples);
-
-    // Helper to check if a channel is active
-    auto isChannelActive = [&](int ch) { return channelHasSignal(buffer, ch, numSamples); };
-
-    if (isChannelActive(1))
-        juce::FloatVectorOperations::copy(cvWaveformSaved, buffer.getReadPointer(1), numSamples);
-    if (isChannelActive(2))
-        juce::FloatVectorOperations::copy(cvOctaveSaved, buffer.getReadPointer(2), numSamples);
-    if (isChannelActive(3))
-        juce::FloatVectorOperations::copy(cvCoarseSaved, buffer.getReadPointer(3), numSamples);
-    if (isChannelActive(4))
-        juce::FloatVectorOperations::copy(cvFineSaved, buffer.getReadPointer(4), numSamples);
-    if (isChannelActive(5))
-        juce::FloatVectorOperations::copy(cvLevelSaved, buffer.getReadPointer(5), numSamples);
-    if (isChannelActive(modCVChannelFor(kJackPan, /*poly*/ false)))
-        juce::FloatVectorOperations::copy(cvPanSaved, buffer.getReadPointer(modCVChannelFor(kJackPan, false)),
-                                          numSamples);
+    const auto activeCV = [&](int ch) -> const float* {
+        return channelHasSignal(buffer, ch, numSamples) ? buffer.getReadPointer(ch) : nullptr;
+    };
+    const float* cvWaveformCh = activeCV(1);
+    const float* cvOctaveCh = activeCV(2);
+    const float* cvCoarseCh = activeCV(3);
+    const float* cvFineCh = activeCV(4);
+    const float* cvLevelCh = activeCV(5);
+    const float* cvPanCh = activeCV(modCVChannelFor(kJackPan, /*poly*/ false));
 
     // Unison/Detune/Pulse Width/Glide CV (ch14-17) alias the Audio R output block -- must be read
     // before the clear below touches those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
 
-    // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
-    // shared mod-CV input channels (1-5 mono), but clearing them here is SAFE because:
-    // (a) those CVs were already cached above (into cv*Saved) before this clear; and
-    // (b) the module declares 14 output channels, so JUCE's AudioProcessorGraph treats
-    //     inputChan < numOutputs and makes a PRIVATE COPY of any CV channel that is also
-    //     consumed later by another downstream node (juce_AudioProcessorGraph addCopyChannelOp
-    //     / isBufferNeededLater). So this only zeroes our private copy, never the shared
-    //     source buffer.
-    // WARNING: this safety depends on the 14-output declaration in the constructor —
-    //          do NOT reduce it back to 8.
+    // Clear every output channel except the mod-CV inputs still to be read (cleared at the end).
+    // Clearing a shared input channel only ever zeroes this node's private copy: the module declares
+    // 22 output channels, so JUCE's AudioProcessorGraph makes a PRIVATE COPY of any CV channel that
+    // a later node also consumes (addCopyChannelOp / isBufferNeededLater).
+    // WARNING: this safety depends on the output declaration in the constructor -- do NOT reduce it.
+    const int lastCVChannel = modCVChannelFor(kJackPan, /*poly*/ false);
     for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numCh; ++ch)
-        buffer.clear(ch, 0, numSamples);
+        if (ch == 0 || ch > lastCVChannel)
+            buffer.clear(ch, 0, numSamples);
 
     float totalPitch =
         voices[0].lastMidiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
@@ -103,11 +79,6 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     int baseWaveform = waveformParam->getIndex();
 
     const float* cvPitchCh = nullptr; // Mono mode ignores pitch CV
-    const float* cvWaveformCh = (numCh > 1) ? cvWaveformSaved.get() : nullptr;
-    const float* cvOctaveCh = (numCh > 2) ? cvOctaveSaved.get() : nullptr;
-    const float* cvCoarseCh = (numCh > 3) ? cvCoarseSaved.get() : nullptr;
-    const float* cvFineCh = (numCh > 4) ? cvFineSaved.get() : nullptr;
-    const float* cvLevelCh = (numCh > 5) ? cvLevelSaved.get() : nullptr;
     auto* ch0 = buffer.getWritePointer(0);
 
     // modulateNormalised is a no-op when cv == 0.0f, so an unpatched jack reproduces the
@@ -118,6 +89,13 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     const int levelLen = std::max(1, std::min(numSamples, 4096));
     fillLevelRamp(levelLen);
     fillPulseWidthRamp(levelLen, global.pulseWidthPercent);
+
+    // Each unison voice's detune ratio is a block constant: computed once here, not per sample.
+    float detuneMultipliers[MAX_UNISON];
+    for (int u = 0; u < unisonCount; ++u) {
+        const float detuneOffset = (unisonCount > 1) ? detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
+        detuneMultipliers[u] = std::pow(2.0f, detuneOffset / 1200.0f);
+    }
 
     for (int i = 0; i < numSamples; ++i) {
         float baseFreq = gliding ? voices[0].glide.nextFrequency() : voices[0].smoothedFreq.getNextValue();
@@ -174,9 +152,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
         // Unison generation
         float sample = 0.0f;
         for (int u = 0; u < unisonCount; ++u) {
-            float detuneOffset = (unisonCount > 1) ? detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
-            float detuneMultiplier = std::pow(2.0f, detuneOffset / 1200.0f);
-            float uniDt = dt * detuneMultiplier;
+            float uniDt = dt * detuneMultipliers[u];
 
             float uniSample;
             if (voices[0].crossfadeSamplesRemaining > 0) {
@@ -208,14 +184,13 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // Place the finished mono voice across Audio L / Audio R. Done as a post-pass rather than
     // inside the render loop so the generator stays byte-identical to the plain mono path.
     fillPanRamp(numSamples);
-    placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanSaved.get(), numSamples);
+    placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanCh, numSamples);
+    for (int ch = 1; ch <= lastCVChannel && ch < numCh; ++ch)
+        buffer.clear(ch, 0, numSamples);
 
     // Push to visual buffer
-    if (auto* vb = getVisualBuffer()) {
-        for (int i = 0; i < numSamples; ++i) {
-            vb->pushSample(ch0[i]);
-        }
-    }
+    if (auto* vb = getVisualBuffer())
+        vb->pushBlock(ch0, numSamples);
 }
 
 // ---------------------------------------------------------------------------
