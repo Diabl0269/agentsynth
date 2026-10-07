@@ -109,6 +109,13 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         // mixer-unbind invariant applies to every live MixerPanelComponent, not only the docked one.
         bottomDock.unbindAllMixerViews();
     };
+    // A restore that frees only some nodes (an undo of a duplicate, a redo of a delete) unbinds only the mixer
+    // columns bound to them; the rest stay bound and the rebuild after the restore keeps them.
+    graphEditor.onBeforeDetachModuleComponentsFor =
+        [this](const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+            midiLearnController_.cancelPickTarget();
+            bottomDock.unbindMixerViewsFor(doomed);
+        };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, the mixer-reveal hook
     // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip
     // switches tabs and scrolls to the column -- a closed dock has nothing on screen to scroll to yet.

@@ -19,6 +19,7 @@
 #include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <set>
 #include <vector>
 
 class AppUndoManager;
@@ -57,6 +58,10 @@ public:
     /** `sources`: the feeding tracks' names, comma-joined (computed by the caller, which holds the TimelineDoc --
      *  Core's MixerColumn only carries TrackIds); they feed the header's sources badge. */
     void setColumn(const synth::MixerColumn& column, const juce::String& sources);
+    /** True when the last setColumn() was given exactly `column` and `sources`. */
+    bool showsColumn(const synth::MixerColumn& column, const juce::String& sources) const;
+    /** True when the strip or one of the inserts this column binds controls to has its node uid in `uids`. */
+    bool bindsAnyOf(const std::set<juce::uint32>& uids) const;
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
     /** The strip's stable uuid -- what the panel re-finds a column by across a rebuild. */
@@ -270,7 +275,10 @@ public:
 
     /** Re-tints the header swatch (and top stripe) in place -- the cheap path for a track colour edit, which must
      *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
-    void setHeaderColour(juce::Colour colour) { header_.setColour(colour); }
+    void setHeaderColour(juce::Colour colour) {
+        header_.setColour(colour);
+        shownColumn_.colour = colour;
+    }
 
     /** Whether the header's dot opens a colour picker; false leaves it a plain swatch. */
     void setColourEditable(bool editable) { header_.setColourEditable(editable); }
@@ -363,6 +371,8 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
     bool showsSources_ = false;
+    synth::MixerColumn shownColumn_; // what the last setColumn() was given, for showsColumn()
+    juce::String shownSources_;
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;

@@ -93,9 +93,10 @@ void GraphEditor::detachAllModuleComponents() {
 // detachAllModuleComponents for a restore that frees only `doomed` (an undo of a duplicate or an add, a redo of a
 // delete): the same unbinding, but only those nodes' cards are pictured, detached and dropped. Every other card stays
 // bound to a processor that survives, so updateComponents() only has new nodes left to build cards for; rebuilding
-// every card on such an undo made it grow with the project. Unbinding the owner's UI (the mixer columns, MIDI Learn,
-// the pick overlay) and the mod matrix rows stays wholesale: those are rebuilt from the graph after every restore
-// anyway.
+// every card on such an undo made it grow with the project. The owner's UI is told which nodes go when it installed
+// onBeforeDetachModuleComponentsFor (the mixer then unbinds and rebuilds only the columns bound to them); otherwise it
+// unbinds wholesale through onBeforeDetachAllModuleComponents. The mod matrix rows are unbound wholesale: they are
+// rebuilt from the graph after every restore anyway.
 void GraphEditor::detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
     std::set<juce::uint32> gone;
     for (auto id : doomed)
@@ -104,7 +105,12 @@ void GraphEditor::detachModuleComponentsFor(const std::vector<juce::AudioProcess
     for (auto* comp : modules) // pictured while still bound; a no-op outside a restore's glide Scope
         if (gone.count(comp->getNodeId().uid) != 0)
             cardGlide_.noteExit(comp, comp->getNodeId().uid);
-    fireBeforeDetachAllModuleComponents();
+    if (onBeforeDetachModuleComponentsFor) {
+        modDot_->endCanvasPick();
+        onBeforeDetachModuleComponentsFor(doomed);
+    } else {
+        fireBeforeDetachAllModuleComponents();
+    }
     for (int i = modules.size(); --i >= 0;) {
         auto* comp = modules.getUnchecked(i);
         const auto id = comp->getNodeId();

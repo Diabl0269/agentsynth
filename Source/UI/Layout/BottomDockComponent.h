@@ -133,6 +133,8 @@ public:
      *  graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch apply) runs is
      *  unbound first too. */
     void unbindAllMixerViews();
+    /** unbindAllMixerViews() for a restore that frees only `doomed` (MixerPanelComponent::unbindColumnsFor). */
+    void unbindMixerViewsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
     /** Sibling of unbindAllMixerViews() for MixerPanelComponent::rebuildIfUnbound()'s own
      *  contract (MainComponent wires this to GraphEditor::onGraphStructureChanged). */
     void rebuildIfUnboundMixerViews();

@@ -217,6 +217,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelRowKeyboard.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnReuse.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesPane.h

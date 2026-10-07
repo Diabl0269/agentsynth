@@ -691,6 +691,7 @@ add_executable(Tests
     UI/Layout/SidePane/SidePaneShortcutTests.cpp
     Mixer/MixerViewDocTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
+    UI/Mixer/MixerPanelIncrementalRebuildTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp

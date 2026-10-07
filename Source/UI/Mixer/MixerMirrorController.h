@@ -3,8 +3,10 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <vector>
 
 namespace synth::theme {
 class AppLookAndFeel;
@@ -78,6 +80,7 @@ public:
      *  only mutate stripColumns_, which the next open() rebuilds from scratch anyway via rebuild()
      *  below). */
     void unbindIfOpen();
+    void unbindIfOpenFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
     void rebuildIfUnboundIfOpen();
     /** BottomDockComponent::rebuildMixer()'s own extension point -- called unconditionally from
      *  there (mirror_ may not exist yet; the null check makes that free). */

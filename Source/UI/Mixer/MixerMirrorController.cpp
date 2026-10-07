@@ -25,6 +25,11 @@ void MixerMirrorController::unbindIfOpen() {
         mirror_->unbindAllColumns();
 }
 
+void MixerMirrorController::unbindIfOpenFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+    if (mirror_)
+        mirror_->unbindColumnsFor(doomed);
+}
+
 void MixerMirrorController::rebuildIfUnboundIfOpen() {
     if (mirror_)
         mirror_->rebuildIfUnbound();

@@ -478,14 +478,36 @@ already has a real `content_->button` to apply it to.
 
 **A UI object holding a raw pointer into one graph node must let go of it before that node's processor
 is freed.** Every graph-replacing mutation funnels through
-`GraphEditor::detachAllModuleComponents()` (or, for an undo or redo that frees only some nodes,
-`GraphEditor::detachModuleComponentsFor()`), which fires `onBeforeDetachAllModuleComponents` at its
+`GraphEditor::detachAllModuleComponents()`, which fires `onBeforeDetachAllModuleComponents` at its
 top; `MainComponent` wires that to `MixerPanelComponent::unbindAllColumns()`, which unbinds every
 strip column's and Master's fader, pan, mute, solo, meter and EQ thumbnail and clears their raw
 pointers **without destroying anything** (`MixerColumnComponent::unbindFromGraph()` /
 `MixerMasterColumn::unbindFromGraph()`, both idempotent and null-safe, like `MixerFader::unbind()`).
+An undo or redo that frees only some nodes goes through `GraphEditor::detachModuleComponentsFor()`
+instead, which fires `onBeforeDetachModuleComponentsFor(doomed)`; `MainComponent` wires that to
+`MixerPanelComponent::unbindColumnsFor()`, which unbinds only the strip columns bound to a doomed node
+(`MixerColumnComponent::bindsAnyOf`: the strip and its inserts) plus Master, so the rest stay bound.
 `~MainComponent()`'s own `detachAllModuleComponents()` call, already ordered before
 `audioEngine.shutdown()`, covers the same teardown hazard for free.
+
+### A rebuild keeps the columns that did not change
+
+`MixerPanelComponent::rebuild()` builds a fresh snapshot but re-creates only the strip columns it has to
+(`MixerPanelColumnReuse.cpp`): a column is **kept** when it is still bound and everything it was built from is equal
+-- its `synth::MixerColumn` and sources line (`MixerColumnComponent::showsColumn`, every field compared) and what the
+panel decided for it (colour dot editable, zone). Re-creating every column made a knob undo, a duplicate and its undo
+grow with the number of channels. Rules that keep a kept column right:
+
+- **Everything `setColumn()` shows comes from the column and the sources line.** A new field drawn from the graph or
+  the doc goes into `MixerColumn` (so a change to it rebuilds the column), never read on the side in `setColumn()`.
+- A kept column's controls follow parameter changes through their own listeners; mute and solo are module state with
+  no listener, so a kept column re-reads them (`refreshMuteSoloVisual()`), and its reveal highlight is cleared as a new
+  column's would be. Meter ballistics, the clip readout and an armed MIDI Learn outline carry on.
+- `refreshTrackColours()` re-tints in place and records the colour as shown, so the next rebuild keeps the column.
+- An unbound column is never kept: `unbindAllColumns()` makes the next rebuild re-create every column.
+
+`MixerPanelIncrementalRebuildTests.cpp` counts the columns built (`getStripColumnsBuiltForTest()`): none for a knob
+undo, one for a duplicate, none for its undo.
 
 **FRO133 (right-click MIDI Learn on the mixer, [`docs/control/midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage))
 adds one more thing to this list.** Both `unbindFromGraph()` methods above also clear a small MIDI

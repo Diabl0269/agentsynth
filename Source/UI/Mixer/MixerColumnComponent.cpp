@@ -153,6 +153,8 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
 void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sources) {
     nodeId_ = column.nodeId;
     uuid_ = column.uuid;
+    shownColumn_ = column;
+    shownSources_ = sources;
 
     header_.setColour(column.colour);
     header_.setDisplayName(column.name);
@@ -215,6 +217,24 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // setEntries()) if this ran first.
     sendList_.setEntries(column.sends, column.nodeId);
     resized();
+}
+
+// Everything setColumn() shows is read from `column` and `sources`, and the controls it binds stay live through their
+// own parameter listeners, so an equal pair means the column already shows what a fresh one would (the panel's
+// incremental rebuild keeps it; MixerPanelComponent::rebuild).
+bool MixerColumnComponent::showsColumn(const synth::MixerColumn& column, const juce::String& sources) const {
+    return column == shownColumn_ && sources == shownSources_;
+}
+
+// The nodes whose processors this column holds pointers into: the strip (fader, pan, mute, solo, meter, send rows,
+// MIDI Learn entries) and its inserts (the EQ thumbnail binds the first Parametric EQ among them).
+bool MixerColumnComponent::bindsAnyOf(const std::set<juce::uint32>& uids) const {
+    if (uids.count(nodeId_.uid) != 0)
+        return true;
+    for (const auto& insert : shownColumn_.inserts)
+        if (uids.count(insert.nodeId.uid) != 0)
+            return true;
+    return false;
 }
 
 // header_'s inline rename commits here. A boxed strip's column name already comes from its MACRO
