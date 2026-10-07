@@ -47,16 +47,20 @@ public:
     void storeHull(const juce::String& macroId, juce::Rectangle<int> hull);
     /** The canvas part of GraphEditor::timerCallback(); call after the cached routings were refreshed. */
     void tick();
+    /** What the last tick() asked to repaint, in canvas coordinates. */
+    juce::Rectangle<int> lastTickArea() const noexcept { return lastTickArea_; }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     bool routingsMoved();
     void refreshCableActivity();
+    juce::Rectangle<int> visibleCableArea() const;
 
     GraphEditor& editor_;
     juce::uint64 generation_ = 1;
     juce::uint64 fittedGeneration_ = 0; // the generation the canvas frame was last fitted at
     juce::uint64 routingSignature_ = 0;
+    juce::Rectangle<int> lastTickArea_;
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
 };
 

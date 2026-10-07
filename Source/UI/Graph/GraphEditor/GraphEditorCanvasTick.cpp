@@ -9,6 +9,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Layout/CableCurve.h"
 
 #include <map>
 #include <tuple>
@@ -46,17 +47,34 @@ void CanvasMemo::changeListenerCallback(juce::ChangeBroadcaster*) { editor_.repa
 // bypass, the attenuverter amount) are refreshed in place. Card moves, graph edits and every other change reach the
 // memo through repaintCanvas() (childBoundsChanged and the graph's broadcast included). The canvas frame is refitted
 // only when the layout generation moved, since fitting it measures every macro border.
+//
+// The tick repaints only the visible cables' area: the signal-flow dots and a cable's activity are all it changes. On
+// a canvas zoomed in to a few cards (dragging a knob) the cards outside it are no longer redrawn 30 times a second.
+// Anything else on the canvas that changes over time requests its own repaint; the tick no longer covers it. With the
+// memo dropped (the routing set moved) the whole canvas is repainted.
 void CanvasMemo::tick() {
     if (routingsMoved())
         editor_.cablesCacheValid = false;
     else if (editor_.cablesCacheValid)
         refreshCableActivity();
-    editor_.content.repaint(); // the signal-flow dots move along every cable
+    lastTickArea_ = editor_.cablesCacheValid ? visibleCableArea() : editor_.content.getLocalBounds();
+    if (!lastTickArea_.isEmpty())
+        editor_.content.repaint(lastTickArea_);
     if (fittedGeneration_ != generation_) {
         fittedGeneration_ = generation_;
         ++workCounters().canvasFrameFits;
         editor_.refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // live drags only grow
     }
+}
+
+// The union of every cable box (synth::ui::cablePaintBounds) that reaches the visible canvas, cut to it.
+juce::Rectangle<int> CanvasMemo::visibleCableArea() const {
+    const auto visible = editor_.getVisibleCanvasRect();
+    juce::Rectangle<float> area;
+    for (const auto& cable : editor_.cablesCache)
+        if (const auto box = synth::ui::cablePaintBounds(cable.p1, cable.p2); box.intersects(visible))
+            area = area.isEmpty() ? box : area.getUnion(box);
+    return area.getIntersection(visible).getSmallestIntegerContainer();
 }
 
 // FNV-1a over what decides a routing cable's existence and ends; values that only change how it is drawn are left
@@ -113,6 +131,8 @@ void CanvasMemo::refreshCableActivity() {
 }
 
 } // namespace graph_editor_paint
+
+juce::Rectangle<int> GraphEditor::getLastTickRepaintAreaForTest() const { return canvasMemo_->lastTickArea(); }
 
 // A card that moves or resizes moves its cable ends and can move a macro border.
 void GraphEditor::GraphContentComponent::childBoundsChanged(juce::Component*) { editor.repaintCanvas(); }

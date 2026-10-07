@@ -33,7 +33,7 @@ gliding cards inside the memo, see below) and the cable retract, which repaint o
 
 ## Per-frame work does not grow with the patch
 
-The 30 Hz tick repaints the visible canvas (the signal-flow dots move along every cable), so on a project with dozens
+The 30 Hz tick repaints the visible cables (the signal-flow dots move along every cable), so on a project with dozens
 of tracks anything per cable, per card or per macro in that paint runs hundreds of times a frame. These rules keep the
 tick's own work flat and the paint linear in what is on screen, and keep animation frames off that path:
 
@@ -46,6 +46,11 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   edited behind the editor's back). So **a change that moves a cable end without moving a card, a knob or a
   graph edge must call `repaintCanvas()`** (`notifyModuleContentChanged()` from a card); the tick no longer catches it.
   Rebuilding every cable on every tick cost about 10 ms a tick at 80 tracks.
+- **The tick repaints only the visible cables' area** (`CanvasMemo::tick`: the union of `cablePaintBounds` over the
+  cables reaching the visible canvas, cut to it; the whole canvas when the memo was dropped). So **anything else on the
+  canvas that changes over time requests its own repaint** (its driver's frame, or `repaintCanvas()`); the tick no longer
+  repaints it by accident. Zoomed out on a busy patch the area is most of the view; zoomed in on a few cards the cards
+  away from the cables are no longer redrawn every tick.
 - **Macro borders and the canvas frame are measured once per layout.** `CanvasMemo` keeps a layout generation that
   `repaintCanvas()` and `updateComponents()` bump; `macroHullTargetBounds` measures a border once per generation, and the
   tick refits the canvas frame (which measures every border) only when the generation moved. Measuring all 80 borders
@@ -106,7 +111,10 @@ whose track duplicates froze the app. It lives on the developer's machine, not i
 work it leaves behind and the next paint:
 `PROFILE_DUPLICATE=10 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestProjectProfile*'`.
 `DISABLED_LoadTestDeleteUndoProfile` opens a temporary copy of it (autosaves left out, the copy deleted afterwards)
-and prints the cost of deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
+and prints the frames a user feels as lag (the idle tick, a pan, a zoom and a knob drag step, a timeline scroll, the
+tick zoomed in on a card; `profileInteractions`, also run by `profile()` at N tracks, with
+`PROFILE_SPIN_FRAME=<s> PROFILE_SPIN_KIND=tick|pan|zoom|knob|timeline` to loop one for `sample`), then the cost of
+deleting the on-screen card with the most cables, undoing it, and a parameter-only undo: each
 call, the one full repaint it asks for, and the average ghost frame (`profile()` prints the same at N tracks):
 `./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestDeleteUndoProfile*'`.
 Its audio-side counterpart, the per-block render cost of the same project, is `Tests/App/ModuleCpuProfileTests.cpp`

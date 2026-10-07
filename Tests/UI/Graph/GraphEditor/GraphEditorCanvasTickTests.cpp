@@ -210,3 +210,33 @@ TEST(GraphEditorCanvasTick, ARepaintMeasuresNoMacroBorderUntilAMemberMoves) {
     EXPECT_GE(graph_editor_paint::workCounters().hullComputations, 1) << "the moved member's border is measured";
     EXPECT_LE(graph_editor_paint::workCounters().hullComputations, 2) << "once per border";
 }
+
+// A membership change moves no card, so the border a paint measured just before it is the only one the memo holds.
+TEST(GraphEditorCanvasTick, ABorderMeasuredBeforeAMembershipChangeStillGlides) {
+    Canvas c;
+    const auto macroId = c.groupIntoOpenMacro({c.osc, c.filter});
+    const auto newcomer = addModuleAt(c.editor, c.engine, std::make_unique<FilterModule>(), 1500, 300);
+    c.settle(); // the paint measured the border without the newcomer
+    const auto before = c.editor.snapshotPaintedHulls();
+
+    ASSERT_TRUE(c.editor.getMacros().addMember(macroId, uuidOf(c.engine, newcomer)));
+    c.editor.glideHullsFrom(before);
+    EXPECT_TRUE(c.editor.isHullGlideLiveForTest()) << "the border grows to the newcomer instead of snapping";
+    c.editor.finishHullGlideForTest();
+    EXPECT_TRUE(c.editor.paintedMacroHullBounds(macroId).contains(findComponent(c.editor, newcomer)->getBounds()));
+}
+
+// Zoomed in on a few cards (dragging a knob) the tick redraws only where its dots move, not every card in view.
+TEST(GraphEditorCanvasTick, TheTickRepaintsOnlyTheVisibleCables) {
+    Canvas c;
+    const auto lone = addModuleAt(c.editor, c.engine, std::make_unique<FilterModule>(), 300, 1500); // no cable
+    c.settle();
+    c.tick();
+    const auto area = c.editor.getLastTickRepaintAreaForTest();
+    const auto& cable = c.editor.buildVisibleCables().front();
+    EXPECT_TRUE(area.toFloat().contains(
+        synth::ui::cablePaintBounds(cable.p1, cable.p2).getIntersection(c.editor.getVisibleCanvasRect())))
+        << "the dots move along the cable";
+    EXPECT_FALSE(area.intersects(findComponent(c.editor, lone)->getBounds())) << "a card with no cable is left alone";
+    EXPECT_TRUE(c.editor.getVisibleCanvasRect().contains(area.toFloat()));
+}

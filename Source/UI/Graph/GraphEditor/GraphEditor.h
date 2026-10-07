@@ -668,6 +668,7 @@ public:
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
     int getCableRebuildCountForTest() const noexcept { return cableRebuildCount; }
+    juce::Rectangle<int> getLastTickRepaintAreaForTest() const; // canvas coordinates
 
     // ---- Zoom gesture (raster freeze) test seams ----
     bool isZoomGestureActive() const noexcept { return zoomGestureActive; }

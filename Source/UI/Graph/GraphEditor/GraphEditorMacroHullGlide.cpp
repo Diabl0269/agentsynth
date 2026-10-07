@@ -52,8 +52,11 @@ MacroHullGlide::Hulls GraphEditor::snapshotPaintedHulls() const {
 }
 
 // Call after a change that may have moved borders, with a snapshotPaintedHulls() taken before it. A border
-// already gliding is restarted from where it is drawn now, so a second change never makes it jump.
+// already gliding is restarted from where it is drawn now, so a second change never makes it jump. The borders measured
+// before the change are dropped first: a membership change moves no card, so nothing else told the memo, and the
+// border a paint measured during the drag would read as unmoved and snap instead of gliding.
 void GraphEditor::glideHullsFrom(const MacroHullGlide::Hulls& before) {
+    canvasMemo_->layoutChanged();
     MacroHullGlide::Hulls after;
     for (const auto& [id, rect] : before)
         if (macros.find(id) != nullptr && !macros.isEffectivelyCollapsed(id))
