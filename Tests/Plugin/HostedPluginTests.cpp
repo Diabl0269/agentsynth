@@ -202,6 +202,55 @@ TEST(HostedPluginTest, InstrumentWithNoInputsGetsItsOutputChannelsCleared) {
 // 3. Refusal
 // ============================================================================
 
+TEST(HostedPluginTest, AuxBusesAreDroppedSoAWidePluginPublishesWithItsMainBuses) {
+    // 2/2 main + 8 stereo aux outs = 18 outputs: over the cap only because of the aux buses.
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Multi Out", 0x5754424, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, false, 0, false,
+                                                    synth::test::StubAuxOutputs{8, 2, true});
+    });
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    module.loadPlugin(stubDescription("Multi Out"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
+
+    ASSERT_TRUE(module.hasInstance()) << module.getStatusMessage();
+    EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumOutputChannels(), 2);
+    EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumInputChannels(), 2);
+    EXPECT_TRUE(module.getStatusMessage().isEmpty());
+}
+
+TEST(HostedPluginTest, WideAuxPluginThatCannotDropItsAuxBusesIsStillRefused) {
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Rigid Multi Out", 0x5754424, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, false, 0, false,
+                                                    synth::test::StubAuxOutputs{8, 2, false});
+    });
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    module.loadPlugin(stubDescription("Rigid Multi Out"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
+
+    EXPECT_FALSE(module.hasInstance());
+    EXPECT_TRUE(module.getStatusMessage().contains("at most 16"));
+}
+
+TEST(HostedPluginTest, PluginUnderTheCapKeepsItsAuxBuses) {
+    // 2 + 3 stereo aux = 8 outputs: fits, so the aux buses must stay enabled.
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Small Multi Out", 0x5754424, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, false, 0, false,
+                                                    synth::test::StubAuxOutputs{3, 2, true});
+    });
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    module.loadPlugin(stubDescription("Small Multi Out"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
+
+    ASSERT_TRUE(module.hasInstance());
+    EXPECT_EQ(module.getVisibleOutputPortCount(), 8) << "the full default layout, aux buses included";
+}
+
 TEST(HostedPluginTest, OverMaxRefusedWithMessage) {
     StubBackend backend(
         [] { return std::make_unique<StubPluginInstance>(kTooManyChannels, kTooManyChannels, "Wide Plugin"); });
