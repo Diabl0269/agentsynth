@@ -38,7 +38,12 @@ const std::vector<std::pair<juce::String, const char*>> kDualIOOptOuts = {
 // Master is Declared too (inputs only): its four inputs are two stereo BLOCKS (Mix L/R, Direct L/R),
 // so the inherited Auto rule (collapsed by default, one "Audio" jack) would misdescribe it. Declared
 // ships SPLIT, which is its long-standing four-jack look; collapsed shows "Mix" and "Direct".
-const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable", "Filter", "VCA", "Sampler", "Master"};
+//
+// Hosted Plugin is Declared too: its fixed 16/16 shape hides whether the hosted instance is a stereo
+// pair, so the toggle is always present and only acts on an instance with exactly 2 inputs / 2 outputs. It ships
+// SPLIT because every project saved before the toggle existed loaded as separate Left/Right jacks.
+const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable", "Filter",       "VCA",
+                                                   "Sampler",    "Master",    "Hosted Plugin"};
 
 bool containsName(const std::vector<juce::String>& v, const juce::String& s) {
     return std::find(v.begin(), v.end(), s) != v.end();

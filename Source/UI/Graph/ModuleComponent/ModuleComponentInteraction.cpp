@@ -5,6 +5,7 @@
 // sibling ModuleComponent*.cpp units next to this one.
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -781,7 +782,8 @@ void ModuleComponent::finishTitleRename(bool commit) {
 
     // Typing the auto-numbered name back is the same as having no custom title, so it stores as
     // blank and keeps following the numbering instead of freezing today's number in place.
-    owner.setModuleDisplayName(nodeId, typed.trim() == module->getName() ? juce::String() : typed);
+    owner.setModuleDisplayName(
+        nodeId, typed.trim() == synth::moduleTitle(juce::NamedValueSet(), module) ? juce::String() : typed);
     repaint();
 }
 

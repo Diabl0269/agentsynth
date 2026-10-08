@@ -90,6 +90,10 @@ public:
     /** Display name of the loaded (or pending) plugin; empty when the module is bare. */
     juce::String getPluginName() const { return identity_.name; }
 
+    juce::String getDefaultTitle() const override;
+    /** 1-based; 1 shows the bare name. Message thread. */
+    void setInstanceOrdinal(int ordinal) noexcept { instanceOrdinal_ = ordinal < 1 ? 1 : ordinal; }
+
     /** Message thread. Why the module is not currently hosting anything — an over-max refusal, a
      *  format error, "not installed" — or empty when there is nothing to say. Polled by the UI. */
     const juce::String& getStatusMessage() const noexcept { return statusMessage_; }
@@ -246,8 +250,25 @@ public:
     // Port model
     //==============================================================================
 
-    int getVisibleInputPortCount() const override { return visibleInputs_.load(std::memory_order_relaxed); }
-    int getVisibleOutputPortCount() const override { return visibleOutputs_.load(std::memory_order_relaxed); }
+    /** The instance's real jack counts, except that an instance with EXACTLY 2 inputs (outputs) shows ONE
+     *  "Audio" jack while Dual I/O is off -- the same collapse an FX pair gets, owning both raw legs. Any other
+     *  count (mono, 3+, none yet) is untouched by the toggle. Dual I/O ON (the default, and what every project
+     *  saved before the toggle existed loads as) is today's separate Left/Right jacks. */
+    int getVisibleInputPortCount() const override {
+        const int raw = visibleInputs_.load(std::memory_order_relaxed);
+        return (raw == 2 && !isDualIO()) ? 1 : raw;
+    }
+    int getVisibleOutputPortCount() const override {
+        const int raw = visibleOutputs_.load(std::memory_order_relaxed);
+        return (raw == 2 && !isDualIO()) ? 1 : raw;
+    }
+
+    /** True when the published instance has exactly 2 inputs or exactly 2 outputs, i.e. the Dual I/O toggle does
+     *  something. The card shows its Dual I/O button only then. */
+    bool hasStereoPairInstance() const noexcept {
+        return visibleInputs_.load(std::memory_order_relaxed) == 2 ||
+               visibleOutputs_.load(std::memory_order_relaxed) == 2;
+    }
 
     juce::String getInputPortLabel(int channelIndex) const override;
     juce::String getOutputPortLabel(int channelIndex) const override;
@@ -255,22 +276,19 @@ public:
     LogicalPort mapInputChannel(int rawChannel) const override;
     LogicalPort mapOutputChannel(int rawChannel) const override;
 
-    /** Unlike the split-block voice modules, ch1 here is never a CV input — this module has
-     *  none, only the instance's own raw audio channels in a contiguous block (mapOutputChannel
-     *  above) — so it does NOT use the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which
-     *  would read -1 forever: this module never registers a Dual I/O parameter (its shape is fixed
-     *  16/16, not the exactly-2-out shape that grants one). Derived from the PUBLISHED instance's
-     *  real output count instead: ch1 once there are 2+ real outputs (a stereo or wider
-     *  instrument/effect); ch0 again (both legs read the one channel) for a genuinely mono
-     *  instance; -1 (no leg at all) for a bare/silent module. Callers that build a stereo channel
-     *  from this node (MainComponent::addInstrumentPluginTrack) must read this only AFTER the load
-     *  completes — see onLoadCompleted above — so it reflects the real instance, not the bare
-     *  placeholder's 1-in/1-out default. */
+    /** Unlike the split-block voice modules, ch1 here is never a CV input -- this module has none, only the
+     *  instance's own raw audio channels in a contiguous block (mapOutputChannel above) -- so it does NOT use
+     *  the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which would say ch1 even for a mono or
+     *  bare module. Derived from the PUBLISHED instance's raw output count instead (NOT the visible count: a
+     *  collapsed stereo pair still has two raw legs, which is what keeps its cables intact): ch1 once there
+     *  are 2+ real outputs; ch0 again (both legs read the one channel) for a genuinely mono instance; -1 for a
+     *  bare/silent module. Callers that build a stereo channel from this node
+     *  (MainComponent::addInstrumentPluginTrack) must read this only AFTER the load completes -- see
+     *  onLoadCompleted above -- so it reflects the real instance, not the bare placeholder. */
     int rightAudioLegChannel() const override {
         if (!hasInstance())
-            return -1; // bare/silent module: getVisibleOutputPortCount()'s floor-of-1 placeholder
-                       // is not a real channel to report a leg on
-        const int outputs = getVisibleOutputPortCount();
+            return -1; // bare/silent module: the floor-of-1 placeholder is not a real channel to report a leg on
+        const int outputs = visibleOutputs_.load(std::memory_order_relaxed);
         if (outputs >= 2)
             return 1;
         if (outputs == 1)
@@ -295,6 +313,11 @@ private:
 
     /** Message thread. Applies a layout-only patch (see makeCardLayoutPatch); false if `state` is not one. */
     bool applyCardLayoutPatch(const juce::var& state);
+
+    /** Message thread. Before the instance is read or prepared: asks for a stereo MAIN output (and a stereo main
+     *  input when it has an enabled mono one) if the plugin supports it, so a plugin whose default is mono still
+     *  gets two jacks. Never touches a bus with 3+ channels, a disabled input, or any aux/sidechain bus. */
+    static void negotiateStereoMainBuses(juce::AudioPluginInstance& instance);
 
     /** Message thread. Prepares, validates and publishes `instance`, or refuses it with a reason. */
     void publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance);
@@ -373,7 +396,8 @@ private:
     // bypass paths — reaping has to make progress in a patch whose hosted module is bypassed.
     std::atomic<std::uint64_t> blockCounter_{0};
 
-    // Visible jack counts. Floor of 1 while empty: a bare module still has to show where audio goes
+    // The instance's RAW channel counts (getVisible*PortCount() starts from these, then applies the Dual I/O
+    // collapse). Floor of 1 while empty: a bare module still has to show where audio goes
     // in and comes out. Set to the instance's REAL counts at publish (which may legitimately be 0 in
     // for an instrument), reset to 1 on unload.
     std::atomic<int> visibleInputs_{1};
@@ -393,6 +417,7 @@ private:
     // cleared by every other load: it belongs to the plugin it was saved from.
     juce::MemoryBlock pendingBlob_;
     juce::String statusMessage_;
+    int instanceOrdinal_ = 1;
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     bool loading_ = false;
 

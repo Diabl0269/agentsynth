@@ -146,7 +146,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
-        {"Hosted Plugin", "bypassed, muted"},
+        {"Hosted Plugin", "bypassed, dualIO, muted"},
         {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, muted, phase, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},

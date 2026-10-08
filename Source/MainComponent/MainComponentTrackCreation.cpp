@@ -13,10 +13,12 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Timeline/UniqueTrackName.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <set>
+#include <vector>
 
 namespace {
 
@@ -31,6 +33,14 @@ constexpr int kChannelCardGapX = 40;
 // codebase is (see docs/mixer/track-presets.md#saving-and-setting-a-default).
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
+
+// `base` made unique against the document's current track names ("Diva", else "Diva 2", "Diva 3"...).
+juce::String uniqueTrackName(const synth::TimelineDoc& doc, const juce::String& base) {
+    std::vector<juce::String> names;
+    for (const auto& track : doc.getTracks())
+        names.push_back(track.name);
+    return synth::uniqueNameAmong(base, names);
+}
 
 } // namespace
 
@@ -254,8 +264,9 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
 // is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
 // out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
 // mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
-// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before. The build
-// itself is buildInstrumentTrackBody, shared with the timelineOps host.
+// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before, except a hosted plugin's track is
+// named after the plugin and numbered only when that name is taken ("Diva", "Diva 2"). The build itself is
+// buildInstrumentTrackBody, shared with the timelineOps host.
 void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                                  const juce::String& trackNamePrefix, bool poly) {
     if (instrumentProcessor == nullptr) {
@@ -267,6 +278,9 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     }
 
     const int index = (int)timelineDoc.getTracks().size();
+    // A hosted plugin's track is named after the plugin ("Diva", then "Diva 2"); every other instrument keeps
+    // "<prefix> <N>".
+    const bool namedAfterPlugin = dynamic_cast<synth::HostedPluginModule*>(instrumentProcessor.get()) != nullptr;
     juce::String trackName; // set inside the mutation; read afterwards for the status message
     // shared_ptr so the mutate lambda (which recordGraphTimelineAndMacroChange takes by const-ref
     // and must remain copyable as std::function) can carry a move-only juce::AudioProcessor —
@@ -275,7 +289,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
-        [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
+        [this, index, &trackName, trackNamePrefix, poly, stagedInstrument, namedAfterPlugin] {
             // Same default-consulting branch as addAudioTrack's own, before any node is created
             // (including `stagedInstrument`, which is simply discarded unused when a default wins — never
             // added to the graph) (see docs/mixer/track-presets.md#saving-and-setting-a-default).
@@ -291,10 +305,13 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
                 }
             }
 
-            trackName = trackNamePrefix + " " + juce::String(index + 1);
+            trackName = namedAfterPlugin ? uniqueTrackName(timelineDoc, trackNamePrefix)
+                                         : trackNamePrefix + " " + juce::String(index + 1);
             buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{}, /*envelopeParams=*/{});
         });
 
+    if (namedAfterPlugin)
+        audioEngine.updateModuleNames(); // the new module's "Diva 2" card title, immediately
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
@@ -451,8 +468,8 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     auto& graph = audioEngine.getGraph();
     const int instrumentX = build.trackInPosition.x + build.trackInSize.x + kChannelCardGapX;
     // The instrument is user-facing, so it follows the left/right jacks preference like a library
-    // drop does (a hosted plugin has no dualIO parameter, making this a no-op there). Before addNode
-    // and before any wiring below reads the module's right-leg channel.
+    // drop does (a hosted plugin's dualIO only changes its jacks once it publishes a 2-in or 2-out instance). Before
+    // addNode and before any wiring below reads the module's right-leg channel.
     newModuleHook()(**stagedInstrument, (*stagedInstrument)->getName());
     auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
     if (instrumentNodePtr == nullptr)

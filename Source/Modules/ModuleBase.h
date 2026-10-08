@@ -567,6 +567,11 @@ public:
 
     const juce::String getName() const override { return moduleName; }
 
+    /** The title a card shows when the user set none. Defaults to getName() (the auto-numbered type
+     *  name); a module whose shown name is not its type name (a hosted plugin) overrides it.
+     *  getName() stays the type key either way. Message thread. */
+    virtual juce::String getDefaultTitle() const { return getName(); }
+
     bool isBypassed() const { return bypassedParam->get(); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 

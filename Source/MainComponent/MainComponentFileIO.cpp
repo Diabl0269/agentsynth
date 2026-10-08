@@ -170,6 +170,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
+    if (result.ok)
+        audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
     graphEditor.updateComponents();
     if (!result.ok) {
         // load() is all-or-nothing, so a failure has to leave the previous project intact —
@@ -240,6 +242,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     const auto result = synth::ProjectBundle::loadAutosave(
         bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
         midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    if (result.ok)
+        audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;

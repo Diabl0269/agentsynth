@@ -4,6 +4,7 @@
 #include "AudioEngine.h"
 #include "AudioEngine/ConnectionIndex.h"
 #include "Modules/AttenuverterModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -367,11 +368,18 @@ void AudioEngine::updateModuleNames() {
     // incidentally fires, then keep it forever after (recomputed the same way every time).
     std::vector<std::pair<ModuleBase*, juce::String>> nameable;
     std::map<juce::String, int> typeCounts;
+    std::map<juce::String, int> hostedOrdinals;
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
             if (module->getModuleType() == ModuleType::ExternalMidi)
                 continue; // Do not rename External MIDI modules as their name matches the device name
 
+            if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module)) {
+                // Numbered by the plugin it hosts, not by the "Hosted Plugin" type: two Divas are "Diva" and
+                // "Diva 2" (the first stays bare), a Diva and a Serum are both bare.
+                hosted->setInstanceOrdinal(++hostedOrdinals[hosted->getPluginName()]);
+                continue;
+            }
             juce::String baseName = module->getName();
             int lastSpace = baseName.lastIndexOf(" ");
             if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))

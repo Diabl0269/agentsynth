@@ -590,6 +590,13 @@ one builds the exact same Track In, instrument, default chain, Master flow, boxe
 macro, as ONE undo step — except the instrument is a hosted `HostedPluginModule` rather than a factory
 module, and **the load is ASYNCHRONOUS**.
 
+The track is named after the plugin: the first Diva track is "Diva", the next "Diva 2" (the lowest free
+suffix against the timeline's current track names, `uniqueNameAmong`). The Hosted Plugin card is titled
+the same way: the plugin's name, with " 2", " 3" for later modules of the same plugin
+(`HostedPluginModule::getDefaultTitle`, numbered by `AudioEngine::updateModuleNames`). The type key
+`getName()`/"Hosted Plugin" is unchanged, and nothing extra is saved: the shown name derives from the
+persisted plugin identity, so a reloaded project shows the same names. A custom rename still wins.
+
 `MainComponent::addInstrumentPluginTrack` stages a bare Hosted Plugin module OFF the graph, starts its
 load, and **only opens the undo transaction once `HostedPluginModule::onLoadCompleted` reports
 success** — a completion hook that fires once per load attempt, covering all three exits (publish, an
@@ -608,8 +615,10 @@ parameter, so every one of those branches falls through to the plain path automa
 **`ModuleBase::rightAudioLegChannel()` is read only AFTER the load completes**, since the module's
 real channel count is not known before then. `HostedPluginModule` overrides it from the published
 instance's real output count: ch1 once there are two or more outputs, ch0 duplicated onto both legs
-for a genuinely mono instance. The base class's `hasDualIOParameter()`-gated default would read -1
-forever, since this module never registers a Dual I/O parameter.
+for a genuinely mono instance. It reads the instance's RAW output count, not the visible jack count,
+so a stereo plugin whose Dual I/O is off (one "Audio" jack, FRO654) still reports ch1 and the strip's L and R
+cables stay wired. The new instrument follows the "Dual I/O for new modules" preference like any other module
+(`newModuleHook()` runs before the node joins the graph).
 
 **Four rules the picker itself follows.** A click resolves against a SNAPSHOT of the options list
 captured when the menu was built (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by

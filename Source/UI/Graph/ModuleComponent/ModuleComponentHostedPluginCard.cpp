@@ -104,6 +104,8 @@ void ModuleComponent::HostedCardBinding::appendParameterMenuItems(const juce::St
 // which rebuilds and re-measures itself; the extra pass is harmless.
 void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
     card_.unbindHostedPluginCard(/*paramsAlive*/ true);
+    if (card_.dualIOButton != nullptr)
+        card_.dualIOButton->setVisible(false); // nothing to split until the next instance publishes
 
     juce::Component::SafePointer<ModuleComponent> safeCard(&card_);
     juce::MessageManager::callAsync([safeCard] {
@@ -113,6 +115,9 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
 }
 
 void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
+    card_.repaint(); // the shown name can change when the plugin publishes
+    if (card_.dualIOButton != nullptr)
+        card_.dualIOButton->setVisible(module_.get() != nullptr && module_->hasStereoPairInstance());
     card_.rebuildHostedPluginCard();
     card_.relayoutHostedPluginCard();
 }
