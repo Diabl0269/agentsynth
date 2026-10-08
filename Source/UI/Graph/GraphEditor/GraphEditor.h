@@ -131,7 +131,8 @@ public:
     void deleteModule(ModuleComponent* module);
     /** `recordUndo=false`: the caller already opened a recordGraphAndMacroChange around it. */
     void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, bool recordUndo = true);
-    void replaceModule(ModuleComponent* module, const juce::String& newModuleType);
+    void replaceModule(ModuleComponent* module, const juce::String& newModuleType,
+                       const std::function<void(juce::AudioProcessor&)>& configure = {});
     void updateModulePosition(ModuleComponent* module);
 
     // Preset Management
@@ -407,6 +408,7 @@ public:
     /** Fires as the postRestore of the combined undo/redo this doc participates in (see
      *  setMidiRemoteProjectDocForUndo) -- never for the initial replace itself. May be null. */
     std::function<void()> onMidiRemoteDocRestored;
+    std::function<std::vector<synth::PluginIdentity>()> installedPluginsProvider; // "Replace with..." plugin rows
 
     /** Non-owning; null (the default, and every headless test) means replaceModule() falls back to
      *  its plain graph-only undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must

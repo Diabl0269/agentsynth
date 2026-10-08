@@ -316,6 +316,29 @@ TEST(ModuleLibraryKeyboardNav, SearchFieldEnterWithNothingFocusedIsLeftForTheEdi
     EXPECT_FALSE(comp.simulateSearchFieldKeyPressForTest(enterKey()));
 }
 
+TEST(ModuleLibraryKeyboardNav, SearchFieldEnterWithAQueryInsertsTheFirstMatch) {
+    ModuleLibraryComponent comp;
+    comp.setSize(kPanelWidth, kTallPanelHeight);
+    juce::String activated;
+    comp.onModuleActivated = [&activated](const juce::String& name) { activated = name; };
+
+    comp.setSearchText("filt");
+    ASSERT_EQ(comp.getKeyboardFocusedIndex(), -1);
+    EXPECT_TRUE(comp.simulateSearchFieldKeyPressForTest(enterKey()));
+    EXPECT_EQ(activated, "Filter") << "the same module choosing that row would add";
+}
+
+TEST(ModuleLibraryKeyboardNav, SearchFieldEnterWithAQueryThatMatchesNothingInsertsNothing) {
+    ModuleLibraryComponent comp;
+    comp.setSize(kPanelWidth, kTallPanelHeight);
+    juce::String activated;
+    comp.onModuleActivated = [&activated](const juce::String& name) { activated = name; };
+
+    comp.setSearchText("zzzzqqqq");
+    EXPECT_FALSE(comp.simulateSearchFieldKeyPressForTest(enterKey()));
+    EXPECT_TRUE(activated.isEmpty());
+}
+
 TEST(ModuleLibraryKeyboardNav, SearchFieldLeftRightAreNeverIntercepted) {
     ModuleLibraryComponent comp;
     comp.setSize(kPanelWidth, kTallPanelHeight);

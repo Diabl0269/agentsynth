@@ -334,6 +334,8 @@ void MainComponent::wireGraphEditorCallbacks() {
                                           juce::AudioProcessorGraph::NodeID newNodeId) {
         midiLearnController_.retargetNode(oldNodeUuid, newNodeId);
     };
+    // "Replace with..." lists the scanned plugins beside the module types, the same list the library shows.
+    graphEditor.installedPluginsProvider = [this] { return getPluginScanService().getKnownPluginIdentities(); };
     graphEditor.onMidiRemoteDocRestored = [this] { midiLearnController_.publishAssignments(); };
     // "Edit MIDI assignment..." -- open the dock (ensureBottomDockOpen(), same "open before reveal"
     // shape as trackChannelLink_.setMixerRevealHook() above) before asking the panel to select the

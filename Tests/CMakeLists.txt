@@ -293,6 +293,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
+    UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp
