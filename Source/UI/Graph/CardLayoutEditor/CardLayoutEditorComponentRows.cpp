@@ -53,8 +53,6 @@ void CardLayoutEditorComponent::setChecked(const juce::String& paramId, bool che
     }
 }
 
-void CardLayoutEditorComponent::showParameter(const juce::String& paramId) { setChecked(paramId, true); }
-
 // A rename alone does not rebuild: the row already shows what it committed, and a rebuild mid-edit
 // would flicker for nothing.
 void CardLayoutEditorComponent::renameRow(const CardLayoutEditorModel::Row& row, const juce::String& text) {

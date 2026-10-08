@@ -27,6 +27,11 @@ ModuleComponent* GraphEditor::moduleComponentForNode(juce::AudioProcessorGraph::
     return nullptr;
 }
 
+void GraphEditor::endPluginAddingControls(juce::AudioProcessorGraph::NodeID nodeId) {
+    if (auto* card = moduleComponentForNode(nodeId))
+        card->setPluginTouchToAdd(false);
+}
+
 // For every cable (every KIND, not just AttenuverterChain -- once a knob-bound jack's
 // gutter dot is hidden, ANY routing landing on it -- DirectCV, PolyBus or AttenuverterChain --
 // lands on the knob, since there is no gutter position left for it to draw at; portPos

@@ -473,3 +473,134 @@ TEST(HostedPluginEditorWindowTest, UnrelatedKeyDoesNotClose) {
     EXPECT_FALSE(window.keyPressed(juce::KeyPress('w'))); // 'w' with no Cmd modifier must not close
     EXPECT_FALSE(closeRequested);
 }
+
+// ============================================================================
+// 8. The "Adding controls" tab -- a strip above the plugin, never over it
+// ============================================================================
+
+namespace {
+StubBackend::Factory resizableEditorFactory() {
+    return [] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Resizable Plugin", 0x3333, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{},
+                                                    /*reportsEditor*/ true);
+    };
+}
+} // namespace
+
+TEST(HostedPluginEditorWindowTabTest, TheTabGrowsTheWindowAboveTheEditorAndLeavesWhenTheModeEnds) {
+    StubBackend backend(resizableEditorFactory());
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend, "Resizable Plugin", 0x3333);
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(1));
+    auto* editor = window.getEditorContentForTest();
+    ASSERT_NE(editor, nullptr);
+    const int editorW = editor->getWidth();
+    const int editorH = editor->getHeight();
+    ASSERT_EQ(window.getHeight(), editorH);
+    EXPECT_FALSE(window.getFrameForTest()->hasTabForTest()) << "no tab until the mode is on";
+
+    window.setAddingControls(true);
+
+    auto* frame = window.getFrameForTest();
+    EXPECT_TRUE(window.isAddingControls());
+    EXPECT_TRUE(frame->hasTabForTest());
+    EXPECT_EQ(window.getHeight(), editorH + synth::HostedPluginEditorFrame::kTabHeight) << "the window grows";
+    EXPECT_EQ(editor->getWidth(), editorW);
+    EXPECT_EQ(editor->getHeight(), editorH) << "the plugin keeps its size";
+    EXPECT_EQ(editor->getY(), synth::HostedPluginEditorFrame::kTabHeight) << "and sits below the strip";
+
+    window.setAddingControls(false);
+
+    EXPECT_FALSE(frame->hasTabForTest());
+    EXPECT_EQ(window.getHeight(), editorH);
+    EXPECT_EQ(editor->getY(), 0);
+}
+
+TEST(HostedPluginEditorWindowTabTest, AResizeTheEditorAsksForWhileTheTabIsUpKeepsTheStrip) {
+    StubBackend backend(resizableEditorFactory());
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend, "Resizable Plugin", 0x3333);
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(1));
+    window.setAddingControls(true);
+
+    window.getEditorContentForTest()->setSize(640, 480);
+
+    EXPECT_EQ(window.getWidth(), 640);
+    EXPECT_EQ(window.getHeight(), 480 + synth::HostedPluginEditorFrame::kTabHeight);
+    EXPECT_EQ(window.getEditorContentForTest()->getY(), synth::HostedPluginEditorFrame::kTabHeight);
+}
+
+TEST(HostedPluginEditorWindowTabTest, DoneAndEscAskTheOwnerToEndTheModeWithoutClosingTheWindow) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(7));
+    int done = 0;
+    bool closed = false;
+    window.onAddingControlsDone = [&](juce::AudioProcessorGraph::NodeID id) {
+        EXPECT_EQ(id, juce::AudioProcessorGraph::NodeID(7));
+        ++done;
+    };
+    window.onCloseRequested = [&](juce::AudioProcessorGraph::NodeID) { closed = true; };
+
+    EXPECT_TRUE(window.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(closed) << "with the mode off Esc closes the window";
+    EXPECT_EQ(done, 0);
+
+    closed = false;
+    window.setAddingControls(true);
+    EXPECT_TRUE(window.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(done, 1);
+    EXPECT_FALSE(closed) << "with the mode on Esc only ends it";
+    EXPECT_TRUE(window.isAddingControls()) << "the window waits for the owner to turn the tab off";
+
+    window.getFrameForTest()->doneButton().onClick();
+    EXPECT_EQ(done, 2);
+}
+
+TEST(HostedPluginEditorWindowTabTest, TheTabSurvivesTheEditorBeingRebuilt) {
+    StubBackend backend(resizableEditorFactory());
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend, "Resizable Plugin", 0x3333);
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(1));
+    window.setAddingControls(true);
+
+    loadAndWait(module, backend, "Resizable Plugin", 0x3333); // a swap: the window rebuilds its content
+
+    ASSERT_NE(window.getFrameForTest(), nullptr);
+    EXPECT_TRUE(window.getFrameForTest()->hasTabForTest());
+    EXPECT_NE(dynamic_cast<StubPluginEditor*>(window.getEditorContentForTest()), nullptr);
+}
+
+TEST(HostedPluginWindowManagerTabTest, ClosingAWindowThatIsAddingControlsTellsTheOwnerOnce) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+    HostedPluginWindowManager manager;
+    const juce::AudioProcessorGraph::NodeID id(3);
+    std::vector<juce::AudioProcessorGraph::NodeID> ended;
+    manager.onAddingControlsEnded = [&](juce::AudioProcessorGraph::NodeID n) { ended.push_back(n); };
+
+    manager.openEditorFor(&module, id);
+    manager.closeAllForNode(id);
+    EXPECT_TRUE(ended.empty()) << "a window that was not adding controls ends nothing";
+
+    manager.openEditorFor(&module, id);
+    manager.setAddingControls(id, true);
+    EXPECT_TRUE(manager.getWindowForTest(id)->isAddingControls());
+    manager.getWindowForTest(id)->getFrameForTest()->doneButton().onClick();
+    EXPECT_EQ(ended.size(), 1u) << "Done reaches the owner";
+
+    manager.closeAllForNode(id);
+    ASSERT_EQ(ended.size(), 2u) << "closing the window while adding reaches the owner too";
+    EXPECT_EQ(ended.back(), id);
+
+    manager.setAddingControls(id, true); // no window: harmless
+    EXPECT_EQ(manager.getOpenWindowCountForTest(), 0);
+}

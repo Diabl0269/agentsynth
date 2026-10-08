@@ -68,9 +68,9 @@ TEST_F(ModuleComponentTest, PanelIconsAreDrawnInColourAtRestNotGrey) {
     EXPECT_FALSE(paintsColour(row.removeButton(), p.muted));
 
     auto& split = panel->sourcesPage().splitButton();
-    split.setSize(240, synth::ui::ModDotSplitButton::kHeight);
-    EXPECT_TRUE(paintsColour(split.listHalf(), synth::ui::modDotGlyphColour(p, ModDotGlyph::List)));
-    EXPECT_TRUE(paintsColour(split.pickHalf(), synth::ui::modDotGlyphColour(p, ModDotGlyph::Crosshair)));
+    split.setSize(240, synth::ui::SplitButton::kHeight);
+    EXPECT_TRUE(paintsColour(split.leftHalf(), synth::ui::modDotGlyphColour(p, ModDotGlyph::List)));
+    EXPECT_TRUE(paintsColour(split.rightHalf(), synth::ui::modDotGlyphColour(p, ModDotGlyph::Crosshair)));
 }
 
 TEST_F(ModuleComponentTest, EveryPanelIconHasATooltipAndAScreenReaderName) {
@@ -80,7 +80,7 @@ TEST_F(ModuleComponentTest, EveryPanelIconHasATooltipAndAScreenReaderName) {
     ASSERT_NE(panel, nullptr);
     auto& row = *panel->sourcesPage().rowAt(0);
     auto& split = panel->sourcesPage().splitButton();
-    for (juce::Button* button : {&row.timelineButton(), &row.removeButton(), &split.listHalf(), &split.pickHalf()}) {
+    for (juce::Button* button : {&row.timelineButton(), &row.removeButton(), &split.leftHalf(), &split.rightHalf()}) {
         auto* client = dynamic_cast<juce::SettableTooltipClient*>(button);
         ASSERT_NE(client, nullptr);
         EXPECT_TRUE(client->getTooltip().isNotEmpty()) << button->getTitle();

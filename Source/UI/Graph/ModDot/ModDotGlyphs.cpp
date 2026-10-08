@@ -13,6 +13,7 @@ juce::Colour modDotGlyphColour(const ModDotPalette& p, ModDotGlyph glyph, float 
         base = p.positive;
         break;
     case ModDotGlyph::List:
+    case ModDotGlyph::Hand:
         base = p.accent;
         break;
     }
@@ -68,6 +69,27 @@ void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<floa
         p.lineTo(a.getX() + tick, c.y);
         p.startNewSubPath(a.getRight(), c.y);
         p.lineTo(a.getRight() - tick, c.y);
+        break;
+    }
+    case ModDotGlyph::Hand: { // a pointing hand: touch a control to add it
+        const auto at = [&a](float fx, float fy) {
+            return juce::Point<float>(a.getX() + a.getWidth() * fx, a.getY() + a.getHeight() * fy);
+        };
+        p.startNewSubPath(at(0.30f, 0.62f));
+        p.lineTo(at(0.30f, 0.14f)); // the index finger, up and over its tip
+        p.quadraticTo(at(0.30f, 0.02f), at(0.42f, 0.02f));
+        p.quadraticTo(at(0.54f, 0.02f), at(0.54f, 0.14f));
+        p.lineTo(at(0.54f, 0.42f)); // the knuckles step down to the right
+        p.quadraticTo(at(0.54f, 0.34f), at(0.64f, 0.38f));
+        p.quadraticTo(at(0.72f, 0.40f), at(0.74f, 0.50f));
+        p.quadraticTo(at(0.80f, 0.46f), at(0.88f, 0.54f));
+        p.lineTo(at(0.88f, 0.74f)); // the edge of the palm
+        p.quadraticTo(at(0.88f, 0.98f), at(0.62f, 0.98f));
+        p.lineTo(at(0.50f, 0.98f)); // the heel of the hand, and the thumb back to the finger
+        p.quadraticTo(at(0.34f, 0.98f), at(0.24f, 0.82f));
+        p.lineTo(at(0.08f, 0.58f));
+        p.quadraticTo(at(0.14f, 0.50f), at(0.22f, 0.56f));
+        p.lineTo(at(0.30f, 0.66f));
         break;
     }
     case ModDotGlyph::Trash: {

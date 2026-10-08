@@ -1,20 +1,23 @@
 // The split button's two halves: painting (lit state, glyph, label, focus ring) and the Left/Right hop between them.
 
-#include "ModDotSplitButton.h"
+#include "SplitButton.h"
 
-#include "ModDotPalette.h"
-#include "UI/Layout/FocusRing.h"
+#include "FocusRing.h"
+#include "UI/Graph/ModDot/ModDotPalette.h"
 
 namespace synth::ui {
 
-class ModDotSplitButton::Half final : public juce::Button {
+class SplitButton::Half final : public juce::Button {
 public:
-    Half(ModDotGlyph glyph, juce::String label, bool leftHalf)
-        : juce::Button(label)
-        , glyph_(glyph)
-        , label_(std::move(label))
+    Half(const SplitButtonHalfSpec& spec, bool leftHalf)
+        : juce::Button(spec.title)
+        , glyph_(spec.glyph)
+        , label_(spec.label)
+        , spec_(spec)
         , leftHalf_(leftHalf)
         , hover_(*this) {
+        setTitle(spec.title);
+        setTooltip(spec.tooltip);
         setWantsKeyboardFocus(true);
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
     }
@@ -23,6 +26,8 @@ public:
         if (lit_ == lit)
             return;
         lit_ = lit;
+        if (spec_.litTitle.isNotEmpty())
+            setTitle(lit ? spec_.litTitle : spec_.title);
         repaint();
     }
     void setSibling(Half* sibling) { sibling_ = sibling; }
@@ -64,65 +69,68 @@ public:
         }
         const auto ink = lit_ ? p.accent : modDotGlyphColour(p, glyph_, hover_.value());
         auto inner = getLocalBounds().reduced(10, 0);
-        paintModDotGlyph(g, glyph_, inner.removeFromLeft(14).toFloat().withSizeKeepingCentre(14.0f, 14.0f), ink);
-        inner.removeFromLeft(6);
-        g.setColour(lit_ ? p.accent : p.text);
-        g.setFont(juce::Font(juce::FontOptions(12.5f)));
-        g.drawText(label_, inner, juce::Justification::centredLeft, true);
+        if (label_.isEmpty()) {
+            paintModDotGlyph(g, glyph_, inner.toFloat().withSizeKeepingCentre(14.0f, 14.0f), ink);
+        } else {
+            paintModDotGlyph(g, glyph_, inner.removeFromLeft(14).toFloat().withSizeKeepingCentre(14.0f, 14.0f), ink);
+            inner.removeFromLeft(6);
+            g.setColour(lit_ ? p.accent : p.text);
+            g.setFont(juce::Font(juce::FontOptions(12.5f)));
+            g.drawText(label_, inner, juce::Justification::centredLeft, true);
+        }
         paintFocusRing(g, area, *this, r);
     }
 
 private:
     ModDotGlyph glyph_;
     juce::String label_;
+    SplitButtonHalfSpec spec_;
     bool leftHalf_;
     ModDotHoverFade hover_;
     Half* sibling_ = nullptr;
     bool lit_ = false;
 };
 
-ModDotSplitButton::ModDotSplitButton()
-    : list_(std::make_unique<Half>(ModDotGlyph::List, "Add source", true))
-    , pick_(std::make_unique<Half>(ModDotGlyph::Crosshair, "Pick on canvas", false)) {
-    list_->setTitle("Add source");
-    list_->setTooltip("Add source from a list");
-    pick_->setTitle("Pick on canvas");
-    pick_->setTooltip("Pick a source on the canvas. Esc stops");
-    list_->setSibling(pick_.get());
-    pick_->setSibling(list_.get());
-    addAndMakeVisible(*list_);
-    addAndMakeVisible(*pick_);
-    setTitle("Add a source");
+SplitButton::SplitButton(const SplitButtonHalfSpec& left, const SplitButtonHalfSpec& right,
+                         const juce::String& groupTitle)
+    : left_(std::make_unique<Half>(left, true))
+    , right_(std::make_unique<Half>(right, false))
+    , iconsOnly_(left.label.isEmpty() && right.label.isEmpty()) {
+    right_->setClickingTogglesState(true); // the right half is the mode switch: a screen reader reads it as on or off
+    left_->setSibling(right_.get());
+    right_->setSibling(left_.get());
+    addAndMakeVisible(*left_);
+    addAndMakeVisible(*right_);
+    setTitle(groupTitle);
 }
 
-ModDotSplitButton::~ModDotSplitButton() = default;
+SplitButton::~SplitButton() = default;
 
-juce::Button& ModDotSplitButton::listHalf() noexcept { return *list_; }
-juce::Button& ModDotSplitButton::pickHalf() noexcept { return *pick_; }
+juce::Button& SplitButton::leftHalf() noexcept { return *left_; }
+juce::Button& SplitButton::rightHalf() noexcept { return *right_; }
 
-void ModDotSplitButton::setListOpen(bool open) {
-    listOpen_ = open;
-    list_->setLit(open);
-    list_->setTitle(open ? "Add source, list open" : "Add source");
+void SplitButton::setLeftLit(bool lit) {
+    leftLit_ = lit;
+    left_->setLit(lit);
 }
 
-void ModDotSplitButton::setPicking(bool on) {
-    picking_ = on;
-    pick_->setLit(on);
-    pick_->setTitle(on ? "Pick on canvas, on" : "Pick on canvas");
+void SplitButton::setRightLit(bool lit) {
+    rightLit_ = lit;
+    right_->setLit(lit);
+    right_->setToggleState(lit, juce::dontSendNotification);
 }
 
-void ModDotSplitButton::resized() {
+void SplitButton::resized() {
     auto r = getLocalBounds();
-    const int leftWidth = r.getWidth() * 11 / 20;
-    list_->setBounds(r.removeFromLeft(leftWidth));
-    pick_->setBounds(r);
+    const int leftWidth = iconsOnly_ ? r.getWidth() / 2 : r.getWidth() * 11 / 20;
+    left_->setBounds(r.removeFromLeft(leftWidth));
+    right_->setBounds(r);
 }
 
-void ModDotSplitButton::paintOverChildren(juce::Graphics& g) {
+void SplitButton::paintOverChildren(juce::Graphics& g) {
     const auto p = modDotPaletteFor(*this);
     g.setColour(p.border);
-    g.fillRect(juce::Rectangle<int>(list_->getRight(), 5, 1, getHeight() - 10));
+    g.fillRect(juce::Rectangle<int>(left_->getRight(), 5, 1, getHeight() - 10));
 }
 
 } // namespace synth::ui

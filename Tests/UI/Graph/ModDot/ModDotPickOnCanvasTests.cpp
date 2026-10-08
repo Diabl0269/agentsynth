@@ -36,7 +36,7 @@ struct PickFixture : Fixture {
         panel = clickDot();
     }
 
-    void startPick() { mouseClick(panel->sourcesPage().splitButton().pickHalf()); }
+    void startPick() { mouseClick(panel->sourcesPage().splitButton().rightHalf()); }
 
     // A press on `card` as the picker layer receives it.
     void pressOn(ModuleComponent& card) {
@@ -62,11 +62,11 @@ TEST_F(ModuleComponentTest, ThePickHalfPutsALayerOverTheCanvasAndTheHalfAgainTak
     ASSERT_NE(picker, nullptr);
     EXPECT_EQ(picker->getParentComponent(), f.editor.get()) << "the layer covers the canvas";
     EXPECT_EQ(picker->getBounds(), f.editor->getLocalBounds());
-    EXPECT_TRUE(f.panel->sourcesPage().splitButton().isPicking()) << "the half is lit";
+    EXPECT_TRUE(f.panel->sourcesPage().splitButton().isRightLit()) << "the half is lit";
 
-    mouseClick(f.panel->sourcesPage().splitButton().pickHalf());
+    mouseClick(f.panel->sourcesPage().splitButton().rightHalf());
     EXPECT_FALSE(f.panel->isPicking());
-    EXPECT_FALSE(f.panel->sourcesPage().splitButton().isPicking());
+    EXPECT_FALSE(f.panel->sourcesPage().splitButton().isRightLit());
     EXPECT_EQ(f.editor->getNumChildComponents() > 0 ? f.editor->findChildWithID("modDotCanvasPicker") : nullptr,
               nullptr)
         << "the layer is gone from the canvas";
@@ -157,5 +157,5 @@ TEST_F(ModuleComponentTest, ThePickLayerIsNamedForAScreenReader) {
     f.startPick();
     ASSERT_NE(f.panel->canvasPicker(), nullptr);
     EXPECT_EQ(f.panel->canvasPicker()->getTitle(), "Pick a source module");
-    EXPECT_EQ(f.panel->sourcesPage().splitButton().pickHalf().getTitle(), "Pick on canvas, on");
+    EXPECT_EQ(f.panel->sourcesPage().splitButton().rightHalf().getTitle(), "Pick on canvas, on");
 }

@@ -11,8 +11,9 @@ and [module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)).
 default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo seam.
 The card unit and `HostedParameterAttachment` (FRO128), described in
 [Card rendering as built](#card-rendering-as-built-fro128). The picker (FRO132), described in
-[Choosing knobs as built](#choosing-knobs-as-built-fro132) -- touch-to-add now has both a gesture
-path and a burst-filtered value-change fallback (FRO241). MIDI Learn / Forget / Edit assignment and
+[Choosing knobs as built](#choosing-knobs-as-built-fro132) -- touch capture has both a gesture
+path and a burst-filtered value-change fallback (FRO241). Add by moving a control in the plugin (FRO653),
+described in [Add by moving a control in the plugin](#add-by-moving-a-control-in-the-plugin). MIDI Learn / Forget / Edit assignment and
 "Automate..." on a plugin-card knob (FRO137), described in
 [Interaction with Controllers and automation](#interaction-with-controllers-and-automation).
 
@@ -87,7 +88,7 @@ resolved by precedence, first hit wins:
 
 The automatic default (rule 3) is **shown** on the card as knobs before the user chooses
 anything — there is no separate "unconfigured" state distinct from "showing the automatic set"
-(the automatic default is always shown, never a separate blank state). The "empty layout" case (Open Editor + **Edit Layout…** as the
+(the automatic default is always shown, never a separate blank state). The "empty layout" case (Open Editor + the add-controls split button as the
 whole card body) therefore only occurs when the plugin has no automatable parameters at all.
 
 A slot whose `paramId` no longer resolves on the live instance is **hidden from the card
@@ -98,7 +99,7 @@ that phrase now lives in the picker's missing-params line, not in a greyed knob 
 
 A layout's slot count is uncapped in the model; the card shows them in the ordinary knob grid
 (the card body's run layouts in `CardBodyGeometry.cpp`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
-growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Edit Layout…**
+growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and the add-controls split
 button as the whole body.
 
 ---
@@ -164,10 +165,12 @@ with `label` or the parameter's name, and binds it with a **`HostedParameterAtta
   module; after a rebuild the card re-measures and asks the canvas to accept the new size
   (`refreshPortLayout`). Component ids are `hostedKnob:<paramId>` / `hostedToggle:` / `hostedChoice:`.
   A Choice slot with fewer than two entries is drawn as a knob.
-- **Chrome.** One row at the top of the body: **Open Editor** and **Edit Layout...** (id
-  `chooseKnobs`), each half of the narrow band. **Edit Layout...** only fires
-  `ModuleComponent::onChooseKnobsRequested`, which the picker will set. With no automatable parameters
-  the two buttons are the whole body.
+- **Chrome.** One row at the top of the body, each half of the narrow band: **Open Editor** and the
+  add-controls split button (id `addControls`, `synth::ui::SplitButton`, the same one the mod dot panel
+  uses). Its list half (icon only, id `addControlsFromList`) fires
+  `ModuleComponent::onChooseKnobsRequested`, which opens the picker; its hand half (id
+  `addControlsByMoving`) toggles [Add by moving a control in the plugin](#add-by-moving-a-control-in-the-plugin).
+  With no automatable parameters the two controls are the whole body.
 - **Rebuild triggers.** The instance going live (a card is built before an async load publishes, so it
   starts with the buttons only), the per-instance override changing (`HostedPluginModule::onCardLayoutChanged`,
   a single slot the card owns), and `PluginCardLayoutStore::Listener::layoutChangedForPlugin` for this
@@ -216,15 +219,15 @@ than detached, so no freed parameter is ever touched. Which paths reach which ha
 
 ## Choosing knobs
 
-Entry points: **Edit Layout…** on the card body (next to Open Editor) and **Edit Layout...** in the
-card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
+Entry points: the **Add from list** (list icon) half of the split button on the card body (next to Open Editor)
+and **Edit Layout...** in the card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 (`Source/UI/Graph/PluginKnobPicker/`), a popover anchored to the card:
 
 ```text
 ┌ Knobs for "Serum" ──────────────────────────────────────────────┐
 │ Apply to:  (• This instance)  ( All Serum instances )           │
 │ Preset:  [Default ▾]  [Save as…] [Delete] [Reset to automatic]  │
-│ ┌ search ─────────────┐   [ ] Touch in the plugin editor to add │
+│ ┌ search ─────────────┐                                          │
 │ │ filt                │                                          │
 │ └─────────────────────┘                                          │
 │  ☑ Filter Cutoff        ≡     label: [Cutoff   ]                 │
@@ -244,23 +247,46 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 - **Preset** lists the type's saved layouts; *Save as…* names the current slot list; loading a
   preset copies it into whichever scope *Apply to* selects; *Reset to automatic* removes the
   chosen scope's layout so precedence falls through.
-- **Touch in the plugin editor to add**: while ticked, a parameter that reports a **gesture
-  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout
-  immediately -- a gesture is always a deliberate touch. For a plugin that never emits one, a
-  **value-change fallback** (FRO241) also counts: a `parameterValueChanged` on a parameter NOT
-  already in the layout is a fallback candidate, but it is **debounced against a burst** --
-  candidates are collected for 200 ms from the first one, and only committed once that window closes
-  *without* exceeding 3 distinct parameters (an automation sweep or a preset load can move many
-  parameters near-simultaneously; a deliberate touch moves one, or a couple in quick succession, not
-  four-plus). A value change on a parameter already in the layout (the picker's own tick, or the
-  card's own knob attachment moving it) is ignored outright -- it never opens or extends a window.
-  One known remaining edge: nothing distinguishes the plugin editor's own touch from some other
-  in-process code calling `setValue`/`setValueNotifyingHost` on a not-yet-added parameter for an
-  unrelated reason (there is no such call site in this codebase today, but a future one would be
-  mistaken for a touch). The picker opens the plugin's editor window once, the moment this is ticked,
-  if it is not already open.
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.
+
+### Add by moving a control in the plugin
+
+The hand half of the card's split button (tooltip *Add by moving a control in the plugin*, screen-reader name
+the same, with *, on* while it is on) turns on a mode: the plugin's own window opens, and each control the user
+moves or clicks there is added to the card. **No popover is built**, so nothing covers the plugin's controls. It
+stays on, with the hand half lit, until it is turned off by **Done** on the window's tab, **Esc** (focus in the
+plugin window or in the card), the hand half again, or closing the plugin window; all four un-light the hand
+half. The mode also ends when the plugin instance goes away (an unload or a swap).
+
+- **What is added.** A parameter that reports a **gesture start** on the instance
+  (`parameterGestureChanged(index, true)`) is added at once -- a gesture is always a deliberate touch. For a
+  plugin that never emits one, a **value-change fallback** (FRO241) also counts: a `parameterValueChanged` on a
+  parameter NOT already on the card is a fallback candidate, but it is **debounced against a burst** --
+  candidates are collected for 200 ms from the first one, and only committed once that window closes
+  *without* exceeding 3 distinct parameters (an automation sweep or a preset load can move many parameters
+  near-simultaneously; a deliberate touch moves one, or a couple in quick succession, not four-plus). A value
+  change on a parameter already on the card is ignored outright. One known remaining edge: nothing
+  distinguishes the plugin editor's own touch from some other in-process code calling
+  `setValue`/`setValueNotifyingHost` on a not-yet-added parameter for an unrelated reason. Each add is
+  `HostedCardLayoutSource::showParameter` (scope "This instance"), one undo step.
+- **The tab.** While the mode is on, `HostedPluginEditorFrame` (the window's content) grows a thin strip above
+  the plugin's editor, holding **Adding controls** and a **Done** button (name *Done adding controls*, tooltip
+  naming Esc, keyboard reachable with the accent focus ring). The strip grows the window rather than covering
+  the plugin: the editor keeps its size and sits below it. The tab slides down from the window's top edge over
+  190 ms with `easeOutBack` (a small bounce) and back up over 120 ms with `easeInCubic`; it lands at once when
+  the window is not on screen or under Reduce Motion ([Motion rules](../layout/animation.md#motion-rules)).
+- **Wiring.** `ModuleComponent::setPluginTouchToAdd(bool)` owns the mode: it creates `PluginTouchToAdd`
+  (`Source/UI/Graph/PluginKnobPicker/`, the touch capture mapped onto the card's layout), which opens the editor
+  window through `GraphEditor::onOpenPluginEditorRequested`, then tells the owner through
+  `GraphEditor::onPluginAddingControlsChanged` to show the tab (`HostedPluginWindowManager::setAddingControls`).
+  The way back is `HostedPluginWindowManager::onAddingControlsEnded` (Done, Esc in the window, or closing it),
+  which `MainComponent` forwards to `GraphEditor::endPluginAddingControls`, turning the mode off on the card; the
+  card then hides the tab the same way, so the card is the single source of truth.
+- **Esc** is handled directly (`HostedPluginEditorWindow::keyPressed`, `ModuleComponent::keyPressed`), like
+  "Pick on canvas" on the mod dot panel; it is not a rebindable shortcut.
+- The card's right-click **Add control from plugin window...** (enabled once the instance is live) starts the
+  same mode.
 
 ### Add to card from the plugin window
 
@@ -280,9 +306,8 @@ Two more ways in, for a parameter the user is looking at:
   change is one undo step. Only VST3 plugins that request a context menu for the control get the item; AU
   and plugins that draw their own menus do not.
 - **Add control from plugin window...** on the card's right-click menu (hosted cards only, enabled once the
-  instance is live) opens the picker exactly like **Edit Layout...** but with *Touch in the plugin editor to
-  add* already ticked, which also opens the plugin's window. It is the reachable entry for touch capture
-  and the searchable list.
+  instance is live) starts [Add by moving a control in the plugin](#add-by-moving-a-control-in-the-plugin),
+  the same as the hand half of the split button.
 
 ### Choosing knobs as built (FRO132)
 
@@ -291,13 +316,13 @@ The picker is the shared card layout editor ([module-card-layout.md](../layout/m
 Apply to / presets / reset, one `applyCurrentLayout()` write path) over a `HostedCardLayoutSource`
 (the instance's parameters captured once, the extra-state override or the plugin's stored default,
 written as the flat v1 slot list). `PluginKnobPickerComponent` (`Source/UI/Graph/PluginKnobPicker/`) is
-that editor plus touch-to-add, and `PluginKnobPickerTouchCapture` beside it is touch-to-add's gesture
-listener + FRO241's value-change fallback. A built-in module's card opens the same editor over its own
+that editor over the hosted source; `PluginKnobPickerTouchCapture` beside it is the gesture listener +
+FRO241's value-change fallback behind [Add by moving a control in the plugin](#add-by-moving-a-control-in-the-plugin). A built-in module's card opens the same editor over its own
 parameters; only the hosted source lists unticked rows after the ticked ones and has no groups or
 widget choice.
 
 - **Entry points.** `ModuleComponent::showPluginKnobPicker()` (`ModuleComponentHostedPluginCard.cpp`)
-  builds the picker and opens it via a `juce::CallOutBox` anchored to the **Edit Layout...** button
+  builds the picker and opens it via a `juce::CallOutBox` anchored to the split button's list half
   (`createHostedPluginControls()` wires `onChooseKnobsRequested` to it) or the card's own right-click
   menu item, **Edit Layout...** like every card's (`ModuleComponentInteraction.cpp::buildModuleContextMenu`,
   which offers the picker when the node is a `HostedPluginModule`). The actual
@@ -326,8 +351,8 @@ widget choice.
   instance's own override), rather than waiting for a further edit -- so the scope switch itself is
   what the design doc's "clears this instance's override so it follows the default" sentence means in
   practice.
-- **Touch to add: gesture + value-change fallback (FRO241).**
-  `PluginKnobPickerTouchCapture` registers a `juce::AudioProcessorParameter::Listener` on every
+- **Touch capture: gesture + value-change fallback (FRO241).**
+  `PluginKnobPickerTouchCapture` (owned by the card's `PluginTouchToAdd`) registers a `juce::AudioProcessorParameter::Listener` on every
   parameter of the live instance while armed. Both `parameterGestureChanged` and
   `parameterValueChanged` can arrive on ANY thread -- INCLUDING the audio thread, since automation
   drives `parameterValueChanged` from `processHostBlock` -- so every callback only queues, cheaply and
@@ -493,11 +518,13 @@ second root (`<settings>/ModuleCardLayouts/<ModuleType>/`).
   listing an orphan as missing belongs to the picker's tests.
 - `Tests/UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp`: search, tick/untick, reorder,
   label, scope switch (clears the override and broadcasts), presets (save/load/delete, reset to
-  automatic), touch-to-add via a real gesture and its off-thread -> message-thread hop, missing
-  parameters, and the two real-gesture entry points (the card button and the context-menu item,
+  automatic), the touch capture's off-thread -> message-thread hop, missing
+  parameters, and the real-gesture entry points (the split button's list half and the context-menu item,
   each through a real click handler with a stubbed `juce::CallOutBox`), plus the "Add to card" item
-  (enabled, disabled "On the card", unknown id, module gone, the card's hook and rebuild, one undo step)
-  and "Add control from plugin window..." (hosted cards only, touch capture armed). The real popup of
+  (enabled, disabled "On the card", unknown id, module gone, the card's hook and rebuild, one undo step),
+  and the add-by-moving mode (the split button's halves, the hand half arming without a popover, a captured
+  parameter landing on the card, Done / Esc / the hand again / closing the window each ending it, the tab on
+  the editor window appearing and going, "Add control from plugin window..." starting it). The real popup of
   a real VST3 plugin cannot run headless: those tests build the menu through
   `HostedPluginModule::buildParameterContextMenu`, the function the patched JUCE host calls, and invoke the
   item's action; `scripts/tests/juce-patch.test.sh` covers the patch applying. The value-change fallback

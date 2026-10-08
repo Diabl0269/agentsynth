@@ -121,7 +121,7 @@ void ModDotPopover::setListTarget(bool open) {
     if (listOpen_ == open)
         return;
     listOpen_ = open;
-    sourcesPage_.splitButton().setListOpen(open);
+    sourcesPage_.splitButton().setLeftLit(open);
     const bool focusWasInList = addPage_.isParentOf(juce::Component::getCurrentlyFocusedComponent());
     if (open) {
         choiceSignature_.clear();
@@ -169,14 +169,14 @@ void ModDotPopover::startPick() {
     picker_->onPicked = [this](juce::AudioProcessorGraph::NodeID node) { pickNode(node); };
     picker_->onEscape = [this] { stopPick(); };
     picker_->begin();
-    sourcesPage_.splitButton().setPicking(true);
+    sourcesPage_.splitButton().setRightLit(true);
     juce::AccessibilityHandler::postAnnouncement("Pick on canvas. Click a module to add it as a source. Escape stops.",
                                                  juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
 // The layer is parked, not deleted: this can run from inside one of its own event handlers.
 void ModDotPopover::stopPick() {
-    sourcesPage_.splitButton().setPicking(false);
+    sourcesPage_.splitButton().setRightLit(false);
     if (picker_ == nullptr)
         return;
     picker_->setVisible(false);

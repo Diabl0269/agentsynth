@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HostedPluginEditorFrame.h"
 #include "HostedPluginModule.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -49,6 +50,14 @@ public:
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
+    /** Shows (or hides) the "Adding controls" tab above the plugin's editor while the card's "add by moving a
+     *  control" mode is on. The strip grows the window; it never covers the plugin. Idempotent. */
+    void setAddingControls(bool on);
+    bool isAddingControls() const noexcept { return adding_; }
+    /** Fired when Done is pressed on the tab, or Esc is pressed while it is up. The owner turns the mode off
+     *  (which hides the tab through setAddingControls(false)); this window does not hide it by itself. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onAddingControlsDone;
+
     /** Fired when the close button is clicked, or when the deferred post-instance-change recheck
      *  (see the class comment) confirms the module's instance is really gone rather than mid-swap.
      *  HostedPluginWindowManager installs this to erase (and so destroy) this window from its map —
@@ -57,7 +66,8 @@ public:
 
     // Testing hooks — see HostedPluginEditorWindowTests.cpp. State, not pixels: none of these
     // require the window to ever have been made visible.
-    juce::Component* getEditorContentForTest() const { return getContentComponent(); }
+    juce::Component* getEditorContentForTest() const;
+    HostedPluginEditorFrame* getFrameForTest() const { return frame(); }
     bool isShowingGenericEditorForTest() const;
     bool isShowingPlaceholderForTest() const;
 
@@ -80,8 +90,13 @@ private:
     // Installed on module.onInstanceChanged; see the class comment.
     void instanceChanged();
 
+    HostedPluginEditorFrame* frame() const { return dynamic_cast<HostedPluginEditorFrame*>(getContentComponent()); }
+    // Wraps `inner` in the frame that carries the tab strip and makes it the content.
+    void installContent(std::unique_ptr<juce::Component> inner, bool resizable);
+
     juce::WeakReference<HostedPluginModule> moduleRef_;
     juce::AudioProcessorGraph::NodeID nodeId_;
+    bool adding_ = false;
 
 #if JUCE_MAC
     // Owns the NSEvent monitor installed by installMacKeyMonitor() above — a plain member, so

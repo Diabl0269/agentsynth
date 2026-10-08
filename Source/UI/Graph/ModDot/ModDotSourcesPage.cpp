@@ -9,6 +9,16 @@
 
 namespace synth::ui {
 
+namespace {
+SplitButtonHalfSpec addSourceHalf() {
+    return {ModDotGlyph::List, "Add source", "Add source", "Add source, list open", "Add source from a list"};
+}
+SplitButtonHalfSpec pickOnCanvasHalf() {
+    return {ModDotGlyph::Crosshair, "Pick on canvas", "Pick on canvas", "Pick on canvas, on",
+            "Pick a source on the canvas. Esc stops"};
+}
+} // namespace
+
 ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& controller,
                                      juce::AudioProcessorGraph::NodeID card, int destChannel, KnobModTarget target)
     : editor_(editor)
@@ -16,14 +26,15 @@ ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& cont
     , card_(card)
     , destChannel_(destChannel)
     , target_(std::move(target))
+    , split_(addSourceHalf(), pickOnCanvasHalf(), "Add a source")
     , updater_(this) {
     setTitle(target_.paramName + " modulation sources");
     addAndMakeVisible(split_);
-    split_.listHalf().onClick = [this] {
+    split_.leftHalf().onClick = [this] {
         if (onAddSourceRequested)
             onAddSourceRequested();
     };
-    split_.pickHalf().onClick = [this] {
+    split_.rightHalf().onClick = [this] {
         if (onPickOnCanvasRequested)
             onPickOnCanvasRequested();
     };
@@ -164,11 +175,11 @@ void ModDotSourcesPage::layoutRows() {
         y += h;
     }
     dividerY_ = y + 3;
-    split_.setBounds(6, dividerY_ + 4, getWidth() - 12, ModDotSplitButton::kHeight);
+    split_.setBounds(6, dividerY_ + 4, getWidth() - 12, SplitButton::kHeight);
     heightChanged();
 }
 
-int ModDotSourcesPage::preferredHeight() const { return dividerY_ + 4 + ModDotSplitButton::kHeight + 6; }
+int ModDotSourcesPage::preferredHeight() const { return dividerY_ + 4 + SplitButton::kHeight + 6; }
 
 void ModDotSourcesPage::resized() { layoutRows(); }
 
@@ -197,7 +208,7 @@ void ModDotSourcesPage::focusEntry() {
             e.row->bar().grabKeyboardFocus();
             return;
         }
-    split_.listHalf().grabKeyboardFocus();
+    split_.leftHalf().grabKeyboardFocus();
 }
 
 // Up/Down walk the rows (each row's bar) and end on the split button's list half.
@@ -210,7 +221,7 @@ void ModDotSourcesPage::navigate(juce::Component* from, int step) {
     for (auto& e : entries_)
         if (!e.leaving)
             stops.push_back({&e.row->bar(), e.row.get()});
-    stops.push_back({&split_.listHalf(), &split_});
+    stops.push_back({&split_.leftHalf(), &split_});
     int index = (int)stops.size() - 1;
     for (int i = 0; i < (int)stops.size(); ++i)
         if (from != nullptr && (stops[(size_t)i].container == from || stops[(size_t)i].container->isParentOf(from)))

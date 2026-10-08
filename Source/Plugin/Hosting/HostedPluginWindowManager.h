@@ -2,6 +2,7 @@
 
 #include "HostedPluginEditorWindow.h"
 #include "HostedPluginModule.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 #include <memory>
@@ -68,6 +69,10 @@ public:
 
         auto window = std::make_unique<HostedPluginEditorWindow>(*module, nodeId);
         window->onCloseRequested = [this](juce::AudioProcessorGraph::NodeID id) { closeAllForNode(id); };
+        window->onAddingControlsDone = [this](juce::AudioProcessorGraph::NodeID id) {
+            if (onAddingControlsEnded)
+                onAddingControlsEnded(id);
+        };
         // A DocumentWindow's default position is the screen origin, i.e. top-left UNDER the menu
         // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
         // at its content size and bring it forward, in that order, around the addToDesktop() call
@@ -101,7 +106,26 @@ public:
      *  "AllForNode" (rather than e.g. closeEditor) because the one-per-node rule makes "all" and
      *  "the one" the same set, and the plural form is what a future multi-window-per-node change
      *  (were one ever needed) would keep meaning. */
-    void closeAllForNode(juce::AudioProcessorGraph::NodeID nodeId) { windows_.erase(nodeId); }
+    void closeAllForNode(juce::AudioProcessorGraph::NodeID nodeId) {
+        const auto it = windows_.find(nodeId);
+        if (it == windows_.end())
+            return;
+        const bool wasAdding = it->second->isAddingControls();
+        windows_.erase(it);
+        if (wasAdding && onAddingControlsEnded) // closing the window ends "add by moving a control"
+            onAddingControlsEnded(nodeId);
+    }
+
+    /** Shows or hides the "Adding controls" tab on `nodeId`'s window, if one is open. Safe when there is none. */
+    void setAddingControls(juce::AudioProcessorGraph::NodeID nodeId, bool on) {
+        if (const auto it = windows_.find(nodeId); it != windows_.end())
+            it->second->setAddingControls(on);
+    }
+
+    /** Fired when the user ends "add by moving a control" from the window: Done, Esc, or closing the window.
+     *  MainComponent turns the card's mode off, which hides the tab through setAddingControls(false). Not fired
+     *  by closeAll() or pruneClosedNodes() (shutdown, a deleted node). */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onAddingControlsEnded;
 
     /** Closes the node's editor window when one is open, otherwise opens it (openEditorFor). */
     void toggleEditorFor(HostedPluginModule* module, juce::AudioProcessorGraph::NodeID nodeId) {

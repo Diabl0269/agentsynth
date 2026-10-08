@@ -19,11 +19,14 @@
 
 #include "../../../StubPluginInstance.h"
 #include "../../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
+#include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
 #include "Modules/OscillatorModule.h"
+#include "Plugin/Hosting/HostedPluginEditorWindow.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Plugin/Hosting/HostedPluginWindowManager.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -31,6 +34,7 @@
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/SplitButton.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -476,29 +480,8 @@ TEST(PluginKnobPickerTest, ResetToAutomaticRemovesTheOverrideAndShowsTheAutomati
 }
 
 // ============================================================================
-// 4. Touch-to-add
+// 4. Touch capture
 // ============================================================================
-
-TEST(PluginKnobPickerTest, TouchToAddViaAGestureAppendsTheParameter) {
-    PickerRig rig;
-    auto node = rig.addPlugin({knobSpec("k", "Knob"), knobSpec("j", "Other")});
-    auto picker = rig.makePicker(node);
-
-    bool openRequested = false;
-    picker->onOpenPluginEditorRequested = [&] { openRequested = true; };
-
-    picker->setTouchToAddArmedForTest(true);
-    EXPECT_TRUE(openRequested) << "arming opens the plugin editor if it wasn't already";
-    EXPECT_TRUE(picker->isTouchToAddArmedForTest());
-
-    picker->simulateTouchGestureForTest(1); // "j"'s live parameter index
-    pump();
-
-    auto parsed = CardLayout::fromVar(node.module->getCardLayoutOverride());
-    ASSERT_EQ(parsed.status, CardLayout::ParseStatus::Ok);
-    ASSERT_EQ(parsed.layout.slots.size(), 1u);
-    EXPECT_EQ(parsed.layout.slots[0].paramId, "j");
-}
 
 TEST(PluginKnobPickerTouchCaptureTest, AnOffThreadGestureIsHoppedToTheMessageThread) {
     PickerRig rig;
@@ -578,6 +561,14 @@ juce::MouseEvent rightClickAt(juce::Component& comp, juce::Point<int> position) 
                             &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
 }
 
+// A press and release as the mouse delivers them (a button's click fires on the release).
+void clickCentre(juce::Component& c) {
+    const auto at = c.getLocalBounds().getCentre();
+    c.mouseDown(makeModuleClickWithMods(c, at, plainLeftClick()));
+    c.mouseUp(makeModuleClickWithMods(c, at, plainLeftClick()));
+    pump();
+}
+
 const juce::PopupMenu::Item* findMenuItemByText(const juce::PopupMenu& menu, const juce::String& text) {
     juce::PopupMenu::MenuItemIterator it(menu, true);
     while (it.next())
@@ -587,19 +578,19 @@ const juce::PopupMenu::Item* findMenuItemByText(const juce::PopupMenu& menu, con
 }
 } // namespace
 
-TEST(PluginKnobPickerEntryPointTest, ChooseKnobsButtonOpensThePickerThroughTheRealClickHandler) {
+TEST(PluginKnobPickerEntryPointTest, TheListHalfOpensThePickerThroughTheRealClickHandler) {
     PickerRig rig;
     auto node = rig.addPlugin({knobSpec("k", "Knob")});
     RecordingModuleComponent card(node.module, node.nodeId, rig.editor);
 
-    auto* button = childWithId<juce::TextButton>(card, "chooseKnobs");
-    ASSERT_NE(button, nullptr);
-    ASSERT_NE(button->onClick, nullptr);
-    button->onClick(); // the real handler a click invokes -- see ModuleComponentEnvelopeCardTests.cpp's
-                       // own comment for why this suite calls onClick() rather than triggerClick()
-                       // (which posts an async message no headless test pumps)
+    auto* split = childWithId<synth::ui::SplitButton>(card, "addControls");
+    ASSERT_NE(split, nullptr);
+    split->setSize(80, synth::ui::SplitButton::kHeight);
+    clickCentre(split->leftHalf());
 
     EXPECT_EQ(card.callOutBoxLaunches, 1);
+    EXPECT_NE(dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get()), nullptr);
+    EXPECT_FALSE(card.isPluginTouchToAdd()) << "the list half never starts the by-moving mode";
     card.detachFromProcessor();
 }
 
@@ -728,7 +719,7 @@ TEST(AddToCardMenuTest, TheCardRegistersItsHookAndRebuildsWhenAParameterIsAdded)
     EXPECT_EQ(windowMenuFor(*node.module, "k").getNumItems(), 0) << "a torn-down card leaves no hook behind";
 }
 
-TEST(AddToCardMenuTest, TheCardMenuOffersAddControlFromPluginWindowAndArmsTouchCapture) {
+TEST(AddToCardMenuTest, TheCardMenuOffersAddControlFromPluginWindowAndStartsTheModeWithoutAPopover) {
     PickerRig rig;
     auto node = rig.addPlugin({knobSpec("k", "Knob")});
     std::vector<juce::AudioProcessorGraph::NodeID> editorRequests;
@@ -744,18 +735,15 @@ TEST(AddToCardMenuTest, TheCardMenuOffersAddControlFromPluginWindowAndArmsTouchC
     ASSERT_TRUE(static_cast<bool>(item->action));
     item->action();
 
-    ASSERT_EQ(card.callOutBoxLaunches, 1);
-    auto* picker = dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get());
-    ASSERT_NE(picker, nullptr);
-    EXPECT_TRUE(picker->isTouchToAddArmedForTest());
-    ASSERT_EQ(editorRequests.size(), 1u) << "arming opens the plugin's own window";
+    EXPECT_EQ(card.callOutBoxLaunches, 0) << "the plugin's window must stay unobstructed: no popover";
+    EXPECT_TRUE(card.isPluginTouchToAdd());
+    ASSERT_EQ(editorRequests.size(), 1u) << "starting opens the plugin's own window";
     EXPECT_EQ(editorRequests[0], node.nodeId);
 
-    // "Edit Layout..." keeps opening the picker unarmed.
+    // "Edit Layout..." still opens the picker.
     card.onChooseKnobsRequested();
-    picker = dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get());
-    ASSERT_NE(picker, nullptr);
-    EXPECT_FALSE(picker->isTouchToAddArmedForTest());
+    EXPECT_EQ(card.callOutBoxLaunches, 1);
+    EXPECT_NE(dynamic_cast<PluginKnobPickerComponent*>(card.lastEditor.get()), nullptr);
     card.detachFromProcessor();
 }
 
@@ -766,4 +754,185 @@ TEST(AddToCardMenuTest, ABuiltInCardMenuHasNoAddControlFromPluginWindowItem) {
     ModuleComponent card(oscillator, node->nodeID, rig.editor);
     EXPECT_EQ(findMenuItemByText(card.buildModuleContextMenu(), "Add control from plugin window..."), nullptr);
     card.detachFromProcessor();
+}
+
+// ============================================================================
+// 8. Add by moving a control in the plugin
+// ============================================================================
+
+namespace {
+
+/** A hosted card wired the way MainComponent wires it: a real (headless) window manager behind the editor and
+ *  tab callbacks, and the window's Done / Esc / close reaching back to the card. */
+struct AddingRig {
+    explicit AddingRig(std::vector<StubParamSpec> specs) {
+        node = rig.addPlugin(std::move(specs));
+        rig.editor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID id) {
+            manager.openEditorFor(node.module, id);
+        };
+        rig.editor.onPluginAddingControlsChanged = [this](juce::AudioProcessorGraph::NodeID id, bool on) {
+            manager.setAddingControls(id, on);
+        };
+        manager.onAddingControlsEnded = [this](juce::AudioProcessorGraph::NodeID) { card->setPluginTouchToAdd(false); };
+        card = std::make_unique<RecordingModuleComponent>(node.module, node.nodeId, rig.editor);
+        card->setSize(240, 200);
+        split().setSize(80, synth::ui::SplitButton::kHeight);
+    }
+    ~AddingRig() { card->detachFromProcessor(); }
+
+    synth::ui::SplitButton& split() { return *childWithId<synth::ui::SplitButton>(*card, "addControls"); }
+    synth::HostedPluginEditorWindow* window() { return manager.getWindowForTest(node.nodeId); }
+    synth::HostedPluginEditorFrame* frame() { return window() != nullptr ? window()->getFrameForTest() : nullptr; }
+    bool tabIsUp() { return frame() != nullptr && frame()->hasTabForTest(); }
+    void startByClickingTheHand() { clickCentre(split().rightHalf()); }
+    /** Everything that must be true once the mode is off, wherever it was ended from. */
+    void expectEnded(const char* how) {
+        SCOPED_TRACE(how);
+        EXPECT_FALSE(card->isPluginTouchToAdd());
+        EXPECT_FALSE(split().isRightLit()) << "the hand half un-lights";
+        EXPECT_FALSE(split().rightHalf().getToggleState());
+        EXPECT_FALSE(tabIsUp()) << "the tab leaves the window";
+        if (window() != nullptr)
+            EXPECT_FALSE(window()->isAddingControls());
+    }
+
+    PickerRig rig;
+    PickerRig::Node node;
+    synth::HostedPluginWindowManager manager;
+    std::unique_ptr<RecordingModuleComponent> card;
+};
+
+} // namespace
+
+TEST(AddByMovingTest, TheSplitButtonsHalvesHaveNamesTooltipsAndAreTabStops) {
+    AddingRig a({knobSpec("k", "Knob")});
+    auto& left = a.split().leftHalf();
+    auto& right = a.split().rightHalf();
+
+    EXPECT_EQ(left.getTitle(), "Add from list");
+    EXPECT_EQ(left.getTooltip(), "Add from list");
+    EXPECT_EQ(right.getTitle(), "Add by moving a control in the plugin");
+    EXPECT_EQ(right.getTooltip(), "Add by moving a control in the plugin");
+    EXPECT_TRUE(left.getWantsKeyboardFocus());
+    EXPECT_TRUE(right.getWantsKeyboardFocus());
+    for (const auto& text : {left.getTitle(), left.getTooltip(), right.getTitle(), right.getTooltip()})
+        EXPECT_NE(text, text.toUpperCase()) << "no ALL-CAPS text";
+
+    a.startByClickingTheHand();
+    EXPECT_EQ(right.getTitle(), "Add by moving a control in the plugin, on") << "a screen reader hears the state";
+    EXPECT_TRUE(right.getToggleState());
+}
+
+TEST(AddByMovingTest, TheHandStartsTheModeOpensTheWindowAndShowsTheTabWithoutAPopover) {
+    AddingRig a({knobSpec("k", "Knob"), knobSpec("j", "Other")});
+    EXPECT_FALSE(a.card->isPluginTouchToAdd());
+    EXPECT_EQ(a.window(), nullptr);
+
+    a.startByClickingTheHand();
+
+    EXPECT_EQ(a.card->callOutBoxLaunches, 0) << "no popover over the plugin's controls";
+    EXPECT_TRUE(a.card->isPluginTouchToAdd());
+    EXPECT_TRUE(a.split().isRightLit()) << "the hand stays lit while the mode is on";
+    ASSERT_NE(a.window(), nullptr) << "starting opened the plugin's own window";
+    EXPECT_TRUE(a.window()->isAddingControls());
+    EXPECT_TRUE(a.tabIsUp());
+    EXPECT_EQ(a.frame()->getStripHeight(), synth::HostedPluginEditorFrame::kTabHeight);
+    EXPECT_EQ(a.frame()->inner().getY(), a.frame()->getStripHeight())
+        << "the strip sits above the plugin: nothing is covered";
+}
+
+TEST(AddByMovingTest, EachControlMovedInThePluginIsAddedToTheCardAndTheModeStaysOn) {
+    AddingRig a({knobSpec("k", "Knob"), knobSpec("j", "Other"), knobSpec("m", "Third")});
+    a.startByClickingTheHand();
+    ASSERT_TRUE(a.card->isPluginTouchToAdd());
+
+    auto* instance = a.node.module->getActiveInstanceForEditor();
+    ASSERT_NE(instance, nullptr);
+    auto& params = instance->getParameters();
+    params[1]->beginChangeGesture(); // the user grabs "j" in the plugin's own window
+    params[1]->endChangeGesture();
+    pump();
+
+    EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:j"), nullptr) << "the touched control is on the card";
+    EXPECT_EQ(childWithId<juce::Slider>(*a.card, "hostedKnob:k"), nullptr);
+    EXPECT_TRUE(a.card->isPluginTouchToAdd()) << "the mode stays on until it is turned off";
+
+    params[2]->beginChangeGesture();
+    params[2]->endChangeGesture();
+    pump();
+    EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:m"), nullptr) << "and the next one is added too";
+    EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:j"), nullptr);
+    EXPECT_TRUE(a.card->isPluginTouchToAdd());
+}
+
+TEST(AddByMovingTest, DoneOnTheTabEndsTheMode) {
+    AddingRig a({knobSpec("k", "Knob")});
+    a.startByClickingTheHand();
+    ASSERT_TRUE(a.tabIsUp());
+    auto& done = a.frame()->doneButton();
+    EXPECT_EQ(done.getTitle(), "Done adding controls");
+    EXPECT_TRUE(done.getTooltip().contains("Esc"));
+    EXPECT_TRUE(done.getWantsKeyboardFocus());
+
+    clickCentre(done);
+
+    a.expectEnded("Done");
+    EXPECT_NE(a.window(), nullptr) << "Done leaves the plugin window open";
+}
+
+TEST(AddByMovingTest, EscInThePluginWindowEndsTheModeInsteadOfClosingTheWindow) {
+    AddingRig a({knobSpec("k", "Knob")});
+    a.startByClickingTheHand();
+    ASSERT_NE(a.window(), nullptr);
+
+    EXPECT_TRUE(a.window()->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+
+    a.expectEnded("Esc");
+    EXPECT_NE(a.window(), nullptr) << "the first Esc only ends the mode";
+    EXPECT_TRUE(a.window()->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(a.window(), nullptr) << "with the mode off Esc closes the window as before";
+}
+
+TEST(AddByMovingTest, ClickingTheHandAgainEndsTheMode) {
+    AddingRig a({knobSpec("k", "Knob")});
+    a.startByClickingTheHand();
+    ASSERT_TRUE(a.card->isPluginTouchToAdd());
+
+    clickCentre(a.split().rightHalf());
+
+    a.expectEnded("the hand again");
+}
+
+TEST(AddByMovingTest, ClosingThePluginWindowEndsTheMode) {
+    AddingRig a({knobSpec("k", "Knob")});
+    a.startByClickingTheHand();
+    ASSERT_NE(a.window(), nullptr);
+
+    a.window()->closeButtonPressed();
+
+    EXPECT_EQ(a.window(), nullptr);
+    a.expectEnded("closing the window");
+}
+
+TEST(AddByMovingTest, UnloadingThePluginEndsTheMode) {
+    AddingRig a({knobSpec("k", "Knob")});
+    a.startByClickingTheHand();
+
+    a.node.module->unloadPlugin();
+    pump();
+
+    a.expectEnded("unload");
+}
+
+TEST(AddByMovingTest, TheModeCanBeStartedAgainAfterItEnded) {
+    AddingRig a({knobSpec("k", "Knob"), knobSpec("j", "Other")});
+    a.startByClickingTheHand();
+    clickCentre(a.split().rightHalf());
+    a.expectEnded("first run");
+
+    a.startByClickingTheHand();
+
+    EXPECT_TRUE(a.card->isPluginTouchToAdd());
+    EXPECT_TRUE(a.split().isRightLit());
+    EXPECT_TRUE(a.tabIsUp());
 }

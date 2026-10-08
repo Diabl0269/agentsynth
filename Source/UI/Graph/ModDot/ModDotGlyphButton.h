@@ -12,7 +12,7 @@
 
 namespace synth::ui {
 
-enum class ModDotGlyph { Timeline, Trash, List, Crosshair };
+enum class ModDotGlyph { Timeline, Trash, List, Crosshair, Hand };
 
 /** The colour `glyph` is drawn in whatever the state (resting, hovered, focused, pressed): the panel's icons are
  *  always in colour, never greyed until a state change. Remove is the negative colour, the lanes of "show in

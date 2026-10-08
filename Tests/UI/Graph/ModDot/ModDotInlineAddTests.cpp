@@ -58,7 +58,7 @@ struct InlineFixture : Fixture {
                 return row;
         return nullptr;
     }
-    void openList() { clickNow(panel->sourcesPage().splitButton().listHalf()); }
+    void openList() { clickNow(panel->sourcesPage().splitButton().leftHalf()); }
 };
 
 } // namespace
@@ -83,7 +83,7 @@ TEST_F(ModuleComponentTest, TheListUnfoldsRightUnderTheRowsInTheSamePanel) {
     EXPECT_EQ(f.panel->getHeight(), f.panel->settledHeight(true));
     EXPECT_EQ(rows.getHeight(), foldedHeight) << "the rows page is not resized by the list";
 
-    mouseClick(rows.splitButton().listHalf());
+    mouseClick(rows.splitButton().leftHalf());
     EXPECT_FALSE(f.panel->isListOpen()) << "a second click folds it back";
     EXPECT_EQ(f.panel->getHeight(), foldedHeight);
     EXPECT_FALSE(f.list().isVisible());
@@ -225,24 +225,24 @@ TEST_F(ModuleComponentTest, TheSplitButtonsHalvesAreSeparateControlsThatLightWit
     NoMotion motion;
     InlineFixture f;
     auto& split = f.panel->sourcesPage().splitButton();
-    EXPECT_EQ(split.listHalf().getTitle(), "Add source");
-    EXPECT_EQ(split.listHalf().getTooltip(), "Add source from a list");
-    EXPECT_EQ(split.pickHalf().getTitle(), "Pick on canvas");
-    EXPECT_FALSE(split.pickHalf().getTooltip().isEmpty());
-    EXPECT_TRUE(split.listHalf().getWantsKeyboardFocus());
-    EXPECT_TRUE(split.pickHalf().getWantsKeyboardFocus());
-    EXPECT_LT(split.listHalf().getRight(), split.pickHalf().getRight());
-    EXPECT_EQ(split.listHalf().getRight(), split.pickHalf().getX()) << "two halves, side by side";
+    EXPECT_EQ(split.leftHalf().getTitle(), "Add source");
+    EXPECT_EQ(split.leftHalf().getTooltip(), "Add source from a list");
+    EXPECT_EQ(split.rightHalf().getTitle(), "Pick on canvas");
+    EXPECT_FALSE(split.rightHalf().getTooltip().isEmpty());
+    EXPECT_TRUE(split.leftHalf().getWantsKeyboardFocus());
+    EXPECT_TRUE(split.rightHalf().getWantsKeyboardFocus());
+    EXPECT_LT(split.leftHalf().getRight(), split.rightHalf().getRight());
+    EXPECT_EQ(split.leftHalf().getRight(), split.rightHalf().getX()) << "two halves, side by side";
 
-    mouseClick(split.listHalf());
-    EXPECT_TRUE(split.isListOpen());
-    EXPECT_FALSE(split.isPicking()) << "the list half does not start a pick";
-    EXPECT_EQ(split.listHalf().getTitle(), "Add source, list open");
+    mouseClick(split.leftHalf());
+    EXPECT_TRUE(split.isLeftLit());
+    EXPECT_FALSE(split.isRightLit()) << "the list half does not start a pick";
+    EXPECT_EQ(split.leftHalf().getTitle(), "Add source, list open");
 
-    mouseClick(split.pickHalf());
-    EXPECT_TRUE(split.isPicking());
+    mouseClick(split.rightHalf());
+    EXPECT_TRUE(split.isRightLit());
     EXPECT_TRUE(f.panel->isListOpen()) << "the pick half leaves the list as it was";
-    EXPECT_EQ(split.pickHalf().getTitle(), "Pick on canvas, on");
+    EXPECT_EQ(split.rightHalf().getTitle(), "Pick on canvas, on");
 }
 
 // juce::Button keeps keyPressed protected; the public Component entry point is what a key event reaches.
@@ -252,11 +252,11 @@ TEST_F(ModuleComponentTest, TheListIsReachableAndOperableFromTheKeyboardAlone) {
     NoMotion motion;
     InlineFixture f;
     auto& split = f.panel->sourcesPage().splitButton();
-    EXPECT_TRUE(pressKey(split.listHalf(), juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(pressKey(split.leftHalf(), juce::KeyPress(juce::KeyPress::returnKey)));
     juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     ASSERT_TRUE(f.panel->isListOpen()) << "Return on the list half opens the list";
 
-    EXPECT_TRUE(pressKey(split.listHalf(), juce::KeyPress(juce::KeyPress::rightKey))) << "Right hops to the next half";
+    EXPECT_TRUE(pressKey(split.leftHalf(), juce::KeyPress(juce::KeyPress::rightKey))) << "Right hops to the next half";
     EXPECT_TRUE(f.panel->sourcesPage().keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
     EXPECT_TRUE(f.list().keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
 
@@ -266,8 +266,8 @@ TEST_F(ModuleComponentTest, TheListIsReachableAndOperableFromTheKeyboardAlone) {
     EXPECT_TRUE(row->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(f.engine.getModulationRoutings().size(), 2u) << "Return on a row adds it";
 
-    EXPECT_TRUE(pressKey(split.pickHalf(), juce::KeyPress(juce::KeyPress::leftKey))) << "Left hops back";
-    EXPECT_TRUE(pressKey(split.pickHalf(), juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_TRUE(pressKey(split.rightHalf(), juce::KeyPress(juce::KeyPress::leftKey))) << "Left hops back";
+    EXPECT_TRUE(pressKey(split.rightHalf(), juce::KeyPress(juce::KeyPress::spaceKey)));
     juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     EXPECT_TRUE(f.panel->isPicking()) << "Space on the pick half starts the pick";
 }

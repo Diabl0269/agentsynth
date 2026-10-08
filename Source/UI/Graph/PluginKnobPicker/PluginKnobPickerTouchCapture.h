@@ -75,7 +75,7 @@ private:
     void handleAsyncUpdate() override;
     void timerCallback() override;
 
-    HostedPluginModule& module_;
+    juce::WeakReference<HostedPluginModule> module_; // weak: the card may outlive a freed module by a moment
     bool armed_ = false;
 
     juce::CriticalSection queueLock_;
