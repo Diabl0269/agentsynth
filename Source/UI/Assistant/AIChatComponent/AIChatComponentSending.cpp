@@ -157,6 +157,12 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
 
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
 
+    // The server counts every hosted request, so re-read the entitlement and the plan badge's
+    // "used / limit" moves with each reply instead of staying at its sign-in value. (The Quota
+    // branch below already did this on its own.)
+    if (accountServicePtr != nullptr)
+        accountServicePtr->refreshEntitlement();
+
     if (aiResponse.success) {
         // Parsed once: the plan's root goes to the preview here and its JSON to the card's Apply.
         juce::String prose;
@@ -181,10 +187,6 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         // Upgrade-to-Pro button (see MessageBubble).
         messages.push_back({"assistant", aiResponse.error.message, "", false, /*showUpgradeAction=*/true});
         messages.back().responseMs = elapsed;
-        // The user may have just paid mid-session — check again so a retry right after upgrading
-        // reflects the new plan without restarting the app.
-        if (accountServicePtr != nullptr)
-            accountServicePtr->refreshEntitlement();
     } else {
         // Some provider messages already start with "Error: " (RemoteProvider's HTTP failures);
         // prefixing those again read "Error: Error: ..." in the bubble.

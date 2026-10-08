@@ -346,6 +346,8 @@ set(APPUI_SOURCES
     Source/UI/Assistant/ChatMessageAccessibilityText.h
     Source/UI/Assistant/AccountRow.cpp
     Source/UI/Assistant/AccountRow.h
+    Source/UI/Assistant/EntitlementWatcher.cpp
+    Source/UI/Assistant/EntitlementWatcher.h
     Source/UI/Assistant/PlanBadge.cpp
     Source/UI/Assistant/PlanBadge.h
     Source/UI/Assistant/SignInDialog.cpp
