@@ -225,12 +225,13 @@ path); nothing else needs to know.
 - **Timeline track rows.** `AppUndoManager::isRestoring()` is true during the restore. When the timeline panel rebuilds
   its header rows while it is set and the rebuild is a pure reorder (same tracks, new order),
   `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
-  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. Any other rebuild
-  lands at once.
+  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
+  drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
+  any other rebuild lands at once.
 - **A duplicated track's row.** Cmd+D / "Duplicate Track" arms `TimelinePanelComponent::armTrackDuplicateGlide`; the
   rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
   `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
-  removes the row at once, like deleting a track.
+  removes the row like deleting a track does: it shrinks away and the rows below close the gap.
 - **Off-screen.** Same check as the forward move: the timeline glide runs only
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.
@@ -278,8 +279,27 @@ every surface that animates a delete:
   the ghosts and snapshots, the cables on gliding cards, and the retracting cable ghosts, never the whole canvas.
 - **Off-screen:** ghosts are made only while the canvas is showing (`Hooks::canAnimate`), so headless tests see the
   final state synchronously; tests force it with `setForceAnimateForTest` and step `applyTimelineAtMs`.
-- Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at
-  once, or use their own collapse). They should reuse `ExitEnterTimeline`.
+- **Timeline track rows and mixer columns** (`Source/UI/Layout/ExitEnterList/`). Deleting a track (Cmd+Backspace or
+  the row menu) shrinks its whole row on the timeline, header and the lane line beside it, toward its centre, and the
+  rows below then close the gap. Cmd+Z (and a redo of an add) reverses it: the gap opens, the row grows back, a 1 px
+  accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
+  Add Track or Duplicate Track, and the redo that brings it back). A deleted
+  track's own channel is not one of those: it stays in the mixer as an orphan strip that moves to the end, which lands at
+  once, as does any change that moves a column without adding or removing one.
+  The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
+  pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
+  its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the
+  timeline ends, so the restored row or column keeps its focus and title. The picture of a list that loses a row is
+  taken BEFORE the change (`TimelinePanelComponent::noteTracksLeaving`, `MixerPanelComponent::noteColumnsLeaving`, called
+  by `MainComponent::deleteTrack` and, for an undo or redo that drops a track, by `AppUndoManager::setTrackListHooks`
+  from the timeline snapshot action); a list that regains a row is pictured after the change. `finishTrackListChange` /
+  `finishColumnChange` start the motion once the change and its rebuilds have landed. Only the scrolling group of the mixer
+  moves (a pinned column lands at once), and a change that adds and removes at once, or happens with the piano roll open,
+  lands at once. Reduce Motion is the plain fade; Animations Off and an off-screen panel are instant. Tests force the
+  motion with `TimelinePanelComponent::forceTrackGlideForTest` / `MixerPanelComponent::forceColumnMotionForTest` and
+  step `applyAtMs`.
+- Not yet covered: collapsed macro cards and the mod panel's source rows (those still remove at once, or use their own
+  collapse). They should reuse `ExitEnterTimeline`.
 
 ### Controls arriving and leaving a card
 
@@ -359,7 +379,7 @@ pointer inside it, or a dialog opened from the keyboard, slides down. Reduce mot
 
 The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
 window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
-in and out like any alert. The deleted track's row then leaves at once, like the menu's Delete Track.
+in and out like any alert. The deleted track's row then shrinks away, like the menu's Delete Track.
 
 **Tooltips** are the exception to "popup windows": they are children of their app window, so they
 do not go through `PopupMotion`. See [Tooltips](#tooltips).
@@ -572,6 +592,7 @@ strings.
 | **Macro port names zoom fade** | Alpha is a pure function of zoom (`easeInOutCubic` over 0.5 to 0.7), no driver or timer, so not a time-bounded-rule exception; the strip fill recedes; on an open macro the same factor also slides each port's interior jack onto its boundary jack and narrows the painted strip to a rail (layout widths fixed) | `GraphEditor` / `MacroCardComponent` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **Automation lane reorder** | Dragging a lane header within its track: the lane's block (row plus modulator rows) lifts under the pointer, the other lanes glide aside (160 ms, `easeOutCubic`), settle on drop (140 ms), Esc returns it; Cmd+Alt+Up/Down glides the moved block into its slot; headers only (the curve editors follow on commit); at once when not on screen; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` via `ReorderDragSession` |
+| **Track delete and undo (timeline row, mixer column)** | A deleted track's row (header and lane line) shrinks toward its centre (180 ms) and the rows below close the gap (200 ms); a mixer column that leaves does the same sideways. Cmd+Z makes room (200 ms), grows it back (180 ms) and fades a 1 px accent outline (400 ms); phases never overlap; a plain fade under Reduce Motion; instant when off screen or Animations Off; see [delete and undo animation](#delete-and-undo-animation) | `ExitEnterListMotion` via `TimelinePanelComponent`, `MixerPanelComponent` |
 | **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
 | **Side pane open/close** | The pane's width tweens 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out from the current width; content keeps its full width and is revealed; lands at once when not on screen; see [side pane](side-pane.md) | `SidePane` |
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |

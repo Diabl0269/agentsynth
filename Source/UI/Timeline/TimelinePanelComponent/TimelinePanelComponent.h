@@ -4,6 +4,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportNudge.h"
 #include "UI/Layout/EdgeResizeHandle.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -29,6 +30,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
@@ -496,6 +498,13 @@ public:
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
     void armTrackDuplicateGlide(synth::TrackId source) noexcept { duplicateGlideSource_ = source; }
+    /** Delete and undo motion (TimelinePanelTrackListMotion.cpp). Call noteTracksLeaving() before a change that may
+     *  remove tracks (a delete, or an undo/redo that drops one) and finishTrackListChange() once the change and every
+     *  re-sync it caused have landed: a removed row shrinks away and the rows below close the gap; a row an undo
+     *  brings back is made room for, grows back and gets a fading outline. Both are no-ops off screen. */
+    void noteTracksLeaving();
+    void finishTrackListChange();
+    synth::ui::ExitEnterListMotion& getTrackListMotionForTest() noexcept { return trackListMotion_; }
     void focusTrackRow(synth::TrackId id);
     bool handleRootFocusKey(const juce::KeyPress& key);
 
@@ -639,6 +648,20 @@ private:
     float trackPointerY(int screenY) const;
     // Places every row: static slots, or the animator's positions while a reorder is in flight.
     void placeTrackHeaders();
+
+    // Delete and undo motion: the picture of the rows taken before a removal, which tracks the last rebuild added and
+    // removed, and the overlay that plays them.
+    struct TrackListPicture {
+        juce::Image image;
+        float scale = 1.0f;
+        std::vector<synth::ui::ExitEnterListRow> rows;
+    };
+    std::vector<synth::ui::ExitEnterListRow> trackListRows() const;
+    juce::Rectangle<int> trackListMotionArea() const;
+    void noteTrackSetChange(const std::vector<synth::Track>& tracks);
+    std::optional<TrackListPicture> pendingTrackPicture_;
+    std::vector<juce::String> trackRowsAdded_, trackRowsRemoved_;
+    synth::ui::ExitEnterListMotion trackListMotion_{*this};
 
     ReorderDragAnimator trackReorder_;
     ReorderFramePump trackFrames_{*this};

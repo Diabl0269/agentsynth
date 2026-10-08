@@ -375,6 +375,8 @@ void TimelinePanelComponent::syncTrackHeaders() {
         return;
     }
 
+    noteTrackSetChange(tracks); // which rows went and which came back (delete and undo motion)
+
     // Preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
     // point of resolving by id is that a track deleted ABOVE the focused one must not silently hand
     // focus to whatever track now sits at the old numeric index). Invalid (default-constructed) when

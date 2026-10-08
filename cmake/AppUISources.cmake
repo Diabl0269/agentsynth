@@ -69,6 +69,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLaneKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackListMotion.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeight.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
@@ -219,6 +220,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnReuse.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnMotion.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesPane.h
@@ -263,6 +265,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
     Source/UI/Mixer/MixerMirrorController.cpp
+    Source/UI/Layout/ExitEnterList/ExitEnterListPlan.h
+    Source/UI/Layout/ExitEnterList/ExitEnterListPlan.cpp
+    Source/UI/Layout/ExitEnterList/ExitEnterListMotion.h
+    Source/UI/Layout/ExitEnterList/ExitEnterListMotion.cpp
     Source/UI/Layout/ReorderDrag/ReorderDragAnimator.h
     Source/UI/Layout/ReorderDrag/ReorderDragAnimator.cpp
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h

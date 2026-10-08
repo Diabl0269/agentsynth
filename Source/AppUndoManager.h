@@ -15,6 +15,8 @@ class MixerViewDoc;         // Forward declaration (Source/Mixer/MixerViewDoc.h)
 struct TransportDoc;        // Forward declaration (Source/Transport/TransportDoc.h)
 } // namespace synth
 
+bool timelineRestoreDropsTrack(const synth::TimelineDoc& doc, const juce::var& state);
+
 /**
  * @class AppUndoManager
  * @brief Thin wrapper around juce::UndoManager with convenience methods for
@@ -281,8 +283,13 @@ public:
      *  one is harmless. See `MainComponent::markDocumentClean`. */
     int getEditSerial() const { return editSerial_; }
 
+    int getRestoreSerial() const noexcept { return restoreSerial_; }
+
     void fireBeforeRestore(); // called by the undoable actions this manager creates, never by anything else
     void fireAfterRestore();
+
+    void setTrackListHooks(std::function<void()> tracksLeaving, std::function<void()> trackListSettled);
+    void fireTracksLeaving(); // called by the timeline snapshot action only
 
 private:
     // Undo or redo one step, retracting the cables it takes away.
@@ -298,6 +305,7 @@ private:
     synth::GraphSnapshotCache graphSnapshots_;
     // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
     int editSerial_ = 0;
+    int restoreSerial_ = 0;
     bool restoring_ = false;
     bool stepHooksOpen_ = false, stepAfterRestorePending_ = false; // see fireBeforeRestore()
     std::shared_ptr<void> glideScope_;                             // a CardGlideAnimator::Scope, see beginRestore()
@@ -308,6 +316,9 @@ private:
     // lives inside `undoManager`, which is a member destroyed with this object.
     std::function<void()> beforeRestore_;
     std::function<void()> afterRestore_;
+    std::function<void()> tracksLeaving_;
+    std::function<void()> trackListSettled_;
+    bool tracksLeavingFired_ = false;
 
     // Builds a graph SnapshotAction wired to graphEditor's detach/reattach lifecycle — the
     // pre/post-restore lambda plumbing recordStructuralChange, pushSnapshotFromCapture, and the

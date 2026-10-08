@@ -425,6 +425,7 @@ void TimelinePanelComponent::syncTrackScroll() {
 
 //==============================================================================
 void TimelinePanelComponent::resized() {
+    trackListMotion_.finishNow(); // its picture is of the old geometry
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
     // MainComponent::resized()).
     int transportBarHeight = 34;

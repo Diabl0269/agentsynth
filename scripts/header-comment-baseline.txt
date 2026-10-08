@@ -11,7 +11,7 @@
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
-113 Source/AppUndoManager.h
+105 Source/AppUndoManager.h
 103 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 87 Source/Mixer/ChannelFlows/ChannelFlows.h

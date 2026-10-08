@@ -4,6 +4,7 @@
 #include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -237,6 +238,16 @@ public:
      *  updateComponents() on all three of those paths; it is a no-op whenever the columns are
      *  already live, so it does not turn every structural change into a full mixer rebuild. */
     void rebuildIfUnbound();
+
+    /** Delete and undo motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows: call
+     *  noteColumnsLeaving() before a change that may remove a track's column and finishColumnChange() once it and
+     *  its rebuilds have landed. The columns after a removed one close the gap; a column an undo brings back is made
+     *  room for, grows back and gets a fading outline. Only the scrolling group moves; no-ops off screen. */
+    void noteColumnsLeaving();
+    void finishColumnChange();
+    /** Test seam: animate even though the panel is not showing. */
+    void forceColumnMotionForTest(bool on) noexcept { columnMotionForced_ = on; }
+    synth::ui::ExitEnterListMotion& getColumnMotionForTest() noexcept { return columnMotion_; }
 
     int getColumnCount() const noexcept { return (int)columnEntries_.size(); }
 
@@ -565,6 +576,21 @@ private:
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
     std::optional<MixerRowRef> rowFocus_; // set only while the focused column's rows hold the keys
+
+    // Delete and undo motion: the picture of the columns taken before a removal, which channels the rebuilds added and
+    // removed, and the overlay that plays them.
+    struct ColumnPicture {
+        juce::Image image;
+        float scale = 1.0f;
+        std::vector<synth::ui::ExitEnterListRow> rows;
+    };
+    std::vector<synth::ui::ExitEnterListRow> scrollingColumnRows() const;
+    bool canAnimateColumnMotion() const { return isShowing() || columnMotionForced_; }
+    void noteColumnSetChange(const std::vector<juce::String>& added, const std::vector<juce::String>& removed);
+    std::optional<ColumnPicture> pendingColumnPicture_;
+    std::vector<juce::String> columnsAdded_, columnsRemoved_;
+    bool columnMotionForced_ = false;
+    synth::ui::ExitEnterListMotion columnMotion_{*this};
 
     ReorderDragAnimator columnReorder_;
     ReorderFramePump columnFrames_{*this};

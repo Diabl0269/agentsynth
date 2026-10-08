@@ -267,6 +267,7 @@ void MixerPanelComponent::rebuild() {
     // A strip column whose column did not change is kept as it is (MixerPanelColumnReuse.cpp): re-creating every
     // column made each edit and undo grow with the number of channels.
     auto previous = releaseStripColumns();
+    std::vector<juce::String> shown, gone;
     for (const auto& column : snapshot.columns) {
         // Strips AND buses: a bus is an ordinary strip column with a BUS badge and a feeding-strips
         // source line (docs/mixer/sends-and-buses.md), not a column kind of its own with its own widget.
@@ -276,6 +277,8 @@ void MixerPanelComponent::rebuild() {
         const auto channelId = channelIdFor(column);
         if (viewDoc_->isHidden(channelId))
             continue;
+        if (previous.count(column.uuid) == 0)
+            shown.push_back(column.uuid);
         auto widget = takeOrBuildStripColumn(previous, column, channelId);
 
         ColumnEntry entry;
@@ -291,9 +294,12 @@ void MixerPanelComponent::rebuild() {
 
         stripColumns_.push_back(std::move(widget));
     }
-    for (const auto& [uuid, widget] : previous) // the columns no longer shown
+    for (const auto& [uuid, widget] : previous) { // the columns no longer shown
         stripColumnState_.erase(widget.get());
+        gone.push_back(uuid);
+    }
     previous.clear();
+    noteColumnSetChange(shown, gone);
 
     if (directColumn_ != nullptr) {
         const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);
@@ -575,6 +581,7 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 }
 
 void MixerPanelComponent::resized() {
+    columnMotion_.finishNow(); // its picture is of the old geometry
     // Same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
     // time this panel lays out, the same staleness window MixerColumnHeader accepts for its own
