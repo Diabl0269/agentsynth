@@ -123,3 +123,20 @@ TEST_F(VCAModuleTest, MonoMode_BackwardsCompatible) {
     // Channel 1 should be copy of channel 0 (mono-to-stereo)
     EXPECT_EQ(buf.getSample(0, 999), buf.getSample(1, 999));
 }
+
+// Regression test for FRO744: an envelope that idles at 0 and fires mid-block must gate that block.
+// A probe of only the block's first 64 samples missed it and fell back to the silent poly CV channel.
+TEST_F(VCAModuleTest, EnvelopeFiringLateInTheBlockStillGatesTheBlock) {
+    juce::AudioBuffer<float> buffer(24, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 1.0f);
+        buffer.setSample(1, i, i < 200 ? 0.0f : 1.0f);
+    }
+
+    juce::MidiBuffer midi;
+    vca->processBlock(buffer, midi);
+
+    EXPECT_FLOAT_EQ(buffer.getSample(0, 100), 0.0f);
+    EXPECT_NEAR(buffer.getSample(0, 300), 0.5f, 1.0e-4f);
+}

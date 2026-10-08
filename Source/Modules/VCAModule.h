@@ -49,6 +49,13 @@ public:
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }
 
+    static bool hasAnyNonZero(const float* data, int numSamples) noexcept {
+        for (int s = 0; s < numSamples; ++s)
+            if (data[s] != 0.0f)
+                return true;
+        return false;
+    }
+
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
@@ -84,14 +91,11 @@ public:
             auto* audioData = buffer.getWritePointer(0);
             const float* cvData = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
 
-            // If ch1 has no signal, try ch8 (poly envelope routing)
-            if (cvData != nullptr && numChannels > 8) {
-                float rms1 = 0.0f;
-                for (int s = 0; s < std::min(numSamples, 64); ++s)
-                    rms1 += cvData[s] * cvData[s];
-                if (rms1 < 1e-6f)
-                    cvData = buffer.getReadPointer(8);
-            }
+            // If ch1 carries nothing at all this block, try ch8 (poly envelope routing). The whole
+            // block is probed: an envelope that idles at 0 and fires mid-block would be missed by
+            // a head-of-block probe, muting its attack and then stepping in a block later.
+            if (cvData != nullptr && numChannels > 8 && !hasAnyNonZero(cvData, numSamples))
+                cvData = buffer.getReadPointer(8);
 
             // The right leg is gated by the SAME gain ramp and the same CV, so both legs stay
             // level-matched; walking the smoother twice would leave R a block behind L. Skipped

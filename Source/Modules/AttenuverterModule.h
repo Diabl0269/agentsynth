@@ -38,10 +38,9 @@ public:
 
         bool cvAmountActive = false;
         if (cvAmountData) {
-            float rms = 0.0f;
-            for (int i = 0; i < std::min(numSamples, 64); ++i)
-                rms += cvAmountData[i] * cvAmountData[i];
-            cvAmountActive = (rms / std::min(numSamples, 64)) > 1e-6f;
+            // Whole block: an envelope that idles at 0 and fires mid-block must not be missed.
+            for (int i = 0; i < numSamples && !cvAmountActive; ++i)
+                cvAmountActive = cvAmountData[i] != 0.0f;
         }
         smoothedAmount.setTargetValue(*amountParam);
 
