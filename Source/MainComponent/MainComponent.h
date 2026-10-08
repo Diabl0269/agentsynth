@@ -70,6 +70,9 @@ class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
 namespace telemetry {
 class TelemetryService; // Telemetry/TelemetryService.h
 }
+namespace ui {
+class ProjectLoadPipeline; // UI/Graph/ProjectLoad/ProjectLoadPipeline.h
+}
 } // namespace synth
 class MainComponent
     : public juce::Component
@@ -330,6 +333,7 @@ public:
     insertTrackPresetFromFileForTest(const juce::File& file); // inserted track's name, or empty on rejection
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
     synth::TimelineOpsHost& getTimelineOpsHostForTest() { return timelineOpsHost_; }
+    synth::ui::ProjectLoadPipeline& getProjectLoadPipeline() { return *projectLoad_; } // never null after construction
 
 private:
     // ---- Command table: backs getAllCommands/getCommandInfo/perform (MainComponentCommandTable.cpp) ----
@@ -743,6 +747,7 @@ private:
 
     juce::String currentPatchName_{"Default"}; // declared before statusBar
     StatusBarComponent statusBar;
+    std::unique_ptr<synth::ui::ProjectLoadPipeline> projectLoad_; // after the canvas, dock and status bar: dies first
     bool isDirty_ = false;    // recomputed from savedEditSerial_; never write false directly (use markDocumentClean())
     int savedEditSerial_ = 0; // AppUndoManager edit serial at the last save/load/new document
     int documentGeneration_ = 0; // bumped by guardUnsavedChanges() just before `proceed`; stale async loads compare it

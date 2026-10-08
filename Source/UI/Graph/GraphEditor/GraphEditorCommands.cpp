@@ -17,6 +17,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 
 using namespace detail;
 
@@ -275,6 +276,13 @@ bool GraphEditor::showContextMenuForKeyboardFocus() {
 // fire from any panel that doesn't consume the key first. The card keys (arrows, Alt+arrows,
 // Return) are rebindable and live on CanvasCardKeyboard.
 bool GraphEditor::keyPressed(const juce::KeyPress& key) {
+    // While a project is still loading the canvas's edit keys wait (card moves, delete); every other key passes on.
+    const int code = key.getKeyCode();
+    if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey ||
+         code == juce::KeyPress::returnKey || code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey ||
+         code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) &&
+        getLoadReveal().refuseEdit())
+        return true;
     if (cardKeyboard_->keyPressed(key))
         return true;
 

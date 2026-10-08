@@ -9,6 +9,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/CableCurve.h"
 
 #include <map>
@@ -134,5 +135,9 @@ void CanvasMemo::refreshCableActivity() {
 
 juce::Rectangle<int> GraphEditor::getLastTickRepaintAreaForTest() const { return canvasMemo_->lastTickArea(); }
 
-// A card that moves or resizes moves its cable ends and can move a macro border.
-void GraphEditor::GraphContentComponent::childBoundsChanged(juce::Component*) { editor.repaintCanvas(); }
+// A card that moves or resizes moves its cable ends and can move a macro border. A card popping in as a project opens
+// changes only its transform, never its bounds: nothing on the canvas moved.
+void GraphEditor::GraphContentComponent::childBoundsChanged(juce::Component*) {
+    if (editor.loadReveal_ == nullptr || !editor.loadReveal_->isApplyingFrame())
+        editor.repaintCanvas();
+}

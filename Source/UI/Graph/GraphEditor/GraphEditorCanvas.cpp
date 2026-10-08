@@ -19,6 +19,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -66,6 +67,7 @@ void GraphEditor::detachAllModuleComponents() {
     // An undo or redo that frees a node tears every card down here: picture them first, so the ones it removes
     // shrink away (CardGlideAnimator::noteExitsBeforeTeardown). A no-op outside a restore.
     cardGlide_.noteExitsBeforeTeardown();
+    getLoadReveal().finish(); // every card it scales is about to go
     // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
     // whatever mutation the caller is about to run (see the member's own doc comment).
     fireBeforeDetachAllModuleComponents();

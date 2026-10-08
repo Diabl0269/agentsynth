@@ -34,6 +34,7 @@ class ModDotController; // UI/Graph/ModDot/ModDotController.h
 }
 class AudioEngine;
 class CanvasCardKeyboard;
+class LoadRevealAnimator;
 class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
@@ -239,8 +240,7 @@ public:
     juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
     void updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId, juce::Point<int> canvasCentre);
     void clearMacroDragCandidate(bool keepFrozenBorders = false);
-    /** Freezes the borders of the module's macro and ancestors for a reparent drag; cleared by clearMacroDragCandidate.
-     */
+    /** Freezes the borders of the module's macro and ancestors for a reparent drag (cleared on candidate clear). */
     void beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId);
     /** Paint-only hull bounds (hit-testing keeps using macroHullBounds). */
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
@@ -700,8 +700,8 @@ public:
     CanvasFrame& getCanvasFrameForTest() noexcept { return canvasFrame_; }
 
     AppUndoManager* getUndoManager() const noexcept { return undoManager; } // null for a bare editor
-    /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
-    CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
+    CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; } // AppUndoManager opens a Scope on it per undo
+    LoadRevealAnimator& getLoadReveal(); // the project-open reveal and edit block (GraphEditorLoadReveal.cpp)
 
     // ---- Card-glide test seams (CardGlideAnimator.h) ----
     CardGlideAnimator& getCardGlideForTest() noexcept { return cardGlide_; }
@@ -911,6 +911,7 @@ private:
 
     // Paint-only slide of cards a make-room / return / auto-arrange moved (CardGlideAnimator.h).
     CardGlideAnimator cardGlide_;
+    std::unique_ptr<LoadRevealAnimator> loadReveal_; // built on first use
 
     // Removed cables retracting into their source jack (CableRetractAnimator.h) plus its driver.
     CableRetractAnimator cableRetract_;
@@ -994,7 +995,6 @@ private:
 
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
-
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

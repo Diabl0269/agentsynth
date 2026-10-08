@@ -22,7 +22,7 @@ public:
         const auto compBounds = owner.getLocalBounds();
         // Frozen: reuse the scale already in the image. A resize still reallocates, because
         // compBounds changed and imageBounds follows it.
-        const float useScale = (frozen && image.isValid()) ? scale : realScale;
+        const float useScale = (frozen && (image.isValid() || pinned)) ? scale : realScale;
         const auto imageBounds = compBounds * useScale;
 
         if (image.isNull() || image.getBounds() != imageBounds) {
@@ -71,6 +71,7 @@ public:
         if (frozen == shouldFreeze)
             return;
         frozen = shouldFreeze;
+        pinned = false;
         if (!frozen) {
             // Thaw: drop the image so the next paint sizes it from the real scale and renders
             // once, crisp. Keeping it would leave the card soft until something else resized it.
@@ -80,6 +81,20 @@ public:
         }
     }
     bool isFrozen() const noexcept { return frozen; }
+    /** Rasterises at `pinnedScale` until unpin(), even before the first paint: a card first painted while a
+     *  temporary component transform scales it (the project-load pop) is still drawn crisp at its real scale. */
+    void pinScale(float pinnedScale) {
+        frozen = true;
+        pinned = true;
+        scale = pinnedScale;
+    }
+    /** Ends pinScale() and keeps the image: at the card's real scale nothing is re-rendered. */
+    void unpin() {
+        if (!pinned)
+            return;
+        pinned = false;
+        frozen = false;
+    }
 
     /** The last raster of the whole card at its raster scale, or a null image when there is none at the card's
      *  current size. Shares pixels with the cache, so it shows what the card paints next; a part the card invalidated
@@ -99,6 +114,7 @@ private:
     juce::Component& owner;
     float scale = 1.0f;
     bool frozen = false;
+    bool pinned = false;
     int rasterCount = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZoomFrozenCachedImage)
 };

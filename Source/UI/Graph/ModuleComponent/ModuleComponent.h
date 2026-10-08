@@ -297,6 +297,8 @@ public:
     /** Pins/unpins this card's raster scale for the duration of a canvas zoom gesture.
      *  Owned by GraphEditor; never call from the card itself. */
     void setRasterFrozen(bool frozen);
+    /** The module's sample or wavetable landed after this card was built (a project opened on screen). */
+    void refreshLoadedFileLabels();
     bool isRasterFrozen() const noexcept;
     const synth::ui::ZoomFrozenCachedImage* getRasterCacheForTest() const noexcept { return rasterCache; }
 

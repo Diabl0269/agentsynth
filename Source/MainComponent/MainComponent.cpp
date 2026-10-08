@@ -7,6 +7,7 @@
 #include "Telemetry/TelemetryService.h"
 #include "Timeline/AssetManager.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Layout/TextFieldKeys.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
@@ -239,6 +240,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     assembleToolbar();        // ORDER: setButtons() before setSize()
     fitMixerHostToSections(); // ORDER: after the first layout, so an open Mixer at launch fits its sections
     wireStatusBar();
+    // ORDER: after the canvas, the dock and the status bar exist; its overlays sit above both.
+    projectLoad_ = std::make_unique<synth::ui::ProjectLoadPipeline>(
+        graphEditor, audioEngine, *this, &bottomDock,
+        [this](const juce::String& message) { statusBar.showMessage(message); });
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
     // ordered step here because it is standalone-only and never a top-level call site.
@@ -255,6 +260,7 @@ MainComponent::~MainComponent() {
     // setHandshakeFeedbackSink() was never called (see
     // docs/control/midi-remote-device-handshake.md#device-handshake).
     midiLearnController_.shutdownHandshakes();
+    projectLoad_.reset(); // its overlays listen to the canvas and the dock, and its decodes may still be running
 
     // Unregister FIRST, before anything below (closing native plugin-editor windows included) has a
     // chance to pump the message loop. A `pluginScanCompleted` queued by a scan on another thread
