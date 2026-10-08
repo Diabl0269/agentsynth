@@ -93,6 +93,10 @@ bool ModuleComponent::keyPressed(const juce::KeyPress& key) {
     if (focused == nullptr || focused == this || !isParentOf(focused))
         return false;
 
+    if (key == juce::KeyPress::escapeKey && isPluginTouchToAdd()) { // Esc ends "add by moving a control" first
+        setPluginTouchToAdd(false);
+        return true;
+    }
     if (key == juce::KeyPress::escapeKey) {
         focusForKeyboard(&owner);
         return true;

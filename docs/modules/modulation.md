@@ -520,7 +520,7 @@ the arrows keep working.
   one step, Esc cancels) is one step too. Clicking a row, or focusing it, selects it (a 10 percent accent tint) and
   calls `ModDotController::setLastChosen`, so a dot drag edits that source next; the chosen source's row is selected
   when the panel opens.
-* **Add source** is a split button under the rows, after a divider (`ModDotSplitButton`). The left half (list icon,
+* **Add source** is a split button under the rows, after a divider (`SplitButton`, `Source/UI/Layout/SplitButton.h`, shared with the hosted plugin card's add-controls button). The left half (list icon,
   "Add source", tooltip "Add source from a list") unfolds the source list in the same panel, directly under the rows,
   which stay visible above it; a second click or Esc folds it back. The right half (crosshair icon, "Pick on canvas")
   starts the canvas pick below. Each half is its own Tab stop with the accent focus ring; Left and Right hop between
@@ -586,7 +586,7 @@ the arrows keep working.
   module row "New ADSR, new module". The `ModDotPopover` surface is audited in
   `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp`.
 * **Where it lives.** The panel and its parts are `ModDotPopover` (+ `ModDotPanelFrame`, `ModDotPanelGeometry`),
-  `ModDotSourcesPage` (+ `ModDotSourceRow`, `ModDotAmountBar`, `ModDotSplitButton`), `ModDotAddSourcePage` (+
+  `ModDotSourcesPage` (+ `ModDotSourceRow`, `ModDotAmountBar`; the shared `SplitButton`), `ModDotAddSourcePage` (+
   `ModDotAddSourceParts`) and `ModDotCanvasPicker`; `ModDotController` opens it (`popoverLauncher` is the seam a
   headless test uses instead of a real window) and follows the graph with it open on the editor's tick. Motion:
   [animation.md](../layout/animation.md#what-moves-and-how).

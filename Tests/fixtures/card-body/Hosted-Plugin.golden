@@ -4,7 +4,7 @@ type Hosted Plugin size 280x135
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 182,2 22x20 visible=0 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
   child 4 textButton id="openPluginEditor" at 40,93 98x24 visible=1 title="Open Editor" tip="Open this plugin's editor window" focusOrder=0 wantsFocus=0
-  child 5 textButton id="chooseKnobs" at 142,93 98x24 visible=1 title="Edit Layout..." tip="Choose which plugin parameters show on this card" focusOrder=0 wantsFocus=1
+  child 5 component id="addControls" at 142,93 98x24 visible=1 title="Add controls" tip="" focusOrder=0 wantsFocus=0
   child 6 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 7 component id="" at 4,72 12x12 visible=1 title="In 1 input" tip="" focusOrder=0 wantsFocus=0
   child 8 component id="" at 264,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

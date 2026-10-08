@@ -232,6 +232,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/HelperTooltip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
+    Source/UI/Layout/SplitButton.h
+    Source/UI/Layout/SplitButton.cpp
     Source/UI/Layout/SidePane/SidePane.h
     Source/UI/Layout/SidePane/SidePane.cpp
     Source/UI/Layout/SidePane/SidePaneToggleButton.h
@@ -451,8 +453,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotPanelFrame.cpp
     Source/UI/Graph/ModDot/ModDotPanelGeometry.h
     Source/UI/Graph/ModDot/ModDotPanelGeometry.cpp
-    Source/UI/Graph/ModDot/ModDotSplitButton.h
-    Source/UI/Graph/ModDot/ModDotSplitButton.cpp
     Source/UI/Graph/ModDot/ModDotController.h
     Source/UI/Graph/ModDot/ModDotController.cpp
     Source/UI/Graph/ModDot/ModDotTooltip.h
@@ -495,6 +495,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginTouchToAdd.h
+    Source/UI/Graph/PluginKnobPicker/PluginTouchToAdd.cpp
     Source/UI/Layout/AutomatedMarker.h
     Source/UI/Layout/AutomatedMarker.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
@@ -584,6 +586,8 @@ set(APPUI_SOURCES
     Source/UI/Chrome/ShortcutHint/ShortcutHintOverlayEntries.cpp
     # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
     # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
+    Source/Plugin/Hosting/HostedPluginEditorFrame.cpp
+    Source/Plugin/Hosting/HostedPluginEditorFrame.h
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     Source/Plugin/Hosting/HostedPluginEditorWindow.h
     Source/Plugin/Hosting/HostedPluginWindowManager.h

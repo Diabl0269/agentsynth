@@ -306,6 +306,15 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
                 pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
     };
+    // "Add by moving a control in the plugin": the card turns the mode on or off and the window shows or hides its
+    // tab; Done, Esc or closing the window turn it off on the card, which then hides the tab the same way.
+    graphEditor.onPluginAddingControlsChanged = [this](juce::AudioProcessorGraph::NodeID nodeId, bool on) {
+        pluginWindowManager.setAddingControls(nodeId, on);
+    };
+    pluginWindowManager.onAddingControlsEnded = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        graphEditor.endPluginAddingControls(nodeId);
+        pluginWindowManager.setAddingControls(nodeId, false); // also when the node has no card to answer
+    };
     // Module-card right-click MIDI Learn -- all three forward to the one collaborator that owns
     // RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
     graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {

@@ -8,6 +8,7 @@
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
+#include "UI/Graph/PluginKnobPicker/PluginTouchToAdd.h"
 #include <set>
 
 /**
@@ -34,6 +35,8 @@ public:
     juce::AudioPluginInstance* boundInstance = nullptr;
     /** Parameters with a gesture in flight, so overlapping gestures still make one undo step. */
     std::set<const juce::AudioProcessorParameter*> activeGestures;
+    /** "Add by moving a control in the plugin" while it is on; null otherwise. */
+    std::unique_ptr<synth::ui::PluginTouchToAdd> touchToAdd;
 
 private:
     void addKnob(const synth::ResolvedCardSlot& resolved, const juce::String& text);

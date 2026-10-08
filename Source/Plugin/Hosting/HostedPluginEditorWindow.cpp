@@ -58,6 +58,11 @@ bool HostedPluginEditorWindow::keyPressed(const juce::KeyPress& key) {
     // this far, but in practice HostedPluginWindowMacKeyMonitor (mac only) intercepts Cmd+W earlier,
     // ahead of the app's own menu key equivalents -- see HostedPluginWindowMacKeyMonitor.mm.
     const bool isEscape = key == juce::KeyPress::escapeKey;
+    if (isEscape && adding_) { // while the tab is up Esc ends the mode, it does not close the window
+        if (onAddingControlsDone)
+            onAddingControlsDone(nodeId_);
+        return true;
+    }
     const bool isCommandW = key == juce::KeyPress('w', juce::ModifierKeys::commandModifier, 0);
     if (!isEscape && !isCommandW)
         return false;
@@ -76,9 +81,12 @@ void HostedPluginEditorWindow::rebuildContent() {
             editor = new juce::GenericAudioProcessorEditor(*instance); // hasEditor() == false
     }
 
-    if (editor != nullptr) {
+    if (editor != nullptr && editor == getEditorContentForTest()) {
+        // The instance's editor is the one already showing (createEditorIfNeeded hands it back): the frame
+        // owns it, so it must not be wrapped a second time.
         setResizable(editor->isResizable(), false);
-        setContentOwned(editor, /*resizeToFitWhenContentChangesSize*/ true);
+    } else if (editor != nullptr) {
+        installContent(std::unique_ptr<juce::Component>(editor), editor->isResizable());
     } else {
         // No instance right now — either a genuine unload, or the transient gap mid-swap between
         // the old instance retiring and the new one publishing (see the class comment). Neutral,
@@ -88,12 +96,38 @@ void HostedPluginEditorWindow::rebuildContent() {
         placeholder->setComponentID(kPlaceholderComponentId);
         placeholder->setJustificationType(juce::Justification::centred);
         placeholder->setSize(280, 120);
-        setResizable(false, false);
-        setContentOwned(placeholder, true);
+        installContent(std::unique_ptr<juce::Component>(placeholder), false);
     }
 
     if (module != nullptr)
         setName(titleFor(*module));
+}
+
+void HostedPluginEditorWindow::installContent(std::unique_ptr<juce::Component> inner, bool resizable) {
+    auto wrapper = std::make_unique<HostedPluginEditorFrame>(std::move(inner));
+    wrapper->onDone = [this] {
+        if (onAddingControlsDone)
+            onAddingControlsDone(nodeId_);
+    };
+    setResizable(resizable, false);
+    setContentOwned(wrapper.release(), /*resizeToFitWhenContentChangesSize*/ true);
+    // A rebuilt editor (instance swap) keeps the tab up while the mode is on.
+    if (adding_)
+        if (auto* current = frame())
+            current->setAddingControls(true);
+}
+
+void HostedPluginEditorWindow::setAddingControls(bool on) {
+    if (adding_ == on)
+        return;
+    adding_ = on;
+    if (auto* current = frame())
+        current->setAddingControls(on);
+}
+
+juce::Component* HostedPluginEditorWindow::getEditorContentForTest() const {
+    auto* current = frame();
+    return current != nullptr ? &current->inner() : nullptr;
 }
 
 void HostedPluginEditorWindow::instanceChanged() {
@@ -119,11 +153,11 @@ void HostedPluginEditorWindow::instanceChanged() {
 }
 
 bool HostedPluginEditorWindow::isShowingGenericEditorForTest() const {
-    return dynamic_cast<juce::GenericAudioProcessorEditor*>(getContentComponent()) != nullptr;
+    return dynamic_cast<juce::GenericAudioProcessorEditor*>(getEditorContentForTest()) != nullptr;
 }
 
 bool HostedPluginEditorWindow::isShowingPlaceholderForTest() const {
-    auto* content = getContentComponent();
+    auto* content = getEditorContentForTest();
     return content != nullptr && content->getComponentID() == kPlaceholderComponentId;
 }
 

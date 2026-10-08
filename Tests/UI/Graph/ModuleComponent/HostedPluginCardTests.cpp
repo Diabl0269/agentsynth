@@ -278,18 +278,17 @@ TEST(HostedPluginCardTest, AnEmptyLayoutIsJustTheTwoButtons) {
     EXPECT_TRUE(childrenOfType<juce::ToggleButton>(*card).empty());
 
     auto* openEditor = childWithId<juce::TextButton>(*card, "openPluginEditor");
-    auto* chooseKnobs = childWithId<juce::TextButton>(*card, "chooseKnobs");
+    auto* split = childWithId<synth::ui::SplitButton>(*card, "addControls");
     ASSERT_NE(openEditor, nullptr);
-    ASSERT_NE(chooseKnobs, nullptr);
-    EXPECT_EQ(chooseKnobs->getButtonText(), "Edit Layout...");
-    EXPECT_EQ(openEditor->getY(), chooseKnobs->getY()) << "both buttons share one row";
-    EXPECT_LT(openEditor->getRight(), chooseKnobs->getX()) << "Open Editor on the left, Edit Layout... on the right";
+    ASSERT_NE(split, nullptr);
+    EXPECT_EQ(openEditor->getY(), split->getY()) << "both controls share one row";
+    EXPECT_LT(openEditor->getRight(), split->getX()) << "Open Editor on the left, the split button on the right";
     EXPECT_TRUE(openEditor->isVisible());
-    EXPECT_TRUE(chooseKnobs->isVisible());
+    EXPECT_TRUE(split->isVisible());
 
     int requested = 0;
     card->onChooseKnobsRequested = [&requested] { ++requested; };
-    chooseKnobs->onClick();
+    split->leftHalf().onClick();
     EXPECT_EQ(requested, 1);
 }
 
@@ -709,7 +708,7 @@ TEST(HostedPluginCardTest, UnloadingThePluginUnbindsTheCardAndEmptiesItsBody) {
     EXPECT_TRUE(childrenOfType<juce::Slider>(*card).empty());
     EXPECT_TRUE(childrenOfType<juce::ToggleButton>(*card).empty());
     EXPECT_NE(childWithId<juce::TextButton>(*card, "openPluginEditor"), nullptr) << "the chrome stays";
-    EXPECT_NE(childWithId<juce::TextButton>(*card, "chooseKnobs"), nullptr);
+    EXPECT_NE(childWithId<synth::ui::SplitButton>(*card, "addControls"), nullptr);
     pump(); // the re-measure is deferred one loop turn
     EXPECT_LT(card->getHeight(), heightWithKnobs) << "the card shrinks back";
     (void)param; // the retired parameter may be freed by now: it must not be touched again

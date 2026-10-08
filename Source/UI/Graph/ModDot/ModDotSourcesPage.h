@@ -8,7 +8,7 @@
 #include "KnobModSources.h"
 #include "ModDotPage.h"
 #include "ModDotSourceRow.h"
-#include "ModDotSplitButton.h"
+#include "UI/Layout/SplitButton.h"
 #include <memory>
 #include <vector>
 
@@ -48,8 +48,8 @@ public:
     int rowCount() const; // rows not shrinking out
     ModDotSourceRow* rowAt(int index) const;
     ModDotSourceRow* rowFor(juce::AudioProcessorGraph::NodeID attenuverterId) const;
-    ModDotSplitButton& splitButton() noexcept { return split_; }
-    juce::Button& addButton() noexcept { return split_.listHalf(); }
+    SplitButton& splitButton() noexcept { return split_; }
+    juce::Button& addButton() noexcept { return split_.leftHalf(); }
     juce::String titleText() const;
     bool isAnimating() const noexcept { return anim_.isRunning(); }
 
@@ -79,7 +79,7 @@ private:
     int destChannel_;
     KnobModTarget target_;
     std::vector<Entry> entries_;
-    ModDotSplitButton split_;
+    SplitButton split_;
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver anim_;
     int dividerY_ = 0;

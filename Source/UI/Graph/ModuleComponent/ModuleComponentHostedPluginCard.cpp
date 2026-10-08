@@ -103,6 +103,7 @@ void ModuleComponent::HostedCardBinding::appendParameterMenuItems(const juce::St
 // The deferred step checks the module is still there. A swap to a new instance follows with the live edge,
 // which rebuilds and re-measures itself; the extra pass is harmless.
 void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
+    card_.setPluginTouchToAdd(false); // its capture listens to this instance's parameters
     card_.unbindHostedPluginCard(/*paramsAlive*/ true);
     if (card_.dualIOButton != nullptr)
         card_.dualIOButton->setVisible(false); // nothing to split until the next instance publishes
@@ -240,14 +241,25 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     };
     addAndMakeVisible(openPluginEditorButton.get());
 
-    chooseKnobsButton = std::make_unique<juce::TextButton>("Edit Layout...");
-    chooseKnobsButton->setComponentID("chooseKnobs");
-    chooseKnobsButton->setTooltip("Choose which plugin parameters show on this card");
-    chooseKnobsButton->onClick = [this] {
+    // One split button for adding controls: the list picker on the left, "add by moving a control in the
+    // plugin" on the right (the same split button as the mod dot panel's "Add source").
+    addControlsSplit = std::make_unique<synth::ui::SplitButton>(
+        synth::ui::SplitButtonHalfSpec{synth::ui::ModDotGlyph::List, {}, "Add from list", {}, "Add from list"},
+        synth::ui::SplitButtonHalfSpec{synth::ui::ModDotGlyph::Hand,
+                                       {},
+                                       "Add by moving a control in the plugin",
+                                       "Add by moving a control in the plugin, on",
+                                       "Add by moving a control in the plugin"},
+        "Add controls");
+    addControlsSplit->setComponentID("addControls");
+    addControlsSplit->leftHalf().setComponentID("addControlsFromList");
+    addControlsSplit->rightHalf().setComponentID("addControlsByMoving");
+    addControlsSplit->leftHalf().onClick = [this] {
         if (onChooseKnobsRequested)
             onChooseKnobsRequested();
     };
-    addAndMakeVisible(chooseKnobsButton.get());
+    addControlsSplit->rightHalf().onClick = [this] { setPluginTouchToAdd(!isPluginTouchToAdd()); };
+    addAndMakeVisible(addControlsSplit.get());
 
     hostedCard_ = std::make_unique<HostedCardBinding>(*this, hosted, owner.getPluginCardLayoutStore());
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
@@ -255,13 +267,11 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
         rebuildHostedPluginCard();
 }
 
-// Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Edit Layout..."
-// button (createHostedPluginControls() above wires onChooseKnobsRequested to this very function)
-// and from buildModuleContextMenu()'s "Edit Layout..." item (ModuleComponentInteraction.cpp),
-// both of which just call onChooseKnobsRequested(), and from its "Add control from plugin window..." item,
-// which asks for touch capture to start armed -- so this is the ONE place that actually builds
-// the popover (see docs/control/plugin-card-layout.md#choosing-knobs).
-void ModuleComponent::showPluginKnobPicker(bool armTouchToAdd) {
+// Opens the parameter list picker as a juce::CallOutBox anchored to the split button's list half. Reached from
+// that half (createHostedPluginControls() above wires onChooseKnobsRequested to this) and from the context
+// menu's "Edit Layout..." item (ModuleComponentInteraction.cpp), so this is the ONE place that builds the popover
+// (docs/control/plugin-card-layout.md#choosing-knobs).
+void ModuleComponent::showPluginKnobPicker() {
     if (hostedCard_ == nullptr)
         return;
     auto* hosted = hostedCard_->getModule();
@@ -271,20 +281,47 @@ void ModuleComponent::showPluginKnobPicker(bool armTouchToAdd) {
     auto picker = std::make_unique<synth::ui::PluginKnobPickerComponent>(
         *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager,
         owner.getCardKeyboard().getShortcutManager());
-    // Same callback the card's own "Open Editor" button uses (createHostedPluginControls() above) --
-    // MainComponent wires owner.onOpenPluginEditorRequested to HostedPluginWindowManager::openEditorFor,
-    // which is idempotent (brings an already-open window to front), so touch-to-add can call it freely.
-    picker->onOpenPluginEditorRequested = [this] {
-        if (owner.onOpenPluginEditorRequested)
-            owner.onOpenPluginEditorRequested(nodeId);
-    };
-
-    // After the editor callback is wired: arming opens the plugin's own window through it.
-    if (armTouchToAdd)
-        picker->armTouchToAdd();
-
-    const auto anchor = chooseKnobsButton != nullptr ? chooseKnobsButton->getScreenBounds() : getScreenBounds();
+    const auto anchor =
+        addControlsSplit != nullptr ? addControlsSplit->leftHalf().getScreenBounds() : getScreenBounds();
     launchCardLayoutEditorCallOutBox(std::move(picker), anchor);
+}
+
+bool ModuleComponent::isPluginTouchToAdd() const {
+    return hostedCard_ != nullptr && hostedCard_->touchToAdd != nullptr;
+}
+
+// "Add by moving a control in the plugin". On: the plugin's own window opens through the owner's editor callback
+// (no popover is built, so nothing covers the plugin) and the owner is told to show the window's tab. The mode
+// stays on until it is turned off here: the hand half again, Done on the tab, Esc, or closing the window (the owner
+// reaches this through GraphEditor::endPluginAddingControls). Every path ends in the split button showing the
+// truth, including a refusal (no live instance).
+void ModuleComponent::setPluginTouchToAdd(bool on) {
+    if (hostedCard_ == nullptr)
+        return;
+    const bool wasOn = isPluginTouchToAdd();
+    auto* hosted = hostedCard_->getModule();
+    if (on && !wasOn && hosted != nullptr && hosted->hasInstance()) {
+        hostedCard_->touchToAdd = std::make_unique<synth::ui::PluginTouchToAdd>(
+            *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager);
+        hostedCard_->touchToAdd->onRequestOpenEditor = [this] {
+            if (owner.onOpenPluginEditorRequested)
+                owner.onOpenPluginEditorRequested(nodeId);
+        };
+        hostedCard_->touchToAdd->start(); // opens the window, so the tab has a window to hang from
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, true);
+        juce::AccessibilityHandler::postAnnouncement(
+            "Adding controls. Move a control in the plugin window to add it. Escape stops.",
+            juce::AccessibilityHandler::AnnouncementPriority::medium);
+    } else if (!on && wasOn) {
+        hostedCard_->touchToAdd.reset();
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, false);
+        juce::AccessibilityHandler::postAnnouncement("Stopped adding controls.",
+                                                     juce::AccessibilityHandler::AnnouncementPriority::medium);
+    }
+    if (addControlsSplit != nullptr)
+        addControlsSplit->setRightLit(isPluginTouchToAdd());
 }
 
 // Only ever runs with the instance the resolver reads still live: from the live edge, from a layout change
@@ -349,8 +386,14 @@ void ModuleComponent::releaseHostedPluginCard() {
     const bool paramsAlive = hosted != nullptr && hosted->getActiveInstanceForEditor() == hostedCard_->boundInstance;
 
     hostedCard_->shutdown();
+    if (hostedCard_->touchToAdd != nullptr) {
+        // Same teardown as turning it off, minus the split button, which goes with the card.
+        hostedCard_->touchToAdd.reset();
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, false);
+    }
     unbindHostedPluginCard(paramsAlive);
-    chooseKnobsButton.reset();
+    addControlsSplit.reset();
     hostedCard_.reset();
 }
 
@@ -391,8 +434,8 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
     const int half = (narrowW - kGap) / 2;
     if (apply) {
         openPluginEditorButton->setBounds(narrowX, y, half, kRowHeight);
-        if (chooseKnobsButton != nullptr)
-            chooseKnobsButton->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
+        if (addControlsSplit != nullptr)
+            addControlsSplit->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
     }
     return y + kRowHeight + 6;
 }

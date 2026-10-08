@@ -383,17 +383,17 @@ public:
     std::function<std::set<juce::String>(juce::AudioProcessorGraph::NodeID)> onQueryAutomatedParamsForNode;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
-    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)>
-        onEditMidiAssignmentRequested; // unset until the MIDI Remote panel exists
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onEditMidiAssignmentRequested;
     // Pushes/clears the armed breathing outline onto the target ModuleComponent, if on screen.
     void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     void clearMidiLearnArmed();
     // Repaints every card so its MIDI-mapped badges follow the Preferences switch (a card paints from a cached image).
     void repaintMidiLearnBadges();
 
-    // A hosted-plugin card's "Open Editor" button; resolves `nodeId` to its HostedPluginModule and
-    // hands it to HostedPluginWindowManager::openEditorFor -- same reason as the callbacks above.
+    // Hosted-plugin card hooks ("Open Editor", the add-by-moving mode), wired to HostedPluginWindowManager.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
+    std::function<void(juce::AudioProcessorGraph::NodeID, bool)> onPluginAddingControlsChanged;
+    void endPluginAddingControls(juce::AudioProcessorGraph::NodeID nodeId);
 
     // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, must outlive this editor.
     void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }

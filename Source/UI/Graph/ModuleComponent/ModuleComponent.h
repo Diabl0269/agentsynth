@@ -7,6 +7,7 @@
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
+#include "UI/Layout/SplitButton.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -353,9 +354,14 @@ public:
     /** Hosted-plugin card only; empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
     std::function<void()> onChooseKnobsRequested;
 
-    /** No-op unless this is a live Hosted Plugin card. `armTouchToAdd` opens it with "touch a control in
-     *  the plugin's window" already on. See ModuleComponentHostedPluginCard.cpp. */
-    void showPluginKnobPicker(bool armTouchToAdd = false);
+    /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
+     *  See ModuleComponentHostedPluginCard.cpp. */
+    void showPluginKnobPicker();
+    /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
+     *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
+     *  the window's "Adding controls" tab. Off is a no-op when it was not on. */
+    void setPluginTouchToAdd(bool on);
+    bool isPluginTouchToAdd() const;
     /** Opens the card layout editor beside this card; the hosted plugin's picker on a hosted card,
      *  nothing on a bespoke card. See ModuleComponentLayoutEditor.cpp. */
     void showCardLayoutEditor();
@@ -572,7 +578,7 @@ private:
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
-    std::unique_ptr<juce::TextButton> chooseKnobsButton;
+    std::unique_ptr<synth::ui::SplitButton> addControlsSplit;
     juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
     class HostedCardBinding;
     std::unique_ptr<HostedCardBinding> hostedCard_;

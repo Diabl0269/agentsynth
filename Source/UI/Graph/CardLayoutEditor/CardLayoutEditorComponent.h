@@ -72,15 +72,6 @@ public:
     const juce::String& getFocusedRowKeyForTest() const noexcept { return focusedKey_; }
     juce::Button& getAddGroupButtonForTest() noexcept { return addGroupButton_; }
 
-protected:
-    /** Where a subclass's own controls go: called from resized() with the area under the search box;
-     *  returns the height used (0 = none). */
-    virtual int layoutExtraControls(juce::Rectangle<int> area);
-    /** Ticks a parameter on (the way a click on its tick would). */
-    void showParameter(const juce::String& paramId);
-    bool isParameterShown(const juce::String& paramId) const { return model_.isShown(paramId); }
-    const std::vector<CardLayoutEditorParam>& getParameters() const noexcept { return params_; }
-
 private:
     // ---- Lifecycle / layout (CardLayoutEditorComponent.cpp) ----
     void buildChrome();

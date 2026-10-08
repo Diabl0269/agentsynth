@@ -119,8 +119,6 @@ void CardLayoutEditorComponent::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 }
 
-int CardLayoutEditorComponent::layoutExtraControls(juce::Rectangle<int>) { return 0; }
-
 void CardLayoutEditorComponent::resized() {
     auto area = getLocalBounds().reduced(kMargin);
 
@@ -150,9 +148,6 @@ void CardLayoutEditorComponent::resized() {
     }
     searchEditor_.setBounds(searchRow);
     area.removeFromTop(kRowGap);
-
-    if (const int used = layoutExtraControls(area.withHeight(kControlHeight)); used > 0)
-        area.removeFromTop(used + kRowGap / 2);
 
     missingLabel_.setVisible(model_.missingNames().size() > 0);
     if (missingLabel_.isVisible()) {

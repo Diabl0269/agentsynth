@@ -443,10 +443,10 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
             if (safeThis != nullptr && safeThis->onChooseKnobsRequested)
                 safeThis->onChooseKnobsRequested();
         });
-        // Opens the same picker with "touch a control in the plugin's window" already on.
+        // Starts "add by moving a control in the plugin" (no popover).
         m.addItem("Add control from plugin window...", hosted->hasInstance(), false, [safeThis] {
             if (safeThis != nullptr)
-                safeThis->showPluginKnobPicker(/*armTouchToAdd*/ true);
+                safeThis->setPluginTouchToAdd(true);
         });
         m.addSeparator();
     }
