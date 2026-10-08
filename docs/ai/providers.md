@@ -44,6 +44,12 @@ whatever host string the previous provider had left behind. An empty or unset `"
 back to `synth::branding::kApiBaseUrl` (`Source/Branding.h`); see that constant's own comment for
 the current state of the deployed service.
 
+In Settings > AI the address box is hidden for Remote, so a new user never has to type a URL; the
+"Custom server address..." button reveals it for a self-hosted or local server. "Use hosted server"
+(shown whenever Ollama is selected or a custom Remote address is saved) switches the provider back to
+Remote and clears `"remoteHost"`. Existing installs that never saved `"aiProvider"` stay on Ollama
+on purpose: moving them silently would start sending prompts off their machine.
+
 Installing a provider after construction has an ordering contract of its own — see
 [the model discovery ordering contract](chat-component.md#model-discovery-ordering-contract).
 
