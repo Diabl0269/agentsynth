@@ -408,9 +408,19 @@ void AIChatComponent::resized() {
 
     viewport.setBounds(b);
 
-    // Layout message bubbles and loader.
+    // Layout message bubbles and loader. Growing the list past the viewport shows the scrollbar and
+    // shrinking it hides it, which changes the width the bubbles wrap at, so a second pass runs when
+    // the width the first one used is no longer the viewport's.
+    for (int pass = 0; pass < 2; ++pass) {
+        const int listWidth = viewport.getMaximumVisibleWidth();
+        layoutMessageList(listWidth);
+        if (viewport.getMaximumVisibleWidth() == listWidth)
+            break;
+    }
+}
+
+void AIChatComponent::layoutMessageList(int listWidth) {
     int y = 0;
-    const int listWidth = viewport.getMaximumVisibleWidth();
     // Each bubble gets a max width of ~80% of the list, with the rest left as a gutter on the
     // OPPOSITE side from its role — user bubbles hug the right edge, assistant bubbles the left —
     // so a conversation reads as two columns instead of every bubble spanning edge-to-edge with no

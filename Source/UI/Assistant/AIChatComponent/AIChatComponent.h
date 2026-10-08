@@ -221,6 +221,7 @@ public:
     }
 
 private:
+    void layoutMessageList(int listWidth);
     void timerCallback() override;
     void applyFetchedModels(const juce::StringArray& models, bool success); // message thread
 
