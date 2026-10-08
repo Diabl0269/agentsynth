@@ -343,9 +343,11 @@ void PreferencesSettingsTab::paint(juce::Graphics& g) {
 void PreferencesSettingsTab::paintContent(juce::Graphics& g) {
     // Group separators. Drawn from the text colour at low alpha rather than a theme token so the
     // rule stays legible on both light and dark themes without needing one of its own.
-    g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
-    for (const auto& divider : dividerBounds)
-        g.fillRect(divider);
+    const auto ruleColour = findColour(juce::Label::textColourId).withAlpha(kDividerAlpha);
+    for (size_t i = 0; i < dividerBounds.size(); ++i) {
+        g.setColour(i < dividerAlphas_.size() ? ruleColour.withMultipliedAlpha(dividerAlphas_[i]) : ruleColour);
+        g.fillRect(dividerBounds[i]);
+    }
 }
 
 void PreferencesSettingsTab::resized() {
@@ -383,10 +385,12 @@ void PreferencesSettingsTab::resized() {
     std::fill(std::begin(sectionStartY), std::end(sectionStartY), -1);
     layoutContent(contentWidth);
     placeSectionHeaders(contentWidth);
+    squashFadingGroups();
 }
 
 void PreferencesSettingsTab::layoutContent(int contentWidth) {
     dividerBounds.clear();
+    laidOutGroups_.clear();
 
     // ---- Live filter -----------------------------------------------------------------------
     //
@@ -410,7 +414,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             s << t->getTooltip() << " ";
         return s;
     };
-    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+    auto groupTarget = [&](std::initializer_list<juce::Component*> comps) {
         if (query.isEmpty())
             return categoryShown(layoutCategory);
         // One haystack per group, so every word of a multi-word query may land on a different control.
@@ -419,10 +423,13 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             haystack << textOf(*c) << " ";
         return synth::ui::searchMatches(haystack, query);
     };
-    auto setGroupVisible = [](std::initializer_list<juce::Component*> comps, bool visible) {
-        for (auto* c : comps)
-            c->setVisible(visible);
+    // A group that is going away keeps its slot (and its components) while it fades; fadeGroup answers true for it.
+    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+        return fadeGroup(comps, groupTarget(comps));
     };
+    // The fades own visibility now (fadeGroup, called from groupMatches above); the closure stays so the layout
+    // units keep their one shape.
+    auto setGroupVisible = [](std::initializer_list<juce::Component*>, bool) {};
     // Each group is laid out top-down in CONTENT coordinates, accumulating a running y; the
     // host's total height (set at the end) is whatever the visible groups need, and the viewport
     // scrolls when that exceeds the visible area. addDivider reserves a hairline between two

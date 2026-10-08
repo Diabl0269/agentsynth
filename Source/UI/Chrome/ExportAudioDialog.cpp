@@ -167,7 +167,7 @@ bool ExportAudioDialog::keyPressed(const juce::KeyPress& key) {
 
 void ExportAudioDialog::handleReturnRequested() {
     // Export is the default button of the options page; the progress page has no default.
-    if (!progressPage_.isVisible() && exportButton_.isEnabled())
+    if (!progressPageFade_.isShown() && exportButton_.isEnabled())
         beginExport();
 }
 
@@ -196,7 +196,7 @@ void ExportAudioDialog::nameControlsForAccessibility() {
 }
 
 void ExportAudioDialog::handleEscapeRequested() {
-    if (progressPage_.isVisible()) {
+    if (progressPageFade_.isShown()) {
         // A render is (or was) in flight — Cancel/Close on the progress page already reads the
         // right action for whichever state that button is currently in (reportComplete() retexts
         // it to "Close" and rewires onClick to onRequestClose; see its own comment), so route
@@ -239,10 +239,8 @@ void ExportAudioDialog::setLameExecutable(const juce::File& lameExecutable) {
 // MP3 has a bitrate but no bit depth; every other format is the other way round.
 void ExportAudioDialog::updateFormatDependentRows() {
     const bool mp3 = selectedFormat() == BounceFormat::Mp3;
-    bitDepthLabel_.setVisible(!mp3);
-    bitDepthBox_.setVisible(!mp3);
-    bitrateLabel_.setVisible(mp3);
-    bitrateBox_.setVisible(mp3);
+    bitDepthFade_.setShown(!mp3);
+    bitrateFade_.setShown(mp3);
 }
 
 void ExportAudioDialog::updateBitDepthChoicesForFormat() {
@@ -435,8 +433,8 @@ void ExportAudioDialog::beginExport() {
 }
 
 void ExportAudioDialog::showProgressPage() {
-    optionsPage_.setVisible(false);
-    progressPage_.setVisible(true);
+    optionsPageFade_.setShown(false);
+    progressPageFade_.setShown(true);
     progressStatusLabel_.setText("Bouncing...", juce::dontSendNotification);
     progressValue_ = 0.0;
     progressCancelButton_.setButtonText("Cancel");

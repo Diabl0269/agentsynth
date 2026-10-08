@@ -2,6 +2,7 @@
 // AudioEngine/TimelineDoc/BounceRunner, so these tests drive the real controls and read back the
 // BounceOptions/destination Export would send, with no audio device and no message loop needed.
 
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include <gtest/gtest.h>
 
@@ -465,4 +466,79 @@ TEST(ExportAudioDialogTest, CancelChoiceDoesNotFireOnExport) {
 
     EXPECT_FALSE(fired);
     file.deleteFile();
+}
+
+// ---- Fades (docs/layout/animation.md, "Fading things in and out") ----------------------------------------------
+
+// Bit depth and bitrate share one slot: choosing MP3 fades the bit depth out while the bitrate fades in.
+TEST(ExportAudioDialogTest, TheBitDepthAndBitrateRowsCrossFadeWhenTheFormatChanges) {
+    auto dialog = makeDialog();
+    dialog.setLameExecutable(juce::File::getSpecialLocation(juce::File::currentExecutableFile));
+    ASSERT_TRUE(dialog.isMp3AvailableForTest());
+    auto& bitDepth = dialog.getBitDepthBoxForTest();
+    auto& bitrate = dialog.getBitrateBoxForTest();
+    ASSERT_TRUE(bitDepth.isVisible());
+    ASSERT_FALSE(bitrate.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    EXPECT_TRUE(bitDepth.isVisible()) << "stays on screen while it fades";
+    EXPECT_FALSE(interceptsClicks(bitDepth)) << "a leaving control takes no clicks";
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_FLOAT_EQ(bitrate.getAlpha(), 0.0f);
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(bitDepth.getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(bitrate.getAlpha(), 0.5f, 0.01f);
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(bitDepth.isVisible());
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_FLOAT_EQ(bitrate.getAlpha(), 1.0f);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_TRUE(bitDepth.isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(bitrate.isVisible());
+    EXPECT_TRUE(bitDepth.isVisible());
+}
+
+// Export swaps the options page for the progress page by a cross-fade; which page is up is decided at once.
+TEST(ExportAudioDialogTest, TheOptionsPageFadesIntoTheProgressPage) {
+    auto dialog = makeDialog();
+    auto& options = dialog.getOptionsPageForTest();
+    auto& progress = dialog.getProgressPageForTest();
+    ASSERT_TRUE(options.isVisible());
+    ASSERT_FALSE(progress.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.showProgressPage();
+    EXPECT_TRUE(options.isVisible()) << "the options page stays while it fades out";
+    EXPECT_FALSE(interceptsClicks(options));
+    EXPECT_TRUE(progress.isVisible());
+    EXPECT_FLOAT_EQ(progress.getAlpha(), 0.0f);
+
+    // Return must not start another export while the options page is still on screen.
+    bool exported = false;
+    dialog.onExport = [&](BounceOptions, juce::File) { exported = true; };
+    dialog.keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    EXPECT_FALSE(exported);
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(options.getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(progress.getAlpha(), 0.5f, 0.01f);
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(options.isVisible());
+    EXPECT_TRUE(progress.isVisible());
+    EXPECT_FLOAT_EQ(progress.getAlpha(), 1.0f);
+}
+
+TEST(ExportAudioDialogTest, TheFadesLandAtOnceWhenAnimationsAreOff) {
+    auto dialog = makeDialog();
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    dialog.showProgressPage();
+    EXPECT_FALSE(dialog.getOptionsPageForTest().isVisible());
+    EXPECT_TRUE(dialog.getProgressPageForTest().isVisible());
 }

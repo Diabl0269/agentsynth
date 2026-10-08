@@ -18,6 +18,7 @@
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
 #include "Timeline/MusicalScale.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -89,24 +90,26 @@ public:
         scrollViewport_.repaint();
     }
 
+    // The custom editor block: sharps row + gap, naturals row + gap, name row + gap.
+    static constexpr int kCustomBlockHeight = 18 + 2 + 24 + 4 + 22 + 6;
+    // What the block takes of the content: all of it once shown, none when hidden, and in between while it fades,
+    // so the rows below slide with the fade instead of jumping.
+    int customBlockHeight() const { return juce::roundToInt((float)kCustomBlockHeight * customFade_.progress()); }
+
     // Height the sidebar needs at full size: the 6 px inset on each side plus every row that
     // layoutContentInto consumes (the custom-editor block only while it is showing). It mirrors
     // that layout's row sizes (a test pins the two together: the last row's bottom plus the inset).
     int contentNaturalHeight() const {
         constexpr int kInset = 6; // matches the inset layoutContentInto takes off the content area
         int y = kInset;
-        y += 22 + 4; // root row + gap
-        y += 22 + 6; // scale combo + gap
-        if (customEditorVisible_) {
-            y += 18 + 2; // sharps row + gap
-            y += 24 + 4; // naturals row + gap
-            y += 22 + 6; // name row + gap
-        }
-        y += 22 + 10; // pitch-visibility toggle + gap
-        y += 22 + 4;  // min row + gap
-        y += 22 + 6;  // max row + gap
-        y += 24 + 2;  // generate button + gap
-        y += 20;      // add-to-existing toggle
+        y += 22 + 4;              // root row + gap
+        y += 22 + 6;              // scale combo + gap
+        y += customBlockHeight(); // the custom editor: its full height once shown, tweened with its fade
+        y += 22 + 10;             // pitch-visibility toggle + gap
+        y += 22 + 4;              // min row + gap
+        y += 22 + 6;              // max row + gap
+        y += 24 + 2;              // generate button + gap
+        y += 20;                  // add-to-existing toggle
         return y + kInset;
     }
 
@@ -124,21 +127,25 @@ public:
         scaleCombo_.setBounds(bounds.removeFromTop(22));
         bounds.removeFromTop(6);
 
-        if (customEditorVisible_) {
+        // The custom editor lives in `customBlock_`, which clips it: while it fades the block is only as tall as the
+        // fade has got and its rows (always laid out at full size, from the block's top) are cut off at the bottom.
+        const auto blockArea = bounds.removeFromTop(customBlockHeight());
+        customBlock_.setBounds(blockArea);
+        {
+            juce::Rectangle<int> inner(0, 0, blockArea.getWidth(), kCustomBlockHeight);
             // A mini one-octave keyboard rather than a flat row of checkboxes: sharps get their
             // own row ABOVE the naturals, each one centred on the boundary between the two
             // naturals it sits between on a real keyboard — see layoutMiniKeyboard.
-            auto sharpsRow = bounds.removeFromTop(18);
-            bounds.removeFromTop(2);
-            auto naturalsRow = bounds.removeFromTop(24);
+            auto sharpsRow = inner.removeFromTop(18);
+            inner.removeFromTop(2);
+            auto naturalsRow = inner.removeFromTop(24);
             layoutMiniKeyboard(sharpsRow, naturalsRow);
-            bounds.removeFromTop(4);
+            inner.removeFromTop(4);
 
-            auto nameRow = bounds.removeFromTop(22);
+            auto nameRow = inner.removeFromTop(22);
             saveCustomScaleButton_.setBounds(nameRow.removeFromRight(56));
             nameRow.removeFromRight(4);
             customScaleNameEditor_.setBounds(nameRow);
-            bounds.removeFromTop(6);
         }
 
         pitchVisibilityToggle_.setBounds(bounds.removeFromTop(22));
@@ -232,6 +239,8 @@ public:
     // paint or device.
     juce::Viewport& getScrollViewportForTest() noexcept { return scrollViewport_; }
     int getContentNaturalHeightForTest() const noexcept { return contentNaturalHeight(); }
+    // The custom editor's block (keys, name, Save): it is what fades, and it clips its rows to the height reached.
+    juce::Component& getCustomBlockForTest() noexcept { return customBlock_; }
 
 private:
     static constexpr int kNoScaleId = 1;
@@ -341,7 +350,7 @@ private:
     void buildCustomScaleEditor() {
         for (int pc = 0; pc < 12; ++pc) {
             auto& toggle = customPitchToggles_[(size_t)pc];
-            scaleContent_.addChildComponent(toggle);
+            customBlock_.addAndMakeVisible(toggle);
             toggle.setComponentID("scaleAssistCustomToggle" + juce::String(pc));
             toggle.setButtonText(pitchClassName(pc));
             toggle.setTitle("Custom scale note " + pitchClassName(pc));
@@ -349,12 +358,14 @@ private:
             toggle.setBlackKey(isBlackPitchClass(pc));
         }
 
-        scaleContent_.addChildComponent(customScaleNameEditor_);
+        scaleContent_.addChildComponent(customBlock_);
+        customFade_.onFrame = [this] { resized(); };
+        customBlock_.addAndMakeVisible(customScaleNameEditor_);
         customScaleNameEditor_.setComponentID("scaleAssistCustomNameEditor");
         customScaleNameEditor_.setTextToShowWhenEmpty("Scale name", juce::Colours::grey);
         customScaleNameEditor_.setTitle("Custom scale name");
 
-        scaleContent_.addChildComponent(saveCustomScaleButton_);
+        customBlock_.addAndMakeVisible(saveCustomScaleButton_);
         saveCustomScaleButton_.setComponentID("scaleAssistCustomSaveButton");
         saveCustomScaleButton_.setTooltip("Save the custom scale under the name above");
         saveCustomScaleButton_.onClick = [this] { handleSaveCustomScale(); };
@@ -518,10 +529,7 @@ private:
 
     void showCustomEditor(bool show) {
         customEditorVisible_ = show;
-        for (auto& toggle : customPitchToggles_)
-            toggle.setVisible(show);
-        customScaleNameEditor_.setVisible(show);
-        saveCustomScaleButton_.setVisible(show);
+        customFade_.setShown(show); // the block (toggles, name, Save) fades and the rows below slide with it
         resized();
     }
 
@@ -560,6 +568,10 @@ private:
     juce::ComboBox rootCombo_;
     juce::ComboBox scaleCombo_;
 
+    // The custom scale editor (the twelve keys, the name field and Save), held in one block so it can fade and be
+    // clipped to the height the fade has reached. `customEditorVisible_` is its logical state.
+    juce::Component customBlock_;
+    synth::ui::FadeVisibility customFade_{&customBlock_};
     std::array<PianoKeyToggle, 12> customPitchToggles_;
     juce::TextEditor customScaleNameEditor_;
     juce::TextButton saveCustomScaleButton_{"Save"};

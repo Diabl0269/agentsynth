@@ -70,10 +70,12 @@ void PreferencesSettingsTab::layoutUsageStatsGroup(int& y, int contentWidth, boo
     const std::initializer_list<juce::Component*> comps = {&shareUsageStatsToggle, &usageStatsLearnMoreButton};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
-    // The id row is part of the group but follows the toggle, not the search: no id exists while sharing is off.
-    const bool showId = visible && shareUsageStatsToggle.getToggleState() && usageStatsIdLabel.getText().isNotEmpty();
-    usageStatsIdLabel.setVisible(showId);
-    usageStatsCopyIdButton.setVisible(showId);
+    // The id row is part of the group but follows the toggle, not the search: no id exists while sharing is off. It
+    // has a fade of its own (made on its first layout), so it fades when the toggle changes and with its group.
+    const bool groupShown = groupFades_.at(&shareUsageStatsToggle).fade->isShown();
+    const bool showId =
+        fadeGroup({&usageStatsIdLabel, &usageStatsCopyIdButton},
+                  groupShown && shareUsageStatsToggle.getToggleState() && usageStatsIdLabel.getText().isNotEmpty());
     if (!visible)
         return;
     if (previousGroupWasVisible) {

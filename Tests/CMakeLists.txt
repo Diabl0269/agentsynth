@@ -904,6 +904,7 @@ add_executable(Tests
     UI/Layout/BottomDockTabFadeTests.cpp
     UI/Timeline/TimelineFadeMotionTests.cpp
     UI/Graph/CardBody/CardBodyFadeTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFadeTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

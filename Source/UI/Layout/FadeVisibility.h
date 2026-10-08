@@ -77,6 +77,10 @@ public:
         driver_.start(updater_, ms, [](float t) { return t; }, [this](float t) { frame(t); }, [this] { finish(); });
     }
 
+    /** Land on `shown` at once, with no fade: for the first layout of a screen that is already on show, so what
+     *  was there from the start does not fade away. */
+    void snapTo(bool shown) { land(shown); }
+
     /** True while the components are shown or fading in: the answer to "is it logically on". */
     bool isShown() const { return isVisibleNow() && !fadingOut_; }
 

@@ -1,3 +1,4 @@
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -107,4 +108,31 @@ TEST_F(AIHostedServerTest, UseHostedServerSwitchesAnOllamaUserBackToRemote) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("aiProvider"), "remote");
     EXPECT_FALSE(host->isVisible());
     EXPECT_FALSE(hosted->isVisible());
+}
+
+// The address box and the two buttons fade in and out in their places instead of popping.
+TEST_F(AIHostedServerTest, TheAddressBoxFadesInAndTheCustomButtonFadesOut) {
+    auto window = openWindow();
+    auto* aiTab = window->getTabs().getTabContentComponent(1);
+    auto* host = findByTitle<juce::TextEditor>(aiTab, "AI provider host");
+    auto* custom = findByTitle<juce::TextButton>(aiTab, "Use a custom server address");
+    ASSERT_TRUE(host != nullptr && custom != nullptr);
+    ASSERT_FALSE(host->isVisible());
+    const auto hostBounds = host->getBounds();
+
+    FadeAnimateGuard guard;
+    custom->onClick();
+    EXPECT_TRUE(host->isVisible());
+    EXPECT_FLOAT_EQ(host->getAlpha(), 0.0f) << "frame 0 of the fade-in";
+    EXPECT_TRUE(custom->isVisible()) << "the button stays while it fades out";
+    EXPECT_FALSE(interceptsClicks(*custom));
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(host->getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(custom->getAlpha(), 0.5f, 0.01f);
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(host->getAlpha(), 1.0f);
+    EXPECT_FALSE(custom->isVisible());
+    EXPECT_EQ(host->getBounds(), hostBounds) << "it fades where it stands; nothing moves";
 }

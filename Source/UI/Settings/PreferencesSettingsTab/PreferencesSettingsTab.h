@@ -5,6 +5,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <functional>
@@ -244,6 +245,11 @@ public:
     juce::Button& getSectionHeaderForTest(Category category);
     synth::ui::FoldAllButton& getFoldAllButtonForTest() { return foldAllButton; }
 
+    // Test seams for the group fades (a group that a fold or a filter takes out fades while the rows below slide up):
+    // run the layout a fade's last frame asked for, and ask whether any group is still fading.
+    void flushLayoutForTest() { relayoutUpdater_.handleUpdateNowIfNeeded(); }
+    bool anyGroupFadingForTest() const;
+
     // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
     // into layoutContent. True when a window is too short to show every group, false when they fit.
@@ -280,6 +286,13 @@ private:
     void layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
                            const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
     void setupCategorySelector();
+
+    // Group fades (...GroupFades.cpp). A group that a filter or a fold takes out fades out while its rows squeeze
+    // together and the rows below slide up; one that comes back does the reverse. `fadeGroup` is what the layout's
+    // `groupMatches` closure ends in: it starts the fade towards `target` and answers whether the group still takes
+    // a slot in this pass (true while it is shown or fading). `squashFadingGroups` is the last step of resized().
+    bool fadeGroup(std::initializer_list<juce::Component*> comps, bool target);
+    void squashFadingGroups();
 
     // "All" view. Every layout*Groups unit calls enterCategory() first: it records where the
     // category's rows begin so placeSectionHeaders() can slot a header above them afterwards.
@@ -626,6 +639,26 @@ private:
 
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
+
+    // One fade per group, made on the group's first layout (which lands at once: what was there from the start does
+    // not fade). The key is the group's first component. `laidOutGroups_` is the groups the last pass walked, in
+    // order; `dividerAlphas_` is one per divider (a divider of a fading group fades with it).
+    struct GroupFade {
+        std::vector<juce::Component*> comps;
+        std::unique_ptr<synth::ui::FadeVisibility> fade;
+    };
+    std::map<juce::Component*, GroupFade> groupFades_;
+    std::vector<GroupFade*> laidOutGroups_;
+    std::vector<float> dividerAlphas_;
+    // Every frame of every fade asks for one more layout; they are coalesced into a single pass per turn.
+    struct RelayoutUpdater : juce::AsyncUpdater {
+        void handleAsyncUpdate() override {
+            if (run)
+                run();
+        }
+        std::function<void()> run;
+    };
+    RelayoutUpdater relayoutUpdater_;
     synth::ui::ScrollIntoViewOnFocus followFocus_{contentViewport};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)

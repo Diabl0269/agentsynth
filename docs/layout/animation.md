@@ -602,7 +602,18 @@ conditional section that is not a swap is laid out at once when it comes and fad
 ([Controls swapping in place](#controls-swapping-in-place)) and starts no fade. Every fade frame invalidates the
 card's cached raster through the child's own `setAlpha`, so a card repaints exactly while a fade runs and not after.
 The Pick on canvas overlay (`PickTargetOverlay`) fades the same way as one whole component: it takes no click from the
-moment Esc or a click ends it, and its outlines stay painted until it has faded out.
+moment Esc or a click ends it, and its outlines stay painted until it has faded out. Settings and dialogs use it too: a Preferences group that a
+fold or a search filter takes out (the group's rows fade while their slot is squeezed to `progress()` of its height, so
+the rows below and the next section's header slide up; one group, one `FadeVisibility`, made on its first layout and
+landing at once then), the Export Audio dialog's options page (which cross-fades into the progress page) and its
+bit depth and bitrate rows (which cross-fade in their shared slot), the Configure I/O dialog's "Add a port" shape box
+and voices editor, each row's voices editor (the shape box slides over as its block grows) and the "No inputs yet" /
+"No outputs yet" hints (the section below slides with the hint's height), the piano roll scale panel's custom scale
+editor (its keys, name field and Save, clipped to the height reached while the controls below slide), and the AI
+settings tab's host label and address box and its Custom server / Use hosted server buttons (fixed slots). The
+Preferences section headers and the fold-all strip, and the Keyboard Shortcuts tab's folds (collapsing there is
+instant on purpose), are not faded. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
+something already on screen so what was there from the start does not fade.
 
 ## Tooltips
 

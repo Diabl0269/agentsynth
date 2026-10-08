@@ -743,4 +743,5 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp
     Source/UI/Graph/CardBody/CardBlockFade.h
     Source/UI/Graph/CardBody/CardBodyFades.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
