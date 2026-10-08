@@ -694,12 +694,12 @@ public:
     void advanceCableRetractForTest(float t);
     void finishCableRetractForTest();
 
-    /** The visible canvas frame rect (canvas coordinates, animated) and its retarget hook (GraphEditorCanvasFrame.cpp).
-     */
+    /** The visible canvas frame rect (canvas coordinates, animated) and its retarget hook (the canvas frame). */
     juce::Rectangle<float> getCanvasFrameRect() const { return canvasFrame_.current(); }
     void refreshCanvasFrame(CanvasFrame::Mode mode);
     CanvasFrame& getCanvasFrameForTest() noexcept { return canvasFrame_; }
 
+    AppUndoManager* getUndoManager() const noexcept { return undoManager; } // null for a bare editor
     /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
     CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
 

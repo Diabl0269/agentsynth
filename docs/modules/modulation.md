@@ -560,6 +560,9 @@ the arrows keep working.
   set by `MainComponent` to `removeModulator`): the routing and its amount lane go in one undo step, the ports it
   crossed are swept, and removing an LFO's last destination asks first. With no host set (a canvas test) it falls back
   to `GraphEditor::removeModulationChain`.
+  The row shrinks toward its centre (180 ms) and the rows below then close the gap (200 ms); Cmd+Z opens the gap, grows
+  the row back and fades a thin accent outline around it (a plain fade under Reduce Motion, at once off screen):
+  [delete and undo animation](../layout/animation.md#delete-and-undo-animation).
 * **Double-click the dot to remove.** With ONE source on the knob, a double-click on its dot removes that connection
   as one undo step: the cable animates out and the attenuverter and any macro-port hop it used go with it, the source
   module stays (`GraphEditor::removeModulationChain`, via `ModDotController::dotDoubleClicked`); Cmd+Z brings it all
