@@ -798,8 +798,8 @@ void MainComponent::hideWelcomeScreen() {
     // continuation (loadPresetGuarded, newPatch) calls this unconditionally as its last step even
     // when the welcome screen was never showing in the first place (e.g. the toolbar's own Load
     // button, not the welcome screen, triggered the load).
-    if (welcomeScreen_)
-        welcomeScreen_->setVisible(false);
+    if (welcomeFade_)
+        welcomeFade_->setShown(false); // fades out, then hides
 }
 
 // Reopens the overlay (AppCommands::showWelcomeScreen, wired to the macOS Help menu in
@@ -815,7 +815,7 @@ void MainComponent::showWelcomeScreen() {
         saveRecentProjects();
     welcomeScreen_->setRecentProjects(recentProjects.getEntries());
     welcomeScreen_->toFront(false);
-    welcomeScreen_->setVisible(true);
+    welcomeFade_->setShown(true);
     welcomeScreen_->focusFirstControl();
 }
 

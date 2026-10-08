@@ -507,6 +507,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
+    UI/Layout/FadeVisibilityTests.cpp
     UI/Layout/ReducedMotionTests.cpp
     UI/Layout/SplitButtonTests.cpp
     UI/Layout/ScrollTweenTests.cpp

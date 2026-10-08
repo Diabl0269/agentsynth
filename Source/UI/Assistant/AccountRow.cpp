@@ -38,15 +38,16 @@ void AccountRow::setAccountService(AccountService* service) {
     accountService = service;
 
     if (accountService == nullptr) {
-        setVisible(false);
+        rowFade_.setShown(false);
         return;
     }
 
-    setVisible(true);
     // Synchronous, not routed through onStateChanged — this row does not own that callback slot
     // (AIChatComponent does), and the caller needs an immediately-truthful reflection of the
-    // snapshot right after attaching, not one that depends on a later dispatch-loop pump.
+    // snapshot right after attaching, not one that depends on a later dispatch-loop pump. The
+    // controls take their state while the row is still hidden, so only the row itself fades in.
     updateFromSnapshot(accountService->getSnapshot());
+    rowFade_.setShown(true);
 }
 
 void AccountRow::refresh() {
@@ -67,26 +68,26 @@ void AccountRow::updateFromSnapshot(const AccountSnapshot& snapshot) {
 
     switch (snapshot.state) {
     case AccountState::SignedOut:
-        signInButton.setVisible(true);
-        signOutButton.setVisible(false);
-        statusLabel.setVisible(false);
+        signInFade_.setShown(true);
+        signOutFade_.setShown(false);
+        statusFade_.setShown(false);
         break;
 
     case AccountState::SigningIn:
-        signInButton.setVisible(false);
-        signOutButton.setVisible(false);
-        statusLabel.setVisible(true);
         statusLabel.setColour(juce::Label::textColourId, mutedText);
         statusLabel.setText("Signing in...", juce::dontSendNotification);
+        signInFade_.setShown(false);
+        signOutFade_.setShown(false);
+        statusFade_.setShown(true);
         break;
 
     case AccountState::SignedIn:
-        signInButton.setVisible(false);
-        signOutButton.setVisible(true);
-        statusLabel.setVisible(true);
         statusLabel.setColour(juce::Label::textColourId, normalText);
         statusLabel.setText(snapshot.email.isNotEmpty() ? snapshot.email : juce::String("Signed in"),
                             juce::dontSendNotification);
+        signInFade_.setShown(false);
+        signOutFade_.setShown(true);
+        statusFade_.setShown(true);
         break;
     }
 
@@ -120,12 +121,12 @@ void AccountRow::resized() {
     // Right-aligned to match signOutButton below and AIChatComponent's upsellButton in the row
     // beneath this one — every bottom-chrome action button hugs the same edge so the stack reads
     // as one coherent column instead of alternating sides.
-    if (signInButton.isVisible()) {
+    if (signInFade_.isShown()) {
         signInButton.setBounds(b.removeFromRight(90));
         return;
     }
 
-    if (signOutButton.isVisible())
+    if (signOutFade_.isShown())
         signOutButton.setBounds(b.removeFromRight(90).reduced(2, 2));
 
     statusLabel.setBounds(b);

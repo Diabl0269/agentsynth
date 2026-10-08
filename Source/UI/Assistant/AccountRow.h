@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AccountService.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -57,6 +58,13 @@ private:
     juce::TextButton signInButton;
     juce::TextButton signOutButton;
     juce::Label statusLabel; // email / "Signed in" / "Signing in..."
+
+    // The row fades in and out as a whole, and its three states cross-fade into each other (160 ms in,
+    // 110 ms out); layout follows the state that is shown, so a leaving control keeps its place.
+    synth::ui::FadeVisibility rowFade_{this};
+    synth::ui::FadeVisibility signInFade_{&signInButton};
+    synth::ui::FadeVisibility signOutFade_{&signOutButton};
+    synth::ui::FadeVisibility statusFade_{&statusLabel};
 
     // Non-owning; auto-nulls when the dialog (owned by its DialogWindow) is destroyed, whether
     // that happens via its own Cancel button, an auto-close on success, or the native title bar

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/IconButton.h"
+#include "UI/Layout/UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // StatusBarComponent  (docs/layout/chrome.md#status-bar)
@@ -13,7 +14,9 @@
 // (cpu delta > 0.5 %, voices changed, or patch name changed). Zero writeToLog calls.
 //
 // showMessage() displays a transient status message that auto-clears after ~2.5 s.
-// While active it overrides the normal patch/cpu/voice text in the centre of the bar.
+// While active it overrides the normal patch/cpu/voice text in the centre of the bar. The message
+// fades in over 160 ms and out over 110 ms (80 ms plain fade under Reduce Motion), cross-fading with
+// the normal text; with the bar off screen, or Animations Off, the final state lands at once.
 //
 // Transport cluster: a play/stop glyph button + a "bar.beat.ticks   BPM" readout, ALWAYS visible
 // regardless of the timeline panel's visibility — before this, play/stop/position only existed
@@ -103,6 +106,13 @@ public:
     // code never reads this back — showMessage() is fire-and-forget.
     const juce::String& getTransientMessageForTest() const noexcept { return transientMessage_; }
 
+    // Test-only: how far the message has faded in (0 normal status, 1 message), the text painted as the
+    // message (kept while it fades out), and a hand step of a running fade (1 finishes it) for tests that
+    // force the animated path with FadeVisibility::setAnimateOffScreenForTest.
+    float getMessageAlphaForTest() const noexcept { return messageAlpha_; }
+    const juce::String& getDisplayedMessageForTest() const noexcept { return displayedMessage_; }
+    void stepMessageFadeForTest(float t);
+
     // Test-only: the round-trip segment's rendered string, and how many times it has asked
     // for a repaint. The counter is the same seam TimelineClipLaneArea's live strip uses to prove
     // its own gating — two updates with the same value must cost exactly one repaint.
@@ -147,6 +157,16 @@ private:
 
     // Transient/sticky message state. Empty transientMessage_ means neither is active.
     juce::String transientMessage_;
+    // What paint() draws as the message: transientMessage_, kept while the message fades out.
+    juce::String displayedMessage_;
+    float messageAlpha_ = 0.0f; // 0 normal status .. 1 message
+    float fadeFrom_ = 0.0f;
+    float fadeTo_ = 0.0f;
+    juce::VBlankAnimatorUpdater vblankUpdater_{this};
+    synth::ui::AnimationDriver messageFade_;
+    void fadeMessageTo(bool shown);
+    void landMessageAt(float to);
+    void paintStatusText(juce::Graphics& g, int rightEdge, int textY, int textH) const;
     bool messageIsSticky_ = false; // set via showStickyMessage(); clearMessage() only touches this one
 
     // Last-rendered values, used for gated-repaint comparison.

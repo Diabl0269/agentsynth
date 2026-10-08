@@ -1,3 +1,4 @@
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "AI/AccountService.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "UI/Assistant/PlanBadge.h"
@@ -214,4 +215,39 @@ TEST(PlanBadgeTest, RendersProPlanTextOnceEntitlementIsKnown) {
     EXPECT_TRUE(label->getText().contains("10000"));
 
     badge.setAccountService(nullptr);
+}
+
+// The badge fades in and its strip grows with it; leaving, the strip closes over the fade (headless: the
+// animated path is forced and stepped by hand).
+TEST(PlanBadgeTest, FadesInWithItsStripAndOutAgain) {
+    auto performer = makeSignInPerformer(makeTokenSuccess("at1", "rt1"), makeMeSuccess("jane@example.com"),
+                                         makeEntitlementSuccess("free", 1000, 240));
+    auto tokenStore = std::make_unique<InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    AccountService service{kHost, performer, std::move(tokenStore)};
+
+    PlanBadge badge;
+    badge.setAccountService(&service);
+    service.attemptSilentSignIn();
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().entitlementKnown; }));
+
+    FadeAnimateGuard guard;
+    badge.refresh();
+    EXPECT_TRUE(badge.isVisible());
+    EXPECT_FLOAT_EQ(badge.getAlpha(), 0.0f) << "starts transparent";
+    EXPECT_EQ(badge.getPreferredHeight(), 1) << "starts as a sliver";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(badge.getPreferredHeight(), 1);
+    EXPECT_LT(badge.getPreferredHeight(), 18);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(badge.getPreferredHeight(), 18);
+
+    badge.setAccountService(nullptr);
+    EXPECT_TRUE(badge.isVisible()) << "stays until the fade has ended";
+    EXPECT_EQ(badge.getPreferredHeight(), 18);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_LT(badge.getPreferredHeight(), 18);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(badge.isVisible());
+    EXPECT_EQ(badge.getPreferredHeight(), 0);
 }

@@ -264,6 +264,14 @@ private:
     synth::ui::AnimationDriver foldAnim;
 };
 
+namespace {
+// A banner strip's height while it fades: its natural height scaled by how far the fade has got, never
+// below 1 px while it is still on screen (0 means "not there" to the layout below).
+int stripHeight(int natural, const synth::ui::FadeVisibility& fade) {
+    return juce::jmax(1, juce::roundToInt(static_cast<float>(natural) * fade.progress()));
+}
+} // namespace
+
 void AIChatComponent::resized() {
     auto b = getLocalBounds().reduced(10);
 
@@ -303,7 +311,8 @@ void AIChatComponent::resized() {
     // wrap across from the label's own height — see AppLookAndFeel::drawLabel()).
     const int hostedNoticeHeight =
         hostedModeNotice.isVisible()
-            ? computeWrappedTextHeight(hostedModeNotice.getFont(), hostedModeNotice.getText(), chromeWidth)
+            ? stripHeight(computeWrappedTextHeight(hostedModeNotice.getFont(), hostedModeNotice.getText(), chromeWidth),
+                          hostedNoticeFade_)
             : 0;
     const int hostedNoticeGap = hostedNoticeHeight > 0 ? kChromeGap : 0;
 
@@ -313,7 +322,9 @@ void AIChatComponent::resized() {
     // length date, so a fixed height clipped it whenever the rendered sentence wrapped.
     const int downgradeStripHeight =
         downgradeStripLabel.isVisible()
-            ? computeWrappedTextHeight(downgradeStripLabel.getFont(), downgradeStripLabel.getText(), chromeWidth)
+            ? stripHeight(
+                  computeWrappedTextHeight(downgradeStripLabel.getFont(), downgradeStripLabel.getText(), chromeWidth),
+                  downgradeFade_)
             : 0;
     const int downgradeStripGap = downgradeStripHeight > 0 ? kChromeGap : 0;
 
@@ -323,7 +334,7 @@ void AIChatComponent::resized() {
     // contract, but starts VISIBLE by default (see the member doc comment) — most callers (including
     // every existing test that never attaches an AccountService) will therefore reserve this space,
     // unlike the other three rows in this stack.
-    const int upsellStripHeight = upsellButton.isVisible() ? 32 : 0;
+    const int upsellStripHeight = upsellButton.isVisible() ? stripHeight(32, upsellFade_) : 0;
     const int upsellStripGap = upsellStripHeight > 0 ? kChromeGap : 0;
 
     // Input row (40) + its gap + the model row (24), all on the 8px grid.

@@ -388,6 +388,8 @@ void MainComponent::createWelcomeScreen() {
     // must never be constructed there.
     if (ownedAudioEngine != nullptr) {
         welcomeScreen_ = std::make_unique<synth::ui::WelcomeScreenComponent>();
+        welcomeFade_ =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{welcomeScreen_.get()});
 
         welcomeScreen_->onNewProject = [this] {
             // AppCommands::newPatch's own guard ("New Patch") runs first; newPatch() itself calls

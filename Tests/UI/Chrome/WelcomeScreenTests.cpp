@@ -11,6 +11,7 @@
 //   * showWhatsNewDialog()/AppCommands::whatsNew are never invoked from a test — they open a real
 //     modal juce::AlertWindow.
 
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
@@ -544,4 +545,49 @@ TEST_F(WelcomeScreenTest, ShowWelcomeScreenCommand_IsRegisteredAndActiveOnTheApp
     juce::ApplicationCommandInfo info(AppCommands::showWelcomeScreen);
     mc.getCommandInfo(AppCommands::showWelcomeScreen, info);
     EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0);
+}
+
+// The welcome screen fades out and back in: it is hidden only after the fade, ignores clicks while it
+// leaves, and lands at once headless.
+TEST_F(WelcomeScreenTest, FadesOutAndInAndHidesOnlyAfterTheFade) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto* welcome = mc.getWelcomeScreenForTest();
+    ASSERT_NE(welcome, nullptr);
+    ASSERT_TRUE(welcome->isVisible());
+
+    FadeAnimateGuard guard;
+    mc.hideWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible()) << "stays on screen while it fades out";
+    EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest()) << "but the app already treats it as gone";
+    EXPECT_FALSE(interceptsClicks(*welcome)) << "a second click cannot reach it";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(welcome->getAlpha(), 0.5f, 0.01f);
+    EXPECT_TRUE(welcome->isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(welcome->isVisible());
+
+    mc.showWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible());
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 0.0f) << "fades in from transparent";
+    EXPECT_FALSE(mc.isWelcomeScreenHiddenForTest());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 1.0f);
+    EXPECT_TRUE(interceptsClicks(*welcome));
+}
+
+TEST_F(WelcomeScreenTest, HidesAndShowsAtOnceWhenAnimationsAreOff) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto* welcome = mc.getWelcomeScreenForTest();
+    ASSERT_NE(welcome, nullptr);
+
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    mc.hideWelcomeScreenForTest();
+    EXPECT_FALSE(welcome->isVisible());
+    mc.showWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible());
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 1.0f);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AccountService.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -48,6 +49,10 @@ private:
     bool hasContent = false;
 
     juce::Label textLabel;
+
+    // The badge fades in and out and its strip height follows (160 ms in, 110 ms out); each frame asks the
+    // parent to lay out again. Lands at once headless and off screen.
+    synth::ui::FadeVisibility fade_{this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlanBadge)
 };
