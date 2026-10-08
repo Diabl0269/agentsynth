@@ -128,6 +128,10 @@ void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
 
 void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::LaneId lane,
                                                 std::vector<ModulatorInfo> infos, const juce::String& parameterName) {
+    std::set<juce::String> known; // routings that already had a row: they do not fade in again
+    for (const auto& old : entry.infos)
+        known.insert(old.key());
+    entry.fades.clear();
     entry.rows.clear();
     entry.bands.clear();
     entry.infos = std::move(infos);
@@ -152,6 +156,16 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         band->setModulator(info, lane, parameterName);
         bodies_->addAndMakeVisible(*band);
         entry.bands.push_back(std::move(band));
+        if (known.count(info.key()) == 0) {
+            // A new routing's row and band come in with a fade; off screen they simply land shown.
+            auto* newRow = entry.rows.back().get();
+            auto* newBand = entry.bands.back().get();
+            newRow->setVisible(false);
+            newBand->setVisible(false);
+            entry.fades.push_back(
+                std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{newRow, newBand}));
+            entry.fades.back()->setShown(true);
+        }
     }
 }
 

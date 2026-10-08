@@ -181,6 +181,9 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     };
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
     initHeightHandle();
+    // The chips and the arrow fade as the track gains or loses them; their widths follow the fade so the row slides.
+    for (auto* fade : {&foldArrowFade_, &channelChipFade_})
+        fade->onFrame = [this] { resized(); };
 
     // Ctrl+E's pointer and Tab twin. Its tooltip names the binding, so refreshFromDoc rebuilds it.
     addAndMakeVisible(showModuleButton_);
@@ -359,8 +362,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 
     // 5.2: every track whose notes/audio play into a channel shows the chip -- linked or not.
     const bool showChannelChip = channelInfo_.hasChannel && t->kind != synth::TrackKind::Automation;
-    if (channelChip_.isVisible() != showChannelChip) {
-        channelChip_.setVisible(showChannelChip);
+    if (channelChipFade_.isShown() != showChannelChip) {
+        channelChipFade_.setShown(showChannelChip);
         resized(); // the chip shares the bottom row with the binding chip
     }
     if (showChannelChip) {
@@ -374,14 +377,14 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 
     // Every track has the arrow (open, an empty track shows just "+ Add automation..."); the Unassigned
     // section only while it holds lanes.
-    foldArrow_.setVisible(!isSectionHeader() || !t->lanes.empty());
+    foldArrowFade_.setShown(!isSectionHeader() || !t->lanes.empty());
     foldArrow_.setState(automationExpanded_, isSectionHeader() ? juce::String("Unassigned") : t->name,
                         shownLaneCount());
 
     // The Automation track is the "Unassigned automation" section header: it hosts lanes no single
     // track owns, so a node binding, a colour, M/S/R and a rename all mean nothing for it.
     if (isSectionHeader()) {
-        bindingChip_.setVisible(false);
+        bindingChipFade_.setShown(false);
         for (juce::Component* hidden :
              {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&muteButton_),
               static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_),
@@ -393,7 +396,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         nameLabel_.setEditable(false, false, false);
         nameLabel_.setTooltip("Automation lanes no single track plays");
     } else {
-        bindingChip_.setVisible(true);
+        bindingChipFade_.setShown(true);
 
         // Chip text/state/tooltip. Three cases, two of them amber. The tooltip is what carries the
         // "this shows a binding, it does not add a module" explanation the button text has no room for.
@@ -505,9 +508,10 @@ void TimelineTrackHeaderComponent::resized() {
     showModuleButton_.setBounds(showSlot.withSizeKeepingCentre(
         TrackShowModuleButton::kSize, juce::jmin(TrackShowModuleButton::kSize, showSlot.getHeight())));
     bottomRow.removeFromRight(kRowPadding);
-    if (channelChip_.isVisible()) {
-        channelChip_.setBounds(bottomRow.removeFromRight(bottomRow.getWidth() / 2));
-        bottomRow.removeFromRight(kRowPadding);
+    if (const float p = channelChipFade_.progress(); p > 0.0f) { // the chip's share grows and shrinks with its fade
+        channelChip_.setBounds(
+            bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(bottomRow.getWidth() / 2) * p)));
+        bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
     }
     bindingChip_.setBounds(bottomRow);
 }
@@ -518,8 +522,8 @@ void TimelineTrackHeaderComponent::resized() {
 void TimelineTrackHeaderComponent::layoutFoldArrowAndBadges(juce::Rectangle<int>& row) {
     const auto* t = track();
     const int laneCount = t != nullptr ? shownLaneCount() : 0;
-    if (foldArrow_.isVisible())
-        foldArrow_.setBounds(row.removeFromLeft(TrackFoldArrow::kSize)
+    if (const float p = foldArrowFade_.progress(); p > 0.0f) // the arrow's slot opens and closes with its fade
+        foldArrow_.setBounds(row.removeFromLeft(juce::roundToInt(static_cast<float>(TrackFoldArrow::kSize) * p))
                                  .withSizeKeepingCentre(TrackFoldArrow::kSize, TrackFoldArrow::kSize));
     kindBadgeBounds_ = isSectionHeader() ? juce::Rectangle<int>() : row.removeFromLeft(kKindBadgeWidth);
     laneBadgeBounds_ = {};
@@ -744,7 +748,7 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         }
     }
     if (matchesAction(key, "timelineToggleTrackAutomation", plainKey('a'))) {
-        if (foldArrow_.isVisible() && onAutomationToggleRequested)
+        if (foldArrowFade_.isShown() && onAutomationToggleRequested)
             onAutomationToggleRequested(trackId_);
         return true;
     }

@@ -581,7 +581,12 @@ Where it is used: the Welcome screen hiding and reopening; the AI chat's hosted-
 and downgrade notice, its Cancel button and thinking spinner (which keeps pulsing until it has faded out); the plan
 card's feedback comment row (on a rating) and details panel (Show details), which fade while the card grows or
 shrinks to fit; the account row (as a whole, and its Sign in / Signing in / email and Sign out controls cross-fade
-as the state changes); the plan badge. The status bar's transient and sticky messages do the same with their own
+as the state changes); the plan badge; the bottom dock's tabs (Timeline, Mixer, MIDI Remote), which cross-fade as the leaving host fades
+out over the arriving one (the active tab lands at once; the leaving panel's own visible flag follows its host's fade); the
+piano roll opening and closing against the clip lanes (closing fades the emptied roll out as the lanes fade in); the
+routing pane's canvas node, Show on canvas link, MIDI destinations and mixer channel row, whose heights follow the fade
+so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; and a new
+modulator row with its band in the lanes. The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
 the cleared message's words staying painted until then.
 

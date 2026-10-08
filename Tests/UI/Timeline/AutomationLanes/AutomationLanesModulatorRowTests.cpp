@@ -5,6 +5,7 @@
 // The MainComponent side -- adding, removing and undoing real modulators -- is in
 // AutomationLanesModulatorMainTests.cpp.
 
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -434,4 +435,34 @@ TEST(AutomationLanesModulatorRowTest, TheShapePictureFollowsTheShapeAndIsNamedFo
     h.host.values["lfo-1.shape"] = 3.0f;
     row->refreshValues();
     EXPECT_EQ(icon.getTitle(), "Square shape");
+}
+
+TEST(AutomationLanesModulatorRowTest, ANewModulatorRowAndItsBandFadeInTogether) {
+    FadeAnimateGuard guard;
+    HostedLanes h;
+    auto& f = h.f;
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto cutoff = f.addLane(bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(bass, true);
+    f.panel.refreshModulators();
+    EXPECT_EQ(f.panel.modulatorRowForTest(cutoff, 0), nullptr);
+
+    h.host.modulators = {lfoInfo("1")}; // an LFO is patched into the lane
+    f.panel.refreshModulators();
+    auto* row = f.panel.modulatorRowForTest(cutoff, 0);
+    ASSERT_NE(row, nullptr);
+    EXPECT_TRUE(row->isVisible());
+    EXPECT_EQ(row->getAlpha(), 0.0f) << "the row fades in";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(row->getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(row->getAlpha(), 1.0f);
+
+    h.host.modulators = {lfoInfo("1"), lfoInfo("2")}; // a second one: only the new routing fades in
+    f.panel.refreshModulators();
+    auto* second = f.panel.modulatorRowForTest(cutoff, 1);
+    ASSERT_NE(second, nullptr);
+    EXPECT_EQ(second->getAlpha(), 0.0f);
+    EXPECT_EQ(f.panel.modulatorRowForTest(cutoff, 0)->getAlpha(), 1.0f) << "a routing that was there stays whole";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
 }

@@ -4,6 +4,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -302,6 +303,8 @@ public:
 
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
+    /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade). */
+    juce::Component& getTabHostForTest(Tab tab) noexcept { return hostForTab(tab); }
     /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
     float getLiftedTabLeftForTest() const { return reorder_.getDraggedStart(); }
     /** Test seam: the Esc key press a real drag would receive from the window. */
@@ -447,6 +450,10 @@ private:
     synth::ui::DetachablePanelHost timelineHost_;
     synth::ui::DetachablePanelHost mixerHost_;
     synth::ui::DetachablePanelHost midiRemoteHost_;
+    // A tab switch cross-fades the hosts (animation.md, "Fading things in and out").
+    synth::ui::FadeVisibility timelineFade_{&timelineHost_};
+    synth::ui::FadeVisibility mixerFade_{&mixerHost_};
+    synth::ui::FadeVisibility midiRemoteFade_{&midiRemoteHost_};
     // The Mixer's optional second live view -- see MixerMirrorController.h's own class
     // comment. Constructed once (its ConfigureFn closure captures the same graph/doc/macros/
     // undoManager/graphEditor/audioEngine references mixer_.configure() below already used), opened

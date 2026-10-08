@@ -131,8 +131,9 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     if (!pianoRoll_.isOpen())
         return; // id didn't resolve to a live clip — PianoRollComponent::openClip's own contract
 
-    clipLaneArea_.setVisible(false);
-    pianoRoll_.setVisible(true);
+    // The clip lanes fade out as the roll fades in (FadeVisibility); both are laid out at once, only the opacity runs.
+    clipLaneFade_.setShown(false);
+    rollFade_.setShown(true);
     pianoRoll_.grabKeyboardFocus();
     // The lanes region is carved DIFFERENTLY once the roll is open — it reserves a toolbar row above
     // the ruler (see resized()) — and isOpen() is what that carve-up branches on, so the layout has
@@ -150,8 +151,9 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
 
 void TimelinePanelComponent::closePianoRoll() {
     pianoRoll_.closeRoll();
-    pianoRoll_.setVisible(false);
-    clipLaneArea_.setVisible(true);
+    // The (now empty) roll fades out as the clip lanes fade back in.
+    rollFade_.setShown(false);
+    clipLaneFade_.setShown(true);
     clipLaneArea_.grabKeyboardFocus();
     resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above
     ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping

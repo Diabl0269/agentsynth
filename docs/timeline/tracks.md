@@ -602,3 +602,9 @@ Tests: `Tests/UI/Timeline/TimelineRoutingPaneTests.cpp` (the side pane),
 `Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` (the real-child-dispatch right-click
 coverage), `Tests/UI/Timeline/TimelineTrackFocusTests.cpp`, and
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp` for the panel-side column.
+
+## Header chips fade
+
+A track header's channel chip and fold arrow fade in and out as the track gains or loses them, the binding chip giving
+way (or taking the room back) as the channel chip's width follows the fade. A new modulator row and its band under a
+lane fade in. See [animation](../layout/animation.md#fading-things-in-and-out).
