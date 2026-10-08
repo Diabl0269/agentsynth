@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/ModuleBase.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace synth {
@@ -14,6 +15,8 @@ inline juce::String moduleTitle(const juce::NamedValueSet& nodeProperties, const
     const auto custom = nodeProperties["displayName"].toString();
     if (custom.isNotEmpty())
         return custom;
+    if (const auto* module = dynamic_cast<const ModuleBase*>(processor))
+        return module->getDefaultTitle();
     return processor != nullptr ? processor->getName() : juce::String();
 }
 

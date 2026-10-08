@@ -113,6 +113,7 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
 }
 
 void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
+    card_.repaint(); // the shown name can change when the plugin publishes
     card_.rebuildHostedPluginCard();
     card_.relayoutHostedPluginCard();
 }

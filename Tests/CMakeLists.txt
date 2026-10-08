@@ -112,6 +112,7 @@ add_executable(Tests
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
     Timeline/TrackOwnershipTests.cpp
+    Timeline/UniqueTrackNameTests.cpp
     Timeline/AutomationApplierTests.cpp
     Timeline/AutomationRecordTests.cpp
     Timeline/AutomationSlicingTests.cpp
@@ -182,6 +183,7 @@ add_executable(Tests
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
+    Plugin/HostedPluginTitleTests.cpp
     Plugin/PluginCardLayoutStoreTests.cpp
     Plugin/ModuleCardLayoutStoreTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp

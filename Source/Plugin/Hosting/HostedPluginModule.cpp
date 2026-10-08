@@ -43,6 +43,16 @@ HostedPluginModule::~HostedPluginModule() {
     retired_.clear();
 }
 
+// The shown name: the plugin's name, with " <n>" for the second and later hosted modules of the same plugin
+// (instanceOrdinal_, assigned by AudioEngine::updateModuleNames); "Hosted Plugin" while bare. Deliberately NOT
+// getName(): that is the type key several callers branch on, so only the title layer (synth::moduleTitle)
+// reads this. Nothing is persisted for it -- the plugin identity is, and the ordinal is recomputed from the graph.
+juce::String HostedPluginModule::getDefaultTitle() const {
+    if (identity_.name.isEmpty())
+        return getName();
+    return instanceOrdinal_ > 1 ? identity_.name + " " + juce::String(instanceOrdinal_) : identity_.name;
+}
+
 //==============================================================================
 // Loading (message thread only)
 //==============================================================================

@@ -590,6 +590,13 @@ one builds the exact same Track In, instrument, default chain, Master flow, boxe
 macro, as ONE undo step — except the instrument is a hosted `HostedPluginModule` rather than a factory
 module, and **the load is ASYNCHRONOUS**.
 
+The track is named after the plugin: the first Diva track is "Diva", the next "Diva 2" (the lowest free
+suffix against the timeline's current track names, `uniqueNameAmong`). The Hosted Plugin card is titled
+the same way: the plugin's name, with " 2", " 3" for later modules of the same plugin
+(`HostedPluginModule::getDefaultTitle`, numbered by `AudioEngine::updateModuleNames`). The type key
+`getName()`/"Hosted Plugin" is unchanged, and nothing extra is saved: the shown name derives from the
+persisted plugin identity, so a reloaded project shows the same names. A custom rename still wins.
+
 `MainComponent::addInstrumentPluginTrack` stages a bare Hosted Plugin module OFF the graph, starts its
 load, and **only opens the undo transaction once `HostedPluginModule::onLoadCompleted` reports
 success** — a completion hook that fires once per load attempt, covering all three exits (publish, an

@@ -90,6 +90,10 @@ public:
     /** Display name of the loaded (or pending) plugin; empty when the module is bare. */
     juce::String getPluginName() const { return identity_.name; }
 
+    juce::String getDefaultTitle() const override;
+    /** 1-based; 1 shows the bare name. Message thread. */
+    void setInstanceOrdinal(int ordinal) noexcept { instanceOrdinal_ = ordinal < 1 ? 1 : ordinal; }
+
     /** Message thread. Why the module is not currently hosting anything — an over-max refusal, a
      *  format error, "not installed" — or empty when there is nothing to say. Polled by the UI. */
     const juce::String& getStatusMessage() const noexcept { return statusMessage_; }
@@ -393,6 +397,7 @@ private:
     // cleared by every other load: it belongs to the plugin it was saved from.
     juce::MemoryBlock pendingBlob_;
     juce::String statusMessage_;
+    int instanceOrdinal_ = 1;
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     bool loading_ = false;
 

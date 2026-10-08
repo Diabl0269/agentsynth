@@ -9,6 +9,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "Branding.h"
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
@@ -851,4 +852,41 @@ TEST_F(ChannelFlowTest, AddInstrumentTrackMenuOscillatorNonPolyStaysNonPoly) {
         << "the non-poly menu entry must never take the poly-envelope branch";
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
         << "a freshly created Oscillator defaults to poly OFF — no Voice Mixer needed";
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentTracksAreNamedAfterThePluginAndNumberedOnlyOnClash) {
+    InstrumentPluginStubBackendCFT backend;
+    backend.factories["Stub Synth"] = [] {
+        return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
+    };
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    mc.getPluginScanService().setCandidateSource([](const juce::String&) { return juce::StringArray(); });
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+    for (int added = 1; added <= 2; ++added) {
+        mc.getTimelinePanel().buildAddTrackMenu();
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase + 0);
+        ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == added; }))
+            << "the async load/chain-build never completed";
+    }
+
+    const auto& tracks = mc.getTimelineDoc().getTracks();
+    ASSERT_EQ(tracks.size(), 2u);
+    EXPECT_EQ(tracks[0].name, "Stub Synth");
+    EXPECT_EQ(tracks[1].name, "Stub Synth 2");
+
+    std::vector<juce::String> titles;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) != nullptr)
+            titles.push_back(synth::moduleTitle(*node));
+    std::sort(titles.begin(), titles.end());
+    ASSERT_EQ(titles.size(), 2u);
+    EXPECT_EQ(titles[0], "Stub Synth");
+    EXPECT_EQ(titles[1], "Stub Synth 2");
 }

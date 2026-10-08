@@ -169,6 +169,7 @@ void GraphEditor::addHostedPluginAtCanvasPosition(const synth::PluginIdentity& i
         if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&processor))
             hosted->loadPlugin(identity);
     });
+    audioEngine.updateModuleNames(); // a second Diva reads "Diva 2" immediately, not on the next tick
 }
 
 // Canvas coordinates of the middle of the current view — where a clicked (rather than dragged)
