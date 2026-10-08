@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
@@ -50,6 +51,10 @@ void MainComponent::deleteTrack(synth::TrackId track) {
         return;
     const juce::String uuid = existing->bindingUuid;
 
+    // The rows and columns are pictured while the track is still there, so they can shrink away.
+    timelinePanel.noteTracksLeaving();
+    bottomDock.getMixerPanel().noteColumnsLeaving();
+
     // ONE undo step covering both domains: the track and the node that fed it disappear together,
     // and come back together.
     undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, uuid] {
@@ -63,6 +68,8 @@ void MainComponent::deleteTrack(synth::TrackId track) {
         timelineDoc.removeTrack(track);
     });
     reconcileTimelineAfterGraphChange();
+    timelinePanel.finishTrackListChange();
+    bottomDock.getMixerPanel().finishColumnChange();
 }
 
 // Cmd+Backspace on a focused row. Asks first unless the person switched the question off; the deletion itself is

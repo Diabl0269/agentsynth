@@ -324,6 +324,7 @@ add_executable(Tests
     UI/Graph/ModDot/ModDotAddSourceTests.cpp
     UI/Graph/ModDot/ModDotMacroRoutingTests.cpp
     UI/Graph/ModDot/ModDotPopoverTests.cpp
+    UI/Graph/ModDot/ModDotSourceRemovalMotionTests.cpp
     UI/Graph/ModDot/ModDotRowPolishTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickTests.cpp
     UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
@@ -514,6 +515,7 @@ add_executable(Tests
     UI/Layout/AppTooltipWindowTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Layout/ExitEnterTimelineTests.cpp
+    UI/Layout/ExitEnterList/ExitEnterListMotionTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
     UI/Library/ModuleLibraryCollapseTests.cpp
@@ -604,6 +606,7 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
     UI/Timeline/TimelineTrackDuplicateTests.cpp
+    UI/Timeline/TimelineTrackDeleteMotionTests.cpp
     UI/Timeline/TimelineTrackShowModuleTests.cpp
     UI/Timeline/TimelineAddTrackKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardTests.cpp
@@ -708,6 +711,7 @@ add_executable(Tests
     Mixer/MixerViewDocTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerPanelIncrementalRebuildTests.cpp
+    UI/Mixer/MixerPanelColumnMotionTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp

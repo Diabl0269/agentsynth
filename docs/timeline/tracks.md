@@ -562,7 +562,9 @@ The menu's items:
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
   Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
   ("Ask before deleting a track with the keyboard") turns the question back on. Cmd+Z brings the track back either way.
-  Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
+  The row (header and its lane line) shrinks away toward its centre and the rows below close the gap; Cmd+Z makes room,
+  grows it back and fades a thin accent outline around it ([delete and undo](../layout/animation.md#delete-and-undo-animation),
+  `TimelinePanelTrackListMotion.cpp`). Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own

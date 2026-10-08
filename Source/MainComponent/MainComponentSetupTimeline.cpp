@@ -231,6 +231,18 @@ void MainComponent::wireTimelineHookInventory() {
                 programmaticApplyScopes.pop_back();
             reconcileTimelineAfterGraphChange();
         });
+    // 5. TRACK LIST MOTION: a track an undo/redo removes or brings back shrinks away or grows in, on the timeline and
+    // in
+    //    the mixer (the same two calls deleteTrack makes around its own removal).
+    undoManager.setTrackListHooks(
+        [this] {
+            timelinePanel.noteTracksLeaving();
+            bottomDock.getMixerPanel().noteColumnsLeaving();
+        },
+        [this] {
+            timelinePanel.finishTrackListChange();
+            bottomDock.getMixerPanel().finishColumnChange();
+        });
     timelinePanel.setTrackHeaderHost(this);
     timelinePanel.setTimelineDoc(&timelineDoc);
     // Same undo stack every graph/timeline mutation already shares — a clip drag/trim/

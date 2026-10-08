@@ -126,12 +126,14 @@ private:
 class TimelineSnapshotAction : public juce::UndoableAction {
 public:
     TimelineSnapshotAction(synth::TimelineDoc& doc, const juce::var& beforeState, const juce::var& afterState,
-                           std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
+                           std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {},
+                           std::function<void()> tracksLeaving = {})
         : doc(doc)
         , beforeState(beforeState)
         , afterState(afterState)
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , tracksLeaving(std::move(tracksLeaving)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -150,6 +152,8 @@ private:
     bool restore(const juce::var& state) {
         if (beforeRestore)
             beforeRestore();
+        if (tracksLeaving && timelineRestoreDropsTrack(doc, state))
+            tracksLeaving(); // the track list pictures its rows while they are still there
         const bool ok = doc.fromVar(state);
         jassert(ok); // a var this class produced must always be accepted by fromVar
         // Fired even on a failed restore: the owner's pass re-derives orphan flags and republishes,
@@ -165,6 +169,7 @@ private:
     int sizeInUnits = -1; // sizedOnce
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void()> tracksLeaving;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineSnapshotAction)
@@ -767,7 +772,8 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
 
     undoManager.beginNewTransaction();
     performAction(new TimelineSnapshotAction(
-        doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+        doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+        [this] { fireTracksLeaving(); }));
     return true;
 }
 
@@ -812,7 +818,8 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
-            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [this] { fireTracksLeaving(); }));
 
     return true;
 }
@@ -968,7 +975,8 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
                                  macrosChanged);
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
-            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [this] { fireTracksLeaving(); }));
     if (midiRemoteChanged)
         performAction(
             new MidiRemoteSnapshotAction(*midiRemoteDoc, midiRemoteBefore, midiRemoteAfter, midiRemotePostRestore));

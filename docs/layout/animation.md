@@ -225,12 +225,13 @@ path); nothing else needs to know.
 - **Timeline track rows.** `AppUndoManager::isRestoring()` is true during the restore. When the timeline panel rebuilds
   its header rows while it is set and the rebuild is a pure reorder (same tracks, new order),
   `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
-  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. Any other rebuild
-  lands at once.
+  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
+  drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
+  any other rebuild lands at once.
 - **A duplicated track's row.** Cmd+D / "Duplicate Track" arms `TimelinePanelComponent::armTrackDuplicateGlide`; the
   rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
   `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
-  removes the row at once, like deleting a track.
+  removes the row like deleting a track does: it shrinks away and the rows below close the gap.
 - **Off-screen.** Same check as the forward move: the timeline glide runs only
   while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
   forces it.
@@ -278,8 +279,30 @@ every surface that animates a delete:
   the ghosts and snapshots, the cables on gliding cards, and the retracting cable ghosts, never the whole canvas.
 - **Off-screen:** ghosts are made only while the canvas is showing (`Hooks::canAnimate`), so headless tests see the
   final state synchronously; tests force it with `setForceAnimateForTest` and step `applyTimelineAtMs`.
-- Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at
-  once, or use their own collapse). They should reuse `ExitEnterTimeline`.
+- **Timeline track rows and mixer columns** (`Source/UI/Layout/ExitEnterList/`). Deleting a track (Cmd+Backspace or
+  the row menu) shrinks its whole row on the timeline, header and the lane line beside it, toward its centre, and the
+  rows below then close the gap. Cmd+Z (and a redo of an add) reverses it: the gap opens, the row grows back, a 1 px
+  accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
+  Add Track or Duplicate Track, and the redo that brings it back). A deleted
+  track's own channel is not one of those: it stays in the mixer as an orphan strip that moves to the end, which lands at
+  once, as does any change that moves a column without adding or removing one.
+  The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
+  pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
+  its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the
+  timeline ends, so the restored row or column keeps its focus and title. The picture of a list that loses a row is
+  taken BEFORE the change (`TimelinePanelComponent::noteTracksLeaving`, `MixerPanelComponent::noteColumnsLeaving`, called
+  by `MainComponent::deleteTrack` and, for an undo or redo that drops a track, by `AppUndoManager::setTrackListHooks`
+  from the timeline snapshot action); a list that regains a row is pictured after the change. `finishTrackListChange` /
+  `finishColumnChange` start the motion once the change and its rebuilds have landed. Only the scrolling group of the mixer
+  moves (a pinned column lands at once), and a change that adds and removes at once, or happens with the piano roll open,
+  lands at once. Reduce Motion is the plain fade; Animations Off and an off-screen panel are instant. Tests force the
+  motion with `TimelinePanelComponent::forceTrackGlideForTest` / `MixerPanelComponent::forceColumnMotionForTest` and
+  step `applyAtMs`.
+- **Mod dot panel rows** use the same numbers on real rows: a removed source's row shrinks toward its centre (180 ms),
+  then the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that
+  appears after an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds
+  just grows in (160 ms, no outline). See the "Mod-dot panel" row below.
+- Not yet covered: collapsed macro cards (those still remove at once).
 
 ### Controls arriving and leaving a card
 
@@ -359,7 +382,7 @@ pointer inside it, or a dialog opened from the keyboard, slides down. Reduce mot
 
 The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
 window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
-in and out like any alert. The deleted track's row then leaves at once, like the menu's Delete Track.
+in and out like any alert. The deleted track's row then shrinks away, like the menu's Delete Track.
 
 **Tooltips** are the exception to "popup windows": they are children of their app window, so they
 do not go through `PopupMotion`. See [Tooltips](#tooltips).
@@ -572,6 +595,7 @@ strings.
 | **Macro port names zoom fade** | Alpha is a pure function of zoom (`easeInOutCubic` over 0.5 to 0.7), no driver or timer, so not a time-bounded-rule exception; the strip fill recedes; on an open macro the same factor also slides each port's interior jack onto its boundary jack and narrows the painted strip to a rail (layout widths fixed) | `GraphEditor` / `MacroCardComponent` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **Automation lane reorder** | Dragging a lane header within its track: the lane's block (row plus modulator rows) lifts under the pointer, the other lanes glide aside (160 ms, `easeOutCubic`), settle on drop (140 ms), Esc returns it; Cmd+Alt+Up/Down glides the moved block into its slot; headers only (the curve editors follow on commit); at once when not on screen; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` via `ReorderDragSession` |
+| **Track delete and undo (timeline row, mixer column)** | A deleted track's row (header and lane line) shrinks toward its centre (180 ms) and the rows below close the gap (200 ms); a mixer column that leaves does the same sideways. Cmd+Z makes room (200 ms), grows it back (180 ms) and fades a 1 px accent outline (400 ms); phases never overlap; a plain fade under Reduce Motion; instant when off screen or Animations Off; see [delete and undo animation](#delete-and-undo-animation) | `ExitEnterListMotion` via `TimelinePanelComponent`, `MixerPanelComponent` |
 | **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
 | **Side pane open/close** | The pane's width tweens 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out from the current width; content keeps its full width and is revealed; lands at once when not on screen; see [side pane](side-pane.md) | `SidePane` |
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |
@@ -590,7 +614,7 @@ strings.
 | **Toolbar buttons** | Three tweens per button, each retargeting from its current value on one `AnimationDriver` apiece: hover 110 ms `easeOutCubic` in / 90 ms `easeInCubic` out (chip 16 -> 26 percent, ground, caption colour), press 80 ms (the chip and glyph squash to 0.92 x 0.86 about the chip's centre), lit 160 ms in / 110 ms out (the chip fills with the group colour while the glyph cross-fades to its ink art). On hover the glyph lifts 1 px and its moving part (the SVG's `mv` / `mv2` group, drawn as a separate `Drawable`) does one small thing: the cog and Light mode turn 30 degrees, Undo -22 and Redo +22 (the arrow swings about its elbow with an ease-out-back overshoot of about 10 percent while the hover arrives, a plain return on leaving), Save's shutter slides 1.5 down, Load's arrow drops 2, New's plus grows 1.2x, the feedback lines slide 1 right, Auto Arrange's right tiles part 1.5 up and down, the minimap view moves (2, 1), the matrix grows 1.12x, the panel rises 1.5, the library's leaning book tips 10 degrees further (distances in icon units). The AI button is the one looping glyph: a pulse runs along its cable and a spark blooms at the plug over one 2.8 s cycle (a linear `AnimationDriver` that restarts itself, the pulse placed with `Path::getPointAlongPath`), while the assistant is working (`setBusy`, from `AIChatComponent::onWaitingChanged`) or the button is hovered; its keyframes cross-fade with the rest glyph 140 ms in / 220 ms out and the cycle stops once they are gone, so an idle button schedules no frames. Under Reduce Motion (read when a hover starts, and when the button turns busy) nothing moves and only the colours change; lands at once when not on screen; nothing runs at rest; see [toolbar buttons](chrome.md#toolbar-buttons) | `ToolbarButton`, painted by `AppLookAndFeel::drawToolbarButton` |
 | **Velocity strip readout** | The value beside a hovered or dragged stick fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity and slides ~4 px from the stick head to its spot (`velocitylane::readoutSlidePx`); stick-to-stick moves and edits keep the current opacity; lands at once when not on screen; one `AnimationDriver` | `PianoRollVelocityLane` |
 | **Mod-dot tooltip** | The "LFO 1 · +42%" readout above-right of a knob whose landing dot is dragged (or stepped by key) fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity; a plain 80 ms linear fade under Reduce Motion; lands at once when not on screen; painted on the canvas over the cards; one `AnimationDriver`; see [mod dot](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot) | `ModDotTooltip` via `ModDotController` |
-| **Mod-dot panel** | The dot's panel fades in as a popup window (`PopupMotion`, 160 ms in / 110 ms out) with a `popup_motion::Style` of its own: it slides 12 px out of the dot (not the pointer) with a 3% overshoot (`easeOutBackSoft`), and leaves 6 px back toward it on Esc, click-away or a pick; Reduce Motion is the plain 80 ms fade; a second click on the dot while it fades out cuts the fade short and the new panel takes its place (`ModDotPanelFrame::finishClosingNow`). "Add source" unfolds the source list under the rows in the same panel: the panel's height grows 160 ms `easeOutCubic` and folds back 110 ms `easeInCubic` (one driver), and near the bottom of the screen the panel slides up with it, frame by frame, while its arrow stays level with the dot. A group's fold turns its arrow 90 degrees and opens or closes its rows over 160 ms `easeOutCubic`, the rows below sliding (never jumping), one driver for every group at once; a new source row grows in from zero height (160 ms `easeOutCubic`) and a removed one shrinks out (110 ms `easeInCubic`) with the rows below sliding up; row and button hover is a 100 ms fade. The Pick on canvas layer only outlines the hovered card (static, no animation). Everything lands at once when not on screen or under Reduce Motion; frames only while a tween runs; see [mod dot menu](../modules/modulation.md#the-mod-dot-menu) | `ModDotPopover`, `ModDotPanelFrame`, `ModDotSourcesPage`, `ModDotAddSourcePage` |
+| **Mod-dot panel** | The dot's panel fades in as a popup window (`PopupMotion`, 160 ms in / 110 ms out) with a `popup_motion::Style` of its own: it slides 12 px out of the dot (not the pointer) with a 3% overshoot (`easeOutBackSoft`), and leaves 6 px back toward it on Esc, click-away or a pick; Reduce Motion is the plain 80 ms fade; a second click on the dot while it fades out cuts the fade short and the new panel takes its place (`ModDotPanelFrame::finishClosingNow`). "Add source" unfolds the source list under the rows in the same panel: the panel's height grows 160 ms `easeOutCubic` and folds back 110 ms `easeInCubic` (one driver), and near the bottom of the screen the panel slides up with it, frame by frame, while its arrow stays level with the dot. A group's fold turns its arrow 90 degrees and opens or closes its rows over 160 ms `easeOutCubic`, the rows below sliding (never jumping), one driver for every group at once; a new source row grows in from zero height (160 ms `easeOutCubic`); a removed one shrinks toward its centre (180 ms) and then the rows below close the gap (200 ms), and Cmd+Z opens the gap, grows the row back and fades a 1 px accent outline around it (400 ms), the shared exit and gap timeline of [delete and undo](#delete-and-undo-animation) (a plain fade under Reduce Motion); row and button hover is a 100 ms fade. The Pick on canvas layer only outlines the hovered card (static, no animation). Everything lands at once when not on screen or under Reduce Motion; frames only while a tween runs; see [mod dot menu](../modules/modulation.md#the-mod-dot-menu) | `ModDotPopover`, `ModDotPanelFrame`, `ModDotSourcesPage`, `ModDotAddSourcePage` |
 | **Velocity strip show/hide** | The grid gives up `round(p * full)` px at the bottom while the strip keeps its full height and rises from the roll's bottom edge (clipped, never squashed); 200 ms (`kScalePanelAnimMs`) `easeInOutCubic`, same as the scale panel, retargets from the current progress, lands at once when not on screen or on a persisted restore | `PianoRollComponent` / `VelocityLaneSlide` |
 
 ## The time-bounded animation rule
