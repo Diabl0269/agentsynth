@@ -35,6 +35,13 @@ struct FoldCanvas {
     NodeID outside, sink;
     juce::String macroId;
 
+    // The machine's own reduce-motion setting (a CI runner may have it on) must not decide which fold a test sees:
+    // pin "system prefers full motion" unless the test pins an animation mode itself.
+    struct SystemMotionPin {
+        SystemMotionPin() { synth::ui::setReducedMotionForTest(false); }
+        ~SystemMotionPin() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } systemMotionPin;
+
     explicit FoldCanvas(int count, bool autoPorts = false) {
         undo.setGraphEditor(&editor);
         editor.setSize(6000, 4000);
