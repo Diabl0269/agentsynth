@@ -321,6 +321,12 @@ void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
         scrollTrackRows(amount);
         return;
     }
+    // Only a USER's sideways scroll reaches here (the wheel, a trackpad swipe, the eased wheel
+    // tween); follow's own page-flip goes through pageViewToShowBeat and never this method. Taking
+    // the view away from the playhead by hand means "stop following", so the flag, the button and
+    // the roll's mirror all switch off together rather than the next poll snapping the view back.
+    if (followPlayhead_)
+        setFollowPlayheadEnabled(false);
     viewState_.scrollBeats(amount);
     ruler_.repaint();
     repaint(gridLanesBounds_);
