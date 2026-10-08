@@ -18,6 +18,7 @@
 //      patched JUCE host calls, and the item's action is invoked directly.
 
 #include "../../../StubPluginInstance.h"
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AppUndoManager.h"
@@ -935,4 +936,28 @@ TEST(AddByMovingTest, TheModeCanBeStartedAgainAfterItEnded) {
     EXPECT_TRUE(a.card->isPluginTouchToAdd());
     EXPECT_TRUE(a.split().isRightLit());
     EXPECT_TRUE(a.tabIsUp());
+}
+
+// The "parameters missing" line fades out when the first edit drops its names, and the list below slides up.
+TEST(PluginKnobPickerTest, TheMissingLineFadesOutAndTheListSlidesUp) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("k", "Knob")});
+    CardLayout layout;
+    layout.slots = {slotFor("k"), slotFor("gone-param")};
+    node.module->setCardLayoutOverride(layout.toVar());
+    auto picker = rig.makePicker(node);
+    ASSERT_TRUE(picker->isMissingLineVisibleForTest());
+    const int top = picker->getRowsTopForTest();
+
+    FadeAnimateGuard animate;
+    picker->triggerRowToggleForTest(0);
+    EXPECT_EQ(picker->getMissingParameterCountForTest(), 0);
+    EXPECT_TRUE(picker->isMissingLineVisibleForTest());
+    EXPECT_TRUE(picker->getMissingParameterLineForTest().contains("gone-param")) << "its words stay while it fades";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_LT(picker->getRowsTopForTest(), top);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(picker->isMissingLineVisibleForTest());
+    EXPECT_TRUE(picker->getMissingParameterLineForTest().isEmpty());
+    EXPECT_LT(picker->getRowsTopForTest(), top - 10);
 }

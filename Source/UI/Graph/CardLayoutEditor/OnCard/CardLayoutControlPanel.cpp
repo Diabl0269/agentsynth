@@ -56,6 +56,12 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
         field->onReturnKey = [this] { commitRange(); };
         field->onFocusLost = [this] { commitRange(); };
     }
+    rangeFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
+    hintFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
+    hintFade_.onHidden = [this] {
+        if (!hintFade_.isShown())
+            hint_.setText({}, juce::dontSendNotification);
+    };
     hide_.setTitle("Hide from card");
     hide_.setTooltip("Hide this control from the card. It goes to the More row");
     hide_.setExplicitFocusOrder(7);
@@ -125,6 +131,14 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
                         {"Small", "Large"}, 2, CardWidget::Knob, CardWidget::KnobLarge);
         buildPairSwitch(direction_, "Direction", "Whether this fader stands up or lies down",
                         {"Vertical", "Horizontal"}, 3, CardWidget::FaderV, CardWidget::FaderH);
+        sizeFade_ = std::make_unique<synth::ui::FadeVisibility>(
+            std::initializer_list<juce::Component*>{&sizeCaption_, size_.get()});
+        directionFade_ = std::make_unique<synth::ui::FadeVisibility>(
+            std::initializer_list<juce::Component*>{&directionCaption_, direction_.get()});
+        sizeFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+        directionFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+        sizeFade_->setShown(false);
+        directionFade_->setShown(false);
     }
     if (showAs_ != nullptr)
         for (int i = 0; i < (int)kinds_.size(); ++i)
@@ -133,16 +147,13 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
     showAsCaption_.setVisible(showAs_ != nullptr);
     const bool hasSize = offersKnobSize(options_.widgetChoices, options_.widget);
     const bool hasDirection = offersFaderDirection(options_.widgetChoices, options_.widget);
-    size_->setVisible(hasSize);
-    sizeCaption_.setVisible(hasSize);
-    direction_->setVisible(hasDirection);
-    directionCaption_.setVisible(hasDirection);
+    sizeFade_->setShown(hasSize);
+    directionFade_->setShown(hasDirection);
     size_->setSelectedIndex(options_.widget == CardWidget::KnobLarge ? 1 : 0, juce::dontSendNotification);
     direction_->setSelectedIndex(options_.widget == CardWidget::FaderH ? 1 : 0, juce::dontSendNotification);
     const bool hasRange = options_.fullRange.has_value();
-    for (auto* c : std::initializer_list<juce::Component*>{&rangeCaption_, &rangeTo_, &minimum_, &maximum_})
-        c->setVisible(hasRange);
-    hint_.setVisible(false);
+    rangeFade_.setShown(hasRange);
+    hintFade_.setShown(false);
     fillFields();
     const int width = juce::jlimit(kMinWidth, kMaxWidth, std::max(kMinWidth, showAsWidth_ + 2 * kPad));
     setSize(width, 0);
@@ -168,31 +179,46 @@ int CardLayoutControlPanel::arrange() {
         showAs_->setBounds(kPad, y + kCaptionH, width, kSwitchH);
         y += kCaptionH + kSwitchH + kGap;
     }
-    if (size_ != nullptr && (size_->isVisible() || direction_->isVisible())) {
-        auto& caption = size_->isVisible() ? sizeCaption_ : directionCaption_;
-        auto& pair = size_->isVisible() ? *size_ : *direction_;
-        caption.setBounds(kPad, y, width, kCaptionH);
-        pair.setBounds(kPad, y + kCaptionH, width, kSwitchH);
-        y += kCaptionH + kSwitchH + kGap;
+    if (sizeFade_ != nullptr) {
+        // Size and Direction share one slot, so a swap between them keeps it; a lone arrival or exit grows or
+        // shrinks it with the fade (the rows are squeezed, not moved) and the rows below slide.
+        const int full = kCaptionH + kSwitchH;
+        const float pairShown = std::min(1.0f, sizeFade_->progress() + directionFade_->progress());
+        const int slot = scaled(full, pairShown);
+        squeeze(sizeCaption_, kPad, y, width, 0, kCaptionH, slot);
+        squeeze(directionCaption_, kPad, y, width, 0, kCaptionH, slot);
+        squeeze(*size_, kPad, y, width, kCaptionH, kSwitchH, slot);
+        squeeze(*direction_, kPad, y, width, kCaptionH, kSwitchH, slot);
+        y += slot + scaled(kGap, pairShown);
     }
     labelCaption_.setBounds(kPad, y, width, kCaptionH);
     label_.setBounds(kPad, y + kCaptionH, width, kFieldH);
     y += kCaptionH + kFieldH + kGap;
-    if (options_.fullRange.has_value()) {
-        rangeCaption_.setBounds(kPad, y, width, kCaptionH);
+    {
+        const float shown = rangeFade_.progress();
+        const int slot = scaled(kCaptionH + kFieldH, shown);
         const int field = (width - kToWidth) / 2;
-        minimum_.setBounds(kPad, y + kCaptionH, field, kFieldH);
-        rangeTo_.setBounds(kPad + field, y + kCaptionH, kToWidth, kFieldH);
-        maximum_.setBounds(kPad + width - field, y + kCaptionH, field, kFieldH);
-        y += kCaptionH + kFieldH;
-        if (hint_.isVisible()) {
-            hint_.setBounds(kPad, y + 2, width, kCaptionH);
-            y += kCaptionH + 2;
-        }
-        y += kGap;
+        squeeze(rangeCaption_, kPad, y, width, 0, kCaptionH, slot);
+        squeeze(minimum_, kPad, y, field, kCaptionH, kFieldH, slot);
+        squeeze(rangeTo_, kPad + field, y, kToWidth, kCaptionH, kFieldH, slot);
+        squeeze(maximum_, kPad + width - field, y, field, kCaptionH, kFieldH, slot);
+        y += slot;
+        const int hintSlot = scaled(kCaptionH + 2, hintFade_.progress());
+        squeeze(hint_, kPad, y, width, 2, kCaptionH, hintSlot);
+        y += hintSlot + scaled(kGap, shown);
     }
     hide_.setBounds(kPad, y, width, kSwitchH);
     return y + kSwitchH + kPad;
+}
+
+// `value` times a fade's progress, in whole pixels.
+int CardLayoutControlPanel::scaled(int value, float progress) { return juce::roundToInt((float)value * progress); }
+
+// Puts a row's component at `offset` inside a slot of `slotHeight` starting at `top`, cut off where the slot ends,
+// so a row that is fading in or out is squeezed into the room it has instead of overlapping its neighbours.
+void CardLayoutControlPanel::squeeze(juce::Component& c, int x, int top, int w, int offset, int height,
+                                     int slotHeight) {
+    c.setBounds(x, top + offset, w, juce::jlimit(0, height, slotHeight - offset));
 }
 
 void CardLayoutControlPanel::resized() { arrange(); }
@@ -211,11 +237,13 @@ void CardLayoutControlPanel::commitRange() {
     if (!options_.fullRange.has_value())
         return;
     const auto entry = parseRangeEntry(minimum_.getText(), maximum_.getText(), *options_.fullRange);
-    const bool changed = hint_.getText().isNotEmpty() != !entry.ok;
-    hint_.setText(entry.ok ? juce::String() : entry.hint, juce::dontSendNotification);
-    hint_.setVisible(!entry.ok);
-    if (changed)
-        setSize(getWidth(), arrange());
+    // The words stay until the fade-out ends (onHidden clears them); off screen the fade lands at once.
+    if (!entry.ok)
+        hint_.setText(entry.hint, juce::dontSendNotification);
+    hintFade_.setShown(!entry.ok);
+    if (entry.ok && !hintFade_.isFading())
+        hint_.setText({}, juce::dontSendNotification);
+    setSize(getWidth(), arrange());
     if (!entry.ok || entry.range == options_.range) {
         fillFields();
         return;

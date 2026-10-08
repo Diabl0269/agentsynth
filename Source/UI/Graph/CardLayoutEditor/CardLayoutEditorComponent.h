@@ -2,6 +2,7 @@
 
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorSource.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -61,6 +62,8 @@ public:
     void triggerResetToAutomaticForTest();
     int getMissingParameterCountForTest() const { return model_.missingNames().size(); }
     juce::String getMissingParameterLineForTest() const { return missingLabel_.getText(); }
+    bool isMissingLineVisibleForTest() const { return missingLabel_.isVisible(); }
+    int getRowsTopForTest() const { return rowsViewport_.getY(); }
     /** The visible row index whose key is `key` (a parameter id, or "#<n>" for group n), or -1. */
     int findRowForTest(const juce::String& key) const;
     CardLayoutEditorRow* getRowForTest(int row) const;
@@ -130,6 +133,8 @@ private:
     juce::TextEditor searchEditor_;
     juce::TextButton addGroupButton_{"+ Add group"};
     juce::Label missingLabel_;
+    synth::ui::FadeVisibility missingFade_{
+        &missingLabel_}; ///< The "parameters missing" line fades and its height follows.
 
     juce::Viewport rowsViewport_;
     juce::Component rowsContent_;

@@ -78,12 +78,16 @@ void CardLayoutEditorComponent::commitAndRebuild(const juce::String& focusKey) {
 void CardLayoutEditorComponent::updateMissingLabel() {
     const auto names = model_.missingNames();
     if (names.isEmpty()) {
-        missingLabel_.setText({}, juce::dontSendNotification);
+        // The words stay until the fade-out ends (onHidden clears them); off screen it lands at once.
+        missingFade_.setShown(false);
+        if (!missingFade_.isFading())
+            missingLabel_.setText({}, juce::dontSendNotification);
         return;
     }
     missingLabel_.setText(juce::String(names.size()) +
                               " parameters missing in this version: " + names.joinIntoString(", "),
                           juce::dontSendNotification);
+    missingFade_.setShown(true);
 }
 
 // Writes whichever scope "Apply to" names; the source decides what that means and how it undoes. The

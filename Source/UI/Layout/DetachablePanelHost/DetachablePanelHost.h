@@ -2,6 +2,7 @@
 
 #include "DetachedPanelWindow.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -105,6 +106,10 @@ public:
     juce::String getButtonTooltipForTest() { return detachButton_.getTooltip(); }
     juce::String getButtonTextForTest() const { return detachButton_.getButtonText(); }
     bool isDetachButtonVisibleForTest() const noexcept { return detachButton_.isVisible(); }
+    /** Where the panel starts, i.e. the header strip's current height (0 when hidden, kHeaderStripHeight when shown;
+     * between mid-fade). */
+    int getHeaderHeightForTest() const noexcept { return panel_.getY(); }
+    bool isHeaderShownForTest() const noexcept { return headerFade_.isShown(); }
     juce::Component& getPanelForTest() noexcept { return panel_; }
 
 protected:
@@ -142,6 +147,9 @@ private:
 
     juce::Label titleLabel_;
     juce::DrawableButton detachButton_{"detachPanel", juce::DrawableButton::ImageFitted};
+    /// The docked header strip (title and detach button) fades when a host's header goes in or out of the tab strip;
+    /// the panel's room follows its progress. A detached panel's window borrows these, so it lands first.
+    FadeVisibility headerFade_{&titleLabel_, &detachButton_};
     bool embeddedHeader_ = false;
     bool createsNativeWindows_ = false;
     juce::String focusRegionId_;

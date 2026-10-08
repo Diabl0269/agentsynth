@@ -403,7 +403,10 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 ## Popup windows
 
 Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, alert boxes and
-dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. The
+dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. One kind of call-out is
+the exception: a popover that JUCE launches and dismisses itself (`CallOutBox::launchAsynchronously`, today the
+colour picker) only eases in, through [`CalloutReveal`](#popup-reveal), because it dismisses synchronously and has no
+window of ours to fade out. The
 mechanism is `synth::ui::PopupMotion` (`Source/UI/Layout/PopupMotion.{h,cpp}`); the numbers and the
 frame math are pure functions in `synth::ui::popup_motion`, unit-tested in
 `Tests/UI/Layout/PopupMotionTests.cpp`. It reuses `AnimationDriver` and the easing helpers above.
@@ -626,6 +629,17 @@ shrink away like controls on a card (`control_motion`, `ControllerSurfaceMotion.
 bounce, a picture of the removed control shrinking 150 ms, a plain 80 ms fade under Reduce Motion). Switching to
 another controller, or anything off screen or under Animations Off, lands at once.
 
+The rest of the small swaps use it too. The Card Layout Editor's panels: the on-card control panel's rows (Size and
+Direction cross-fade in one shared slot, the Range row and its hint fade while the panel grows or shrinks, rows being
+squeezed into the room they have rather than overlapping), the "parameters missing" line of the list editor, and the
+ADSR strip's Controls switch (the "+ Add control" button slides over as it fades). The module library's help
+popover: a section's body fades while its height tweens, so the sections below slide and the call-out resizes each
+frame. A docked panel's header strip (`DetachablePanelHost`) when its header moves into the tab strip: the panel slides
+up as the strip fades; detaching or re-docking mid-fade lands it first (`snapTo`), since the window borrows the
+strip's components. Kept instant on purpose: the Mod Matrix and MIDI destination pickers' search filtering (rows
+filtered by every keystroke, not a state change), and the help popover's own close (the library owns the call-out box and re-parents the
+popup between it and the pinned panel, so closing deletes the box in the same call; a fade-out would outlive it).
+
 ## Tooltips
 
 One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app
@@ -657,7 +671,9 @@ owned by the popup content and started from its `parentHierarchyChanged()`: the 
 the content is parented, then, on the next message-loop turn once it is showing, fades in over 160 ms (`easeOutCubic`)
 while sliding 8 px out of the side that faces the element that opened it (the side of the callout with the largest inset,
 `directionToAnchor`; a popover under a button grows down from it), landing exactly on its final bounds. Only the entrance
-is animated: a callout dismisses synchronously, so the 110 ms exit of the motion rules has nothing to run on. Today the
+is animated, and no exit is promised for this kind of call-out: it dismisses synchronously, so the 110 ms exit of the
+motion rules has nothing to run on (a call-out the app closes itself leaves through `PopupMotion::dismissCallOut`,
+[Popup windows](#popup-windows)). Today the
 colour picker (`ColourPickerPopup`) uses it, which covers the Timeline track swatch, the ruler's marker colours, the macro
 recolour and the mixer's colour dot.
 

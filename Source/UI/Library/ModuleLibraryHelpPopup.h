@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -251,6 +252,9 @@ public:
 
     juce::String getSectionTitleForTest(int index) const { return sections_[(size_t)index].title; }
     bool isSectionExpandedForTest(int index) const { return sections_[(size_t)index].expanded; }
+    /** The section body's current height and whether its rows are on screen (they stay until a fade-out ends). */
+    int getSectionBodyHeightForTest(int index) const { return sections_[(size_t)index].holder->getHeight(); }
+    bool isSectionBodyVisibleForTest(int index) const { return sections_[(size_t)index].holder->isVisible(); }
     juce::StringArray getSectionLinesForTest(int index) const { return sections_[(size_t)index].lines; }
 
     /** Simulates clicking the header of section `index` — the same synchronous "call the handler
@@ -509,6 +513,10 @@ private:
         bool expanded = true; // open by default — a first-time user should not need to click first
         std::unique_ptr<HeaderRow> header;
         std::vector<std::unique_ptr<TextRow>> body;
+        /// Holds the body rows: fades with the section and is as tall as its rows times the fade's progress, so
+        /// the sections below slide (docs/layout/animation.md#fading-things-in-and-out).
+        std::unique_ptr<juce::Component> holder;
+        std::unique_ptr<synth::ui::FadeVisibility> fade;
     };
 
     void addSection(const juce::String& title, const juce::StringArray& lines) {
@@ -518,11 +526,17 @@ private:
         const int index = (int)sections_.size();
         section.header = std::make_unique<HeaderRow>(title, [this, index] { toggleSection(index); });
         column_.addAndMakeVisible(*section.header);
+        section.holder = std::make_unique<juce::Component>();
+        section.holder->setInterceptsMouseClicks(false, true);
+        column_.addAndMakeVisible(*section.holder);
         for (const auto& line : lines) {
             auto row = std::make_unique<TextRow>(line);
-            column_.addAndMakeVisible(*row);
+            section.holder->addAndMakeVisible(*row);
             section.body.push_back(std::move(row));
         }
+        section.fade =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{section.holder.get()});
+        section.fade->onFrame = [this] { refit(); };
         sections_.push_back(std::move(section));
     }
 
@@ -534,7 +548,7 @@ private:
         s.body.clear(); // each TextRow's destructor detaches it from column_ — see juce::Component
         for (const auto& line : newLines) {
             auto row = std::make_unique<TextRow>(line);
-            column_.addAndMakeVisible(*row);
+            s.holder->addAndMakeVisible(*row);
             s.body.push_back(std::move(row));
         }
         applyThemeColours(); // re-pushes colours onto the fresh rows and re-lays-out
@@ -545,12 +559,25 @@ private:
         auto& section = sections_[(size_t)index];
         section.expanded = !section.expanded;
         section.header->setExpandedForPaint(section.expanded);
+        // The body fades and its height follows the fade, frame by frame (refit); off screen it lands at once.
+        section.fade->setShown(section.expanded);
+        refit();
+    }
+
+    // Re-lays the column out and re-fits the outer popup to the now shorter/taller content — a manually-hosted
+    // juce::CallOutBox tracks its content component's size via childBoundsChanged(), so this
+    // is what makes collapsing a section actually shrink the popup rather than leaving dead
+    // space (mirrors MidiDestinationPicker::refreshRows()); harmless no-op while floating.
+    void refit() {
         layoutColumn();
-        // Re-fits the outer popup to the now shorter/taller content — a manually-hosted
-        // juce::CallOutBox tracks its content component's size via childBoundsChanged(), so this
-        // is what makes collapsing a section actually shrink the popup rather than leaving dead
-        // space (mirrors MidiDestinationPicker::refreshRows()); harmless no-op while floating.
         setSize(getWidth(), preferredHeight());
+    }
+
+    static int bodyHeight(const SectionRow& section) {
+        int natural = 0;
+        for (auto& row : section.body)
+            natural += row->getPreferredHeight();
+        return juce::roundToInt((float)natural * section.fade->progress());
     }
 
     void applyThemeColours() {
@@ -582,15 +609,15 @@ private:
         for (auto& section : sections_) {
             section.header->setBounds(0, y, width, kHeaderHeight);
             y += kHeaderHeight;
+            int rowY = 0;
             for (auto& row : section.body) {
                 row->layoutForWidth(width);
-                row->setVisible(section.expanded);
-                if (section.expanded) {
-                    row->setBounds(0, y, width, row->getPreferredHeight());
-                    y += row->getPreferredHeight();
-                }
+                row->setBounds(0, rowY, width, row->getPreferredHeight());
+                rowY += row->getPreferredHeight();
             }
-            y += kSectionGap;
+            const int height = bodyHeight(section);
+            section.holder->setBounds(0, y, width, height);
+            y += height + kSectionGap;
         }
         column_.setSize(width, juce::jmax(y, 1));
     }
@@ -598,11 +625,7 @@ private:
     int preferredHeight() const {
         int rowsHeight = 0;
         for (auto& section : sections_) {
-            rowsHeight += kHeaderHeight;
-            if (section.expanded)
-                for (auto& row : section.body)
-                    rowsHeight += row->getPreferredHeight();
-            rowsHeight += kSectionGap;
+            rowsHeight += kHeaderHeight + bodyHeight(section) + kSectionGap;
         }
         const int content = kOuterPadding * 2 + kTopBarHeight + 4 + rowsHeight;
         return juce::jlimit(kTopBarHeight + kHeaderHeight + kOuterPadding * 2, kMaxHeight, content);
