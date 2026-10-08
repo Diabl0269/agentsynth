@@ -59,6 +59,7 @@ public:
             // updateSettings() persists anything, or the previous provider's host text gets
             // written under the new provider's key.
             const auto* descriptor = selectedDescriptor();
+            customServerRevealed = remoteHostIsCustom();
             hostEditor.setText(
                 appProperties.getUserSettings()->getValue(hostSettingsKeyFor(descriptor), defaultHostFor(descriptor)),
                 juce::dontSendNotification);
@@ -79,6 +80,24 @@ public:
         hostEditor.onReturnKey = [this] { updateSettings(); };
         hostEditor.onFocusLost = [this] { updateSettings(); };
 
+        // The hosted server's address is baked into the app (synth::branding::kApiBaseUrl), so the
+        // address box stays out of the way for "remote" unless the user asks for a custom server.
+        addChildComponent(customServerButton);
+        customServerButton.setButtonText("Custom server address...");
+        customServerButton.setTitle("Use a custom server address");
+        customServerButton.setTooltip("Point Remote at your own AgentSynth server instead of the hosted one.");
+        customServerButton.onClick = [this] {
+            customServerRevealed = true;
+            updateHostFieldForSelectedProvider();
+            hostEditor.grabKeyboardFocus();
+        };
+        addChildComponent(useHostedButton);
+        useHostedButton.setButtonText("Use hosted server");
+        useHostedButton.setTitle("Use the hosted AgentSynth server");
+        useHostedButton.setTooltip("Switch back to the hosted AgentSynth server and forget any custom address.");
+        useHostedButton.onClick = [this] { switchToHostedServer(); };
+
+        customServerRevealed = remoteHostIsCustom();
         updateHostFieldForSelectedProvider();
 
         // Local chat-history retention. This is deliberately the only *local* retention
@@ -198,6 +217,11 @@ public:
         auto hostRow = bounds.removeFromTop(25);
         hostLabel.setBounds(hostRow.removeFromLeft(100));
         hostEditor.setBounds(hostRow);
+
+        auto hostedRow = bounds.removeFromTop(28).withTrimmedTop(3);
+        useHostedButton.setBounds(hostedRow.removeFromLeft(150));
+        hostedRow.removeFromLeft(8);
+        customServerButton.setBounds(hostedRow.removeFromLeft(190));
 
         bounds.removeFromTop(30);
         auto historyRow = bounds.removeFromTop(25);
@@ -348,11 +372,28 @@ private:
                                                                      : juce::String("http://localhost:11434");
     }
 
+    bool remoteHostIsCustom() const {
+        return appProperties.getUserSettings()->getValue("remoteHost").trim().isNotEmpty();
+    }
+
+    // Back to the baked-in hosted server: provider "remote", no custom address.
+    void switchToHostedServer() {
+        for (size_t i = 0; i < visibleProviders.size(); ++i)
+            if (visibleProviders[i]->id == "remote")
+                providerCombo.setSelectedId((int)i + 1, juce::dontSendNotification);
+        customServerRevealed = false;
+        hostEditor.setText({}, juce::dontSendNotification);
+        updateSettings();
+    }
+
     void updateHostFieldForSelectedProvider() {
         const auto* descriptor = selectedDescriptor();
-        bool showHost = descriptor == nullptr || descriptor->needsHost;
+        const bool isRemote = descriptor != nullptr && descriptor->id == "remote";
+        bool showHost = descriptor == nullptr || (descriptor->needsHost && (!isRemote || customServerRevealed));
         hostLabel.setVisible(showHost);
         hostEditor.setVisible(showHost);
+        customServerButton.setVisible(isRemote && !customServerRevealed);
+        useHostedButton.setVisible(!isRemote || remoteHostIsCustom());
         hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
                           juce::dontSendNotification);
     }
@@ -377,6 +418,9 @@ private:
     juce::ComboBox providerCombo;
     juce::Label hostLabel;
     juce::TextEditor hostEditor;
+    juce::TextButton customServerButton;
+    juce::TextButton useHostedButton;
+    bool customServerRevealed = false;
     juce::Label historyRetentionLabel;
     juce::ComboBox historyRetentionCombo;
     juce::Label requestTimeoutLabel;

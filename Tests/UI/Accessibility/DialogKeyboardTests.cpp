@@ -379,7 +379,7 @@ TEST_F(AccessibilitySettingsTest, AiTabTabOrder) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
     expectTabOrder(tabContent(window, tabIndex(window, "AI")),
-                   names({"AI provider", "AI provider host", "Local history retention", "Request timeout"}));
+                   names({"AI provider", "Use a custom server address", "Local history retention", "Request timeout"}));
 }
 
 TEST_F(AccessibilitySettingsTest, FeedbackTabTabOrderIncludesSendOnceThereIsText) {

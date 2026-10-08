@@ -432,6 +432,7 @@ add_executable(Tests
     FX/DistortionSweepTests.cpp
     Modules/OscillatorCVModulationTests.cpp
     Modules/OscillatorUnisonDetuneCVAliasingTests.cpp
+    UI/Settings/AIHostedServerTests.cpp
     UI/Settings/SettingsWindowTests.cpp
     UI/Settings/SettingsWindowEscapeFadeTests.cpp
     UI/Settings/SettingsWindowTabKeysTests.cpp
