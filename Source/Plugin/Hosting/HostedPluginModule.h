@@ -263,6 +263,13 @@ public:
         return (raw == 2 && !isDualIO()) ? 1 : raw;
     }
 
+    /** True when the published instance has exactly 2 inputs or exactly 2 outputs, i.e. the Dual I/O toggle does
+     *  something. The card shows its Dual I/O button only then. */
+    bool hasStereoPairInstance() const noexcept {
+        return visibleInputs_.load(std::memory_order_relaxed) == 2 ||
+               visibleOutputs_.load(std::memory_order_relaxed) == 2;
+    }
+
     juce::String getInputPortLabel(int channelIndex) const override;
     juce::String getOutputPortLabel(int channelIndex) const override;
 

@@ -18,6 +18,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <chrono>
 #include <gtest/gtest.h>
+#include <tuple>
 
 using synth::HostedPluginBackend;
 using synth::HostedPluginModule;
@@ -374,4 +375,36 @@ TEST(HostedPluginDualIOTest, LoadingAPatchWithTwoOfTheSamePluginNamesThemDivaAnd
             titles.push_back(synth::moduleTitle(*node));
     ASSERT_EQ(titles.size(), 2u);
     EXPECT_TRUE((titles[0] == "Diva" && titles[1] == "Diva 2") || (titles[0] == "Diva 2" && titles[1] == "Diva"));
+}
+
+// ---------------------------------------------------------------------------
+// 6. The header button only exists for a stereo pair
+// ---------------------------------------------------------------------------
+
+namespace {
+bool dualIOButtonVisible(ModuleComponent& card) {
+    for (auto* child : card.getChildren())
+        if (auto* button = dynamic_cast<juce::DrawableButton*>(child))
+            if (button->getName() == "Dual I/O")
+                return button->isVisible();
+    return false;
+}
+} // namespace
+
+TEST(HostedPluginDualIOTest, TheDualIOButtonShowsOnlyOnceAStereoInstancePublishes) {
+    for (const auto& [inputs, outputs, expected] :
+         {std::tuple{2, 2, true}, std::tuple{0, 2, true}, std::tuple{1, 1, false}, std::tuple{0, 6, false}}) {
+        SCOPED_TRACE(juce::String(inputs) + " in / " + juce::String(outputs) + " out");
+        StubBackend backend([=] { return std::make_unique<StubPluginInstance>(inputs, outputs, "Card Plugin"); });
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        HostedPluginModule module;
+        ModuleComponent card(&module, juce::AudioProcessorGraph::NodeID(1), editor);
+        card.setSize(280, 400);
+        EXPECT_FALSE(dualIOButtonVisible(card)) << "a bare card has nothing to split";
+
+        module.loadPlugin(descriptionNamed("Card Plugin", 7), backend);
+        ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
+        EXPECT_EQ(dualIOButtonVisible(card), expected);
+    }
 }
