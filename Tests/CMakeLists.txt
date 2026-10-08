@@ -752,6 +752,7 @@ add_executable(Tests
     UI/MidiRemote/OrphanControllerTests.cpp
     UI/MidiRemote/MidiRemotePanelAssignTests.cpp
     UI/MidiRemote/MidiRemoteUndoRoutingTests.cpp
+    UI/MidiRemote/MidiRemoteFadeTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp

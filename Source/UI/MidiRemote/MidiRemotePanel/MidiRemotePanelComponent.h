@@ -2,6 +2,7 @@
 
 #include "MidiRemote/EncoderAutoDetect.h"
 #include "MidiRemote/PickTarget.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
@@ -181,7 +182,9 @@ public:
     /** MIDI inputs a Recreate could bind to: not already used by a profile (Host MIDI in the plugin build). */
     std::vector<synth::ControllerProfile::Input> getRecreateInputs() const;
     juce::String getOrphanStatusTextForTest() const { return orphanView_.getStatusTextForTest(); }
-    bool isOrphanViewShownForTest() const { return orphanView_.isVisible(); }
+    bool isOrphanViewShownForTest() const { return orphanFade_.isShown(); }
+    bool isInspectorShownForTest() const { return inspectorFade_.isShown(); }
+    bool isPageStripShownForTest() const { return pageStripFade_.isShown(); }
     OrphanControllerComponent& getOrphanViewForTest() { return orphanView_; }
     ControlInspectorComponent& getInspectorForTest() { return inspector_; }
     const ControllerSurfaceCell* findSurfaceCellForTest(const juce::String& controlId) const {
@@ -351,6 +354,11 @@ private:
     ControlInspectorComponent inspector_;
     OrphanControllerComponent orphanView_;
     juce::String orphanStatus_;
+    // The inspector and the orphan view cross-fade in the same bounds; the page strip fades with the controller
+    // (docs/layout/animation.md#fading-things-in-and-out).
+    FadeVisibility inspectorFade_{&inspector_};
+    FadeVisibility orphanFade_{&orphanView_};
+    FadeVisibility pageStripFade_{&pageStrip_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiRemotePanelComponent)
 };

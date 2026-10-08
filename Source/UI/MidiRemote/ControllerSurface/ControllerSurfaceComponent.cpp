@@ -19,6 +19,7 @@
 
 #include "ControllerSurfaceComponent.h"
 
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <algorithm>
@@ -49,6 +50,11 @@ ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 // refresh -- Detect, a move, a delete, an undo/redo) instead prunes the existing selection down to
 // whatever ids still exist, so the caller doesn't have to re-apply it after every mutation.
 void ControllerSurfaceComponent::setControls(const juce::String& profileId, const std::vector<CellModel>& cells) {
+    const bool animate = profileId == profileId_ && !profileId.isEmpty() && FadeVisibility::canAnimateIn(this);
+    auto departures = animate ? pictureDepartures(cells) : std::vector<Departure>{};
+    std::vector<juce::String> previousIds;
+    for (auto* cell : cells_)
+        previousIds.push_back(cell->getControlId());
     if (profileId != profileId_) {
         selectedIds_.clear();
         restoreOrResetView(profileId);
@@ -87,6 +93,7 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         if (onSelectionChanged)
             onSelectionChanged(selectedIds_);
     }
+    startCellMotion(std::move(departures), previousIds, animate);
 }
 
 void ControllerSurfaceComponent::setDetectPulseControlId(const juce::String& controlId) {

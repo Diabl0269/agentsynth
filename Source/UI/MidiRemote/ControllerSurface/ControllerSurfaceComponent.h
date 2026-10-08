@@ -2,6 +2,8 @@
 
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
 #include "MidiRemote/RemoteModel.h"
+#include "UI/Layout/ControlMotion.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -84,6 +86,11 @@ public:
     const ControllerSurfaceCell* findCellForTest(const juce::String& controlId) const;
     /** Non-const overload for a test driving a real mouseDown/mouseDrag/mouseUp on the cell found. */
     ControllerSurfaceCell* findCellForTest(const juce::String& controlId);
+    /** Test seams for the grow-in / shrink-away of controls added to or removed from the shown controller
+     *  (ControllerSurfaceMotion.cpp): the leaving pictures on the grid, and a hand-stepped frame (t 0..1;
+     *  1 lands everything, as the end of the motion does). */
+    int getShrinkGhostCountForTest() const noexcept { return ghosts_.size(); }
+    void stepMotionForTest(float t);
     /** Test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
 
@@ -134,6 +141,19 @@ private:
     void setSelectionInternal(std::vector<juce::String> ids, bool notify = true);
     void handleCellSelected(const juce::String& controlId, const juce::ModifierKeys& mods);
 
+    // ---- Controls growing in / shrinking away (ControllerSurfaceMotion.cpp) ----
+    struct Departure {
+        juce::Image image;
+        juce::Rectangle<int> bounds;
+        synth::ui::control_motion::Axis axis = synth::ui::control_motion::Axis::both;
+    };
+    /** Before a same-profile rebuild: a picture of every cell whose id is not in `keep`. */
+    std::vector<Departure> pictureDepartures(const std::vector<CellModel>& keep) const;
+    /** After the rebuild: the departures shrink away and the cells whose id is not in `previousIds` grow in. */
+    void startCellMotion(std::vector<Departure> departures, const std::vector<juce::String>& previousIds, bool animate);
+    void applyMotionFrame(float elapsedMs);
+    void landMotion();
+
     // ---- Marquee / pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
 
@@ -167,6 +187,11 @@ private:
     juce::String pulseControlId_;
     double pulseSinceMs_ = 0.0;
     juce::OwnedArray<ControllerSurfaceCell> cells_;
+    juce::OwnedArray<synth::ui::control_motion::ShrinkGhost> ghosts_;
+    std::vector<juce::Component::SafePointer<ControllerSurfaceCell>> arriving_;
+    synth::ui::ReorderFramePump motionPump_{*this};
+    double motionStartMs_ = 0.0;
+    bool motionReduced_ = false;
 
     // Marquee drag state (ControllerSurfaceMarquee.cpp), in content-local (canvas) coordinates so
     // it survives pan/zoom: a Shift-press on empty grid space that turns into a drag once the

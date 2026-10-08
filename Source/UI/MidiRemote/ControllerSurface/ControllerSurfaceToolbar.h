@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -24,7 +25,7 @@ public:
 
     /** The right-aligned undo cue on the button row; empty hides it. */
     void setUndoHint(const juce::String& text);
-    juce::String getUndoHint() const { return undoHintLabel_.getText(); }
+    juce::String getUndoHint() const { return undoFade_.isShown() ? undoHintLabel_.getText() : juce::String(); }
 
     /** The selected controller's
      *  handshake port-mismatch warning (MidiLearnController::getHandshakeIssueForProfile), shown as
@@ -33,11 +34,14 @@ public:
      *  must re-layout afterwards, same as setDetectOn() (see
      * docs/control/midi-remote-device-handshake.md#device-handshake). */
     void setPortHint(const juce::String& text);
-    juce::String getPortHint() const { return portHintLabel_.getText(); }
+    juce::String getPortHint() const { return portFade_.isShown() ? portHintLabel_.getText() : juce::String(); }
 
-    /** Height this toolbar wants right now (the hint row adds to it). */
+    /** Height this toolbar wants right now: each hint row adds its height times its fade's progress, so the
+     *  rows below slide while a hint fades in or out. */
     int getPreferredHeight() const noexcept;
 
+    /** Fired on each frame of a hint row's fade, when getPreferredHeight() has changed: the owner lays out again. */
+    std::function<void()> onPreferredHeightChanged;
     std::function<void(bool on)> onDetectToggled;
     /** The anchor is the button the popup menu should hang from. */
     std::function<void(juce::Component& anchor)> onAssignRequested;
@@ -51,6 +55,7 @@ public:
     static constexpr int kHintHeight = 34;
 
 private:
+    void relayoutForHintFade();
     bool detectOn_ = false;
     juce::TextButton detectButton_;
     juce::TextButton assignButton_;
@@ -59,6 +64,11 @@ private:
     juce::Label hintLabel_;
     juce::Label undoHintLabel_;
     juce::Label portHintLabel_;
+    // The hint rows fade (FadeVisibility, docs/layout/animation.md#fading-things-in-and-out); the two full-width
+    // rows also tween their height with the fade.
+    FadeVisibility detectHintFade_{&hintLabel_};
+    FadeVisibility undoFade_{&undoHintLabel_};
+    FadeVisibility portFade_{&portHintLabel_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceToolbar)
 };

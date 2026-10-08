@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -139,6 +140,8 @@ private:
     juce::String selectedProfileId_;
     bool hosted_ = false;
     juce::TextButton addControllerButton_{"+ Add controller"};
+    synth::ui::FadeVisibility addControllerFade_{
+        &addControllerButton_};       // docs/layout/animation.md#fading-things-in-and-out
     juce::String announcedValueText_; // last getAccessibilityValueText() handed to the peer
 
     void refreshAccessibilityValue();

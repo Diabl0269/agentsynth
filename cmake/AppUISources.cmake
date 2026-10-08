@@ -529,6 +529,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceSelection.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMarquee.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceGroupDrag.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMotion.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceView.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp

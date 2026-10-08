@@ -616,6 +616,16 @@ Preferences section headers and the fold-all strip, and the Keyboard Shortcuts t
 instant on purpose), are not faded. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
 something already on screen so what was there from the start does not fade.
 
+The MIDI Remote panel uses it too: the inspector and the orphan view cross-fade in the same spot; the page strip
+fades with the selected controller; the Detect hint and the handshake port warning rows fade while the toolbar's
+height follows `progress()` (the toolbar's `onPreferredHeightChanged` makes the panel lay out again, so the surface
+slides rather than jumps); the undo cue fades; the inspector's control fields fade as one group, with their
+divider, when a control is selected or the selection empties; the Add Controller button fades out in a plugin and
+back in. Controls added to or removed from the shown controller on the surface do not fade: they grow in and
+shrink away like controls on a card (`control_motion`, `ControllerSurfaceMotion.cpp`: 200 ms grow with the 8%
+bounce, a picture of the removed control shrinking 150 ms, a plain 80 ms fade under Reduce Motion). Switching to
+another controller, or anything off screen or under Animations Off, lands at once.
+
 ## Tooltips
 
 One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app

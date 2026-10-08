@@ -462,6 +462,15 @@ test file in `Tests/CMakeLists.txt` the same way (see that file's `MidiRemote/` 
 
 ---
 
+### Motion
+
+Nothing in the panel pops. The inspector and the orphan view cross-fade; the page strip, the Detect hint, the port
+warning row, the undo cue, the inspector's control fields and the Add Controller button fade with
+`FadeVisibility`, and the two hint rows tween the toolbar's height so the surface slides. A control added to or
+removed from the shown controller grows in or shrinks away on the surface like controls on a card; a different
+controller replaces the grid at once. See
+[Fading things in and out](../layout/animation.md#fading-things-in-and-out).
+
 ## Add controller
 
 "+ Add controller" → a popover: **MIDI input device** (the `juce::MidiInput::getAvailableDevices()`

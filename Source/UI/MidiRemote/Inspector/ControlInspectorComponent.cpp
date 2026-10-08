@@ -506,6 +506,8 @@ ControlInspectorComponent::ControlInspectorComponent() {
             onLearnTargetRequested(learnTargetButton_);
     };
     addAndMakeVisible(learnTargetButton_);
+
+    fieldsFade_.onFrame = [this] { repaint(); }; // the divider fades with the fields
 }
 
 // Out-of-line so the OwnedArray<AssignmentRow> member can delete its (complete, here) element
@@ -524,14 +526,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
                                                      : juce::String("No control selected"),
                            juce::dontSendNotification);
         nameLabel_.setVisible(true);
-        kindCombo_.setVisible(false);
-        messageSpecLabel_.setVisible(false);
-        relearnButton_.setVisible(false);
-        encodingCombo_.setVisible(false);
-        autoDetectButton_.setVisible(false);
-        buttonModeLabel_.setVisible(false);
-        focusBankToggle_.setVisible(false);
-        learnTargetButton_.setVisible(false);
+        fieldsFade_.setShown(false);
         resized();
         repaint();
         return;
@@ -541,28 +536,20 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     nameLabel_.setVisible(true);
 
     kindCombo_.setSelectedId(kindToComboId(model_.control.kind), juce::dontSendNotification);
-    kindCombo_.setVisible(true);
 
     messageSpecLabel_.setText(formatMessageSpec(model_.control.message), juce::dontSendNotification);
-    messageSpecLabel_.setVisible(true);
-
-    relearnButton_.setVisible(true);
 
     populateEncodingCombo(encodingCombo_, model_.control);
     encodingCombo_.setSelectedId(encodingToComboId(model_.control.encoding), juce::dontSendNotification);
-    encodingCombo_.setVisible(true);
 
-    autoDetectButton_.setVisible(true);
     autoDetectButton_.setEnabled(canAutoDetectEncoding(model_.control));
 
     buttonModeLabel_.setText(model_.control.buttonMode == synth::ButtonMode::toggle ? "Toggle" : "Momentary",
                              juce::dontSendNotification);
-    buttonModeLabel_.setVisible(true);
 
     focusBankToggle_.setToggleState(model_.control.focusBank, juce::dontSendNotification);
-    focusBankToggle_.setVisible(true);
 
-    learnTargetButton_.setVisible(true);
+    fieldsFade_.setShown(true);
 
     resized();
     repaint();
@@ -639,11 +626,11 @@ void ControlInspectorComponent::paint(juce::Graphics& g) {
     const juce::Colour background = lf != nullptr ? lf->getTheme().colors.surface : juce::Colours::black;
     g.fillAll(background);
 
-    if (!model_.hasControl)
+    if (!fieldsFade_.isShown() && !fieldsFade_.isFading())
         return;
 
     const juce::Colour lineColour = lf != nullptr ? lf->getTheme().colors.border : juce::Colours::grey;
-    g.setColour(lineColour);
+    g.setColour(lineColour.withMultipliedAlpha(fieldsFade_.progress()));
     const int dividerY = focusBankToggle_.getBottom() + kDividerGap / 2;
     g.drawHorizontalLine(dividerY, static_cast<float>(getLocalBounds().getX()),
                          static_cast<float>(getLocalBounds().getRight()));
