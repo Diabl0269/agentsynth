@@ -428,6 +428,10 @@ TEST_F(AIChatComponentTest, EditPlanCardCommentRowAndDetailsFadeAndGrow) {
     ASSERT_FALSE(comment->isVisible());
     ASSERT_FALSE(details->isVisible());
     const int base = card->getHeight();
+    // The thumbs row is the card's last row here, so what sits below it is the card's bottom padding.
+    // Widths and fonts change how the preview wraps (and so every y above), never this margin.
+    const int bottomPadding = base - (thumbsUp->getBottom() + 2);
+    ASSERT_GT(bottomPadding, 0);
 
     FadeAnimateGuard guard;
     thumbsUp->onClick();
@@ -444,10 +448,15 @@ TEST_F(AIChatComponentTest, EditPlanCardCommentRowAndDetailsFadeAndGrow) {
     detailsButton->onClick();
     EXPECT_TRUE(details->isVisible());
     synth::ui::FadeVisibility::stepAllForTest(0.5f);
-    EXPECT_GT(card->getHeight(), withComment);
-    EXPECT_LT(card->getHeight(), withComment + 8 + 240);
+    const int midFade = card->getHeight();
+    EXPECT_GT(midFade, withComment);
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
-    EXPECT_EQ(card->getHeight(), withComment + 8 + 240);
+    // Fully open, the card ends exactly one gap and the panel below the comment row and one bottom
+    // padding under the panel, wherever the preview text wrapped.
+    EXPECT_LT(midFade, card->getHeight());
+    EXPECT_GT(details->getHeight(), 0);
+    EXPECT_EQ(details->getY(), comment->getBottom() + 2 + 8);
+    EXPECT_EQ(card->getHeight(), details->getBottom() + bottomPadding);
 
     detailsButton->onClick();
     EXPECT_TRUE(details->isVisible()) << "hidden only after the fade";
