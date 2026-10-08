@@ -185,6 +185,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
         return;
     }
     AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true);
+    engine.updateModuleNames(); // a restored second Diva reads "Diva 2" right away
     // This path replaces the graph without going through publishTimeline, so it recounts the
     // mixer's soloed strips itself — a restored session's solo flags live in the strips' extra
     // state (docs/mixer/mixer.md#solo-is-a-render-time-gate), and a stale count would leave the mix stuck (un)gated.

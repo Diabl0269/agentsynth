@@ -15,11 +15,15 @@ constexpr int kReapRetryDelayMs = 250;
 } // namespace
 
 HostedPluginModule::HostedPluginModule()
-    : ModuleBase("Hosted Plugin", kMaxPluginChannels, kMaxPluginChannels) {
+    : ModuleBase("Hosted Plugin", kMaxPluginChannels, kMaxPluginChannels, StereoAudio::Declared) {
     // 16 in / 16 out, for the node's whole lifetime, whatever plugin (if any) it ends up hosting.
     // See the class comment: JUCE fixes the bus layout here and renegotiating it would drop every
     // connection the node has.
     addMuteParameter();
+    // StereoAudio::Declared: the "dualIO" parameter exists (default ON = separate Left/Right jacks, what every
+    // project saved before the toggle loads as) but only does anything once the published instance has exactly 2
+    // inputs / 2 outputs; see getVisibleOutputPortCount(). The plugin's own parameters live on the inner
+    // instance, so this one never shifts their indices.
 }
 
 HostedPluginModule::~HostedPluginModule() {
@@ -189,9 +193,47 @@ void HostedPluginModule::prepareInstance(juce::AudioPluginInstance& instance) co
     instance.prepareToPlay(currentSampleRate_, currentBlockSize_);
 }
 
+void HostedPluginModule::negotiateStereoMainBuses(juce::AudioPluginInstance& instance) {
+    const auto layout = instance.getBusesLayout();
+    const auto stereo = juce::AudioChannelSet::stereo();
+
+    // Only a main bus that is mono (or, for the output, absent/disabled) is widened to stereo. 2 is already
+    // stereo; 3+ is a wider plugin whose raw jacks stay as they are. An INPUT that is disabled (an instrument)
+    // stays off. Aux buses (index 1+) are carried through untouched, so a sidechain is never enabled here.
+    auto widen = [&stereo](juce::Array<juce::AudioChannelSet>& buses, bool isInput) {
+        if (buses.isEmpty())
+            return false;
+        auto& main = buses.getReference(0);
+        const int n = main.size();
+        if (n >= 2 || (isInput && n == 0))
+            return false;
+        main = stereo;
+        return true;
+    };
+
+    auto candidate = layout;
+    const bool widenedIn = widen(candidate.inputBuses, /*isInput*/ true);
+    const bool widenedOut = widen(candidate.outputBuses, /*isInput*/ false);
+    if (!widenedIn && !widenedOut)
+        return;
+
+    if (instance.checkBusesLayoutSupported(candidate)) {
+        instance.setBusesLayout(candidate);
+        return;
+    }
+    if (widenedIn && widenedOut) { // mono-in / stereo-out is the common shape when stereo-in is refused
+        candidate = layout;
+        widen(candidate.outputBuses, /*isInput*/ false);
+        if (instance.checkBusesLayoutSupported(candidate))
+            instance.setBusesLayout(candidate);
+    }
+}
+
 void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance) {
     if (instance == nullptr)
         return;
+
+    negotiateStereoMainBuses(*instance);
 
     // Take whatever bus layout the instance reports as its default — we ask it what it is rather
     // than imposing one, because a plugin's preferred layout is the one it is guaranteed to render
@@ -453,6 +495,8 @@ void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
 
 juce::String HostedPluginModule::getInputPortLabel(int channelIndex) const {
     const int visible = getVisibleInputPortCount();
+    if (visibleInputs_.load(std::memory_order_relaxed) == 2 && visible == 1)
+        return "Audio";
     if (visible == 2)
         return channelIndex == 0 ? "In L" : "In R";
     return "In " + juce::String(channelIndex + 1);
@@ -460,12 +504,18 @@ juce::String HostedPluginModule::getInputPortLabel(int channelIndex) const {
 
 juce::String HostedPluginModule::getOutputPortLabel(int channelIndex) const {
     const int visible = getVisibleOutputPortCount();
+    if (visibleOutputs_.load(std::memory_order_relaxed) == 2 && visible == 1)
+        return "Audio";
     if (visible == 2)
         return channelIndex == 0 ? "Out L" : "Out R";
     return "Out " + juce::String(channelIndex + 1);
 }
 
 LogicalPort HostedPluginModule::mapInputChannel(int rawChannel) const {
+    // A collapsed stereo pair: one Audio jack owning raw ch0 + ch1 (the FX-pair map, no CV jacks).
+    if (visibleInputs_.load(std::memory_order_relaxed) == 2 && !isDualIO())
+        return mapStereoPairInput(rawChannel, 0);
+
     LogicalPort port;
     const int visible = getVisibleInputPortCount();
     port.visibleJackIndex = (visible > 0) ? juce::jlimit(0, visible - 1, rawChannel) : 0;
@@ -476,6 +526,9 @@ LogicalPort HostedPluginModule::mapInputChannel(int rawChannel) const {
 }
 
 LogicalPort HostedPluginModule::mapOutputChannel(int rawChannel) const {
+    if (visibleOutputs_.load(std::memory_order_relaxed) == 2 && !isDualIO())
+        return mapStereoPairOutput(rawChannel);
+
     LogicalPort port;
     const int visible = getVisibleOutputPortCount();
     port.visibleJackIndex = (visible > 0) ? juce::jlimit(0, visible - 1, rawChannel) : 0;

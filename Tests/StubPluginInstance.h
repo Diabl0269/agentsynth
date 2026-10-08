@@ -185,11 +185,16 @@ public:
     // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
     // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
     //
+    // flexibleLayout: false (the default) makes the stub accept ONLY the bus layout it was built with, like a
+    // plugin that is genuinely mono-only / fixed-width; true makes it accept any layout, like the many real
+    // plugins whose default main bus is mono but which also run in stereo (HostedPluginModule's stereo
+    // negotiation asks such a plugin for a stereo main output).
+    //
     // initialLatency is deliberately LAST: every existing call site names its arguments
     // positionally, so a new parameter anywhere else would have to touch all of them.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
                        juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false,
-                       int initialLatency = 0)
+                       int initialLatency = 0, bool flexibleLayout = false)
         : juce::AudioPluginInstance(
               BusesProperties()
                   .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
@@ -198,7 +203,9 @@ public:
         , name_(std::move(pluginName))
         , format_(std::move(format))
         , uid_(uid)
-        , reportsEditor_(reportsEditor) {
+        , reportsEditor_(reportsEditor)
+        , flexibleLayout_(flexibleLayout) {
+        defaultLayout_ = getBusesLayout();
         // A stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
         // addHostedParameter (not addParameter, which AudioPluginInstance hides private — every
         // hosted parameter must be a HostedAudioProcessorParameter) takes ownership, exactly like
@@ -243,6 +250,10 @@ public:
     }
 
     const juce::String getName() const override { return name_; }
+
+    bool isBusesLayoutSupported(const BusesLayout& layout) const override {
+        return flexibleLayout_ || layout == defaultLayout_;
+    }
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParameter_; }
 
@@ -349,6 +360,8 @@ private:
     juce::String format_;
     int uid_ = 0;
     bool reportsEditor_ = false;
+    bool flexibleLayout_ = false;
+    BusesLayout defaultLayout_;
 
     // The honest-latency delay line — see the class comment. One slot per reported sample, per
     // channel; the first getLatencySamples() samples out of a freshly sized line are silence,

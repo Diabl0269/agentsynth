@@ -468,8 +468,8 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     auto& graph = audioEngine.getGraph();
     const int instrumentX = build.trackInPosition.x + build.trackInSize.x + kChannelCardGapX;
     // The instrument is user-facing, so it follows the left/right jacks preference like a library
-    // drop does (a hosted plugin has no dualIO parameter, making this a no-op there). Before addNode
-    // and before any wiring below reads the module's right-leg channel.
+    // drop does (a hosted plugin's dualIO only changes its jacks once it publishes a 2-in or 2-out instance). Before
+    // addNode and before any wiring below reads the module's right-leg channel.
     newModuleHook()(**stagedInstrument, (*stagedInstrument)->getName());
     auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
     if (instrumentNodePtr == nullptr)

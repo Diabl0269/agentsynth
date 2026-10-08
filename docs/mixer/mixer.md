@@ -615,8 +615,10 @@ parameter, so every one of those branches falls through to the plain path automa
 **`ModuleBase::rightAudioLegChannel()` is read only AFTER the load completes**, since the module's
 real channel count is not known before then. `HostedPluginModule` overrides it from the published
 instance's real output count: ch1 once there are two or more outputs, ch0 duplicated onto both legs
-for a genuinely mono instance. The base class's `hasDualIOParameter()`-gated default would read -1
-forever, since this module never registers a Dual I/O parameter.
+for a genuinely mono instance. It reads the instance's RAW output count, not the visible jack count,
+so a stereo plugin whose Dual I/O is off (one "Audio" jack, FRO654) still reports ch1 and the strip's L and R
+cables stay wired. The new instrument follows the "Dual I/O for new modules" preference like any other module
+(`newModuleHook()` runs before the node joins the graph).
 
 **Four rules the picker itself follows.** A click resolves against a SNAPSHOT of the options list
 captured when the menu was built (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by

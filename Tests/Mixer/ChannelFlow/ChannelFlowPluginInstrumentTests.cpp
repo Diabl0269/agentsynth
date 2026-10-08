@@ -120,6 +120,55 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
                                "rightAudioLegChannel() read AFTER the load completed, never assumed ch1 blind";
 }
 
+// The plugin track follows the Dual I/O preference. The stub's DEFAULT is a mono output that also runs in
+// stereo, so this also covers the stereo negotiation; collapsing the jack must not drop either raw cable.
+TEST_F(ChannelFlowTest, PluginInstrumentTrackFollowsTheDualIOPreferenceAndKeepsBothRawCables) {
+    for (const bool dual : {true, false}) {
+        SCOPED_TRACE(dual ? "preference: dual" : "preference: collapsed");
+        InstrumentPluginStubBackendCFT backend;
+        backend.factories["Stub Synth"] = [] {
+            return std::make_unique<synth::test::StubPluginInstance>(
+                0, 1, "Stub Synth", 0x5754424, "VST3", std::vector<synth::test::StubParamSpec>{}, false, 0,
+                /*flexibleLayout=*/true);
+        };
+        synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        mc.getGraphEditor().setDefaultDualIOForNewModules(dual);
+        auto& graph = mc.getAudioEngine().getGraph();
+        mc.getPluginScanService().setCandidateSource([](const juce::String&) { return juce::StringArray(); });
+        seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+        mc.getTimelinePanel().buildAddTrackMenu();
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase + 0);
+        ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == 1; }));
+
+        auto* plugin = findNodeOfTypeCFT(graph, ModuleType::HostedPlugin);
+        auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
+        ASSERT_NE(plugin, nullptr);
+        ASSERT_NE(gate, nullptr);
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(plugin->getProcessor());
+        ASSERT_NE(hosted, nullptr);
+
+        EXPECT_EQ(hosted->isDualIO(), dual);
+        EXPECT_EQ(hosted->getVisibleOutputPortCount(), dual ? 2 : 1);
+
+        bool leftWired = false;
+        bool rightWired = false;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != gate->nodeID)
+                continue;
+            leftWired = leftWired || (c.source.channelIndex == 0 && c.destination.channelIndex == 0);
+            rightWired = rightWired || (c.source.channelIndex == 1 && c.destination.channelIndex == 1);
+        }
+        EXPECT_TRUE(leftWired);
+        EXPECT_TRUE(rightWired) << "collapsing the plugin's jack must leave the raw ch1 -> Gate R cable in place";
+    }
+}
+
 TEST_F(ChannelFlowTest, PluginInstrumentTrackOneUndoStepRevertsEverythingAndRedoRestores) {
     InstrumentPluginStubBackendCFT backend;
     backend.factories["Stub Synth"] = [] {

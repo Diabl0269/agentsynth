@@ -183,6 +183,7 @@ add_executable(Tests
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
+    Plugin/HostedPluginDualIOTests.cpp
     Plugin/HostedPluginTitleTests.cpp
     Plugin/PluginCardLayoutStoreTests.cpp
     Plugin/ModuleCardLayoutStoreTests.cpp

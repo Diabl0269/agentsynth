@@ -100,6 +100,7 @@ void GraphEditor::loadPreset(juce::File file, bool append) {
             added = synth::SnippetManager::insertSnippet(json, graph, juce::Point<int>(),
                                                          /*includeExtraState=*/true, &addedMacros,
                                                          /*trustedPayload=*/true);
+            audioEngine.updateModuleNames(); // same as the replace path below: "Diva 2" right away
             for (auto& macro : addedMacros)
                 macros.add(macro);
             updateComponents(); // reconcile the view, prune stale macros against surviving nodes
@@ -130,6 +131,7 @@ void GraphEditor::loadPreset(juce::File file, bool append) {
         const bool ok = synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true);
         if (ok)
             patchDocument.loadFromVar(json); // preserve per-file unknown keys (a trusted load)
+        audioEngine.updateModuleNames();     // a loaded second Diva reads "Diva 2" right away, not on the next edit
         updateComponents();                  // reconcile the view to whatever state the graph is in
     };
     if (undoManager)
