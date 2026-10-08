@@ -200,10 +200,23 @@ bool ModuleLibraryComponent::keyPressed(const juce::KeyPress& key, juce::Compone
         return moveKeyboardFocus(-1);
     if (key.isKeyCode(juce::KeyPress::downKey))
         return moveKeyboardFocus(1);
-    // Only once a row is already keyboard-focused — otherwise Return keeps its normal
-    // (consumed, no-op) TextEditor behaviour, since the query has nothing to insert yet.
-    if (key == juce::KeyPress::returnKey && keyboardFocusedIndex >= 0)
+    if (key != juce::KeyPress::returnKey)
+        return false;
+    if (keyboardFocusedIndex >= 0)
         return handleEnterKey();
+    // Typing a query and pressing Return inserts the first match (type "filt", Return -> Filter), the same as
+    // arrowing down to that row and pressing Return. With no query there is nothing to pick, so Return keeps its
+    // normal (consumed, no-op) TextEditor behaviour.
+    if (searchEditor.getText().isEmpty())
+        return false;
+    for (const int index : navigableEntryIndices()) {
+        if (!isDraggableEntry(index) || !isEntryEnabled(index))
+            continue;
+        keyboardFocusedIndex = index;
+        refreshAccessibilityValue();
+        repaint();
+        return handleEnterKey();
+    }
     return false;
 }
 

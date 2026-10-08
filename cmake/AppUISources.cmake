@@ -418,6 +418,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorModulators.cpp
     Source/UI/Graph/GraphEditor/GraphEditorOutputDock.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorReplace.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
@@ -476,6 +477,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotSourcesPage.cpp
     Source/UI/Graph/ModDot/ModSourceCatalog.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
+    Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp

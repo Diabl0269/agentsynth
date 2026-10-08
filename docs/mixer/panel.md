@@ -548,7 +548,7 @@ Windows passing only by luck.
 **Every single-node removal path needs the same seam, or a liveness check.**
 `GraphEditor::deleteSelection()` (a canvas Delete, `deleteMacroAndMembers`),
 `requestDeleteModule()` (a card's own delete button and its "Delete Module" item) and
-`replaceModule()` (the "Replace with..." submenu, offered for every module except the singleton Audio
+`replaceModule()` (the "Replace with..." picker, offered for every module except the singleton Audio
 Input and Output — so it reaches a `ChannelStripModule`, and a `MasterModule`, which is deliberately
 kept out of every collapsed macro and is therefore always individually addressable) all fire
 `onBeforeDetachAllModuleComponents` immediately before their `graph.removeNode()`.

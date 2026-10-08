@@ -12,6 +12,7 @@
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "ReplaceWithPicker.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -450,72 +451,22 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
+    // "Replace with..." opens a searchable picker of every module type and scanned hosted plugin (only for actual
+    // modules, not AudioGraphIOProcessor).
     // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
     // Oscillator would silently leave the patch with no way to get the device's input in,
     // and the library row it came from greyed out.
     if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
-        juce::PopupMenu replaceMenu;
-        auto currentType = getType(module);
-
-        struct ModEntry {
-            const char* name;
-            ModuleType type;
-        };
-        struct Category {
-            const char* header;
-            std::vector<ModEntry> modules;
-        };
-        std::vector<Category> categories = {
-            {"Sources",
-             {{"Oscillator", ModuleType::Oscillator},
-              {"Wavetable", ModuleType::Wavetable},
-              {"Noise", ModuleType::Noise},
-              {"Sampler", ModuleType::Sampler},
-              {"LFO", ModuleType::LFO}}},
-            {"Sequencing",
-             {{"Sequencer", ModuleType::Sequencer},
-              {"Poly Sequencer", ModuleType::PolySequencer},
-              {"MIDI Keyboard", ModuleType::MidiKeyboard},
-              {"Poly MIDI", ModuleType::PolyMidi},
-              {"External MIDI", ModuleType::ExternalMidi}}},
-            {"Envelopes & Control",
-             {{"ADSR", ModuleType::ADSR},
-              {"Envelope Follower", ModuleType::EnvelopeFollower},
-              {"VCA", ModuleType::VCA}}},
-            {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
-            {"Modulation FX",
-             {{"Chorus", ModuleType::Chorus},
-              {"Phaser", ModuleType::Phaser},
-              {"Flanger", ModuleType::Flanger},
-              {"Distortion", ModuleType::Distortion},
-              {"Ring Modulator", ModuleType::RingModulator},
-              {"Bitcrusher", ModuleType::Bitcrusher},
-              {"Pitch Shifter", ModuleType::PitchShifter}}},
-            {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
-            {"Dynamics",
-             {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}, {"Gate", ModuleType::Gate}}},
-            {"Utility",
-             {{"Sample & Hold", ModuleType::SampleHold},
-              {"Comparator", ModuleType::Comparator},
-              {"Math", ModuleType::Math}}},
-        };
-
-        for (auto& cat : categories) {
-            juce::PopupMenu catMenu;
-            bool hasItems = false;
-            for (auto& mod : cat.modules) {
-                if (mod.type == currentType)
-                    continue;
-                juce::String typeName(mod.name);
-                catMenu.addItem(typeName, [this, typeName] { owner.replaceModule(this, typeName); });
-                hasItems = true;
-            }
-            if (hasItems)
-                replaceMenu.addSubMenu(cat.header, catMenu);
-        }
-
-        m.addSubMenu("Replace with...", replaceMenu);
+        juce::Component::SafePointer<ModuleComponent> replaceThis(this);
+        m.addItem("Replace with...", [replaceThis] {
+            if (replaceThis == nullptr)
+                return;
+            std::optional<synth::PluginIdentity> hostedIdentity;
+            if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(replaceThis->module))
+                hostedIdentity = hosted->getIdentity();
+            synth::ui::showReplacePicker(replaceThis->owner, *replaceThis, getType(replaceThis->module),
+                                         hostedIdentity);
+        });
         m.addSeparator();
     }
 

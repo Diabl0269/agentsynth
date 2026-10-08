@@ -83,7 +83,10 @@ Typing a query — trimmed, matched by the shared [search matcher](chrome.md#sha
 - Filtering is layout-only. `getDraggableModuleNames()` is unfiltered, because callers that
   instantiate through the factory must not see a search-shrunk catalogue.
 
-Escape clears the field.
+Escape clears the field. Return in the field inserts the first match (type "filt", Return -> Filter), the
+same as arrowing onto that row and pressing Return: it picks the first module, snippet or plugin row that is enabled,
+never a section header. With an empty query, or one that matches nothing, Return does nothing; once Up or Down has put
+the keyboard focus on a row, Return inserts that row instead.
 
 **The search field's colours are re-applied in `parentHierarchyChanged()` as well as
 `lookAndFeelChanged()`.** `MainComponent`'s constructor applies the persisted theme in its ctor

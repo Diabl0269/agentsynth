@@ -348,6 +348,23 @@ Not wired because the card height does not change: the Spectrum toggle (a backdr
 the ADSR's Time|Tempo switch (a swap group: each stage fader for its division in the same cell) and a tab switch (a tab group is as tall as its tallest tab). A card that
 is still being constructed never makes room (it is not on the canvas yet).
 
+## Replace with... (FRO651)
+
+A card's right-click menu has one "Replace with..." item (absent for the singleton Audio Input and Output). It opens
+the shared searchable picker (`synth::ui::ModMatrixPicker`, the one the Mod Matrix and the add-automation and
+add-modulator pickers use) in a call-out over the card, with the search field focused. The rows are every module type the
+old nested submenu listed, under the same category headers and without the card's own type, then every scanned plugin
+(instruments and effects) under "Plugins", each with its format (VST3 or AU) as the second line; the plugin the card
+already hosts is left out. The plugin list comes from `GraphEditor::installedPluginsProvider`, which `MainComponent`
+points at the same scan list the module library shows. Typing filters ("diva" finds Diva), Up and Down move, Return or a
+click picks the highlighted row, Escape closes. Rows and launcher: `ReplaceWithPicker.h/.cpp`.
+
+Picking a module row calls `GraphEditor::replaceModule(card, type)`; picking a plugin row calls it with `"Hosted
+Plugin"` and a `configure` hook that sets the identity (`HostedPluginModule::loadPlugin`) before the node joins the
+graph, so it is inside the undo snapshot and undo and redo remember which plugin. Position, compatible cables,
+modulation routings and MIDI Remote mappings carry over exactly as for a module replace, in one undo step
+(`GraphEditorReplace.cpp`).
+
 ## Header buttons
 
 The header area holds `DrawableButton` instances, not `TextButton`s, positioned in `resized()`
