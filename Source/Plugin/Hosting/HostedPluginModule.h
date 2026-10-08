@@ -20,7 +20,7 @@ namespace synth {
  * necessarily after the node is already wired. getVisibleInput/OutputPortCount report the instance's
  * real counts; hidden channels are cleared every block, and the owner drops routings left on a jack
  * that disappeared (GraphEditor::dropRoutingsOnHiddenJacks — an invisible jack cannot be unplugged).
- * An instance wanting MORE than 16 in or out is REFUSED (getStatusMessage()), never truncated.
+ * More than 16 in or out: main buses only is tried first, else REFUSED (getStatusMessage()), never truncated.
  *
  * Passes audio through unmodified until an instance is published — loading is async, and a patch
  * naming a plugin this machine doesn't have never publishes one — so a chain never goes silent for
@@ -318,6 +318,8 @@ private:
      *  input when it has an enabled mono one) if the plugin supports it, so a plugin whose default is mono still
      *  gets two jacks. Never touches a bus with 3+ channels, a disabled input, or any aux/sidechain bus. */
     static void negotiateStereoMainBuses(juce::AudioPluginInstance& instance);
+
+    static void dropAuxBusesIfTooWide(juce::AudioPluginInstance& instance);
 
     /** Message thread. Prepares, validates and publishes `instance`, or refuses it with a reason. */
     void publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance);

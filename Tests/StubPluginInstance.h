@@ -149,6 +149,14 @@ struct StubParamSpec {
     bool isBypass = false; // the instance reports this parameter from getBypassParameter()
 };
 
+/** Extra enabled aux OUTPUT buses after the main pair (a multi-out sampler like Maschine 2). `droppable`: the
+ *  stub also accepts the layout with those aux buses disabled; otherwise only its exact default layout. */
+struct StubAuxOutputs {
+    int count = 0;
+    int channelsEach = 2;
+    bool droppable = true;
+};
+
 /** A juce::AudioPluginInstance that marks the audio it touches and round-trips a state blob.
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
@@ -163,6 +171,18 @@ struct StubParamSpec {
  *    an instance. */
 class StubPluginInstance : public juce::AudioPluginInstance {
 public:
+    static BusesProperties makeBuses(int numInputs, int numOutputs, const StubAuxOutputs& aux) {
+        auto props =
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
+                .withOutput("Output", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numOutputs)),
+                            numOutputs > 0);
+        for (int i = 0; i < aux.count; ++i)
+            props = props.withOutput("Aux " + juce::String(i + 1),
+                                     juce::AudioChannelSet::discreteChannels(aux.channelsEach), true);
+        return props;
+    }
+
     /** The gain the stub applies to every output channel. Distinctive on purpose. */
     static constexpr float kGainMarker = 0.5f;
 
@@ -194,17 +214,14 @@ public:
     // positionally, so a new parameter anywhere else would have to touch all of them.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
                        juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false,
-                       int initialLatency = 0, bool flexibleLayout = false)
-        : juce::AudioPluginInstance(
-              BusesProperties()
-                  .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
-                  .withOutput("Output", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numOutputs)),
-                              numOutputs > 0))
+                       int initialLatency = 0, bool flexibleLayout = false, StubAuxOutputs aux = {})
+        : juce::AudioPluginInstance(makeBuses(numInputs, numOutputs, aux))
         , name_(std::move(pluginName))
         , format_(std::move(format))
         , uid_(uid)
         , reportsEditor_(reportsEditor)
-        , flexibleLayout_(flexibleLayout) {
+        , flexibleLayout_(flexibleLayout)
+        , auxDroppable_(aux.droppable) {
         defaultLayout_ = getBusesLayout();
         // A stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
         // addHostedParameter (not addParameter, which AudioPluginInstance hides private — every
@@ -252,7 +269,17 @@ public:
     const juce::String getName() const override { return name_; }
 
     bool isBusesLayoutSupported(const BusesLayout& layout) const override {
-        return flexibleLayout_ || layout == defaultLayout_;
+        if (flexibleLayout_ || layout == defaultLayout_)
+            return true;
+        // Droppable aux buses: the default layout with any of the aux OUTPUT buses (index 1+) disabled.
+        if (!auxDroppable_ || layout.inputBuses != defaultLayout_.inputBuses ||
+            layout.outputBuses.size() != defaultLayout_.outputBuses.size())
+            return false;
+        for (int i = 0; i < layout.outputBuses.size(); ++i)
+            if (layout.outputBuses[i] != defaultLayout_.outputBuses[i] &&
+                !(i > 0 && layout.outputBuses[i].isDisabled()))
+                return false;
+        return true;
     }
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParameter_; }
@@ -361,6 +388,7 @@ private:
     int uid_ = 0;
     bool reportsEditor_ = false;
     bool flexibleLayout_ = false;
+    bool auxDroppable_ = false;
     BusesLayout defaultLayout_;
 
     // The honest-latency delay line — see the class comment. One slot per reported sample, per

@@ -19,7 +19,7 @@
 49 Source/Mixer/TrackPresetManager.h
 45 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h
-70 Source/Plugin/Hosting/HostedPluginModule.h
+69 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
 56 Source/ProjectBundle.h
 54 Source/SnippetManager.h

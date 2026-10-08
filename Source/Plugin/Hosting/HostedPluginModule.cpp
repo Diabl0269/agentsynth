@@ -229,11 +229,30 @@ void HostedPluginModule::negotiateStereoMainBuses(juce::AudioPluginInstance& ins
     }
 }
 
+// Message thread. Only for an instance still wider than kMaxPluginChannels after negotiation (e.g. Maschine 2, whose
+// many aux output buses total 32): asks it to run with its main buses only (every aux bus disabled). A plugin that
+// already fits is never touched; one that refuses the reduced layout is left as it was (and then refused).
+void HostedPluginModule::dropAuxBusesIfTooWide(juce::AudioPluginInstance& instance) {
+    if (instance.getTotalNumInputChannels() <= kMaxPluginChannels &&
+        instance.getTotalNumOutputChannels() <= kMaxPluginChannels)
+        return;
+
+    auto candidate = instance.getBusesLayout();
+    for (int i = 1; i < candidate.inputBuses.size(); ++i)
+        candidate.inputBuses.getReference(i) = juce::AudioChannelSet::disabled();
+    for (int i = 1; i < candidate.outputBuses.size(); ++i)
+        candidate.outputBuses.getReference(i) = juce::AudioChannelSet::disabled();
+
+    if (instance.checkBusesLayoutSupported(candidate))
+        instance.setBusesLayout(candidate);
+}
+
 void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance) {
     if (instance == nullptr)
         return;
 
     negotiateStereoMainBuses(*instance);
+    dropAuxBusesIfTooWide(*instance);
 
     // Take whatever bus layout the instance reports as its default — we ask it what it is rather
     // than imposing one, because a plugin's preferred layout is the one it is guaranteed to render
