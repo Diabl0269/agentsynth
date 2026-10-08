@@ -33,7 +33,7 @@ void AIChatComponent::updateUpsellStrip() {
                                "cloud backup across devices.");
 
     const bool showUpsell = accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot());
-    upsellButton.setVisible(showUpsell);
+    upsellFade_.setShown(showUpsell);
     historyButton.setTooltip(showUpsell ? kHistoryTooltipBase + ". " + kUpsellText : kHistoryTooltipBase);
     resized();
 }
@@ -44,13 +44,13 @@ void AIChatComponent::updateDowngradeStrip() {
     const bool pro = accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot());
     const bool show = signedIn && !pro && lastDeletionScheduledAt.isNotEmpty();
 
-    downgradeStripLabel.setVisible(show);
     if (show) {
         downgradeStripLabel.setText(juce::String::fromUTF8("Your subscription has lapsed \xe2\x80\x94 your saved "
                                                            "history will be deleted on ") +
                                         formatReadableDate(lastDeletionScheduledAt) + ".",
                                     juce::dontSendNotification);
     }
+    downgradeFade_.setShown(show); // after the text is set: it fades in with its words
     resized();
 }
 

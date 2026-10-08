@@ -1,5 +1,6 @@
 // AIChatComponentWaitingTests.cpp -- onWaitingChanged tells the host when a request goes out (true)
 // and when it ends by reply or cancel (false), so the AI toolbar button can show the assistant working.
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
 
 namespace {
@@ -70,4 +71,60 @@ TEST(AIChatWaitingCallbackTest, FiresFalseOnCancelAndOnlyOnce) {
     EXPECT_TRUE(seen[0]);
     EXPECT_FALSE(seen[1]);
     EXPECT_FALSE(chat.isWaiting());
+}
+
+// Cancel and the spinner fade in with a request and out when it ends, and are hidden only after the fade.
+TEST(AIChatWaitingFadeTest, CancelAndSpinnerFadeInAndOut) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    juce::TextButton* cancel = nullptr;
+    for (auto* child : chat.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child); b != nullptr && b->getButtonText() == "Cancel")
+            cancel = b;
+    ASSERT_NE(cancel, nullptr);
+
+    FadeAnimateGuard guard;
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    EXPECT_TRUE(cancel->isVisible());
+    EXPECT_FLOAT_EQ(cancel->getAlpha(), 0.0f) << "fades in, no pop";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(cancel->getAlpha(), 1.0f);
+    EXPECT_TRUE(chat.isCancelVisible());
+
+    chat.simulateCancelClick();
+    EXPECT_FALSE(chat.isCancelVisible()) << "logically gone at once";
+    EXPECT_TRUE(cancel->isVisible()) << "but on screen until the fade ends";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(cancel->getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(cancel->isVisible());
+}
+
+TEST(AIChatWaitingFadeTest, CancelHidesAtOnceWhenAnimationsAreOff) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    findInput(chat)->setText("hello");
+    chat.triggerSend();
+    EXPECT_TRUE(chat.isCancelVisible());
+    chat.simulateCancelClick();
+    EXPECT_FALSE(chat.isCancelVisible());
+    for (auto* child : chat.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child); b != nullptr && b->getButtonText() == "Cancel") {
+            EXPECT_FALSE(b->isVisible());
+            EXPECT_FLOAT_EQ(b->getAlpha(), 1.0f);
+        }
 }

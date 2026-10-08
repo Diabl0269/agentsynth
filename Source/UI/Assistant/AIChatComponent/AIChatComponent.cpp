@@ -164,6 +164,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
     upsellButton.onClick = [this] { openUpgradePage(); };
 
+    // A fade frame changes a banner's height, so the stack lays out again; the spinner keeps pulsing until
+    // its fade-out has ended.
+    for (auto* fade : {&hostedNoticeFade_, &upsellFade_, &downgradeFade_})
+        fade->onFrame = [this] { resized(); };
+    spinnerFade_.onHidden = [this] { spinnerDot.stopPulse(vblankUpdater); };
+
     // Downgrade notice — invisible until historyButtonClicked() learns a real grace-period
     // deletion date (see lastDeletionScheduledAt's doc comment); never shown speculatively.
     addChildComponent(downgradeStripLabel);
@@ -338,12 +344,14 @@ void AIChatComponent::cancelRequest() {
     // Stop the live thinking-status / timeout timer.
     stopTimer();
 
-    // Stop the pulse animation and hide the spinner.
-    spinnerDot.stopPulse(vblankUpdater);
-    spinnerDot.setVisible(false);
+    // Fade the spinner out (it pulses until it has gone) and hide the cancel button; a fade that
+    // lands at once (off screen) stops the pulse here.
+    spinnerFade_.setShown(false);
+    if (!spinnerFade_.isFading())
+        spinnerDot.stopPulse(vblankUpdater);
 
-    // Hide the cancel button, restore normal input state.
-    cancelButton.setVisible(false);
+    // Restore normal input state.
+    cancelFade_.setShown(false);
     sendButton.setEnabled(true);
     inputField.setReadOnly(false);
     waitingStatusLabel = nullptr;

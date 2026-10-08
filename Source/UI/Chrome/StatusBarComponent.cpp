@@ -1,5 +1,7 @@
 #include "StatusBarComponent.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
@@ -165,8 +167,9 @@ juce::String StatusBarComponent::getTooltipForPosition(juce::Point<int> localPos
 // ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
     transientMessage_ = msg;
+    displayedMessage_ = msg;
     messageIsSticky_ = false;
-    repaint();
+    fadeMessageTo(true);
     // (Re-)start the single-shot auto-clear timer: 2500 ms, fires once.
     startTimer(2500);
 }
@@ -175,8 +178,9 @@ void StatusBarComponent::showMessage(const juce::String& msg) {
 void StatusBarComponent::showStickyMessage(const juce::String& msg) {
     stopTimer(); // no auto-clear -- clearMessage()/a later showMessage() ends it
     transientMessage_ = msg;
+    displayedMessage_ = msg;
     messageIsSticky_ = true;
-    repaint();
+    fadeMessageTo(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,13 +189,55 @@ void StatusBarComponent::clearMessage() {
         return; // nothing sticky is showing: empty, or a transient message running its own timer
     transientMessage_ = {};
     messageIsSticky_ = false;
-    repaint();
+    fadeMessageTo(false);
 }
 
 // ---------------------------------------------------------------------------
 void StatusBarComponent::timerCallback() {
     stopTimer();
     transientMessage_ = {};
+    fadeMessageTo(false);
+}
+
+// ---------------------------------------------------------------------------
+// The message and the normal text cross-fade on one tween (messageAlpha_). Off screen, or with
+// Animations Off, the final state lands before this returns. A message that replaces another
+// keeps the current opacity; a clear mid fade-in turns round from where it is.
+void StatusBarComponent::fadeMessageTo(bool shown) {
+    const float to = shown ? 1.0f : 0.0f;
+    const float from = messageAlpha_;
+    if (!synth::ui::FadeVisibility::canAnimateIn(this) || from == to) {
+        landMessageAt(to);
+        return;
+    }
+    fadeFrom_ = from;
+    fadeTo_ = to;
+    const double ms = shown ? synth::ui::motionMs(160.0, 80.0) : synth::ui::motionMs(110.0, 80.0);
+    messageFade_.start(
+        vblankUpdater_, ms, [](float t) { return t; },
+        [this](float t) {
+            messageAlpha_ = fadeFrom_ + (fadeTo_ - fadeFrom_) * t;
+            repaint();
+        },
+        [this] { landMessageAt(fadeTo_); });
+}
+
+void StatusBarComponent::stepMessageFadeForTest(float t) {
+    if (!messageFade_.isRunning())
+        return;
+    if (t >= 1.0f)
+        landMessageAt(fadeTo_);
+    else
+        messageAlpha_ = fadeFrom_ + (fadeTo_ - fadeFrom_) * t;
+}
+
+// The final state of a fade. Stopping the driver destroys the callback that called this, so `to` is a
+// parameter, not a capture.
+void StatusBarComponent::landMessageAt(float to) {
+    messageFade_.stop(vblankUpdater_);
+    messageAlpha_ = to;
+    if (to == 0.0f)
+        displayedMessage_ = {};
     repaint();
 }
 
@@ -203,9 +249,6 @@ void StatusBarComponent::paint(juce::Graphics& g) {
     const auto bg0 = c.bg0;
     const auto border = c.border;
     const auto textPrimary = c.textPrimary;
-    const auto textMuted = c.textMuted;
-    const auto warningColour = c.warning;
-    const auto accentColour = c.accent;
 
     const auto bounds = getLocalBounds().toFloat();
 
@@ -226,52 +269,73 @@ void StatusBarComponent::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(11.0f));
 
-    if (transientMessage_.isNotEmpty()) {
+    // The message and the normal text cross-fade: each is drawn in its own transparency layer.
+    const float msgA = messageAlpha_;
+    if (msgA < 1.0f) {
+        if (msgA > 0.0f)
+            g.beginTransparencyLayer(1.0f - msgA);
+        paintStatusText(g, rightEdge, textY, textH);
+        if (msgA > 0.0f)
+            g.endTransparencyLayer();
+    }
+    if (msgA > 0.0f) {
         // Transient message overrides the normal status text — draw it centred across the
         // full available width (left pad to right edge before the mute button slot).
-        g.setColour(textPrimary);
-        g.drawText(transientMessage_, padH, textY, rightEdge - padH, textH, juce::Justification::centredLeft, true);
-    } else {
-        // Normal status: patch name, CPU, voice count.
-
-        // Patch name — left-aligned
-        const juce::String patchStr = formatPatch(patchName_);
-        g.setColour(textPrimary);
-        g.drawText(patchStr, padH, textY, 160, textH, juce::Justification::centredLeft, true);
-
-        // CPU — after patch name, warning colour if > 80 %
-        const juce::String cpuStr = formatCpu(cpuPct_ / 100.0f);
-        g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
-        g.drawText(cpuStr, kCpuX, textY, kCpuWidth, textH, juce::Justification::centredLeft, true);
-
-        // Round trip — after CPU, and only while it actually fits before the voice count's own
-        // slot (isRoundTripSegmentVisible() — shared with getTooltipForPosition() so the two can
-        // never disagree about whether this segment is on screen).
-        if (isRoundTripSegmentVisible()) {
-            g.setColour(textMuted);
-            g.drawText(roundTripText_, kRoundTripX, textY, kRoundTripWidth, textH, juce::Justification::centredLeft,
-                       true);
-        }
-
-        // Transport cluster readout ("001.1.000   120.0 BPM") — after the play/stop glyph button
-        // (see resized() for its bounds), and only while the whole cluster fits before the
-        // voice-count slot; transportClusterFits_ is computed once in resized() rather than here
-        // because the button is a live child component that resized() must actually hide, not just
-        // skip drawing over — see the header comment. Accent while playing, same "obviously
-        // running" cue as the button's own glyph colour.
-        if (transportClusterFits_ && transportDisplayText_.isNotEmpty()) {
-            g.setColour(transportPlaying_ ? accentColour : textMuted);
-            const int transportTextX = kTransportX + kTransportButtonSize + kTransportTextGap;
-            g.drawText(transportDisplayText_, transportTextX, textY, kTransportTextWidth, textH,
-                       juce::Justification::centredLeft, true);
-        }
-
-        // Voice count — right-aligned before mute button
-        const juce::String voiceStr = formatVoices(voices_);
-        g.setColour(textMuted);
-        g.drawText(voiceStr, rightEdge - kVoiceSlotWidth, textY, kVoiceSlotWidth, textH,
-                   juce::Justification::centredRight, true);
+        g.setColour(textPrimary.withMultipliedAlpha(msgA));
+        g.drawText(displayedMessage_, padH, textY, rightEdge - padH, textH, juce::Justification::centredLeft, true);
     }
+}
+
+// ---------------------------------------------------------------------------
+void StatusBarComponent::paintStatusText(juce::Graphics& g, int rightEdge, int textY, int textH) const {
+    using namespace synth::theme;
+
+    const auto& c = themeOf(*this).colors;
+    const auto textPrimary = c.textPrimary;
+    const auto textMuted = c.textMuted;
+    const auto warningColour = c.warning;
+    const auto accentColour = c.accent;
+    const int padH = kPadH;
+    g.setFont(juce::Font(11.0f));
+
+    // Normal status: patch name, CPU, voice count.
+
+    // Patch name — left-aligned
+    const juce::String patchStr = formatPatch(patchName_);
+    g.setColour(textPrimary);
+    g.drawText(patchStr, padH, textY, 160, textH, juce::Justification::centredLeft, true);
+
+    // CPU — after patch name, warning colour if > 80 %
+    const juce::String cpuStr = formatCpu(cpuPct_ / 100.0f);
+    g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
+    g.drawText(cpuStr, kCpuX, textY, kCpuWidth, textH, juce::Justification::centredLeft, true);
+
+    // Round trip — after CPU, and only while it actually fits before the voice count's own
+    // slot (isRoundTripSegmentVisible() — shared with getTooltipForPosition() so the two can
+    // never disagree about whether this segment is on screen).
+    if (isRoundTripSegmentVisible()) {
+        g.setColour(textMuted);
+        g.drawText(roundTripText_, kRoundTripX, textY, kRoundTripWidth, textH, juce::Justification::centredLeft, true);
+    }
+
+    // Transport cluster readout ("001.1.000   120.0 BPM") — after the play/stop glyph button
+    // (see resized() for its bounds), and only while the whole cluster fits before the
+    // voice-count slot; transportClusterFits_ is computed once in resized() rather than here
+    // because the button is a live child component that resized() must actually hide, not just
+    // skip drawing over — see the header comment. Accent while playing, same "obviously
+    // running" cue as the button's own glyph colour.
+    if (transportClusterFits_ && transportDisplayText_.isNotEmpty()) {
+        g.setColour(transportPlaying_ ? accentColour : textMuted);
+        const int transportTextX = kTransportX + kTransportButtonSize + kTransportTextGap;
+        g.drawText(transportDisplayText_, transportTextX, textY, kTransportTextWidth, textH,
+                   juce::Justification::centredLeft, true);
+    }
+
+    // Voice count — right-aligned before mute button
+    const juce::String voiceStr = formatVoices(voices_);
+    g.setColour(textMuted);
+    g.drawText(voiceStr, rightEdge - kVoiceSlotWidth, textY, kVoiceSlotWidth, textH, juce::Justification::centredRight,
+               true);
 }
 
 // ---------------------------------------------------------------------------

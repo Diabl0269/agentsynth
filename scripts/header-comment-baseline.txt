@@ -36,8 +36,8 @@
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
 27 Source/Transport/OfflineTransportDriver.h
-38 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
-38 Source/UI/Chrome/StatusBarComponent.h
+31 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
+31 Source/UI/Chrome/StatusBarComponent.h
 118 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 42 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h

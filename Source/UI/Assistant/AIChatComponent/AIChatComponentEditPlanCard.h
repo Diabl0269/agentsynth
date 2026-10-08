@@ -37,6 +37,8 @@ private:
     void applyThemeColours();
     void showApplied();
     int previewHeight(int width) const;
+    void relayout();
+    int commentRowSlot() const;
 
     static constexpr int kPadding = 8;
     static constexpr int kRowGap = 8;
@@ -63,6 +65,11 @@ private:
     juce::TextEditor commentField;
     juce::TextButton commentSaveButton;
     juce::TextEditor detailsDisplay;
+
+    // The feedback comment row and the details panel open and close with a fade and a height tween
+    // (160 ms in, 110 ms out); each frame lays the chat out again. Declared after what they wrap.
+    synth::ui::FadeVisibility commentFade_{&commentField, &commentSaveButton};
+    synth::ui::FadeVisibility detailsFade_{&detailsDisplay};
 };
 
 } // namespace synth

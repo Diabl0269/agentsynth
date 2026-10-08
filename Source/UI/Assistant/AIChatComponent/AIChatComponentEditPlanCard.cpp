@@ -49,10 +49,8 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     detailsButton.onClick = [this] {
         isExpanded = !isExpanded;
         detailsButton.setButtonText(isExpanded ? "Hide details" : "Show details");
-        if (auto* chat = findParentComponentOfClass<AIChatComponent>())
-            chat->resized();
-        else
-            resized();
+        detailsFade_.setShown(isExpanded);
+        relayout();
     };
 
     if (planOk && onApply) {
@@ -105,7 +103,20 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
                            prettyPrintJson(data.planJson));
     synth::ui::removeHiddenTabStops(detailsDisplay);
 
+    commentFade_.onFrame = [this] { relayout(); };
+    detailsFade_.onFrame = [this] { relayout(); };
+    // A card restored with a rating already picked shows its comment row from the start.
+    commentFade_.setShown(currentRating != AIChatComponent::PatchRatingUiState::None);
+
     applyThemeColours();
+}
+
+// A change of height needs AIChatComponent::resized(): it sizes each bubble.
+void AIChatComponent::EditPlanCard::relayout() {
+    if (auto* chat = findParentComponentOfClass<AIChatComponent>())
+        chat->resized();
+    else
+        resized();
 }
 
 // Theme tokens, resolved again once the card is parented: at construction a card is not yet in the
@@ -162,35 +173,34 @@ void AIChatComponent::EditPlanCard::resized() {
     b.removeFromTop(kRowGap);
 
     // The comment row appears only once a rating is picked, so an answer nobody has judged does
-    // not invite a comment with nothing to attach it to.
+    // not invite a comment with nothing to attach it to. The row and the details panel are placed at
+    // their full size; while they fade the card's height (getRequiredHeight) is what grows, so they
+    // are revealed from the top as it does.
     auto thumbsRow = b.removeFromTop(kFeedbackRowHeight);
     thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
     thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
-    const bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
-    commentField.setVisible(showComment);
-    commentSaveButton.setVisible(showComment);
-    if (showComment) {
-        b.removeFromTop(kRowGap);
-        auto commentRow = b.removeFromTop(kFeedbackRowHeight);
-        commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
-        commentField.setBounds(commentRow.reduced(2));
-    }
 
-    detailsDisplay.setVisible(isExpanded);
-    if (isExpanded) {
-        b.removeFromTop(kRowGap);
-        detailsDisplay.setBounds(b.removeFromTop(kDetailsHeight));
-    }
+    auto rest = b.withHeight(kRowGap + kFeedbackRowHeight + kRowGap + kDetailsHeight);
+    rest.removeFromTop(kRowGap);
+    auto commentRow = rest.removeFromTop(kFeedbackRowHeight);
+    commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
+    commentField.setBounds(commentRow.reduced(2));
+
+    const int commentSlot = commentRowSlot();
+    auto detailsArea = b.withHeight(commentSlot + kRowGap + kDetailsHeight);
+    detailsArea.removeFromTop(commentSlot + kRowGap);
+    detailsDisplay.setBounds(detailsArea);
+}
+
+int AIChatComponent::EditPlanCard::commentRowSlot() const {
+    return juce::roundToInt(static_cast<float>(kRowGap + kFeedbackRowHeight) * commentFade_.progress());
 }
 
 int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
-    const bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
     int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) + kRowGap +
                  kButtonRowHeight + kRowGap + kFeedbackRowHeight;
-    if (showComment)
-        height += kRowGap + kFeedbackRowHeight;
-    if (isExpanded)
-        height += kRowGap + kDetailsHeight;
+    height += commentRowSlot();
+    height += juce::roundToInt(static_cast<float>(kRowGap + kDetailsHeight) * detailsFade_.progress());
     return height;
 }
 
@@ -201,12 +211,10 @@ std::unique_ptr<juce::AccessibilityHandler> AIChatComponent::EditPlanCard::creat
 void AIChatComponent::EditPlanCard::setRating(AIChatComponent::PatchRatingUiState rating) {
     currentRating = rating;
     applyThemeColours();
-    // A rating grows the card (the comment row appears), and AIChatComponent::resized() is what
+    // A rating grows the card (the comment row fades in), and AIChatComponent::resized() is what
     // sizes each bubble, so that is the level that must lay out again.
-    if (auto* chat = findParentComponentOfClass<AIChatComponent>())
-        chat->resized();
-    else
-        resized();
+    commentFade_.setShown(currentRating != AIChatComponent::PatchRatingUiState::None);
+    relayout();
     notifyRate();
 }
 

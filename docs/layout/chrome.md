@@ -241,7 +241,8 @@ The text, verified against what each value actually reads:
 - **Transport play/stop button**: "Play / Stop", set in the constructor — the same text
   `TimelineTransportBar`'s own play/stop button uses.
 
-A transient message (`showMessage()`) suppresses every tooltip on the row —
+A transient message (`showMessage()`) cross-fades over the normal text (160 ms in, 110 ms out; see
+[animation](animation.md#fading-things-in-and-out)) and suppresses every tooltip on the row —
 `getTooltipForPosition` returns `""` immediately — since it visually covers the segments it would
 otherwise explain.
 
@@ -378,7 +379,9 @@ Details: [usage statistics](../development/usage-statistics.md#the-welcome-scree
 
 App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s
 Welcome screen subsection for the gating rationale and the guard-before-hide ordering that keeps a
-Cancel answer from dismissing it. It always shows at launch in the standalone app (never in the
+Cancel answer from dismissing it. It fades out when a choice dismisses it and back in when Help > Show Welcome Screen
+reopens it (hidden only after the fade, deaf to clicks while it leaves; [animation](animation.md#fading-things-in-and-out)).
+It always shows at launch in the standalone app (never in the
 plugin) and there is no opt-out; a legacy `showWelcomeScreenAtLaunch` value in an old settings file
 is ignored. Help > Show Welcome Screen reopens it.
 

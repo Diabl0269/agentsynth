@@ -7,6 +7,7 @@
 
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
 #include "../../Accessibility/TabOrderHelpers.h"
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
 
 namespace {
@@ -366,4 +367,111 @@ TEST_F(AIChatComponentTest, AppliedStateSurvivesTheSavedHistoryRoundTrip) {
     EXPECT_FALSE(appliedButtons.front()->isEnabled());
     EXPECT_TRUE(restored.chat->getLastPlanJsonForTesting().isNotEmpty());
     EXPECT_EQ(restored.host.batches, 0) << "restoring applies nothing";
+}
+
+namespace {
+juce::Label* findHostedNotice(synth::AIChatComponent& chat) {
+    for (auto* child : chat.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText().startsWith("Hosted"))
+            return label;
+    return nullptr;
+}
+} // namespace
+
+// The hosted-mode notice strip fades and its height follows; it is hidden only after the fade.
+TEST_F(AIChatComponentTest, HostedNoticeFadesWithItsStripHeight) {
+    PlanRig rig(/*hosted=*/true);
+    auto* notice = findHostedNotice(*rig.chat);
+    ASSERT_NE(notice, nullptr);
+    ASSERT_TRUE(notice->isVisible());
+    const int fullHeight = notice->getHeight();
+    ASSERT_GT(fullHeight, 1);
+
+    FadeAnimateGuard guard;
+    rig.provider->hosted = false;
+    rig.chat->refreshModels();
+    EXPECT_TRUE(notice->isVisible()) << "still on screen while it fades out";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_TRUE(notice->isVisible());
+    EXPECT_LT(notice->getHeight(), fullHeight) << "the strip closes over the fade";
+    EXPECT_NEAR(notice->getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(notice->isVisible());
+
+    rig.provider->hosted = true;
+    rig.chat->refreshModels();
+    EXPECT_TRUE(notice->isVisible());
+    EXPECT_FLOAT_EQ(notice->getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(notice->getHeight(), fullHeight);
+    EXPECT_FLOAT_EQ(notice->getAlpha(), 1.0f);
+}
+
+// A rating opens the comment row and Show details opens the panel, each by growing the card while it fades;
+// both land at once headless.
+TEST_F(AIChatComponentTest, EditPlanCardCommentRowAndDetailsFadeAndGrow) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const auto cards = rig.findTitled("Edit plan");
+    ASSERT_EQ(cards.size(), 1u);
+    auto* card = cards.front();
+    auto* thumbsUp = dynamic_cast<juce::Button*>(rig.findTitled("This answer was helpful").front());
+    ASSERT_NE(thumbsUp, nullptr);
+    auto* comment = rig.findTitled("Feedback comment").front();
+    auto* details = rig.findTitled("Edit plan details").front();
+    juce::Button* detailsButton = nullptr;
+    for (auto* child : card->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
+            detailsButton = b;
+    ASSERT_NE(detailsButton, nullptr);
+    ASSERT_FALSE(comment->isVisible());
+    ASSERT_FALSE(details->isVisible());
+    const int base = card->getHeight();
+    // The thumbs row is the card's last row here, so what sits below it is the card's bottom padding.
+    // Widths and fonts change how the preview wraps (and so every y above), never this margin.
+    const int bottomPadding = base - (thumbsUp->getBottom() + 2);
+    ASSERT_GT(bottomPadding, 0);
+
+    FadeAnimateGuard guard;
+    thumbsUp->onClick();
+    EXPECT_TRUE(comment->isVisible());
+    EXPECT_FLOAT_EQ(comment->getAlpha(), 0.0f);
+    EXPECT_EQ(card->getHeight(), base) << "frame 0 adds no height";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(card->getHeight(), base);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    const int withComment = card->getHeight();
+    EXPECT_EQ(withComment, base + 8 + 24);
+    EXPECT_FLOAT_EQ(comment->getAlpha(), 1.0f);
+
+    detailsButton->onClick();
+    EXPECT_TRUE(details->isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    const int midFade = card->getHeight();
+    EXPECT_GT(midFade, withComment);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    // Fully open, the card ends exactly one gap and the panel below the comment row and one bottom
+    // padding under the panel, wherever the preview text wrapped.
+    EXPECT_LT(midFade, card->getHeight());
+    EXPECT_GT(details->getHeight(), 0);
+    EXPECT_EQ(details->getY(), comment->getBottom() + 2 + 8);
+    EXPECT_EQ(card->getHeight(), details->getBottom() + bottomPadding);
+
+    detailsButton->onClick();
+    EXPECT_TRUE(details->isVisible()) << "hidden only after the fade";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(details->isVisible());
+    EXPECT_EQ(card->getHeight(), withComment);
+}
+
+TEST_F(AIChatComponentTest, EditPlanCardRatingAndDetailsLandAtOnceOffScreen) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    auto* card = rig.findTitled("Edit plan").front();
+    const int base = card->getHeight();
+    dynamic_cast<juce::Button*>(rig.findTitled("This answer was helpful").front())->onClick();
+    EXPECT_TRUE(rig.findTitled("Feedback comment").front()->isVisible());
+    EXPECT_EQ(card->getHeight(), base + 8 + 24);
 }

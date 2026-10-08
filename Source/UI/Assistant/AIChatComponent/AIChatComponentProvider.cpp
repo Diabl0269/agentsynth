@@ -78,7 +78,7 @@ void AIChatComponent::updateHostedModeNotice() {
         if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
             hostedModeNotice.setColour(juce::Label::textColourId, lf->getTheme().colors.textMuted);
     }
-    hostedModeNotice.setVisible(hosted);
+    hostedNoticeFade_.setShown(hosted);
     resized();
 }
 

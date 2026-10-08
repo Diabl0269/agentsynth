@@ -44,6 +44,7 @@
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -315,6 +316,9 @@ public:
     synth::ui::WelcomeScreenComponent* getWelcomeScreenForTest() const {
         return welcomeScreen_.get();
     } // null in Hosted mode
+    void hideWelcomeScreenForTest() { hideWelcomeScreen(); }
+    void showWelcomeScreenForTest() { showWelcomeScreen(); }
+    bool isWelcomeScreenHiddenForTest() const { return isWelcomeScreenHidden(); }
     void loadPresetGuardedForTest(int index);
     synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
@@ -674,6 +678,8 @@ private:
 
     std::unique_ptr<synth::ui::WelcomeScreenComponent>
         welcomeScreen_; // null in Hosted mode; added last so it paints on top
+    // Fades welcomeScreen_ in and out. Declared after it, so it is destroyed first.
+    std::unique_ptr<synth::ui::FadeVisibility> welcomeFade_;
 
     synth::HostedPluginWindowManager pluginWindowManager; // declared after the engine + graphEditor so it dies first
 

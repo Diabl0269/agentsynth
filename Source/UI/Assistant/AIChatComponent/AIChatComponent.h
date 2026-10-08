@@ -10,6 +10,7 @@
 #include "UI/Assistant/AccountRow.h"
 #include "UI/Assistant/EntitlementWatcher.h"
 #include "UI/Assistant/PlanBadge.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <atomic>
@@ -121,7 +122,7 @@ public:
     void simulateEscapeKey() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
 
     // Testing hook: returns true if the cancel button is currently visible.
-    bool isCancelVisible() const { return cancelButton.isVisible(); }
+    bool isCancelVisible() const { return cancelFade_.isShown(); }
 
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
@@ -220,6 +221,7 @@ public:
     }
 
 private:
+    void layoutMessageList(int listWidth);
     void timerCallback() override;
     void applyFetchedModels(const juce::StringArray& models, bool success); // message thread
 
@@ -258,6 +260,14 @@ private:
         // entire pulsing lifetime.  The pointer is stored so the recursive onComplete
         // callback can restart without a dangling reference to the function parameter.
         void startPulse(juce::VBlankAnimatorUpdater& updater) {
+            // Animations Off completes a driver at once, which would restart this pulse without end: hold the
+            // dot steady instead.
+            if (synth::ui::animationsOff()) {
+                updaterPtr = nullptr;
+                currentAlpha = 1.0f;
+                repaint();
+                return;
+            }
             updaterPtr = &updater;
             pulseAnim.start(
                 updater,
@@ -375,6 +385,16 @@ private:
                 accountServicePtr->refreshEntitlement();
         },
         [this] { return accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot()); }};
+
+    // Cancel, the spinner and the three bottom banners fade in and out (160 ms in, 110 ms out, 80 ms under
+    // Reduce Motion) instead of popping. A banner's strip height follows its fade through progress(), so
+    // the rows around it slide; headless and off-screen they land at once. Declared after the components
+    // they wrap.
+    synth::ui::FadeVisibility cancelFade_{&cancelButton};
+    synth::ui::FadeVisibility spinnerFade_{&spinnerDot};
+    synth::ui::FadeVisibility hostedNoticeFade_{&hostedModeNotice};
+    synth::ui::FadeVisibility upsellFade_{&upsellButton};
+    synth::ui::FadeVisibility downgradeFade_{&downgradeStripLabel};
 
     // Opens a Quota error's "Upgrade to Pro" button target. Real default; overridden in tests via
     // setUrlOpenerForTesting() so no test ever launches a real browser.

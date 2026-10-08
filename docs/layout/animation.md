@@ -508,6 +508,35 @@ shortcut.
   origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
   nothing is committed — no undo step.
 
+## Fading things in and out
+
+Anything that appears or disappears in place (not a popup window, which is [PopupMotion](#popup-windows)) uses one
+helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never a bare `setVisible()`:
+
+- **Numbers.** 160 ms in, 110 ms out, linear in time (the popups' and tooltips' numbers); a plain 80 ms fade under
+  Reduce Motion (`motionMs`); no time at all under Animations Off. One `AnimationDriver` per helper, no timer.
+- **Hide after the fade.** Hiding keeps the components on screen and takes them out only when the fade has ended
+  (then their alpha goes back to 1). Showing makes them visible at alpha 0 first, so frame 0 is already a fade
+  frame. A reversal starts from the current opacity. While a fade-out runs the components ignore the mouse, so a
+  button cannot be clicked twice.
+- **Logical state is immediate.** `isShown()` is false the moment a hide starts; owners that decide things from it
+  (the Welcome screen's `isWelcomeScreenHidden()`, a banner's strip) read that, not `isVisible()`.
+- **Height strips.** An owner that also tweens a height passes `onFrame` and reads `progress()` (0 to 1): the
+  AI chat's banners and the plan badge size their strip as natural height times `progress()`, so the rows around
+  them slide instead of jumping.
+- **Off screen lands at once.** When the parent is not showing (every headless test) the final state lands before
+  `setShown()` returns and `onFrame` is not called, so the caller's own layout after it is right either way. Tests
+  force the animated path with `FadeVisibility::setAnimateOffScreenForTest` and step by hand with
+  `stepAllForTest` (`Tests/UI/Layout/FadeVisibilityTests.cpp`).
+
+Where it is used: the Welcome screen hiding and reopening; the AI chat's hosted-mode notice, Upgrade to Pro strip
+and downgrade notice, its Cancel button and thinking spinner (which keeps pulsing until it has faded out); the plan
+card's feedback comment row (on a rating) and details panel (Show details), which fade while the card grows or
+shrinks to fit; the account row (as a whole, and its Sign in / Signing in / email and Sign out controls cross-fade
+as the state changes); the plan badge. The status bar's transient and sticky messages do the same with their own
+driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
+the cleared message's words staying painted until then.
+
 ## Tooltips
 
 One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app
@@ -601,7 +630,9 @@ strings.
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |
 | **Library rows** | Hover highlight; grab / dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query highlight on matching labels (shared `drawSearchHighlightedText`, static fill, no animation) | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` into `StatusBarComponent` |
-| **AI request Cancel and spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner, time-bounded — stops on completion or cancel, confined to its region | `AIChatComponent` |
+| **AI request Cancel and spinner** | Cancel button and the pulsing "thinking" spinner fade in with a request and out when it ends (160 ms in, 110 ms out; the spinner pulses until it has gone); the pulse is time-bounded, stops on completion or cancel and is confined to its region; see [Fading things in and out](#fading-things-in-and-out) | `AIChatComponent` via `FadeVisibility` |
+| **Welcome screen, AI chat banners, plan card rows, account row, plan badge** | Fade in and out with `FadeVisibility`; a banner's or the badge's strip height and the plan card's comment row and details panel grow and shrink with the fade so the content around them slides; see [Fading things in and out](#fading-things-in-and-out) | `MainComponent`, `AIChatComponent`, `AccountRow`, `PlanBadge` |
+| **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent` |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |

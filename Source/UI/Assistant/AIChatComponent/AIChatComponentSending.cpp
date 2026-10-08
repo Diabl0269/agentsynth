@@ -105,8 +105,8 @@ void AIChatComponent::sendButtonClicked() {
     inputField.setReadOnly(true);
 
     // Show cancel affordance and start the pulse spinner.
-    cancelButton.setVisible(true);
-    spinnerDot.setVisible(true);
+    cancelFade_.setShown(true);
+    spinnerFade_.setShown(true);
     spinnerDot.startPulse(vblankUpdater);
 
     // Live thinking-status timer (also enforces the request timeout). It covers every route below:

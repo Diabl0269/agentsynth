@@ -156,4 +156,4 @@ bool MainComponent::isExportAvailable() const { return !isBounceInProgress_; }
 
 bool MainComponent::isBottomDockVisibleForSnap() const { return isBottomDockVisible; }
 
-bool MainComponent::isWelcomeScreenHidden() const { return welcomeScreen_ == nullptr || !welcomeScreen_->isVisible(); }
+bool MainComponent::isWelcomeScreenHidden() const { return welcomeFade_ == nullptr || !welcomeFade_->isShown(); }
