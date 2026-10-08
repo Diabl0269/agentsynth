@@ -741,4 +741,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.h
     Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp
+    Source/UI/Graph/CardBody/CardBlockFade.h
+    Source/UI/Graph/CardBody/CardBodyFades.cpp
 )

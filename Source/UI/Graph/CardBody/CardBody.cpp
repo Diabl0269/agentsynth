@@ -15,6 +15,7 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -132,7 +133,9 @@ bool CardBody::isStaleFor(const juce::AudioProcessorGraph::Node& node) const {
 }
 
 void CardBody::createViews() {
-    for (auto& item : plan_.items) {
+    viewFades_.resize(plan_.items.size());
+    for (int i = 0; i < (int)plan_.items.size(); ++i) {
+        auto& item = plan_.items[(size_t)i];
         if (item.kind != CardBodyItem::Kind::View)
             continue;
         if (const auto* factory = findCardViewFactory(item.view)) {
@@ -140,6 +143,7 @@ void CardBody::createViews() {
                 card_.addAndMakeVisible(view.get());
                 view->setVisible(item.open);
                 item.widget = views_.add(view.release());
+                attachViewFade(i);
             }
         }
     }
@@ -167,6 +171,7 @@ void CardBody::createParameterWidgets() {
     createTabStrips();
     if (hasMoreRow())
         createMoreButton();
+    attachMoreAndSectionFades();
     applyVisibility();
     startWatchingConditions();
 }
@@ -388,12 +393,18 @@ juce::Component* CardBody::findView(CardView view) const {
 }
 
 void CardBody::setViewOpen(CardView view, bool open) {
-    for (auto& item : plan_.items)
-        if (item.kind == CardBodyItem::Kind::View && item.view == view) {
-            item.open = open;
-            if (item.widget != nullptr)
-                item.widget->setVisible(open);
-        }
+    for (int i = 0; i < (int)plan_.items.size(); ++i) {
+        auto& item = plan_.items[(size_t)i];
+        if (item.kind != CardBodyItem::Kind::View || item.view != view)
+            continue;
+        item.open = open;
+        if (item.widget == nullptr)
+            continue;
+        // The view fades and the card's height follows; neighbours make room once (CardBlockFade).
+        viewFades_[(size_t)i].setShown(
+            open, settlingFootprint_, [this] { card_.updateLayout(); },
+            [this] { card_.owner.handleModuleResized(&card_); });
+    }
 }
 
 bool CardBody::isViewOpen(CardView view) const {
@@ -411,6 +422,8 @@ ThresholdControlComponent* CardBody::getThresholdView() const {
 }
 
 void CardBody::releaseViews() {
+    for (auto& fade : viewFades_)
+        fade.reset();
     for (auto& item : plan_.items)
         if (item.kind == CardBodyItem::Kind::View)
             item.widget = nullptr;

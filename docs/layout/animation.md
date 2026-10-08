@@ -588,7 +588,21 @@ routing pane's canvas node, Show on canvas link, MIDI destinations and mixer cha
 so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; and a new
 modulator row with its band in the lanes. The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
-the cleared message's words staying painted until then.
+the cleared message's words staying painted until then. Inside a module card, the Show Scope and Show Response
+panels (with the Spectrum toggle), the LFO's custom wave section (curve editor, Grid, Shapes and Tools), the ADSR's
+Show Envelope Graph view, the More row's controls and a layout section that comes or goes with a mode fade the same
+way, and the card's height follows (`CardBlockFade`, `Source/UI/Graph/CardBody/CardBlockFade.h`, a `FadeVisibility`
+plus `height(full)` = `full * progress()`): each frame re-measures the card, so the rows below slide, and the
+neighbours make room once per direction (a growing card asks for its final footprint when the fade starts, a
+shrinking one gives the room back when the fade has ended; never per frame, which would push and pull them and
+rebuild every cable 60 times a second). The panels' bounds shrink with the fade (they are never clipped, so nothing
+overlaps what is under them); the More row's controls sit at full size and the card's bottom edge clips them. A
+conditional section that is not a swap is laid out at once when it comes and fades in; when it goes it stays laid out
+(`holding`) until it has faded out, then the card closes up. A swap of controls in place keeps its own motion
+([Controls swapping in place](#controls-swapping-in-place)) and starts no fade. Every fade frame invalidates the
+card's cached raster through the child's own `setAlpha`, so a card repaints exactly while a fade runs and not after.
+The Pick on canvas overlay (`PickTargetOverlay`) fades the same way as one whole component: it takes no click from the
+moment Esc or a click ends it, and its outlines stay painted until it has faded out.
 
 ## Tooltips
 
@@ -685,6 +699,8 @@ strings.
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` into `StatusBarComponent` |
 | **AI request Cancel and spinner** | Cancel button and the pulsing "thinking" spinner fade in with a request and out when it ends (160 ms in, 110 ms out; the spinner pulses until it has gone); the pulse is time-bounded, stops on completion or cancel and is confined to its region; see [Fading things in and out](#fading-things-in-and-out) | `AIChatComponent` via `FadeVisibility` |
 | **Welcome screen, AI chat banners, plan card rows, account row, plan badge** | Fade in and out with `FadeVisibility`; a banner's or the badge's strip height and the plan card's comment row and details panel grow and shrink with the fade so the content around them slides; see [Fading things in and out](#fading-things-in-and-out) | `MainComponent`, `AIChatComponent`, `AccountRow`, `PlanBadge` |
+| **Card parts: scope, response, LFO wave section, envelope view, More row, conditional section** | Fade in 160 ms / out 110 ms (plain 80 ms under Reduce Motion) with `FadeVisibility` while the card's height follows the fade; neighbours make room once per direction; lands at once off screen or under Animations Off; a swap of controls keeps its own motion; see [Fading things in and out](#fading-things-in-and-out) | `CardBlockFade` via `ModuleComponent`, `CardBody` |
+| **Pick on canvas overlay** | Fades in 160 ms / out 110 ms as one component, takes no click once ended, outlines stay until it has faded out | `PickTargetOverlay` via `FadeVisibility` |
 | **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent` |

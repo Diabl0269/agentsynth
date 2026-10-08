@@ -6,6 +6,7 @@
 #include <functional>
 #include <initializer_list>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <utility>
 #include <vector>
 
 // FadeVisibility (docs/layout/animation.md#fading-things-in-and-out): shows and hides one or more child
@@ -33,7 +34,11 @@ public:
     static constexpr double kReducedMs = 80.0;
 
     FadeVisibility(std::initializer_list<juce::Component*> targets)
-        : targets_(targets)
+        : FadeVisibility(std::vector<juce::Component*>(targets)) {}
+
+    /** For a set only known at run time (every control of a card section). `targets` is not empty. */
+    explicit FadeVisibility(std::vector<juce::Component*> targets)
+        : targets_(std::move(targets))
         , updater_(targets_.front()) {
         registry().push_back(this);
     }

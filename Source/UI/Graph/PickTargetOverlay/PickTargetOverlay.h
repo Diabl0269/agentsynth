@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <vector>
 
@@ -9,8 +10,9 @@
 // covers the canvas, the bottom dock and the transport bar alike) that outlines every candidate a
 // surface reported, swallows the next click, and resolves it against the candidates itself -- no
 // card or mixer column knows the mode exists. Entered only from the MIDI Remote panel, never a
-// global key. The outlines are static (painted once into a cached image, redone only when the
-// parent resizes or a click re-measures), so it adds no timer and no animation.
+// global key. The outlines are static (redone only when the parent resizes or a click re-measures), so the
+// overlay adds no timer; it fades in (160 ms) and out (110 ms) with FadeVisibility, taking no click once it
+// has ended, and lands at once off screen or under Animations Off.
 namespace synth::ui {
 
 class PickTargetOverlay
@@ -41,6 +43,7 @@ public:
      *  components; the topmost one when several overlap. Null if none. */
     const PickCandidate* findCandidateAt(juce::Point<int> point);
     int getOutlineCountForTest() const noexcept { return static_cast<int>(outlines_.size()); }
+    bool isFadingForTest() const noexcept { return fade_ != nullptr && fade_->isFading(); }
     juce::Rectangle<int> getOutlineBoundsForTest(int index) const {
         return outlines_[static_cast<size_t>(index)].bounds;
     }
@@ -66,6 +69,7 @@ private:
     bool active_ = false;
     bool probing_ = false;
     juce::Component::SafePointer<juce::Component> watchedParent_;
+    std::unique_ptr<FadeVisibility> fade_; // the overlay itself; built last, so it goes first
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PickTargetOverlay)
 };

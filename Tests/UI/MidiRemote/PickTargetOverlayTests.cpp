@@ -7,6 +7,7 @@
 // bar. Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
@@ -310,4 +311,40 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
         controller.cancelPickTarget();
     }
     root.deleteRecursively();
+}
+
+TEST_F(MidiRemotePickTargetTest, TheOverlayFadesInAndOutAndAnswersNoClickWhileItLeaves) {
+    FadeAnimateGuard guard;
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+    EXPECT_TRUE(overlay().isVisible());
+    EXPECT_NEAR(overlay().getAlpha(), 0.0f, 1e-4f) << "frame 0 is already the first fade frame";
+    EXPECT_TRUE(overlay().isFadingForTest());
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(overlay().getAlpha(), 0.5f, 0.01f); // alpha is stored in 8 bits
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_NEAR(overlay().getAlpha(), 1.0f, 1e-4f);
+    const int outlines = overlay().getOutlineCountForTest();
+    ASSERT_GT(outlines, 0);
+
+    ASSERT_TRUE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(controller_->isPickingTarget());
+    EXPECT_TRUE(overlay().isVisible()) << "still on screen while it fades out";
+    EXPECT_EQ(overlay().getOutlineCountForTest(), outlines) << "the outlines stay painted until it has gone";
+    EXPECT_FALSE(overlay().hitTest(10, 10)) << "it no longer answers a click";
+    EXPECT_FALSE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(overlay().getAlpha(), 0.5f, 0.01f); // alpha is stored in 8 bits
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(overlay().isVisible());
+    EXPECT_EQ(overlay().getOutlineCountForTest(), 0);
+}
+
+TEST_F(MidiRemotePickTargetTest, TheOverlayAppearsAndGoesAtOnceWhenTheWindowIsNotOnScreen) {
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+    EXPECT_TRUE(overlay().isVisible());
+    EXPECT_NEAR(overlay().getAlpha(), 1.0f, 1e-4f);
+    EXPECT_FALSE(overlay().isFadingForTest());
+    ASSERT_TRUE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(overlay().isVisible());
+    EXPECT_EQ(overlay().getOutlineCountForTest(), 0);
 }

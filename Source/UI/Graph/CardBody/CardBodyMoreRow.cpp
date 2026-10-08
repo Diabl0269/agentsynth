@@ -65,14 +65,25 @@ void CardBody::createMoreButton() {
 juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
 
 // A discrete event, never per value change: the card re-measures and the canvas pushes neighbours
-// clear (or returns them) the same way any other card growth does.
+// clear (or returns them) the same way any other card growth does. The row's controls fade and the card's height
+// follows (CardBlockFade); the row is clipped by the card's bottom edge while it grows.
 void CardBody::setMoreUnfolded(bool unfolded) {
     if (!hasMoreRow() || unfolded == moreUnfolded_)
         return;
     moreUnfolded_ = unfolded;
+    if (!moreFade_.isAttached()) {
+        applyVisibility();
+        card_.updateLayout();
+        card_.owner.handleModuleResized(&card_);
+        card_.repaint();
+        return;
+    }
+    startingMore_ = true; // applyVisibility leaves the row's controls to their fade
     applyVisibility();
-    card_.updateLayout();
-    card_.owner.handleModuleResized(&card_);
+    startingMore_ = false;
+    moreFade_.setShown(
+        unfolded, settlingFootprint_, [this] { card_.updateLayout(); },
+        [this] { card_.owner.handleModuleResized(&card_); });
     card_.repaint();
 }
 
@@ -90,8 +101,13 @@ int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) 
     if (apply && moreButton_ != nullptr)
         moreButton_->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
     y += cardbody::kRowHeight + 2;
-    if (moreUnfolded_)
-        y = layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, apply);
+    if (moreUnfolded_ || moreFade_.isFading()) {
+        // The controls sit at their full size and the card's bottom edge clips them while the row opens or closes.
+        if (apply)
+            layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, true);
+        const int full = layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, false) - y;
+        y += moreFade_.isAttached() ? moreFade_.height(full, settlingFootprint_) : full;
+    }
     return y;
 }
 

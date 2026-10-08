@@ -133,9 +133,12 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
     if (kind == Kind::View) {
         const auto& view = plan.items[(size_t)run.front().item];
         const auto* factory = findCardViewFactory(view.view);
-        if (factory == nullptr || !view.open || (apply && view.widget == nullptr))
+        const float shown = view.reveal >= 0.0f ? view.reveal : (view.open ? 1.0f : 0.0f);
+        if (factory == nullptr || shown <= 0.0f || (apply && view.widget == nullptr))
             return y;
-        return cardbody::layoutViewRow(view.widget, factory->preferredHeight(module), y, g, apply);
+        // A view fading in or out takes its height in step, so the rows around it slide.
+        return cardbody::layoutViewRow(view.widget, juce::roundToInt((float)factory->preferredHeight(module) * shown),
+                                       y, g, apply);
     }
     std::vector<cardbody::CaptionedWidget> captioned;
     std::vector<juce::Component*> plain;
@@ -180,7 +183,8 @@ juce::Rectangle<int> naturalCellSize(const CardBodyPlan& plan, juce::AudioProces
     }
     const auto& view = plan.items[(size_t)cell.item];
     const auto* factory = findCardViewFactory(view.view);
-    return {g.contentW, factory != nullptr && view.open ? factory->preferredHeight(module) : 0};
+    const float shown = view.reveal >= 0.0f ? view.reveal : (view.open ? 1.0f : 0.0f);
+    return {g.contentW, factory != nullptr ? juce::roundToInt((float)factory->preferredHeight(module) * shown) : 0};
 }
 
 std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell, int section) {
@@ -359,7 +363,7 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
                 y = layoutAltGroup(plan, module, group, y, g, apply);
             continue;
         }
-        if (!section.visible)
+        if (!section.visible && !section.holding) // a holding one is still on its way out
             continue;
         y = layoutOneSection(plan, module, section, y, g, apply);
     }
@@ -367,6 +371,7 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
 }
 
 int CardBody::layout(int y, const cardbody::BodyGeometry& g, bool apply) const {
+    refreshReveals();
     return layoutCardBodySections(plan_, module_, y, g, apply);
 }
 

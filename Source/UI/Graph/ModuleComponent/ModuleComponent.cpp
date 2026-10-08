@@ -70,6 +70,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                 scopeToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowScopeText);
                 scopeToggle->setToggleState(false, juce::dontSendNotification);
                 scopeComponent->setVisible(false);
+                attachBlockFade(scopeFade_, {scopeComponent.get()});
                 scopeToggle->onClick = [this] { setScopeShown(scopeToggle->getToggleState()); };
                 addAndMakeVisible(scopeToggle.get());
             }
@@ -101,6 +102,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
+        attachBlockFade(responseFade_, {freqResponseComponent.get(), spectrumToggle.get()});
     }
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
@@ -200,6 +202,10 @@ void ModuleComponent::detachFromProcessor() {
     // while the instance is still alive (the module frees it once its node goes).
     releaseHostedPluginCard();
 
+    // The panels' fades hold a VBlank updater on their first panel, so they go before the panels do.
+    scopeFade_.reset();
+    responseFade_.reset();
+    lfoFade_.reset();
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();

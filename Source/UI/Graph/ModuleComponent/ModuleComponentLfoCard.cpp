@@ -116,7 +116,7 @@ void ModuleComponent::createLfoCardControls() {
         if (i >= 0 && i < (int)std::size(kLfoGridDivisions))
             setLfoGridDivisions(kLfoGridDivisions[i]);
     };
-    addAndMakeVisible(lfoGridCombo.get());
+    addChildComponent(lfoGridCombo.get()); // the custom section's fade shows it
 
     lfoShapesButton = std::make_unique<juce::TextButton>("Shapes");
     lfoShapesButton->onClick = [this] {
@@ -129,7 +129,7 @@ void ModuleComponent::createLfoCardControls() {
             });
         showContextMenuHook_(menu);
     };
-    addAndMakeVisible(lfoShapesButton.get());
+    addChildComponent(lfoShapesButton.get());
 
     lfoToolsButton = std::make_unique<juce::TextButton>("Tools");
     lfoToolsButton->onClick = [this] {
@@ -142,7 +142,8 @@ void ModuleComponent::createLfoCardControls() {
             });
         showContextMenuHook_(menu);
     };
-    addAndMakeVisible(lfoToolsButton.get());
+    addChildComponent(lfoToolsButton.get());
+    attachBlockFade(lfoFade_, {lfoCurveEditor.get(), lfoGridCombo.get(), lfoShapesButton.get(), lfoToolsButton.get()});
 
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
     syncLfoCustomSectionVisibility();
@@ -204,20 +205,12 @@ void ModuleComponent::syncLfoCustomSectionVisibility() {
     auto* shapeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module, "shape"));
     const bool isCustom = shapeParam != nullptr && shapeParam->getIndex() == LFOModule::kCustomShapeIndex;
 
-    lfoCurveEditor->setVisible(isCustom);
-    if (lfoGridCombo != nullptr)
-        lfoGridCombo->setVisible(isCustom);
-    if (lfoShapesButton != nullptr)
-        lfoShapesButton->setVisible(isCustom);
-    if (lfoToolsButton != nullptr)
-        lfoToolsButton->setVisible(isCustom);
-
     auto* bipolarParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "bipolar"));
     const bool bipolar = bipolarParam != nullptr && bipolarParam->get();
     lfoCurveEditor->setFillBaselineLevel(bipolar ? 0.5f : 0.0f);
 
-    updateLayout();
-    owner.handleModuleResized(this);
+    // The editor and its toolbar fade in and out with their height (docs/layout/animation.md#fading-things-in-and-out).
+    fadeBlock(lfoFade_, isCustom);
 }
 
 void ModuleComponent::applyLfoWavePreset(int presetIndex) {
@@ -334,19 +327,21 @@ int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int content
     if (lfoCurveEditor == nullptr || !lfoCurveEditor->isVisible())
         return y;
 
+    // Each part takes its height in step with the fade, so the rows under the section slide.
     if (apply) {
+        const int rowH = blockHeight(lfoFade_, kRowHeight);
         int x = contentX;
-        lfoGridCombo->setBounds(x, y, kLfoGridComboWidth, kRowHeight);
+        lfoGridCombo->setBounds(x, y, kLfoGridComboWidth, rowH);
         x += kLfoGridComboWidth + kLfoToolbarGap;
-        lfoShapesButton->setBounds(x, y, kLfoToolbarButtonWidth, kRowHeight);
+        lfoShapesButton->setBounds(x, y, kLfoToolbarButtonWidth, rowH);
         x += kLfoToolbarButtonWidth + kLfoToolbarGap;
-        lfoToolsButton->setBounds(x, y, kLfoToolbarButtonWidth, kRowHeight);
+        lfoToolsButton->setBounds(x, y, kLfoToolbarButtonWidth, rowH);
     }
-    y += kRowHeight + 2;
+    y += blockHeight(lfoFade_, kRowHeight + 2);
 
     if (apply)
-        lfoCurveEditor->setBounds(contentX, y, contentW, kLfoWaveGraphHeight);
-    y += kLfoWaveGraphHeight + 8;
+        lfoCurveEditor->setBounds(contentX, y, contentW, blockHeight(lfoFade_, kLfoWaveGraphHeight));
+    y += blockHeight(lfoFade_, kLfoWaveGraphHeight + 8);
 
     return y;
 }

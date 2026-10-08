@@ -209,16 +209,17 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
         y += kRowHeight + 2;
     }
 
+    // The panels below fade in and out and take their height in step (blockHeight), so what is under them slides.
     if (freqResponseComponent && freqResponseComponent->isVisible()) {
         if (apply)
-            freqResponseComponent->setBounds(contentX, y, contentW, 120);
-        y += 128;
+            freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
+        y += blockHeight(responseFade_, 128);
     }
 
     if (spectrumToggle && spectrumToggle->isVisible() && !footer) {
         if (apply)
-            spectrumToggle->setBounds(contentX, y, contentW, kRowHeight);
-        y += kRowHeight + 2;
+            spectrumToggle->setBounds(contentX, y, contentW, blockHeight(responseFade_, kRowHeight));
+        y += blockHeight(responseFade_, kRowHeight + 2);
     }
 
     if (scopeToggle && !footer) {
@@ -229,8 +230,8 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
 
     if (scopeComponent && scopeComponent->isVisible()) {
         if (apply)
-            scopeComponent->setBounds(contentX, y, contentW, 100);
-        y += 100;
+            scopeComponent->setBounds(contentX, y, contentW, blockHeight(scopeFade_, 100));
+        y += blockHeight(scopeFade_, 100);
     }
 
     if (footer)

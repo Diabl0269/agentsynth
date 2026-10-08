@@ -322,7 +322,9 @@ target was mapped to and whatever the control drove in the same scope, so a cont
 project and one global assignment. The overlay is
 `synth::ui::PickTargetOverlay` (`Source/UI/Graph/PickTargetOverlay/`), a transparent layer added to
 `MainComponent` — not to the canvas — because the mixer columns and the transport bar are not canvas
-children. It draws once (no timer, no animation), resolves the click itself against the candidates every
+children. It draws once (no timer) and fades in and out with `FadeVisibility` (160 ms in, 110 ms out; at once off
+screen or under Animations Off; it takes no click from the moment it ends, and its outlines stay painted until it has
+faded out), resolves the click itself against the candidates every
 surface reports through its own `collectPickCandidates()` (each surface keeps its own registry; no card
 knows the mode exists), clips each outline by its ancestors so a control under the dock's edge is neither
 drawn nor pickable, lets `BottomDockComponent::getTabButtons()` through (`setPickPassThrough`) and re-collects
