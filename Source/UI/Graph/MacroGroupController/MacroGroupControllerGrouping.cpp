@@ -503,9 +503,12 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
     // ONE undo entry for the whole gesture, not one per macro — applyMacroCollapsed (the raw
     // mutation) runs inside one recorded change.
     auto& graph = host_.graph();
+    const auto foldBefore = snapshotFoldState();
     auto doToggleAll = [this, touchedMacroIds, targetCollapsed] {
+        batchingFolds_ = true;
         for (const auto& macroId : touchedMacroIds)
             applyMacroCollapsed(macroId, targetCollapsed);
+        batchingFolds_ = false;
     };
 
     if (host_.undo())
@@ -513,6 +516,7 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
     else
         doToggleAll();
 
+    foldChangedMacros(foldBefore);
     host_.requestRepaint();
 }
 
@@ -608,6 +612,10 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     if (m == nullptr || m->collapsed == collapsed)
         return;
 
+    // The modules' pictures and the border as they stand now, for the fold that flies them into (or out of) the card.
+    // A multi-macro toggle takes one snapshot for all of them and folds them together.
+    const auto foldBefore = batchingFolds_ ? nullptr : snapshotFoldState();
+
     if (collapsed) {
         // Collapsing FROM expanded: seed the card at the current member bounding box's top-left,
         // sized to the standard card footprint. Port members are EXCLUDED from this union, the
@@ -656,6 +664,7 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
         restoreCardAfterCollapse(macroId);
         returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
     }
+    foldChangedMacros(foldBefore); // every card is final; this only animates how they got there
 }
 
 // The canvas content is (0,0) to the canvas frame plus slack (it grows right/down only) and anything left of or above
@@ -763,6 +772,8 @@ MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
 
         MacroMemberPreview preview;
         preview.bounds = comp->getBounds();
+        preview.nodeUid = nodeId.uid;
+        preview.comp = comp;
         preview.category = categoryForNode(graph.getNodeForId(nodeId));
         result.push_back(preview);
     }

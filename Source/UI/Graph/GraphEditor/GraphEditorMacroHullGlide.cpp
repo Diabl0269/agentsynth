@@ -5,6 +5,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "MacroOwnerIndex.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 namespace graph_editor_paint {
@@ -73,7 +74,9 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
     if (memo != nullptr && &memo->editor_ == this)
         if (const auto it = memo->hulls_.find(macroId); it != memo->hulls_.end())
             return it->second;
-    const auto hull = hullGlide_.apply(macroId, macroHullTargetBounds(macroId));
+    // A macro unfolding grows its border ahead of its modules, always holding the ones in flight.
+    const auto folding = cardGlide_.fold().expandOutlineFor(macroId);
+    const auto hull = folding ? *folding : hullGlide_.apply(macroId, macroHullTargetBounds(macroId));
     if (memo != nullptr && &memo->editor_ == this)
         memo->hulls_.emplace(macroId, hull);
     return hull;

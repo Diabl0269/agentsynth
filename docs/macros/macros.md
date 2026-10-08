@@ -29,7 +29,9 @@ processing of its own and no graph edges beyond the ones its ports carry.
 - A channel macro a track plays shares that track's colour in both directions
   ([`docs/mixer/mixer.md`](../mixer/mixer.md#a-track-and-its-macro-share-a-colour)); any other macro keeps its own.
 - Collapsed, a macro draws as a `MacroCardComponent` and its member `ModuleComponent`s are hidden.
-  Expanded, it draws as a dashed hull around the union of its members' bounds.
+  Expanded, it draws as a dashed hull around the union of its members' bounds. Toggling between the two folds the
+  modules into the card's preview boxes and back out, instead of swapping at once
+  ([Macro fold](../layout/animation.md#macro-fold)); the model change is still instant.
 - Selection, drag and delete are **not** a parallel mechanism: selecting a macro selects its members
   in the ordinary `SelectionModel`, so the existing group-drag and delete paths do the work
   unchanged.

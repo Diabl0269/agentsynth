@@ -281,6 +281,52 @@ every surface that animates a delete:
 - Not yet covered: timeline track rows, collapsed macro cards, and the mod panel's source rows (those still remove at
   once, or use their own collapse). They should reuse `ExitEnterTimeline`.
 
+### Macro fold
+
+Collapsing a macro folds its modules into the closed card; expanding unfolds them out of it. The model change is
+still instant and one undo step (`MacroGroupController::applyMacroCollapsed`); the flight is a paint-only layer in
+`MacroFoldAnimator` (`Source/UI/Graph/MacroFoldAnimator/`), owned by `CardGlideAnimator` (`fold()`), drawn by the same
+overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`, unit-tested without components).
+
+- **Collapse:** each member flies (position and size, `easeInCubic`, 200 ms) from its card to its own preview box on
+  the closed card, which sits at the group's top-left. Members leave 35 ms apart; for a big macro the stagger shrinks
+  so the last one still lands by 320 ms. The macro's dashed border shrinks in parallel. Each ghost cross-fades from the
+  picture of its card to its category-coloured box in the last part of its flight, and the real card takes over from
+  the ghosts in the last 80 ms.
+- **Expand:** the exact reverse (the module that left last comes out first), with the 8% bounce
+  (`easeOutBackGrow`) as each lands. The border grows ahead of the modules and is done by about 60% of the flights.
+  A module's real card shows the moment its ghost lands.
+- **The border always holds every module:** it is drawn as the card-to-border blend unioned with every module's
+  current rect (`macro_fold::outlineRect`), so no frame shows a module outside it. An expanding macro's border is
+  returned by `GraphEditor::paintedMacroHullBounds` (so the chip and buttons ride it); a collapsing macro's dashed
+  border is drawn by the fold itself, since the macro is already collapsed.
+- **Landing is exact:** the preview boxes come from one pure function, `macro_preview::boxes`
+  (`MacroPreviewLayout.h`), used by `MacroCardComponent::paint` and by the fold, so a module lands on the box the card
+  then draws.
+- **Cables:** a cable with both ends on a collapsing module rides the two flying ghosts and fades as they reach their
+  boxes; a cable crossing the border re-attaches to the card at once, as it always did. When expanding, a cable that
+  touches a module is left out of the canvas' cable memo (`MacroFoldAnimator::applyTo`) and is not drawn until that
+  module lands (the later one, when both ends are modules), then draws out of its port over 160 ms. That draw-out runs
+  past the 320 ms cap by up to 160 ms; the modules never do.
+- **Held cards are invisible**, not just transparent: the closed card while collapsing, each member's card until it
+  lands while expanding. An invisible card can be neither clicked, focused nor read by a screen reader, and
+  `syncMacroCards` decides visibility again when the fold ends.
+- **Port widgets** of an unfolding macro dock to the open border at once, so they are held invisible with the module
+  cards and shown when the border has grown to them (about 60% of the flights).
+- **Several macros at once** (a multi-macro toggle, an undo step that flips more than one) fold together: the toggle
+  takes one `snapshotFoldState()` and starts every plan in one `foldChangedMacros()`.
+- **Pictures come from the cards' rasters** (`ZoomFrozenCachedImage::lastRaster`); a card that was never painted (a
+  macro expanded straight after a project load) is rendered once, up to 16 modules, and past that flies as a plain box.
+- **Undo and redo animate too.** `AppUndoManager::applyHistoryStep` takes `snapshotFoldState()` before the restore and
+  calls `foldChangedMacros()` after it, which folds every macro whose collapsed state flipped, all in one animation.
+  Those modules keep out of the delete and undo ghosts (`CardGlideAnimator::dropGhostsFor`).
+- **Interruption:** any pass that re-syncs the cards (`syncMacroCards`: a second toggle, a rename) lands the running
+  fold at once first. Nested macros are not folded: a nested child's card simply lands with its ancestor.
+- **Reduce Motion:** no flight; the card that appears (the closed card, or the members) fades in over 80 ms. Animations
+  Off, and an off-screen canvas, land at once (`Hooks::canAnimate`; tests force it with `setForceAnimateForTest` and
+  step `MacroFoldAnimator::applyAtMs`).
+- **A frame repaints only the fold's area** (its border, ghosts and the cables it draws), never the whole canvas.
+
 ### Controls arriving and leaving a card
 
 In the on-card layout editor ([editing a layout](module-card-layout.md#editing-a-layout)) a control that is added
@@ -461,6 +507,8 @@ shortcut.
   (160 ms in, 110 ms out); on hover its glyph lifts 1 px and does one small per-icon motion, never
   more than 2 icon units from rest. Under Reduce Motion nothing moves and only the colours change:
   [What moves, and how](#what-moves-and-how).
+- **Macro fold.** A macro's modules fly into its closed card (200 ms each, 35 ms apart, all landed by 320 ms) and out
+  again with the 8% bounce; the border always holds every module: [details](#macro-fold).
 - **Swapping controls.** Controls that swap in a cell (a Sync flip) shrink out over 190 ms, then the arriving ones
   grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
@@ -581,6 +629,7 @@ strings.
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent` |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
+| **Macro fold** | Collapse: each module flies from its card into its preview box on the closed card (`easeInCubic`, 200 ms, 35 ms apart, all landed by 320 ms) while the dashed border shrinks around them. Expand: the reverse with the 8% bounce, the border growing ahead, each cable drawing out of its port (160 ms) once its module lands. Plain 80 ms fade under Reduce Motion; at once when Off or not on screen; undo and redo fold too; see [Macro fold](#macro-fold) | `MacroFoldAnimator` via `CardGlideAnimator` |
 | **Card make-room / return / auto-arrange glide** | Cards moved by a make-room push, a macro slid in from the canvas edge, a neighbour return or Auto Arrange slide from the old to the new spot (160 ms, `easeOutCubic`): geometry is final at once, the real card is hidden (alpha 0) and a snapshot glides on a canvas overlay (a card whose whole path is off the visible canvas gets no snapshot and is not hidden, see [rendering](rendering.md#per-frame-work-does-not-grow-with-the-patch)); cables touching it follow; hulls and port strips glide separately (see the macro border glide row); undo/redo glide the cards back and forth, including a module taken out of or put into a macro (see [Undo and redo glide](#undo-and-redo-glide)); loads land at once; a retarget starts from the drawn position; frames only while it runs; see [Making room](layout.md#making-room-when-something-grows) | `CardGlideAnimator` via `GraphEditor` |
 | **Macro-crossing cable slide + module flash (FRO41)** | Also on a cable drop that mints a macro port: the new cables' port ends emerge from the release point (no flash). When a drag crosses an expanded macro's hull (applied live, mid-drag, or on the drop): a cable re-routed through an auto-created/removed port slides to its new anchor (220 ms, `easeOutCubic`; endpoints are offset from their live anchors, so a slide started mid-drag stays attached to the moving card), and the dragged module gets a fading ring — pure tween state in `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), driven by `macroCrossingDriverAnim_`; see [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41) | `GraphEditor` |
 | **Macro border glide** | A macro's border glides to its new bounds instead of snapping (220 ms, `easeOutCubic`) on a live membership change, a drag candidate change, and when a drag ends and the held border is released, and on undo and redo of a membership change. The dashed outline, port strips, chip and buttons and docked port widgets glide together (the driver re-docks the widgets each frame); each edge is offset from the live border, so a border that keeps moving still lands on it. Pure state in `MacroHullGlide` (`Source/UI/Graph/MacroHullGlide/`), applied in `GraphEditor::paintedMacroHullBounds`; see [`docs/macros/menu-and-membership.md#macro-borders-glide`](../macros/menu-and-membership.md#macro-borders-glide) | `GraphEditor` |

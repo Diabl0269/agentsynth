@@ -12,12 +12,15 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
     const auto cablesBefore =
         ge != nullptr ? ge->snapshotCablesForRetract() : std::vector<graph_editor_types::VisibleCable>();
     const auto hullsBefore = ge != nullptr ? ge->snapshotPaintedHulls() : MacroHullGlide::Hulls();
+    // A collapse or expand the step reverses folds the modules in or out again, like the edit did.
+    const auto foldsBefore = ge != nullptr ? ge->getMacroController().snapshotFoldState() : nullptr;
     beginRestore();
     const bool did = redoStep ? undoManager.redo() : undoManager.undo();
     endRestore(did);
     if (did && ge != nullptr) {
         ge->retractCablesGoneSince(cablesBefore);
         ge->glideHullsFrom(hullsBefore); // a macro border a take-out or join moved glides back like it glided out
+        ge->getMacroController().foldChangedMacros(foldsBefore);
     }
     return did;
 }

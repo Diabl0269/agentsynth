@@ -12,6 +12,7 @@
 // children. Its one production caller is GraphEditor::changeMacroPortColour in GraphEditorMacroApi.cpp.
 
 #include "GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 
 #include "GraphEditorInternal.h"
 #include "MacroOwnerIndex.h"
@@ -26,6 +27,7 @@
 // MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
 // MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
 void GraphEditor::syncMacroCards() {
+    cardGlide_.fold().land(); // a macro still folding lands first: this pass decides which cards show
     auto& cards = content.getMacroCards();
 
     // 1. Remove cards for macros that no longer exist.

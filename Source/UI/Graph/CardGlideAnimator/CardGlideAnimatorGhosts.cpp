@@ -81,6 +81,19 @@ void CardGlideAnimator::landGhosts() noexcept {
                  items_.end());
 }
 
+void CardGlideAnimator::dropGhostsFor(const std::vector<uint32_t>& nodeUids) {
+    const auto listed = [&nodeUids](const Item& it) {
+        return it.kind != Kind::Move && std::find(nodeUids.begin(), nodeUids.end(), it.nodeUid) != nodeUids.end();
+    };
+    for (auto& item : items_)
+        if (listed(item) && item.kind == Kind::Enter)
+            if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
+                comp->setAlpha(item.savedAlpha);
+    items_.erase(std::remove_if(items_.begin(), items_.end(), listed), items_.end());
+    timeline_.hasExit = exitGhostCount() > 0;
+    timeline_.hasEnter = enterGhostCount() > 0;
+}
+
 bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now,
                                   float snapshotScale) {
     landGhosts();
