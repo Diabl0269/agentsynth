@@ -120,6 +120,9 @@ inline void paintMacroPortFooterButton(juce::Graphics& g, juce::Rectangle<float>
 /** Paints both sidebar strips and their '+'/'-' buttons for every expanded macro, under the port widgets
  *  (GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale, deciding whether '-' shows. */
 void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom);
+/** Every macro as the canvas draws it now, for the border that leaves or returns with a delete or its undo
+ *  (CardGlideAnimator::Border; GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale. */
+std::vector<CardGlideAnimator::Border> captureMacroBorders(GraphEditor& editor, float zoom);
 
 /** True when a source channel carries a structural, absolute-valued signal rather than normalised
  *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever

@@ -147,6 +147,7 @@ void GraphEditor::pruneSelection() {
 // Snapshots the cards of `ids` for the exit animation (CardGlideAnimatorGhosts.cpp); call it inside an open glide
 // Scope, before the removal. The model change itself stays immediate.
 void GraphEditor::noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) {
+    cardGlide_.noteMacroBorders(); // an open macro this removes outright shrinks its border away with its cards
     for (auto id : ids)
         if (auto* card = moduleComponentFor(id))
             cardGlide_.noteExit(card, id.uid);

@@ -302,7 +302,14 @@ every surface that animates a delete:
   then the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that
   appears after an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds
   just grows in (160 ms, no outline). See the "Mod-dot panel" row below.
-- Not yet covered: collapsed macro cards (those still remove at once).
+- **Macros:** a collapsed macro's card is a ghost of its own, keyed by its macro id (`CardGlideAnimator::macroKey`,
+  since a macro card has no node id), and shrinks and grows exactly like a module card. An open macro's
+  member cards ghost as usual, and its dashed border, name chip and port strips (a `CardGlideAnimator::Border`,
+  captured before the change by `noteMacroBorders`, drawn from that data since the macro itself is gone) shrink away
+  with them in the same exit phase. Cmd+Z holds the real border back (`isBorderHeld`) while the ghost grows with the
+  cards. A macro that only folds or unfolds is no delete: its card is hidden, not removed, so it never ghosts (the
+  [fold](#macro-fold) animates it). A macro that merely loses its border (ungrouped) keeps its modules and does not
+  ghost either.
 
 ### Macro fold
 

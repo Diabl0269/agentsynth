@@ -7,6 +7,7 @@
 
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
+#include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
@@ -72,8 +73,12 @@ void GraphEditor::configureCardGlide() {
                 out.push_back({m, m->getNodeId().uid});
         for (auto* card : content.getMacroCards())
             if (card != nullptr)
-                out.push_back({card, 0});
+                out.push_back({card, CardGlideAnimator::macroKey(card->getMacroId())});
         return out;
+    };
+    hooks.borders = [this] {
+        const graph_editor_paint::CardMapScope oneCardMap(*this); // every border reads one map of the cards
+        return detail::captureMacroBorders(*this, zoomLevel);
     };
     hooks.snapshotScale = [this] {
         const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());

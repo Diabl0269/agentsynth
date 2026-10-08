@@ -13,6 +13,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -28,7 +29,28 @@ juce::Rectangle<int> visibleCanvasArea(const juce::Component& card);
 
 class CardGlideAnimator {
 public:
-    /** One card: `nodeUid` is the module's node id, 0 for a macro card. */
+    /** The ghost identity of a macro card (macroKey) and of an open macro's border (borderKey): node ids never reach
+     *  the top two bits, so neither collides with a module. */
+    static uint32_t macroKey(const juce::String& macroId) noexcept {
+        return 0x80000000u | (static_cast<uint32_t>(macroId.hashCode()) & 0x3fffffffu);
+    }
+    static uint32_t borderKey(uint32_t macroCardKey) noexcept { return macroCardKey | 0x40000000u; }
+    static bool isMacroKey(uint32_t key) noexcept { return (key & 0x80000000u) != 0; }
+
+    /** What a macro looks like on the canvas, captured while the canvas shows it so that a macro the change removes can
+     *  leave with its cards: `open` borders carry the geometry and look of the dashed border, the name chip and the
+     *  two port strips; `members` are the node ids of everything drawn inside it. */
+    struct Border {
+        uint32_t key = 0; // macroKey of the macro
+        bool open = false;
+        juce::Rectangle<int> hull, chip;
+        juce::Colour colour, stripFill;
+        juce::String name;
+        int inWidth = 0, outWidth = 0;
+        std::vector<uint32_t> members;
+    };
+
+    /** One card: `nodeUid` is the module's node id; a macro card carries its macroKey. */
     struct Entry {
         juce::Component* comp = nullptr;
         uint32_t nodeUid = 0;
@@ -37,6 +59,8 @@ public:
     /** What the owner lends: every card on the canvas, the snapshot scale, a repaint, and the VBlank updater. */
     struct Hooks {
         std::function<std::vector<Entry>()> cards;
+        /** Every macro on the canvas as it looks now (see Border). Unset: macros leave without their border. */
+        std::function<std::vector<Border>()> borders;
         std::function<float()> snapshotScale;
         /** Repaints the whole canvas and drops its cable memo. */
         std::function<void()> repaint;
@@ -88,6 +112,13 @@ public:
     /** Delete/undo ghosts (CardGlideAnimatorGhosts.cpp). While a Scope is open, snapshots `comp` so that, if the
      *  mutation removes its node, the card shrinks away instead of vanishing. No-op when not animating. */
     void noteExit(juce::Component* comp, uint32_t nodeUid);
+    /** While a Scope is open, remembers how every macro border looks so that, if the mutation removes a macro with all
+     *  its modules, the border shrinks away with them. Once per Scope; a restore Scope does it on entry. */
+    void noteMacroBorders();
+    /** Whether the real border of `macroId` stays unpainted: an undo is growing it back as a ghost. */
+    bool isBorderHeld(const juce::String& macroId) const noexcept;
+    /** Border ghosts live right now (test seam). */
+    int borderGhostCount() const noexcept;
     /** Test seam: animate even though the canvas is not showing. */
     void setForceAnimateForTest(bool force) noexcept { forceAnimate_ = force; }
     /** The fold of a macro's modules into its closed card and back, drawn by the same overlay. */
@@ -167,6 +198,7 @@ private:
         juce::Rectangle<int> from, to;
         juce::Image snapshot;
         float savedAlpha = 1.0f;
+        std::shared_ptr<const Border> border; // a macro border ghost: drawn from this, no card behind it
     };
 
     juce::Rectangle<float> currentRect(const Item& item) const noexcept;
@@ -184,6 +216,8 @@ private:
     bool armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
     void paintGhost(juce::Graphics& g, const Item& item) const;
     bool hasMoveItems() const noexcept;
+    void armBorderGhosts(const std::vector<Entry>& now, bool& anyExit, bool& anyEnter);
+    static void paintBorder(juce::Graphics& g, const Border& border, float scale, float alpha);
 
     Hooks hooks_;
     std::unique_ptr<MacroFoldAnimator> fold_;
@@ -194,6 +228,8 @@ private:
     int depth_ = 0;
     int armCount_ = 0;
     std::vector<Candidate> candidates_;
+    std::vector<Border> borders_;          // captured by noteMacroBorders
+    std::set<uint32_t> preexistingMacros_; // every macro card there when the Scope opened, shown or not
     synth::ui::ExitEnterTimeline timeline_;
     synth::ui::ExitEnterTimeline::Frame frame_;
     bool phased_ = false;

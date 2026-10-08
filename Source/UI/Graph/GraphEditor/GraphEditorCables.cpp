@@ -100,7 +100,8 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // only in that one case (a member being pulled out must visibly shrink the hull away from
         // it, which the live union alone can never do).
         const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty() || !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
+        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id) ||
+            !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
             continue;
         ++graph_editor_paint::workCounters().hullsPainted;
 
