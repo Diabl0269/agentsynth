@@ -89,8 +89,15 @@ void MixerSectionLayout::setHidden(MixerSection section, bool hidden) {
     if (hidden_[indexOf(section)] == hidden)
         return;
     hidden_[indexOf(section)] = hidden;
+    shownAmount_[indexOf(section)] = hidden ? 0.0f : 1.0f; // an owner that tweens it overrides this in the notify
     notifyGeometry();
     notifyCommitted();
+}
+
+float MixerSectionLayout::getShownAmount(MixerSection section) const noexcept { return shownAmount_[indexOf(section)]; }
+
+void MixerSectionLayout::setShownAmount(MixerSection section, float amount) noexcept {
+    shownAmount_[indexOf(section)] = std::clamp(amount, 0.0f, 1.0f);
 }
 
 // Fits the sections into a column `columnHeight` px tall. With room to spare every section gets its
@@ -102,7 +109,8 @@ void MixerSectionLayout::setHidden(MixerSection section, bool hidden) {
 MixerSectionLayout::Geometry MixerSectionLayout::resolve(int columnHeight) const noexcept {
     std::array<int, kSectionCount> heights{};
     for (size_t i = 0; i < heights.size(); ++i)
-        heights[i] = hidden_[i] ? kCollapsedHeight : requested_[i];
+        heights[i] =
+            kCollapsedHeight + (int)std::lround((double)(requested_[i] - kCollapsedHeight) * (double)shownAmount_[i]);
     int pan = kPanHeight;
 
     int deficit = fixedChrome() + kMinFaderHeight + pan - columnHeight;
@@ -170,6 +178,7 @@ void MixerSectionLayout::dragDividerBy(MixerSection section, int deltaPx) {
         if (deltaPx <= 0)
             return;
         hidden_[indexOf(section)] = false;
+        shownAmount_[indexOf(section)] = 1.0f;
         dragStartHeight_ = kCollapsedHeight; // the strip is where the section grows from
         requested_[indexOf(section)] = snapHeight(section, dragStartHeight_ + deltaPx);
         notifyGeometry();
@@ -194,6 +203,8 @@ void MixerSectionLayout::loadFrom(const juce::PropertySet& settings) {
     hidden_[indexOf(MixerSection::Inserts)] = settings.getBoolValue(kInsertsHiddenKey, false);
     hidden_[indexOf(MixerSection::Sends)] = settings.getBoolValue(kSendsHiddenKey, false);
     hidden_[indexOf(MixerSection::Eq)] = settings.getBoolValue(kEqHiddenKey, false);
+    for (size_t i = 0; i < shownAmount_.size(); ++i)
+        shownAmount_[i] = hidden_[i] ? 0.0f : 1.0f;
     notifyGeometry();
 }
 

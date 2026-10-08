@@ -67,6 +67,14 @@ public:
     void setHidden(MixerSection section, bool hidden);
     void toggleHidden(MixerSection section) { setHidden(section, !isHidden(section)); }
 
+    /** How open `section` is drawn right now, 1 = its requested height, 0 = the 14 px strip. It follows
+     *  isHidden() at once unless the owner tweens it (the panel's fades call setShownAmount() each frame), so
+     *  every column, Master included, slides its rows through the same heights. A hidden flip, a divider drag
+     *  and a load all put it back on the logical state. */
+    float getShownAmount(MixerSection section) const noexcept;
+    /** Does not notify: the caller lays out again itself. */
+    void setShownAmount(MixerSection section, float amount) noexcept;
+
     /** Every column's geometry for a column `columnHeight` px tall. */
     Geometry resolve(int columnHeight) const noexcept;
     /** The column height at which every section gets its full height and the fader its minimum. */
@@ -99,6 +107,7 @@ private:
     std::array<int, kSectionCount> requested_{kDefaultInsertRows * kInsertRowHeight, kDefaultSendRows* kSendRowHeight,
                                               kEqHeight};
     std::array<bool, kSectionCount> hidden_{false, false, false};
+    std::array<float, kSectionCount> shownAmount_{1.0f, 1.0f, 1.0f};
     int hoveredDivider_ = -1;
     int draggingDivider_ = -1;
     int dragStartHeight_ = 0;

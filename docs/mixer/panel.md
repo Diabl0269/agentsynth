@@ -685,6 +685,13 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
   any column, or its toolbar toggle, shows it again. The strip is an accessibility button titled
   "Show Sends" etc. **The EQ curve's show/hide is this same control** (see
   [the EQ curve thumbnail](#the-eq-curve-thumbnail)).
+- **Closing and opening slide.** A section's height does not jump. The layout keeps an open amount per
+  section (`getShownAmount`, 1 = its height, 0 = the strip) that `resolve()` reads, and the panel writes it from one
+  `FadeVisibility` per section (an empty probe component, 160 ms in, 110 ms out, plain 80 ms under Reduce Motion), so
+  every column, Master included, slides its rows and fader through the same heights. The section's rows
+  (`MixerSectionSwap`) cross-fade with the strip while it slides; the EQ curve dims with its height. A reversal
+  mid-slide starts from the current height; a divider drag, a load and a standalone column land at once; off
+  screen and under Animations Off the change lands before `setHidden` returns.
 - **Dividers.** A 6 px `MixerSectionDivider` under each section in every column: a 1 px `border` line, or a 2 px `accent` line while hovered or
   dragged -- the hover state lives on the shared layout, so the whole row lights up together. The
   Inserts and Sends dividers show the vertical-resize cursor; dragging one resizes that section in

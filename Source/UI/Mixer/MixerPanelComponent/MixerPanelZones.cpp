@@ -79,8 +79,9 @@ int MixerPanelComponent::layoutZones(juce::Rectangle<int> area, bool scrollsVert
         scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, area.getHeight());
     auto place = [&](Zone& zone, int need, int width, bool leftSide) {
         const bool used = need > 0 && width > 0;
-        zone.viewport.setVisible(used);
-        zone.divider.setVisible(used);
+        // A zone fades in when a column is pinned to it and out when its last column leaves; a fading-out
+        // zone keeps its last bounds.
+        zone.fade.setShown(used);
         if (!used)
             return;
         zone.viewport.setBounds(leftSide ? area.removeFromLeft(width) : area.removeFromRight(width));

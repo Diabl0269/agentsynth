@@ -393,6 +393,8 @@ private:
     MixerSectionViewport sendViewport_;
     std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
     std::array<MixerCollapsedSection, MixerSectionLayout::kSectionCount> collapsed_;
+    // After the viewports and strips they fade (destroyed first).
+    std::array<std::unique_ptr<MixerSectionSwap>, MixerSectionLayout::kSectionCount> sectionSwaps_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     MixerFader fader_;

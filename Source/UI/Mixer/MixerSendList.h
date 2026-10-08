@@ -4,6 +4,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include <cmath>
@@ -262,6 +263,8 @@ private:
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
     AddSendAccessibilityProxy addSendProxy_;
+    /** The painted "+ Send" row fades with the proxy (its opacity is the text's); see paint(). */
+    FadeVisibility addSendFade_{&addSendProxy_};
 
     // Drag-reorder gesture. pressedRow_ is armed on a name-area mouseDown and stays set for the whole
     // press (drag or not); the animator's keys are the rows' indices at the press. The press only

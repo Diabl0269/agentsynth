@@ -585,8 +585,9 @@ as the state changes); the plan badge; the bottom dock's tabs (Timeline, Mixer, 
 out over the arriving one (the active tab lands at once; the leaving panel's own visible flag follows its host's fade); the
 piano roll opening and closing against the clip lanes (closing fades the emptied roll out as the lanes fade in); the
 routing pane's canvas node, Show on canvas link, MIDI destinations and mixer channel row, whose heights follow the fade
-so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; and a new
-modulator row with its band in the lanes. The status bar's transient and sticky messages do the same with their own
+so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; a new
+modulator row with its band in the lanes; and the mixer's sections closing and opening (the height slides in every column from the fade's `progress()`, see [the shared sections](../mixer/panel.md#shared-sections)), its Direct and Master columns being shown or hidden, a pinned zone, the empty hint, a column header's colour dot and sources badge, the "+ Send" row and the zones pane's Show all.
+The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
 the cleared message's words staying painted until then. Inside a module card, the Show Scope and Show Response
 panels (with the Spectrum toggle), the LFO's custom wave section (curve editor, Grid, Shapes and Tools), the ADSR's

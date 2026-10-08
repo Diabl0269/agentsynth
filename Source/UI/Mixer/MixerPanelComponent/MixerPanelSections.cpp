@@ -13,6 +13,24 @@ void MixerPanelComponent::wireSectionLayout() {
     sectionLayout_.onCommitted = [this] { onSectionLayoutCommitted(); };
 }
 
+// A section opens and closes by sliding its height: a fade per section (on an empty probe component) carries the
+// open amount, and each frame writes it into the shared layout and lays everything out again, so every column
+// slides its rows through the same heights and the faders keep lining up. Off screen the fade lands at once.
+void MixerPanelComponent::wireSectionFades() {
+    for (size_t i = 0; i < sectionProbes_.size(); ++i) {
+        auto& probe = sectionProbes_[i];
+        addAndMakeVisible(probe);
+        probe.setInterceptsMouseClicks(false, false);
+        probe.setWantsKeyboardFocus(false);
+        probe.setAccessible(false);
+        sectionFades_[i] = std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{&probe});
+        sectionFades_[i]->onFrame = [this, i] {
+            sectionLayout_.setShownAmount((MixerSection)(int)i, sectionFades_[i]->progress());
+            resized();
+        };
+    }
+}
+
 // Loaded once per store: the heights are app-wide, like the bottom dock's own height, so the docked
 // panel and the "both places" mirror read the same keys. The side pane's open state and width load here
 // too, under the Mixer's own tab key.
@@ -43,9 +61,14 @@ bool MixerPanelComponent::contentScrollsVertically() const {
 void MixerPanelComponent::onSectionGeometryChanged() {
     bool reshown = false;
     for (size_t i = 0; i < lastHidden_.size(); ++i) {
-        const bool hidden = sectionLayout_.isHidden((MixerSection)(int)i);
+        const auto section = (MixerSection)(int)i;
+        const bool hidden = sectionLayout_.isHidden(section);
         reshown = reshown || (lastHidden_[i] && !hidden);
         lastHidden_[i] = hidden;
+        // The layout snapped to the final height; the fade takes it back to wherever the section is now (the
+        // final one too when nothing animates, and mid-way when a flip reverses a running fade).
+        sectionFades_[i]->setShown(!hidden);
+        sectionLayout_.setShownAmount(section, sectionFades_[i]->progress());
     }
     if (sectionLayout_.getDraggingDivider() >= 0 && canGrowHost && canGrowHost() && growHost) {
         const int shortfall = requiredPanelHeight() - getHeight();

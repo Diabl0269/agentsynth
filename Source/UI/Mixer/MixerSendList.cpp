@@ -29,8 +29,8 @@ MixerSendList::MixerSendList() {
     setInterceptsMouseClicks(true, true);
     addSendProxy_.setInterceptsMouseClicks(false, false);
     addSendProxy_.setTitle("Add send");
-    addSendProxy_.setVisible(false);
-    addAndMakeVisible(addSendProxy_);
+    addChildComponent(addSendProxy_); // shown (faded in) by resized() while a send can be added
+    addSendFade_.onFrame = [this] { repaint(addSendProxy_.getBounds()); };
 }
 
 MixerSendList::~MixerSendList() = default;
@@ -294,9 +294,12 @@ void MixerSendList::paint(juce::Graphics& g) {
     if (lifted >= 0 && lifted < (int)entries_.size())
         paintRow(g, lifted, rowDrag_.animator().getLift());
 
-    if (canAddSend()) {
-        auto addRow = getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight);
-        g.setColour(accent);
+    // Fades in and out with the proxy; a row that is going keeps the place it had (resized() leaves the bounds).
+    const bool addShowing = addSendProxy_.isVisible();
+    if (canAddSend() || addShowing) {
+        auto addRow = addShowing ? addSendProxy_.getBounds()
+                                 : getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight);
+        g.setColour(addShowing ? accent.withMultipliedAlpha(addSendProxy_.getAlpha()) : accent);
         g.drawText("+ Send", addRow.reduced(2, 0), juce::Justification::centredLeft, false);
     }
 }
@@ -306,7 +309,7 @@ void MixerSendList::resized() {
 
     // Same anchor paint()'s own addRow uses.
     const bool addVisible = canAddSend();
-    addSendProxy_.setVisible(addVisible);
+    addSendFade_.setShown(addVisible);
     if (addVisible)
         addSendProxy_.setBounds(getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight));
 }
