@@ -161,6 +161,18 @@ public:
                                   bool recordUndo = true);
     void removeNodeFromMacro(juce::AudioProcessorGraph::NodeID nodeId);
     void toggleSelectionMacrosCollapsed();
+    /** Cmd+Ctrl+G: folds every selected macro (or, when all are folded, expands them) and, with
+     *  setPackMacrosOnCollapse on, packs the folded cards into a grid. ONE undo step. */
+    void foldAndPackSelectionMacros();
+    /** Preference "packMacrosOnCollapse" (on by default): whether foldAndPackSelectionMacros also packs the cards. */
+    void setPackMacrosOnCollapse(bool enabled) noexcept { packMacrosOnCollapse_ = enabled; }
+    bool getPackMacrosOnCollapse() const noexcept { return packMacrosOnCollapse_; }
+    /** Preference "tidyCanvasOnPack" (on by default; only matters while packing is on): after packing, the whole canvas
+     *  is Auto Arranged so the space the macros left closes up. */
+    void setTidyCanvasOnPack(bool enabled) noexcept { tidyCanvasOnPack_ = enabled; }
+    bool getTidyCanvasOnPack() const noexcept { return tidyCanvasOnPack_; }
+    /** Installed by GraphEditor: the Auto Arrange pass without its own undo record (it joins the caller's step). */
+    std::function<void()> arrangeCanvasHook;
     void groupOrToggleSelectionMacros();
     void selectMacro(const juce::String& macroId, bool additive);
     bool isMacroSelected(const juce::String& macroId) const;
@@ -492,6 +504,12 @@ private:
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
     // True while a multi-macro toggle runs: its folds start together, after the last macro has changed.
     bool batchingFolds_ = false;
+    bool packMacrosOnCollapse_ = true;
+    bool tidyCanvasOnPack_ = true;
+    // The macros a selection folds or expands, and whether any of them is open (MacroGroupControllerFoldPack.cpp).
+    std::set<juce::String> selectionFoldTargets(bool& anyExpanded) const;
+    // Moves the folded top-level cards of `ids` into a tidy grid (MacroPackLayout.h).
+    void packCollapsedCards(const std::set<juce::String>& ids);
     // Shifts an expanded macro's members (and carried collapsed cards) so its hull lies within canvas x,y >= 0.
     // Returns the translation applied (zero when the hull already fitted).
     juce::Point<int> nudgeHullIntoCanvas(const juce::String& macroId);

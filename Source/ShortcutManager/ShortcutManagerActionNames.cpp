@@ -216,6 +216,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Ungroup Macro";
     if (actionId == "collapseMacro")
         return "Collapse / Expand Macro";
+    if (actionId == "foldAndPackMacros")
+        return "Fold and Pack Macros";
     if (actionId == "locateMaster")
         return "Go to Output";
     if (actionId == "toggleLibrary")

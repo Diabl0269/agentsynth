@@ -585,6 +585,15 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
              m.graphEditor.getMacroController().toggleSelectionMacrosCollapsed();
              return true;
          }},
+        // The same "touches ANY macro" gate as collapseMacro: the verb folds every touched macro (or expands them when
+        // all are folded) and, with the "Collapsing also packs macros together" preference, tidies their cards.
+        {AppCommands::foldAndPackMacros, "Fold and Pack Macros",
+         "Fold every selected macro and tidy their cards into a grid (default Cmd+Ctrl+G)", "Edit", "foldAndPackMacros",
+         [](const MainComponent& m) { return m.touchesAnyMacro(); },
+         [](MainComponent& m) {
+             m.graphEditor.getMacroController().foldAndPackSelectionMacros();
+             return true;
+         }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two
         // discoverable surfaces can never disagree about whether there's anything to find.
         {AppCommands::locateMaster, "Go to Output", "Select Master (or Audio Output) and frame the whole output dock",

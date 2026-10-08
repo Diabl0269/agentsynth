@@ -191,7 +191,7 @@ private:
 // "Home" is redefined here: the transient displaced (macro and module card) / expand-nudge records describe an earlier
 // arrangement, so they are cleared, or a later collapse would drag neighbours "back" to spots this layout has just
 // left.
-void GraphEditor::autoArrange() {
+void GraphEditor::autoArrange(bool record) {
     auto& graph = audioEngine.getGraph();
     ArrangeCanvas canvas(graph, macros, content.getModules(), macroController_);
     const auto routings = audioEngine.getModulationRoutings();
@@ -241,7 +241,7 @@ void GraphEditor::autoArrange() {
     };
 
     CardGlideAnimator::Scope glide(cardGlide_); // the moved cards slide; the undo record lands inside the scope
-    if (undoManager)
+    if (undoManager && record)
         undoManager->recordGraphAndMacroChange(graph, macros, apply);
     else
         apply();

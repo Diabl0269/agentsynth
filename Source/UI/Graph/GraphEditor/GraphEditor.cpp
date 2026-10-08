@@ -30,6 +30,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     addAndMakeVisible(content);
     addChildComponent(modMatrix); // closed until toggled (isMatrixVisible); a closed matrix does no work
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
+    macroController_.arrangeCanvasHook = [this] { autoArrange(/*record=*/false); };
     macroController_.setPaintedHullProvider([this](const juce::String& id) { return paintedMacroHullBounds(id); });
 
     // Minimap (issue #159): visibility is driven by setMinimapVisible(), called by the owner once

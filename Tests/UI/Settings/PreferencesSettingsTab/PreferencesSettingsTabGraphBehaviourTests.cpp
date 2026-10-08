@@ -148,6 +148,44 @@ TEST_F(PreferencesSettingsTabTest, MoveMacroOnHullDragToggleDefaultsOffAndRoundT
     }
 }
 
+// Default ON, persisted under its own key, reading the default must not write it, and it reaches an attached editor.
+TEST_F(PreferencesSettingsTabTest, PackMacrosOnCollapseToggleDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isPackMacrosOnCollapseEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("packMacrosOnCollapse"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_TRUE(editor.getMacroController().getPackMacrosOnCollapse());
+
+        tab.setPackMacrosOnCollapseEnabled(false);
+        EXPECT_FALSE(tab.isPackMacrosOnCollapseEnabled());
+        EXPECT_FALSE(editor.getMacroController().getPackMacrosOnCollapse());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("packMacrosOnCollapse"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isPackMacrosOnCollapseEnabled());
+        tab.setPackMacrosOnCollapseEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("packMacrosOnCollapse"), "1");
+    }
+}
+
+TEST_F(PreferencesSettingsTabTest, TidyCanvasOnPackToggleDefaultsOnAndRoundTrips) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.isTidyCanvasOnPackEnabled());
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("tidyCanvasOnPack"));
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    tab.setGraphEditor(&editor);
+    EXPECT_TRUE(editor.getMacroController().getTidyCanvasOnPack());
+    tab.setTidyCanvasOnPackEnabled(false);
+    EXPECT_FALSE(editor.getMacroController().getTidyCanvasOnPack());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("tidyCanvasOnPack"), "0");
+}
+
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");

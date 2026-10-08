@@ -343,6 +343,10 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   `syncMacroCards` decides visibility again when the fold ends.
 - **Port widgets** of an unfolding macro dock to the open border at once, so they are held invisible with the module
   cards and shown when the border has grown to them (about 60% of the flights).
+- **Fold and Pack Macros** (Cmd+Ctrl+G, [details](../macros/menu-and-membership.md#fold-and-pack-macros-cmdctrlg))
+  adds no motion of its own: the model is final at once, the folds fly to the packed card positions, and a selected
+  card that was already folded glides there (160 ms) in the same glide scope. With "Packing also tidies the rest of the
+  canvas" the Auto Arrange glide joins the same scope.
 - **Several macros at once** (a multi-macro toggle, an undo step that flips more than one) fold together: the toggle
   takes one `snapshotFoldState()` and starts every plan in one `foldChangedMacros()`.
 - **Pictures come from the cards' rasters** (`ZoomFrozenCachedImage::lastRaster`); a card that was never painted (a

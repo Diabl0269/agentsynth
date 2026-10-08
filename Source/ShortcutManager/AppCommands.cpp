@@ -53,6 +53,9 @@ namespace AppCommands {
  *    depends on what is selected right now, so this keeps a single static label ("Collapse / Expand
  *    Macro", see getActionDescription): the label never has to guess which way the toggle is about
  *    to go, so one command covers both directions.
+ *  - foldAndPackMacros: folds every selected macro and, when the "packMacrosOnCollapse" preference is on, packs the
+ *    folded cards into a grid; when every selected macro is already folded it expands them all instead. Appended
+ *    last, so no existing enumerator's value moves.
  *  - repeatSelection: repeat-with-a-count. Only the two timeline surfaces implement it (see
  *    MainComponent::performRepeatSelection) but the command is registered unconditionally, the same
  *    way togglePlayback is, so the Settings shortcut list and ShortcutManager's tripwire tests cover
@@ -155,6 +158,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return ungroupSelection;
     if (actionId == "collapseMacro")
         return collapseMacro;
+    if (actionId == "foldAndPackMacros")
+        return foldAndPackMacros;
     if (actionId == "toggleLibrary")
         return toggleLibrary;
     if (actionId == "selectAllModules")

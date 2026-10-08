@@ -167,7 +167,7 @@ public:
     void refreshOutputDeviceInfo();
     void completeStereoPairConnections(ModuleComponent* moduleComp);
     void finalizeModuleDrag(ModuleComponent* module);
-    void autoArrange();
+    void autoArrange(bool record = true); // record=false: inside the caller's own undo step
 
     // ---- Output dock: Master, Rec Tap and Audio Output, always the rightmost cards (GraphEditorOutputDock.cpp,
     // docs/layout/layout.md#output-dock). Their x is derived, never user-set; their shared y is Audio Output's own.

@@ -112,7 +112,9 @@ enum CommandIDs {
     selectNextTrack,
     selectPreviousTrack,
     // Copies external samples/wavetables into the project, saves, optionally zips. Menu-only.
-    collectAndArchive
+    collectAndArchive,
+    // Folds every selected macro and, with the "pack" preference on, tidies their cards into a grid.
+    foldAndPackMacros
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

@@ -92,6 +92,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"groupSelection", ShortcutCategory::Graph},
         {"ungroupSelection", ShortcutCategory::Graph},
         {"collapseMacro", ShortcutCategory::Graph},
+        {"foldAndPackMacros", ShortcutCategory::Graph},
         {"locateMaster", ShortcutCategory::Graph},
         // The canvas's card keys -- consulted by CanvasCardKeyboard::keyPressed only.
         {"canvasSelectCardLeft", ShortcutCategory::Graph},

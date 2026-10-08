@@ -7,6 +7,7 @@
 // for why (juce::Component::SafePointer<GraphEditor> needs a genuine GraphEditor&).
 
 #include "MacroGroupController.h"
+#include "MacroGroupControllerInternal.h"
 #include "MacroNesting.h"
 #include "MacroSelectionUnits.h"
 
@@ -302,13 +303,6 @@ void moveMemberUpOneLevel(synth::MacroSet& macros, const juce::String& macroId, 
     if (macro->members.empty() && macros.childrenOf(macroId).empty())
         macros.remove(macroId);
 }
-
-// The macro a selected node stands for in a collapse toggle: the outermost collapsed macro above
-// it (a hidden node's card is what the user sees), else its direct owner.
-const synth::Macro* toggleTargetFor(const synth::MacroSet& macros, const juce::String& uuid) {
-    const juce::String collapsedId = macros.outermostCollapsedAncestorOf(uuid);
-    return collapsedId.isNotEmpty() ? macros.find(collapsedId) : macros.findByMember(uuid);
-}
 } // namespace
 
 void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
@@ -476,19 +470,8 @@ void MacroGroupController::ungroupSelection() {
 }
 
 void MacroGroupController::toggleSelectionMacrosCollapsed() {
-    auto ids = host_.getSelection().getSelected();
-    std::set<juce::String> touchedMacroIds;
     bool anyExpanded = false;
-    for (auto id : ids) {
-        const juce::String uuid = nodeUuidFor(id);
-        if (uuid.isEmpty())
-            continue;
-        if (const auto* m = toggleTargetFor(host_.getMacros(), uuid)) {
-            touchedMacroIds.insert(m->id);
-            if (!m->collapsed)
-                anyExpanded = true;
-        }
-    }
+    const auto touchedMacroIds = selectionFoldTargets(anyExpanded);
 
     // Refused only when the selection touches NO macro at all.
     if (touchedMacroIds.empty()) {
@@ -544,7 +527,7 @@ void MacroGroupController::groupOrToggleSelectionMacros() {
     int looseCount = 0;
     for (auto id : ids) {
         const juce::String uuid = nodeUuidFor(id);
-        const auto* m = uuid.isEmpty() ? nullptr : toggleTargetFor(host_.getMacros(), uuid);
+        const auto* m = uuid.isEmpty() ? nullptr : macro_toggle::targetFor(host_.getMacros(), uuid);
         if (m != nullptr)
             touchedMacroIds.insert(m->id);
         else

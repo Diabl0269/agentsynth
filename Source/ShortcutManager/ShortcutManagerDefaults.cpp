@@ -192,6 +192,15 @@ void ShortcutManager::addGraphDefaultBindings() {
         juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["collapseMacro"] =
         juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+    // Fold and Pack Macros: a REAL Cmd+Ctrl+G on macOS. On Windows/Linux Cmd IS Ctrl, so that chord would be
+    // Group's Ctrl+G; those platforms take Ctrl+Alt+Shift+G instead (free: Cmd+Alt+G and Cmd+Shift+G have no Ctrl).
+    bindings["foldAndPackMacros"] =
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::ctrlModifier, 0)
+            : juce::KeyPress('g',
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier |
+                                 juce::ModifierKeys::shiftModifier,
+                             0);
     // Cmd+Shift+M — the chord "focusTimeline"/"focusLibrary"'s own comment above earmarked
     // ("'m' is reserved for a future Mixer-focus shortcut") once a mixer existed. Master/Audio
     // Output locate is exactly that need in its canvas-only, pre-mixer-panel form (is the

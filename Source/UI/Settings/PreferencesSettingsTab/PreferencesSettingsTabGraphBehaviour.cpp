@@ -218,6 +218,22 @@ void PreferencesSettingsTab::setMacroDragWithoutCmdEnabled(bool enabled) {
     persistMacroDragWithoutCmd(enabled);
 }
 
+bool PreferencesSettingsTab::isPackMacrosOnCollapseEnabled() const {
+    return packMacrosOnCollapseToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setPackMacrosOnCollapseEnabled(bool enabled) {
+    packMacrosOnCollapseToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistPackMacrosOnCollapse(enabled);
+}
+
+bool PreferencesSettingsTab::isTidyCanvasOnPackEnabled() const { return tidyCanvasOnPackToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setTidyCanvasOnPackEnabled(bool enabled) {
+    tidyCanvasOnPackToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistTidyCanvasOnPack(enabled);
+}
+
 bool PreferencesSettingsTab::isMoveMacroOnHullDragEnabled() const { return moveMacroOnHullDragToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setMoveMacroOnHullDragEnabled(bool enabled) {
@@ -366,6 +382,20 @@ void PreferencesSettingsTab::persistMacroDragWithoutCmd(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setMacroDragWithoutCmdEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistPackMacrosOnCollapse(bool enabled) {
+    appProperties.getUserSettings()->setValue("packMacrosOnCollapse", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getMacroController().setPackMacrosOnCollapse(enabled);
+}
+
+void PreferencesSettingsTab::persistTidyCanvasOnPack(bool enabled) {
+    appProperties.getUserSettings()->setValue("tidyCanvasOnPack", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getMacroController().setTidyCanvasOnPack(enabled);
 }
 
 void PreferencesSettingsTab::persistMoveMacroOnHullDrag(bool enabled) {
@@ -566,6 +596,29 @@ void PreferencesSettingsTab::initMacroToggles() {
     moveMacroOnHullDragToggle.onClick = [this] {
         persistMoveMacroOnHullDrag(moveMacroOnHullDragToggle.getToggleState());
     };
+
+    // Plain on/off, ON by default (Fold and Pack Macros folds in place when off).
+    contentHost.addAndMakeVisible(packMacrosOnCollapseToggle);
+    packMacrosOnCollapseToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("packMacrosOnCollapse", true), juce::dontSendNotification);
+    packMacrosOnCollapseToggle.setTooltip(
+        "When on (the default), Fold and Pack Macros (Cmd+Ctrl+G on macOS) folds every selected macro and then "
+        "tidies the folded cards into a grid of up to four per row, starting where the top-left one stood. Other "
+        "modules stay put. When off, it only folds the selected macros where they are. The plain Collapse / Expand "
+        "Macro command never packs.");
+    packMacrosOnCollapseToggle.onClick = [this] {
+        persistPackMacrosOnCollapse(packMacrosOnCollapseToggle.getToggleState());
+    };
+
+    // Plain on/off, ON by default; only applies while packing is on.
+    contentHost.addAndMakeVisible(tidyCanvasOnPackToggle);
+    tidyCanvasOnPackToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("tidyCanvasOnPack", true),
+                                          juce::dontSendNotification);
+    tidyCanvasOnPackToggle.setTooltip(
+        "When on (the default), Fold and Pack Macros (Cmd+Ctrl+G on macOS) also runs Auto Arrange once the macro "
+        "cards are packed, so the space they left closes up and the rest of the canvas is tidied. When off, the "
+        "other modules stay where they are. Only applies while \"Collapsing also packs macros together\" is on.");
+    tidyCanvasOnPackToggle.onClick = [this] { persistTidyCanvasOnPack(tidyCanvasOnPackToggle.getToggleState()); };
 }
 
 // Lays out the macro toggle group; returns whether it is visible under the current search filter.
@@ -575,9 +628,14 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
     const std::function<void(bool)>& beginGroup) {
-    const std::initializer_list<juce::Component*> comps = {
-        &reconnectChainOnDeleteToggle,       &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle,
-        &macroSpliceCableOnPortDeleteToggle, &macroDragWithoutCmdToggle,        &moveMacroOnHullDragToggle};
+    const std::initializer_list<juce::Component*> comps = {&reconnectChainOnDeleteToggle,
+                                                           &macroAutoCreatePortsOnDragToggle,
+                                                           &macroAutoDeletePortsOnLastCableToggle,
+                                                           &macroSpliceCableOnPortDeleteToggle,
+                                                           &macroDragWithoutCmdToggle,
+                                                           &moveMacroOnHullDragToggle,
+                                                           &packMacrosOnCollapseToggle,
+                                                           &tidyCanvasOnPackToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     beginGroup(visible);

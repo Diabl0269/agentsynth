@@ -485,5 +485,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setSpliceCableOnMacroPortDeleteEnabled(macroSpliceCableOnPortDeleteToggle.getToggleState());
     graphEditor->setMacroDragWithoutCmdEnabled(macroDragWithoutCmdToggle.getToggleState());
     graphEditor->setMoveMacroOnHullDragEnabled(moveMacroOnHullDragToggle.getToggleState());
+    graphEditor->getMacroController().setPackMacrosOnCollapse(packMacrosOnCollapseToggle.getToggleState());
+    graphEditor->getMacroController().setTidyCanvasOnPack(tidyCanvasOnPackToggle.getToggleState());
     graphEditor->setAutoCreateChannelOnConnectEnabled(mixerAutoCreateChannelOnConnectToggle.getToggleState());
 }

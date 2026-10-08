@@ -363,14 +363,15 @@ Cmd+Backspace never fires while typing.
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
+| Cmd+Ctrl+G | Fold and Pack Macros (`foldAndPackMacros`; Ctrl+Alt+Shift+G on Windows/Linux, where Cmd is Ctrl and Ctrl+G is Group): folds every selected macro and, with the Graph preference "Collapsing also packs macros together" on, tidies the cards into a grid; all folded already: expands them. See [Fold and Pack Macros](../macros/menu-and-membership.md#fold-and-pack-macros-cmdctrlg) |
 | Cmd+Shift+M | Go to Output (was "Locate Master") — selects Master (falling back to Audio Output when there is no Master yet) and centres the view on the whole output dock (Master, Rec Tap, Audio Output); a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
 
 | ← / → / ↑ / ↓ | Select the nearest card in that direction (`canvasSelectCardLeft` / `Right` / `Up` / `Down`). See [**Canvas card keys**](#canvas-card-keys) |
 | Alt+← / → / ↑ / ↓ | Move the selected cards one grid step (`canvasMoveCardLeft` / `Right` / `Up` / `Down`), one undo step |
 | Return | Enter the selected card: focus goes to its first control (`canvasEnterCard`) |
 
-Besides the card keys, Graph holds only the six command verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating Master —
+Besides the card keys, Graph holds only the seven command verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, grouping/ungrouping/collapsing/folding-and-packing a macro, and locating Master —
 everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
 zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
 

@@ -30,6 +30,7 @@ add_executable(Tests
     UI/Graph/MacroHullGlideTests.cpp
     UI/Graph/MacroFold/MacroFoldTimelineTests.cpp
     UI/Graph/MacroFold/MacroFoldTests.cpp
+    UI/Graph/MacroFold/MacroFoldPackTests.cpp
     UI/Graph/CableRetractTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
