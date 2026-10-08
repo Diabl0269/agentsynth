@@ -338,6 +338,7 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatComponentFoldTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentUpgradeTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentWaitingTests.cpp
+    UI/Assistant/EntitlementWatcherTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
     Modules/PolySequencerModuleTests.cpp

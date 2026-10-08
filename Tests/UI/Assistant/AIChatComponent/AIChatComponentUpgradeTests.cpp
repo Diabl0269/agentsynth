@@ -101,3 +101,69 @@ TEST_F(AIChatComponentTest, UpsellButtonOpensCheckoutWithSignedInEmail) {
     EXPECT_EQ(openedUrl.toString(true), synth::buildUpgradeUrl("jane+synth@example.com").toString(true));
     EXPECT_EQ(openedUrl.getParameterValues()[0], "jane+synth@example.com");
 }
+
+// Bug: the requests counter stayed at its sign-in value because the entitlement was re-read only
+// after a Quota error. Every finished hosted reply must re-read it.
+TEST_F(AIChatComponentTest, EveryFinishedReplyRereadsTheEntitlement) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    auto entitlementFetches = std::make_shared<std::atomic<int>>(0);
+    auto performer = [entitlementFetches](const juce::String&, const juce::String& url, const juce::StringPairArray&,
+                                          const juce::String&, int,
+                                          const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        if (url.endsWith("/v1/auth/token"))
+            return jsonResult(200, R"({"access_token":"at","token_type":"Bearer","expires_in":3600,)"
+                                   R"("refresh_token":"rt"})");
+        if (url.endsWith("/v1/auth/me"))
+            return jsonResult(200, R"({"id":"u1","email":"a@b.c","display_name":"T","created_at":"2024-01-01"})");
+        if (url.endsWith("/v1/entitlement")) {
+            const int used = ++*entitlementFetches;
+            return jsonResult(200, R"({"plan":"pro","status":"active","period_end":null,)"
+                                   R"("cancel_at_period_end":false,"limits":{"monthly_requests":1000},)"
+                                   R"("usage":{"requests_used":)" +
+                                       juce::String(used) + R"(,"period_start":"2026-08-01"}})");
+        }
+        synth::AuthClient::HttpResult failed;
+        failed.transportFailed = true;
+        return failed;
+    };
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("http://mock-host:8787", performer, std::move(tokenStore));
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+    chatComponent.setAccountService(&accountService);
+    accountService.attemptSilentSignIn();
+
+    const auto waitFor = [](auto predicate) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!predicate() && std::chrono::steady_clock::now() < deadline)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+        return predicate();
+    };
+    ASSERT_TRUE(waitFor([&] { return accountService.getSnapshot().entitlementKnown; }));
+    const int usedAfterSignIn = accountService.getSnapshot().requestsUsed;
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+
+    EXPECT_TRUE(waitFor([&] { return accountService.getSnapshot().requestsUsed > usedAfterSignIn; }))
+        << "the used-requests count never moved after a successful reply";
+}

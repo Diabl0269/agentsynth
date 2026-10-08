@@ -208,6 +208,8 @@ void AIChatComponent::openUpgradePage() {
     // snapshot gives an empty email, which buildUpgradeUrl() turns into the bare checkout link.
     const juce::String email = accountServicePtr != nullptr ? accountServicePtr->getSnapshot().email : juce::String();
     urlOpener(buildUpgradeUrl(email));
+    // The purchase happens in the browser; pick the new plan up as soon as the webhook lands.
+    entitlementWatcher.startWatchingForUpgrade();
 }
 
 AIChatComponent::~AIChatComponent() {

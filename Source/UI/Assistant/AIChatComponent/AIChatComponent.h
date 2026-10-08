@@ -8,6 +8,7 @@
 #include "AI/PatchFeedbackStore.h"
 #include "ChatMessageViewport.h"
 #include "UI/Assistant/AccountRow.h"
+#include "UI/Assistant/EntitlementWatcher.h"
 #include "UI/Assistant/PlanBadge.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -365,6 +366,15 @@ private:
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     SpinnerDot spinnerDot;
+
+    // Keeps the plan badge and requests counter current: refreshes when the app regains focus and
+    // polls after Upgrade until the plan is Pro (see EntitlementWatcher).
+    EntitlementWatcher entitlementWatcher{
+        [this] {
+            if (accountServicePtr != nullptr)
+                accountServicePtr->refreshEntitlement();
+        },
+        [this] { return accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot()); }};
 
     // Opens a Quota error's "Upgrade to Pro" button target. Real default; overridden in tests via
     // setUrlOpenerForTesting() so no test ever launches a real browser.
