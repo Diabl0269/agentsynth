@@ -754,6 +754,7 @@ add_executable(Tests
     UI/MidiRemote/OrphanControllerTests.cpp
     UI/MidiRemote/MidiRemotePanelAssignTests.cpp
     UI/MidiRemote/MidiRemoteUndoRoutingTests.cpp
+    UI/MidiRemote/MidiRemoteFadeTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -903,6 +904,12 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/OnCard/OnCardPanelOnlyTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardTimeTempoTests.cpp
     UI/Theme/KnobStyleLookTests.cpp
+    UI/Layout/BottomDockTabFadeTests.cpp
+    UI/Timeline/TimelineFadeMotionTests.cpp
+    UI/Graph/CardBody/CardBodyFadeTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFadeTests.cpp
+    UI/Mixer/MixerFadeTests.cpp
+    UI/Graph/CardLayoutEditor/OnCard/OnCardFadeTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

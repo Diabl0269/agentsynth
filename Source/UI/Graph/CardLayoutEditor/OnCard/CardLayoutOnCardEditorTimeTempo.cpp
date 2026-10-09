@@ -24,8 +24,8 @@ void CardLayoutOnCardEditor::refreshTimeTempo() {
         }
     if (shown)
         timeTempo_.setSelectedIndex(index, juce::dontSendNotification);
-    if (shown != timeTempo_.isVisible()) {
-        timeTempo_.setVisible(shown);
+    if (shown != timeTempoFade_.isShown()) {
+        timeTempoFade_.setShown(shown);
         resized();
     }
 }

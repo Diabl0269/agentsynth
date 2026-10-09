@@ -45,7 +45,7 @@ back to `synth::branding::kApiBaseUrl` (`Source/Branding.h`); see that constant'
 the current state of the deployed service.
 
 In Settings > AI the address box is hidden for Remote, so a new user never has to type a URL; the
-"Custom server address..." button reveals it for a self-hosted or local server. "Use hosted server"
+"Custom server address..." button reveals it (the address box and its label fade in where they stand) for a self-hosted or local server. "Use hosted server"
 (shown whenever Ollama is selected or a custom Remote address is saved) switches the provider back to
 Remote and clears `"remoteHost"`. Existing installs that never saved `"aiProvider"` stay on Ollama
 on purpose: moving them silently would start sending prompts off their machine.

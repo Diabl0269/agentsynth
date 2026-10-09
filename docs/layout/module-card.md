@@ -156,6 +156,9 @@ so no card shows one today (the automatic layout hides nothing); it appears thro
 - **Height.** Folding and unfolding change the card's height: the card re-measures and calls
   `GraphEditor::handleModuleResized`, the same make-room path every growing card takes. A value drag
   never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`).
+- **Motion.** The hidden controls fade in (160 ms) and out (110 ms) and the card's height follows the fade, the
+  card's bottom edge clipping the controls while the row opens or closes; the neighbours make room once
+  (`CardBody::setMoreUnfolded`, `CardBlockFade`; [animation](animation.md#fading-things-in-and-out)).
 - **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
   can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable).
 
@@ -238,7 +241,10 @@ a preset) re-reads them on the message thread and re-lays out the card only when
   hidden: it never appears in the More row.
 - **Sections.** A section whose `visibleWhen` does not hold takes no space, with its header. Showing or
   hiding it changes the card's height, through `GraphEditor::handleModuleResized` like any other growth:
-  neighbours are pushed clear and come back when it shrinks.
+  neighbours are pushed clear and come back when it shrinks. A plain section (no tab or look, no swap group, no view)
+  fades: it is laid out at once when it comes and its controls and header fade in; when it goes it stays laid out
+  until its controls have faded out, then the card closes up and the neighbours come back (`CardBodyFades.cpp`,
+  `Section::holding`). A look or tab switch and a swap group are swaps and keep the swap motion.
 
 ## Faders, switches and steppers
 
@@ -340,7 +346,7 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | Dual I/O toggle (and the stereo-pair sweep) | `applyDualIOLayoutChange` |
 | Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
 | LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
-| Show Scope / Show Response toggles | `setScopeShown` / `setResponseShown` |
+| Show Scope / Show Response toggles (the panels fade and the card's height follows, `ModuleComponentCardView.cpp`) | `setScopeShown` / `setResponseShown` |
 | A layout section shown or hidden by its condition (`visibleWhen`) | `CardBody::refreshConditions` |
 | ADSR Show Envelope Graph (opens or closes the card body's `envelope` view) | the toggle's `onClick`, `CardBody::setViewOpen` |
 

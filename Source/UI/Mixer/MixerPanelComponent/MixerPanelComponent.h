@@ -5,6 +5,7 @@
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -358,6 +359,7 @@ private:
     juce::String bypassShortcutText() const;
     void wireSectionLayout();
     void onSectionGeometryChanged();
+    void wireSectionFades();
     void onSectionAppearanceChanged();
     void onSectionLayoutCommitted();
     bool contentScrollsVertically() const;
@@ -532,6 +534,7 @@ private:
         ScrollReportingViewport viewport;
         ColumnsContent content;
         ZoneDivider divider;
+        FadeVisibility fade{{&viewport, &divider}}; // a zone fades in when a column is pinned to it, out when empty
     };
 
     MixerSectionLayout sectionLayout_;
@@ -557,6 +560,13 @@ private:
 
     /** Shown only while there are no columns; see the ctor and rebuild(). */
     juce::Label emptyHint_;
+    FadeVisibility emptyHintFade_{&emptyHint_};
+
+    /** One empty, zero-size probe per section whose fade carries the section's open amount (1 open, 0 the strip):
+     *  FadeVisibility's progress() is what every column lays its section height out from, so the shared geometry
+     *  and Master slide together (onSectionGeometryChanged, MixerPanelSections.cpp). */
+    std::array<juce::Component, MixerSectionLayout::kSectionCount> sectionProbes_;
+    std::array<std::unique_ptr<FadeVisibility>, MixerSectionLayout::kSectionCount> sectionFades_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
@@ -572,6 +582,9 @@ private:
     std::vector<std::unique_ptr<MixerColumnComponent>> stripColumns_;
     std::unique_ptr<MixerDirectColumn> directColumn_;
     std::unique_ptr<MixerMasterColumn> masterColumn_;
+    // Declared after the columns, so a fade is gone before the column it drives.
+    std::unique_ptr<FadeVisibility> directFade_;
+    std::unique_ptr<FadeVisibility> masterFade_;
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;

@@ -796,3 +796,9 @@ strip so every other suite keeps its grid-to-bottom geometry, and `VelocityLaneF
 
 **Note for wheel tests:** `juce::MouseWheelDetails` has no default member initialisers, so they must
 construct it `{}`-initialised or a garbage `deltaX` decides the branch.
+
+## Opening and closing
+
+Opening the roll fades it in as the clip lanes fade out; closing fades the emptied roll out as the lanes fade back in
+(`FadeVisibility`, see [animation](../layout/animation.md#fading-things-in-and-out)). The open state and the layout land
+at once; only opacity runs, and a panel that is not on screen swaps immediately.

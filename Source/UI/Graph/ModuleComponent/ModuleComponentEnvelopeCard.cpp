@@ -166,9 +166,8 @@ void ModuleComponent::createEnvelopeCardControls() {
     envelopeGraphToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowEnvelopeText);
     envelopeGraphToggle->setToggleState(cardBody_->isViewOpen(synth::CardView::Envelope), juce::dontSendNotification);
     envelopeGraphToggle->onClick = [this] {
+        // The view fades and the card follows it; the body makes the neighbours room (CardBlockFade).
         cardBody_->setViewOpen(synth::CardView::Envelope, envelopeGraphToggle->getToggleState());
-        updateLayout();
-        owner.handleModuleResized(this);
     };
     addAndMakeVisible(envelopeGraphToggle.get());
     if (cardBody_->hasFooter())

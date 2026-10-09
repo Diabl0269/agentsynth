@@ -1,3 +1,4 @@
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "PreferencesSettingsTabTestFixture.h"
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/TelemetryRecorder.h"
@@ -195,4 +196,32 @@ TEST_F(UsageStatsTabTest, TurningTheToggleEitherWayMarksTheWelcomeQuestionAnswer
     click(*toggle);
     EXPECT_FALSE(settingIsOn());
     EXPECT_TRUE(appProperties.getUserSettings()->getBoolValue(synth::kUsageStatsAskedSettingKey, false));
+}
+
+// The id row has a fade of its own: it comes in with the toggle and leaves with it, and the group around it
+// follows without a jump.
+TEST_F(UsageStatsTabTest, TheIdRowFadesInAndOutWithTheToggle) {
+    auto tab = makeTab();
+    auto* copy = findButtonByText(*tab, "Copy ID");
+    ASSERT_NE(copy, nullptr);
+    ASSERT_FALSE(copy->isVisible());
+
+    FadeAnimateGuard guard;
+    tab->setShareUsageStatsEnabled(true);
+    EXPECT_TRUE(copy->isVisible());
+    EXPECT_FLOAT_EQ(copy->getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    tab->flushLayoutForTest();
+    EXPECT_NEAR(copy->getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    tab->flushLayoutForTest();
+    EXPECT_FLOAT_EQ(copy->getAlpha(), 1.0f);
+    EXPECT_GT(copy->getHeight(), 0);
+
+    tab->setShareUsageStatsEnabled(false);
+    EXPECT_TRUE(copy->isVisible()) << "stays while it fades out";
+    EXPECT_FALSE(interceptsClicks(*copy));
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    tab->flushLayoutForTest();
+    EXPECT_FALSE(copy->isVisible());
 }

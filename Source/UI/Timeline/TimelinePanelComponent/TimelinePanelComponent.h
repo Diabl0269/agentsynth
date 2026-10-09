@@ -5,6 +5,7 @@
 #include "Transport/TransportNudge.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -769,6 +770,9 @@ private:
     // playhead_'s LocalPlayheadClient: while it is open the overlay skips its rows and hands it the
     // drawn beat instead. See PianoRollComponent's class comment.
     synth::ui::PianoRollComponent pianoRoll_{viewState_};
+    // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
+    synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
+    synth::ui::FadeVisibility rollFade_{&pianoRoll_};
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};

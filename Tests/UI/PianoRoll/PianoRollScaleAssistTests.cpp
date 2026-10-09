@@ -4,6 +4,7 @@
 // transpose it enables, and the ScaleAssistPanel component in isolation via its own accessors.
 // Shared PianoRollFixture and makeScaleAssistTestProps live in PianoRollTestHelpers.h.
 
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "PianoRollTestHelpers.h"
 
 #include "Timeline/MusicalScale.h"
@@ -873,4 +874,50 @@ TEST(ScaleAssistPanelTest, ContentNaturalHeightMatchesLaidOutContent) {
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
     EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + kInset, panel.getContentNaturalHeightForTest())
         << "custom editor shown";
+}
+
+// Revealing the custom editor fades its block in while the rows under it slide down, and hiding it does the reverse;
+// the block is cut off at the height the fade has reached, so nothing overlaps the controls below.
+TEST(ScaleAssistPanelTest, TheCustomEditorFadesInAndOutWhileTheRowsBelowSlide) {
+    ScaleAssistPanel panel;
+    panel.setSize(PianoRollComponent::kScalePanelWidth, 800);
+    auto& combo = panel.getScaleCombo();
+    const int without = panel.getContentNaturalHeightForTest();
+    const int belowBefore = panel.getPitchVisibilityToggle().getY();
+    auto& block = panel.getCustomBlockForTest();
+    ASSERT_FALSE(block.isVisible());
+
+    FadeAnimateGuard guard;
+    combo.setSelectedId(combo.getItemId(combo.getNumItems() - 1), juce::sendNotificationSync);
+    ASSERT_TRUE(panel.isCustomEditorVisibleForTest()) << "the logical state is immediate";
+    EXPECT_TRUE(block.isVisible());
+    EXPECT_FLOAT_EQ(block.getAlpha(), 0.0f);
+    EXPECT_EQ(panel.getContentNaturalHeightForTest(), without) << "nothing has slid at frame 0";
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(block.getAlpha(), 0.5f, 0.01f);
+    EXPECT_GT(panel.getContentNaturalHeightForTest(), without);
+    EXPECT_GT(panel.getPitchVisibilityToggle().getY(), belowBefore);
+    EXPECT_GT(block.getHeight(), 0);
+    EXPECT_EQ(panel.getPitchVisibilityToggle().getY(), block.getBottom())
+        << "the toggle under the block follows the block's current bottom";
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    const int withEditor = panel.getContentNaturalHeightForTest();
+    EXPECT_GT(withEditor, without);
+    EXPECT_FLOAT_EQ(block.getAlpha(), 1.0f);
+    EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + 6, withEditor);
+
+    // Back to a preset scale: the block fades out and the rows slide back up.
+    combo.setSelectedId(combo.getItemId(1), juce::sendNotificationSync); // a preset scale
+    EXPECT_FALSE(panel.isCustomEditorVisibleForTest());
+    EXPECT_TRUE(block.isVisible());
+    EXPECT_FALSE(interceptsClicks(block));
+    EXPECT_EQ(panel.getContentNaturalHeightForTest(), withEditor);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_LT(panel.getContentNaturalHeightForTest(), withEditor);
+    EXPECT_GT(panel.getContentNaturalHeightForTest(), without);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(block.isVisible());
+    EXPECT_EQ(panel.getContentNaturalHeightForTest(), without);
 }

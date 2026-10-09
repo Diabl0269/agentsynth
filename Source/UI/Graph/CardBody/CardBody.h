@@ -1,9 +1,11 @@
 #pragma once
 
+#include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyPlan.h"
 #include <memory>
 #include <optional>
+#include <set>
 
 class ModuleComponent;
 class ThresholdControlComponent;
@@ -81,6 +83,16 @@ public:
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
     void stepSwapMotionForTest(double elapsedMs);
     std::vector<juce::Rectangle<float>> swapGhostRectsForTest() const;
+
+    // ---- Fades (CardBodyFades.cpp) -----------------------------------------------------------------
+    /** A view that opens or closes, the More row that unfolds, and a conditional section that appears or goes fade in
+     *  and out with the shared FadeVisibility while the card's height follows (CardBlockFade); off screen, or with
+     *  Animations Off, they land at once. */
+    bool isFadeRunning() const;
+    /** Test seams: the more row's and a section's fade (null without one). */
+    const CardBlockFade& moreFadeForTest() const noexcept { return moreFade_; }
+    const CardBlockFade& sectionFadeForTest(int section) const { return sectionFades_[(size_t)section]; }
+    const CardBlockFade& viewFadeForTest(CardView view) const;
 
     // ---- Lookup ----------------------------------------------------------------------------------
     /** The widget bound to `paramId`, or null. */
@@ -167,6 +179,19 @@ private:
     void handleAsyncUpdate() override;
     int layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g,
                     bool apply) const;
+    // CardBodyFades.cpp
+    void attachViewFade(int item);
+    void attachMoreAndSectionFades();
+    void relayoutForFade();
+    void settleAfterFade();
+    void refreshReveals() const;
+    bool fadeOwnsMore() const;
+    bool fadeOwnsSection(int section) const;
+    bool isFadeableSection(int section) const;
+    std::vector<juce::Component*> sectionTargets(int section) const;
+    /** Starts the fades of the conditional sections `shown` flipped (and holds the ones going away); false when
+     *  none could fade, which leaves them to applyVisibility. */
+    bool beginSectionFades(const std::vector<bool>& wasVisible);
 
     ModuleComponent& card_;
     juce::AudioProcessor& module_;
@@ -185,6 +210,13 @@ private:
     juce::OwnedArray<juce::Component> widgets_;
     juce::OwnedArray<juce::Component> views_;
     std::unique_ptr<CardMoreButton> moreButton_;
+    // After the widgets: a fade holds a VBlank updater on one of them, so it goes first.
+    std::vector<CardBlockFade> viewFades_;    ///< By item index; attached for the views.
+    std::vector<CardBlockFade> sectionFades_; ///< By section index; attached for the fadeable conditional ones.
+    CardBlockFade moreFade_;
+    std::set<int> startingSections_; ///< Sections whose fade starts in this re-read (applyVisibility leaves them).
+    bool startingMore_ = false;
+    bool settlingFootprint_ = false; ///< Measuring at the final footprint (CardBlockFade::setShown).
     juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments_;
     juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments_;
     juce::OwnedArray<juce::ButtonParameterAttachment> buttonAttachments_;

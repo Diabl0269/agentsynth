@@ -14,6 +14,7 @@
 //      see DetachablePanelHost.h's setCreatesNativeWindows() doc comment for the bug this guards.
 //   6. RefreshDetachedWindowTheme() re-skins an already-open detached window.
 
+#include "../FadeVisibilityTestGuard.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -283,4 +284,44 @@ TEST_F(DetachablePanelHostTest, RefreshDetachedWindowThemePicksUpATheThemeSwitch
     host.refreshDetachedWindowTheme();
     EXPECT_EQ(window->getBackgroundColour(), secondSurface)
         << "the already-open window must pick up the new theme immediately";
+}
+
+// The docked header strip fades when a host's header goes into the tab strip, and the panel slides up with it.
+TEST_F(DetachablePanelHostTest, EmbeddedHeaderFadesAndThePanelSlidesUp) {
+    DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
+    host.setBounds(0, 0, 300, 200);
+    const int strip = host.getHeaderHeightForTest();
+    ASSERT_GT(strip, 0);
+
+    FadeAnimateGuard animate;
+    host.setEmbeddedHeader(true);
+    EXPECT_FALSE(host.isHeaderShownForTest()) << "the logical state is immediate";
+    EXPECT_TRUE(host.isDetachButtonVisibleForTest()) << "the strip stays until the fade has ended";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(host.getHeaderHeightForTest(), 0);
+    EXPECT_LT(host.getHeaderHeightForTest(), strip);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(host.isDetachButtonVisibleForTest());
+    EXPECT_EQ(host.getHeaderHeightForTest(), 0);
+
+    host.setEmbeddedHeader(false);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(host.getHeaderHeightForTest(), 0);
+    EXPECT_LT(host.getHeaderHeightForTest(), strip);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(host.getHeaderHeightForTest(), strip);
+}
+
+TEST_F(DetachablePanelHostTest, DetachingMidFadeLandsTheStripAtOnceAndRedockingRestoresIt) {
+    DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
+    host.setBounds(0, 0, 300, 200);
+    FadeAnimateGuard animate;
+    host.setEmbeddedHeader(true);
+    host.setDetached(true);
+    EXPECT_FALSE(host.getDetachButton().isVisible() && host.getDetachButton().getAlpha() < 1.0f)
+        << "the window never borrows a half-faded button";
+    EXPECT_FLOAT_EQ(host.getDetachButton().getAlpha(), 1.0f);
+    host.setDetached(false);
+    EXPECT_FALSE(host.isDetachButtonVisibleForTest()) << "docked again with an embedded header: hidden, no fade";
+    EXPECT_EQ(host.getHeaderHeightForTest(), 0);
 }

@@ -11,6 +11,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/EdgeResizeHandle.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
@@ -834,6 +835,10 @@ private:
     // The CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
     // "which node feeds it". Hidden whenever the track reaches no channel yet.
     ChannelChipComponent channelChip_;
+    // The chips and the fold arrow fade as the track gains or loses them (animation.md, "Fading things in and out").
+    synth::ui::FadeVisibility foldArrowFade_{&foldArrow_};
+    synth::ui::FadeVisibility bindingChipFade_{&bindingChip_};
+    synth::ui::FadeVisibility channelChipFade_{&channelChip_};
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;

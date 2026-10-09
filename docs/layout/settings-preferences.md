@@ -74,6 +74,17 @@ the Settings window is.
   tab uses too; `resized()` gives it a strip between the picker row and the rows only in the All view.
   A header is never hidden and re-shown during a fold: that would drop the keyboard focus it holds. A new category
   also needs a `kSections` entry in that unit.
+- **Group fades** (`PreferencesSettingsTabGroupFades.cpp`, [animation](animation.md#fading-things-in-and-out)): the
+  `groupMatches` closure ends in `fadeGroup`, which keeps one `FadeVisibility` per group (keyed by its first
+  component), starts it towards "matches or not" and answers true while the group is shown *or fading out*. The
+  layout units are unchanged: a leaving group is still laid out at its full size, so every position is the final-state
+  one with the leaving group in its slot. `squashFadingGroups`, the last step of `resized()`, then squeezes each
+  fading group's slot (its rows plus the gap or divider above it) to the fade's `progress()` and moves everything
+  below up; a divider inside a slot fades with it. Each frame of a fade asks for one more layout through an
+  `AsyncUpdater`, so a fold of many groups costs one pass per frame. The first layout of a group lands at once.
+  A fold, "Collapse all", a category change and a search filter all go through `groupMatches`, so they all fade.
+  The Privacy group's id row has a fade of its own (it follows the share switch and its group). The section
+  headers and the fold-all strip are not faded: they follow the state at once.
 - Persistence is untouched: each row's getter/setter/`persist*` code and settings key is exactly what it
   was, so closing and reopening Settings (a new tab constructed from the same properties) reloads every
   value regardless of category.

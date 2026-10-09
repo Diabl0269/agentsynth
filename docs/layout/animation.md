@@ -414,7 +414,10 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 ## Popup windows
 
 Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, alert boxes and
-dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. The
+dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. One kind of call-out is
+the exception: a popover that JUCE launches and dismisses itself (`CallOutBox::launchAsynchronously`, today the
+colour picker) only eases in, through [`CalloutReveal`](#popup-reveal), because it dismisses synchronously and has no
+window of ours to fade out. The
 mechanism is `synth::ui::PopupMotion` (`Source/UI/Layout/PopupMotion.{h,cpp}`); the numbers and the
 frame math are pure functions in `synth::ui::popup_motion`, unit-tested in
 `Tests/UI/Layout/PopupMotionTests.cpp`. It reuses `AnimationDriver` and the easing helpers above.
@@ -592,9 +595,61 @@ Where it is used: the Welcome screen hiding and reopening; the AI chat's hosted-
 and downgrade notice, its Cancel button and thinking spinner (which keeps pulsing until it has faded out); the plan
 card's feedback comment row (on a rating) and details panel (Show details), which fade while the card grows or
 shrinks to fit; the account row (as a whole, and its Sign in / Signing in / email and Sign out controls cross-fade
-as the state changes); the plan badge. The status bar's transient and sticky messages do the same with their own
+as the state changes); the plan badge; the bottom dock's tabs (Timeline, Mixer, MIDI Remote), which cross-fade as the leaving host fades
+out over the arriving one (the active tab lands at once; the leaving panel's own visible flag follows its host's fade); the
+piano roll opening and closing against the clip lanes (closing fades the emptied roll out as the lanes fade in); the
+routing pane's canvas node, Show on canvas link, MIDI destinations and mixer channel row, whose heights follow the fade
+so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; a new
+modulator row with its band in the lanes; and the mixer's sections closing and opening (the height slides in every column from the fade's `progress()`, see [the shared sections](../mixer/panel.md#shared-sections)), its Direct and Master columns being shown or hidden, a pinned zone, the empty hint, a column header's colour dot and sources badge, the "+ Send" row and the zones pane's Show all.
+The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
-the cleared message's words staying painted until then.
+the cleared message's words staying painted until then. Inside a module card, the Show Scope and Show Response
+panels (with the Spectrum toggle), the LFO's custom wave section (curve editor, Grid, Shapes and Tools), the ADSR's
+Show Envelope Graph view, the More row's controls and a layout section that comes or goes with a mode fade the same
+way, and the card's height follows (`CardBlockFade`, `Source/UI/Graph/CardBody/CardBlockFade.h`, a `FadeVisibility`
+plus `height(full)` = `full * progress()`): each frame re-measures the card, so the rows below slide, and the
+neighbours make room once per direction (a growing card asks for its final footprint when the fade starts, a
+shrinking one gives the room back when the fade has ended; never per frame, which would push and pull them and
+rebuild every cable 60 times a second). The panels' bounds shrink with the fade (they are never clipped, so nothing
+overlaps what is under them); the More row's controls sit at full size and the card's bottom edge clips them. A
+conditional section that is not a swap is laid out at once when it comes and fades in; when it goes it stays laid out
+(`holding`) until it has faded out, then the card closes up. A swap of controls in place keeps its own motion
+([Controls swapping in place](#controls-swapping-in-place)) and starts no fade. Every fade frame invalidates the
+card's cached raster through the child's own `setAlpha`, so a card repaints exactly while a fade runs and not after.
+The Pick on canvas overlay (`PickTargetOverlay`) fades the same way as one whole component: it takes no click from the
+moment Esc or a click ends it, and its outlines stay painted until it has faded out. Settings and dialogs use it too: a Preferences group that a
+fold or a search filter takes out (the group's rows fade while their slot is squeezed to `progress()` of its height, so
+the rows below and the next section's header slide up; one group, one `FadeVisibility`, made on its first layout and
+landing at once then), the Export Audio dialog's options page (which cross-fades into the progress page) and its
+bit depth and bitrate rows (which cross-fade in their shared slot), the Configure I/O dialog's "Add a port" shape box
+and voices editor, each row's voices editor (the shape box slides over as its block grows) and the "No inputs yet" /
+"No outputs yet" hints (the section below slides with the hint's height), the piano roll scale panel's custom scale
+editor (its keys, name field and Save, clipped to the height reached while the controls below slide), and the AI
+settings tab's host label and address box and its Custom server / Use hosted server buttons (fixed slots). The
+Preferences section headers and the fold-all strip, and the Keyboard Shortcuts tab's folds (collapsing there is
+instant on purpose), are not faded. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
+something already on screen so what was there from the start does not fade.
+
+The MIDI Remote panel uses it too: the inspector and the orphan view cross-fade in the same spot; the page strip
+fades with the selected controller; the Detect hint and the handshake port warning rows fade while the toolbar's
+height follows `progress()` (the toolbar's `onPreferredHeightChanged` makes the panel lay out again, so the surface
+slides rather than jumps); the undo cue fades; the inspector's control fields fade as one group, with their
+divider, when a control is selected or the selection empties; the Add Controller button fades out in a plugin and
+back in. Controls added to or removed from the shown controller on the surface do not fade: they grow in and
+shrink away like controls on a card (`control_motion`, `ControllerSurfaceMotion.cpp`: 200 ms grow with the 8%
+bounce, a picture of the removed control shrinking 150 ms, a plain 80 ms fade under Reduce Motion). Switching to
+another controller, or anything off screen or under Animations Off, lands at once.
+
+The rest of the small swaps use it too. The Card Layout Editor's panels: the on-card control panel's rows (Size and
+Direction cross-fade in one shared slot, the Range row and its hint fade while the panel grows or shrinks, rows being
+squeezed into the room they have rather than overlapping), the "parameters missing" line of the list editor, and the
+ADSR strip's Controls switch (the "+ Add control" button slides over as it fades). The module library's help
+popover: a section's body fades while its height tweens, so the sections below slide and the call-out resizes each
+frame. A docked panel's header strip (`DetachablePanelHost`) when its header moves into the tab strip: the panel slides
+up as the strip fades; detaching or re-docking mid-fade lands it first (`snapTo`), since the window borrows the
+strip's components. Kept instant on purpose: the Mod Matrix and MIDI destination pickers' search filtering (rows
+filtered by every keystroke, not a state change), and the help popover's own close (the library owns the call-out box and re-parents the
+popup between it and the pinned panel, so closing deletes the box in the same call; a fade-out would outlive it).
 
 ## Tooltips
 
@@ -627,7 +682,9 @@ owned by the popup content and started from its `parentHierarchyChanged()`: the 
 the content is parented, then, on the next message-loop turn once it is showing, fades in over 160 ms (`easeOutCubic`)
 while sliding 8 px out of the side that faces the element that opened it (the side of the callout with the largest inset,
 `directionToAnchor`; a popover under a button grows down from it), landing exactly on its final bounds. Only the entrance
-is animated: a callout dismisses synchronously, so the 110 ms exit of the motion rules has nothing to run on. Today the
+is animated, and no exit is promised for this kind of call-out: it dismisses synchronously, so the 110 ms exit of the
+motion rules has nothing to run on (a call-out the app closes itself leaves through `PopupMotion::dismissCallOut`,
+[Popup windows](#popup-windows)). Today the
 colour picker (`ColourPickerPopup`) uses it, which covers the Timeline track swatch, the ruler's marker colours, the macro
 recolour and the mixer's colour dot.
 
@@ -691,6 +748,8 @@ strings.
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` into `StatusBarComponent` |
 | **AI request Cancel and spinner** | Cancel button and the pulsing "thinking" spinner fade in with a request and out when it ends (160 ms in, 110 ms out; the spinner pulses until it has gone); the pulse is time-bounded, stops on completion or cancel and is confined to its region; see [Fading things in and out](#fading-things-in-and-out) | `AIChatComponent` via `FadeVisibility` |
 | **Welcome screen, AI chat banners, plan card rows, account row, plan badge** | Fade in and out with `FadeVisibility`; a banner's or the badge's strip height and the plan card's comment row and details panel grow and shrink with the fade so the content around them slides; see [Fading things in and out](#fading-things-in-and-out) | `MainComponent`, `AIChatComponent`, `AccountRow`, `PlanBadge` |
+| **Card parts: scope, response, LFO wave section, envelope view, More row, conditional section** | Fade in 160 ms / out 110 ms (plain 80 ms under Reduce Motion) with `FadeVisibility` while the card's height follows the fade; neighbours make room once per direction; lands at once off screen or under Animations Off; a swap of controls keeps its own motion; see [Fading things in and out](#fading-things-in-and-out) | `CardBlockFade` via `ModuleComponent`, `CardBody` |
+| **Pick on canvas overlay** | Fades in 160 ms / out 110 ms as one component, takes no click once ended, outlines stay until it has faded out | `PickTargetOverlay` via `FadeVisibility` |
 | **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent` |

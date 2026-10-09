@@ -22,6 +22,11 @@ The `GraphEditor` 30 Hz connection animation blits these cached images rather th
 text layout and parameter reads on every animation frame. **Do not reintroduce unconditional
 `repaint()` calls in `timerCallback` on module components or their always-visible children.**
 
+A part of a card that fades in or out ([animation](animation.md#fading-things-in-and-out): a panel, the More row, a
+conditional section) needs no repaint of its own: each frame's `setAlpha` (and the re-layout that follows the fade)
+invalidates the card's cached image through the child, so the card re-rasters once per fade frame and not at all once
+the fade has landed (`CardFades.EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNothing`).
+
 ## The canvas has one invalidation seam
 
 `buildVisibleCables()` is memoized, and `GraphEditor::repaintCanvas()` is the single "canvas

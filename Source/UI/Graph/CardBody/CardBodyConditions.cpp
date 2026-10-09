@@ -110,8 +110,8 @@ bool CardBodyPlan::isOnCard(int item) const {
     if (item < 0 || item >= (int)items.size())
         return false;
     const auto onCard = [this](int section) {
-        if (section < 0 || !sections[(size_t)section].visible)
-            return false;
+        if (section < 0 || !(sections[(size_t)section].visible || sections[(size_t)section].holding))
+            return false; // a section fading out is still on the card
         const int group = sections[(size_t)section].tabGroup;
         return group < 0 || tabGroups[(size_t)group].sections[(size_t)tabGroups[(size_t)group].selected] == section;
     };
@@ -181,10 +181,12 @@ void CardBody::applyVisibility() {
         if (item.kind == CardBodyItem::Kind::View)
             visible = visible && item.open; // a view the card's toggle closed stays closed
         const bool dims = item.when.has_value() || dimmable.count(i) > 0;
+        // A fade owns its controls while it runs (More row, a conditional section).
+        const bool faded = (folded && fadeOwnsMore()) || fadeOwnsSection(item.section);
         for (auto* component : {item.widget, item.label}) {
             if (component == nullptr)
                 continue;
-            if (governed)
+            if (governed && !faded)
                 component->setVisible(visible && !isHeldBySwap(*component)); // an arriving control waits its turn
             if (dims)
                 markDimmed(*component, item.dimmed);
@@ -192,8 +194,8 @@ void CardBody::applyVisibility() {
         if (dims && item.widget != nullptr && dimHintsReady_)
             describeDimmed(*item.widget, item.dimmed);
     }
-    for (const auto& section : plan_.sections)
-        if (section.header != nullptr)
+    for (int s = 0; s < (int)plan_.sections.size(); ++s)
+        if (const auto& section = plan_.sections[(size_t)s]; section.header != nullptr && !fadeOwnsSection(s))
             section.header->setVisible(section.visible);
     if (moreButton_ != nullptr)
         moreButton_->setUnfolded(moreUnfolded_);
@@ -249,13 +251,30 @@ void CardBody::refreshConditions() {
     finishSwapMotion();
     const bool animate = canAnimateSwap();
     auto snapshot = animate ? snapshotForSwap() : SwapSnapshot();
+    std::vector<bool> sectionWasVisible;
+    for (const auto& section : plan_.sections)
+        sectionWasVisible.push_back(section.visible);
     if (!plan_.evaluateConditions(module_).any)
         return;
+    // A plain section that comes or goes fades (it is no swap): one going stays laid out until it has faded out, then
+    // the card closes up; one coming is laid out at once and fades in. Everything else swaps or lands as before.
+    beginSectionFades(sectionWasVisible);
+    // When nothing but fading-out sections flipped, the card stays exactly as it is until they have gone.
+    bool onlyLeaving = !startingSections_.empty();
+    for (int s = 0; s < (int)plan_.sections.size(); ++s)
+        if (plan_.sections[(size_t)s].visible != sectionWasVisible[(size_t)s] &&
+            (!startingSections_.count(s) || plan_.sections[(size_t)s].visible))
+            onlyLeaving = false;
     if (animate)
         pictureLeavingControls(snapshot);
     applyVisibility();
+    // The fades start before the layout: a section coming is already shown (at alpha 0) when the card measures, so the
+    // jacks of its knobs leave the gutter as they will stay.
+    for (int s : std::exchange(startingSections_, {}))
+        sectionFades_[(size_t)s].get()->setShown(plan_.sections[(size_t)s].visible);
     const int height = card_.getHeight();
-    card_.updateLayout();
+    if (!onlyLeaving)
+        card_.updateLayout();
     const bool resized = card_.getHeight() != height;
     if (resized)
         card_.owner.handleModuleResized(&card_);

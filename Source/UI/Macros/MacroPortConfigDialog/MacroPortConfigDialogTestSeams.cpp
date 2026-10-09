@@ -99,6 +99,14 @@ void MacroPortConfigDialog::commitRowVoiceCountForTest(int row) {
         rowControls_[row]->voicesEditor.onFocusLost();
 }
 
+juce::Component* MacroPortConfigDialog::getRowShapeBoxForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->shapeBox : nullptr;
+}
+
+juce::Component* MacroPortConfigDialog::getRowVoicesEditorForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->voicesEditor : nullptr;
+}
+
 void MacroPortConfigDialog::triggerCloseForTest() {
     if (closeButton_.onClick)
         closeButton_.onClick();

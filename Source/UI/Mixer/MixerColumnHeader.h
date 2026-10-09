@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/HelperTooltip.h"
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
@@ -48,7 +49,7 @@ public:
         nameLabel_.addMouseListener(this, false);
         nameLabel_.setCursorSource(this);
         addAndMakeVisible(colourDot_);
-        colourDot_.setVisible(false); // shown once setColour() gives it a colour
+        colourDotFade_.setShown(false); // faded in once setColour() gives it a colour
         colourDot_.onClick = [this] {
             if (colourDot_.consumeDragFlag())
                 return; // the release of a header drag, not a click
@@ -97,7 +98,7 @@ public:
         // just repaint.
         colour_ = colour;
         colourDot_.setColour(colour);
-        colourDot_.setVisible(colour.getAlpha() > 0);
+        colourDotFade_.setShown(colour.getAlpha() > 0);
         resized();
         repaint();
     }
@@ -125,7 +126,7 @@ public:
         sourcesButton_.setTitle(words);
         sourcesButton_.setDescription(words);
         sourcesButton_.setTooltip(words);
-        sourcesButton_.setVisible(sources_.isNotEmpty());
+        sourcesFade_.setShown(sources_.isNotEmpty());
         badgesChanged();
     }
     juce::String getSources() const { return sources_; }
@@ -384,6 +385,8 @@ private:
     juce::String sources_;
     MixerColourDot colourDot_;
     MixerIconButton sourcesButton_{"mixerSourcesBadge"};
+    FadeVisibility colourDotFade_{&colourDot_}; // the dot and the badge fade as a colour or sources appear
+    FadeVisibility sourcesFade_{&sourcesButton_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };

@@ -69,8 +69,18 @@ ControllerSurfaceToolbar::ControllerSurfaceToolbar() {
     portHintLabel_.setInterceptsMouseClicks(false, false);
     addChildComponent(portHintLabel_);
 
+    detectHintFade_.onFrame = [this] { relayoutForHintFade(); };
+    portFade_.onFrame = [this] { relayoutForHintFade(); };
+
     setProfileSelected(false);
     setControlSelected(false);
+}
+
+void ControllerSurfaceToolbar::relayoutForHintFade() {
+    resized();
+    repaint();
+    if (onPreferredHeightChanged)
+        onPreferredHeightChanged();
 }
 
 ControllerSurfaceToolbar::~ControllerSurfaceToolbar() = default;
@@ -88,7 +98,7 @@ void ControllerSurfaceToolbar::setControlSelected(bool selected) { assignButton_
 void ControllerSurfaceToolbar::setDetectOn(bool on) {
     detectOn_ = on;
     detectButton_.setToggleState(on, juce::dontSendNotification);
-    hintLabel_.setVisible(on);
+    detectHintFade_.setShown(on);
     resized();
     repaint();
 }
@@ -98,10 +108,14 @@ void ControllerSurfaceToolbar::setDetectOn(bool on) {
 // button row's leftover width, so showing it never changes getPreferredHeight() and never makes
 // the panel re-layout the surface underneath.
 void ControllerSurfaceToolbar::setUndoHint(const juce::String& text) {
-    if (text == undoHintLabel_.getText() && undoHintLabel_.isVisible() == text.isNotEmpty())
+    if (text == getUndoHint())
         return;
-    undoHintLabel_.setText(text, juce::dontSendNotification);
-    undoHintLabel_.setVisible(text.isNotEmpty());
+    // A cleared cue keeps its words while it fades out.
+    if (text.isNotEmpty())
+        undoHintLabel_.setText(text, juce::dontSendNotification);
+    undoFade_.setShown(text.isNotEmpty());
+    if (text.isEmpty() && !undoFade_.isFading())
+        undoHintLabel_.setText({}, juce::dontSendNotification);
 }
 
 // Unlike setUndoHint/setDetectOn's hint row, this one has no other exception to Source/UI/CLAUDE.md's
@@ -110,18 +124,23 @@ void ControllerSurfaceToolbar::setUndoHint(const juce::String& text) {
 // getPreferredHeight() and needs the same "caller re-layouts" contract setDetectOn() already has
 // (see MidiRemotePanelHandshake.cpp's refreshPortHint()).
 void ControllerSurfaceToolbar::setPortHint(const juce::String& text) {
-    if (text == portHintLabel_.getText() && portHintLabel_.isVisible() == text.isNotEmpty())
+    if (text == getPortHint())
         return;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
         portHintLabel_.setColour(juce::Label::textColourId, lf->getTheme().colors.warning);
-    portHintLabel_.setText(text, juce::dontSendNotification);
-    portHintLabel_.setVisible(text.isNotEmpty());
+    // A cleared warning keeps its words while its row fades out and shrinks away.
+    if (text.isNotEmpty())
+        portHintLabel_.setText(text, juce::dontSendNotification);
+    portFade_.setShown(text.isNotEmpty());
+    if (text.isEmpty() && !portFade_.isFading())
+        portHintLabel_.setText({}, juce::dontSendNotification);
     resized();
     repaint();
 }
 
 int ControllerSurfaceToolbar::getPreferredHeight() const noexcept {
-    return kRowHeight + (portHintLabel_.isVisible() ? kHintHeight : 0) + (detectOn_ ? kHintHeight : 0);
+    return kRowHeight + juce::roundToInt((float)kHintHeight * portFade_.progress()) +
+           juce::roundToInt((float)kHintHeight * detectHintFade_.progress());
 }
 
 void ControllerSurfaceToolbar::resized() {
@@ -136,10 +155,10 @@ void ControllerSurfaceToolbar::resized() {
     moreButton_.setBounds(row.removeFromLeft(40));
     row.removeFromLeft(8);
     undoHintLabel_.setBounds(row);
-    if (portHintLabel_.isVisible())
-        portHintLabel_.setBounds(bounds.removeFromTop(kHintHeight).reduced(8, 0));
-    hintLabel_.setBounds(bounds.reduced(8, 0));
-    hintLabel_.setVisible(detectOn_);
+    // The labels keep their full height; the toolbar's own bounds clip them while their row is still growing.
+    portHintLabel_.setBounds(bounds.getX() + 8, bounds.getY(), bounds.getWidth() - 16, kHintHeight);
+    bounds.removeFromTop(juce::roundToInt((float)kHintHeight * portFade_.progress()));
+    hintLabel_.setBounds(bounds.getX() + 8, bounds.getY(), bounds.getWidth() - 16, kHintHeight);
 }
 
 void ControllerSurfaceToolbar::paint(juce::Graphics& g) {

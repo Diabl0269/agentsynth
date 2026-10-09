@@ -343,7 +343,7 @@ void ControllersListComponent::resized() {
     addControllerButton_.setBounds(getLocalBounds().removeFromBottom(kFooterHeight).reduced(8, 4));
 }
 
-void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerButton_.setVisible(visible); }
+void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerFade_.setShown(visible); }
 
 void ControllersListComponent::setHosted(bool hosted) {
     hosted_ = hosted;

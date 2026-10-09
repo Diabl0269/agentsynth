@@ -8,6 +8,7 @@
 #include "OnCardCells.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ControlMotion.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
@@ -273,6 +274,8 @@ private:
     juce::Component::SafePointer<CardLayoutAddPanel> addPanel_;
     juce::TextButton addControl_{"+ Add control"};
     CardSegmentedSwitch timeTempo_{"Controls", juce::StringArray{"Shared", "Separate"}};
+    /// The switch fades in and out and "+ Add control" slides over with it (docs/layout/animation.md).
+    synth::ui::FadeVisibility timeTempoFade_{&timeTempo_};
     std::optional<float> openingSync_; ///< The card's Sync (0..1) as the session opened; put back when it ends.
     AddDrag addDrag_;
     bool applyToAll_ = false; ///< Every write goes to the type's default, not this module.

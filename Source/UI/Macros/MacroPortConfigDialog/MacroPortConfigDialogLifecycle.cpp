@@ -71,8 +71,9 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newKindBox_.addItem("MIDI", kKindMidiId);
     newKindBox_.setSelectedId(kKindAudioCVId, juce::dontSendNotification);
     newKindBox_.onChange = [this] {
-        newShapeBox_.setVisible(newKindBox_.getSelectedId() != kKindMidiId);
+        newShapeFade_.setShown(newKindBox_.getSelectedId() != kKindMidiId);
         updateNewPortVoicesVisibility();
+        resized();
     };
     newKindBox_.setTitle("New port kind");
     newKindBox_.setTooltip("Audio / CV, or MIDI");
@@ -80,7 +81,10 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
 
     populateShapeBox(newShapeBox_);
     newShapeBox_.setSelectedId(kShapeMonoId, juce::dontSendNotification);
-    newShapeBox_.onChange = [this] { updateNewPortVoicesVisibility(); };
+    newShapeBox_.onChange = [this] {
+        updateNewPortVoicesVisibility();
+        resized();
+    };
     newShapeBox_.setTitle("New port shape");
     newShapeBox_.setTooltip("Mono, stereo or poly");
     addAndMakeVisible(newShapeBox_);
@@ -98,7 +102,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setTooltip("Number of voices of the new poly port");
     removeHiddenTabStops(newVoicesEditor_);
     addAndMakeVisible(newVoicesEditor_);
-    updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
+    newVoicesFade_.snapTo(false); // Mono is the default shape: starts hidden
 
     newNameEditor_.setTextToShowWhenEmpty("Port name", juce::Colours::grey);
     // Return commits the in-progress "Add a port" field the same way it already does for a
@@ -136,9 +140,13 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     rowsContent_.addAndMakeVisible(inputsEmptyHint_);
     rowsContent_.addAndMakeVisible(outputsEmptyHint_);
 
+    for (auto* fade : {&newShapeFade_, &newVoicesFade_, &inputsHintFade_, &outputsHintFade_})
+        fade->onFrame = [this] { resized(); }; // the hints also tween their section's height
+
     rebuildRowComponents();
     setSize(kDialogWidth, idealDialogHeight());
     resized();
+    hintFadesPrimed_ = true;
 }
 
 MacroPortConfigDialog::~MacroPortConfigDialog() = default;
@@ -190,8 +198,7 @@ void MacroPortConfigDialog::requestClose() {
 void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
     const bool isMidi = newKindBox_.getSelectedId() == kKindMidiId;
     const bool poly = !isMidi && newShapeBox_.getSelectedId() == kShapePolyId;
-    newVoicesEditor_.setVisible(poly);
-    newVoicesLabel_.setVisible(poly);
+    newVoicesFade_.setShown(poly);
 }
 
 void MacroPortConfigDialog::paint(juce::Graphics& g) {
@@ -256,6 +263,22 @@ void MacroPortConfigDialog::resized() {
         placeDragRows();
 }
 
+// The height an empty-section hint takes, and (when applying) its fade. The hint's slot follows the fade, so the
+// section below it slides instead of jumping; a measure answers with the settled height.
+int MacroPortConfigDialog::emptyHintHeight(bool apply, synth::ui::FadeVisibility& fade, bool wanted, juce::Label& hint,
+                                           int y, int width) {
+    if (!apply)
+        return wanted ? kEmptyHintHeight : 0;
+    if (!hintFadesPrimed_)
+        fade.snapTo(wanted);
+    else
+        fade.setShown(wanted);
+    const int height = juce::roundToInt((float)kEmptyHintHeight * fade.progress());
+    if (height > 0)
+        hint.setBounds(0, y, width, height);
+    return height;
+}
+
 int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
     width = juce::jmax(160, width);
     int y = 0;
@@ -273,13 +296,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
             rowControls_[i]->setBounds(0, y, width, kRowHeight);
         y += kRowHeight + kRowGap;
     }
-    if (apply)
-        inputsEmptyHint_.setVisible(!anyInput);
-    if (!anyInput) {
-        if (apply)
-            inputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
-        y += kEmptyHintHeight;
-    }
+    y += emptyHintHeight(apply, inputsHintFade_, !anyInput, inputsEmptyHint_, y, width);
 
     y += kSectionGap;
     if (apply)
@@ -295,13 +312,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
             rowControls_[i]->setBounds(0, y, width, kRowHeight);
         y += kRowHeight + kRowGap;
     }
-    if (apply)
-        outputsEmptyHint_.setVisible(!anyOutput);
-    if (!anyOutput) {
-        if (apply)
-            outputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
-        y += kEmptyHintHeight;
-    }
+    y += emptyHintHeight(apply, outputsHintFade_, !anyOutput, outputsEmptyHint_, y, width);
 
     if (apply)
         rowsContent_.setSize(width, y);

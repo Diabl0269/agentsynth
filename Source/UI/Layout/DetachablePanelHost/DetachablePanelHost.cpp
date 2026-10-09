@@ -34,6 +34,7 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
 
     addAndMakeVisible(panel_);
 
+    headerFade_.onFrame = [this] { resized(); };
     applyTooltip();
 }
 
@@ -66,6 +67,7 @@ void DetachablePanelHost::setDetached(bool detached) {
         return;
 
     if (detached) {
+        headerFade_.snapTo(headerFade_.isShown()); // the window borrows the strip: no fade runs on it
         window_ = std::make_unique<DetachedPanelWindow>(panel_, detachButton_, titleLabel_, boundsKey_, appProperties_,
                                                         lookAndFeel_, shortcutManager_);
         window_->onCloseRequested = [this] { setDetached(false); };
@@ -91,6 +93,7 @@ void DetachablePanelHost::setDetached(bool detached) {
         addAndMakeVisible(detachButton_);
         addAndMakeVisible(panel_);
         window_.reset();
+        headerFade_.snapTo(!embeddedHeader_); // back docked: the strip is as the host wants it, no fade
         resized();
     }
 
@@ -104,11 +107,10 @@ void DetachablePanelHost::resized() {
         return; // nothing docked to lay out -- the window lays out its own borrowed copy
 
     auto bounds = getLocalBounds();
-    const bool showOwnHeader = !embeddedHeader_;
-    titleLabel_.setVisible(showOwnHeader);
-    detachButton_.setVisible(showOwnHeader);
-    if (showOwnHeader) {
-        auto header = bounds.removeFromTop(kHeaderStripHeight);
+    headerFade_.setShown(!embeddedHeader_);
+    // The strip's room follows its fade, so the panel slides instead of jumping.
+    if (const int height = juce::roundToInt((float)kHeaderStripHeight * headerFade_.progress()); height > 0) {
+        auto header = bounds.removeFromTop(height);
         detachButton_.setBounds(header.removeFromRight(kHeaderStripHeight));
         titleLabel_.setBounds(header);
     }

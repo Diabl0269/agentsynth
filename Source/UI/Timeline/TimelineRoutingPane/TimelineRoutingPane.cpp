@@ -25,6 +25,12 @@ TimelineRoutingPane::TimelineRoutingPane()
     : showOnCanvas_("Show on canvas " + chevron())
     , showInMixer_("Show in mixer " + chevron()) {
     setComponentID("timelineRoutingPane");
+    // A control fading in or out resizes its row from the fade's progress, so the rows below slide.
+    for (auto* fade : {&canvasNodeFade_, &midiDestinationsFade_, &showOnCanvasFade_, &channelFade_})
+        fade->onFrame = [this] {
+            layoutSections();
+            repaint();
+        };
     // The pane is its own focus region (Tab goes timeline -> routing pane -> scale pane): the root takes focus and
     // Up/Down step through the controls below. A click never moves keyboard focus into it.
     setWantsKeyboardFocus(true);
@@ -158,11 +164,12 @@ void TimelineRoutingPane::computeNotesAndChannel() {
 
 void TimelineRoutingPane::applyViewToChildren() {
     const bool routable = view_.hasTrack;
-    canvasNode_.setVisible(routable);
-    midiDestinations_.setVisible(routable && view_.isMidi);
-    showOnCanvas_.setVisible(routable && view_.bound);
-    channelChip_.setVisible(routable && view_.hasChannel);
-    showInMixer_.setVisible(routable && view_.hasChannel);
+    // Each control fades in or out as the selected track changes what is routable (animation.md); a fade-out keeps it
+    // on screen until it has ended.
+    canvasNodeFade_.setShown(routable);
+    midiDestinationsFade_.setShown(routable && view_.isMidi);
+    showOnCanvasFade_.setShown(routable && view_.bound);
+    channelFade_.setShown(routable && view_.hasChannel);
     if (!routable)
         return;
 
@@ -173,7 +180,8 @@ void TimelineRoutingPane::applyViewToChildren() {
                                                          "'. Click to choose a different node.");
     midiDestinations_.setButtonText(view_.midiDestinationsText);
     midiDestinations_.setTooltip("MIDI destinations: " + view_.midiDestinationsText + ". Click to change.");
-    channelChip_.setChannelName(view_.channelText);
+    if (view_.hasChannel) // a chip fading out keeps the name it showed
+        channelChip_.setChannelName(view_.channelText);
     setTitle("Routing for " + view_.name);
 }
 
@@ -192,15 +200,17 @@ void TimelineRoutingPane::layoutSections() {
 
     layout_.header = {0, 0, getWidth(), kHeaderHeight};
     int y = kHeaderHeight + kPad;
+    // A row whose control is fading takes `p` of its height, so what is below slides instead of jumping.
+    const auto scaled = [](int n, float p) { return juce::roundToInt(static_cast<float>(n) * p); };
     auto row = [&](int height) {
         const juce::Rectangle<int> bounds(kPad, y, contentWidth, height);
         y += height;
         return bounds;
     };
-    auto endSection = [&] {
-        y += kPad;
+    auto endSection = [&](float p = 1.0f) {
+        y += scaled(kPad, p);
         layout_.dividers.push_back(y);
-        y += 1 + kPad;
+        y += scaled(1 + kPad, p);
     };
 
     layout_.canvasNodeHeading = row(kHeadingHeight);
@@ -210,23 +220,26 @@ void TimelineRoutingPane::layoutSections() {
         layout_.missingNote = row(kNoteHeight);
         y += kRowGap;
     }
-    if (showOnCanvas_.isVisible())
-        showOnCanvas_.setBounds(row(kLinkHeight));
+    if (const float p = showOnCanvasFade_.progress(); p > 0.0f)
+        showOnCanvas_.setBounds(row(scaled(kLinkHeight, p)));
     endSection();
 
-    if (view_.isMidi) {
-        layout_.midiDestinationsHeading = row(kHeadingHeight);
-        midiDestinations_.setBounds(row(kButtonHeight));
-        endSection();
+    if (const float p = midiDestinationsFade_.progress(); p > 0.0f) {
+        layout_.midiAlpha = p;
+        layout_.midiDestinationsHeading = row(scaled(kHeadingHeight, p));
+        midiDestinations_.setBounds(row(scaled(kButtonHeight, p)));
+        endSection(p);
     }
 
     layout_.mixerChannelHeading = row(kHeadingHeight);
-    if (view_.hasChannel) {
-        channelChip_.setBounds(row(kChipHeight));
-        y += kRowGap;
-        showInMixer_.setBounds(row(kLinkHeight));
-    } else {
-        layout_.noChannel = row(kLinkHeight);
+    if (const float p = channelFade_.progress(); p > 0.0f) {
+        channelChip_.setBounds(row(scaled(kChipHeight, p)));
+        y += scaled(kRowGap, p);
+        showInMixer_.setBounds(row(scaled(kLinkHeight, p)));
+    }
+    if (const float p = channelFade_.progress(); p < 1.0f) {
+        layout_.noChannelAlpha = 1.0f - p;
+        layout_.noChannel = row(scaled(kLinkHeight, 1.0f - p));
     }
     setContentHeight(y + kPad);
 }

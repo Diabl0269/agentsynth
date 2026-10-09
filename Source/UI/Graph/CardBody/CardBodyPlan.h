@@ -37,6 +37,9 @@ struct CardBodyItem {
     bool dimmed = false; ///< A `dim` condition or a code dim rule greys it out now.
     bool pill = false;   ///< A footer toggle, drawn as the small pill.
     bool open = true;    ///< A view only: shown now (the layout's `open`, then the card's toggle).
+    /** A view only: how much of its height it takes now while it fades in or out (0 to 1), written by the live card
+     *  body each time it lays out; negative = follow `open`, as in a plan that is only measured. */
+    mutable float reveal = -1.0f;
 
     /** The text the card shows for this parameter: the override, else the parameter's name. */
     juce::String captionText() const;
@@ -56,6 +59,7 @@ struct CardBodyPlan {
         juce::Component* header = nullptr; ///< The header row; null until built, and without a title.
         std::optional<CardCondition> visibleWhen;
         bool visible = true;   ///< visibleWhen's current result.
+        bool holding = false;  ///< Not visible any more but still laid out while its controls fade out.
         bool footer = false;   ///< The footer row (CardSection::kFooterId), always laid out last.
         bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.

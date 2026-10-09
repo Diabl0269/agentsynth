@@ -200,6 +200,7 @@ private:
     MixerSectionViewport insertViewport_;
     std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
     MixerCollapsedSection insertsCollapsed_;
+    MixerSectionSwap insertsSwap_{&insertViewport_, insertsCollapsed_};
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;

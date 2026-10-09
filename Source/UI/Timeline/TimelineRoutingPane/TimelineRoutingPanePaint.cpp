@@ -25,8 +25,8 @@ PaneColours coloursOf(const juce::Component& component) {
 
 // Small sentence-case heading, like the Mixer pane's group headings but without the capitals.
 void drawHeading(juce::Graphics& g, const juce::Rectangle<int>& area, const juce::String& text,
-                 const PaneColours& colours) {
-    g.setColour(colours.muted);
+                 const PaneColours& colours, float alpha = 1.0f) {
+    g.setColour(colours.muted.withMultipliedAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(10.5f, juce::Font::bold)));
     g.drawText(text, area, juce::Justification::bottomLeft, false);
 }
@@ -76,11 +76,11 @@ void TimelineRoutingPane::paint(juce::Graphics& g) {
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawFittedText(view_.missingNote, layout_.missingNote, juce::Justification::topLeft, 3);
     }
-    if (view_.isMidi)
-        drawHeading(g, layout_.midiDestinationsHeading, "MIDI destinations", colours);
+    if (!layout_.midiDestinationsHeading.isEmpty()) // present while its section is shown or fading
+        drawHeading(g, layout_.midiDestinationsHeading, "MIDI destinations", colours, layout_.midiAlpha);
     drawHeading(g, layout_.mixerChannelHeading, "Mixer channel", colours);
     if (!layout_.noChannel.isEmpty()) {
-        g.setColour(colours.muted);
+        g.setColour(colours.muted.withMultipliedAlpha(layout_.noChannelAlpha));
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
         g.drawText(view_.channelText, layout_.noChannel, juce::Justification::centredLeft, true);
     }

@@ -24,6 +24,11 @@ PickTargetOverlay::PickTargetOverlay() {
     setWantsKeyboardFocus(true);
     setMouseCursor(juce::MouseCursor::CrosshairCursor);
     setVisible(false);
+    fade_ = std::make_unique<FadeVisibility>(std::vector<juce::Component*>{this});
+    fade_->onHidden = [this] {
+        outlines_.clear(); // kept painted while the overlay fades out
+        repaint();
+    };
 }
 
 PickTargetOverlay::~PickTargetOverlay() {
@@ -46,7 +51,7 @@ void PickTargetOverlay::begin(std::vector<PickCandidate> candidates) {
     active_ = true;
     setBounds(parent->getLocalBounds());
     refreshOutlines();
-    setVisible(true);
+    fade_->setShown(true);
     toFront(false);
     if (isShowing())
         grabKeyboardFocus(); // a hidden or peer-less host (a headless test) cannot take focus
@@ -68,8 +73,10 @@ void PickTargetOverlay::setPassThrough(std::vector<juce::Component*> components)
 void PickTargetOverlay::end() {
     active_ = false;
     candidates_.clear();
-    outlines_.clear();
-    setVisible(false);
+    // The overlay no longer answers a click (hitTest), but its outlines stay painted until it has faded out.
+    fade_->setShown(false);
+    if (!fade_->isFading())
+        outlines_.clear();
 }
 
 // A candidate's outline is its bounds in overlay space, clipped by every ancestor between it and the

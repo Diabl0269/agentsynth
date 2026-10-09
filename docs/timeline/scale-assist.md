@@ -53,7 +53,11 @@ narrowing the controls. No horizontal bar is shown — the width is fixed and ne
 
 The custom-scale editor's show/hide (`showCustomEditor`, fired by selecting the "Edit custom
 scales..." row) toggles `customEditorVisible_` and calls `resized()`, so hiding it reclaims the
-height it used and re-decides whether the panel still overflows — no stale scrollbar. The panel's
+height it used and re-decides whether the panel still overflows — no stale scrollbar. The editor's
+twelve keys, name field and Save button live in one `customBlock_` that fades in and out
+(`FadeVisibility`, [animation](../layout/animation.md#fading-things-in-and-out)); the block is as tall as the fade
+has got (`customBlockHeight()`, mirrored by `contentNaturalHeight()`), lays its rows out at full size from its top
+and clips them, so the controls under it slide with the fade instead of jumping or overlapping. The panel's
 background and right-edge hairline stay painted on the panel itself, behind the (transparent)
 viewport, so nothing visually changes when scrolling is not needed.
 

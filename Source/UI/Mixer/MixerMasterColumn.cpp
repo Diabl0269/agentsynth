@@ -417,11 +417,11 @@ void MixerMasterColumn::resized() {
     const size_t inserts = (size_t)MixerSection::Inserts;
     const bool insertsHidden = sectionLayout_->isHidden(MixerSection::Inserts);
     const auto insertsArea = row(geometry.sectionTop[inserts], geometry.sectionHeight[inserts]);
-    insertViewport_.setVisible(!insertsHidden);
+    insertsSwap_.setHidden(insertsHidden);
     insertViewport_.setBounds(insertsArea);
     insertViewport_.setContentHeight(insertList_.getPreferredHeight());
-    insertsCollapsed_.setVisible(insertsHidden);
-    insertsCollapsed_.setBounds(insertsArea);
+    insertsCollapsed_.setBounds(
+        insertsArea.withHeight(juce::jmin(insertsArea.getHeight(), MixerSectionLayout::kCollapsedHeight)));
     for (size_t i = 0; i < dividers_.size(); ++i)
         dividers_[i].setBounds(row(geometry.dividerTop[i], MixerSectionLayout::kDividerHeight));
 

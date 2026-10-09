@@ -8,6 +8,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "ShortcutsSettingsTab.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 //==============================================================================
@@ -390,10 +391,18 @@ private:
         const auto* descriptor = selectedDescriptor();
         const bool isRemote = descriptor != nullptr && descriptor->id == "remote";
         bool showHost = descriptor == nullptr || (descriptor->needsHost && (!isRemote || customServerRevealed));
-        hostLabel.setVisible(showHost);
-        hostEditor.setVisible(showHost);
-        customServerButton.setVisible(isRemote && !customServerRevealed);
-        useHostedButton.setVisible(!isRemote || remoteHostIsCustom());
+        // The host row's controls fade in and out where they stand (the rows around them never move); what is
+        // there when the tab is built does not fade.
+        const auto fadeTo = [this](synth::ui::FadeVisibility& fade, bool shown) {
+            if (hostRowSettled)
+                fade.setShown(shown);
+            else
+                fade.snapTo(shown);
+        };
+        fadeTo(hostFade, showHost);
+        fadeTo(customServerFade, isRemote && !customServerRevealed);
+        fadeTo(useHostedFade, !isRemote || remoteHostIsCustom());
+        hostRowSettled = true;
         hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
                           juce::dontSendNotification);
     }
@@ -420,6 +429,10 @@ private:
     juce::TextEditor hostEditor;
     juce::TextButton customServerButton;
     juce::TextButton useHostedButton;
+    synth::ui::FadeVisibility hostFade{&hostLabel, &hostEditor};
+    synth::ui::FadeVisibility customServerFade{&customServerButton};
+    synth::ui::FadeVisibility useHostedFade{&useHostedButton};
+    bool hostRowSettled = false;
     bool customServerRevealed = false;
     juce::Label historyRetentionLabel;
     juce::ComboBox historyRetentionCombo;

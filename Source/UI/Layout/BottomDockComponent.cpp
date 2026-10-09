@@ -74,6 +74,19 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     , mixerTabButton_(*this, Tab::Mixer, nameForTab(Tab::Mixer))
     , midiRemoteTabButton_(*this, Tab::MidiRemote, nameForTab(Tab::MidiRemote))
     , shortcutManager_(shortcutManager) {
+    // The leaving tab's own panel flag follows once its host has faded out (see applyTabVisibility).
+    timelineFade_.onHidden = [this] {
+        if (!timelineHost_.isDetached() && activeTab_ != Tab::Timeline)
+            timelinePanel_.setVisible(false);
+    };
+    mixerFade_.onHidden = [this] {
+        if (!mixerHost_.isDetached() && activeTab_ != Tab::Mixer)
+            mixer_->setVisible(false);
+    };
+    midiRemoteFade_.onHidden = [this] {
+        if (!midiRemoteHost_.isDetached() && activeTab_ != Tab::MidiRemote)
+            midiRemotePanel_.setVisible(false);
+    };
     addAndMakeVisible(stripFocus_);
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);
@@ -418,21 +431,28 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     const bool mixerActive = activeTab_ == Tab::Mixer;
     const bool midiRemoteActive = activeTab_ == Tab::MidiRemote;
     const bool timelineActive = activeTab_ == Tab::Timeline;
-    timelineHost_.setVisible(timelineActive);
-    mixerHost_.setVisible(mixerActive);
-    midiRemoteHost_.setVisible(midiRemoteActive);
+    // A tab switch cross-fades: the leaving host fades out as the arriving one fades in (FadeVisibility, animation.md).
+    // Whether a tab is selected lands at once (isShown()); the leaving panel keeps its own visible flag until its host
+    // has faded out (onHidden), so the picture does not empty while it fades.
+    timelineFade_.setShown(timelineActive);
+    mixerFade_.setShown(mixerActive);
+    midiRemoteFade_.setShown(midiRemoteActive);
     // Also toggle each panel's OWN visible flag, preserving the contract
     // TimelinePanelTestFixture.h's timelinePanelIsOpen() documents ("timelinePanel_.isVisible()
     // means the Timeline tab is selected") for the common (docked) case -- but ONLY while docked
     // here: a detached panel is no longer this host's child at all (it lives in its own
     // DetachedPanelWindow), so touching its visible flag would wrongly hide/show it inside that
     // window based on which dock tab happens to be "active" here.
-    if (!timelineHost_.isDetached())
-        timelinePanel_.setVisible(timelineActive);
-    if (!mixerHost_.isDetached())
-        mixer_->setVisible(mixerActive);
-    if (!midiRemoteHost_.isDetached())
-        midiRemotePanel_.setVisible(midiRemoteActive);
+    const auto syncPanel = [](synth::ui::DetachablePanelHost& host, synth::ui::FadeVisibility& fade,
+                              juce::Component& panel, bool active) {
+        if (host.isDetached())
+            return;
+        if (active || !fade.isFading())
+            panel.setVisible(active);
+    };
+    syncPanel(timelineHost_, timelineFade_, timelinePanel_, timelineActive);
+    syncPanel(mixerHost_, mixerFade_, *mixer_, mixerActive);
+    syncPanel(midiRemoteHost_, midiRemoteFade_, midiRemotePanel_, midiRemoteActive);
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);

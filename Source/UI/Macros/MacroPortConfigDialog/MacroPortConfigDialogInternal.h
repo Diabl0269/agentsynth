@@ -311,7 +311,9 @@ public:
         voicesEditor.setExplicitFocusOrder(4);
         deleteButton.setExplicitFocusOrder(5);
 
-        updateVoicesVisibility();
+        voicesFade_.snapTo(isPolyShown()); // what a row starts with does not fade
+        voicesFade_.onFrame = [this] { resized(); };
+        resized();
     }
 
     juce::Colour kindTintColour() const {
@@ -404,10 +406,14 @@ public:
         }
     }
 
+    bool isPolyShown() const {
+        return !isMidi && shapeFromComboIndex(shapeBox.getSelectedId()) == MacroPortShape::Poly;
+    }
+
+    // The voices editor fades in and out as the shape changes; shapeBox slides over as its block's width follows
+    // the fade (resized()).
     void updateVoicesVisibility() {
-        const bool poly = !isMidi && shapeFromComboIndex(shapeBox.getSelectedId()) == MacroPortShape::Poly;
-        voicesEditor.setVisible(poly);
-        voicesLabel.setVisible(poly);
+        voicesFade_.setShown(isPolyShown());
         resized();
     }
 
@@ -445,10 +451,11 @@ public:
     // delete+recreate, complete with a fresh uuid and dropped cables) just from opening and
     // closing the dialog. Voices only matters while the row is showing Poly (the only shape that
     // makes voicesEditor visible at all, and Poly can never be the lossy StereoCollapsed case), so
-    // gating on isVisible() keeps this reachable only through the one path that's actually safe to
+    // gating on the voices editor being shown (voicesFade_.isShown(): false the moment its fade-out starts, not
+    // when it ends) keeps this reachable only through the one path that's actually safe to
     // re-derive from the combo's current selection.
     void maybeCommitVoicesOnClose() {
-        if (voicesEditor.isVisible())
+        if (voicesFade_.isShown())
             maybeCommitShape();
     }
 
@@ -479,11 +486,12 @@ public:
         if (isMidi) {
             midiTag.setBounds(area.removeFromRight(56));
         } else {
-            if (voicesEditor.isVisible()) {
-                voicesEditor.setBounds(area.removeFromRight(38));
-                area.removeFromRight(4);
-                voicesLabel.setBounds(area.removeFromRight(42));
-                area.removeFromRight(6);
+            // The voices block (editor, label, gap: 90 px) is as wide as the fade has got, so the shape box slides.
+            if (const int voicesWidth = juce::roundToInt(90.0f * voicesFade_.progress()); voicesWidth > 0) {
+                auto block = area.removeFromRight(voicesWidth);
+                voicesEditor.setBounds(block.removeFromRight(38));
+                block.removeFromRight(4);
+                voicesLabel.setBounds(block.removeFromRight(42));
             }
             shapeBox.setBounds(area.removeFromRight(90));
         }
@@ -530,6 +538,9 @@ private:
     juce::String committedName_;              // see maybeCommitName()
     std::optional<juce::Colour> customColour; // nullopt = falls back to kindTintColour()
     float lift_ = 0.0f;                       // see setLift()
+
+    // The voices editor and its label, shown for a poly shape only. Declared after them: destroyed first.
+    synth::ui::FadeVisibility voicesFade_{&voicesLabel, &voicesEditor};
 };
 
 } // namespace synth::ui

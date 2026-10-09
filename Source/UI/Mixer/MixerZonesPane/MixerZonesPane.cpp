@@ -179,7 +179,7 @@ void MixerZonesPane::refreshSummary() {
     hiddenLabel_.setText(any ? juce::String(hidden) + " hidden " + dot : juce::String("No hidden channels"),
                          juce::dontSendNotification);
     hiddenLabel_.setTitle(any ? juce::String(hidden) + " hidden" : juce::String("No hidden channels"));
-    showAll_.setVisible(any);
+    showAllFade_.setShown(any);
 }
 
 void MixerZonesPane::setChip(Chip chip) {

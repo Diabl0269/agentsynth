@@ -6,6 +6,7 @@
 #include <functional>
 #include <initializer_list>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <utility>
 #include <vector>
 
 // FadeVisibility (docs/layout/animation.md#fading-things-in-and-out): shows and hides one or more child
@@ -33,7 +34,11 @@ public:
     static constexpr double kReducedMs = 80.0;
 
     FadeVisibility(std::initializer_list<juce::Component*> targets)
-        : targets_(targets)
+        : FadeVisibility(std::vector<juce::Component*>(targets)) {}
+
+    /** For a set only known at run time (every control of a card section). `targets` is not empty. */
+    explicit FadeVisibility(std::vector<juce::Component*> targets)
+        : targets_(std::move(targets))
         , updater_(targets_.front()) {
         registry().push_back(this);
     }
@@ -71,6 +76,12 @@ public:
         const double ms = shown ? motionMs(kFadeInMs, kReducedMs) : motionMs(kFadeOutMs, kReducedMs);
         driver_.start(updater_, ms, [](float t) { return t; }, [this](float t) { frame(t); }, [this] { finish(); });
     }
+
+    /** Land on `shown` at once, with no fade, stopping any fade that is running. For the first layout of a screen
+     *  that is already on show (what was there from the start does not fade away), and for an owner that is about
+     *  to hand the components to someone else (a window borrowing them) or has just put them back and must not
+     *  start a fade from a stale state. */
+    void snapTo(bool shown) { land(shown); }
 
     /** True while the components are shown or fading in: the answer to "is it logically on". */
     bool isShown() const { return isVisibleNow() && !fadingOut_; }

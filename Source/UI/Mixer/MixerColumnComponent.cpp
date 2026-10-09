@@ -98,6 +98,10 @@ MixerColumnComponent::MixerColumnComponent() {
     for (size_t i = 0; i < dividers_.size(); ++i) {
         addAndMakeVisible(dividers_[i]);
         addChildComponent(collapsed_[i]);
+        sectionSwaps_[i] = std::make_unique<MixerSectionSwap>(i == 0   ? &insertViewport_
+                                                              : i == 1 ? &sendViewport_
+                                                                       : nullptr,
+                                                              collapsed_[i]);
     }
     // A standalone column (no panel) still reacts to its own dividers and strips.
     ownSectionLayout_.onGeometryChanged = [this] { resized(); };
@@ -534,25 +538,28 @@ void MixerColumnComponent::resized() {
     fader_.setBounds(faderRow);
 }
 
-// A hidden section swaps its content for the 14 px summary strip. The insert and send viewports are
-// hidden with it (so their rows are neither clickable nor in the accessibility tree); the EQ
-// thumbnail only gets empty bounds, because its isVisible() means "this column has an EQ".
+// A hidden section swaps its content for the 14 px summary strip, the two cross-fading while the shared layout
+// slides the section's height (MixerSectionSwap). The insert and send viewports are hidden once they have faded
+// (so their rows are neither clickable nor in the accessibility tree); the EQ thumbnail only gets empty bounds
+// and an opacity that follows the height, because its isVisible() means "this column has an EQ".
 void MixerColumnComponent::layoutSections(const MixerSectionLayout::Geometry& geometry, juce::Rectangle<int> inner) {
     for (size_t i = 0; i < dividers_.size(); ++i) {
         const auto section = (MixerSection)(int)i;
         const bool hidden = sectionLayout_->isHidden(section);
         const juce::Rectangle<int> area(inner.getX(), geometry.sectionTop[i], inner.getWidth(),
                                         geometry.sectionHeight[i]);
-        collapsed_[i].setVisible(hidden);
-        collapsed_[i].setBounds(area);
+        sectionSwaps_[i]->setHidden(hidden);
+        // The strip stays its own 14 px at the section's top while the section is still sliding shut or open.
+        collapsed_[i].setBounds(area.withHeight(juce::jmin(area.getHeight(), MixerSectionLayout::kCollapsedHeight)));
         dividers_[i].setBounds(inner.getX(), geometry.dividerTop[i], inner.getWidth(),
                                MixerSectionLayout::kDividerHeight);
         if (section == MixerSection::Eq) {
-            eqThumbnail_.setBounds(hidden ? area.withHeight(0) : area);
+            const float open = sectionLayout_->getShownAmount(section);
+            eqThumbnail_.setAlpha(open);
+            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0) : area);
             continue;
         }
         auto& viewport = section == MixerSection::Inserts ? insertViewport_ : sendViewport_;
-        viewport.setVisible(!hidden);
         viewport.setBounds(area);
     }
     insertViewport_.setContentHeight(insertList_.getPreferredHeight());

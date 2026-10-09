@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
@@ -567,6 +568,11 @@ private:
     std::unique_ptr<juce::ToggleButton> freqResponseToggle;
     std::unique_ptr<EQCurveComponent> eqCurveComponent;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
+    // The Show Scope / Show Response panels fade with their height (ModuleComponentCardView.cpp); declared after
+    // the panels they fade, so they go first.
+    synth::CardBlockFade scopeFade_;
+    synth::CardBlockFade responseFade_;
+    bool settlingFootprint_ = false; // measuring at the final footprint (CardBlockFade::setShown)
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -601,6 +607,7 @@ private:
     std::unique_ptr<juce::ComboBox> lfoGridCombo;
     std::unique_ptr<juce::TextButton> lfoShapesButton;
     std::unique_ptr<juce::TextButton> lfoToolsButton;
+    synth::CardBlockFade lfoFade_;      // editor + toolbar, fading with their height
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
@@ -721,6 +728,9 @@ private:
     void setResponseShown(bool show);
     void setSpectrumShown(bool show);
     void restoreCardView();
+    int blockHeight(const synth::CardBlockFade& block, int full) const;
+    void fadeBlock(synth::CardBlockFade& block, bool show);
+    void attachBlockFade(synth::CardBlockFade& block, std::vector<juce::Component*> targets);
     void rememberCardView(const std::function<void(synth::CardViewState&)>& edit);
     // The toggles that join a footer row (Show Response, Show Spectrum, Show Scope), in that order.
     std::vector<juce::ToggleButton*> footerChromeToggles(bool visibleOnly = false) const;

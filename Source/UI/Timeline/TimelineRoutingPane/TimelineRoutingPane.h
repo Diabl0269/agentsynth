@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/TextLinkButton.h"
@@ -125,7 +126,9 @@ private:
         juce::Rectangle<int> mixerChannelHeading;
         juce::Rectangle<int> noChannel;
         juce::Rectangle<int> emptyLine;
-        std::vector<int> dividers; // y of each 1 px section border
+        float midiAlpha = 1.0f;      // the MIDI destinations heading's opacity while its section fades
+        float noChannelAlpha = 1.0f; // the "No mixer channel" line's, while the channel row fades
+        std::vector<int> dividers;   // y of each 1 px section border
     };
 
     // Hosts the pane in a Viewport: the pane takes the viewport's width and at least its height, taller when the
@@ -154,6 +157,11 @@ private:
     RoutingComboButton midiDestinations_{"MIDI destinations"};
     ChannelChipComponent channelChip_;
     TextLinkButton showInMixer_;
+    // One fade per control (the chip and its Show in mixer link go together).
+    synth::ui::FadeVisibility canvasNodeFade_{&canvasNode_};
+    synth::ui::FadeVisibility showOnCanvasFade_{&showOnCanvas_};
+    synth::ui::FadeVisibility midiDestinationsFade_{&midiDestinations_};
+    synth::ui::FadeVisibility channelFade_{&channelChip_, &showInMixer_};
     PaneKeys paneKeys_{*this};
 
     std::function<void(juce::PopupMenu&)> showBindingMenuHook_;

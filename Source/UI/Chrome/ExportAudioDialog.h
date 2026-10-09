@@ -2,6 +2,7 @@
 
 #include "Transport/BounceExporter.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -140,6 +141,11 @@ public:
     void setTailUnitBarsForTest(bool bars);
     void setTailValueForTest(double value);
     void simulateEscapeKeyForTest() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
+    // The parts that fade (docs/layout/animation.md, "Fading things in and out").
+    juce::Component& getBitDepthBoxForTest() noexcept { return bitDepthBox_; }
+    juce::Component& getBitrateBoxForTest() noexcept { return bitrateBox_; }
+    juce::Component& getOptionsPageForTest() noexcept { return optionsPage_; }
+    juce::Component& getProgressPageForTest() noexcept { return progressPage_; }
     // TextEditor::escapePressed() posts an async command message in real use (never delivered in
     // a headless test with no message loop), so this drives the wired fileNameEditor_.onEscapeKey
     // lambda directly instead — same idiom simulateEscapeKeyForTest above uses for keyPressed().
@@ -201,6 +207,9 @@ private:
     juce::TextButton exportButton_{"Export"};
     juce::TextButton cancelButton_{"Cancel"};
     std::unique_ptr<juce::FileChooser> fileChooser_;
+    // Bit depth and bitrate share one slot: the one that is not wanted fades out as the other fades in.
+    synth::ui::FadeVisibility bitDepthFade_{&bitDepthLabel_, &bitDepthBox_};
+    synth::ui::FadeVisibility bitrateFade_{&bitrateLabel_, &bitrateBox_};
 
     // ---- Progress page ----
     juce::Component progressPage_;
@@ -208,6 +217,10 @@ private:
     double progressValue_ = 0.0;
     juce::ProgressBar progressBar_{progressValue_};
     juce::TextButton progressCancelButton_{"Cancel"};
+    // The options page and the progress page cross-fade (same bounds). Which page is up is read from these
+    // (isShown), not from the pages' visibility, which lags a fade-out.
+    synth::ui::FadeVisibility optionsPageFade_{&optionsPage_};
+    synth::ui::FadeVisibility progressPageFade_{&progressPage_};
 
     // Last, so it is destroyed before the controls it listens on.
     synth::ui::ArrowKeyNavigation arrowKeys_{*this};

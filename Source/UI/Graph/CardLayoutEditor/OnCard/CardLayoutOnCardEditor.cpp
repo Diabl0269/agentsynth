@@ -53,6 +53,7 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
                           "own controls and positions");
     timeTempo_.onChange = [this](int index) { chooseTimeTempo(index); };
     timeTempo_.setVisible(false);
+    timeTempoFade_.onFrame = [this] { resized(); };
     addChildComponent(timeTempo_);
     hideZone_.setVisible(false);
     addChildComponent(hideZone_);
@@ -387,9 +388,9 @@ void CardLayoutOnCardEditor::resized() {
     const int y = (ModuleComponent::kHeaderHeight - CardLayoutEditBar::kHeight) / 2;
     editBar_.setBounds(getWidth() - width - kBarMargin, y, width, CardLayoutEditBar::kHeight);
     auto strip = getLocalBounds().removeFromBottom(kAddStripHeight).withTrimmedTop(kAddGap);
-    if (timeTempo_.isVisible()) {
-        timeTempo_.setBounds(strip.removeFromLeft(kTimeTempoWidth));
-        strip.removeFromLeft(kBarMargin);
+    if (const float shown = timeTempoFade_.progress(); shown > 0.0f) {
+        timeTempo_.setBounds(strip.removeFromLeft(juce::roundToInt((float)kTimeTempoWidth * shown)));
+        strip.removeFromLeft(juce::roundToInt((float)kBarMargin * shown));
     }
     addControl_.setBounds(strip);
     hideZone_.setBounds(getLocalBounds().removeFromBottom(kAddStripHeight).withTrimmedTop(kAddGap));

@@ -5,6 +5,7 @@
 // loop involved at all. GraphEditor-side wiring (promptConfigureMacroIO) and the port-mutation
 // API these callbacks are meant to reach are covered separately in Tests/MacroPortFlowTests.cpp.
 
+#include "../UI/Layout/FadeVisibilityTestGuard.h"
 #include "../UI/Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -864,4 +865,127 @@ TEST(MacroPortConfigDialogTest, BareArrowOnARowControlDoesRowNavigationNotReorde
     EXPECT_TRUE(dialog.simulateRowControlArrowKeyForTest(0, MacroPortConfigDialog::RowControl::Delete,
                                                          /*moveDown=*/true, /*withCommandModifier=*/false));
     EXPECT_FALSE(reorderFired);
+}
+
+// ---- Fades (docs/layout/animation.md, "Fading things in and out") ----------------------------------------------
+
+// The "Add a port" shape box fades out for a MIDI port (it has no shape) and back in for Audio / CV.
+TEST(MacroPortConfigDialogTest, TheNewPortShapeBoxFadesWithTheKind) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    auto& box = dialog.getNewShapeBoxForTest();
+    ASSERT_TRUE(box.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.setNewPortKindForTest(MacroPortKind::Midi);
+    EXPECT_TRUE(box.isVisible()) << "stays on screen while it fades out";
+    EXPECT_FALSE(interceptsClicks(box));
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(box.getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(box.isVisible());
+
+    dialog.setNewPortKindForTest(MacroPortKind::AudioCV);
+    EXPECT_TRUE(box.isVisible());
+    EXPECT_FLOAT_EQ(box.getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(box.getAlpha(), 1.0f);
+}
+
+TEST(MacroPortConfigDialogTest, TheNewPortVoicesEditorFadesInForPolyAndGetsItsPlace) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    auto& voices = dialog.getNewVoicesEditorForTest();
+    ASSERT_FALSE(voices.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.setNewPortShapeForTest(MacroPortShape::Poly);
+    EXPECT_TRUE(voices.isVisible());
+    EXPECT_FLOAT_EQ(voices.getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(voices.getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(voices.getAlpha(), 1.0f);
+    EXPECT_FALSE(voices.getBounds().isEmpty()) << "a revealed editor has a place in the row";
+
+    dialog.setNewPortShapeForTest(MacroPortShape::Mono);
+    EXPECT_TRUE(voices.isVisible());
+    EXPECT_FALSE(interceptsClicks(voices));
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(voices.isVisible());
+}
+
+// A row's voices editor fades in when its shape becomes Poly and out when it stops being Poly.
+TEST(MacroPortConfigDialogTest, ARowsVoicesEditorFadesWithItsShape) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    auto* voices = dialog.getRowVoicesEditorForTest(0);
+    auto* shape = dialog.getRowShapeBoxForTest(0);
+    ASSERT_TRUE(voices != nullptr && shape != nullptr);
+    ASSERT_FALSE(voices->isVisible()) << "a Mono row starts without it, and without a fade";
+    const int shapeRightBefore = shape->getRight();
+
+    FadeAnimateGuard guard;
+    dialog.setRowShapeForTest(0, MacroPortShape::Poly);
+    EXPECT_TRUE(voices->isVisible());
+    EXPECT_FLOAT_EQ(voices->getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(voices->getAlpha(), 0.5f, 0.01f);
+    const int shapeRightMid = shape->getRight();
+    EXPECT_LT(shapeRightMid, shapeRightBefore) << "the shape box slides over as the voices editor takes its place";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(voices->getAlpha(), 1.0f);
+    EXPECT_LT(shape->getRight(), shapeRightMid);
+}
+
+// Close commits a pending voice count only while the editor is really there; one that is fading out (the shape is
+// no longer Poly) must not recommit the shape.
+TEST(MacroPortConfigDialogTest, CloseDoesNotRecommitFromAVoicesEditorThatIsFadingOut) {
+    Row poly;
+    poly.nodeUuid = "uuid-poly";
+    poly.isInput = true;
+    poly.name = "Voices In";
+    poly.kind = MacroPortKind::AudioCV;
+    poly.shape = MacroPortShape::Poly;
+    poly.voiceCount = 3;
+    MacroPortConfigDialog dialog("My Macro", {poly});
+
+    int commits = 0;
+    dialog.onChangePortShape = [&](const juce::String&, MacroPortShape, int) { ++commits; };
+
+    FadeAnimateGuard guard;
+    dialog.setRowShapeForTest(0, MacroPortShape::Mono);
+    ASSERT_EQ(commits, 1);
+    ASSERT_TRUE(dialog.getRowVoicesEditorForTest(0)->isVisible()) << "still fading out";
+
+    dialog.setRowVoiceCountForTest(0, 7);
+    dialog.triggerCloseForTest();
+    EXPECT_EQ(commits, 1) << "closing must not send the shape again from the fading editor";
+}
+
+// An empty section's hint fades out when its first port arrives, and the section below slides up with it.
+TEST(MacroPortConfigDialogTest, TheEmptyHintFadesOutAsAPortArrivesAndTheSectionBelowSlides) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    auto& inputsHint = dialog.getInputsEmptyHintForTest();
+    auto& outputsHint = dialog.getOutputsEmptyHintForTest();
+    ASSERT_TRUE(inputsHint.isVisible());
+    ASSERT_TRUE(outputsHint.isVisible());
+
+    auto twoPortsWithAnInput = twoPorts();
+    twoPortsWithAnInput.pop_back(); // one input, no outputs
+
+    FadeAnimateGuard guard;
+    dialog.refreshPorts(twoPortsWithAnInput);
+    EXPECT_TRUE(inputsHint.isVisible()) << "stays while it fades";
+    const int fullHeight = inputsHint.getHeight();
+    ASSERT_GT(fullHeight, 0);
+    const int outputsHintYStart = outputsHint.getY();
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(inputsHint.getAlpha(), 0.5f, 0.01f);
+    EXPECT_LT(inputsHint.getHeight(), fullHeight);
+    EXPECT_GT(inputsHint.getHeight(), 0);
+    EXPECT_LT(outputsHint.getY(), outputsHintYStart) << "the outputs section slides up";
+    EXPECT_TRUE(outputsHint.isVisible()) << "the outputs section is still empty";
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(inputsHint.isVisible());
+    EXPECT_EQ(outputsHint.getY(), outputsHintYStart - fullHeight);
 }

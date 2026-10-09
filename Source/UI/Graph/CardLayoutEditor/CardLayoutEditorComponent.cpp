@@ -58,6 +58,11 @@ void CardLayoutEditorComponent::buildChrome() {
     missingLabel_.setJustificationType(juce::Justification::centredLeft);
     missingLabel_.setColour(juce::Label::textColourId, juce::Colours::orange);
     addAndMakeVisible(missingLabel_);
+    missingFade_.onFrame = [this] { resized(); };
+    missingFade_.onHidden = [this] {
+        if (!missingFade_.isShown())
+            missingLabel_.setText({}, juce::dontSendNotification);
+    };
     updateMissingLabel();
 
     rowsContent_.setInterceptsMouseClicks(true, true);
@@ -149,10 +154,11 @@ void CardLayoutEditorComponent::resized() {
     searchEditor_.setBounds(searchRow);
     area.removeFromTop(kRowGap);
 
-    missingLabel_.setVisible(model_.missingNames().size() > 0);
-    if (missingLabel_.isVisible()) {
-        missingLabel_.setBounds(area.removeFromTop(18));
-        area.removeFromTop(kRowGap / 2);
+    // The line's room follows its fade, so the list below slides instead of jumping.
+    const int missingSpace = juce::roundToInt((18.0f + kRowGap / 2) * missingFade_.progress());
+    if (missingSpace > 0) {
+        missingLabel_.setBounds(area.removeFromTop(std::min(18, missingSpace)));
+        area.removeFromTop(std::max(0, missingSpace - 18));
     }
 
     rowsViewport_.setBounds(area);

@@ -7,6 +7,7 @@
 
 #include "OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -40,14 +41,15 @@ public:
     CardSegmentedSwitch* getShowAsForTest() const noexcept { return showAs_.get(); }
     CardSegmentedSwitch* getSizeForTest() const noexcept { return size_.get(); }
     CardSegmentedSwitch* getDirectionForTest() const noexcept { return direction_.get(); }
-    bool isSizeRowShownForTest() const { return size_ != nullptr && size_->isVisible(); }
-    bool isDirectionRowShownForTest() const { return direction_ != nullptr && direction_->isVisible(); }
+    bool isSizeRowShownForTest() const { return sizeFade_ != nullptr && sizeFade_->isShown(); }
+    bool isDirectionRowShownForTest() const { return directionFade_ != nullptr && directionFade_->isShown(); }
     juce::TextEditor& getLabelEditorForTest() noexcept { return label_; }
     juce::TextEditor& getMinimumEditorForTest() noexcept { return minimum_; }
     juce::TextEditor& getMaximumEditorForTest() noexcept { return maximum_; }
     juce::TextButton& getHideButtonForTest() noexcept { return hide_; }
     juce::String getHintForTest() const { return hint_.getText(); }
-    bool isRangeRowShownForTest() const { return minimum_.isVisible(); }
+    bool isRangeRowShownForTest() const { return rangeFade_.isShown(); }
+    bool isHintShownForTest() const { return hintFade_.isShown(); }
     /** What Return in the field does. */
     void commitLabelForTest() { commitLabel(); }
     void commitRangeForTest() { commitRange(); }
@@ -62,6 +64,8 @@ private:
     void commitRange();
     void fillFields();
     int arrange();
+    static int scaled(int value, float progress);
+    static void squeeze(juce::Component& c, int x, int top, int w, int offset, int height, int slotHeight);
     void applyColours();
     void timerCallback() override;
     bool focusIsInside() const;
@@ -83,6 +87,12 @@ private:
     juce::TextEditor minimum_;
     juce::TextEditor maximum_;
     juce::TextButton hide_{"Hide from card"};
+    // Rows that come and go fade (and the panel's height follows their progress): FadeVisibility, never setVisible.
+    // The Size and Direction rows are made with their switches.
+    std::unique_ptr<synth::ui::FadeVisibility> sizeFade_;
+    std::unique_ptr<synth::ui::FadeVisibility> directionFade_;
+    synth::ui::FadeVisibility rangeFade_{&rangeCaption_, &rangeTo_, &minimum_, &maximum_};
+    synth::ui::FadeVisibility hintFade_{&hint_};
     int focusTries_ = 0;
     int showAsWidth_ = 0; ///< The switch's width for its segment texts.
 

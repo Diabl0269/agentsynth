@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
@@ -176,6 +177,9 @@ private:
         std::vector<ModulatorInfo> infos;
         std::vector<std::unique_ptr<ModulatorRow>> rows;
         std::vector<std::unique_ptr<ModulatorBand>> bands;
+        // A row and its band fade in together when the routing is new (animation.md); declared after both, so the
+        // fades are gone before the components they drive.
+        std::vector<std::unique_ptr<synth::ui::FadeVisibility>> fades;
     };
 
     bool isVisibleLane(const synth::Track& track) const;

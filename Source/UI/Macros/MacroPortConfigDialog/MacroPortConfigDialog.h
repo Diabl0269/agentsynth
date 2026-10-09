@@ -5,6 +5,7 @@
 #include "UI/Chrome/ColourPickerPopup.h" // juce::PropertiesFile (juce_data_structures) + ColourPickerPopup itself
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -235,6 +236,14 @@ public:
     // the class comment's note on kAddBlockHeight).
     juce::Rectangle<int> getAddButtonBoundsForTest() const;
 
+    // ---- Test seams: the parts that fade (docs/macros/configure-io.md) ----
+    juce::Component& getNewShapeBoxForTest() noexcept { return newShapeBox_; }
+    juce::Component& getNewVoicesEditorForTest() noexcept { return newVoicesEditor_; }
+    juce::Component& getInputsEmptyHintForTest() noexcept { return inputsEmptyHint_; }
+    juce::Component& getOutputsEmptyHintForTest() noexcept { return outputsEmptyHint_; }
+    juce::Component* getRowShapeBoxForTest(int row);
+    juce::Component* getRowVoicesEditorForTest(int row);
+
 private:
     class PortRowComponent; // one row's controls + kind-tinted background; defined in the .cpp
 
@@ -280,6 +289,7 @@ private:
     // function so the measurement used to size the dialog can never drift from the layout that
     // actually runs, which two separate "compute height" / "lay out" functions risked.
     int layOutOrMeasureRows(bool apply, int width);
+    int emptyHintHeight(bool apply, synth::ui::FadeVisibility& fade, bool wanted, juce::Label& hint, int y, int width);
     int idealDialogHeight();
 
     juce::String macroName_;
@@ -305,6 +315,15 @@ private:
     juce::Label outputsHeader_{"outputsHeader", "Outputs"};
     juce::Label inputsEmptyHint_{"inputsEmptyHint", "No inputs yet"};
     juce::Label outputsEmptyHint_{"outputsEmptyHint", "No outputs yet"};
+
+    // The "Add a port" shape box (not for MIDI) and voices editor (poly only) fade in and out in their places; an
+    // empty-section hint fades while its section's height follows the fade (layOutOrMeasureRows). Declared after the
+    // controls they fade, so they are destroyed first.
+    synth::ui::FadeVisibility newShapeFade_{&newShapeBox_};
+    synth::ui::FadeVisibility newVoicesFade_{&newVoicesLabel_, &newVoicesEditor_};
+    synth::ui::FadeVisibility inputsHintFade_{&inputsEmptyHint_};
+    synth::ui::FadeVisibility outputsHintFade_{&outputsEmptyHint_};
+    bool hintFadesPrimed_ = false; // the first layout lands at once: what is there from the start does not fade
 
     static constexpr int kRowHeight = 32;
     static constexpr int kRowGap = 4;

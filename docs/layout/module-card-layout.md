@@ -633,6 +633,9 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
   nothing. Cancel puts the opening layout back as one more step (when it differs), so Cmd+Z after Cancel
   brings the cancelled edits back.
   The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
+- **Small swaps fade.** The control panel's Size/Direction/Range rows and the range hint, the list editor's "parameters
+  missing" line and the ADSR strip's Controls switch fade with their heights following
+  ([animation.md](animation.md#fading-things-in-and-out)); headless runs land the final state at once.
 - **Later:** the list's built-in-only parts (groups, widget choice, tab rows, unticked rows staying in place) have no
   entry point now and can go once nothing needs them.
 

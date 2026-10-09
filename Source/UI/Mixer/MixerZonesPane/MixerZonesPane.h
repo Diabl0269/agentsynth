@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -127,6 +128,7 @@ private:
     Chip chip_ = Chip::All;
     juce::Label hiddenLabel_;
     TextLinkButton showAll_{"Show all", juce::Justification::centredRight};
+    FadeVisibility showAllFade_{&showAll_}; // fades in with the first hidden channel, out with the last
     juce::Viewport viewport_;
     ListContent listContent_;
 

@@ -70,6 +70,7 @@ MixerPanelComponent::MixerPanelComponent() {
     toolbar_.onResetMeters = [this] { resetAllMeterReadouts(); };
     onOpenEqWindow = [this](juce::AudioProcessorGraph::NodeID nodeId) { openEqWindowOnCanvas(nodeId); };
     wireSectionLayout();
+    wireSectionFades();
 
     // A direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
     // slide it). This panel is the single focusable leaf, so the hint is purely decorative: no
@@ -107,6 +108,8 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
+    directFade_ = std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{directColumn_.get()});
+    masterFade_ = std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{masterColumn_.get()});
     masterColumn_->setSectionLayout(sectionLayout_);
     masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine, meterReader_);
     // Post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
@@ -303,10 +306,11 @@ void MixerPanelComponent::rebuild() {
 
     if (directColumn_ != nullptr) {
         const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);
-        directColumn_->setVisible(showDirect);
+        // Faded in or out; a fade target is never made visible by hand (it would skip the fade).
+        directFade_->setShown(showDirect);
         if (showDirect) {
             directColumn_->refreshEnablement();
-            content_.addAndMakeVisible(*directColumn_);
+            content_.addChildComponent(*directColumn_);
 
             ColumnEntry entry;
             entry.kind = ColumnEntry::Kind::Direct;
@@ -317,7 +321,7 @@ void MixerPanelComponent::rebuild() {
         }
     }
     if (masterColumn_ != nullptr) {
-        masterColumn_->setVisible(snapshot.hasMaster);
+        masterFade_->setShown(snapshot.hasMaster);
         if (snapshot.hasMaster) {
             for (const auto& column : snapshot.columns)
                 if (column.kind == synth::MixerColumn::Kind::Master) {
@@ -332,7 +336,7 @@ void MixerPanelComponent::rebuild() {
                     entry.zone = viewDoc_->getZone(entry.channelId);
                     columnEntries_.push_back(std::move(entry));
                 }
-            content_.addAndMakeVisible(*masterColumn_);
+            content_.addChildComponent(*masterColumn_);
         }
     }
 
@@ -341,7 +345,7 @@ void MixerPanelComponent::rebuild() {
 
     // An empty graph (no strips, no Direct, no Master -- a brand-new project) otherwise
     // rendered a blank panel with nothing telling the user how to get started.
-    emptyHint_.setVisible(columnEntries_.empty());
+    emptyHintFade_.setShown(columnEntries_.empty());
 
     resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
     reconcileRowFocus();

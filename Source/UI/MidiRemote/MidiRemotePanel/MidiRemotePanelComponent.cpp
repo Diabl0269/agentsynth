@@ -76,6 +76,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     addAndMakeVisible(inspector_);
     addChildComponent(orphanView_);
 
+    toolbar_.onPreferredHeightChanged = [this] { resized(); };
     controllersList_.onSelectProfile = [this](const juce::String& profileId) { selectProfile(profileId); };
     controllersList_.onRenameRequested = [this](const juce::String& profileId, const juce::String& newName) {
         handleRenameRequested(profileId, newName);
@@ -347,7 +348,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     if (profile == nullptr || doc_ == nullptr || audioEngine_ == nullptr) {
         controllerSurface_.setControls({}, {});
         pageStrip_.setPages(1, 1);
-        pageStrip_.setVisible(false); // no controller -> no pages to switch or add
+        pageStripFade_.setShown(false); // no controller -> no pages to switch or add
         return;
     }
 
@@ -356,7 +357,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     const int effectivePageCount = remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(profile->id) : 1;
     pageStrip_.setPages(effectivePageCount, activePage);
-    pageStrip_.setVisible(true);
+    pageStripFade_.setShown(true);
 
     // The engine's own transient bindings, for display only -- fetched once per rebuild
     // rather than per control below (see docs/control/midi-remote.md#focus-bank).
@@ -468,8 +469,8 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
 
 void MidiRemotePanelComponent::refreshInspectorForSelection() {
     const bool orphan = isOrphanSelected();
-    orphanView_.setVisible(orphan);
-    inspector_.setVisible(!orphan);
+    orphanFade_.setShown(orphan);
+    inspectorFade_.setShown(!orphan);
     if (orphan) {
         toolbar_.setControlSelected(false);
         juce::String name;

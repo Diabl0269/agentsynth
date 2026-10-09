@@ -208,7 +208,8 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   untouched `StereoCollapsed` port as `Stereo` — a real delete-and-recreate — just from opening and
   closing the dialog. Voices only matter while a row shows Poly, never the lossy `StereoCollapsed`
   case, so `requestClose()` calls a narrower `maybeCommitVoicesOnClose()` that commits only when
-  `voicesEditor.isVisible()`.
+  the row's voices editor is shown (`voicesFade_.isShown()`: the logical state, which is false the moment the editor
+  starts fading out).
 - **Arrow Up and Down move focus between rows** — wired on the row's colour swatch and Delete glyph
   button only (`GlyphButton`/`PortColourSwatch::onVerticalArrow` to
   `MacroPortConfigDialog::moveRowFocus`), never on the shape combo or a text field, which already have
@@ -235,6 +236,16 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   controls are centred at different heights, so `PortRowComponent` gives them an explicit focus order;
   a MIDI row's shape combo is hidden, so Tab skips it. Every control without visible text has a title
   and a tooltip, and a row scrolled out of view scrolls in when focused.
+
+## Fades
+
+Things that appear and disappear in the dialog use `FadeVisibility`
+([animation](../layout/animation.md#fading-things-in-and-out)), never a bare `setVisible`: the "Add a port" shape box
+(gone for a MIDI kind) and voices editor (poly only) fade in their places; a row's voices editor fades with its shape
+while the shape box slides over as the voices block's width follows the fade; the "No inputs yet" / "No outputs yet"
+hints fade while their slot's height follows, so the section below slides (`layOutOrMeasureRows`, whose measure
+answers with the settled height so the dialog is sized for where it ends up). A row built with its dialog starts in
+its final state, with no fade.
 
 ## Deleting a port from the dialog
 
