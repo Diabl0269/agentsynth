@@ -77,9 +77,11 @@ its Track In: the first node the bound Track In's MIDI reaches (through macro po
 plugin. With none (an audio track, a Track In wired to nothing) it is the bound node itself. It is selected and centred through
 `showNodeOnCanvas`, the path a modulator's "show" uses (the canvas centres at once; there is no animated pan helper). A node
 inside a collapsed macro, such as every instrument a new instrument track makes, has no card of its own, so the outermost collapsed
-macro's card is what gets centred. A hosted plugin's
-window is then toggled through `HostedPluginWindowManager::toggleEditorFor`, which reads the live window map, never a flag, because the
-window can be closed from its own title bar; a built-in instrument has no window, so it only gets its card selected. An unbound or
+macro's card is what gets centred. Ctrl+E never opens a window. A hosted plugin's
+window has its own chord, **Ctrl+Cmd+E** on macOS / **Ctrl+Alt+E** elsewhere (`timelineToggleFocusedTrackPluginWindow`, rebindable,
+`TrackHeaderHost::toggleTrackPluginWindow` -> `MainComponent::toggleTrackPluginWindow`), which toggles it through
+`HostedPluginWindowManager::toggleEditorFor`; that reads the live window map, never a flag, because the
+window can be closed from its own title bar. A built-in instrument has no window, so the chord does nothing there. An unbound or
 orphaned track does nothing. The button (`TrackShowModuleButton`) is a Tab stop with a focus ring, named "Show <track> module", its
 tooltip names the live binding, and a click leaves focus on the row. It is not drawn on the Automation section header.
 Tests: `Tests/UI/Timeline/TimelineTrackShowModuleTests.cpp`, `Tests/App/MainComponent/MainComponentShowTrackModuleTests.cpp`.

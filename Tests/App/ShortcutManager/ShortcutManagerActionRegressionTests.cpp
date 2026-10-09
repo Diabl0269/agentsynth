@@ -549,6 +549,38 @@ TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleHasNoConflictInItsCate
         << "collides with " << manager.getConflictingAction("timelineShowFocusedTrackModule", binding);
 }
 
+// timelineToggleFocusedTrackPluginWindow -- Ctrl+Cmd+E on the Mac, Ctrl+Alt+E elsewhere (Cmd IS Ctrl there, so the Mac
+// chord would collapse into Ctrl+E), Timeline category.
+TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowIsRegisteredWithCtrlCmdEOnMacAndCtrlAltEElsewhere) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineToggleFocusedTrackPluginWindow"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineToggleFocusedTrackPluginWindow"),
+              "Toggle Focused Track Plugin Window");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineToggleFocusedTrackPluginWindow"), ShortcutCategory::Timeline);
+
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+    auto kp = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::ctrlModifier));
+
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    kp = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier));
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(kp, manager.getBinding("timelineShowFocusedTrackModule")))
+        << "distinct from Ctrl+E";
+}
+
+TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowHasNoConflictOnEitherPlatform) {
+    for (const auto platform : {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other}) {
+        manager.setDefaultsPlatform(platform);
+        const auto binding = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+        EXPECT_TRUE(manager.getConflictingAction("timelineToggleFocusedTrackPluginWindow", binding).isEmpty())
+            << "collides with " << manager.getConflictingAction("timelineToggleFocusedTrackPluginWindow", binding);
+    }
+}
+
 TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineShowFocusedTrackModuleHasNoCommand) {
     EXPECT_EQ(AppCommands::getCommandForAction("timelineShowFocusedTrackModule"), AppCommands::kNoCommand);
 }

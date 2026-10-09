@@ -143,6 +143,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineDuplicateFocusedTrack", ShortcutCategory::Timeline},
         // Shows the focused track's module on the canvas, and opens or closes an instrument's window (Ctrl+E).
         {"timelineShowFocusedTrackModule", ShortcutCategory::Timeline},
+        // Opens or closes the focused plugin track's own window (Ctrl+Cmd+E; Ctrl+Alt+E off the Mac).
+        {"timelineToggleFocusedTrackPluginWindow", ShortcutCategory::Timeline},
         {"timelineClipPrevious", ShortcutCategory::Timeline},
         {"timelineClipNext", ShortcutCategory::Timeline},
         {"timelineClipAbove", ShortcutCategory::Timeline},

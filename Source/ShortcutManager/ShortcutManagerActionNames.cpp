@@ -154,6 +154,8 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Duplicate Focused Track";
     if (actionId == "timelineShowFocusedTrackModule")
         return "Show Focused Track Module";
+    if (actionId == "timelineToggleFocusedTrackPluginWindow")
+        return "Toggle Focused Track Plugin Window";
     if (actionId == "timelineIncreaseTrackHeight")
         return "Increase Track Height";
     if (actionId == "timelineDecreaseTrackHeight")

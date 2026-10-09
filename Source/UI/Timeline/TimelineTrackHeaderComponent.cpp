@@ -23,6 +23,14 @@ constexpr int kSwatchWidth = 8;
 constexpr int kHeightHandleThickness = 5; // the strip along the row's bottom edge
 const juce::KeyPress kDuplicateKey('d', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kShowModuleKey('e', juce::ModifierKeys::ctrlModifier, 0);
+// Fallback when no ShortcutManager is installed; mirrors ShortcutManagerDefaults (a real Cmd+Ctrl+E on the Mac, where
+// Cmd is distinct from Ctrl; Ctrl+Alt+E elsewhere, where Cmd IS Ctrl).
+#if JUCE_MAC
+const juce::KeyPress kTogglePluginWindowKey('e', juce::ModifierKeys::commandModifier | juce::ModifierKeys::ctrlModifier,
+                                            0);
+#else
+const juce::KeyPress kTogglePluginWindowKey('e', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
+#endif
 const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
@@ -339,7 +347,9 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     setTooltip("Right-click, Shift+F10 or Return for the track menu; " +
                bindingText("timelineDuplicateFocusedTrack", kDuplicateKey) + " duplicates the track, " +
                bindingText("timelineDeleteFocusedTrack", kDeleteTrackKey) + " deletes it, " +
-               bindingText("timelineShowFocusedTrackModule", kShowModuleKey) + " shows its module");
+               bindingText("timelineShowFocusedTrackModule", kShowModuleKey) + " shows its module, " +
+               bindingText("timelineToggleFocusedTrackPluginWindow", kTogglePluginWindowKey) +
+               " opens or closes a plugin's window");
     showModuleButton_.setTrack(t->name, bindingText("timelineShowFocusedTrackModule", kShowModuleKey));
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
@@ -730,6 +740,12 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (!isSectionHeader() && matchesAction(key, "timelineShowFocusedTrackModule", kShowModuleKey)) {
         if (host_ != nullptr)
             host_->showTrackModule(trackId_);
+        return true;
+    }
+    // Ctrl+Cmd+E opens or closes THIS row's plugin window; the host does nothing for a track without a hosted plugin.
+    if (!isSectionHeader() && matchesAction(key, "timelineToggleFocusedTrackPluginWindow", kTogglePluginWindowKey)) {
+        if (host_ != nullptr)
+            host_->toggleTrackPluginWindow(trackId_);
         return true;
     }
     // A folds THIS row's lanes, like the arrow (a row without an arrow still claims the key, so it never

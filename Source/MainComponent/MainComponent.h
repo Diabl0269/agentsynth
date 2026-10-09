@@ -529,6 +529,7 @@ private:
                           synth::ui::ParameterEditPhase phase) override;
     void showNodeOnCanvas(const juce::String& uuid) override;
     void showTrackModule(synth::TrackId track) override;
+    void toggleTrackPluginWindow(synth::TrackId track) override;
     juce::ApplicationProperties* getAppProperties() override;
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;
@@ -548,6 +549,8 @@ private:
     double audioFileLengthInBeats(const juce::File& file) const;
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
+    /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */
+    juce::AudioProcessorGraph::Node* trackModuleNode(synth::TrackId track);
 
     // ---- File handlers, minus the dialogs ----
     bool saveToFile(const juce::File& file);

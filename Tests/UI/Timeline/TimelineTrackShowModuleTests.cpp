@@ -39,8 +39,10 @@ struct RecordingHost : TrackHeaderHost {
     std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
     synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
     void showTrackModule(TrackId track) override { shown.push_back(track); }
+    void toggleTrackPluginWindow(TrackId track) override { windowToggled.push_back(track); }
 
     std::vector<TrackId> shown;
+    std::vector<TrackId> windowToggled;
 };
 
 struct Fixture {
@@ -92,6 +94,27 @@ TEST(TimelineTrackShowModuleTest, TheKeyIsRebindableThroughTheShortcutManager) {
     EXPECT_TRUE(header->keyPressed(juce::KeyPress('u', juce::ModifierKeys::ctrlModifier, 0)));
     EXPECT_EQ(f.host.shown.size(), 1u);
     EXPECT_NE(header->getShowModuleButton().getTooltip().indexOfIgnoreCase("U"), -1) << "the tooltip names the binding";
+
+    f.panel.setShortcutManager(nullptr); // before `manager` goes out of scope
+}
+
+TEST(TimelineTrackShowModuleTest, TheWindowChordAsksTheHostToToggleThePluginWindowAndCtrlEDoesNot) {
+    Fixture f;
+    const auto a = f.doc.addTrack(TrackKind::Midi, "A");
+    ShortcutManager manager;
+    f.panel.setShortcutManager(&manager);
+    auto* header = f.panel.getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+
+    EXPECT_TRUE(header->keyPressed(ctrlE()));
+    EXPECT_TRUE(f.host.windowToggled.empty()) << "Ctrl+E only shows the module";
+
+    const auto chord = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+    EXPECT_TRUE(header->keyPressed(chord));
+    ASSERT_EQ(f.host.windowToggled.size(), 1u);
+    EXPECT_EQ(f.host.windowToggled[0], a);
+    EXPECT_EQ(f.host.shown.size(), 1u) << "the chord does not also show the module";
+    EXPECT_NE(header->getTooltip().indexOfIgnoreCase("plugin's window"), -1) << "the row's tooltip names it";
 
     f.panel.setShortcutManager(nullptr); // before `manager` goes out of scope
 }
