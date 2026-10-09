@@ -264,6 +264,7 @@ void PortTargetSearchPage::toggleSection(const Section& section, bool expand) {
 void PortTargetSearchPage::applyState(bool animate) {
     for (auto& section : sections_) {
         int visible = 0;
+        section->header.setQuery(query_);
         for (auto& item : section->items) {
             const bool match = rowMatches(item.target);
             item.row->setVisible(match);

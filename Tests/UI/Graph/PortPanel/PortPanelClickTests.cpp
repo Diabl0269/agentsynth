@@ -210,3 +210,40 @@ TEST_F(GraphEditorTest, ADoubleClickOnAnUnconnectedJackIsStillANoOp) {
     EXPECT_EQ(f.engine.getGraph().getConnections().size(), 0u);
     EXPECT_EQ(f.launches, 1) << "the first click opened it, the second does nothing";
 }
+
+namespace {
+
+// The click as the app receives it: the press and release go to whatever component is under the point, found the way
+// JUCE finds it, and the double-click timer is left to run.
+void realClick(GraphEditor& editor, ModuleComponent& card, juce::Point<int> inCard, int clicks = 1) {
+    editor.setVisible(true); // getComponentAt skips an invisible tree
+    const auto inEditor = editor.getLocalPoint(&card, inCard);
+    auto* hit = editor.getComponentAt(inEditor);
+    ASSERT_NE(hit, nullptr) << "nothing under the point";
+    const auto p = hit->getLocalPoint(&card, inCard);
+    hit->mouseDown(portEvent(*hit, p, p, {}, clicks));
+    hit->mouseUp(portEvent(*hit, p, p, {}, clicks));
+}
+
+} // namespace
+
+TEST_F(GraphEditorTest, ARealSingleClickOnAOneCableJackOpensThePanelOnceTheTimerRuns) {
+    PortFixture f(1);
+    ASSERT_TRUE(f.editor->getDoubleClickPortDisconnectEnabled());
+
+    realClick(*f.editor, *f.oscCard(), f.oscOut());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(juce::MouseEvent::getDoubleClickTimeout() + 150);
+
+    EXPECT_EQ(f.launches, 1);
+    ASSERT_NE(f.panel(), nullptr);
+    EXPECT_EQ(f.cablesBetweenOscAnd(0), 1);
+}
+
+TEST_F(GraphEditorTest, ARealClickOnTheInputEndOfAOneCableOpensThePanelOnceTheTimerRuns) {
+    PortFixture f(1);
+    auto* vca = f.card(f.vcaIds[0]);
+    realClick(*f.editor, *vca, vca->getPortCenter(0, true));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(juce::MouseEvent::getDoubleClickTimeout() + 150);
+    EXPECT_EQ(f.launches, 1);
+    EXPECT_NE(f.panel(), nullptr);
+}

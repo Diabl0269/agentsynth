@@ -643,3 +643,61 @@ TEST_F(GraphEditorTest, WithNoConnectionsAddConnectionIsTheMainAction) {
     panel->focusEntry(); // nothing to remove, so the keys go to Add connection
     EXPECT_EQ(panel->getHeight(), panel->settledHeight(false));
 }
+
+namespace {
+
+// What a component paints, as pixels, so a highlight shows up as a difference.
+juce::Image paintedOf(juce::Component& c) {
+    juce::Image image(juce::Image::ARGB, c.getWidth(), c.getHeight(), true);
+    juce::Graphics g(image);
+    c.paintEntireComponent(g, false);
+    return image;
+}
+
+bool differs(const juce::Image& a, const juce::Image& b) {
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return true;
+    return false;
+}
+
+} // namespace
+
+TEST_F(GraphEditorTest, TheGroupHeaderHighlightsTheLettersTheQueryMatched) {
+    AddFixture f;
+    auto* panel = f.openAdd(f.oscId, 0, false);
+    ASSERT_NE(panel, nullptr);
+    auto& page = panel->searchPage();
+    const auto name = f.titleOf(f.math); // a module with two jacks: a group
+    auto* header = page.header(name);
+    ASSERT_NE(header, nullptr);
+    header->setSize(300, synth::ui::ModDotGroupHeader::kHeight);
+    page.setQuery("math");
+
+    EXPECT_EQ(header->query(), "math");
+    const auto spans = synth::ui::searchHighlightSpans(name, "math");
+    ASSERT_EQ(spans.size(), 1u);
+    EXPECT_EQ(spans[0].start, 0);
+    EXPECT_EQ(spans[0].length, 4);
+    const auto lit = paintedOf(*header);
+    header->setQuery({}); // same count and fold, only the highlight differs
+    EXPECT_TRUE(differs(lit, paintedOf(*header))) << "the matched letters of the header are painted highlighted";
+
+    page.setQuery({});
+    EXPECT_EQ(header->query(), "");
+}
+
+TEST_F(GraphEditorTest, ALoneRowHighlightsTheModulePartOfItsLabel) {
+    AddFixture f;
+    auto* panel = f.openAdd(f.extMidi, juce::AudioProcessorGraph::midiChannelIndex, false, true);
+    ASSERT_NE(panel, nullptr);
+    auto& page = panel->searchPage();
+    page.setQuery("lfo");
+    auto* row = rowLabelled(*panel, f.titleOf(f.lfo) + f.dot() + "Midi input");
+    ASSERT_NE(row, nullptr);
+    row->setSize(300, synth::ui::ModDotChoiceRow::kHeight);
+    const auto lit = paintedOf(*row);
+    row->setQuery({});
+    EXPECT_TRUE(differs(lit, paintedOf(*row))) << "the module part of \"module . port\" is highlighted";
+}

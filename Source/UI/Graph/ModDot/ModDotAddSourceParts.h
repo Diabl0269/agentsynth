@@ -191,6 +191,14 @@ public:
         }
     }
     int count() const noexcept { return count_; }
+    /** The search query the page is filtering by: the letters of the group's name it matched are highlighted. */
+    void setQuery(const juce::String& query) {
+        if (query != query_) {
+            query_ = query;
+            repaint();
+        }
+    }
+    const juce::String& query() const noexcept { return query_; }
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (key.isKeyCode(juce::KeyPress::leftKey)) {
@@ -224,9 +232,9 @@ public:
         g.fillRoundedRectangle(area, 6.0f);
         paintModDotChevron(g, juce::Rectangle<float>(8.0f, 8.0f).withCentre({16.0f, (float)kHeight * 0.5f}), fold_,
                            p.muted);
-        g.setColour(p.text);
-        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
-        g.drawText(group_, juce::Rectangle<int>(28, 0, getWidth() - 70, kHeight), juce::Justification::centredLeft);
+        drawSearchHighlightedText(g, group_, query_, juce::Rectangle<int>(28, 0, getWidth() - 70, kHeight),
+                                  juce::Font(juce::FontOptions(12.0f, juce::Font::bold)), p.text,
+                                  p.accent.withAlpha(0.28f), p.accent);
         g.setColour(p.muted);
         g.setFont(p.mono(11.0f));
         g.drawText(juce::String(count_), juce::Rectangle<int>(getWidth() - 44, 0, 32, kHeight),
@@ -239,6 +247,7 @@ private:
     bool expanded_ = true;
     float fold_ = 1.0f;
     int count_ = 0;
+    juce::String query_;
     ModDotHoverFade hover_;
 };
 
