@@ -157,7 +157,7 @@ Intermediary inserted between a modulation source and its destination to scale C
 
 `Source/AppUndoManager.h/.cpp`
 
-Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle — `setGraphEditor(nullptr)` before graph teardown.
+Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle: a `GraphEditor` built with the manager registers itself (`setGraphEditor`), so a restore detaches the cards of the nodes it frees, and the manager holds the editor weakly.
 
 ### A snapshot costs what the edit changed, not the project
 

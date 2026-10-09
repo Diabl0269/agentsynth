@@ -70,6 +70,21 @@ struct ReplaceFixture {
         return nullptr;
     }
 
+    // Cards whose processor is no longer in the graph: a restore must never leave one standing.
+    int cardsOnFreedModules() {
+        int stale = 0;
+        for (auto* child : editor.getChildComponent(0)->getChildren()) {
+            auto* card = dynamic_cast<ModuleComponent*>(child);
+            if (card == nullptr)
+                continue;
+            bool live = false;
+            for (auto* node : engine.getGraph().getNodes())
+                live = live || node->getProcessor() == card->getModule();
+            stale += live ? 0 : 1;
+        }
+        return stale;
+    }
+
     // Opens the picker through the card's real context-menu item.
     std::unique_ptr<ModMatrixPicker> openFromMenu(ModuleComponent& c) {
         std::unique_ptr<ModMatrixPicker> captured;
@@ -208,4 +223,18 @@ TEST(ReplaceWithPicker, UndoBringsTheOldModuleBackAndRedoRemembersTheWhichPlugin
     EXPECT_TRUE(f.undo.redo());
     ASSERT_NE(f.hosted(), nullptr);
     EXPECT_EQ(f.hosted()->getIdentity(), pluginNamed("Diva", 0xD1FA));
+}
+
+// The editor is handed the undo manager only through its constructor, so a restore reaches it without the test
+// wiring anything: the hosted module an undo frees takes its card with it, and a redo builds the card again.
+TEST(ReplaceWithPicker, UndoAndRedoLeaveNoCardOnAFreedModule) {
+    ReplaceFixture f;
+    synth::ui::applyReplaceChoice(f.editor, f.card(f.oscId), {{}, pluginNamed("Diva", 0xD1FA)});
+    ASSERT_EQ(f.cardsOnFreedModules(), 0) << "premise: the replace itself is clean";
+
+    ASSERT_TRUE(f.undo.undo());
+    EXPECT_EQ(f.cardsOnFreedModules(), 0);
+
+    ASSERT_TRUE(f.undo.redo());
+    EXPECT_EQ(f.cardsOnFreedModules(), 0);
 }

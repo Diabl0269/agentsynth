@@ -610,6 +610,11 @@ void refreshCanvasAfterRestore(GraphEditor& ge) {
 
 AppUndoManager::AppUndoManager() {}
 
+// The canvas an undo or redo keeps in step: it detaches the cards of the nodes a restore frees and reconciles the rest
+// afterwards. A GraphEditor built with this manager registers itself, so a restore can never free a module under a
+// live card. Held weakly: the editor may go first.
+void AppUndoManager::setGraphEditor(GraphEditor* ge) { graphEditor = ge; }
+
 // The serial counts here so it can never drift from what the undo stack actually holds. The step is sized inside
 // perform(), against the graph snapshot cache's counts, so a graph step costs only the nodes its edit changed.
 bool AppUndoManager::performAction(juce::UndoableAction* action) {

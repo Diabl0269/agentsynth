@@ -28,7 +28,7 @@ class AppUndoManager {
 public:
     AppUndoManager();
 
-    void setGraphEditor(GraphEditor* ge) { graphEditor = ge; }
+    void setGraphEditor(GraphEditor* ge);
 
     juce::UndoManager& getUndoManager() { return undoManager; }
 
@@ -299,7 +299,7 @@ private:
         return graphSnapshots_.capture(graph); // every graph snapshot, never a fresh graphToJSON
     }
 
-    GraphEditor* graphEditor = nullptr;
+    juce::Component::SafePointer<GraphEditor> graphEditor;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
     synth::GraphSnapshotCache graphSnapshots_;
