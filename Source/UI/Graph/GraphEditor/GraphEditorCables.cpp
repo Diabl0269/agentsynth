@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Layout/CableCurve.h"
@@ -112,17 +113,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
                                      macro.id == editor.getMacroDragJoinId() ||
                                      macro.id == editor.getMacroDragLiveOwnerId();
 
-        juce::Path outline;
-        outline.addRoundedRectangle(hull.toFloat(), 10.0f);
-        juce::Path dashedOutline;
-        const float dashLengths[] = {6.0f, 4.0f};
-        juce::PathStrokeType(isDragCandidate ? 2.5f : 1.5f).createDashedStroke(dashedOutline, outline, dashLengths, 2);
-        g.setColour(macro.colour.withAlpha(isDragCandidate ? 0.9f : 0.6f));
-        g.fillPath(dashedOutline);
-        if (isDragCandidate) {
-            g.setColour(macro.colour);
-            g.strokePath(outline, juce::PathStrokeType(2.5f));
-        }
+        MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
 
         // A tab overlapping the hull's own top edge, not floating above it — a macro whose
         // members sit near the top of the canvas would otherwise clip the label off-canvas with
@@ -188,6 +179,7 @@ const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() 
         }
         macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
         cardGlide_.applyTo(cablesCache);         // endpoints follow gliding cards, see CardGlideAnimator.h
+        cardGlide_.fold().applyTo(cablesCache);  // an unfolding macro draws its modules' cables itself
         cablesCacheValid = true;
         ++cableRebuildCount;
     }

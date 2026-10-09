@@ -4,6 +4,7 @@
 // here so the header stays a declaration list.
 
 #include "GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 
 void GraphEditor::setShowCanvasContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
     showCanvasContextMenuHook_ = std::move(hook);
@@ -40,5 +41,6 @@ void GraphEditor::advanceCardGlideForTest(float t) {
 
 void GraphEditor::finishCardGlideForTest() {
     cardGlide_.finish();
+    cardGlide_.fold().land();
     repaintCanvas();
 }

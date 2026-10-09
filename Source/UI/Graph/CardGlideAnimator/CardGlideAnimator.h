@@ -6,17 +6,20 @@
 // Geometry is already final when this is armed; the real cards are hidden (alpha 0) and snapshots are drawn gliding
 // from the old rect to the new one by GraphContentComponent::paintOverChildren. See CardGlideAnimator.cpp.
 
+#include "UI/Graph/CableColour.h"
 #include "UI/Layout/ExitEnterTimeline.h"
 #include "UI/Layout/UIAnimation.h"
 #include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <utility>
 #include <vector>
 
 namespace graph_editor_types {
 struct VisibleCable;
 }
+class MacroFoldAnimator;
 
 namespace card_glide_detail {
 /** The part of the canvas the card's viewer shows, in canvas coordinates; everything when it has no such viewer. */
@@ -47,6 +50,11 @@ public:
         std::function<bool()> canAnimate;
         /** The theme's accent, for the outline around a card an undo brought back. */
         std::function<juce::Colour()> accent;
+        /** Lent on to the macro fold (MacroFoldAnimator.h): a copy of the cables drawn now, a module category's
+         *  colour, and the canvas' wire look for a cable the fold draws itself. */
+        std::function<std::vector<graph_editor_types::VisibleCable>()> visibleCables;
+        std::function<juce::Colour(synth::ui::ModuleCategory)> categoryColour;
+        std::function<void(juce::Graphics&, const graph_editor_types::VisibleCable&, float)> paintCable;
     };
 
     struct Captured {
@@ -55,7 +63,7 @@ public:
         juce::Rectangle<int> bounds;
     };
 
-    CardGlideAnimator() = default;
+    CardGlideAnimator();
     ~CardGlideAnimator();
     CardGlideAnimator(const CardGlideAnimator&) = delete;
     CardGlideAnimator& operator=(const CardGlideAnimator&) = delete;
@@ -82,6 +90,12 @@ public:
     void noteExit(juce::Component* comp, uint32_t nodeUid);
     /** Test seam: animate even though the canvas is not showing. */
     void setForceAnimateForTest(bool force) noexcept { forceAnimate_ = force; }
+    /** The fold of a macro's modules into its closed card and back, drawn by the same overlay. */
+    MacroFoldAnimator& fold() noexcept;
+    const MacroFoldAnimator& fold() const noexcept;
+    /** Drops the delete/undo ghosts of the cards in `nodeUids` and puts a hidden one back: a macro fold animates
+     *  them instead (an undo of a collapse would otherwise also shrink every member away). */
+    void dropGhostsFor(const std::vector<uint32_t>& nodeUids);
     /** Test seam: advances the phased timeline to `elapsedMs` (what the driver does each frame). */
     void applyTimelineAtMs(double elapsedMs);
     /** Ghosts live right now: exits shrinking, enters growing or outlined (test seams). */
@@ -172,6 +186,7 @@ private:
     bool hasMoveItems() const noexcept;
 
     Hooks hooks_;
+    std::unique_ptr<MacroFoldAnimator> fold_;
     std::vector<Item> items_;
     std::vector<Captured> before_;
     synth::ui::AnimationDriver driver_;

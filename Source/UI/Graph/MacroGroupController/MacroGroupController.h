@@ -37,6 +37,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <utility>
@@ -64,6 +65,8 @@ public:
     struct MacroMemberPreview {
         juce::Rectangle<int> bounds;
         synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
+        uint32_t nodeUid = 0;            // the module's node id
+        ModuleComponent* comp = nullptr; // its card on the canvas (hidden while the macro is collapsed)
     };
 
     /** One port's on-card jack, in the collapsed card's OWN local coordinates (add the live
@@ -163,6 +166,15 @@ public:
     bool isMacroSelected(const juce::String& macroId) const;
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
     void setMacroCollapsed(const juce::String& macroId, bool collapsed);
+
+    // ---- Macro fold: modules fly into the closed card and out of it (MacroGroupControllerFold.cpp) ----
+    /** What an undo, redo or multi-macro toggle needs to animate the macros whose collapsed state it flips: one
+     *  entry per visible macro, taken BEFORE the change. Null (and free) when nothing would animate. */
+    struct FoldSnapshot;
+    std::shared_ptr<const FoldSnapshot> snapshotFoldState();
+    /** After the change: folds every macro in `before` whose collapsed state changed, all in one animation. */
+    void foldChangedMacros(const std::shared_ptr<const FoldSnapshot>& before);
+
     void renameMacro(const juce::String& macroId, const juce::String& newName);
 
     /** Installed by the app when renaming a macro may also have to rename a LINKED track, so both halves land in ONE
@@ -478,6 +490,8 @@ private:
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
+    // True while a multi-macro toggle runs: its folds start together, after the last macro has changed.
+    bool batchingFolds_ = false;
     // Shifts an expanded macro's members (and carried collapsed cards) so its hull lies within canvas x,y >= 0.
     // Returns the translation applied (zero when the hull already fitted).
     juce::Point<int> nudgeHullIntoCanvas(const juce::String& macroId);

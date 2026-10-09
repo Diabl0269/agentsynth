@@ -7,6 +7,7 @@
 // AppUndoManager, with no VBlank, through the animator's frame seam.
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
@@ -185,9 +186,9 @@ TEST(CardGlideFrameCost, APartialPaintSkipsTheCablesAndMacroBordersOutsideIt) {
     EXPECT_EQ(part.hullsPainted, 0);
 }
 
-// An undo that folds a macro back hides its members without tearing any card down, so nothing was pictured up front:
-// they are pictured when the undo's scope closes, and still shrink away.
-TEST(CardGlideFrameCost, AnUndoThatHidesCardsWithoutTearingThemDownStillShrinksThemAway) {
+// An undo that folds a macro back hides its members without tearing any card down. The macro fold flies them into the
+// card, so the shrink-away ghosts the scope would have made for them are dropped.
+TEST(CardGlideFrameCost, AnUndoThatHidesCardsWithoutTearingThemDownFoldsThemIntoTheCardInsteadOfShrinkingThemAway) {
     Canvas c;
     c.editor.setSelectedNodes({c.ids[2], c.ids[3]});
     const auto macroId = c.editor.getMacroController().groupSelectionIntoMacro();
@@ -201,6 +202,7 @@ TEST(CardGlideFrameCost, AnUndoThatHidesCardsWithoutTearingThemDownStillShrinksT
 
     ASSERT_TRUE(c.undo.undo()); // folds the macro again
     EXPECT_FALSE(findComponent(c.editor, c.ids[2])->isVisible());
-    EXPECT_EQ(c.glide().exitGhostCount(), 2);
+    EXPECT_EQ(c.glide().exitGhostCount(), 0) << "the macro fold animates these two cards";
+    EXPECT_EQ(c.glide().fold().ghostCount(), 2);
     c.editor.finishCardGlideForTest();
 }

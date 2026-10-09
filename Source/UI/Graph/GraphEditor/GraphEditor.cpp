@@ -10,6 +10,7 @@
 #include "GraphEditorPaintMemo.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
@@ -86,6 +87,20 @@ void GraphEditor::configureCardGlide() {
     hooks.updater = &vblankUpdater;
     hooks.canAnimate = [this] { return isShowing(); };
     hooks.accent = [this] { return synth::theme::themeOf(*this).colors.accent; };
+    // The macro fold (MacroFoldAnimator.h) draws the cables of the modules it flies itself, with the canvas' wire look.
+    hooks.visibleCables = [this] { return buildVisibleCables(); };
+    hooks.categoryColour = [this](synth::ui::ModuleCategory category) { return categoryPreviewColour(category); };
+    hooks.paintCable = [this](juce::Graphics& g, const VisibleCable& cable, float alpha) {
+        const auto wire = buildCablePath(cable.p1, cable.p2);
+        const auto colour = colourForCable(cable).withMultipliedAlpha(alpha);
+        const bool isModulation = cable.kind != VisibleCable::Kind::Direct;
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+            lf->drawConnectionWire(g, cable.p1, cable.p2, wire, colour, isModulation, cable.activity, false);
+            return;
+        }
+        g.setColour(colour);
+        g.strokePath(wire, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    };
     cardGlide_.setHooks(std::move(hooks));
 }
 

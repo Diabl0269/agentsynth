@@ -1,4 +1,5 @@
 #include "MacroCardComponent.h"
+#include "MacroPreviewLayout.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -54,29 +55,16 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // hidden — see syncMacroCards), scaled to fit the strip left between the title and the count
     // line, one filled rect per member coloured by module CATEGORY so it echoes what expanding
     // the macro would show. Drawn in the middle column between the two port strips.
-    const auto previewArea = textArea.reduced(0, 2);
+    const auto previewArea = getPreviewArea();
     if (!previewArea.isEmpty()) {
         const auto members = owner.getMacroController().macroMemberPreviews(macroId);
-        juce::Rectangle<int> unionBounds;
+        std::vector<juce::Rectangle<int>> memberBounds;
         for (const auto& member : members)
-            unionBounds = unionBounds.isEmpty() ? member.bounds : unionBounds.getUnion(member.bounds);
-
-        if (!unionBounds.isEmpty()) {
-            const float scale = juce::jmin(previewArea.getWidth() / (float)unionBounds.getWidth(),
-                                           previewArea.getHeight() / (float)unionBounds.getHeight());
-            const float scaledW = unionBounds.getWidth() * scale;
-            const float scaledH = unionBounds.getHeight() * scale;
-            const float offsetX = previewArea.getX() + (previewArea.getWidth() - scaledW) * 0.5f;
-            const float offsetY = previewArea.getY() + (previewArea.getHeight() - scaledH) * 0.5f;
-
-            for (const auto& member : members) {
-                juce::Rectangle<float> box((member.bounds.getX() - unionBounds.getX()) * scale + offsetX,
-                                           (member.bounds.getY() - unionBounds.getY()) * scale + offsetY,
-                                           juce::jmax(2.0f, member.bounds.getWidth() * scale),
-                                           juce::jmax(2.0f, member.bounds.getHeight() * scale));
-                g.setColour(owner.categoryPreviewColour(member.category).withAlpha(0.85f));
-                g.fillRoundedRectangle(box, 1.5f);
-            }
+            memberBounds.push_back(member.bounds);
+        const auto boxes = macro_preview::boxes(memberBounds, previewArea);
+        for (size_t i = 0; i < boxes.size(); ++i) {
+            g.setColour(owner.categoryPreviewColour(members[i].category).withAlpha(0.85f));
+            g.fillRoundedRectangle(boxes[i], 1.5f);
         }
     }
     // ---- End content preview ----
@@ -152,6 +140,15 @@ juce::Rectangle<int> MacroCardComponent::getContentArea() const {
     // The middle column between the two port strips: title, member preview and count live here.
     const auto [inW, outW] = owner.getMacroController().macroCardStripWidths(macroId);
     return getLocalBounds().withTrimmedLeft(inW).withTrimmedRight(outW).reduced(10, 6);
+}
+
+// The strip left between the title row and the member-count line; the preview boxes (macro_preview::boxes) are laid
+// out inside it, and the fold animation flies each module onto its box in it.
+juce::Rectangle<int> MacroCardComponent::getPreviewArea() const {
+    auto area = getContentArea();
+    area.removeFromTop(20);
+    area.removeFromBottom(14);
+    return area.reduced(0, 2);
 }
 
 juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {

@@ -8,6 +8,7 @@
 #include "CardGlideAnimator.h"
 
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 
@@ -39,12 +40,29 @@ juce::Rectangle<int> visibleCanvasArea(const juce::Component& card) {
 } // namespace card_glide_detail
 using card_glide_detail::visibleCanvasArea;
 
+CardGlideAnimator::CardGlideAnimator()
+    : fold_(std::make_unique<MacroFoldAnimator>()) {}
+
+MacroFoldAnimator& CardGlideAnimator::fold() noexcept { return *fold_; }
+const MacroFoldAnimator& CardGlideAnimator::fold() const noexcept { return *fold_; }
+
 CardGlideAnimator::~CardGlideAnimator() {
     if (hooks_.updater != nullptr)
         driver_.stop(*hooks_.updater);
 }
 
-void CardGlideAnimator::setHooks(Hooks hooks) { hooks_ = std::move(hooks); }
+void CardGlideAnimator::setHooks(Hooks hooks) {
+    hooks_ = std::move(hooks);
+    MacroFoldAnimator::Hooks foldHooks;
+    foldHooks.updater = hooks_.updater;
+    foldHooks.canAnimate = [this] { return canAnimate(); };
+    foldHooks.repaint = hooks_.repaint;
+    foldHooks.repaintArea = hooks_.repaintArea;
+    foldHooks.visibleCables = hooks_.visibleCables;
+    foldHooks.categoryColour = hooks_.categoryColour;
+    foldHooks.paintCable = hooks_.paintCable;
+    fold_->setHooks(std::move(foldHooks));
+}
 
 std::vector<CardGlideAnimator::Captured> CardGlideAnimator::capture(const std::vector<Entry>& cards) {
     std::vector<Captured> out;
@@ -157,6 +175,7 @@ void CardGlideAnimator::finish() noexcept {
 }
 
 void CardGlideAnimator::paint(juce::Graphics& g) const {
+    fold_->paint(g);
     for (const auto& item : items_) {
         if (item.kind != Kind::Move) {
             paintGhost(g, item);

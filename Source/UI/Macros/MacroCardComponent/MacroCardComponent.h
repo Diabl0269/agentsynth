@@ -65,6 +65,9 @@ public:
      *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
     juce::String getModuleCountText() const;
 
+    /** Card-local strip the member preview boxes are laid out in (macro_preview::boxes). */
+    juce::Rectangle<int> getPreviewArea() const;
+
     /** Opens the inline rename editor over the card. Public so a test can drive it without
      *  synthesising a right-click + menu selection. */
     void beginRename();

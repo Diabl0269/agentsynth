@@ -189,7 +189,9 @@ no card there to host an inline editor.
 member-count text, the card draws one small filled rounded rect per member — the live union of member
 `ModuleComponent` bounds, scaled to fit the middle column. Each box is coloured by that member's module
 category (`GraphEditor::categoryPreviewColour`, the same `themeColourForCategory` token the canvas uses
-elsewhere), so the preview echoes what expanding would show.
+elsewhere), so the preview echoes what expanding would show. The boxes are laid out by one pure function,
+`macro_preview::boxes` (`MacroPreviewLayout.h`, inside `MacroCardComponent::getPreviewArea()`), which the fold
+animation also uses to fly each module onto its box ([Macro fold](animation.md#macro-fold)).
 
 **The card carries a port strip on each side.** Ports lay out on 16 px rows from y = 30, one row per
 port, so names never overlap; the card is 280 px wide and grows taller than its 90 px floor when a side
