@@ -8,7 +8,8 @@
 
 // Undo and redo bump the edit serial for the same reason a fresh edit does: after a save, an undo moves the
 // document AWAY from what is on disk, so it has to read as modified. A cable the step takes away retracts on
-// the canvas rather than vanishing (GraphEditor::retractCablesGoneSince).
+// the canvas rather than vanishing and one it brings back grows out of its source jack
+// (GraphEditor::retractCablesGoneSince).
 bool AppUndoManager::applyHistoryStep(bool redoStep) {
     juce::Component::SafePointer<GraphEditor> ge(graphEditor);
     const auto cablesBefore =
@@ -20,7 +21,7 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
     const bool did = redoStep ? undoManager.redo() : undoManager.undo();
     endRestore(did);
     if (did && ge != nullptr) {
-        ge->retractCablesGoneSince(cablesBefore);
+        ge->retractCablesGoneSince(cablesBefore, /*growAdded=*/true);
         ge->glideHullsFrom(hullsBefore); // a macro border a take-out or join moved glides back like it glided out
         ge->getMacroController().foldChangedMacros(foldsBefore);
     }

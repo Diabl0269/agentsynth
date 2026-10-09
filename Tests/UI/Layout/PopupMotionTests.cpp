@@ -68,6 +68,88 @@ TEST(PopupMotionFrame, StyleSetsTheSlideAndAnOvershootKeepsAlphaAtMostOne) {
 }
 
 // ----------------------------------------------------------------------------------------------
+// A style that scales its body (the mod dot's panel)
+// ----------------------------------------------------------------------------------------------
+
+Style growStyle() {
+    Style style;
+    style.overshoot = true;
+    style.inSlidePx = 0.0f;
+    style.outSlidePx = 0.0f;
+    style.inMs = 200.0;
+    style.outMs = 140.0;
+    style.alphaInFraction = 0.6f;
+    style.inStartScale = 0.4f;
+    style.outEndScale = 0.5f;
+    return style;
+}
+
+TEST(PopupMotionScale, TheDefaultStyleNeverScalesAndKeepsTheSharedDurations) {
+    const juce::Point<int> down(0, 1);
+    for (const float e : {0.0f, 0.5f, 1.0f}) {
+        EXPECT_FLOAT_EQ(frameAt(Phase::In, e, down, false).scale, 1.0f);
+        EXPECT_FLOAT_EQ(frameAt(Phase::Out, e, down, false).scale, 1.0f);
+    }
+    EXPECT_DOUBLE_EQ(durationMs(Phase::In, false, Style{}), 160.0);
+    EXPECT_DOUBLE_EQ(durationMs(Phase::Out, false, Style{}), 110.0);
+}
+
+TEST(PopupMotionScale, GrowsFromFortyPercentWithTheOvershootAndSettlesAtOne) {
+    const auto style = growStyle();
+    const juce::Point<int> down(0, 1);
+    EXPECT_FLOAT_EQ(frameAt(Phase::In, ease(Phase::In, 0.0f, style), down, false, style, 0.0f).scale, 0.4f);
+    const float mid = frameAt(Phase::In, ease(Phase::In, 0.5f, style), down, false, style, 0.5f).scale;
+    EXPECT_GT(mid, 0.4f);
+    EXPECT_LT(mid, 1.0f);
+    float peak = 0.0f;
+    for (int i = 0; i <= 100; ++i) {
+        const float t = (float)i / 100.0f;
+        peak = juce::jmax(peak, frameAt(Phase::In, ease(Phase::In, t, style), down, false, style, t).scale);
+    }
+    EXPECT_GT(peak, 1.0f) << "the soft overshoot";
+    EXPECT_LT(peak, 1.03f);
+    EXPECT_NEAR(frameAt(Phase::In, ease(Phase::In, 1.0f, style), down, false, style, 1.0f).scale, 1.0f, 1e-5f);
+}
+
+TEST(PopupMotionScale, FadeInIsDoneAtSixtyPercentOfTheArrivalAndLinearBeforeIt) {
+    const auto style = growStyle();
+    const juce::Point<int> down(0, 1);
+    const auto alphaAtTime = [&](float t) {
+        return frameAt(Phase::In, ease(Phase::In, t, style), down, false, style, t).alpha;
+    };
+    EXPECT_FLOAT_EQ(alphaAtTime(0.0f), 0.0f);
+    EXPECT_NEAR(alphaAtTime(0.3f), 0.5f, 1e-5f);
+    EXPECT_FLOAT_EQ(alphaAtTime(0.6f), 1.0f);
+    EXPECT_FLOAT_EQ(alphaAtTime(1.0f), 1.0f);
+}
+
+TEST(PopupMotionScale, LeavesDownToHalfSizeWhileFadingLinearlyInTime) {
+    const auto style = growStyle();
+    const juce::Point<int> down(0, 1);
+    EXPECT_FLOAT_EQ(frameAt(Phase::Out, 0.0f, down, false, style).scale, 1.0f);
+    EXPECT_FLOAT_EQ(frameAt(Phase::Out, 1.0f, down, false, style).scale, 0.5f);
+    const float e = ease(Phase::Out, 0.5f);
+    EXPECT_NEAR(frameAt(Phase::Out, e, down, false, style).scale, 1.0f - 0.5f * e, 1e-6f);
+    EXPECT_NEAR(frameAt(Phase::Out, e, down, false, style).alpha, 0.5f, 1e-5f) << "linear in time, as every popup";
+    EXPECT_FLOAT_EQ(frameAt(Phase::Out, 1.0f, down, false, style).alpha, 0.0f);
+}
+
+TEST(PopupMotionScale, ReduceMotionIsThePlainEightyMillisecondFadeWithNoScale) {
+    const auto style = growStyle();
+    const juce::Point<int> down(0, 1);
+    EXPECT_DOUBLE_EQ(durationMs(Phase::In, true, style), 80.0);
+    EXPECT_DOUBLE_EQ(durationMs(Phase::Out, true, style), 80.0);
+    EXPECT_DOUBLE_EQ(durationMs(Phase::In, false, style), 200.0);
+    EXPECT_DOUBLE_EQ(durationMs(Phase::Out, false, style), 140.0);
+    for (const float e : {0.0f, 0.5f, 1.0f}) {
+        EXPECT_FLOAT_EQ(frameAt(Phase::In, e, down, true, style, e).scale, 1.0f);
+        EXPECT_FLOAT_EQ(frameAt(Phase::Out, e, down, true, style, e).scale, 1.0f);
+    }
+    // the fade keeps the shared curve, not the shortened one
+    EXPECT_NEAR(frameAt(Phase::In, 0.5f, down, true, style, 0.5f).alpha, alphaAt(Phase::In, 0.5f), 1e-6f);
+}
+
+// ----------------------------------------------------------------------------------------------
 // Frames
 // ----------------------------------------------------------------------------------------------
 

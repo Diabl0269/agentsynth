@@ -1,43 +1,39 @@
-// GraphEditorCableRetract.cpp -- removed cables retract into their source jack and fade (CableRetractAnimator.h):
-// arming from a before/after diff, the driver, and the ghost paint pass. GraphEditor is declared in GraphEditor.h;
+// GraphEditorCableRetract.cpp -- removed cables retract into their source jack and fade, restored ones grow back
+// (CableRetractAnimator.h): arming from a before/after diff and the driver. GraphEditor is declared in GraphEditor.h;
 // sibling GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "GraphEditor.h"
 
-#include "UI/Layout/CableCurve.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/UIAnimation.h"
 
 std::vector<GraphEditor::VisibleCable> GraphEditor::snapshotCablesForRetract() { return buildVisibleCables(); }
 
-namespace {
-// Where the retracting ghosts are drawn now, in canvas coordinates.
-juce::Rectangle<int> ghostArea(const CableRetractAnimator& retract) {
-    juce::Rectangle<float> area;
-    for (const auto& ghost : retract.ghosts())
-        area = area.getUnion(synth::ui::cablePaintBounds(ghost.p1, ghost.p2));
-    return area.getSmallestIntegerContainer();
-}
-} // namespace
-
 // Called after a disconnect, an undo or a redo with the cables drawn before it. Every cable no longer drawn is
-// kept as a ghost for one short retract, so a removal never just blinks out. Each frame repaints only where the ghosts
-// were and are drawn, never the whole canvas.
-void GraphEditor::retractCablesGoneSince(const std::vector<VisibleCable>& before) {
-    if (!cableRetract_.arm(before, buildVisibleCables()))
+// kept as a ghost for one short retract, so a removal never just blinks out; with `growAdded` (undo and redo) a cable
+// the step brought back grows out of its source jack. Each frame repaints only where the moving wires were and are
+// drawn, never the whole canvas. Animations: Off shows the result at once; Reduce Motion is an alpha fade.
+void GraphEditor::retractCablesGoneSince(const std::vector<VisibleCable>& before, bool growAdded) {
+    if (synth::ui::animationsOff()) {
+        cableRetract_.finish();
+        return;
+    }
+    if (!cableRetract_.arm(before, buildVisibleCables(), {growAdded, synth::ui::prefersReducedMotion()}))
         return;
     juce::Component::SafePointer<GraphEditor> safeEditor(this);
     cableRetractDriverAnim_.start(
-        vblankUpdater, 180.0, [](float t) { return t; },
+        vblankUpdater, cableRetract_.durationMs(), [](float t) { return t; },
         [safeEditor](float t) {
             if (safeEditor == nullptr)
                 return;
-            const auto drawnBefore = ghostArea(safeEditor->cableRetract_);
+            const auto drawnBefore = safeEditor->cableRetract_.paintArea();
             safeEditor->cableRetract_.applyTweenAt(t);
-            safeEditor->content.repaint(drawnBefore.getUnion(ghostArea(safeEditor->cableRetract_)));
+            safeEditor->content.repaint(drawnBefore.getUnion(safeEditor->cableRetract_.paintArea()));
         },
         [safeEditor] {
             if (safeEditor == nullptr)
                 return;
-            const auto drawnBefore = ghostArea(safeEditor->cableRetract_);
+            const auto drawnBefore = safeEditor->cableRetract_.paintArea();
             safeEditor->cableRetract_.finish();
             safeEditor->content.repaint(drawnBefore);
         });

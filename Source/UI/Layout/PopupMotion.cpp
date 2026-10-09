@@ -173,6 +173,7 @@ public:
             return;
         }
         const float startAlpha = animating_ ? window_->getAlpha() : 1.0f;
+        const float startScale = animating_ ? lastScale_ : 1.0f;
         if (animating_) {
             driver_.stop(updater_);
             stopTimer();
@@ -189,18 +190,19 @@ public:
         disablePlatformAnimation(*window_);
 
         driver_.start(
-            updater_, popup_motion::durationMs(Phase::Out, reduce_),
+            updater_, popup_motion::durationMs(Phase::Out, reduce_, style_),
             [](float t) { return popup_motion::ease(Phase::Out, t); },
-            [this, startAlpha](float e) {
+            [this, startAlpha, startScale](float e) {
                 if (!leaving_)
                     return;
                 const auto f = popup_motion::frameAt(Phase::Out, e, dir_, reduce_, style_);
                 window_->setAlpha(startAlpha * f.alpha);
+                applyBodyScale(startScale * f.scale);
                 window_->setTopLeftPosition(restPos_ +
                                             juce::Point<int>(roundToInt(f.offset.x), roundToInt(f.offset.y)));
             },
             [this] { finishOut(); });
-        startTimer((int)popup_motion::durationMs(Phase::Out, reduce_) + kWatchdogSlackMs);
+        startTimer((int)popup_motion::durationMs(Phase::Out, reduce_, style_) + kWatchdogSlackMs);
     }
 
     void componentBeingDeleted(juce::Component&) override {
@@ -221,6 +223,25 @@ private:
         Impl& owner;
     };
 
+    // The scale of the style's body about its pivot. Buffered while scaled: the panel's shadow is a blur, too dear to
+    // redraw on every frame of the tween.
+    void applyBodyScale(float scale) {
+        auto* body = style_.body ? style_.body() : nullptr;
+        if (body == nullptr)
+            return;
+        lastScale_ = scale;
+        const bool scaled = std::abs(scale - 1.0f) > 1.0e-4f;
+        if (scaled) {
+            const auto pivot = style_.bodyPivot ? style_.bodyPivot() : juce::Point<float>();
+            body->setTransform(juce::AffineTransform::scale(scale, scale, pivot.x, pivot.y));
+        } else if (body->isTransformed()) {
+            body->setTransform(juce::AffineTransform());
+        }
+        const bool buffered = body->getCachedComponentImage() != nullptr;
+        if (buffered != scaled)
+            body->setBufferedToImage(scaled);
+    }
+
     juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : juce::Desktop::getMousePosition(); }
 
     bool canAnimate() const { return PopupMotion::isEnabled() && !animationsOff() && window_->isOnDesktop(); }
@@ -230,9 +251,10 @@ private:
         return peer != nullptr && (peer->getStyleFlags() & juce::ComponentPeer::windowHasTitleBar) != 0;
     }
 
-    void applyFrame(Phase phase, float eased) {
-        const auto f = popup_motion::frameAt(phase, eased, dir_, reduce_, style_);
+    void applyFrame(Phase phase, float eased, float time) {
+        const auto f = popup_motion::frameAt(phase, eased, dir_, reduce_, style_, time);
         window_->setAlpha(f.alpha);
+        applyBodyScale(f.scale);
         window_->setTopLeftPosition(restPos_ + juce::Point<int>(roundToInt(f.offset.x), roundToInt(f.offset.y)));
     }
 
@@ -252,17 +274,17 @@ private:
         cache_ = {};
         animating_ = true;
 
-        applyFrame(Phase::In, 0.0f); // frame 0 before the first VBlank can show the window whole
+        applyFrame(Phase::In, 0.0f, 0.0f); // frame 0 before the first VBlank can show the window whole
+        // The driver runs linear: the frame needs both the time (a fade that ends early) and the eased progress.
         driver_.start(
-            updater_, popup_motion::durationMs(Phase::In, reduce_),
-            [this](float t) { return popup_motion::ease(Phase::In, t, style_); },
-            [this](float e) {
+            updater_, popup_motion::durationMs(Phase::In, reduce_, style_), [](float t) { return t; },
+            [this](float t) {
                 if (animating_)
-                    applyFrame(Phase::In, e);
+                    applyFrame(Phase::In, popup_motion::ease(Phase::In, t, style_), t);
             },
             [this] { finishIn(); });
         // If no VBlank ever arrives the window must not stay invisible.
-        startTimer((int)popup_motion::durationMs(Phase::In, reduce_) + kWatchdogSlackMs);
+        startTimer((int)popup_motion::durationMs(Phase::In, reduce_, style_) + kWatchdogSlackMs);
 
         if (!hasNativeTitleBar())
             snapshotTask_.triggerAsyncUpdate(); // a picture to leave with, even if dismissed at once
@@ -275,6 +297,7 @@ private:
         animating_ = false;
         window_->setAlpha(1.0f);
         window_->setTopLeftPosition(restPos_);
+        applyBodyScale(1.0f);
         if (cache_.isNull())
             capture();
     }
@@ -332,6 +355,7 @@ private:
         window_->setInterceptsMouseClicks(true, true);
         window_->setAlpha(1.0f);
         window_->setTopLeftPosition(restPos_);
+        applyBodyScale(1.0f);
     }
 
     void onHidden() {
@@ -409,6 +433,7 @@ private:
     SnapshotTask snapshotTask_;
     juce::Point<int> dir_{0, 1};
     juce::Point<int> restPos_;
+    float lastScale_ = 1.0f;
     bool reduce_ = false;
     bool animating_ = false;
     bool ghosted_ = false;

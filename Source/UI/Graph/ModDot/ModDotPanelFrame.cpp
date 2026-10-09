@@ -7,6 +7,31 @@
 
 namespace synth::ui {
 
+// Everything the window draws: the shadow, the fill and outline, and the panel on top. It fills the frame and takes
+// the same clicks (the panel and its arrow only), so scaling it scales the whole picture.
+class ModDotPanelFrame::Body final : public juce::Component {
+public:
+    explicit Body(const juce::Path& outline)
+        : outline_(outline) {
+        setOpaque(false);
+        setWantsKeyboardFocus(false);
+    }
+
+    bool hitTest(int x, int y) override { return outline_.contains((float)x, (float)y); }
+
+    void paint(juce::Graphics& g) override {
+        const auto p = modDotPaletteFor(*this);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.35f), 8, {0, 2}).drawForPath(g, outline_);
+        g.setColour(p.panel);
+        g.fillPath(outline_);
+        g.setColour(p.border);
+        g.strokePath(outline_, juce::PathStrokeType(1.0f));
+    }
+
+private:
+    const juce::Path& outline_;
+};
+
 ModDotPanelFrame::ModDotPanelFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor,
                                    juce::Rectangle<int> dot, juce::Rectangle<int> area)
     : content_(std::move(content))
@@ -16,7 +41,9 @@ ModDotPanelFrame::ModDotPanelFrame(std::unique_ptr<juce::Component> content, juc
     setOpaque(false);
     setWantsKeyboardFocus(false);
     setTitle(content_->getTitle());
-    addAndMakeVisible(*content_);
+    body_ = std::make_unique<Body>(outline_);
+    addAndMakeVisible(*body_);
+    body_->addAndMakeVisible(*content_);
     content_->addComponentListener(this);
     reposition();
 }
@@ -44,7 +71,14 @@ void ModDotPanelFrame::reposition() {
     local_.tipY -= origin.y;
     content_->setTopLeftPosition(local_.panel.getPosition());
     outline_ = modDotPanel::outline(local_);
-    repaint();
+    body_->repaint();
+}
+
+juce::Component& ModDotPanelFrame::body() noexcept { return *body_; }
+
+void ModDotPanelFrame::resized() {
+    if (body_ != nullptr)
+        body_->setBounds(getLocalBounds());
 }
 
 void ModDotPanelFrame::componentMovedOrResized(juce::Component& component, bool, bool wasResized) {
@@ -67,13 +101,22 @@ void ModDotPanelFrame::showOnDesktop() {
     startTimer(200);
 }
 
-// Grows out of the dot: slides 12 px away from it with a 3% overshoot, and leaves 6 px back toward it.
+// Grows out of the dot: the body scales from 40% about the dot's centre with a 3% overshoot while it fades in, and
+// shrinks back toward it on the way out. The window itself does not slide: the scale already moves the panel.
 popup_motion::Style ModDotPanelFrame::motionStyle() const {
     popup_motion::Style style;
-    style.inSlidePx = kInSlidePx;
-    style.outSlidePx = kOutSlidePx;
+    style.inSlidePx = 0.0f;
+    style.outSlidePx = 0.0f;
     style.overshoot = true;
+    style.inMs = kInMs;
+    style.outMs = kOutMs;
+    style.alphaInFraction = kFadeInFraction;
+    style.inStartScale = kInStartScale;
+    style.outEndScale = kOutEndScale;
     style.anchor = [dot = dot_] { return dot.getCentre(); };
+    style.body = [this]() -> juce::Component* { return body_.get(); };
+    // The dot's centre in the body's parent space (the frame's own): the dot is in the space the frame's bounds are in.
+    style.bodyPivot = [this] { return (dot_.getCentre() - getPosition()).toFloat(); };
     return style;
 }
 
@@ -127,14 +170,5 @@ bool ModDotPanelFrame::keyPressed(const juce::KeyPress& key) {
 }
 
 bool ModDotPanelFrame::hitTest(int x, int y) { return outline_.contains((float)x, (float)y); }
-
-void ModDotPanelFrame::paint(juce::Graphics& g) {
-    const auto p = modDotPaletteFor(*this);
-    juce::DropShadow(juce::Colours::black.withAlpha(0.35f), 8, {0, 2}).drawForPath(g, outline_);
-    g.setColour(p.panel);
-    g.fillPath(outline_);
-    g.setColour(p.border);
-    g.strokePath(outline_, juce::PathStrokeType(1.0f));
-}
 
 } // namespace synth::ui

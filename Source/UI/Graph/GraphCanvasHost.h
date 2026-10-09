@@ -27,6 +27,9 @@ struct PluginIdentity;
 namespace synth::ui {
 class SelectionModel;
 }
+namespace graph_editor_types {
+struct VisibleCable;
+}
 
 class GraphCanvasHost {
 public:
@@ -127,6 +130,13 @@ public:
      *  recolour, port add/remove/rename/reorder/recolour) call this, matching their pre-PR2
      *  behaviour of a bare repaint() with no cable-cache invalidation. */
     virtual void requestRepaint() = 0;
+
+    /** The cables as drawn now, and the retract of every cable no longer drawn since (GraphEditor's own pair, which
+     *  simply gain `override`): a macro-port delete takes cables away and snapshots before, retracts after, like
+     *  every other cable-removing edit. The callers include UI/Graph/GraphEditor/GraphEditorTypes.h. */
+    virtual std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract() = 0;
+    virtual void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before,
+                                        bool growAdded = false) = 0;
 
     /** Cmd+G's real entry point — GraphEditor's own method, not moved into MacroGroupController
      *  (it shows a SafePointer-based async modal, docs/macros/auto-ports.md#auto-creating-ports-when-grouping).

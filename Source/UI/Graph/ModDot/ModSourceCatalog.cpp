@@ -12,8 +12,10 @@
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Layout/SearchMatch.h"
+#include <algorithm>
 #include <map>
 #include <set>
+#include <typeindex>
 
 namespace synth::ui {
 
@@ -103,6 +105,7 @@ const std::vector<NewModuleSource>& newModuleSources() {
     // type, so a new modulator module shows up in the search without an edit here.
     static const std::vector<NewModuleSource> types = [] {
         std::vector<NewModuleSource> out;
+        std::vector<std::type_index> seen;
         for (const auto& name : synth::AIStateMapper::authorableModuleTypes()) {
             if (GraphEditor::isSingletonIOModule(name))
                 continue;
@@ -111,13 +114,32 @@ const std::vector<NewModuleSource>& newModuleSources() {
             if (module == nullptr)
                 continue;
             const auto group = groupFor(*module);
+            const std::type_index moduleClass(typeid(*module));
+            if (const auto twin = std::find(seen.begin(), seen.end(), moduleClass); twin != seen.end()) {
+                // Another key for a class already offered: its name becomes a search word, except that "ADSR" is the
+                // key the row creates whatever order the factory lists them in.
+                auto& first = out[(size_t)(twin - seen.begin())];
+                if (group == ModSourceGroup::Envelopes && first.label != "Env") {
+                    first.label = "Env"; // the keys are one envelope: the row says so, and "envelope" finds it
+                    first.aliases += " envelope";
+                }
+                if (name == "ADSR") {
+                    first.aliases += " " + first.typeName;
+                    first.typeName = name;
+                } else {
+                    first.aliases += " " + name;
+                }
+                continue;
+            }
             if (group != ModSourceGroup::Lfos && group != ModSourceGroup::Envelopes &&
                 group != ModSourceGroup::Macros && group != ModSourceGroup::Sequencers &&
                 group != ModSourceGroup::Oscillators)
                 continue;
             const auto outputs = modSourceOutputs(*module);
-            if (!outputs.empty())
-                out.push_back({name, outputs.front().channel});
+            if (outputs.empty())
+                continue;
+            seen.push_back(moduleClass);
+            out.push_back({name, name, juce::String(), outputs.front().channel});
         }
         return out;
     }();

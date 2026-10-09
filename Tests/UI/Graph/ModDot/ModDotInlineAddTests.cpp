@@ -136,13 +136,36 @@ TEST_F(ModuleComponentTest, ATypedQueryOffersNewModuleRowsAndAnEmptyOneDoesNot) 
 
     typeInto(f.list().searchEditor(), "adsr");
 
-    auto* row = f.rowLabelled("New ADSR");
+    auto* row = f.rowLabelled("New Env");
     ASSERT_NE(row, nullptr);
     EXPECT_TRUE(row->isNew());
     EXPECT_EQ(row->newType(), "ADSR");
-    EXPECT_EQ(row->getTitle(), "New ADSR, new module");
+    EXPECT_EQ(row->getTitle(), "New Env, new module");
     EXPECT_NE(f.list().header("New module"), nullptr);
     EXPECT_NE(f.rowLabelled(f.titleOf(f.adsr)), nullptr) << "the existing envelope is still offered";
+}
+
+TEST_F(ModuleComponentTest, NewModuleListOffersOneEnvelopeEntryWhoseAliasesKeepTheOtherKeysFindable) {
+    int envelopes = 0;
+    for (const auto& source : synth::ui::newModuleSources())
+        if (source.label == "Env") {
+            ++envelopes;
+            EXPECT_EQ(source.typeName, "ADSR") << "the first factory key stands for the class";
+            for (const char* word : {"envelope", "Amp Env", "Filter Env"})
+                EXPECT_TRUE(source.aliases.containsIgnoreCase(word)) << word;
+        }
+    EXPECT_EQ(envelopes, 1);
+    for (const auto& source : synth::ui::newModuleSources()) {
+        EXPECT_FALSE(source.typeName == "Amp Env") << "the twin keys are not rows of their own";
+        EXPECT_FALSE(source.typeName == "Filter Env");
+    }
+
+    NoMotion motion;
+    InlineFixture f;
+    f.openList();
+    typeInto(f.list().searchEditor(), "filter env");
+    EXPECT_NE(f.rowLabelled("New Env"), nullptr);
+    EXPECT_EQ(f.rowLabelled("New Filter Env"), nullptr);
 }
 
 TEST_F(ModuleComponentTest, ChoosingNewModuleCreatesItBesideTheCardAndConnectsItInOneUndoStep) {
@@ -150,7 +173,7 @@ TEST_F(ModuleComponentTest, ChoosingNewModuleCreatesItBesideTheCardAndConnectsIt
     InlineFixture f;
     f.openList();
     typeInto(f.list().searchEditor(), "adsr");
-    auto* row = f.rowLabelled("New ADSR");
+    auto* row = f.rowLabelled("New Env");
     ASSERT_NE(row, nullptr);
     const auto nodesBefore = f.engine.getGraph().getNumNodes();
     const auto before = f.engine.getGraph().getNodes();

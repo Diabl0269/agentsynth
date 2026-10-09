@@ -180,9 +180,43 @@ TEST(ModDotPanelFrameTest, MotionGrowsOutOfTheDotWithASoftOvershoot) {
     ModDotPanelFrame frame(std::move(content), anchor, juce::Rectangle<int>(100, 200, 12, 12), kScreen);
     const auto style = frame.motionStyle();
     EXPECT_TRUE(style.overshoot);
-    EXPECT_GT(style.inSlidePx, synth::ui::popup_motion::kInSlidePx);
+    EXPECT_FLOAT_EQ(style.inStartScale, 0.4f);
+    EXPECT_FLOAT_EQ(style.outEndScale, 0.5f);
+    EXPECT_DOUBLE_EQ(style.inMs, 200.0);
+    EXPECT_DOUBLE_EQ(style.outMs, 140.0);
+    EXPECT_FLOAT_EQ(style.inSlidePx, 0.0f) << "the scale moves the panel; the window itself stays put";
     ASSERT_TRUE(style.anchor != nullptr);
     EXPECT_EQ(style.anchor(), juce::Point<int>(106, 206)) << "the dot's centre, not the pointer";
+    ASSERT_TRUE(style.body != nullptr);
+    EXPECT_EQ(style.body(), &frame.body());
+    ASSERT_TRUE(style.bodyPivot != nullptr);
+    EXPECT_EQ(style.bodyPivot(), (juce::Point<int>(106, 206) - frame.getPosition()).toFloat())
+        << "scales about the dot's centre in the frame's own coordinates";
+}
+
+TEST(ModDotPanelFrameTest, EverythingTheWindowDrawsLivesInOneBodyThatFillsTheFrame) {
+    juce::Component anchor;
+    auto content = std::make_unique<juce::Component>();
+    auto* contentPtr = content.get();
+    contentPtr->setSize(280, 100);
+    ModDotPanelFrame frame(std::move(content), anchor, juce::Rectangle<int>(100, 200, 12, 12), kScreen);
+    EXPECT_EQ(frame.body().getBounds(), frame.getLocalBounds());
+    EXPECT_TRUE(frame.body().isParentOf(contentPtr)) << "the panel scales with its outline";
+    contentPtr->setSize(280, 300);
+    EXPECT_EQ(frame.body().getBounds(), frame.getLocalBounds()) << "the body follows the frame's growth";
+    const auto& p = frame.placement();
+    EXPECT_TRUE(frame.body().hitTest(p.tipX + 2, p.tipY));
+    EXPECT_FALSE(frame.body().hitTest(1, 1));
+    EXPECT_FALSE(frame.body().isTransformed()) << "at rest nothing is scaled";
+}
+
+TEST(ModDotPanelFrameTest, TheLeavingShrinkEndsWithTheBodyBackAtFullSize) {
+    AnimateOffScreenGuard seam;
+    MotionFrame m;
+    m.frame->close();
+    ASSERT_TRUE(pumpUntil([&] { return m.closed == 1; }));
+    pumpUntil([] { return false; });
+    EXPECT_FALSE(m.frame->body().isTransformed()) << "a panel that lives on after a vetoed close is whole";
 }
 
 TEST(ModDotPanelFrameTest, EscapeFadesTheLiveWindowOutThenClosesAndTheDotStaysReachable) {

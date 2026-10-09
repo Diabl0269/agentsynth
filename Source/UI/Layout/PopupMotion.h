@@ -11,6 +11,10 @@
 // 160 ms ease-out. Out: it fades to 0 while sliding 2 px back toward the anchor, 110 ms ease-in.
 // With Reduce motion on, both are a plain 80 ms fade and nothing moves; with Animations set to Off the window
 // shows and hides at once.
+//
+// A window can opt into more through popup_motion::Style: its own slide distances, durations and a soft overshoot,
+// a grow-out-of-the-anchor SCALE (a native window cannot be scaled, so the Style names a child "body" component
+// that holds everything the window draws, and the engine scales that one about a pivot), and a shorter fade-in.
 
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
@@ -59,9 +63,27 @@ struct Style {
     float inSlidePx = kInSlidePx;
     float outSlidePx = kOutSlidePx;
     bool overshoot = false; // the arrival eases with easeOutBackSoft: it lands 3% past, then settles
+    double inMs = 0.0;      // > 0 replaces kInMs
+    double outMs = 0.0;     // > 0 replaces kOutMs
+    /** In: the opacity is 1 from this fraction of the arrival's time on (linear before it); 1 = the shared curve. */
+    float alphaInFraction = 1.0f;
+    float inStartScale = 1.0f; // the body arrives from this scale (1 = no scale)
+    float outEndScale = 1.0f;  // the body leaves down to this scale (1 = no scale)
     /** Where the window grows out of (screen coordinates); null = the pointer. */
     std::function<juce::Point<int>()> anchor;
+    /** The child of the window that gets the scale (null or unset = nothing is scaled), and the point it scales about,
+     *  in the body's parent space. Reduce motion never scales. */
+    std::function<juce::Component*()> body;
+    std::function<juce::Point<float>()> bodyPivot;
 };
+
+/** How long a phase runs under `style`: its own duration when it sets one, else the shared one. */
+inline double durationMs(Phase phase, bool reduceMotion, const Style& style) noexcept {
+    const double own = phase == Phase::In ? style.inMs : style.outMs;
+    if (animationsOff())
+        return 0.0;
+    return !reduceMotion && own > 0.0 ? own : durationMs(phase, reduceMotion);
+}
 
 inline float ease(Phase phase, float t, const Style& style) noexcept {
     return phase == Phase::In && style.overshoot ? easeOutBackSoft(t) : ease(phase, t);
@@ -84,6 +106,7 @@ inline juce::Point<int> slideDirection(juce::Rectangle<int> windowBounds, juce::
 
 struct Frame {
     float alpha = 1.0f;              // window opacity
+    float scale = 1.0f;              // the body's scale (Style::body); 1 when the style scales nothing
     juce::Point<float> offset{0, 0}; // displacement from the window's resting position
 };
 
@@ -98,12 +121,18 @@ inline float alphaAt(Phase phase, float eased) noexcept {
 
 /** The window's state when the phase's eased progress is `eased` (0 at the start of the phase, 1 at
  *  its end). In: alpha 0 -> 1, offset -dir * 4 px -> 0. Out: alpha 1 -> 0, offset 0 -> -dir * 2 px.
- *  `dir` is slideDirection(); Reduce motion keeps the alpha and drops the offset. */
-inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion,
-                     const Style& style = {}) noexcept {
+ *  `dir` is slideDirection(); Reduce motion keeps the alpha and drops the offset and the scale. `time` is the phase's
+ *  linear progress (0..1) for a style whose fade-in is shorter than the arrival (Style::alphaInFraction); -1 = unknown.
+ */
+inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduceMotion, const Style& style = {},
+                     float time = -1.0f) noexcept {
     Frame f;
     f.alpha = alphaAt(phase, eased);
+    if (phase == Phase::In && !reduceMotion && style.alphaInFraction < 1.0f && time >= 0.0f)
+        f.alpha = juce::jlimit(0.0f, 1.0f, time / juce::jmax(style.alphaInFraction, 0.01f));
     if (!reduceMotion) {
+        f.scale = phase == Phase::In ? style.inStartScale + (1.0f - style.inStartScale) * eased
+                                     : 1.0f + (style.outEndScale - 1.0f) * eased;
         const float distance = phase == Phase::In ? -style.inSlidePx * (1.0f - eased) : -style.outSlidePx * eased;
         f.offset = {(float)dir.x * distance, (float)dir.y * distance};
     }

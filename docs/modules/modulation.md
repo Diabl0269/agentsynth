@@ -499,7 +499,7 @@ is no separate callout arrow) in a window of its own, `ModDotPanelFrame`: right 
 no room. Near the bottom of the screen it slides up to stay fully on screen while the arrow tip stays level with the
 dot's centre, and it keeps doing so frame by frame as the panel grows (`ModDotPanelGeometry::place`, pinned by
 `ModDotPanelGeometryTests`). The window is not modal: a press anywhere else closes it (the edits already applied),
-except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`), sliding out of the dot with a 3% overshoot and leaving softly on Esc, click-away or a pick. `ModDotPopover`
+except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`), growing out of the dot (the whole panel scales from 40% with a 3% overshoot while it fades in) and shrinking back toward it on Esc, click-away or a pick. `ModDotPopover`
 (`Source/UI/Graph/ModDot/`) is the panel inside it; everything it paints uses the theme tokens itself (`ModDotPalette`).
 The window owns a tooltip window of its own (`ModDotPanelFrame::installTooltipWindow`, the shared
 `AppTooltipWindow` with its fade and the "Show info tooltips" preference), a child of the frame, because the main
@@ -539,7 +539,9 @@ the arrows keep working.
 * **New module.** While the search has text, a last group "New module" offers "New <module>" rows, each with a small
   "New" tag, for the module types that match the query and can be a source: the authorable LFO, envelope, macro,
   sequencer and oscillator types (`newModuleSources`, probed from the module factory once, like the Dual I/O list; the
-  new source reads the module's first modulation output). Choosing one creates the module beside the knob's card and
+  new source reads the module's first modulation output). The ADSR, Amp Env and Filter Env factory keys are one
+  module class, so they are ONE row, "New Env" (it creates an ADSR; "envelope", "adsr", "amp env" and "filter env" all
+  find it, and every key stays loadable). Choosing one creates the module beside the knob's card and
   connects it, as ONE undo step (`GraphEditor::addModulationSourceModule`: the card, its place and any room made for it,
   the cable through the macro-port seam, its depth, and joining the card's macro when it is in one). Return prefers an
   existing match to a new module.

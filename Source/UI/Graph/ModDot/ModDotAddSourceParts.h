@@ -47,8 +47,11 @@ public:
     /** The factory key a "New" row creates; empty for an existing source. */
     const juce::String& newType() const noexcept { return newType_; }
     const juce::String& usageText() const noexcept { return usage_; }
-    /** What a search matches: the module's name for a "New" row (so "adsr" finds "New ADSR"), else the label. */
-    juce::String matchText() const { return isNew() ? newType_ : item_.searchText(); }
+    /** What a search matches: the module's key and aliases for a "New" row (so "adsr" and "amp env" find "New Env"),
+     *  else the label and aliases. */
+    juce::String matchText() const {
+        return isNew() ? (item_.aliases.isEmpty() ? newType_ : newType_ + " " + item_.aliases) : item_.searchText();
+    }
 
     const ModSourceItem& item() const noexcept { return item_; }
     bool isAdded() const noexcept { return added_; }
