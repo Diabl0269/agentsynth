@@ -64,6 +64,9 @@ public:
     const juce::String& query() const noexcept { return query_; }
 
     std::function<void(const ModDotChoiceRow&)> onPick;
+    /** The pointer is over the row or it has keyboard focus (true), or neither any more (false): the port panel
+     *  previews the cable the row would make. */
+    std::function<void(const ModDotChoiceRow&, bool lit)> onHighlight;
 
     /** Picks it, as a click or Return would; an added source does nothing. */
     void pick() {
@@ -91,8 +94,16 @@ public:
                                   added_ ? p.disabled : p.text, p.accent.withAlpha(0.28f), p.accent);
         paintFocusRing(g, area, *this, 6.0f);
     }
-    void mouseEnter(const juce::MouseEvent&) override { hover_.setHovered(true); }
-    void mouseExit(const juce::MouseEvent&) override { hover_.setHovered(false); }
+    void mouseEnter(const juce::MouseEvent&) override {
+        hover_.setHovered(true);
+        hovered_ = true;
+        notifyHighlight();
+    }
+    void mouseExit(const juce::MouseEvent&) override {
+        hover_.setHovered(false);
+        hovered_ = false;
+        notifyHighlight();
+    }
     void mouseUp(const juce::MouseEvent& e) override {
         if (getLocalBounds().contains(e.getPosition()))
             pick();
@@ -104,10 +115,26 @@ public:
         }
         return false;
     }
-    void focusGained(FocusChangeType) override { repaint(); }
-    void focusLost(FocusChangeType) override { repaint(); }
+    void focusGained(FocusChangeType) override {
+        focused_ = true;
+        repaint();
+        notifyHighlight();
+    }
+    void focusLost(FocusChangeType) override {
+        focused_ = false;
+        repaint();
+        notifyHighlight();
+    }
 
 private:
+    void notifyHighlight() {
+        const bool lit = hovered_ || focused_;
+        if (lit != lit_ && onHighlight) {
+            lit_ = lit;
+            onHighlight(*this, lit);
+        }
+    }
+
     static void paintNewTag(juce::Graphics& g, const ModDotPalette& p, juce::Rectangle<int> area) {
         const auto pill = area.toFloat().withSizeKeepingCentre((float)area.getWidth(), 14.0f);
         g.setColour(p.accent.withAlpha(0.18f));
@@ -123,6 +150,9 @@ private:
     juce::String newType_;
     juce::String query_;
     ModDotHoverFade hover_;
+    bool hovered_ = false;
+    bool focused_ = false;
+    bool lit_ = false;
 };
 
 /** A group's header: fold arrow, name, count. Click, Return or Space toggles; Left folds, Right unfolds. */
@@ -161,6 +191,14 @@ public:
         }
     }
     int count() const noexcept { return count_; }
+    /** The search query the page is filtering by: the letters of the group's name it matched are highlighted. */
+    void setQuery(const juce::String& query) {
+        if (query != query_) {
+            query_ = query;
+            repaint();
+        }
+    }
+    const juce::String& query() const noexcept { return query_; }
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (key.isKeyCode(juce::KeyPress::leftKey)) {
@@ -194,9 +232,9 @@ public:
         g.fillRoundedRectangle(area, 6.0f);
         paintModDotChevron(g, juce::Rectangle<float>(8.0f, 8.0f).withCentre({16.0f, (float)kHeight * 0.5f}), fold_,
                            p.muted);
-        g.setColour(p.text);
-        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
-        g.drawText(group_, juce::Rectangle<int>(28, 0, getWidth() - 70, kHeight), juce::Justification::centredLeft);
+        drawSearchHighlightedText(g, group_, query_, juce::Rectangle<int>(28, 0, getWidth() - 70, kHeight),
+                                  juce::Font(juce::FontOptions(12.0f, juce::Font::bold)), p.text,
+                                  p.accent.withAlpha(0.28f), p.accent);
         g.setColour(p.muted);
         g.setFont(p.mono(11.0f));
         g.drawText(juce::String(count_), juce::Rectangle<int>(getWidth() - 44, 0, 32, kHeight),
@@ -209,6 +247,7 @@ private:
     bool expanded_ = true;
     float fold_ = 1.0f;
     int count_ = 0;
+    juce::String query_;
     ModDotHoverFade hover_;
 };
 

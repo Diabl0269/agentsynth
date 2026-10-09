@@ -5,6 +5,7 @@
 #include "ModDotController.h"
 #include "ModDotPalette.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ExitEnterRowSlots.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <algorithm>
 #include <cmath>
@@ -216,11 +217,8 @@ void ModDotSourcesPage::growNewRows() {
 }
 
 void ModDotSourcesPage::startRemovalMotion() {
-    const float full = (float)ModDotSourceRow::kHeight;
+    exit_enter_slots::begin(entries_, (float)ModDotSourceRow::kHeight);
     for (auto& e : entries_) {
-        e.from = e.leaving ? full : (e.restored ? 0.0f : full);
-        e.to = e.leaving ? 0.0f : full;
-        e.current = e.from;
         if (e.leaving) {
             e.row->setEnabled(false); // a row on its way out is not a control any more
             e.row->setInterceptsMouseClicks(false, false);
@@ -231,10 +229,7 @@ void ModDotSourcesPage::startRemovalMotion() {
         return;
     }
     reducedMotion_ = prefersReducedMotion();
-    timeline_ = {};
-    timeline_.hasExit = std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving; });
-    timeline_.hasEnter = std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.restored; });
-    timeline_.hasGap = true;
+    timeline_ = exit_enter_slots::timelineFor(entries_);
     motionActive_ = true;
     applyTimelineAtMs(0.0);
     const double total = timeline_.totalMs();
@@ -248,21 +243,7 @@ void ModDotSourcesPage::startRemovalMotion() {
 void ModDotSourcesPage::applyTimelineAtMs(double elapsedMs) {
     if (!motionActive_)
         return;
-    using synth::ui::ExitEnterTimeline;
-    const auto frame = timeline_.at(elapsedMs);
-    for (auto& e : entries_) {
-        if (!e.leaving && !e.restored)
-            continue;
-        e.current = e.from + (e.to - e.from) * frame.gap;
-        if (e.leaving) {
-            e.scale = ExitEnterTimeline::ghostScale(frame.exit, true, reducedMotion_);
-            e.alpha = ExitEnterTimeline::ghostAlpha(frame.exit, true, reducedMotion_);
-        } else {
-            e.scale = ExitEnterTimeline::ghostScale(frame.grow, false, reducedMotion_);
-            e.alpha = ExitEnterTimeline::ghostAlpha(frame.grow, false, reducedMotion_);
-            e.outline = frame.grow >= 1.0f ? 1.0f - frame.outline : 0.0f;
-        }
-    }
+    exit_enter_slots::apply(entries_, timeline_, elapsedMs, reducedMotion_);
     layoutRows();
     repaint();
 }
@@ -274,12 +255,7 @@ void ModDotSourcesPage::landMotion() {
     if (!wasActive)
         return;
     motionActive_ = false;
-    for (auto& e : entries_) {
-        e.current = e.leaving ? 0.0f : (float)ModDotSourceRow::kHeight;
-        e.restored = false;
-        e.scale = e.alpha = 1.0f;
-        e.outline = 0.0f;
-    }
+    exit_enter_slots::land(entries_, (float)ModDotSourceRow::kHeight);
     finishLeaving();
     layoutRows();
     repaint();
@@ -292,19 +268,8 @@ void ModDotSourcesPage::finishLeaving() {
 
 void ModDotSourcesPage::layoutRows() {
     int y = kTitleHeight;
-    for (auto& e : entries_) {
-        const int h = juce::roundToInt(e.current);
-        e.row->setBounds(0, y, getWidth(), h);
-        e.row->setVisible(h > 0 && e.scale > 0.0f && e.alpha > 0.0f);
-        e.row->setAlpha(e.alpha);
-        if (e.scale < 1.0f) {
-            const auto c = e.row->getBounds().toFloat().getCentre();
-            e.row->setTransform(juce::AffineTransform::scale(e.scale, e.scale, c.x, c.y));
-        } else {
-            e.row->setTransform({});
-        }
-        y += h;
-    }
+    for (auto& e : entries_)
+        y += exit_enter_slots::place(*e.row, e, y, getWidth());
     dividerY_ = y + 3;
     split_.setBounds(6, dividerY_ + 4, getWidth() - 12, SplitButton::kHeight);
     heightChanged();

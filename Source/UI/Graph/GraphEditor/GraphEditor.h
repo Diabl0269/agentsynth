@@ -30,8 +30,11 @@
 #include <vector>
 
 namespace synth::ui {
-class ModDotController; // UI/Graph/ModDot/ModDotController.h
-}
+class ModDotController;    // UI/Graph/ModDot/ModDotController.h
+class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
+class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
+class ColourPickerPopup;   // a unique_ptr return type only; 89 files include this header
+} // namespace synth::ui
 class AudioEngine;
 class CanvasCardKeyboard;
 class LoadRevealAnimator;
@@ -42,9 +45,6 @@ struct ViewDoc;              // Forward declaration (Source/Project/ViewDoc.h)
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
 class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 } // namespace synth
-namespace synth::ui {
-class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
-}
 namespace graph_editor_paint {
 class CanvasMemo;
 } // namespace graph_editor_paint
@@ -110,7 +110,6 @@ public:
     bool hasLocatableMasterOrOutput() const;
     /** Selects Master, falling back to Audio Output when there is none yet, and pans into view. */
     LocateMasterResult locateMasterOrOutput();
-    // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
     void dragConnection(juce::Point<int> screenPos);
@@ -282,6 +281,8 @@ public:
     // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
     /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
     synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
+    /** The jack panel's controller: jack clicks, the open panel, the cable highlight (UI/Graph/PortPanel). */
+    synth::ui::PortPanelController& getPortPanel() noexcept { return *portPanel_; }
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
     /** Opacity factor (0..1) of the smart-connection preview cables; 1 once they have faded in. */
@@ -425,7 +426,6 @@ public:
     bool pasteClipboardAt(juce::Point<int> canvasPos);
     bool duplicateSelection();
 
-    // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
 
@@ -795,7 +795,8 @@ private:
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this};
-    std::unique_ptr<synth::ui::ModDotController> modDot_; // the mod dot's drag, tooltip and last-chosen source
+    std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
+    std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;
@@ -937,8 +938,7 @@ private:
     std::map<juce::String, bool> dualIOPerModuleOverrides;
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
-    // Wheel-pan tween (a mouse notch eases over ~120 ms; trackpad events apply at once). Axis 0 = x, 1 = y of
-    // panOffset.
+    // Wheel-pan tween (a mouse notch eases ~120 ms; trackpad events apply at once); axis 0 = x, 1 = y of panOffset.
     synth::ui::ScrollTweenRunner wheelPanTween_;
     void panByWheel(int axis, float amountPx, bool eased);
     void configureCardGlide();
@@ -955,7 +955,6 @@ private:
     // Slides the port-side end of every cable a cable drop created from `dropPoint` (canvas coordinates) to its anchor.
     void armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint);
     void startMacroCrossingDriver();
-    // ---- Live membership change and border glide (GraphEditorMacroLiveDrag.cpp) ----
     juce::Rectangle<int> macroHullTargetBounds(const juce::String& macroId) const;
     bool canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId) const;
     void applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
@@ -973,6 +972,7 @@ private:
     void repaintCanvas() override;
     std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
     friend class graph_editor_paint::CanvasMemo;
+    friend class synth::ui::PortConnector;
 
     // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
     // Post-passes of rebuildVisibleCables(); the knob re-anchor MUST run before the collapsed-macro pass.

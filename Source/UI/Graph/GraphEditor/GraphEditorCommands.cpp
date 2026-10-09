@@ -17,6 +17,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 
 using namespace detail;
@@ -544,6 +545,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         doDisconnect();
     }
     repaint();
+    repaintCanvas(); // drops the cable memo, or the retract below would diff against the cables as they were
     retractCablesGoneSince(cablesBefore);
 }
 
@@ -768,6 +770,7 @@ void GraphEditor::timerCallback() {
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
     canvasMemo_->tick(); // keeps the cable memo, refreshes cable activity, repaints, refits the frame if cards moved
+    portPanel_->tick();  // after the memo, so the open panel lists the cables as they are now
 
     // Pressing or RELEASING Ctrl is not a mouse move, and suggestions were only recomputed from
     // updateDragPreview — so a drag that stopped moving kept showing a stale insert preview after

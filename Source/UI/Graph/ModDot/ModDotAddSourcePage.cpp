@@ -216,6 +216,7 @@ void ModDotAddSourcePage::setAll(bool expand) {
 void ModDotAddSourcePage::applyState(bool animate) {
     for (auto& section : sections_) {
         int visible = 0;
+        section->header.setQuery(query_);
         for (auto& row : section->rows) {
             const bool match = rowMatches(*row);
             row->setVisible(match);

@@ -13,6 +13,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
@@ -56,6 +57,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     setWantsKeyboardFocus(true);
 
     modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
+    portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
     configureCardGlide();
     configureCanvasFrame();
     startTimerHz(30);
@@ -64,7 +66,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 GraphEditor::~GraphEditor() {
     stopTimer();
     loadReveal_.reset(); // before the cards it may still be scaling
-    modDot_.reset();     // before `content`, which its tooltip animator is attached to
+    portPanel_.reset();
+    modDot_.reset(); // before `content`, which its tooltip animator is attached to
 }
 
 // Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
