@@ -391,6 +391,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         // connections still in the graph to classify. See GraphEditor::deleteSelection's matching
         // comment.
         const auto healSplices = captureHealSplices({nodeId});
+        const auto reflow = macroController_.captureDeleteReflow({nodeId}); // see GraphEditor::deleteSelection
         // graph.removeNode() frees this node's processor -- and its AudioProcessorParameters --
         // synchronously, and a module card's own Delete is just as able to remove a
         // ChannelStripModule/MasterModule as a canvas "Delete" is. Nothing on this path rebuilds
@@ -409,6 +410,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedMacroPort(n);
         updateComponents();
+        macroController_.applyDeleteReflow(reflow);
     };
 
     CardGlideAnimator::Scope glideScope(cardGlide_); // shrinks away (noteCardExits)

@@ -198,6 +198,7 @@ private:
         juce::Rectangle<int> from, to;
         juce::Image snapshot;
         float savedAlpha = 1.0f;
+        float exitStart = 0.0f; // an Exit ghost an interruption carried over: how far it had already shrunk
         std::shared_ptr<const Border> border; // a macro border ghost: drawn from this, no card behind it
     };
 
@@ -213,6 +214,8 @@ private:
     bool canAnimate() const;
     void pruneItems();
     void landGhosts() noexcept;
+    float exitProgress(const Item& item) const noexcept;
+    void dropCarriedExitsThatReturn(const std::vector<Entry>& now);
     bool armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
     void paintGhost(juce::Graphics& g, const Item& item) const;
     bool hasMoveItems() const noexcept;

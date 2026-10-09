@@ -269,6 +269,17 @@ public:
     void clearModuleDisplacements() { moduleDisplaced_.clear(); }
     /** Drops the pushes remembered for one module card (it was deleted). */
     void forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId);
+
+    // ---- Reflow around a delete (MacroGroupControllerDeleteReflow.cpp) ----
+    /** Where a deleted card stood inside an open macro, and the neighbours it had pushed aside. */
+    struct DeleteReflow {
+        std::vector<std::pair<juce::String, juce::Rectangle<int>>> slots; // {macro id, the card's rect}
+        std::vector<synth::Macro::DisplacedNeighbour> pushed;
+    };
+    /** Call BEFORE the cards in `ids` are removed; takes their push records out of the controller. */
+    DeleteReflow captureDeleteReflow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    /** Call AFTER the removal and updateComponents(), inside the delete's undo record; opens none of its own. */
+    void applyDeleteReflow(const DeleteReflow& reflow);
     /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
      *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
      *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,
@@ -495,6 +506,7 @@ private:
     // order. `movedAny` is set when at least one neighbour moved.
     using DisplacedRecords = std::vector<synth::Macro::DisplacedNeighbour>;
     DisplacedRecords returnRecordedNeighbours(const DisplacedRecords& records, bool& movedAny);
+    void closeGapAt(const juce::String& macroId, juce::Rectangle<int> slot);
     // Transient (never saved, not part of any snapshot): what a module card's growth pushed aside, keyed by the
     // grower's "n:<nodeUid>". The macro counterpart lives on synth::Macro::displaced.
     std::map<juce::String, DisplacedRecords> moduleDisplaced_;

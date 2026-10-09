@@ -73,13 +73,26 @@ bool CardGlideAnimator::hasMoveItems() const noexcept {
     return std::any_of(items_.begin(), items_.end(), [](const Item& it) { return it.kind == Kind::Move; });
 }
 
-// Drops the ghosts of an earlier animation: a new one replaces them rather than retargeting.
+// How far an Exit ghost has shrunk: an interrupted one resumes from where it was drawn, so its own share of the new
+// exit phase covers only what was left.
+float CardGlideAnimator::exitProgress(const Item& item) const noexcept {
+    return item.exitStart + (1.0f - item.exitStart) * frame_.exit;
+}
+
+// Ends the ghosts of an earlier animation before a new one is armed. A card that was still shrinking keeps shrinking
+// from the size it was drawn at (it joins the new exit phase); a grown-back card lands live at once.
 void CardGlideAnimator::landGhosts() noexcept {
-    for (auto& item : items_)
+    for (auto& item : items_) {
         if (item.kind == Kind::Enter)
             if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
                 comp->setAlpha(item.savedAlpha);
-    items_.erase(std::remove_if(items_.begin(), items_.end(), [](const Item& it) { return it.kind != Kind::Move; }),
+        if (item.kind == Kind::Exit && phased_)
+            item.exitStart = exitProgress(item);
+    }
+    items_.erase(std::remove_if(items_.begin(), items_.end(),
+                                [](const Item& it) {
+                                    return it.kind == Kind::Enter || (it.kind == Kind::Exit && it.exitStart >= 1.0f);
+                                }),
                  items_.end());
 }
 
@@ -96,11 +109,33 @@ void CardGlideAnimator::dropGhostsFor(const std::vector<uint32_t>& nodeUids) {
     timeline_.hasEnter = enterGhostCount() > 0;
 }
 
+// A carried Exit ghost whose card (or macro border) is back on the canvas, because the interrupting change was the undo
+// of the delete, makes way for the grow-back that change arms.
+void CardGlideAnimator::dropCarriedExitsThatReturn(const std::vector<Entry>& now) {
+    const auto borders = hooks_.borders ? hooks_.borders() : std::vector<Border>();
+    items_.erase(std::remove_if(items_.begin(), items_.end(),
+                                [&](const Item& it) {
+                                    if (it.kind != Kind::Exit)
+                                        return false;
+                                    if (it.border != nullptr)
+                                        return std::any_of(borders.begin(), borders.end(), [&it](const Border& b) {
+                                            return b.open && borderKey(b.key) == it.nodeUid;
+                                        });
+                                    return std::any_of(now.begin(), now.end(), [&it](const Entry& e) {
+                                        return e.nodeUid == it.nodeUid && e.comp != nullptr && e.comp->isVisible();
+                                    });
+                                }),
+                 items_.end());
+}
+
 bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now,
                                   float snapshotScale) {
     landGhosts();
     phased_ = false;
     bool anyExit = false, anyEnter = false;
+    dropCarriedExitsThatReturn(now);
+    for (const auto& item : items_)
+        anyExit = anyExit || item.kind == Kind::Exit; // a ghost carried over keeps shrinking in the new exit phase
     if (restoring_)
         noteRestoreExits(now);
 
@@ -153,6 +188,10 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
     timeline_.hasExit = anyExit;
     timeline_.hasEnter = anyEnter;
     timeline_.hasGap = hasMoveItems();
+    // The timeline restarts at 0: cards still gliding go on from where they are drawn, not from where they began.
+    for (auto& item : items_)
+        if (item.kind == Kind::Move)
+            item.from = currentRect(item).toNearestInt();
     frame_ = {};
     progress_ = 0.0f;
     return true;
@@ -178,7 +217,7 @@ void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
     using synth::ui::ExitEnterTimeline;
     if (item.border != nullptr) {
         const bool exiting = item.kind == Kind::Exit;
-        const float progress = exiting ? frame_.exit : frame_.grow;
+        const float progress = exiting ? exitProgress(item) : frame_.grow;
         if (item.grown || (!exiting && frame_.grow <= 0.0f))
             return;
         paintBorder(g, *item.border, ExitEnterTimeline::ghostScale(progress, exiting, reducedMotion_),
@@ -186,8 +225,8 @@ void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
         return;
     }
     if (item.kind == Kind::Exit) {
-        const float scale = ExitEnterTimeline::ghostScale(frame_.exit, true, reducedMotion_);
-        const float alpha = ExitEnterTimeline::ghostAlpha(frame_.exit, true, reducedMotion_);
+        const float scale = ExitEnterTimeline::ghostScale(exitProgress(item), true, reducedMotion_);
+        const float alpha = ExitEnterTimeline::ghostAlpha(exitProgress(item), true, reducedMotion_);
         if (scale <= 0.0f || alpha <= 0.0f || item.snapshot.isNull())
             return;
         juce::Graphics::ScopedSaveState state(g);
@@ -229,7 +268,7 @@ juce::Rectangle<float> CardGlideAnimator::ghostRectFor(uint32_t nodeUid) const n
             continue;
         if (item.kind == Kind::Exit)
             return ExitEnterTimeline::scaledAboutCentre(
-                item.from, ExitEnterTimeline::ghostScale(frame_.exit, true, reducedMotion_));
+                item.from, ExitEnterTimeline::ghostScale(exitProgress(item), true, reducedMotion_));
         if (item.grown)
             return item.to.toFloat();
         if (frame_.grow > 0.0f)

@@ -157,6 +157,13 @@ bounded retry, narrow repair, prompt), measured with `Tools/AIPatchHarness`
 the correct shape is an app-side **tool or action** the model invokes, with the app authoring the
 macro from a validated node set — never a `"macros"` key the model writes directly.
 
+## Deleting a card inside an open macro
+
+Deleting a member card closes the hole it leaves: the cards after it in the macro slide into its place and the
+border shrinks with them, in the same undo step (Cmd+Z puts everything back). On the open canvas the hole stays. The
+rule for "after" and the glide are in [layout.md](../layout/layout.md#making-room-when-something-grows) ("Deleting a
+card") and [animation.md](../layout/animation.md#delete-and-undo-animation).
+
 ## Deliberate limits
 
 - **A macro is not a saveable library item.** Snippets already cover "save this group and paste it

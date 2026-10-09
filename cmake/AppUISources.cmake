@@ -415,6 +415,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFold.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFoldPack.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDeleteReflow.cpp
     Source/UI/Graph/MacroGroupController/MacroPackLayout.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp

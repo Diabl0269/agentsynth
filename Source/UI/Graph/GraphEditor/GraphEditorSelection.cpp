@@ -179,6 +179,9 @@ void GraphEditor::deleteSelection() {
         // find its surviving neighbours (and healing a whole run of them in one pass) needs the
         // graph as it stood before any of `ids` was removed.
         const auto healSplices = captureHealSplices(ids);
+        // Also before removal: where each card stood in an open macro (its hole closes) and what it had pushed aside
+        // (the neighbours come home).
+        const auto reflow = macroController_.captureDeleteReflow(ids);
         // The macros that lose a member (a port included) shrink, so neighbours pushed aside when they grew may return.
         std::set<juce::String> shrunkMacros;
         for (auto id : ids)
@@ -209,6 +212,7 @@ void GraphEditor::deleteSelection() {
             macroController_.autoDeleteOrphanedMacroPort(n);
         selection.clear();
         updateComponents();
+        macroController_.applyDeleteReflow(reflow);
         for (const auto& macroId : shrunkMacros)
             macroController_.returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
     };
