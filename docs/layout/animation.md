@@ -296,7 +296,9 @@ every surface that animates a delete:
   from the timeline snapshot action); a list that regains a row is pictured after the change. `finishTrackListChange` /
   `finishColumnChange` start the motion once the change and its rebuilds have landed. Only the scrolling group of the mixer
   moves (a pinned column lands at once), and a change that adds and removes at once, or happens with the piano roll open,
-  lands at once. Reduce Motion is the plain fade; Animations Off and an off-screen panel are instant. Tests force the
+  lands at once. Deleting a track also takes its macro and the modules only it used off the canvas (`MainComponent::deleteTrack`
+  opens a `CardGlideAnimator::Scope` around the one undo step), so the row, the mixer column, the macro card and the cards
+  leave together by the same exit and gap phases, and Cmd+Z grows them all back together. Reduce Motion is the plain fade; Animations Off and an off-screen panel are instant. Tests force the
   motion with `TimelinePanelComponent::forceTrackGlideForTest` / `MixerPanelComponent::forceColumnMotionForTest` and
   step `applyAtMs`.
 - **Mod dot panel rows** use the same numbers on real rows: a removed source's row shrinks toward its centre (180 ms),

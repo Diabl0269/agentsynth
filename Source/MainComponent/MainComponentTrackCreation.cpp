@@ -17,7 +17,6 @@
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/UniqueTrackName.h"
-#include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <set>
@@ -45,105 +44,7 @@ juce::String uniqueTrackName(const synth::TimelineDoc& doc, const juce::String& 
     return synth::uniqueNameAmong(base, names);
 }
 
-// What deleting `track` takes from the mixer: its own strip and, while that strip's insert list is a straight line,
-// the inserts between the track's source and the strip; plus every other strip's send slot that feeds the strip (the
-// slot goes with the strip, so no "no target" send is left behind). Both empty when the track has no strip of its own:
-// nothing reaches one, it is a bus, or other tracks feed the channel too (that one stays for them). Cables on the
-// removed nodes go with them.
-struct OwnStrip {
-    std::vector<juce::AudioProcessorGraph::NodeID> nodes;
-    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, int>> incomingSends; // {source strip, slot}
-};
-
-OwnStrip ownStripOf(juce::AudioProcessorGraph& graph, const synth::TimelineDoc& doc, const synth::MacroSet& macros,
-                    synth::TrackId track) {
-    OwnStrip own;
-    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
-    for (const auto& column : snapshot.columns) {
-        if (column.kind != synth::MixerColumn::Kind::Strip || !column.linkedToTrack ||
-            column.feedingTracks.size() != 1 || column.feedingTracks.front() != track)
-            continue;
-        own.nodes.push_back(column.nodeId);
-        if (column.insertChainIsLinear)
-            for (const auto& insert : column.inserts)
-                own.nodes.push_back(insert.nodeId);
-        for (const auto& other : snapshot.columns)
-            if (other.nodeId != column.nodeId)
-                for (const auto& send : other.sends)
-                    if (!send.keyTarget && send.targetNodeId == column.nodeId)
-                        own.incomingSends.emplace_back(other.nodeId, send.slot);
-        break;
-    }
-    return own;
-}
-
 } // namespace
-
-void MainComponent::deleteTrack(synth::TrackId track) {
-    const auto* existing = timelineDoc.getTrack(track);
-    if (existing == nullptr)
-        return;
-    const juce::String uuid = existing->bindingUuid;
-
-    // The rows and columns are pictured while the track is still there, so they can shrink away.
-    timelinePanel.noteTracksLeaving();
-    bottomDock.getMixerPanel().noteColumnsLeaving();
-
-    auto& graph = audioEngine.getGraph();
-    const auto own = ownStripOf(graph, timelineDoc, graphEditor.getMacros(), track);
-
-    // ONE undo step covering all three domains: the track, the node that fed it and its mixer strip (with the
-    // inserts and the sends into it) disappear together, and come back together; the macro half returns the box the
-    // strip sat in.
-    const auto removeTrackAndStrip = [this, &graph, track, uuid, own] {
-        auto* node = findNodeByUuid(uuid);
-        if (node != nullptr || !own.nodes.empty()) {
-            // Mirrors GraphEditor::requestDeleteModule: drop the mod-matrix rows before the nodes (and the
-            // connections into them) go, unbind the mixer columns that hold them, then reconcile the canvas.
-            graphEditor.getModMatrix().clearRows();
-            for (const auto& [source, slot] : own.incomingSends)
-                synth::removeSend(graph, source, slot);
-            auto doomed = own.nodes;
-            if (node != nullptr)
-                doomed.push_back(node->nodeID);
-            graphEditor.detachModuleComponentsFor(doomed);
-            for (auto id : doomed)
-                graph.removeNode(id);
-            graphEditor.updateComponents();
-        }
-        timelineDoc.removeTrack(track);
-    };
-    undoManager.recordGraphTimelineAndMacroChange(graph, timelineDoc, graphEditor.getMacros(), removeTrackAndStrip);
-    reconcileTimelineAfterGraphChange();
-    timelinePanel.finishTrackListChange();
-    bottomDock.getMixerPanel().finishColumnChange();
-}
-
-// Cmd+Backspace on a focused row. Asks first unless the person switched the question off; the deletion itself is
-// deleteTrack, so the menu's one undo step is unchanged. "Don't ask again" counts only when they confirm.
-void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
-    const auto* existing = timelineDoc.getTrack(track);
-    if (existing == nullptr)
-        return;
-    const auto* settings = appProperties.getUserSettings();
-    if (settings != nullptr && !settings->getBoolValue(synth::ui::kAskBeforeDeletingTrackKey, true)) {
-        deleteTrack(track);
-        return;
-    }
-    juce::Component::SafePointer<MainComponent> safeThis(this);
-    synth::ui::confirmDeleteTrack(synth::ui::deleteTrackConfirmText(existing->name),
-                                  [safeThis, track](bool confirmed, bool dontAskAgain) {
-                                      auto* self = safeThis.getComponent();
-                                      if (self == nullptr || !confirmed)
-                                          return;
-                                      if (dontAskAgain)
-                                          if (auto* userSettings = self->appProperties.getUserSettings()) {
-                                              userSettings->setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
-                                              userSettings->saveIfNeeded();
-                                          }
-                                      self->deleteTrack(track);
-                                  });
-}
 
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
     if (!mutation)

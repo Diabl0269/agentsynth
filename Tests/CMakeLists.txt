@@ -118,6 +118,7 @@ add_executable(Tests
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
     Timeline/TrackOwnershipTests.cpp
+    Timeline/TrackRemovalSetTests.cpp
     Timeline/UniqueTrackNameTests.cpp
     Timeline/AutomationApplierTests.cpp
     Timeline/AutomationRecordTests.cpp
@@ -639,6 +640,7 @@ add_executable(Tests
     UI/Mixer/MixerPanelIncrementalRebuildTests.cpp
     UI/Mixer/MixerPanelColumnMotionTests.cpp
     UI/Mixer/MixerTrackDeleteStripTests.cpp
+    UI/Timeline/TimelineTrackDeleteMacroTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp

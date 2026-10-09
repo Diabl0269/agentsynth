@@ -153,6 +153,62 @@ void GraphEditor::noteCardExits(const std::vector<juce::AudioProcessorGraph::Nod
             cardGlide_.noteExit(card, id.uid);
 }
 
+// The removal itself, with no undo record of its own: deleteSelection() wraps it in one, and so does a bigger gesture
+// that removes nodes along with something else (MainComponent::deleteTrack, which also takes the timeline row and the
+// macro). `healChain` splices the survivors around a removed run ("Reconnect the chain"); `narrowDetach` unbinds and
+// drops only these nodes' cards (detachModuleComponentsFor, so the mixer rebuilds just the columns bound to them)
+// instead of every card.
+void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain,
+                                 bool narrowDetach) {
+    auto& graph = audioEngine.getGraph();
+    noteCardExits(ids); // a no-op outside a CardGlideAnimator::Scope, and for a card already pictured
+    modMatrix.clearRows();
+    const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // Capture BEFORE removal
+    // Capture BEFORE removal too -- walking off each deleted node's own connections to
+    // find its surviving neighbours (and healing a whole run of them in one pass) needs the
+    // graph as it stood before any of `ids` was removed.
+    const auto healSplices = healChain ? captureHealSplices(ids) : std::vector<HealSplice>{};
+    // Also before removal: where each card stood in an open macro (its hole closes) and what it had pushed aside
+    // (the neighbours come home).
+    const auto reflow = macroController_.captureDeleteReflow(ids);
+    // The macros that lose a member (a port included) shrink, so neighbours pushed aside when they grew may return.
+    std::set<juce::String> shrunkMacros;
+    for (auto id : ids)
+        if (const auto* owner = macroController_.macroForNode(id))
+            shrunkMacros.insert(owner->id);
+    // graph.removeNode() below frees each node's processor
+    // synchronously, same as a full graph-replacing restore -- but nothing here reaches
+    // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
+    // reconcileTimelineBindingsOnly(), installed on onGraphStructureChanged, deliberately does
+    // not rebuild the mixer -- see its own comment). A mixer column bound to one of these
+    // NodeIDs (fader/pan/EQ thumbnail/send rows) would sit on a dangling pointer until that
+    // eventual rebuild destroys it and dereferences it. Reuse the exact seam every
+    // graph-replacing restore already unbinds through, same as MixerInsertList::
+    // onBeforeNodeRemoved does for a single mixer-row removal -- unbind BEFORE freeing, not
+    // after.
+    if (narrowDetach)
+        detachModuleComponentsFor(ids);
+    else
+        fireBeforeDetachAllModuleComponents();
+    for (auto id : ids)
+        graph.removeNode(id);
+    // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh
+    // cable to is no longer orphaned by the time they run.
+    healDeletedChain(healSplices);
+    // The bounded one-extra-hop-through-an-attenuverter case runs on the same
+    // pre-captured neighbour list, alongside (order doesn't matter — they touch disjoint node
+    // kinds) the plain direct-neighbour sweep below.
+    for (auto n : portNeighbors)
+        macroController_.autoDeleteOrphanedAttenuverter(n);
+    for (auto n : portNeighbors)
+        macroController_.autoDeleteOrphanedMacroPort(n);
+    selection.clear();
+    updateComponents();
+    macroController_.applyDeleteReflow(reflow);
+    for (const auto& macroId : shrunkMacros)
+        macroController_.returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
+}
+
 // Removes every selected module as ONE undoable change, so Cmd+Z restores the whole group.
 // Also GraphCanvasHost::deleteSelection() — MacroGroupController's deleteMacroAndMembers/
 // removeMacroPort select the nodes to remove, then call this through the host.
@@ -172,50 +228,7 @@ void GraphEditor::deleteSelection() {
     // a DIFFERENT macro port that isn't itself being deleted (an ordinary member was that port's only remaining
     // connection) — macroPortDeletionNeighbors() captures the candidates before removal, then
     // autoDeleteOrphanedMacroPort sweeps them after.
-    auto doDelete = [this, ids, &graph] {
-        modMatrix.clearRows();
-        const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // Capture BEFORE removal
-        // Capture BEFORE removal too -- walking off each deleted node's own connections to
-        // find its surviving neighbours (and healing a whole run of them in one pass) needs the
-        // graph as it stood before any of `ids` was removed.
-        const auto healSplices = captureHealSplices(ids);
-        // Also before removal: where each card stood in an open macro (its hole closes) and what it had pushed aside
-        // (the neighbours come home).
-        const auto reflow = macroController_.captureDeleteReflow(ids);
-        // The macros that lose a member (a port included) shrink, so neighbours pushed aside when they grew may return.
-        std::set<juce::String> shrunkMacros;
-        for (auto id : ids)
-            if (const auto* owner = macroController_.macroForNode(id))
-                shrunkMacros.insert(owner->id);
-        // graph.removeNode() below frees each node's processor
-        // synchronously, same as a full graph-replacing restore -- but nothing here reaches
-        // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
-        // reconcileTimelineBindingsOnly(), installed on onGraphStructureChanged, deliberately does
-        // not rebuild the mixer -- see its own comment). A mixer column bound to one of these
-        // NodeIDs (fader/pan/EQ thumbnail/send rows) would sit on a dangling pointer until that
-        // eventual rebuild destroys it and dereferences it. Reuse the exact seam every
-        // graph-replacing restore already unbinds through, same as MixerInsertList::
-        // onBeforeNodeRemoved does for a single mixer-row removal -- unbind BEFORE freeing, not
-        // after.
-        fireBeforeDetachAllModuleComponents();
-        for (auto id : ids)
-            graph.removeNode(id);
-        // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh
-        // cable to is no longer orphaned by the time they run.
-        healDeletedChain(healSplices);
-        // The bounded one-extra-hop-through-an-attenuverter case runs on the same
-        // pre-captured neighbour list, alongside (order doesn't matter — they touch disjoint node
-        // kinds) the plain direct-neighbour sweep below.
-        for (auto n : portNeighbors)
-            macroController_.autoDeleteOrphanedAttenuverter(n);
-        for (auto n : portNeighbors)
-            macroController_.autoDeleteOrphanedMacroPort(n);
-        selection.clear();
-        updateComponents();
-        macroController_.applyDeleteReflow(reflow);
-        for (const auto& macroId : shrunkMacros)
-            macroController_.returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
-    };
+    auto doDelete = [this, ids] { removeNodesNow(ids, /*healChain=*/true, /*narrowDetach=*/false); };
 
     CardGlideAnimator::Scope glideScope(cardGlide_); // each card shrinks away, see noteCardExits
     noteCardExits(ids);

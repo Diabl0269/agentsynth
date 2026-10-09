@@ -560,17 +560,28 @@ The menu's items:
 - **Duplicate Track** (above the height items; not on the Automation section header) copies the track below itself, and
   names its rebindable shortcut: [add-track](add-track.md#duplicate-a-track).
 - **Delete track** — the same compound step the add-track flows produce, in reverse: the track, its bound
-  `Track In` / `Track Audio` node and its **mixer strip** (the strip, its inserts, and every other channel's send into
-  it) go together, and Cmd+Z brings them all back, the strip in its old place with its gain, pan, sends, inserts,
-  routing, colour and name (`MainComponent::deleteTrack`, one graph + timeline + macro undo step). A channel other
-  tracks feed too, a bus and any strip no track owns stay: only the strip the deleted track alone feeds goes. The menu item never asks;
+  `Track In` / `Track Audio` node, **the macro that holds it** with everything inside, its **mixer strip** (the strip,
+  its inserts, and every other channel's send into it) and **the modules only it used** go together, and Cmd+Z brings
+  them all back in place: each module at its position, the macro with its members, ports and fold, every cable with its
+  modulation amount, the strip with its gain, pan, sends, inserts, routing, colour and name, the track with its lanes
+  (`MainComponent::deleteTrack` in `MainComponentTrackDelete.cpp`, one graph + timeline + macro undo step, redo removes
+  it all again). "Only it used" is `synth::modulesOnlyUsedBy` (`TrackRemovalSet.h`): a module goes when every cable it
+  has ends in what is going, to a fixed point, so an LFO wired only to the track goes, and so does an LFO that only feeds
+  that LFO. A module with a cable to anything that stays (another track, a send bus, Master) stays and only loses its
+  cables into the removed set: an LFO that modulates two tracks keeps its link to the other one and loses the link into
+  the deleted one (the hidden Attenuverter that carried it goes). A module with no cable at all was never used by the
+  track and stays. The output dock, a node another track is bound to, and a module in a different macro are never taken.
+  When the track's macro is shared (another track is bound to a node in it, or another track feeds a strip in it) the
+  macro stays and only the track's own node and strip go. A channel other tracks feed too, a bus and any strip no
+  track owns stay: only the strip the deleted track alone feeds goes. The menu item never asks;
   **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
   `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
   Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
   ("Ask before deleting a track with the keyboard") turns the question back on. Cmd+Z brings the track back either way.
-  The row (header and its lane line) shrinks away toward its centre and the rows below close the gap; Cmd+Z makes room,
-  grows it back and fades a thin accent outline around it ([delete and undo](../layout/animation.md#delete-and-undo-animation),
+  The row (header and its lane line) shrinks away toward its centre and the rows below close the gap, while the macro
+  card and the other cards that leave shrink away on the canvas with it; Cmd+Z makes room, grows them all back and fades
+  a thin accent outline around each ([delete and undo](../layout/animation.md#delete-and-undo-animation),
   `TimelinePanelTrackListMotion.cpp`). Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while

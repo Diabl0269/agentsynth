@@ -174,18 +174,14 @@ public:
     /** Re-derives the dock's positions (node x/y and live bounds, synchronously). No undo step, no dirtiness. */
     void reflowOutputDock() override;
     bool isOutputDockNode(juce::AudioProcessorGraph::NodeID nodeId) const;
-    /** Live vertical drag of a dock card: every other dock card follows `initiator`'s y. */
-    void carryOutputDockWith(ModuleComponent* initiator);
-    /** Drag release of a dock card: snaps y for the whole dock and re-derives x. */
-    void finalizeOutputDockDrag(ModuleComponent* module);
+    void carryOutputDockWith(ModuleComponent* initiator); // live vertical drag: the other dock cards follow its y
+    void finalizeOutputDockDrag(ModuleComponent* module); // drag release: snaps y for the dock, re-derives x
     /** Empty when `nodeId` may be deleted, else why not (Audio Output never; Master while channels exist). */
     juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph::NodeID nodeId) const;
-    /** Erases from `ids` every node outputDockDeleteRefusal() refuses (status message says why). */
-    void removeUndeletableOutputNodes(std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    void removeUndeletableOutputNodes(std::vector<juce::AudioProcessorGraph::NodeID>& ids); // erases refused ids
     /** Takes any dock card out of the macro it is a member of (a saved project can hold one), quietly: no undo step. */
     void evictOutputDockFromMacros();
-    /** Frames the whole dock in view ("Go to Output"). */
-    void frameOutputDock();
+    void frameOutputDock(); // frames the whole dock in view ("Go to Output")
 
     // ---- Multi-select (gesture contract: GraphEditorSelection.cpp) ----
     const synth::ui::SelectionModel& getSelection() const override { return selection; }
@@ -202,6 +198,10 @@ public:
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
+    /** deleteSelection()'s removal with no undo record, for a bigger gesture that records one (MainComponent::
+     *  deleteTrack, inside a CardGlideAnimator::Scope): cards of `ids` shrink away; `healChain` splices the survivors.
+     */
+    void removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain, bool narrowDetach);
     void pruneSelection();
 
     // ---- Marquee (rubber-band) selection; points are in CANVAS coordinates ----
