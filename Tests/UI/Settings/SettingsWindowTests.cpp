@@ -204,6 +204,20 @@ TEST_F(SettingsWindowTest, HasSixTabs) {
     EXPECT_EQ(settingsWindow.getNumTabs(), 6);
 }
 
+TEST_F(SettingsWindowTest, AccountTabSitsNextToAiOnlyWhenThereIsAnAccountService) {
+    synth::AccountService service(
+        "http://mock-host:8787",
+        [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+           const std::atomic<bool>&) { return synth::AuthClient::HttpResult{}; },
+        std::make_unique<synth::InMemoryTokenStore>());
+    SettingsWindow withAccounts(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                themeManager, nullptr, &service);
+    EXPECT_EQ(withAccounts.getNumTabs(), 7);
+    EXPECT_EQ(withAccounts.getTabName(1), "AI");
+    EXPECT_EQ(withAccounts.getTabName(2), "Account");
+    EXPECT_EQ(withAccounts.getTabName(3), "Keyboard Shortcuts");
+}
+
 TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);

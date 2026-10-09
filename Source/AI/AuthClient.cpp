@@ -678,6 +678,73 @@ AuthClient::SubmitGeneralFeedbackResult AuthClient::submitGeneralFeedback(const 
     return result;
 }
 
+AuthClient::DeleteAccountResult AuthClient::deleteAccount(const juce::String& accessToken,
+                                                          const std::atomic<bool>& cancelled) const {
+    DeleteAccountResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http = performHttp("DELETE", host + "/v1/account", headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    result.httpStatus = http.httpStatus;
+    if (http.httpStatus == 204) { // success has no body to parse
+        result.ok = true;
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    if (auto* error = obj != nullptr ? obj->getProperty("error").getDynamicObject() : nullptr) {
+        result.errorCode = error->getProperty("code").toString();
+        result.errorMessage = error->getProperty("message").toString();
+    }
+    return result;
+}
+
+AuthClient::SubmitExitSurveyResult AuthClient::submitExitSurvey(const juce::String& accessToken,
+                                                                const juce::String& kind,
+                                                                const std::vector<juce::String>& reasons,
+                                                                const juce::String& comment,
+                                                                const std::atomic<bool>& cancelled) const {
+    SubmitExitSurveyResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+    headers.set("Content-Type", "application/json");
+
+    juce::Array<juce::var> reasonList;
+    for (const auto& reason : reasons)
+        reasonList.add(reason);
+
+    juce::DynamicObject::Ptr bodyObj = new juce::DynamicObject();
+    bodyObj->setProperty("kind", kind);
+    bodyObj->setProperty("reasons", juce::var(reasonList));
+    if (comment.isNotEmpty())
+        bodyObj->setProperty("comment", comment);
+    const juce::String body = juce::JSON::toString(juce::var(bodyObj.get()), true);
+
+    const auto http = performHttp("POST", host + "/v1/exit-survey", headers, body, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus < 200 || http.httpStatus >= 300) {
+        result.transportError = "Error: POST /v1/exit-survey failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    result.ok = true;
+    return result;
+}
+
 bool AuthClient::revoke(const juce::String& token, const std::atomic<bool>& cancelled) const {
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/x-www-form-urlencoded");

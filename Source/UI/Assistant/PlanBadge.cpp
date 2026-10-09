@@ -63,15 +63,35 @@ void PlanBadge::updateFromSnapshot(const AccountSnapshot& snapshot) {
                                         : (isPro ? juce::Colours::lightblue : juce::Colours::grey);
     textLabel.setColour(juce::Label::textColourId, textColour);
 
-    const juce::String planLabel = isPro ? "Pro" : "Free";
-    textLabel.setText(planLabel + juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(snapshot.requestsUsed) + " / " +
-                          juce::String(snapshot.monthlyRequestLimit) + " this month",
-                      juce::dontSendNotification);
+    textLabel.setText(formatText(snapshot), juce::dontSendNotification);
 
     fade_.setShown(true);
     resized();
     if (auto* parent = getParentComponent())
         parent->resized();
+}
+
+juce::String PlanBadge::formatText(const AccountSnapshot& snapshot, bool spelledOut) {
+    if (snapshot.state != AccountState::SignedIn || !snapshot.entitlementKnown)
+        return {};
+
+    const juce::String planLabel = isProPlan(snapshot) ? "Pro" : "Free";
+    const juce::String used(snapshot.requestsUsed);
+    const juce::String limit(snapshot.monthlyRequestLimit);
+    const juce::String usage =
+        spelledOut ? used + " of " + limit + " requests this month" : used + " / " + limit + " this month";
+    return planLabel + juce::String::fromUTF8(" \xc2\xb7 ") + usage;
+}
+
+juce::String PlanBadge::formatPeriodLine(const AccountSnapshot& snapshot) {
+    if (!isProPlan(snapshot) || snapshot.periodEndIso.isEmpty())
+        return {};
+
+    const auto end = juce::Time::fromISO8601(snapshot.periodEndIso);
+    if (end == juce::Time())
+        return {}; // unparseable: show nothing rather than a wrong date
+
+    return juce::String(snapshot.cancelAtPeriodEnd ? "Ends " : "Renews ") + end.toString(true, false);
 }
 
 void PlanBadge::paint(juce::Graphics&) {

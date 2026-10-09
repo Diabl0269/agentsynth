@@ -175,6 +175,28 @@ public:
         juce::String transportError;
     };
 
+    /** Result of DELETE /v1/account. 204 is success and carries no body. A refusal carries the
+        server's `error.code` / `error.message`; kSubscriptionActive is the 409 "cancel the
+        subscription first" code. */
+    struct DeleteAccountResult {
+        static constexpr const char* kSubscriptionActive = "SUBSCRIPTION_ACTIVE";
+
+        bool ok = false;
+        int httpStatus = 0; // 0 when the request never completed
+        juce::String errorCode;
+        juce::String errorMessage;
+        juce::String transportError;
+
+        bool isSubscriptionActive() const { return httpStatus == 409 && errorCode == kSubscriptionActive; }
+        bool isUnauthorised() const { return httpStatus == 401; }
+    };
+
+    /** Result of POST /v1/exit-survey. `ok` is the whole story. */
+    struct SubmitExitSurveyResult {
+        bool ok = false;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
@@ -253,6 +275,17 @@ public:
     SubmitGeneralFeedbackResult submitGeneralFeedback(const juce::String& accessToken, const juce::String& category,
                                                       const juce::String& text,
                                                       const std::atomic<bool>& cancelled) const;
+
+    /** DELETE /v1/account with `Authorization: Bearer <accessToken>`. Removes the signed-in account
+        and everything it owns; the caller signs out locally on success. */
+    DeleteAccountResult deleteAccount(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
+
+    /** POST /v1/exit-survey with `Authorization: Bearer <accessToken>` and a JSON
+        `{"kind": kind, "reasons": [...], "comment"?: comment}` body. `kind` is "cancel" or "delete";
+        `comment` is omitted when empty. */
+    SubmitExitSurveyResult submitExitSurvey(const juce::String& accessToken, const juce::String& kind,
+                                            const std::vector<juce::String>& reasons, const juce::String& comment,
+                                            const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,
         so the return value only reflects whether the transport succeeded — callers are not

@@ -236,6 +236,7 @@ add_executable(Tests
     Account/AuthClient/AuthClientAccountTests.cpp
     Account/AuthClient/AuthClientConversationsTests.cpp
     Account/AuthClient/AuthClientFeedbackTests.cpp
+    Account/AuthClient/AuthClientExitSurveyTests.cpp
     Account/AccountServiceTests.cpp
     Account/KeychainTokenStoreTests.cpp
     Account/KeychainTokenStoreIsolationTests.cpp
@@ -479,6 +480,9 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStatsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategoryTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
+    UI/Settings/AccountSettingsTabTests.cpp
+    UI/Settings/AccountFlowPanelTests.cpp
+    UI/Settings/LeavingSurveyPanelTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
     Engine/AudioRendering/AudioRenderingModulationTests.cpp
