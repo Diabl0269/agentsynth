@@ -3,6 +3,7 @@
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Settings/SettingsFoldState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace {
 // Divider alpha under a section header. GENTLE on purpose: the row list is already visually grouped
@@ -210,6 +211,18 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
             }
         });
     };
+
+    // The rows and headers fade as they enter and leave a layout; each frame lays out again (rebuildLayout).
+    for (size_t i = 0; i < descLabels.size(); ++i) {
+        rowFades_.push_back(std::make_unique<synth::ui::FadeVisibility>(
+            std::initializer_list<juce::Component*>{descLabels[i].get(), bindButtons[i].get()}));
+        rowFades_.back()->onFrame = [this] { rebuildLayout(); };
+    }
+    for (auto& header : headerButtons) {
+        headerFades_.push_back(
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{header.get()}));
+        headerFades_.back()->onFrame = [this] { rebuildLayout(); };
+    }
 }
 
 //==============================================================================
@@ -258,20 +271,25 @@ void ShortcutsSettingsTab::rebuildLayout() {
     const bool filtering = query.isNotEmpty();
 
     // Width the rows are laid out to: the viewport minus its scrollbar gutter, so a rebind button
-    // never runs under the thumb. The gutter is reserved UNCONDITIONALLY rather than measured —
+    // never runs under the thumb. The gutter is reserved UNCONDITIONALLY rather than measured:
     // whether the bar is on screen depends on the content height this very pass is computing, so
     // asking would make the layout depend on its own output and shift the rows by a few pixels every
     // time a section folded.
     const int contentWidth = juce::jmax(0, rowsViewport.getWidth() - rowsViewport.getScrollBarThickness());
 
-    // The pass records what it lays out; visibility is applied once at the end, only where it
-    // changes. Hiding a header and showing it again within one pass would drop the keyboard focus it
-    // holds (focus then falls to the first Tab stop, the search field), so a header that stays on
-    // screen is never touched. A row left invisible is one the fold or the filter dropped: invisible
-    // children neither paint nor hit-test, which is what stops a collapsed section's buttons from
-    // still being clickable.
-    std::vector<bool> rowShown(descLabels.size(), false);
-    std::vector<bool> headerShown(headerButtons.size(), false);
+    // Every row and header has a fade that this pass steers towards "on screen or not". A widget that is
+    // fading out keeps its slot, squeezed to the fade's progress(), so the rows below slide while it goes;
+    // one that stays on screen is never touched, which is what keeps the keyboard focus it holds. The very
+    // first pass lands each fade on its state so what is there from the start does not fade.
+    const auto steer = [this](synth::ui::FadeVisibility& fade, bool wanted) {
+        if (!laidOutOnce_)
+            fade.snapTo(wanted);
+        else
+            fade.setShown(wanted);
+    };
+    const auto slot = [](const synth::ui::FadeVisibility& fade, int full) {
+        return juce::roundToInt((float)full * fade.progress());
+    };
 
     int y = 0;
     const auto& categoryOrder = ShortcutManager::getCategoryOrder();
@@ -281,56 +299,70 @@ void ShortcutsSettingsTab::rebuildLayout() {
         // match too, so typing "piano" reveals the whole Piano Roll block rather than nothing.
         const bool headerMatches =
             filtering && synth::ui::searchMatches(ShortcutManager::getCategoryName(category), query);
-        std::vector<int> visibleRows;
+        std::vector<int> categoryRows;
+        std::vector<bool> rowMatches;
+        bool sectionHasMatch = false;
         for (int i = 0; i < actionIds.size(); ++i) {
             if (ShortcutManager::getCategory(actionIds[i]) != category)
                 continue;
-            if (!filtering || headerMatches ||
-                rowMatchesQuery(query, descLabels[(size_t)i]->getText(), bindButtons[(size_t)i]->getButtonText()))
-                visibleRows.push_back(i);
+            const bool matches =
+                !filtering || headerMatches ||
+                rowMatchesQuery(query, descLabels[(size_t)i]->getText(), bindButtons[(size_t)i]->getButtonText());
+            categoryRows.push_back(i);
+            rowMatches.push_back(matches);
+            sectionHasMatch = sectionHasMatch || matches;
         }
 
-        const bool sectionHasMatch = !visibleRows.empty();
-        if (!sectionIsVisible(filtering, sectionHasMatch))
-            continue;
+        const bool sectionShown = sectionIsVisible(filtering, sectionHasMatch);
+        const bool expanded =
+            sectionShown && sectionIsExpanded(filtering, sectionHasMatch, isSectionCollapsed(category));
+        auto& headerFade = *headerFades_[categoryIndex];
+        steer(headerFade, sectionShown);
+        const bool headerTakesSlot = sectionShown || headerFade.isFading();
 
-        layout.push_back({-1, category, {0, y, contentWidth, kSectionHeaderHeight}, true});
         auto& header = *headerButtons[categoryIndex];
-        header.setBounds(layout.back().bounds);
-        header.setCollapsed(!filtering && isSectionCollapsed(category));
-        headerShown[categoryIndex] = true;
-        y += kSectionHeaderHeight;
-        // The divider sits in the gap below the header; paintRows draws it at the header's bottom
-        // edge, so no layout height is reserved for the 1 px rule itself.
-        y += kRowGap;
-
-        if (sectionIsExpanded(filtering, sectionHasMatch, isSectionCollapsed(category))) {
-            for (int index : visibleRows) {
-                juce::Rectangle<int> row(0, y, contentWidth, kRowHeight);
-                layout.push_back({index, category, row, false});
-
-                auto rowArea = row;
-                descLabels[(size_t)index]->setBounds(rowArea.removeFromLeft(kDescriptionWidth));
-                bindButtons[(size_t)index]->setBounds(rowArea);
-                rowShown[(size_t)index] = true;
-
-                y += kRowHeight + kRowGap;
-            }
+        if (headerTakesSlot) {
+            const int headerSlot = slot(headerFade, kSectionHeaderHeight + kRowGap);
+            header.setBounds(0, y, contentWidth, juce::jmin(kSectionHeaderHeight, headerSlot));
+            header.setCollapsed(!filtering && isSectionCollapsed(category));
+            if (sectionShown)
+                layout.push_back({-1, category, {0, y, contentWidth, kSectionHeaderHeight}, true});
+            // The divider sits in the gap below the header; the header paints it at its own bottom
+            // edge, so no layout height is reserved for the 1 px rule itself.
+            y += headerSlot;
         }
 
-        y += kSectionGap;
+        for (size_t k = 0; k < categoryRows.size(); ++k) {
+            const auto index = (size_t)categoryRows[k];
+            auto& rowFade = *rowFades_[index];
+            const bool wanted = expanded && rowMatches[k];
+            steer(rowFade, wanted);
+            if (!wanted && !rowFade.isFading())
+                continue;
+            const int rowSlot = slot(rowFade, kRowHeight + kRowGap);
+            juce::Rectangle<int> row(0, y, contentWidth, juce::jmin(kRowHeight, rowSlot));
+            if (wanted)
+                layout.push_back({(int)index, category, {0, y, contentWidth, kRowHeight}, false});
+            auto rowArea = row;
+            descLabels[index]->setBounds(rowArea.removeFromLeft(kDescriptionWidth));
+            bindButtons[index]->setBounds(rowArea);
+            y += rowSlot;
+        }
+
+        if (headerTakesSlot)
+            y += slot(headerFade, kSectionGap);
     }
 
-    for (size_t i = 0; i < headerButtons.size(); ++i)
-        headerButtons[i]->setVisible(headerShown[i]);
-    for (size_t i = 0; i < descLabels.size(); ++i) {
-        descLabels[i]->setVisible(rowShown[i]);
-        bindButtons[i]->setVisible(rowShown[i]);
-    }
-
+    laidOutOnce_ = true;
     rowsHost.setBounds(0, 0, juce::jmax(contentWidth, rowsViewport.getWidth()), juce::jmax(y, 1));
     rowsHost.repaint();
     foldAllButton.setAllFolded(areAllSectionsCollapsed());
+}
+
+bool ShortcutsSettingsTab::anyFadeRunningForTest() const {
+    const auto running = [](const auto& fade) { return fade->isFading(); };
+    return std::any_of(rowFades_.begin(), rowFades_.end(), running) ||
+           std::any_of(headerFades_.begin(), headerFades_.end(), running);
 }
 
 //==============================================================================

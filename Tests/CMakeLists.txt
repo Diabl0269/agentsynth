@@ -921,6 +921,7 @@ target_compile_definitions(Tests PRIVATE
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build
