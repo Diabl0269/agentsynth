@@ -25,6 +25,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackFocusTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackMultiSelectTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackDuplicateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackDeleteMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackShowModuleTests.cpp

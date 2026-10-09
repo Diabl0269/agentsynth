@@ -253,7 +253,7 @@ TEST(TimelineTrackFocusTest, PlainClickFiresOnSelectRequested) {
     ASSERT_NE(header, nullptr);
 
     bool selected = false;
-    header->onSelectRequested = [&] { selected = true; };
+    header->onSelectRequested = [&](const juce::ModifierKeys&) { selected = true; };
     header->mouseDown(makeClick(*header));
     EXPECT_TRUE(selected);
 }
