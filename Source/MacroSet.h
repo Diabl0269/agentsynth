@@ -198,6 +198,9 @@ public:
      *  its own findByMember() check before ever touching MacroSet. */
     bool addMember(const juce::String& macroId, const juce::String& memberUuid);
 
+    /** False (no-op) if `oldUuid` is in no macro or `newUuid` is empty. */
+    bool replaceMember(const juce::String& oldUuid, const juce::String& newUuid);
+
     /** Removes `memberUuid` from whichever macro contains it (no-op if it is in none), also
      *  dropping any port that fronted it — a port's nodeUuid is always a member, so this
      *  keeps that invariant true after a single-member removal too, not only after retainOnly().

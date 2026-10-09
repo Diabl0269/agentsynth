@@ -365,6 +365,11 @@ graph, so it is inside the undo snapshot and undo and redo remember which plugin
 modulation routings and MIDI Remote mappings carry over exactly as for a module replace, in one undo step
 (`GraphEditorReplace.cpp`).
 
+A module inside a macro stays inside it: the new node takes the old node's place in the macro's member list
+(`MacroSet::replaceMember`, before the old node is removed, so the prune in `updateComponents` never sees a gap), and the
+macro set is recorded in the same undo step as the graph (and the MIDI Remote doc when the app wires one), so Cmd+Z puts
+the old module back inside the macro (`Tests/Macros/MacroReplaceMemberTests.cpp`).
+
 ## Header buttons
 
 The header area holds `DrawableButton` instances, not `TextButton`s, positioned in `resized()`
