@@ -28,6 +28,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // Sizes of the cards whose body is NOT drawn from layout data (the bespoke cards, the I/O nodes, a
@@ -100,7 +101,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
 // identity, so the actual override must stay a GraphEditor member, but everything it does is one
 // call into the controller.
 bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetails) {
-    return dragDropController_.isInterestedInDragSource(dragSourceDetails);
+    // While a project is still loading nothing can be dropped onto the canvas (edits wait).
+    return !getLoadReveal().isBlockingEdits() && dragDropController_.isInterestedInDragSource(dragSourceDetails);
 }
 
 void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
@@ -141,7 +143,7 @@ bool GraphEditor::graphHasModuleNamed(juce::AudioProcessorGraph& graph, const ju
 // =============================================================================
 
 bool GraphEditor::isInterestedInFileDrag(const juce::StringArray& files) {
-    return dragDropController_.isInterestedInFileDrag(files);
+    return !getLoadReveal().isBlockingEdits() && dragDropController_.isInterestedInFileDrag(files);
 }
 
 void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
@@ -197,6 +199,8 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     // graph and each one sums into the same device buffer, so a second instance would double the
     // signal rather than address another output — and every node lookup in the app (auto-connect,
     // PatchEval, auto-arrange) takes the first match and stops. Adding a duplicate is a no-op.
+    if (getLoadReveal().refuseEdit()) // a library click while a project is still loading waits
+        return;
     if (isSingletonIOModule(name) && graphHasModuleNamed(audioEngine.getGraph(), name))
         return;
 

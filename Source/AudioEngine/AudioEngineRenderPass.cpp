@@ -5,6 +5,7 @@
 #include "Timeline/MidiRecorder.h"
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 
 namespace {
@@ -241,6 +242,7 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // LFOs / envelopes keep advancing.
     if (masterMuted_.load(std::memory_order_relaxed))
         buffer.clear();
+    applyLoadGate(buffer);
 
     // The LAST write to `buffer` before either caller hands it to hardware or the host --
     // audioDeviceIOCallbackWithContext's `buffer` aliases the device's own output pointers, and
@@ -252,6 +254,28 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // Scoped to the graph's declared OUTPUT channels only, same reasoning as runFeedbackGuard just
     // above: channels past that count are scratch, not something that reaches a listener.
     scrubNonFiniteOutput(buffer, std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels()));
+}
+
+// While a project is opening on screen the gate is closed and the output is silent, the graph still running (the same
+// spot as the master mute). Once it opens the output ramps from silence to full over kLoadGateRampMs, so a patch that
+// starts mid-note does not click in. The gain lives on the audio thread; only the open flag crosses threads.
+void AudioEngine::applyLoadGate(juce::AudioBuffer<float>& buffer) noexcept {
+    constexpr double kLoadGateRampMs = 15.0;
+    if (!loadGateOpen_.load(std::memory_order_acquire)) {
+        buffer.clear();
+        loadGateGain_ = 0.0f;
+        return;
+    }
+    if (loadGateGain_ >= 1.0f)
+        return;
+    const double rate = mainProcessorGraph.getSampleRate() > 0.0 ? mainProcessorGraph.getSampleRate() : 44100.0;
+    const float step = (float)(1000.0 / (kLoadGateRampMs * rate));
+    // The ramp may end mid-block: only its own samples are scaled, the rest of the block is left at full level.
+    const int n = std::min(buffer.getNumSamples(), (int)std::ceil((1.0f - loadGateGain_) / step));
+    const float end = std::min(1.0f, loadGateGain_ + step * (float)n);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        buffer.applyGainRamp(ch, 0, n, loadGateGain_, end);
+    loadGateGain_ = n < buffer.getNumSamples() ? 1.0f : end;
 }
 
 void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset) {

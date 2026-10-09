@@ -17,6 +17,7 @@
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -103,6 +104,10 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id) ||
             !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
             continue;
+        const float revealAlpha = editor.getLoadReveal().hullAlpha(macro.id); // fades in as a project opens
+        if (revealAlpha <= 0.0f)
+            continue;
+        const LoadRevealAnimator::ScopedFade revealFade(g, revealAlpha);
         ++graph_editor_paint::workCounters().hullsPainted;
 
         // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
@@ -530,6 +535,30 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     retractCablesGoneSince(cablesBefore);
 }
 
+// Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
+// is already in canvas coordinates, so everything outside it is skipped.
+static void paintDragPreviewGrid(juce::Graphics& g, synth::theme::AppLookAndFeel* lf) {
+    // The content component's transform maps canvas -> screen. The clip rect of g is
+    // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
+    // gives us the visible region for free.
+    auto clip = g.getClipBounds();
+
+    // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
+    const juce::Colour textPrimaryColourForGrid =
+        lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
+    g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
+
+    constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
+    int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
+    int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
+
+    for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
+        for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
+            g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
+        }
+    }
+}
+
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
@@ -558,31 +587,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         }
     }
 
-    // ---- Drag-preview grid dots (only while a module is being dragged) ----
-    // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.
-    // This stays cheap: we compute the visible clip in canvas coords and skip everything outside.
-    if (editor.getDragDropController().isDragPreviewActive()) {
-        // The content component's transform maps canvas -> screen. The clip rect of g is
-        // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
-        // gives us the visible region for free.
-        auto clip = g.getClipBounds();
-
-        // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
-        const juce::Colour textPrimaryColourForGrid =
-            lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-        g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
-
-        constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
-        int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
-        int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
-
-        for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
-            for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
-                g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
-            }
-        }
-    }
-    // ---- End drag-preview grid dots ----
+    if (editor.getDragDropController().isDragPreviewActive())
+        paintDragPreviewGrid(g, lf);
 
     // Theme color tokens (fall back to legacy literals when unthemed). Wire colours are NOT
     // read here — they come from GraphEditor::colourForCable so that mode + user overrides are
@@ -626,8 +632,12 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // before its path is built: a glide frame repaints a small area, and stroking every cable on a big patch only to
     // have it clipped away cost more than the rest of that paint.
     const auto clip = g.getClipBounds().toFloat();
+    auto& reveal = editor.getLoadReveal();
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
+            continue;
+        const float drawn = reveal.cableProgress(cable.id.srcUid, cable.id.dstUid); // < 1 while a project opens
+        if (drawn <= 0.0f)
             continue;
         const juce::Colour colour = editor.colourForCable(cable);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
@@ -647,6 +657,11 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         else if (cable.kind == GraphEditor::VisibleCable::Kind::ModRouting)
             fallbackWidth = 2.5f + cable.activity * 2.0f;
 
+        if (drawn < 1.0f) { // drawing out from its source jack (LoadRevealAnimator.h), no knob or badge yet
+            strokeWire(cable.p1, cable.p1 + (cable.p2 - cable.p1) * drawn, colour, isModulation, 0.0f, fallbackWidth,
+                       false);
+            continue;
+        }
         auto wirePath = strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
         drawWireDots(wirePath, colour);
 
@@ -729,6 +744,7 @@ void GraphEditor::GraphContentComponent::resized() {}
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // Gliding card snapshots first, so the dots and the drag ghost stay on top of them.
     editor.cardGlide_.paint(g);
+    editor.getLoadReveal().paintOutlines(g); // cards still waiting for their assets as a project opens
 
     // ---- Knob-landing dots -------------
     // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
@@ -736,7 +752,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // UNDER the opaque module card. Painting a small dot here, on top of every child, is what
     // actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
     for (const auto& cable : editor.buildVisibleCables()) {
-        if (!cable.landsOnKnob)
+        if (!cable.landsOnKnob || editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
             continue;
         g.setColour(editor.colourForCable(cable));
         // Shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the

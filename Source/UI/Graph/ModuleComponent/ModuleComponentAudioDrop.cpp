@@ -152,3 +152,10 @@ void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
     sampleNameLabel->setTooltip(name);
     repaint();
 }
+
+// A project opened on screen decodes its samples and wavetables after the cards exist (DeferredAssetLoads.h): the
+// waveform and frame views follow the module on their own ticks, but the file-name labels are only ever set here.
+void ModuleComponent::refreshLoadedFileLabels() {
+    refreshSampleLabel();
+    refreshWavetableLabel();
+}

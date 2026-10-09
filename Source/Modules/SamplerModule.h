@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "ModuleFileStateKeys.h"
+#include "Project/DeferredAssetLoads.h"
 #include <array>
 #include <bitset>
 #include <cmath>
@@ -146,21 +147,28 @@ public:
      *  no registered format can read it. `fromRestoredState` marks a restore from saved state: a project open,
      * undo/redo, paste or a snippet (see gateAt). */
     bool loadSampleFile(const juce::File& file, bool fromRestoredState = false) {
+        ++fileLoadSerial; // a decode still pending for an earlier file no longer applies
+        pendingPath.clear();
+        return installSample(decodeSampleFile(file), fromRestoredState);
+    }
+
+    /** Reads `file` into memory; null when it is missing, unreadable or too short. Any thread: it touches no module. */
+    static SampleData::Ptr decodeSampleFile(const juce::File& file) {
         if (!file.existsAsFile())
-            return false;
+            return nullptr;
 
         juce::AudioFormatManager formatManager;
         formatManager.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
         if (reader == nullptr)
-            return false;
+            return nullptr;
 
         const double readerRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
         const juce::int64 maxFrames = (juce::int64)(kMaxSampleSeconds * readerRate);
         const juce::int64 available = reader->lengthInSamples;
         const int frames = (int)juce::jmin(available, maxFrames);
         if (frames <= 1)
-            return false;
+            return nullptr;
 
         SampleData::Ptr loaded = new SampleData();
         loaded->audio.setSize(juce::jlimit(1, 2, (int)reader->numChannels), frames);
@@ -170,7 +178,14 @@ public:
         loaded->filePath = file.getFullPathName();
         loaded->fileName = file.getFileName();
         loaded->truncated = available > maxFrames;
+        return loaded;
+    }
 
+    /** Publishes a decoded sample to the audio thread: the one install path of a picked file, a restore and a
+     *  deferred project-open decode. False (keeping any loaded sample) for null. Message thread only. */
+    bool installSample(SampleData::Ptr loaded, bool fromRestoredState) {
+        if (loaded == nullptr)
+            return false;
         if (loaded->truncated) {
             // One line per load — not a per-block/per-sample log, so it cannot spam the in-app console.
             juce::Logger::writeToLog("SamplerModule: '" + loaded->fileName + "' truncated to " +
@@ -185,7 +200,11 @@ public:
     }
 
     /** Drops the loaded sample; the module then renders silence. */
-    void clearSample() { publishSample(nullptr); }
+    void clearSample() {
+        ++fileLoadSerial;
+        pendingPath.clear();
+        publishSample(nullptr);
+    }
 
     /** Absolute path of the loaded file, or an empty string. Message thread only. */
     juce::String getSampleFilePath() const { return loadedPath; }
@@ -220,21 +239,27 @@ public:
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)
     // =========================================================================
 
+    // A file still decoding (a project opening on screen) is what the module holds: a save or an undo snapshot taken
+    // before it lands keeps it.
     juce::var getExtraState() const override {
-        if (loadedPath.isEmpty())
+        const juce::String path = pendingPath.isNotEmpty() ? pendingPath : loadedPath;
+        if (path.isEmpty())
             return {};
         juce::DynamicObject::Ptr state = new juce::DynamicObject();
-        state->setProperty(synth::module_file_keys::kSampleFile, loadedPath);
+        state->setProperty(synth::module_file_keys::kSampleFile, path);
         return juce::var(state.get());
     }
 
     void setExtraState(const juce::var& state) override {
         if (auto* obj = state.getDynamicObject()) {
             const juce::String path = obj->getProperty(synth::module_file_keys::kSampleFile).toString();
-            if (path.isNotEmpty())
+            if (path.isNotEmpty() && !deferSampleLoad(juce::File(path)))
                 loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
         }
     }
+
+    /** True while a project open is still decoding this module's file. Message thread only. */
+    bool isSampleLoadPending() const noexcept { return pendingPath.isNotEmpty(); }
 
     // =========================================================================
     // AudioProcessor
@@ -537,6 +562,29 @@ private:
         resetPlayback();
     }
 
+    // Inside a project open on screen (DeferredAssetLoads::active()) the file decodes on a worker and is installed
+    // through installSample here later, unless something loaded or cleared the module since (the serial moved) or the
+    // module is gone (the weak reference). False outside such an open: the caller decodes now.
+    bool deferSampleLoad(const juce::File& file) {
+        auto* loads = synth::DeferredAssetLoads::active();
+        if (loads == nullptr)
+            return false;
+        const int serial = ++fileLoadSerial;
+        pendingPath = file.getFullPathName();
+        juce::WeakReference<SamplerModule> self(this);
+        loads->enqueue(synth::DeferredAssetLoads::Kind::Sample, this, [self, serial, file] {
+            auto decoded = decodeSampleFile(file);
+            return synth::DeferredAssetLoads::Install([self, serial, decoded] {
+                auto* module = self.get();
+                if (module == nullptr || module->fileLoadSerial != serial)
+                    return;
+                module->pendingPath.clear();
+                module->installSample(decoded, /*fromRestoredState=*/true);
+            });
+        });
+        return true;
+    }
+
     void resetPlayback() {
         playhead = -1.0;
         grainClock = 0.0;
@@ -766,6 +814,8 @@ private:
     juce::ReferenceCountedArray<SampleData> retainedSamples; // message thread: keeps old samples alive
     juce::String loadedPath;                                 // message thread only
     juce::String loadedName;                                 // message thread only
+    juce::String pendingPath;                                // message thread only: a deferred decode in flight
+    int fileLoadSerial = 0;                                  // message thread only: bumped by every load request
     std::atomic<int> sampleGeneration{0};
 
     double currentSampleRate = 44100.0;
@@ -815,5 +865,6 @@ private:
     juce::AudioParameterFloat* fineParam = nullptr;
     juce::AudioParameterBool* reverseParam = nullptr;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerModule)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerModule)
 };

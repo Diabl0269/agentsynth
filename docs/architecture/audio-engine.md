@@ -178,6 +178,18 @@ Solo on a `Channel Strip` is a **render-time gate, never a parameter write** ([`
 - **Offline renders honour solo today.** A bounce drives the same `renderPass` (via `OfflineTransportDriver` -> `processHostBlock`), so a soloed strip silences the rest of an exported mix exactly as it does live. Stem export must decide whether a render forces the gate open, the way the metronome is forced off.
 - **Known quirks, inherent to extra-state persistence**: a solo toggle does not move the undo edit serial (no dirty flag, no autosave on its own), and because solo rides in the graph snapshot, undoing an unrelated earlier graph edit restores the solo state that snapshot held.
 
+### Project load gate
+
+While a project opens on screen the output is silent until the patch is complete: `AudioEngine::setLoadGateOpen(false)`
+(any thread; an atomic) clears the rendered buffer in `renderNextBlock`, right after the master-mute clear and before the
+non-finite scrub, so the graph keeps running and the gate catches the metronome too. It is a separate switch from the
+user's master mute, which it never reads or writes; either one silences. When it opens, the output ramps from silence to
+full over 15 ms (the gain lives on the audio thread, `loadGateGain_`, and the ramp stops mid-block where it reaches
+full), so a patch already sounding does not click on. It is open by default, so every engine that never opens a project
+on screen is unaffected. `ProjectLoadPipeline` closes it at the start of an on-screen open and opens it once every asset
+is in and the reveal has drawn the last cable, or at once when the load fails or another open replaces it
+([project-bundle.md](project-bundle.md#opening-a-project-on-screen)). Tests: `Tests/Engine/LoadGateTests.cpp`.
+
 ### Normalling (FRO324)
 
 Right borrows Left while Right is unpatched — the "L / Mono" convention VCV Rack, Softube Modular,

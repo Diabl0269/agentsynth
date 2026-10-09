@@ -574,13 +574,13 @@ include(cmake/KnobStyleSources.cmake)
 include(cmake/ToolbarButtonSources.cmake)
 include(cmake/AiSources.cmake)
 include(cmake/GraphQuerySources.cmake)
-# TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
-# therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
-# which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
-# or the CLAP headers, i.e. exactly the new dependency this decision avoids. The JUCE_PLUGINHOST_*
-# switches are set PUBLIC on JuceModules (cmake/JuceModules.cmake), which Core links PUBLIC: the module
-# code must be compiled with them, and every consumer (AppUI, Tests, the plugin wrapper) must agree on
-# these values or the format list in DefaultHostedPluginBackend's constructor differs between units.
+include(cmake/ProjectLoadSources.cmake)
+# Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
+# licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
+# deliberately deferred: it would mean vendoring clap-juce-extensions or the CLAP headers, i.e. exactly the new
+# dependency this decision avoids. The JUCE_PLUGINHOST_* switches are set PUBLIC on JuceModules
+# (cmake/JuceModules.cmake), which Core links PUBLIC: the module code must be compiled with them, and every consumer
+# (AppUI, Tests, the plugin wrapper) must agree on these values or DefaultHostedPluginBackend's format list differs.
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)

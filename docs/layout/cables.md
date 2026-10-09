@@ -96,7 +96,8 @@ growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`)
   at once.
 - Each frame repaints only the area the moving wires were and are drawn in (`CableRetractAnimator::paintArea`).
 
-Project load and New do not go through undo/redo and do not animate.
+New does not go through undo/redo and does not animate; a project opened on screen draws its cables out from their
+source jacks instead, each once both its ends have appeared ([project load reveal](animation.md#project-load-reveal)).
 
 ## Knob landing
 

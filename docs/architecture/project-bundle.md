@@ -47,6 +47,39 @@ The toolbar's existing Save and Load-from-file dialogs carry both formats (`"*.j
 - **Cmd+S / the Save button** (`MainComponent::performSaveProject`) defaults toward the bundle format rather than always prompting: with a bundle already open (`currentBundleDir_` set and `ProjectBundle::isBundle` true) it resaves straight to that path with no dialog, and otherwise it prompts with the suggested filename defaulting to `<patch name>.agsproj` under `ProjectBundle::getDefaultProjectsDirectory()` (`<userMusicDirectory>/AgentSynth`, created on demand). "Save Project As" (Cmd+Shift+S) always prompts (bundle-only chooser; any other extension typed is forced to `.agsproj`, so it can never write a plain patch), and "Export Patch Only" writes a legacy plain `.json` via `GraphEditor::savePreset` directly — without touching `currentBundleDir_` or the window title — as the explicit escape hatch for a patch-only snapshot. Project open/save dialogs start in that directory; the patch dialogs ("Open Patch...", "Export Patch Only...") start where the **patch save location** preference says (below).
 - **Autosave** periodically writes a separate `autosave.json` sidecar next to `project.json` for the open bundle — it never overwrites the canonical file, and it is not itself a save (see "Autosave and crash recovery" below).
 
+### Opening a project on screen
+
+A project opened while the canvas is on screen (`loadBundleFromFile`, `loadAutosaveFromFile`) goes through
+`ProjectLoadPipeline` (`Source/UI/Graph/ProjectLoad/`, owned by `MainComponent`); everything above still holds, only
+what the user sees and hears changes. Off screen (every headless test, a launch before the window shows) the open is
+exactly as synchronous as it always was: nothing is deferred, hidden, blocked or gated.
+
+1. **`beginLoad()`**, first thing: ends an open still running, closes the engine's load gate
+   ([audio-engine.md](audio-engine.md#project-load-gate)) and hands back the `synth::DeferredAssetLoads` the load
+   opens a `Scope` on around `ProjectBundle::load` / `loadAutosave`.
+2. **Deferred decodes.** Inside that scope a Sampler or Wavetable restoring its file (`setExtraState`) does not read it:
+   it records the file as pending (so `getExtraState`, a save, an undo snapshot and the wavetable folder cursor all
+   still see it) and queues the read on a one-thread `juce::ThreadPool`. The worker touches no module; the result comes
+   back on the message thread (an `AsyncUpdater`) and is installed through the same path as a picked file
+   (`SamplerModule::installSample`, the wavetable's `publishLoadedTable`), unless the module is gone (a weak reference)
+   or something loaded or cleared it since (a per-module request serial). A newer open drops results still in flight.
+   Paste, undo, snippets, the AI and every test decode synchronously, as before.
+3. **`graphBuilt(true)`**, last thing (canvas built, view restored): the pending items are the decodes still in flight
+   and every hosted plugin still instantiating (`HostedPluginModule::isLoading`, polled; its own async load is
+   unchanged). The canvas reveal starts ([animation.md](../layout/animation.md#project-load-reveal)). With nothing
+   pending the load is fast: the patch is usable at once. With anything pending it is slow: the waiting cards are
+   outlined, the stage line says what is pending after 400 ms, and **edits wait**: a click on the canvas or the bottom
+   dock, a canvas Delete or arrow key, a drop on the canvas, a library add and every `"Edit"` command are refused with a
+   short "Still loading" status message, while scrolling and zooming still work (`EditBlockOverlay` passes wheel and
+   pinch through). A detached panel window and the AI panel are not blocked.
+4. **Done.** When every pending item is in, edits come back and the stage line leaves; once the reveal has drawn the last
+   cable the gate opens. A failed load (`graphBuilt(false)`) releases everything at once.
+
+The stages of an open can be timed on a generated project with the disabled bench
+`DISABLED_ProjectOpenProfile` (`Tests/App/ProjectOpenProfileTests.cpp`, `PROFILE_TRACKS=<n>`, default 90): at 90
+instrument tracks (825 cards) building the canvas was about 255 ms of a 290 ms open, a 60 s stereo WAV decoded in
+about 6 ms and a 64-frame wavetable in about 2 ms, on a fast SSD.
+
 ### Recent projects
 
 `Source/RecentProjects.h/.cpp` — the Load menu's "Projects" section (`MainComponent`'s `loadButton.onClick`), a first-level submenu alongside the "Patches" submenu — the Load menu splits what was once a single combined "Load from file..." item (a combined `.json;*.agsproj` + directory browser that conflated a patch with a whole project) into two explicit first-level entries: **Patches** holds the default/factory patches, grouped by category under that submenu, plus an "Open Patch..." leaf; **Projects** holds the recent projects plus an "Open Project..." leaf. A small settings-backed list, same owner-drives-persistence shape as the plugin scan list (`"pluginScanList"`, see below): `RecentProjects` never touches `juce::ApplicationProperties` itself, `MainComponent` restores it from `kRecentProjectsSettingKey` (`"recentProjects"`, `Source/UserSettings.h`) on startup and rewrites it (`saveRecentProjects()`) after every change. Single-owner, unlike the scan list — the plugin editor shares the same `MainComponent`, so there is no second copy to keep in step.

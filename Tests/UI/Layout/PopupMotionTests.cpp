@@ -3,6 +3,7 @@
 // and the look-and-feel hooks that hand windows to the engine. No real window is opened: every
 // component here is peer-less, which is also the contract that keeps headless runs untouched.
 
+#include "NativeWindowTestGuard.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -470,6 +471,8 @@ void letItSettle() {
 } // namespace
 
 TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -480,6 +483,8 @@ TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
 }
 
 TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -492,6 +497,8 @@ TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
 // A menu's picture outlives the menu: when juce brings the app window to the front as the menu closes, a picture
 // at the normal window level would be buried before it had faded (the menu then just vanished).
 TEST(PopupMotionLeaving, TheLeavingPictureStaysAboveTheAppWindow) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -505,6 +512,8 @@ TEST(PopupMotionLeaving, TheLeavingPictureStaysAboveTheAppWindow) {
 
 // The platform's own close animation ran after ours and froze the app window's frames behind it.
 TEST(PopupMotionLeaving, ThePlatformsOwnWindowAnimationIsOff) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";

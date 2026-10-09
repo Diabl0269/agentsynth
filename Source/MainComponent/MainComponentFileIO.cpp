@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "ProjectBundle.h"
@@ -145,6 +146,9 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
 // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
 bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
+    // On screen the open comes to life as it loads: the audio gate closes, samples and wavetables decode off the
+    // message thread, and the canvas reveal starts once it is built (ProjectLoadPipeline.h). Off screen: null.
+    auto* deferredAssets = projectLoad_->beginLoad();
     // Detach BEFORE the load frees the current graph's processors — the same ordering
     // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
     // otherwise read a freed VisualBuffer).
@@ -165,9 +169,12 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     synth::TransportDoc loadedTransport;
     // Seeded with the current view: a project that never saved one leaves it where it is.
     synth::ViewDoc loadedView = graphEditor.getViewDoc();
-    const auto result = synth::ProjectBundle::load(
-        bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
-        midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    const auto result = [&] {
+        const synth::DeferredAssetLoads::Scope deferDecodes(deferredAssets);
+        return synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                          graphEditor.getPatchDocument(), graphEditor.getMacros(), midiRemoteDoc,
+                                          &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    }();
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
     if (result.ok)
@@ -180,6 +187,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         currentBundleDir_ = previousBundleDir;
         refreshAssetRoots();
         statusBar.showMessage("Load failed: " + result.message);
+        projectLoad_->graphBuilt(false);
         return false;
     }
     // The engine's own pan law follows the just-loaded bundle -- absent means Balance
@@ -218,6 +226,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // recent-project rows (both go through openFromFile -> here).
     hideWelcomeScreen();
     countUsage(synth::telemetry::Feature::ProjectOpened); // a user opened a project bundle (not during startup wiring)
+    projectLoad_->graphBuilt(true); // last: the view is restored, so the reveal starts where the user will look
     return true;
 }
 
@@ -229,6 +238,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
 // programmatic way ProjectBundle::load always has.
 bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
+    auto* deferredAssets = projectLoad_->beginLoad(); // see loadBundleFromFile
     graphEditor.detachAllModuleComponents();
 
     const juce::File previousBundleDir = currentBundleDir_;
@@ -239,9 +249,12 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     synth::MixerViewDoc loadedMixerView;
     synth::TransportDoc loadedTransport;
     synth::ViewDoc loadedView = graphEditor.getViewDoc(); // seeded: see loadBundleFromFile
-    const auto result = synth::ProjectBundle::loadAutosave(
-        bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
-        midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    const auto result = [&] {
+        const synth::DeferredAssetLoads::Scope deferDecodes(deferredAssets);
+        return synth::ProjectBundle::loadAutosave(
+            bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
+            midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    }();
     if (result.ok)
         audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
     graphEditor.updateComponents();
@@ -249,6 +262,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
         currentBundleDir_ = previousBundleDir;
         refreshAssetRoots();
         statusBar.showMessage("Recovery failed: " + result.message);
+        projectLoad_->graphBuilt(false);
         return false;
     }
     // Same "follows the just-loaded state" rule as loadBundleFromFile.
@@ -286,6 +300,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // an existing project") can finish opening a bundle — see openFromFile's own comment.
     hideWelcomeScreen();
     countUsage(synth::telemetry::Feature::ProjectOpened); // a user restored a project from its autosave
+    projectLoad_->graphBuilt(true);
     return true;
 }
 

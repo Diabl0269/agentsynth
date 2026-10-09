@@ -147,6 +147,10 @@ public:
 
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
+    /** The project-open gate, apart from the user's mute: closed, the output is silent; opening ramps it in. Any
+     *  thread; open by default (docs/architecture/audio-engine.md#project-load-gate). */
+    void setLoadGateOpen(bool open) noexcept;
+    bool isLoadGateOpen() const noexcept;
 
     // The project's mixer pan law; see the .cpp definition and docs/mixer/mixer.md#pan-law.
     void setMixerPanLaw(synth::MixerPanLaw law) noexcept;
@@ -515,6 +519,9 @@ private:
     bool deviceCallbackAttached_ = false;
 
     std::atomic<bool> masterMuted_{false};
+    std::atomic<bool> loadGateOpen_{true};
+    float loadGateGain_ = 1.0f; // audio thread only: where the opening ramp has got to
+    void applyLoadGate(juce::AudioBuffer<float>& buffer) noexcept;
     std::atomic<synth::MixerPanLaw> mixerPanLaw_{synth::MixerPanLaw::Balance}; // See setMixerPanLaw()
     std::atomic<bool> transportEnabled_{true};
     // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a

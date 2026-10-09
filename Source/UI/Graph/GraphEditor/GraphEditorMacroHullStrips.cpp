@@ -12,6 +12,7 @@
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -32,8 +33,10 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
         const auto& macro = *macroPtr;
         const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id))
+        const float revealAlpha = editor.getLoadReveal().hullAlpha(macro.id); // fades in as a project opens
+        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id) || revealAlpha <= 0.0f)
             continue;
+        const LoadRevealAnimator::ScopedFade revealFade(g, revealAlpha);
 
         const auto [inW, outW] = controller.macroHullStripWidths(macro.id);
         // The fill spans from the hull top so no gap shows under the name pill; only the port ROWS start below the

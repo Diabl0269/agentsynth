@@ -388,6 +388,20 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroHullStrips.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroHullGlide.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCableRetract.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorLoadReveal.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimator.h
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimator.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimatorGroups.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealTimeline.h
+    Source/UI/Graph/ProjectLoad/LoadRevealTimeline.cpp
+    Source/UI/Graph/ProjectLoad/SignalFlowOrder.h
+    Source/UI/Graph/ProjectLoad/SignalFlowOrder.cpp
+    Source/UI/Graph/ProjectLoad/EditBlockOverlay.h
+    Source/UI/Graph/ProjectLoad/EditBlockOverlay.cpp
+    Source/UI/Graph/ProjectLoad/LoadStageLine.h
+    Source/UI/Graph/ProjectLoad/LoadStageLine.cpp
+    Source/UI/Graph/ProjectLoad/ProjectLoadPipeline.h
+    Source/UI/Graph/ProjectLoad/ProjectLoadPipeline.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCableAnchors.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h

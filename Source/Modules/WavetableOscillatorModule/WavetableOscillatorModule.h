@@ -218,6 +218,8 @@ public:
         Does not change any parameter — callers that want the new table to sound must also
         select the "Loaded File" choice. Message thread only. */
     bool loadWavetableFile(const juce::File& file);
+    /** Reads and builds `file` as `mode` cuts it; null when it cannot. Any thread: it touches no module. */
+    static TablePtr decodeWavetableFile(const juce::File& file, ImportMode mode);
 
     /** True for any extension the wavetable loader can read. */
     static bool isSupportedWavetableFile(const juce::File& file) {
@@ -249,10 +251,8 @@ public:
     bool nextWavetable() { return stepWavetable(1); }
     bool previousWavetable() { return stepWavetable(-1); }
 
-    /** File backing the loaded table, or an invalid File when none is loaded. */
-    juce::File getWavetableFile() const {
-        return messageLoadedTable != nullptr ? juce::File(messageLoadedTable->sourcePath) : juce::File();
-    }
+    /** File backing the loaded table (or one a project open is still decoding), or an invalid File when none. */
+    juce::File getWavetableFile() const;
 
     /** Frame count of the table the module would currently play. */
     int getNumFrames() const;
@@ -396,6 +396,7 @@ private:
     /** Publishes a freshly built table. Reclaims the slot the audio thread retired first,
         so the audio thread never has to free anything. */
     void publishLoadedTable(TablePtr table);
+    bool deferWavetableLoad(const juce::File& file); // inside a project open on screen; false: load now
 
     /** Audio thread: take a published table if one is waiting. Pointer moves only — no
         allocation, no deallocation. Skipped (and retried next block) when the message
@@ -931,6 +932,8 @@ private:
     TablePtr retiredTable;       // audio thread -> message thread
     TablePtr audioLoadedTable;   // audio thread only
     TablePtr messageLoadedTable; // message thread only (UI queries, state save)
+    juce::File pendingFile;      // message thread only: a deferred decode in flight (deferWavetableLoad)
+    int fileLoadSerial = 0;      // message thread only: bumped by every load request
 
     // Wavetable folder browser (message thread only)
     juce::File wavetableFolder;
@@ -981,6 +984,7 @@ private:
     juce::AudioParameterChoice* importModeParam = nullptr;
     juce::AudioParameterChoice* interpolationParam = nullptr;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(WavetableOscillatorModule)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WavetableOscillatorModule)
 };
 

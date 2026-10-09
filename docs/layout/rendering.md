@@ -80,6 +80,8 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   (`CardGlideAnimator::requestFrameRepaint`) repaints the ghosts' and snapshots' paths plus the cables touching a
   gliding card, before and after the step, and moves those cables in the memo by the change in their card's offset
   (`followCables`) instead of rebuilding every cable; a cable retract frame repaints only where its ghosts are drawn.
+  The project load reveal's frames work the same way: a popping card repaints only itself (its own transform and
+  alpha), and the frame asks only for the borders it fades and the cables whose drawn length changed.
   A partial paint then skips every cable (`synth::ui::cablePaintBounds`, `CableCurve.h`) and macro border whose box
   misses the clip, before building its path. Repainting the whole canvas and rebuilding every cable per frame made
   a one-card delete or undo cost as much as the idle tick's full paint at every frame (about 16 ms on the Load test

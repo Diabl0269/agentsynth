@@ -3,6 +3,7 @@
 
 #include "WavetableOscillatorModule.h"
 #include "Modules/ModuleFileStateKeys.h"
+#include "Project/DeferredAssetLoads.h"
 
 // ---- Built-in harmonic specs -------------------------------------------
 float WavetableOscillatorModule::classicShapeHarmonic(int shape, int h) {
@@ -485,7 +486,7 @@ juce::var WavetableOscillatorModule::getExtraState() const {
 void WavetableOscillatorModule::setExtraState(const juce::var& state) {
     if (auto* obj = state.getDynamicObject()) {
         const juce::String path = obj->getProperty(synth::module_file_keys::kWavetableFile).toString();
-        if (path.isNotEmpty())
+        if (path.isNotEmpty() && !deferWavetableLoad(juce::File(path)))
             loadWavetableFile(juce::File(path));
 
         const juce::String folder = obj->getProperty(synth::module_file_keys::kWavetableFolder).toString();
@@ -523,15 +524,60 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
         setWavetableFolder(juce::File(folder));
 }
 
+juce::File WavetableOscillatorModule::getWavetableFile() const {
+    if (pendingFile != juce::File())
+        return pendingFile;
+    return messageLoadedTable != nullptr ? juce::File(messageLoadedTable->sourcePath) : juce::File();
+}
+
 bool WavetableOscillatorModule::loadWavetableFile(const juce::File& file) {
-    if (!file.existsAsFile())
+    ++fileLoadSerial; // a decode still pending for an earlier file no longer applies
+    pendingFile = juce::File();
+    auto table = decodeWavetableFile(file, currentImportMode());
+    if (table == nullptr)
         return false;
+    messageLoadedTable = table;
+    publishLoadedTable(std::move(table));
+    return true;
+}
+
+// Inside a project open on screen (DeferredAssetLoads::active()) the file is read and built on a worker and installed
+// here later, unless a newer load request came in since (the serial moved) or the module is gone. The pending file is
+// what getWavetableFile() reports meanwhile, so a save, an undo snapshot and the folder cursor all see it.
+bool WavetableOscillatorModule::deferWavetableLoad(const juce::File& file) {
+    auto* loads = synth::DeferredAssetLoads::active();
+    if (loads == nullptr)
+        return false;
+    const int serial = ++fileLoadSerial;
+    pendingFile = file;
+    const auto mode = currentImportMode();
+    juce::WeakReference<WavetableOscillatorModule> self(this);
+    loads->enqueue(synth::DeferredAssetLoads::Kind::Wavetable, this, [self, serial, file, mode] {
+        auto table = decodeWavetableFile(file, mode);
+        return synth::DeferredAssetLoads::Install([self, serial, table] {
+            auto* module = self.get();
+            if (module == nullptr || module->fileLoadSerial != serial)
+                return;
+            module->pendingFile = juce::File();
+            if (table == nullptr)
+                return;
+            module->messageLoadedTable = table;
+            module->publishLoadedTable(table);
+        });
+    });
+    return true;
+}
+
+WavetableOscillatorModule::TablePtr WavetableOscillatorModule::decodeWavetableFile(const juce::File& file,
+                                                                                   ImportMode mode) {
+    if (!file.existsAsFile())
+        return nullptr;
 
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
     if (reader == nullptr || reader->numChannels == 0 || reader->lengthInSamples <= 0)
-        return false;
+        return nullptr;
 
     // Cap the read so a pathological file cannot exhaust memory.
     const juce::int64 maxRead = (juce::int64)kMaxFrames * 8 * kFrameSize;
@@ -540,16 +586,10 @@ bool WavetableOscillatorModule::loadWavetableFile(const juce::File& file) {
     juce::AudioBuffer<float> raw(1, numSamples);
     raw.clear();
     if (!reader->read(&raw, 0, numSamples, 0, true, reader->numChannels > 1))
-        return false;
+        return nullptr;
 
-    auto table = buildTableFromSamples(raw.getReadPointer(0), numSamples, file.getFileNameWithoutExtension(),
-                                       file.getFullPathName(), currentImportMode());
-    if (table == nullptr)
-        return false;
-
-    messageLoadedTable = table;
-    publishLoadedTable(std::move(table));
-    return true;
+    return buildTableFromSamples(raw.getReadPointer(0), numSamples, file.getFileNameWithoutExtension(),
+                                 file.getFullPathName(), mode);
 }
 
 void WavetableOscillatorModule::setWavetableFolder(const juce::File& folder) {

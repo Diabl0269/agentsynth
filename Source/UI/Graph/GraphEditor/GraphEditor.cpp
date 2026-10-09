@@ -17,6 +17,7 @@
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -62,7 +63,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
 GraphEditor::~GraphEditor() {
     stopTimer();
-    modDot_.reset(); // before `content`, which its tooltip animator is attached to
+    loadReveal_.reset(); // before the cards it may still be scaling
+    modDot_.reset();     // before `content`, which its tooltip animator is attached to
 }
 
 // Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
