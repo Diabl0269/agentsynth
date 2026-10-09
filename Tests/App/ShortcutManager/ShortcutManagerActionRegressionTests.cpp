@@ -587,7 +587,14 @@ TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowIsRegisteredWithCtrlCmdEOn
 }
 
 TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowHasNoConflictOnEitherPlatform) {
-    for (const auto platform : {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other}) {
+    // The Mac table is only checked on a Mac: elsewhere JUCE's commandModifier IS ctrlModifier, so the Mac
+    // default Ctrl+Cmd+E collapses to Ctrl+E there and would read as a clash that no Mac user can hit.
+#if JUCE_MAC
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other};
+#else
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Other};
+#endif
+    for (const auto platform : platforms) {
         manager.setDefaultsPlatform(platform);
         const auto binding = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
         EXPECT_TRUE(manager.getConflictingAction("timelineToggleFocusedTrackPluginWindow", binding).isEmpty())
