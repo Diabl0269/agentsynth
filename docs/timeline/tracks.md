@@ -555,8 +555,11 @@ The menu's items:
 
 - **Duplicate Track** (above the height items; not on the Automation section header) copies the track below itself, and
   names its rebindable shortcut: [add-track](add-track.md#duplicate-a-track).
-- **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
-  its bound `Track In` / `Track Audio` node go together, and come back together. The menu item never asks;
+- **Delete track** — the same compound step the add-track flows produce, in reverse: the track, its bound
+  `Track In` / `Track Audio` node and its **mixer strip** (the strip, its inserts, and every other channel's send into
+  it) go together, and Cmd+Z brings them all back, the strip in its old place with its gain, pan, sends, inserts,
+  routing, colour and name (`MainComponent::deleteTrack`, one graph + timeline + macro undo step). A channel other
+  tracks feed too, a bus and any strip no track owns stay: only the strip the deleted track alone feeds goes. The menu item never asks;
   **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
   `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on

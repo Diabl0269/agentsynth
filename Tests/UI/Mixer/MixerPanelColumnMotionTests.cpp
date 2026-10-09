@@ -192,14 +192,15 @@ TEST(MixerPanelColumnMotion, OffScreenTheColumnsLandAtOnce) {
     EXPECT_EQ(rig.columns().size(), 4u);
 }
 
-TEST(MixerPanelColumnMotion, ADeletedTracksChannelStaysInTheMixerAsAnOrphanSoNothingLeaves) {
+TEST(MixerPanelColumnMotion, ADeletedTracksChannelLeavesWithItsRow) {
     ReducedMotionGuard guard(false);
     Rig rig(true);
     const auto channels = rig.columns().size();
 
     rig.choose(1, synth::ui::TimelineTrackHeaderComponent::kDeleteTrackMenuId);
 
-    EXPECT_EQ(rig.columns().size(), channels) << "the channel is kept; its track is what went";
-    EXPECT_FALSE(rig.motion().isRunning()) << "a column that only moves to the end of the mixer lands at once";
-    EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().isRunning()) << "the timeline row still shrinks";
+    EXPECT_EQ(rig.columns().size(), channels - 1) << "the channel is deleted with its track";
+    EXPECT_TRUE(rig.motion().isRunning()) << "its column shrinks away like the row";
+    EXPECT_EQ(rig.motion().exitGhostCount(), 1);
+    EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().isRunning());
 }

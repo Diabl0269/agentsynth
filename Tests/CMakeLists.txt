@@ -651,6 +651,7 @@ add_executable(Tests
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerPanelIncrementalRebuildTests.cpp
     UI/Mixer/MixerPanelColumnMotionTests.cpp
+    UI/Mixer/MixerTrackDeleteStripTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp
