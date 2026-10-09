@@ -301,7 +301,6 @@ add_executable(Tests
     UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
     UI/Layout/NonModalLabelTests.cpp
-    UI/Timeline/TimelineTransportBarReturnToStartTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp
@@ -319,7 +318,6 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentAutomationMarkerTests.cpp
     UI/Layout/AutomatedMarkerTests.cpp
     UI/Mixer/MixerAutomationMarkerTests.cpp
-    UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKeyboardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentReadoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
@@ -393,7 +391,6 @@ add_executable(Tests
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
     FX/RingModulatorGainTests.cpp
-    Modules/NoiseModuleTests.cpp
     Modules/EdgeCaseTests.cpp
     Engine/IntegrationTests.cpp
     Project/UndoRedo/UndoRedoIdentityPreservingTests.cpp
@@ -462,7 +459,6 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
     App/ShortcutManager/ShortcutManagerTransportChordsTests.cpp
-    UI/Timeline/TransportCtrlChordsTests.cpp
     App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
     App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
@@ -599,41 +595,6 @@ add_executable(Tests
     Macros/MacroBypassMuteTests.cpp
     UI/Graph/ClipboardTests.cpp
     UI/Layout/PanelAnimationAndLoadingTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelRulerTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelMarkerTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelTrackReorderTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelTrackReorderUndoGlideTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelAppWiringTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelResizeTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelAuthoringGestureTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp
-    UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
-    UI/Timeline/CursorGlide/TimelineCursorGlideTests.cpp
-    UI/Timeline/TimelinePlayheadTests.cpp
-    UI/Timeline/TimelineRoutingPaneTests.cpp
-    UI/Timeline/TimelineMidiDestinationMacroRoutingTests.cpp
-    UI/Timeline/TimelineTrackDeleteConfirmTests.cpp
-    UI/Timeline/TimelineTrackHeaderTests.cpp
-    UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
-    UI/Timeline/TimelineTrackFocusTests.cpp
-    UI/Timeline/TimelineTrackDuplicateTests.cpp
-    UI/Timeline/TimelineTrackDeleteMotionTests.cpp
-    UI/Timeline/TimelineTrackShowModuleTests.cpp
-    UI/Timeline/TimelineAddTrackKeyboardTests.cpp
-    UI/Timeline/TimelineAddTrackPickerTests.cpp
-    UI/Timeline/TimelineClipKeyboardTests.cpp
-    UI/Timeline/TimelineClipKeyboardNavTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneRangeTests.cpp
-    UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp
     UI/PianoRoll/PianoRollComponentTests.cpp
@@ -655,7 +616,6 @@ add_executable(Tests
     UI/PianoRoll/PianoRollVelocitySlideTests.cpp
     Timeline/MusicalScaleTests.cpp
     UI/PianoRoll/NoteColourTests.cpp
-    UI/Timeline/MidiDestinationPickerTests.cpp
     Modules/ModuleMidiFlagsTests.cpp
     App/FocusArbitration/FocusArbitrationClipboardTests.cpp
     App/FocusArbitration/FocusArbitrationAutomationLaneTests.cpp
@@ -676,43 +636,6 @@ add_executable(Tests
     UI/Layout/TextFieldKeysTests.cpp
     UI/Layout/TooltipBoundsTests.cpp
     UI/Layout/ListBoxFocusRingTests.cpp
-    UI/Timeline/AutomationEditorTests.cpp
-    UI/Timeline/TimelineTransportBarTests.cpp
-    UI/Timeline/TransportBarMidiLearnTests.cpp
-    UI/Timeline/TimelineRowLayoutTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesFoldTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAddRowTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesHeaderReadoutTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesPointBubbleTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesPointSelectionTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesPointValueFieldTests.cpp
-    UI/Timeline/AutomationLanes/LanePointMathTests.cpp
-    UI/Timeline/AutomationLanes/LanePointStretchTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesStretchTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesShapePaintTests.cpp
-    UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesColourCursorTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesRetargetTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesDuplicateTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesKeyboardTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesReorderTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesLaneMainTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAddModulatorTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesChangeSourceTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesModulatorMainTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesModulatorEditTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesModulatorMacroRemovalTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAmountModelTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAmountBandTests.cpp
-    UI/Timeline/AutomationLanes/AutomationLanesAmountIntegrationTests.cpp
-    UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelColumnDragTests.cpp
     UI/Mixer/MixerSourcesBadgeTests.cpp
@@ -916,7 +839,6 @@ add_executable(Tests
     UI/Graph/CardLayoutEditor/OnCard/OnCardTimeTempoTests.cpp
     UI/Theme/KnobStyleLookTests.cpp
     UI/Layout/BottomDockTabFadeTests.cpp
-    UI/Timeline/TimelineFadeMotionTests.cpp
     UI/Graph/CardBody/CardBodyFadeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFadeTests.cpp
     UI/Mixer/MixerFadeTests.cpp
@@ -998,6 +920,7 @@ target_compile_definitions(Tests PRIVATE
 # would compile a second copy of those modules into this target.
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build
