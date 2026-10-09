@@ -106,6 +106,9 @@ public:
     /** Hides and snapshots every card whose bounds changed since `before`. Returns false (no-op) when none did. */
     bool arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
 
+    /** While a Scope is open: `comp`, a card created inside it, grows in with the small bounce when the Scope closes
+     *  (after any glide of the cards that made room for it), with no outline. No-op when not animating. */
+    void noteEnter(juce::Component* comp, uint32_t nodeUid);
     /** While a restore Scope is open: snapshots every on-screen card for a possible exit. Call it before tearing all
      * the cards down; a restore that frees no node never does, so it snapshots nothing. No-op otherwise. */
     void noteExitsBeforeTeardown();
@@ -220,6 +223,8 @@ private:
     void paintGhost(juce::Graphics& g, const Item& item) const;
     bool hasMoveItems() const noexcept;
     void armBorderGhosts(const std::vector<Entry>& now, bool& anyExit, bool& anyEnter);
+    void addEnterItem(juce::Component& comp, uint32_t nodeUid, float snapshotScale);
+    bool armRequestedEnters(float snapshotScale);
     static void paintBorder(juce::Graphics& g, const Border& border, float scale, float alpha);
 
     Hooks hooks_;
@@ -231,6 +236,7 @@ private:
     int depth_ = 0;
     int armCount_ = 0;
     std::vector<Candidate> candidates_;
+    std::vector<std::pair<juce::Component::SafePointer<juce::Component>, uint32_t>> enterRequests_; // noteEnter
     std::vector<Border> borders_;          // captured by noteMacroBorders
     std::set<uint32_t> preexistingMacros_; // every macro card there when the Scope opened, shown or not
     synth::ui::ExitEnterTimeline timeline_;

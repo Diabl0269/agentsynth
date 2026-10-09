@@ -25,10 +25,16 @@
 #include <memory>
 #include <vector>
 
+class InsertGap;
+
 class GraphDragDropController {
 public:
     explicit GraphDragDropController(GraphCanvasHost& host)
         : host_(host) {}
+    /** `insertGap` (outliving this) opens the gap between cards a drag hovers over; without one nothing is pushed. */
+    GraphDragDropController(GraphCanvasHost& host, InsertGap& insertGap)
+        : host_(host)
+        , insertGap_(&insertGap) {}
 
     // ---- Drag-preview (grid + landing ghost shown during a module drag) -------------------
     void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
@@ -87,8 +93,13 @@ public:
 private:
     /** The expanded macro a plain-module library drop at `details` would join, or empty. */
     juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;
+    /** Opens, moves or closes the gap between cards for the ghost aimed at `aim`. */
+    void hoverInsertGap(juce::Rectangle<int> aim);
 
     GraphCanvasHost& host_;
+    InsertGap* insertGap_ = nullptr;
+    juce::String dragPreviewJoinId_; // the open macro a library drop would join (the gap opens among its cards)
+    juce::Rectangle<int> dragPreviewSelfStart_; // where a dragged canvas card was picked up
 
     // Drag-preview state (grid + landing ghost)
     bool dragPreviewActive_ = false;

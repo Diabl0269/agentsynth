@@ -27,6 +27,43 @@ void CardGlideAnimator::noteExit(juce::Component* comp, uint32_t nodeUid) {
     candidates_.push_back({comp, nodeUid, comp->getBounds(), snapshotOf(*comp, scale)});
 }
 
+void CardGlideAnimator::noteEnter(juce::Component* comp, uint32_t nodeUid) {
+    if (depth_ == 0 || comp == nullptr || nodeUid == 0 || !canAnimate())
+        return;
+    enterRequests_.emplace_back(comp, nodeUid);
+}
+
+// A card that grows in is hidden and drawn from its picture, scaled about its centre, until the grow phase ends.
+void CardGlideAnimator::addEnterItem(juce::Component& comp, uint32_t nodeUid, float snapshotScale) {
+    Item item;
+    item.kind = Kind::Enter;
+    item.comp = &comp;
+    item.nodeUid = nodeUid;
+    item.from = item.to = comp.getBounds();
+    item.savedAlpha = comp.getAlpha();
+    item.snapshot = snapshotOf(comp, snapshotScale);
+    comp.setAlpha(0.0f);
+    items_.push_back(std::move(item));
+}
+
+// The cards noteEnter asked for: each that is still on the canvas and in view grows in.
+bool CardGlideAnimator::armRequestedEnters(float snapshotScale) {
+    bool any = false;
+    for (const auto& [ptr, nodeUid] : enterRequests_) {
+        auto* comp = ptr.getComponent();
+        if (comp == nullptr || !comp->isVisible() || comp->getBounds().isEmpty() || comp->isMouseButtonDown(true) ||
+            !comp->getBounds().intersects(card_glide_detail::visibleCanvasArea(*comp)))
+            continue;
+        const auto uid = nodeUid;
+        if (std::any_of(items_.begin(), items_.end(),
+                        [uid](const Item& it) { return it.kind == Kind::Enter && it.nodeUid == uid; }))
+            continue;
+        addEnterItem(*comp, nodeUid, snapshotScale);
+        any = true;
+    }
+    return any;
+}
+
 // A restore only tears the cards down when it frees a node, so this is where a card it removes can still be
 // pictured; a parameter-only undo, or one that only moves cards, never gets here and pictures nothing. Snapshotting
 // every card when the Scope opened made each such undo stall for the length of a full repaint of every card on screen.
@@ -166,18 +203,11 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
                                  preexistingMacros_.count(e.nodeUid) != 0; // a macro card that was only hidden
             if (existed || !e.comp->getBounds().intersects(card_glide_detail::visibleCanvasArea(*e.comp)))
                 continue;
-            Item item;
-            item.kind = Kind::Enter;
-            item.comp = e.comp;
-            item.nodeUid = e.nodeUid;
-            item.from = item.to = e.comp->getBounds();
-            item.savedAlpha = e.comp->getAlpha();
-            item.snapshot = snapshotOf(*e.comp, snapshotScale);
-            e.comp->setAlpha(0.0f);
-            items_.push_back(std::move(item));
+            addEnterItem(*e.comp, e.nodeUid, snapshotScale);
             anyEnter = true;
         }
     }
+    anyEnter = armRequestedEnters(snapshotScale) || anyEnter;
 
     armBorderGhosts(now, anyExit, anyEnter);
     if (!anyExit && !anyEnter)
@@ -187,6 +217,9 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
     timeline_ = {};
     timeline_.hasExit = anyExit;
     timeline_.hasEnter = anyEnter;
+    // Only what an undo or redo brings back is outlined; a card that is simply new lands with the bounce instead.
+    timeline_.outline = restoring_;
+    timeline_.bounce = !restoring_ && !reducedMotion_;
     timeline_.hasGap = hasMoveItems();
     // The timeline restarts at 0: cards still gliding go on from where they are drawn, not from where they began.
     for (auto& item : items_)
@@ -204,7 +237,7 @@ void CardGlideAnimator::applyTimelineAtMs(double elapsedMs) {
     progress_ = timeline_.hasGap ? frame_.gap : 0.0f;
     pruneItems();
     // An entered card goes live again the moment it has grown; only its outline remains.
-    if (frame_.grow >= 1.0f)
+    if (frame_.grown)
         for (auto& item : items_)
             if (item.kind == Kind::Enter && !item.grown) {
                 item.grown = true;
@@ -245,7 +278,7 @@ void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
                         juce::RectanglePlacement::stretchToFit);
         }
     }
-    if (frame_.grow >= 1.0f && frame_.outline < 1.0f && hooks_.accent) {
+    if (frame_.grown && frame_.outline < 1.0f && hooks_.accent) {
         g.setColour(hooks_.accent().withAlpha(1.0f - frame_.outline));
         g.drawRoundedRectangle(item.to.toFloat().expanded(0.5f), 4.0f, 1.0f);
     }

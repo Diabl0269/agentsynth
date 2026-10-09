@@ -10,6 +10,7 @@
 #include "Modules/SamplerModule.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "SnippetManager.h"
+#include "UI/Graph/InsertGap/InsertGap.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -25,6 +26,10 @@ void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcesso
     dragPreviewSelfId_ = selfId;
     dragPreviewGhost_ = {};
     alignmentGuides_.clear();
+    if (insertGap_ != nullptr)
+        insertGap_->endSession(); // a fresh gesture: nothing of the last one stays open or cancelled
+    auto* self = selfId.uid != 0 ? host_.moduleComponentFor(selfId) : nullptr;
+    dragPreviewSelfStart_ = self != nullptr ? self->getBounds() : juce::Rectangle<int>();
     host_.clearSmartSuggestions();
     // Seed the tick's comparison from the state at press time, so a drag started WITH the modifier
     // already held is not reported as a change on its very first tick.
@@ -48,10 +53,14 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
     dragPreviewAim_ =
         juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW_, dragPreviewH_);
 
-    // A card about to join an open macro lands where it is aimed (snapped) and the macro makes room for it on the
-    // drop; every other drop dodges to the nearest free slot.
+    // Aimed between two cards, the cards after it make room and the card lands in that gap. Otherwise a card about to
+    // join an open macro lands where it is aimed (snapped) and the macro makes room for it on the drop; every other
+    // drop dodges to the nearest free slot.
+    hoverInsertGap(dragPreviewAim_);
+    const auto* gap = insertGap_ != nullptr ? insertGap_->plan() : nullptr;
     const auto resolved =
-        dragPreviewJoinsMacro_
+        gap != nullptr ? gap->slot.getPosition()
+        : dragPreviewJoinsMacro_
             ? synth::LayoutUtil::snap({juce::jmax(0, desiredTopLeftCanvas.x), juce::jmax(0, desiredTopLeftCanvas.y)})
             : host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
     dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
@@ -200,9 +209,29 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
     host_.repaintCanvas();
 }
 
+// A canvas card is placed among the cards of the macro it is in now (a crossing made mid-drag has already moved it);
+// a library module among those of the macro it would join, or the top level. A snippet (a whole group) and a group drag
+// never open a gap.
+void GraphDragDropController::hoverInsertGap(juce::Rectangle<int> aim) {
+    if (insertGap_ == nullptr)
+        return;
+    if (dragPreviewIsSnippet_ || host_.isSelectionDragActive() || aim.isEmpty()) {
+        insertGap_->endSession();
+        return;
+    }
+    const juce::String selfKey = dragPreviewSelfId_.uid != 0
+                                     ? "n:" + juce::String(static_cast<juce::int64>(dragPreviewSelfId_.uid))
+                                     : juce::String();
+    insertGap_->hover(
+        {dragPreviewJoinId_, selfKey, aim.getCentre(), {aim.getWidth(), aim.getHeight()}, dragPreviewSelfStart_});
+}
+
 void GraphDragDropController::endDragPreview() {
+    if (insertGap_ != nullptr)
+        insertGap_->endSession(); // a drop that landed in the gap has already taken it; anything else goes home
     dragPreviewActive_ = false;
     dragPreviewJoinsMacro_ = false;
+    dragPreviewJoinId_.clear();
     dragPreviewGhost_ = {};
     alignmentGuides_.clear();
     host_.clearSmartSuggestions();
@@ -281,6 +310,7 @@ void GraphDragDropController::itemDragMove(const juce::DragAndDropTarget::Source
     const auto joinId = dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String();
     host_.setMacroDropCandidate(joinId);
     dragPreviewJoinsMacro_ = joinId.isNotEmpty();
+    dragPreviewJoinId_ = joinId;
     updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 
@@ -325,7 +355,10 @@ void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceD
     // Modules only: a snippet or plugin payload never reaches here. Cmd (or the drag-without-Cmd
     // preference) over an expanded hull makes the new module a member, in the same undo step as its
     // creation.
-    const juce::String joinMacroId = macroJoinTargetForDrop(dragSourceDetails);
+    // Released over an open gap, the macro it was made in is the one joined: the cards it pushed have moved the
+    // borders, and the join was decided on the borders as they stood when the pointer got there (InsertGap::hover).
+    const bool inGap = insertGap_ != nullptr && insertGap_->isOpen();
+    const juce::String joinMacroId = inGap ? insertGap_->container() : macroJoinTargetForDrop(dragSourceDetails);
     host_.addModuleAtCanvasPosition(name, dropPos, {}, joinMacroId);
     endDragPreview();
 }

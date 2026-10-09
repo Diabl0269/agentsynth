@@ -332,6 +332,7 @@ CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)
     animator_.before_ = capture(entries);
     animator_.restoring_ = restore && animator_.canAnimate();
     animator_.candidates_.clear();
+    animator_.enterRequests_.clear();
     animator_.borders_.clear();
     animator_.preexistingMacros_.clear();
     for (const auto& e : entries)
@@ -349,11 +350,12 @@ CardGlideAnimator::Scope::~Scope() {
     const bool moved = animator_.arm(animator_.before_, now, scale);
     // A Scope that changed nothing leaves a running delete or undo animation alone; any other change arms the new one
     // from what is drawn now (armGhosts).
-    const bool somethingNew =
-        moved || !animator_.candidates_.empty() || animator_.restoring_ || !animator_.borders_.empty();
+    const bool somethingNew = moved || !animator_.candidates_.empty() || animator_.restoring_ ||
+                              !animator_.borders_.empty() || !animator_.enterRequests_.empty();
     const bool ghosts = somethingNew && animator_.armGhosts(animator_.before_, now, scale);
     animator_.before_.clear();
     animator_.candidates_.clear();
+    animator_.enterRequests_.clear();
     animator_.borders_.clear();
     animator_.preexistingMacros_.clear();
     animator_.restoring_ = false;

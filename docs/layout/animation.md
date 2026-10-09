@@ -323,6 +323,20 @@ every surface that animates a delete:
   [fold](#macro-fold) animates it). A macro that merely loses its border (ungrouped) keeps its modules and does not
   ghost either.
 
+### Adding a module between others
+
+The gap a drag opens between two cards ([layout rule](layout.md#making-room-for-a-module-dropped-between-others)) moves
+with the make-room glide: the cards after the insertion point slide aside over 160 ms (`easeOutCubic`), geometry final
+at once, cables following, and an open macro's border glides to its new size (`glideHullsFrom`, 220 ms). Moving to
+another gap or away turns every card back from where it is drawn, never from where it began. On the drop nothing that
+is already in place moves again: the module grows in at its slot with the 8% bounce (`easeOutBackGrow` over 180 ms,
+`CardGlideAnimator::noteEnter`, `ExitEnterTimeline::bounce`) and no outline (the outline marks what an undo brought
+back), after any glide still running; a card dragged from the canvas settles into the gap with the usual 160 ms glide.
+A keyboard insert glides the cards aside, then grows the module in. Cmd+Z glides the cards back and shrinks the module
+away; redo is the reverse. A drop, a second drag or an undo while cards still move carries on from the drawn rects.
+Under Reduce Motion the cards move at once and the module fades in (plain fade, no growing); with Animations Off, or
+off screen, everything lands at once.
+
 ### Macro fold
 
 Collapsing a macro folds its modules into the closed card; expanding unfolds them out of it. The model change is
@@ -640,6 +654,9 @@ shortcut.
   pointer at the grab offset, with the copy cursor. On drop it settles 140 ms `easeOutCubic` and
   becomes the real item. Toggling Option mid-drag switches between copy and move without restarting
   the drag.
+- **Insert between.** A module dragged between two cards makes room for itself: the cards after it glide aside
+  (160 ms), it lands with the 8% bounce, Esc or moving away glides them back:
+  [Adding a module between others](#adding-a-module-between-others).
 - **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its
   origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
   nothing is committed — no undo step.

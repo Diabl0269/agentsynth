@@ -130,7 +130,8 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   the next change that grows it.
 - **Inside out.** After the grower's own level is settled, its enclosing macro may have a bigger
   hull, so that macro is treated as the grower one level up, all the way to the top level.
-- **When.** Only on discrete events, never while dragging: grouping (including nesting), adding
+- **When.** Only on discrete events, never while dragging (a drag between two cards opens its own gap, see
+  [Making room for a module dropped between others](#making-room-for-a-module-dropped-between-others)): grouping (including nesting), adding
   modules to a macro (menu, Cmd-drag, library drop into a hull), expanding a macro, adding a port
   (which lengthens the hull), and a module card changing size in place (loose or macro member: the Macros knob count, the Scope / Response / envelope graph folds, an LFO's Draw section, a poly or Dual I/O toggle; the list is in [module-card.md](module-card.md)).
 - **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
@@ -186,6 +187,55 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   `makeRoomFor`, `returnDisplacedNeighbours`, auto-arrange) arms once. Undo and redo glide too: a move that glided
   forward glides back (see [Undo and redo glide](animation.md#undo-and-redo-glide)). Loading a project and paste never
   glide: they land at once.
+
+## Making room for a module dropped between others
+
+Dragging a module (from the library, or a card already on the canvas) over the space between two cards opens a gap
+there: the cards after that point slide aside, the module lands in the gap, and the cards before it stay put. The
+pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.h`); the live side is `InsertGap`
+(`Source/UI/Graph/InsertGap/`), owned by `MacroGroupController` (`insertGap()`), fed every drag tick by
+`GraphDragDropController::updateDragPreview` and reusing `buildLayoutUnits`, `moveUnitBy` and `CardGlideAnimator`.
+
+- **Which gap.** Judged on the layout units of one level (the top level, or the open macro the card is in or a library
+  module would join) as they are drawn now, from the centre of the dragged card or library ghost. Inside a card only
+  its edge bands count: within a quarter of its width of its left or right edge is a row gap, within a quarter of its
+  height of its top or bottom edge a column gap (the nearer edge wins). Deeper in is an ordinary drop onto the card,
+  which dodges as before. In empty space the ghost has to touch a card (12 px clearance); beside it is a row, above or
+  below it a column. The leading half of a card means "in front of it", the trailing half "in front of the next card
+  in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
+  A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card or a port widget never
+  opens a gap. A card dragged from the canvas opens none while its centre is still over the place it was picked up
+  from, so nudging a card never pushes its neighbours.
+  A drag whose centre is over a macro border it is not in yet (or has just left) opens no gap either, and a library
+  drop released over an open gap joins the macro the gap was made in: the join or leave is decided on the borders as
+  they stood, under any Animations setting (Reduce Motion moves cards at once, so a gap there would shift the border
+  under the pointer).
+- **Where it lands and what moves.** The module copies the spacing between the anchor and the card before it (at the
+  start of a row, the spacing after the anchor; a lone card 40 px), held between 12 and 80 px, and takes the anchor's
+  place: one spacing after the card before it, snapped up to the 8 px grid, level with the anchor. The anchor and every
+  unit of its row (it overlaps the anchor vertically, column: horizontally) from the anchor on move by one shared
+  amount, the module's width plus that spacing rounded up to the grid, so their own spacing is kept. A gap already wide
+  enough moves nothing.
+- **Chain.** A moved unit (or the module's slot itself, say a tall module) that now runs into another unit ahead of it
+  pushes that one along the same way, as far as the 12 px clearance needs, and so on, all the way. A unit behind the
+  pusher, or one that already overlapped it, is left alone; pinned dock cards never move. Inside an open macro the
+  border grows with its members, and a border that grew pushes the units ahead of it at its own level the same way,
+  level by level to the top.
+- **Live and exact.** The moves are real (node x/y and the cards, geometry final at once) and glide like a make-room
+  push. One gap is open at a time; moving to another gap first takes the open one back exactly and then makes the new
+  one from that home layout, and the pointer keeps the open gap while it stays over the slot and the spacing either
+  side. Moving away, the drag leaving the canvas, Esc (a library drag ends; a card drag goes on with the gap closed
+  until it is released) or a click that never moved puts every card back exactly, the output dock included, and
+  records nothing.
+- **The drop.** `InsertGap::Commit` takes the gap back before the drop's undo record and `land()` makes it again inside
+  it, for the module's real size, so the add or move, the pushes and any collapsed macro card pushed are ONE undo step
+  (graph and macros). The pushes are remembered on the landed card like its own growth's
+  ([Shrinking a card](#making-room-when-something-grows)): deleting it later brings them home (and inside a macro the
+  hole is then already filled, so nothing closes further); an undo or redo forgets them, as for every record.
+- **Keyboard.** Adding a module from the library without dragging (Return on a row, or a click) while exactly one card
+  is selected puts it right after that card (`synth::insertModuleAfterSelectedCard`), through the same commit: the
+  cards after it make room, the module joins the card's open macro, one undo step. With nothing after the card the
+  module goes one spacing to its right; with no single selection it lands in the middle of the view as before.
 
 ## Output dock
 

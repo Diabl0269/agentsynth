@@ -60,6 +60,19 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
     configureCardGlide();
     configureCanvasFrame();
+    // A module dragged between cards opens a gap: its borders glide with the cards, the frame grows to hold the cards
+    // it pushed, and Esc closes it wherever the keyboard focus is.
+    InsertGap::Hooks gapHooks;
+    gapHooks.beginBorderGlide = [this]() -> std::function<void()> {
+        auto before = std::make_shared<MacroHullGlide::Hulls>(snapshotPaintedHulls());
+        return [safe = juce::Component::SafePointer<GraphEditor>(this), before] {
+            if (safe != nullptr)
+                safe->glideHullsFrom(*before);
+        };
+    };
+    gapHooks.afterMove = [this] { refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); };
+    gapHooks.keyHost = this;
+    macroController_.insertGap().setHooks(std::move(gapHooks));
     startTimerHz(30);
 }
 

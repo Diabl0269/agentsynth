@@ -205,6 +205,12 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
         return;
 
     auto newProcessor = synth::AIStateMapper::createModule(name);
+    // A drop into the gap a drag opened between two cards (or a keyboard insert after the selected card): the gap goes
+    // home before the undo record and land() re-makes it inside, so the whole insert is one step (InsertGap.h).
+    std::optional<InsertGap::Commit> insert;
+    if (newProcessor && (macroController_.insertGap().isOpen() || macroController_.insertGap().hasPending()))
+        insert.emplace(macroController_.insertGap());
+    const bool inserting = macroController_.insertGap().isCommitting();
 
     // The new card is about to join joinMacroId, so that hull is not an obstacle to placing it (resolvePlacement).
     juce::ScopedValueSetter<juce::String> joinScope(macroDragJoinId_,
@@ -221,14 +227,15 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
         auto estSize = estimateModuleSize(name);
         // A card joining an open macro lands where it was dropped; the macro then makes room (below).
         const bool joining = joinMacroId.isNotEmpty();
-        auto initialPlaced = joining
+        auto initialPlaced = inserting ? macroController_.insertGap().pendingSlot()
+                             : joining
                                  ? synth::LayoutUtil::snap({juce::jmax(0, dropPos.x), juce::jmax(0, dropPos.y)})
                                  : resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
 
         // finalizeNewDrop: locate the newly created ModuleComponent, compute its
         // real final position (snapped + anti-overlapped using actual dimensions),
         // then animate it from the raw drop point to the settled position.
-        auto finalizeNewDrop = [this, initialPlaced, joining](juce::AudioProcessorGraph::NodeID newNodeId) {
+        auto finalizeNewDrop = [this, initialPlaced, joining, inserting](juce::AudioProcessorGraph::NodeID newNodeId) {
             ModuleComponent* newComp = nullptr;
             for (auto* comp : content.getModules()) {
                 if (comp != nullptr && comp->getNodeId() == newNodeId) {
@@ -239,10 +246,17 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             if (newComp == nullptr)
                 return;
 
-            // Compute final position using the real component size.
-            auto toPos = joining ? newComp->getPosition()
-                                 : resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
-                                                    newComp->getNodeId());
+            // Compute final position using the real component size. An insert makes its gap for that size and lands
+            // in it, growing in with the small bounce.
+            const auto inGap = inserting ? macroController_.insertGap().land(
+                                               newNodeId, juce::Point<int>(newComp->getWidth(), newComp->getHeight()))
+                                         : std::nullopt;
+            auto toPos = inGap     ? *inGap
+                         : joining ? newComp->getPosition()
+                                   : resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
+                                                      newComp->getNodeId());
+            if (inGap)
+                cardGlide_.noteEnter(newComp, newNodeId.uid);
 
             // Animate from the estimated initial-placed position to the real final position.
             // If they are identical, animateDropLanding is a no-op (just settles in place).
@@ -251,7 +265,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             // A drop that snapped into a connection settles from where the cursor aimed to its slot (the Scope in
             // placeNode glides it; geometry stays final). Without a suggestion the card just appears, as before.
             const auto aim = dragDropController_.getDragPreviewAim();
-            if (!joining && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
+            if (!joining && !inGap && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
                 aim.getPosition() != toPos)
                 cardGlide_.noteStartRect(newComp, newNodeId.uid,
                                          {aim.getX(), aim.getY(), newComp->getWidth(), newComp->getHeight()});
@@ -299,7 +313,8 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             reflowOutputDock(); // the drop may sit right of the dock: the dock moves, inside this undo step
         };
 
-        if (undoManager && joinMacroId.isNotEmpty())
+        // An insert can push collapsed macro cards, whose place lives in the macros: record those too.
+        if (undoManager && (joinMacroId.isNotEmpty() || inserting))
             undoManager->recordGraphAndMacroChange(graph, macros, placeNode);
         else if (undoManager)
             undoManager->recordStructuralChange(graph, placeNode);
@@ -411,8 +426,17 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // The released card settles from where it was held into its snapped slot (and the patch's make-room pushes glide
     // too) instead of jumping; geometry is final at once. Nothing glides when the card was already on its slot.
     CardGlideAnimator::Scope glide(cardGlide_);
-    slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
-    auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
+    // Released over the gap it opened between two cards: the gap is made again here, inside the drop's undo record
+    // (ModuleComponent::mouseUp holds the InsertGap::Commit), and the card settles into it.
+    auto& gap = macroController_.insertGap();
+    const auto landed = gap.isCommitting()
+                            ? gap.land(module->getNodeId(), juce::Point<int>(module->getWidth(), module->getHeight()))
+                            : std::nullopt;
+    if (!landed)
+        slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
+    auto clear =
+        landed ? *landed
+               : resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
     module->setTopLeftPosition(clear);
     // Persist the snapped/cleared position to graph node properties so it survives reload.
     updateModulePosition(module);

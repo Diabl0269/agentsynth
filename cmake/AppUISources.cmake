@@ -446,6 +446,12 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroNesting.cpp
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
+    Source/UI/Graph/InsertGap/InsertGap.h
+    Source/UI/Graph/InsertGap/InsertGap.cpp
+    Source/UI/Graph/InsertGap/InsertGapKeyboard.h
+    Source/UI/Graph/InsertGap/InsertGapKeyboard.cpp
+    Source/UI/Layout/InsertGap/InsertGapPlan.h
+    Source/UI/Layout/InsertGap/InsertGapPlan.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorAutoArrange.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModulators.cpp

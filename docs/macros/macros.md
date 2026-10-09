@@ -164,6 +164,16 @@ border shrinks with them, in the same undo step (Cmd+Z puts everything back). On
 rule for "after" and the glide are in [layout.md](../layout/layout.md#making-room-when-something-grows) ("Deleting a
 card") and [animation.md](../layout/animation.md#delete-and-undo-animation).
 
+## Adding a module between others inside an open macro
+
+Dragging a module (from the library, or a member card) between two members of an open macro opens a gap there: the
+members after it slide aside, the border grows to hold them (pushing what it then covers outside the macro, in
+chain), and the module lands between them as a member, one undo step. Deleting it later brings the others back and
+the border shrinks again. So after deleting the Filter from Osc, Filter, VCA (the VCA closes up to the Osc), dropping a
+new module between Osc and VCA slides the VCA back out and puts the module where the Filter was. The rule and the
+motion are in [layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others) and
+[animation.md](../layout/animation.md#adding-a-module-between-others).
+
 ## Deliberate limits
 
 - **A macro is not a saveable library item.** Snippets already cover "save this group and paste it

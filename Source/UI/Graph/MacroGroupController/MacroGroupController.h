@@ -31,6 +31,7 @@
 #include "Modules/MacroPortShape.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
+#include "UI/Graph/InsertGap/InsertGap.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <functional>
@@ -276,9 +277,20 @@ public:
     void reflowForResizedModule(juce::AudioProcessorGraph::NodeID nodeId);
     /** Drops the pushes remembered for every module card. Called where a card's "home" stops meaning anything: an
      *  undo/redo restore, Auto Arrange, a project load or any other graph replacement. */
-    void clearModuleDisplacements() { moduleDisplaced_.clear(); }
+    void clearModuleDisplacements() {
+        moduleDisplaced_.clear();
+        insertGap_.forget();
+    }
     /** Drops the pushes remembered for one module card (it was deleted). */
     void forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId);
+    /** Adds pushes the card `growerKey` caused by landing between others, as if its own growth had made them, so
+     *  deleting or shrinking it offers them their way back. Call inside the landing's undo record. */
+    void notePushesBy(const juce::String& growerKey, const std::vector<synth::Macro::DisplacedNeighbour>& records);
+    /** The canvas refresh after moveUnitBy calls (macro cards, port widgets, output dock, repaint). */
+    void refreshAfterUnitMoves();
+    /** The gap a module dragged between cards opens
+     * (docs/layout/layout.md#making-room-for-a-module-dropped-between-others). */
+    InsertGap& insertGap() noexcept { return insertGap_; }
 
     // ---- Reflow around a delete (MacroGroupControllerDeleteReflow.cpp) ----
     /** Where a deleted card stood inside an open macro, and the neighbours it had pushed aside. */
@@ -502,6 +514,7 @@ private:
     void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh,
                                           MacroPortShape stereoShape = MacroPortShape::Stereo);
     GraphCanvasHost& host_;
+    InsertGap insertGap_{host_, *this};
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 
     juce::Rectangle<int> paintedHullBounds(const juce::String& macroId) const;
