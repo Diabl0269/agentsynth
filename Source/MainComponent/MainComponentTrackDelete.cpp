@@ -162,6 +162,10 @@ void MainComponent::deleteTrack(synth::TrackId track) {
 // Cmd+Backspace on a focused row. Asks first unless the person switched the question off; the deletion itself is
 // deleteTrack, so the menu's one undo step is unchanged. "Don't ask again" counts only when they confirm.
 void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
+    if (const auto selected = tracksActedOnBy(track); selected.size() > 1) {
+        deleteTracksAfterConfirm(selected);
+        return;
+    }
     const auto* existing = timelineDoc.getTrack(track);
     if (existing == nullptr)
         return;

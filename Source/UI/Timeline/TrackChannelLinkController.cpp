@@ -251,6 +251,30 @@ TrackChannelLinkController::buildOwnedMacroColourPicker(synth::TrackId track, ju
         });
 }
 
+std::optional<juce::Colour> TrackChannelLinkController::ownedMacroColour(synth::TrackId track) const {
+    const auto* t = doc_.getTrack(track);
+    const auto* macro = t != nullptr ? macroForTrack(*t) : nullptr;
+    if (macro == nullptr || owningTrackForMacro(macro->id).value != track.value)
+        return std::nullopt;
+    return macro->colour;
+}
+
+void TrackChannelLinkController::setOwnedMacroColour(synth::TrackId track, juce::Colour colour) {
+    const auto* t = doc_.getTrack(track);
+    const auto* macro = t != nullptr ? macroForTrack(*t) : nullptr;
+    if (macro == nullptr || owningTrackForMacro(macro->id).value != track.value)
+        return;
+    if (auto* m = macros().find(macro->id))
+        m->colour = colour;
+    graphEditor_.repaint();
+}
+
+bool TrackChannelLinkController::recordColourEdit(const std::function<void()>& mutation) {
+    undo_.recordGraphTimelineAndMacroChange(graph(), doc_, macros(), mutation);
+    graphEditor_.repaint();
+    return true;
+}
+
 void TrackChannelLinkController::installMacroColourHooks() {
     // The macro card's picker, mirrored onto the owning track. The mirror (resolved once when the picker opens)
     // writes the track with no undo step on every drag frame, and puts the original back on a close with no net
@@ -332,6 +356,22 @@ bool TrackChannelLinkController::toggleLinkedChannelSoloed(synth::TrackId track)
     engine_.setChannelStripSoloed(info.stripId, !strip->isSoloed());
     undo_.pushSnapshotFromCapture(graph());
     return true;
+}
+
+std::optional<bool> TrackChannelLinkController::linkedChannelMuted(synth::TrackId track) const {
+    const auto info = resolve(track);
+    const auto* strip = info.linked ? stripFor(info) : nullptr;
+    if (strip == nullptr || !strip->hasMuteParameter())
+        return std::nullopt;
+    return strip->isMuted();
+}
+
+std::optional<bool> TrackChannelLinkController::linkedChannelSoloed(synth::TrackId track) const {
+    const auto info = resolve(track);
+    const auto* strip = info.linked ? stripFor(info) : nullptr;
+    if (strip == nullptr)
+        return std::nullopt;
+    return strip->isSoloed();
 }
 
 void TrackChannelLinkController::reconcileLinkedTracks() {

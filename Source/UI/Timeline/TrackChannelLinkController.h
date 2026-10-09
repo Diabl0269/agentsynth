@@ -65,6 +65,11 @@ public:
                                                                    juce::PropertiesFile* favourites) override;
     bool toggleLinkedChannelMuted(synth::TrackId track) override;
     bool toggleLinkedChannelSoloed(synth::TrackId track) override;
+    std::optional<juce::Colour> ownedMacroColour(synth::TrackId track) const override;
+    void setOwnedMacroColour(synth::TrackId track, juce::Colour colour) override;
+    bool recordColourEdit(const std::function<void()>& mutation) override;
+    std::optional<bool> linkedChannelMuted(synth::TrackId track) const override;
+    std::optional<bool> linkedChannelSoloed(synth::TrackId track) const override;
     void revealChannelForTrack(synth::TrackId track) override;
 
     /** Runs from MainComponent::reconcileTimelineAfterGraphChange -- the funnel every

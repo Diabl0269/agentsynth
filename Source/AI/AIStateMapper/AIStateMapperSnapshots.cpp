@@ -5,6 +5,7 @@
 // the whole graph on every Cmd+Z. The class itself is declared in AIStateMapper.h.
 
 #include "AIStateMapper.h"
+#include "GraphRebuildBatch.h"
 
 #include "AIStateMapperInternal.h"
 
@@ -299,7 +300,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
     }
 
     if (topologyChanged) {
-        graph.rebuild();
+        GraphRebuildBatch::rebuild(graph);
         graph.sendChangeMessage(); // Suppressed per-op above; announced once here instead.
     }
 

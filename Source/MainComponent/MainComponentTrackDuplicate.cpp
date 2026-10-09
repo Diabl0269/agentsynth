@@ -6,6 +6,7 @@
 // and copying the track's timeline half. MainComponent is declared in MainComponent.h; the rest of
 // its implementation lives in the sibling MainComponent*.cpp units next to this one.
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
@@ -114,6 +115,7 @@ void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies) {
         return it != copies.end() ? std::optional<NodeID>(it->second) : std::nullopt;
     };
     const auto connections = graph.getConnections(); // before any rewiring below
+    bool rewired = false;
     for (const auto& c : connections) {
         const auto from = copyOf(c.source.nodeID);
         const auto to = copyOf(c.destination.nodeID);
@@ -122,9 +124,14 @@ void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies) {
         const auto outside = from ? c.destination.nodeID : c.source.nodeID;
         if (isAttenuverter(graph, outside))
             continue; // modulation legs are handled below
-        graph.addConnection({{from.value_or(c.source.nodeID), c.source.channelIndex},
-                             {to.value_or(c.destination.nodeID), c.destination.channelIndex}});
+        // Deferred: the one rebuild comes after the last cable (and, for a bulk duplicate, after the last track).
+        rewired = graph.addConnection({{from.value_or(c.source.nodeID), c.source.channelIndex},
+                                       {to.value_or(c.destination.nodeID), c.destination.channelIndex}},
+                                      juce::AudioProcessorGraph::UpdateKind::none) ||
+                  rewired;
     }
+    if (rewired)
+        synth::GraphRebuildBatch::rebuild(graph);
     for (const auto& into : connections) {
         const auto to = copyOf(into.destination.nodeID);
         if (!to || copyOf(into.source.nodeID) || !isAttenuverter(graph, into.source.nodeID))
@@ -206,6 +213,10 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
 }
 
 void MainComponent::duplicateTrack(synth::TrackId trackId) {
+    if (const auto selected = tracksActedOnBy(trackId); selected.size() > 1) {
+        duplicateTracksBelow(selected, selected.back(), "Duplicated");
+        return;
+    }
     const auto* source = timelineDoc.getTrack(trackId);
     if (source == nullptr || source->kind == synth::TrackKind::Automation)
         return;

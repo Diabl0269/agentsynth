@@ -647,7 +647,7 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
     auto beforeState = captureGraph(graph);
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     mutation();
 
@@ -679,13 +679,13 @@ void AppUndoManager::recordNodeExtraStateChange(juce::AudioProcessorGraph& graph
     if (synth::sameJson(beforeExtraState, afterExtraState))
         return;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new NodeExtraStateAction(graph, nodeId, beforeExtraState, afterExtraState));
 }
 
 void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                           int oldX, int oldY, int newX, int newY, std::function<void()> postRestore) {
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     // The firstPerform flag will skip the first perform() since the position
     // was already changed by the user dragging on the canvas.
@@ -707,7 +707,7 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
 
     auto afterState = captureGraph(graph);
 
-    undoManager.beginNewTransaction(actionName);
+    beginTransaction(actionName);
     performAction(new SnapshotAction(
         beforeState, afterState, graph, preRestore, postRestore, [this] { fireBeforeRestore(); },
         [this] { fireAfterRestore(); }));
@@ -723,7 +723,7 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     auto afterState = captureGraph(graph);
 
     if (!synth::sameJson(capturedBeforeState, afterState)) {
-        undoManager.beginNewTransaction();
+        beginTransaction();
         performAction(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
     }
 
@@ -739,7 +739,7 @@ bool AppUndoManager::recordGraphChangeSince(juce::AudioProcessorGraph& graph, co
     auto afterState = captureGraph(graph);
     if (synth::sameJson(beforeState, afterState))
         return false;
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(createGraphSnapshotAction(graph, beforeState, afterState));
     return true;
 }
@@ -775,7 +775,7 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
     if (synth::sameJson(beforeState, afterState))
         return false; // no-op mutation: don't create an undo step
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new TimelineSnapshotAction(
         doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
         [this] { fireTracksLeaving(); }));
@@ -791,7 +791,7 @@ bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, co
     if (synth::sameJson(beforeJson, afterJson))
         return false; // no-op edit: don't create an undo step
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson, std::move(postRestore)));
     return true;
 }
@@ -801,7 +801,7 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();
@@ -844,7 +844,7 @@ bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& g
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     const juce::var graphBefore = captureGraph(graph);
     const juce::var midiRemoteBefore = doc.toVar();
@@ -920,7 +920,7 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     // graphBeforeOverride wins when supplied, INSTEAD of a fresh graphToJSON(graph)
     // capture — for a caller whose live gesture already wrote intermediate state into the graph
@@ -957,7 +957,7 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();

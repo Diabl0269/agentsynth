@@ -48,6 +48,6 @@ void AppUndoManager::recordTransportChange(std::function<void(const synth::Trans
     if (before == after)
         return;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new TransportDocAction(std::move(apply), before, after));
 }

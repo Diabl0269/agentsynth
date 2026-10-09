@@ -30,6 +30,7 @@
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkController.h"
+#include "UI/Timeline/TrackColourPicker.h"
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -726,4 +727,36 @@ TEST_F(ChannelFlowTest, AddAudioTrackProducesALinkedTrackWhoseHeaderShowsAndRena
     ASSERT_EQ(mc.getGraphEditor().getMacros().size(), 1);
     EXPECT_EQ(mc.getGraphEditor().getMacros().getAll().front().name, "Vocals")
         << "the whole link is wired through MainComponent, not just this test file's rig";
+}
+
+TEST_F(ChannelFlowTest, ABulkColourPickRecoloursEverySelectedTrackAndTheMacrosTheyOwnInOneUndoStep) {
+    LinkRigApp rig;
+    const juce::uint32 originalSnare = rig.doc.getTrack(rig.snare)->colourArgb;
+    const juce::Colour originalLead = rig.editor.getMacros().find(rig.leadMacroId)->colour;
+    const juce::Colour originalDrums = rig.editor.getMacros().find(rig.drumsMacroId)->colour;
+    ASSERT_FALSE(rig.undo.canUndo());
+
+    synth::ui::TrackColourPickerContext context;
+    context.doc = &rig.doc;
+    context.link = &rig.link;
+    context.targets = {rig.lead, rig.kick, rig.snare}; // lead owns "Lead", kick owns "Drums", snare owns nothing
+    context.performEdit = [&rig](const std::function<void()>& m) { rig.undo.recordTimelineChange(rig.doc, m); };
+    auto picker = synth::ui::buildTrackColourPicker(context, rig.lead);
+    ASSERT_NE(picker, nullptr);
+
+    picker->setCurrentColourForTest(juce::Colours::magenta);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, juce::Colours::magenta) << "live preview too";
+    picker->setCurrentColourForTest(juce::Colours::orange);
+    picker->commitForTest();
+
+    for (const auto id : {rig.lead, rig.kick, rig.snare})
+        EXPECT_EQ(rig.doc.getTrack(id)->colourArgb, juce::Colours::orange.getARGB());
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::orange);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, juce::Colours::orange);
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.doc.getTrack(rig.snare)->colourArgb, originalSnare);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalLead);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, originalDrums);
+    EXPECT_FALSE(rig.undo.canUndo()) << "one Cmd+Z undid every track and macro";
 }

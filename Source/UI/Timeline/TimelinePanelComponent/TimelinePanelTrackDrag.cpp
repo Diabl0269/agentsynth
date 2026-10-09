@@ -22,6 +22,34 @@ int indexOfTrack(const std::vector<synth::TrackId>& ids, synth::TrackId id) {
     const auto it = std::find(ids.begin(), ids.end(), id);
     return it == ids.end() ? -1 : static_cast<int>(it - ids.begin());
 }
+
+// The track order after dropping `selected` as one block (their current relative order) where the dragged row lands:
+// among the tracks that are not selected, the block sits where the dragged row would sit with them alone.
+// `insertion` is the dragged row's final index in `order`.
+std::vector<synth::TrackId> blockDropOrder(const std::vector<synth::TrackId>& order,
+                                           const std::vector<synth::TrackId>& selected, int dragged, int insertion) {
+    const auto isSelected = [&selected](synth::TrackId id) {
+        return std::find(selected.begin(), selected.end(), id) != selected.end();
+    };
+    std::vector<synth::TrackId> rest; // without the dragged row, where `insertion` is an index
+    for (int i = 0; i < static_cast<int>(order.size()); ++i)
+        if (i != dragged)
+            rest.push_back(order[static_cast<size_t>(i)]);
+    int unselectedBefore = 0;
+    for (int i = 0; i < std::min(insertion, static_cast<int>(rest.size())); ++i)
+        if (!isSelected(rest[static_cast<size_t>(i)]))
+            ++unselectedBefore;
+    std::vector<synth::TrackId> unselected;
+    for (const auto id : order)
+        if (!isSelected(id))
+            unselected.push_back(id);
+    std::vector<synth::TrackId> result(unselected.begin(), unselected.begin() + unselectedBefore);
+    for (const auto id : order)
+        if (isSelected(id))
+            result.push_back(id);
+    result.insert(result.end(), unselected.begin() + unselectedBefore, unselected.end());
+    return result;
+}
 } // namespace
 
 // Screen Y in the header list's own coordinates. Converted on every event, so the grab offset
@@ -137,10 +165,20 @@ void TimelinePanelComponent::commitTrackDrag() {
     const int insertion = trackReorder_.getInsertionIndex();
     const auto trackId = reorderTrackIds_[static_cast<size_t>(dragged)];
 
-    if (insertion != dragged && doc_ != nullptr) {
+    // Dragging one of several selected tracks moves the whole selection as a block (still one step).
+    const auto selected = isTrackSelected(trackId) ? selectedTracks() : std::vector<synth::TrackId>{};
+    const auto blockOrder = selected.size() > 1 ? blockDropOrder(reorderTrackIds_, selected, dragged, insertion)
+                                                : std::vector<synth::TrackId>{};
+    const bool blockMoves = !blockOrder.empty() && blockOrder != reorderTrackIds_;
+    if ((blockMoves || (blockOrder.empty() && insertion != dragged)) && doc_ != nullptr) {
         // Same no-host fallback TimelineTrackHeaderComponent::performEdit uses -- a panel driven
         // directly against a doc (no MainComponent/undo wiring) still works.
-        auto mutate = [this, trackId, insertion] { doc_->moveTrack(trackId, insertion); };
+        auto mutate = [this, trackId, insertion, blockOrder] {
+            if (blockOrder.empty())
+                doc_->moveTrack(trackId, insertion);
+            for (size_t i = 0; i < blockOrder.size(); ++i)
+                doc_->moveTrack(blockOrder[i], static_cast<int>(i));
+        };
         if (trackHeaderHost_ != nullptr)
             trackHeaderHost_->performTrackEdit(mutate);
         else
@@ -172,6 +210,7 @@ void TimelinePanelComponent::commitTrackDrag() {
 }
 
 void TimelinePanelComponent::endTrackDrag() {
+    pendingClickCollapse_ = {}; // it was a drag, not a click
     trackCancelKey_.disarm();
     if (trackDragCancelled_) {
         trackDragCancelled_ = false;
@@ -235,13 +274,13 @@ std::vector<TimelinePanelComponent::GlideRow> TimelinePanelComponent::rowsToGlid
     if (anchor == rows.end())
         return {};
     const GlideRow slot = *anchor;
+    auto insertAt = static_cast<size_t>(anchor - rows.begin()) + 1;
+    // One new row per copy (several when a whole selection was duplicated), each growing out of the source's slot.
     for (const auto& track : doc_->getTracks()) {
         const bool known =
             std::any_of(rows.begin(), rows.end(), [&track](const GlideRow& r) { return r.id == track.id; });
-        if (!known && track.kind != synth::TrackKind::Automation) {
-            rows.insert(anchor + 1, {track.id, slot.y, slot.height});
-            break;
-        }
+        if (!known && track.kind != synth::TrackKind::Automation)
+            rows.insert(rows.begin() + static_cast<std::ptrdiff_t>(insertAt++), {track.id, slot.y, slot.height});
     }
     return rows;
 }

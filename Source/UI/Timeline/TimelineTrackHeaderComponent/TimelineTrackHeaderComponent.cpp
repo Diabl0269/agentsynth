@@ -171,34 +171,6 @@ void TimelineTrackHeaderComponent::performEdit(const std::function<void()>& muta
         mutation();
 }
 
-void TimelineTrackHeaderComponent::toggleMuted() {
-    const auto* t = track();
-    if (t == nullptr)
-        return;
-    // docs/mixer/mixer.md#channels-follow-audio-not-tracks (c): a LINKED track's M IS the channel's mute -- one
-    // mute, not two. The surface returns false for a shared channel (or no channel at all), and note gating below is
-    // then exactly what it has always been. The refresh is explicit because a strip write is not a doc change: nothing
-    // notifies the header otherwise.
-    if (auto* link = linkSurface(); link != nullptr && link->toggleLinkedChannelMuted(trackId_)) {
-        refreshFromDoc();
-        return;
-    }
-    const bool next = !t->muted;
-    performEdit([this, next] { doc_.setTrackMuted(trackId_, next); });
-}
-
-void TimelineTrackHeaderComponent::toggleSoloed() {
-    const auto* t = track();
-    if (t == nullptr)
-        return;
-    if (auto* link = linkSurface(); link != nullptr && link->toggleLinkedChannelSoloed(trackId_)) {
-        refreshFromDoc(); // see toggleMuted
-        return;
-    }
-    const bool next = !t->soloed;
-    performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
-}
-
 void TimelineTrackHeaderComponent::toggleArmed() {
     const auto* t = track();
     if (t == nullptr)
@@ -214,6 +186,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
     context.doc = &doc_;
     context.favourites = props != nullptr ? props->getUserSettings() : nullptr;
     context.link = linkSurface();
+    context.targets = bulkTargets();
     context.performEdit = [safeThis](const std::function<void()>& mutation) {
         if (auto* self = safeThis.getComponent())
             self->performEdit(mutation);
@@ -426,8 +399,11 @@ void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
 
 void TimelineTrackHeaderComponent::mouseUp(const juce::MouseEvent& e) {
     endDragCursor(*this);
-    if (!draggingRow_)
-        return; // a plain click that never crossed the threshold — nothing to finish
+    if (!draggingRow_) { // a plain click that never crossed the threshold — nothing to finish
+        if (onRowClickReleased)
+            onRowClickReleased();
+        return;
+    }
 
     // Every member write happens BEFORE onRowDragEnded — see that callback's own ordering-hazard
     // comment: it can (and normally does) destroy this component before this function returns.
@@ -507,6 +483,8 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
             host_->duplicateTrack(trackId_);
         return true;
     }
+    if (handleTrackClipboardKey(key))
+        return true;
     // Ctrl+E shows THIS row's module (the same request as its button); a section header has no module of its own.
     if (!isSectionHeader() && matchesAction(key, "timelineShowFocusedTrackModule", kShowModuleKey)) {
         if (host_ != nullptr)
@@ -639,7 +617,9 @@ void TimelineTrackHeaderComponent::showBindingMenu() {
 void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
     if (host_ == nullptr)
         return;
-    if (menuId == kDeleteTrackMenuId)
+    if (menuId == kDeleteTrackMenuId && bulkTargets().size() > 1)
+        host_->deleteTrackAfterConfirm(trackId_); // every selected track, after one question
+    else if (menuId == kDeleteTrackMenuId)
         host_->deleteTrack(trackId_);
     else if (menuId == kDuplicateTrackMenuId)
         host_->duplicateTrack(trackId_);
