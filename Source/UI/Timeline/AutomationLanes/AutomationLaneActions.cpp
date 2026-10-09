@@ -5,7 +5,7 @@
 #include "Timeline/AutomationKernel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <cmath>
 

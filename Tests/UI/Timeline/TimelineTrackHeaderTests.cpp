@@ -16,7 +16,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

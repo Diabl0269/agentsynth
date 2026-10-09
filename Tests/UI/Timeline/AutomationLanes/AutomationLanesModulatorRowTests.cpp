@@ -12,7 +12,7 @@
 #include "UI/Theme/Theme.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <map>
 
 using namespace automation_lanes_test;

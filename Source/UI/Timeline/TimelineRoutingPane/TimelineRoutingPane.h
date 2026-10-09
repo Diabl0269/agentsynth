@@ -7,7 +7,7 @@
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <functional>
 #include <memory>
 #include <vector>

@@ -28,7 +28,7 @@
 #include "UI/Mixer/MixerMeterScale.h"
 #include "UI/Theme/Theme.h"
 #include "UI/Timeline/ChannelChipComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkController.h"
 #include <gtest/gtest.h>
 #include <memory>

@@ -10,7 +10,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 
 namespace {

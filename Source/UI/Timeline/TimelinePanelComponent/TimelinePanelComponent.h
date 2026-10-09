@@ -23,7 +23,7 @@
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include "UI/Timeline/TrackSelectionModel.h"

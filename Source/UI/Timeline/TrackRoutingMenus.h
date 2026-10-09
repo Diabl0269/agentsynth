@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <functional>
 #include <memory>
 #include <vector>

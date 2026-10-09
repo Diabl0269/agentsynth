@@ -78,8 +78,9 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRulerComponent.cpp
     Source/UI/Timeline/TimelinePlayheadOverlay.h
     Source/UI/Timeline/TimelinePlayheadOverlay.cpp
-    Source/UI/Timeline/TimelineTrackHeaderComponent.h
-    Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponentPaint.cpp
     Source/UI/Timeline/ChannelChipComponent.h
     Source/UI/Timeline/ChannelChipComponent.cpp
     Source/UI/Timeline/TrackRoutingMenus.h
