@@ -4,6 +4,7 @@
 
 #include "Auth/InMemoryTokenStore.h"
 #include "FadeVisibilityTestGuard.h"
+#include "NativeWindowTestGuard.h"
 #include "UI/Assistant/AccountRow.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include <gtest/gtest.h>
@@ -44,6 +45,8 @@ TEST(FadeVisibilityTest, AFadeOutTakesTheKeyboardFromTheLeavingControl) {
     FadeAnimateGuard guard;
     Rig rig;
     rig.child.setWantsKeyboardFocus(true);
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     rig.parent.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     rig.parent.setVisible(true);
     FadeVisibility fade{{&rig.child}};

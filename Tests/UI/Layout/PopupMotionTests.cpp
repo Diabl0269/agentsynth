@@ -3,6 +3,7 @@
 // and the look-and-feel hooks that hand windows to the engine. No real window is opened: every
 // component here is peer-less, which is also the contract that keeps headless runs untouched.
 
+#include "NativeWindowTestGuard.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -451,26 +452,6 @@ namespace {
 struct RedWindow : juce::Component {
     void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::red); }
 };
-
-// The label-gated ASAN job's Xvfb display rejects a temporary native window with an X11 BadAtom error, which ends
-// the whole test process (as the lane point tests once did). These tests need a real window, so
-// they skip there; every other job still runs them.
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define POPUP_MOTION_TESTS_ASAN 1
-#endif
-#endif
-#if defined(__SANITIZE_ADDRESS__) && !defined(POPUP_MOTION_TESTS_ASAN)
-#define POPUP_MOTION_TESTS_ASAN 1
-#endif
-
-bool nativeWindowsAbortHere() {
-#if JUCE_LINUX && defined(POPUP_MOTION_TESTS_ASAN)
-    return true;
-#else
-    return false;
-#endif
-}
 
 std::unique_ptr<RedWindow> showNativeWindow() {
     auto window = std::make_unique<RedWindow>();
