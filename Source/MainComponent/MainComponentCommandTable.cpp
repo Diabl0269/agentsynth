@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Transport/MarkerJump.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace {
@@ -599,6 +600,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
         {AppCommands::locateMaster, "Go to Output", "Select Master (or Audio Output) and frame the whole output dock",
          "View", "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
          [](MainComponent& m) { return m.performLocateMaster(); }},
+        {AppCommands::renameSelectedModule, "Rename Module", "Rename the selected module card", "Edit",
+         "renameSelectedModule",
+         [](const MainComponent& m) { return m.graphEditor.getCardKeyboard().canRenameSelectedModule(); },
+         [](MainComponent& m) { return m.graphEditor.getCardKeyboard().renameSelectedModule(); }},
+        {AppCommands::replaceSelectedModule, "Replace Module With...",
+         "Swap the selected module for another type or hosted plugin", "Edit", "replaceSelectedModule",
+         [](const MainComponent& m) { return m.graphEditor.getCardKeyboard().canReplaceSelectedModule(); },
+         [](MainComponent& m) { return m.graphEditor.getCardKeyboard().replaceSelectedModule(); }},
         {AppCommands::toggleLibrary,
          "Toggle Module Library",
          "Toggle the module library sidebar",

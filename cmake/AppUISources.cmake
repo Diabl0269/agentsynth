@@ -105,6 +105,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRowLayout.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp
+    Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.cpp
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h

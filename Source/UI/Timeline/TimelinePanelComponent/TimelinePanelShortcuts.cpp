@@ -34,6 +34,7 @@ std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::g
         targets.emplace_back(shapeStrip_.getButton(shape), "timelineShape" + juce::String(drawShapeName(shape)));
     targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
     targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
+    targets.emplace_back(&addTrackButton_, "openAddTrackMenu");
     return targets;
 }
 

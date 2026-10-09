@@ -1,7 +1,9 @@
 // Concern: per-feature regression coverage for individually-added shortcut actions (minimap,
 // macro group/ungroup/collapse, piano-roll scale toggles, snap/quantise, export-patch-only,
 // focus-region, timeline focused-track mute/solo/arm).
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
+#include <map>
 
 // ---------------------------------------------------------------------------
 // Minimap toggle
@@ -581,4 +583,55 @@ TEST_F(ShortcutManagerTest, TogglePlaybackKeepsItsSpaceBindingAfterTheAliasWasAd
     const auto space = manager.getBinding("togglePlayback");
     EXPECT_EQ(space.getKeyCode(), juce::KeyPress::spaceKey);
     EXPECT_TRUE(space.getModifiers() == juce::ModifierKeys());
+}
+
+// ---------------------------------------------------------------------------
+// Rename / Replace the selected module card
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, RenameSelectedModuleDefaultsToF2AndReplaceToCmdAltR) {
+    const auto rename = manager.getBinding("renameSelectedModule");
+    EXPECT_EQ(rename.getKeyCode(), juce::KeyPress::F2Key);
+    EXPECT_EQ(rename.getModifiers().getRawFlags() & juce::ModifierKeys::allKeyboardModifiers, 0);
+
+    const auto replace = manager.getBinding("replaceSelectedModule");
+    EXPECT_EQ(replace.getKeyCode(), 'r');
+    EXPECT_TRUE(replace.getModifiers().isCommandDown());
+    EXPECT_TRUE(replace.getModifiers().isAltDown());
+    EXPECT_FALSE(replace.getModifiers().isShiftDown());
+
+    EXPECT_EQ(AppCommands::getCommandForAction("renameSelectedModule"), AppCommands::renameSelectedModule);
+    EXPECT_EQ(AppCommands::getCommandForAction("replaceSelectedModule"), AppCommands::replaceSelectedModule);
+    EXPECT_EQ(ShortcutManager::getCategory("renameSelectedModule"), ShortcutCategory::Graph);
+    EXPECT_EQ(ShortcutManager::getCategory("replaceSelectedModule"), ShortcutCategory::Graph);
+}
+
+TEST_F(ShortcutManagerTest, OnTheMacTableNoOtherActionSharesTheRenameOrReplaceChordAndRepeatAndRecordKeepTheirs) {
+    if (ShortcutManager::hostDefaultsPlatform() != ShortcutManager::DefaultsPlatform::Mac)
+        GTEST_SKIP() << "the Mac chord table needs Cmd and Ctrl to be distinct keys";
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+
+    EXPECT_EQ(manager.getActionsForKeyPress(manager.getBinding("renameSelectedModule")),
+              juce::StringArray("renameSelectedModule"));
+    EXPECT_EQ(manager.getActionsForKeyPress(manager.getBinding("replaceSelectedModule")),
+              juce::StringArray("replaceSelectedModule"));
+    EXPECT_EQ(manager.getBinding("repeatSelection"), juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(manager.getBinding("transportRecord"), juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0));
+}
+
+TEST_F(ShortcutManagerTest, OnTheOtherTableEveryDefaultChordIsStillUniqueWithinItsCategory) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    std::map<std::pair<int, juce::String>, juce::String> seen;
+    for (const auto& id : manager.getActionIds()) {
+        const auto binding = manager.getBinding(id);
+        if (!binding.isValid())
+            continue;
+        auto flags = binding.getModifiers().getRawFlags();
+        if ((flags & juce::ModifierKeys::commandModifier) != 0) // off the Mac, Cmd is Ctrl
+            flags = (flags & ~juce::ModifierKeys::commandModifier) | juce::ModifierKeys::ctrlModifier;
+        const auto chord = juce::String(binding.getKeyCode()) + "/" + juce::String(flags);
+        const auto key = std::make_pair(static_cast<int>(ShortcutManager::getCategory(id)), chord);
+        const auto [it, inserted] = seen.emplace(key, id);
+        EXPECT_TRUE(inserted) << id << " shares its chord with " << it->second;
+    }
 }

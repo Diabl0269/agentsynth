@@ -14,7 +14,7 @@
 
 TEST(TimelinePanelComponentTest, AddTrackButtonCarriesATooltip) {
     synth::ui::TimelinePanelComponent panel;
-    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a MIDI or Audio track");
+    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a track or marker; type to search");
 }
 
 // Nothing inside the panel assumes the default height: at 2x, every extra pixel goes to the lanes.

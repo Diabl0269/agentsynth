@@ -59,6 +59,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"focusLibrary", ShortcutCategory::General},
         {"focusLibrarySearch", ShortcutCategory::General},
         {"openContextMenu", ShortcutCategory::General},
+        {"openAddTrackMenu", ShortcutCategory::General},
         // Transport verbs promoted to command-dispatched actions (the prerequisite for
         // docs/control/midi-remote.md#action-targets) -- deliberately UNBOUND by default (see resetToDefaults()),
         // unlike every other row above. They exist as command/MIDI-Remote targets first; a
@@ -94,6 +95,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"collapseMacro", ShortcutCategory::Graph},
         {"foldAndPackMacros", ShortcutCategory::Graph},
         {"locateMaster", ShortcutCategory::Graph},
+        {"renameSelectedModule", ShortcutCategory::Graph},
+        {"replaceSelectedModule", ShortcutCategory::Graph},
         // The canvas's card keys -- consulted by CanvasCardKeyboard::keyPressed only.
         {"canvasSelectCardLeft", ShortcutCategory::Graph},
         {"canvasSelectCardRight", ShortcutCategory::Graph},

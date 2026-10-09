@@ -159,3 +159,32 @@ bool CanvasCardKeyboard::enterSelectedCard() {
     auto* card = findCard(editor_, selected.back());
     return card != nullptr && card->isVisible() && card->enterFromKeyboard();
 }
+
+ModuleComponent* CanvasCardKeyboard::getSingleSelectedCard() const {
+    const auto selected = editor_.getSelectedNodes();
+    return selected.size() == 1 ? findCard(editor_, selected.front()) : nullptr;
+}
+
+bool CanvasCardKeyboard::canRenameSelectedModule() const {
+    auto* card = getSingleSelectedCard();
+    return card != nullptr && card->isVisible() && card->canRename();
+}
+
+bool CanvasCardKeyboard::canReplaceSelectedModule() const {
+    auto* card = getSingleSelectedCard();
+    return card != nullptr && card->isVisible() && card->canReplace();
+}
+
+bool CanvasCardKeyboard::renameSelectedModule() {
+    if (!canRenameSelectedModule())
+        return false;
+    getSingleSelectedCard()->beginTitleRename();
+    return true;
+}
+
+bool CanvasCardKeyboard::replaceSelectedModule() {
+    if (!canReplaceSelectedModule())
+        return false;
+    getSingleSelectedCard()->beginReplace();
+    return true;
+}

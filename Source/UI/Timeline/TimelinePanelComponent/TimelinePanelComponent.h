@@ -517,8 +517,10 @@ public:
     bool isAddTrackButtonFocused() const;
     /** Keys for "+ Track" while it holds focus; false for any other focus owner or an unclaimed key. */
     bool handleAddTrackButtonKey(const juce::KeyPress& key);
-    /** The "+ Track" menu's close callback (rationale beside the definition). */
+    /** The "+ Track" picker's close callback (rationale beside the definition). */
     void finishAddTrackMenu(int result, bool openedFromKeyboard);
+    /** Focuses "+ Track" and opens its searchable picker, as the Add Track shortcut does. Message thread only. */
+    void openAddTrackMenuFromShortcut();
     /** Headless stand-in for real focus (no native window): focus moves are recorded, not grabbed. */
     void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
 
@@ -535,13 +537,15 @@ public:
     std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
-    /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
-     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`. Protected virtual so a
-     *  headless test can override it rather than crash on the display-less menu window -- see its
+    /** Opens the "+ Track" button's searchable picker (MIDI Track / Audio Track / Instrument Tracks / plugins /
+     *  presets / Add Marker). The default implementation launches a call-out. Protected virtual so a
+     *  headless test can override it rather than crash on the display-less window -- see its
      *  definition in TimelinePanelTrackHeaders.cpp. */
     virtual void openAddTrackMenu();
 
 private:
+    void showAddTrackPickerFor(bool fromKeyboard);
+
     // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND the
     // clip-lane area's refresh (prunes the clip selection of anything the mutation removed).
     void timelineChanged(const synth::TimelineDoc& doc) override;

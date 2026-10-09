@@ -151,6 +151,15 @@ public:
      *  synthesising a double-click. No-op for an Attenuverter (it has no header). */
     void beginTitleRename();
 
+    /** True when the card has a header title to rename (not an Attenuverter or a macro port). */
+    bool canRename() const;
+
+    /** True when "Replace with..." applies: a real module that is not the Audio Input/Output singleton. */
+    bool canReplace() const;
+
+    /** Opens the "Replace with..." picker over the card. No-op unless canReplace(). */
+    void beginReplace();
+
     /** Closes the inline editor, committing the typed text or discarding it. */
     void finishTitleRename(bool commit);
 

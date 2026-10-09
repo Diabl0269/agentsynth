@@ -43,6 +43,10 @@ public:
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);
     ~ModMatrixPicker() override;
 
+    /** Runs once from the destructor, however the picker closed (a pick, Escape, a click away): the launcher's cue
+     *  to hand keyboard focus back. After a pick it runs after `onChoose`. */
+    std::function<void()> onClosed;
+
     void resized() override;
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;

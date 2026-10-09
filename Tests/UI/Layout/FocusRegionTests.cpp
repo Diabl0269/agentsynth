@@ -22,7 +22,9 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -545,4 +547,25 @@ TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsReg
 
     mc.getBottomDock().getTimelineHost().setDetached(false);
     EXPECT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr) << "redocking must re-register it";
+}
+
+// The Add Track shortcut shows the Timeline and opens the "+ Track" picker (headless: through the launcher's hook).
+TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensThePicker) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
+    ASSERT_TRUE(commandIsActive(mc, AppCommands::openAddTrackMenu));
+
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p) {
+        picker = std::move(p);
+    };
+    const bool ran = mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_TRUE(ran);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a closed Timeline is opened first";
+    ASSERT_NE(picker, nullptr);
+    const auto texts = picker->getVisibleItemTextsForTest();
+    EXPECT_NE(std::find(texts.begin(), texts.end(), juce::String("MIDI Track")), texts.end());
 }

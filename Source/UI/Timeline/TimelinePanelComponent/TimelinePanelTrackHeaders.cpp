@@ -6,6 +6,7 @@
 // TimelinePanelComponent.h; sibling TimelinePanel*.cpp files in this directory hold the
 // rest of the class.
 
+#include "AddTrackPicker.h"
 #include "TimelinePanelComponent.h"
 
 #include "AppUndoManager.h"
@@ -270,29 +271,47 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 }
 
 // Protected virtual for the same display-less-runner reason as
-// `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
-// positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
-// today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
-// seam), but a test that clicked the button would crash exactly the way the marker menu did -- so
-// the override point exists before someone writes that test.
-void TimelinePanelComponent::openAddTrackMenu() {
+// `TimelineRulerComponent::openMarkerContextMenu`: opening a call-out needs a display to be positioned
+// on. Tests reach the picker through addTrackPickerHookForTest() instead.
+void TimelinePanelComponent::openAddTrackMenu() { showAddTrackPickerFor(isAddTrackButtonFocused()); }
+
+// The shortcut lands focus on "+ Track" first, then opens the picker as a keyboard open. Focus is passed on
+// explicitly because a real grab may not have taken effect by the time the picker is built.
+void TimelinePanelComponent::openAddTrackMenuFromShortcut() {
+    focusAddTrackButton();
+    showAddTrackPickerFor(true);
+}
+
+// Builds the menu (the one source of the entries and of the build-time snapshots), adds "Create Channels", and shows
+// it flattened as a searchable picker. A pick resolves by the menu item's id, exactly as a menu click did.
+void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
     juce::PopupMenu menu = buildAddTrackMenu();
 
     // docs/mixer/mixer.md#creating-channels-in-an-existing-project: disabled rather than hidden when
-    // every track already has a channel (or there are no tracks at all) — a hidden entry would look like the feature
+    // every track already has a channel (or there are no tracks at all) -- a hidden entry would look like the feature
     // disappeared; a disabled one still tells the user it exists and why it's greyed out.
     menu.addSeparator();
     const bool canCreateChannels = trackHeaderHost_ != nullptr && trackHeaderHost_->hasTracksNeedingChannels();
     menu.addItem(kCreateChannelsMenuId, "Create Channels", canCreateChannels);
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
-    // Opened from the keyboard, the menu hands focus back to "+ Track" when it closes (finishAddTrackMenu).
-    const bool fromKeyboard = isAddTrackButtonFocused();
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_),
-                       [safeThis, fromKeyboard](int result) {
-                           if (auto* self = safeThis.getComponent())
-                               self->finishAddTrackMenu(result, fromKeyboard);
-                       });
+    // finishAddTrackMenu hands focus back after a pick; a close without one (Escape, a click away) does it here.
+    // The flag keeps it to exactly one hand-back.
+    auto picked = std::make_shared<bool>(false);
+    auto picker = synth::ui::buildAddTrackPicker(
+        synth::ui::flattenAddTrackMenu(menu),
+        [safeThis, picked, fromKeyboard](int id) {
+            *picked = true;
+            if (auto* self = safeThis.getComponent())
+                self->finishAddTrackMenu(id, fromKeyboard);
+        },
+        [safeThis, picked, fromKeyboard] {
+            if (*picked || !fromKeyboard)
+                return;
+            if (auto* self = safeThis.getComponent())
+                self->finishAddTrackMenu(0, true);
+        });
+    synth::ui::showAddTrackPicker(addTrackButton_, std::move(picker));
 }
 
 // Picked or dismissed, a menu opened from the keyboard hands focus back to "+ Track"; otherwise focus

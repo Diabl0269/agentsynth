@@ -181,6 +181,19 @@ juce::String drawShapeActionName(const juce::String& actionId) {
     return {};
 }
 
+// Add Track and the selected-module Rename / Replace actions.
+juce::String addRenameReplaceActionName(const juce::String& actionId) {
+    if (actionId == "foldAndPackMacros")
+        return "Fold and Pack Macros";
+    if (actionId == "openAddTrackMenu")
+        return "Add Track...";
+    if (actionId == "renameSelectedModule")
+        return "Rename Module";
+    if (actionId == "replaceSelectedModule")
+        return "Replace Module With...";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -216,10 +229,10 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Ungroup Macro";
     if (actionId == "collapseMacro")
         return "Collapse / Expand Macro";
-    if (actionId == "foldAndPackMacros")
-        return "Fold and Pack Macros";
     if (actionId == "locateMaster")
         return "Go to Output";
+    if (const auto name = addRenameReplaceActionName(actionId); name.isNotEmpty())
+        return name;
     if (actionId == "toggleLibrary")
         return "Toggle Module Library";
     // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a

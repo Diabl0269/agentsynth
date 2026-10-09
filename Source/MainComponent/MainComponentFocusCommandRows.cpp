@@ -64,6 +64,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              return synth::ui::openContextMenuForFocusedComponent(m.getFocusedComponentForMenu());
          }},
+        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "+ Track" picker.
+        {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus + Track and open its search",
+         "General", "openAddTrackMenu", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
+         [](MainComponent& m) {
+             m.focusRegions_.focusRegionById("timeline");
+             m.timelinePanel.openAddTrackMenuFromShortcut();
+             return true;
+         }},
         // Registered unconditionally (unlike checkForUpdates below) -- neither command needs OS
         // integration, only ownedAudioEngine != nullptr, which is fixed for this instance's whole
         // lifetime.

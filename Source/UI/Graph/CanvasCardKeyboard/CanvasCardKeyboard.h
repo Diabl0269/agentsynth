@@ -5,6 +5,7 @@
 
 class AppUndoManager;
 class GraphEditor;
+class ModuleComponent;
 class ShortcutManager;
 
 // The canvas's card keys: the arrows select the nearest card in that direction, Alt+arrows move
@@ -34,6 +35,17 @@ public:
     /** Moves keyboard focus to the first control of the selected card. False with no selection
      *  or a card that has no control. */
     bool enterSelectedCard();
+
+    /** The card of the one selected module, or null for no selection, several, or a node with no card. */
+    ModuleComponent* getSingleSelectedCard() const;
+
+    /** Whether the single selected card can be renamed / replaced (drives the command's enablement). */
+    bool canRenameSelectedModule() const;
+    bool canReplaceSelectedModule() const;
+
+    /** Open the selected card's inline title editor / "Replace with..." picker. False when not allowed. */
+    bool renameSelectedModule();
+    bool replaceSelectedModule();
 
 private:
     bool matches(const juce::KeyPress& key, const char* actionId, const juce::KeyPress& fallback) const;

@@ -4,30 +4,45 @@ The `"+ Track"` button at the top of the timeline panel's header column, and eve
 The header rows it creates are [tracks](tracks.md); the channel chains it builds are
 [`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel).
 
-## The menu
+## The picker
 
 `"+ Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
 and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
-[shortcuts](../control/shortcuts.md#timeline)). It carries the tooltip *"Add a MIDI or Audio track"* so the menu is not a surprise, and
-opens:
+[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add Track...** shortcut (Ctrl+T on
+macOS, Ctrl+Alt+T elsewhere, rebindable). Pressing it, or the shortcut, opens a **searchable picker** in a call-out
+under the button: the same shared list as a module card's "Replace with..." (`synth::ui::ModMatrixPicker`). The search
+field has focus, so typing filters at once (all words, any order); Up/Down move, Return picks the first match until
+moved, Escape closes. The rows sit under these headers:
 
-- **MIDI Track** / **Audio Track**
-- an **Instrument Track** submenu — **Oscillator** / **Wavetable** / **Sampler**, poly variants,
-  then a **Plugin** sub-submenu
-- the saved track presets for each kind
-- a separator, then **Add Marker**
+- **Tracks**: MIDI Track / Audio Track
+- **Instrument Tracks**: Oscillator / Wavetable / Sampler and the poly variants
+- **Plugins**: the scanned instrument plugins (a greyed "Scanning for plugins..." or "No instrument plugins found" row when there are none)
+- one header per saved track preset kind (**Audio Track from Preset**, **Instrument Track from Preset**, **Bus from Preset**)
+- **More**: Insert Track Preset from File..., Add Marker, Create Channels (greyed, with the reason, when every track already has a channel)
+
+`TimelinePanelComponent::buildAddTrackMenu()` is still the single source of the entries and of the build-time
+snapshots below. `openAddTrackMenu()` builds that `juce::PopupMenu`, appends Create Channels, and
+`synth::ui::flattenAddTrackMenu` (`AddTrackPicker.h`) turns it into picker rows: each row's id IS the menu item's id,
+so a pick calls `finishAddTrackMenu(id, ...)` -> `applyAddTrackMenuChoice(id)` unchanged. The submenu title becomes the
+header, and the preset kinds and plugins carry extra search words ("plugin instrument vst au", "preset", "marker flag").
 
 Menu ids are `TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` /
 `kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` / `kAddInstrumentSamplerMenuId`
 / `kAddMarkerMenuId`. The MIDI and Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
-`addAudioTrack()`); each Instrument submenu entry calls `addInstrumentTrack(instrumentModuleType)`
+`addAudioTrack()`); each Instrument entry calls `addInstrumentTrack(instrumentModuleType)`
 with its module type string.
 
-`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them — the
-same split the binding and context menus use, since a `juce::PopupMenu` never runs in the test
-binary. `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
-`simulateAddInstrumentTrackClick(menuId)` call straight into it. `openAddTrackMenu()` is the
-`protected virtual` that creates the real window — see
+**Focus.** Opened from the keyboard (the button was focused, or the shortcut ran), the picker hands focus back to
+`"+ Track"` when it closes: `finishAddTrackMenu` does it after a pick, and the picker's `onClosed` (run from its
+destructor) does it after Escape or a click away, once only. The shortcut itself is
+`TimelinePanelComponent::openAddTrackMenuFromShortcut()`: it focuses the button, then opens the picker as a keyboard open;
+`MainComponent` runs it after showing the Timeline.
+
+`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them. A picker never runs
+headless in the test binary, so `synth::ui::test_hooks::addTrackPickerHookForTest()` receives the built picker instead of
+a call-out (`TimelineAddTrackPickerTests.cpp`). `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
+`simulateAddInstrumentTrackClick(menuId)` call straight into the seam. `openAddTrackMenu()` is the
+`protected virtual` that opens the real picker; see
 [ruler](ruler.md#opening-a-menu-is-a-protected-virtual) for why that seam exists.
 
 ## Menu options resolve against a build-time snapshot
@@ -91,7 +106,7 @@ build, matched against `synth::branding::kProductName` / `kCompanyName` rather t
 literal, so it can never offer to host itself. The library sidebar goes through a different
 collector and is unaffected.
 
-Opening the menu (`buildAddTrackMenu()`, called by `openAddTrackMenu()` before it shows the result,
+Opening the picker (`buildAddTrackMenu()`, called by `openAddTrackMenu()` before it flattens the result,
 and the headless test seam for inspecting the built `juce::PopupMenu`'s contents) calls
 `TrackHeaderHost::ensureInstrumentPluginsScanned()` first, which `MainComponent` wires straight to
 its existing `maybeStartEagerPluginScan()` — the SAME hosted-mode-guarded entry point the eager
