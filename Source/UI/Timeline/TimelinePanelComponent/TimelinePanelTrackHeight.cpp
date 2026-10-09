@@ -9,6 +9,8 @@
 
 #include "TimelinePanelComponent.h"
 
+#include <set>
+
 namespace synth::ui {
 
 int TimelinePanelComponent::trackIndexOf(synth::TrackId track) const {
@@ -30,6 +32,46 @@ void TimelinePanelComponent::relayoutTrackRows() {
 
 // The drag previews in the clip lanes' layout and writes the doc once, on release: a doc write per
 // mouse move would republish the audio snapshot and dirty the project on every pixel.
+// A track's resize strip sits on the bottom of its own row, but the row's open lane and modulator rows hang
+// beneath it, so the seam above the next track is the lane block's bottom, not the row's. A second strip
+// along that edge does the same thing (same name, tooltip, drag and double-click), so the edge a person
+// sees above the next track resizes the track it belongs to whether or not lanes are open. It is placed
+// after the lane headers and brought to the front so no lane row takes its hits.
+void TimelinePanelComponent::placeLaneSeamHandles(const TimelineRowLayout& layout) {
+    constexpr int kSeamThickness = 5;
+    const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
+    std::set<synth::TrackId> live;
+    for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
+        auto* header = trackHeaderList_.headers.getUnchecked(i);
+        const auto id = header->getTrackId();
+        auto& ownHandle = header->getHeightHandle();
+        const int extra = layout.trackExtraHeight(i);
+        if (extra <= 0 || !ownHandle.isVisible())
+            continue;
+        live.insert(id);
+        auto& slot = laneSeamHandles_[id];
+        if (slot == nullptr) {
+            slot = std::make_unique<EdgeResizeHandle>(EdgeResizeHandle::Axis::Vertical);
+            slot->setComponentID("trackHeightHandleBelowLanes");
+            slot->onDragStarted = [this, id] { beginTrackHeightDrag(id); };
+            slot->onDragged = [this, id](int delta) { dragTrackHeight(id, delta); };
+            slot->onDragEnded = [this, id] { endTrackHeightDrag(id); };
+            slot->onResetRequested = [this, id] { stepTrackHeight(id, 0); };
+            trackHeaderList_.addAndMakeVisible(*slot);
+        }
+        slot->setTitle(ownHandle.getTitle());
+        slot->setTooltip(ownHandle.getTooltip());
+        slot->setBounds(0, header->getBottom() + extra - kSeamThickness, width, kSeamThickness);
+        slot->toFront(false);
+    }
+    for (auto it = laneSeamHandles_.begin(); it != laneSeamHandles_.end();) {
+        if (live.count(it->first) == 0)
+            it = laneSeamHandles_.erase(it);
+        else
+            ++it;
+    }
+}
+
 void TimelinePanelComponent::beginTrackHeightDrag(synth::TrackId track) {
     const int index = trackIndexOf(track);
     if (index < 0)

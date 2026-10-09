@@ -95,6 +95,71 @@ TEST(TimelineTrackHeightTest, DraggingARowsBottomEdgeResizesOnlyThatTrackInOneUn
     EXPECT_EQ(f.layout().trackRowHeight(1), base);
 }
 
+namespace {
+
+// A press, drag and release at `at` (panel coordinates) delivered to whatever a real click there hits,
+// with positions re-derived per event the way JUCE delivers them.
+void realDragAt(SizingPanel& f, juce::Point<int> at, int delta, int steps = 4) {
+    auto* hit = f.componentAt(at);
+    ASSERT_NE(hit, nullptr);
+    const auto local = [&](float dy) { return hit->getLocalPoint(&f.panel, at.toFloat() + juce::Point<float>(0, dy)); };
+    hit->mouseDown(makeClickEvent(*hit, local(0.0f), leftButton()));
+    for (int i = 1; i <= steps; ++i)
+        hit->mouseDrag(makeDragEvent(*hit, local((float)(delta * i) / (float)steps), local(0.0f), leftButton()));
+    hit->mouseUp(makeDragEvent(*hit, local((float)delta), local(0.0f), leftButton()));
+}
+
+// The seam above the track below: the bottom rows of track `i`'s whole block (its row plus open lane and
+// modulator rows), in panel coordinates. With no lanes open that is the row's own resize strip.
+std::vector<juce::Point<int>> seamPoints(SizingPanel& f, int i) {
+    const auto layout = f.layout();
+    auto& header = f.header(i);
+    const int bottom = header.getY() + layout.trackRowHeight(i) + layout.trackExtraHeight(i);
+    std::vector<juce::Point<int>> pts;
+    for (int y = bottom - 5; y < bottom; ++y)
+        pts.push_back(f.panel.getLocalPoint(&header, juce::Point<int>(header.getWidth() / 2, y)));
+    return pts;
+}
+
+// Each row of the seam lands on a resize strip (with its resize cursor), and a real drag from the last
+// one, delivered to whatever a click there hits, resizes that track.
+void expectSeamResizes(SizingPanel& f, int track) {
+    for (const auto& pt : seamPoints(f, track)) {
+        auto* hit = f.componentAt(pt);
+        auto* handle = dynamic_cast<EdgeResizeHandle*>(hit);
+        ASSERT_NE(handle, nullptr) << "track " << track << " y=" << pt.y << " is not on a resize strip";
+        EXPECT_EQ(handle->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::UpDownResizeCursor));
+    }
+    const int before = f.layout().trackRowHeight(track);
+    realDragAt(f, seamPoints(f, track).back(), 30);
+    EXPECT_EQ(f.layout().trackRowHeight(track), before + 30) << "track " << track;
+}
+
+} // namespace
+
+TEST(TimelineTrackHeightTest, TheSeamAboveTheNextTrackResizesWhetherOrNotLanesAreOpen) {
+    SizingPanel f;
+    f.addLane(f.bass, "cutoff");
+    expectSeamResizes(f, 0); // folded
+    f.panel.setTrackAutomationExpanded(f.bass, true);
+    ASSERT_GT(f.layout().trackExtraHeight(0), 0);
+    expectSeamResizes(f, 0); // a lane row sits right above the next track
+    f.panel.setTrackAutomationExpanded(f.bass, false);
+    expectSeamResizes(f, 0); // folded again: still works
+}
+
+TEST(TimelineTrackHeightTest, ALaneBlocksSeamStripCarriesTheSameNameAndResetsOnDoubleClick) {
+    SizingPanel f;
+    f.addLane(f.bass, "cutoff");
+    f.panel.setTrackAutomationExpanded(f.bass, true);
+    ASSERT_TRUE(f.doc.setTrackHeightScale(f.bass, 2.0));
+    auto* strip = dynamic_cast<EdgeResizeHandle*>(f.componentAt(seamPoints(f, 0).back()));
+    ASSERT_NE(strip, nullptr);
+    EXPECT_EQ(strip->getTitle(), "Resize Bass");
+    strip->mouseDoubleClick(makeClickEvent(*strip, strip->getLocalBounds().getCentre().toFloat(), leftButton()));
+    EXPECT_EQ(f.doc.getTrack(f.bass)->heightScale, 1.0);
+}
+
 TEST(TimelineTrackHeightTest, TheDragPreviewsWithoutTouchingTheDocUntilRelease) {
     SizingPanel f;
     const int base = f.layout().trackRowHeight(0);
