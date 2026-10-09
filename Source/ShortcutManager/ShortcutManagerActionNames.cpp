@@ -183,6 +183,8 @@ juce::String drawShapeActionName(const juce::String& actionId) {
 
 // Add Track and the selected-module Rename / Replace actions.
 juce::String addRenameReplaceActionName(const juce::String& actionId) {
+    if (actionId == "foldAndPackMacros")
+        return "Fold and Pack Macros";
     if (actionId == "openAddTrackMenu")
         return "Add Track...";
     if (actionId == "renameSelectedModule")
@@ -227,8 +229,6 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Ungroup Macro";
     if (actionId == "collapseMacro")
         return "Collapse / Expand Macro";
-    if (actionId == "foldAndPackMacros")
-        return "Fold and Pack Macros";
     if (actionId == "locateMaster")
         return "Go to Output";
     if (const auto name = addRenameReplaceActionName(actionId); name.isNotEmpty())
