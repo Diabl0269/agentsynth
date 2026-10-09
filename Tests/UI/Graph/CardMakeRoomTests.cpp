@@ -189,15 +189,16 @@ TEST(CardMakeRoom, ARestoreForgetsWhatTheCardPushed) {
     EXPECT_EQ(s.c.rect(s.neighbour).getPosition(), pushed.getPosition());
 }
 
-// Deleting the grower drops its record; a new card that reuses nothing of it never pulls anyone home.
-TEST(CardMakeRoom, DeletingTheGrowerForgetsItsPushes) {
+// Deleting the grower sends the neighbours it pushed back to where they were.
+TEST(CardMakeRoom, DeletingTheGrowerBringsItsPushedNeighboursHome) {
     Scene s;
+    const auto home = s.c.rect(s.neighbour);
     s.c.resizeBank(s.bank, kLarge);
-    const auto pushed = s.c.rect(s.neighbour);
+    ASSERT_NE(s.c.rect(s.neighbour), home);
 
     s.c.editor.requestDeleteModule(s.bank);
 
-    EXPECT_EQ(s.c.rect(s.neighbour), pushed) << "deleting the card does not move anyone";
+    EXPECT_EQ(s.c.rect(s.neighbour), home);
 }
 
 // A project load builds the cards at their saved geometry: a bank saved overlapping a neighbour leaves both exactly

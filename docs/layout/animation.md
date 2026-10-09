@@ -302,6 +302,15 @@ every surface that animates a delete:
   then the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that
   appears after an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds
   just grows in (160 ms, no outline). See the "Mod-dot panel" row below.
+- **Gap closing and neighbours returning** ([layout rule](layout.md#making-room-when-something-grows), "Deleting a
+  card"): the cards that close the hole in an open macro, and the neighbours that return to where a deleted card had
+  pushed them, move in the gap phase as ordinary `CardGlideAnimator` glides, after the exit. Cmd+Z reverses them in its
+  own gap phase before the card grows back.
+- **Interruption.** A second delete or undo while the first still moves arms its own timeline from what is drawn:
+  every gliding card is rebased to its drawn rect (even when the second change moves no card), and a card still
+  shrinking keeps shrinking from its drawn size within the new exit phase. A card that is brought back by the undo
+  while its exit ghost is on screen drops that ghost and grows from nothing; a grow-back cut short by a second change
+  lands live at once. A Scope that changes nothing leaves the running animation untouched.
 - **Macros:** a collapsed macro's card is a ghost of its own, keyed by its macro id (`CardGlideAnimator::macroKey`,
   since a macro card has no node id), and shrinks and grows exactly like a module card. An open macro's
   member cards ghost as usual, and its dashed border, name chip and port strips (a `CardGlideAnimator::Border`,

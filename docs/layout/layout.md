@@ -141,7 +141,7 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   (`reflowForResizedModule`) the neighbours it pushed first get their way back by the rule below, and only then does the
   new footprint push what it covers. A neighbour whose old spot the card's new rect still covers stays blocked and keeps
   its record, so grow, shrink, grow settles the same way every time. The records are dropped on undo/redo, Auto Arrange,
-  any graph replacement (project load, new patch, preset) and when the card is deleted.
+  any graph replacement (project load, new patch, preset). Deleting the card is no loss: it first sends the neighbours it pushed back (see [Deleting a card](#deleting-a-card)).
 - **Shrinking.** Whatever a macro's growth pushed is remembered on that macro (`Macro::displaced`: which unit, how
   far, where it landed; never saved to a project file, and lost when an undo or redo restores a snapshot). Collapsing the
   macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
@@ -151,6 +151,15 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the
   expand's canvas nudge (`restoreCardAfterCollapse`) when the members have not moved since and the card's old spot is
   clear, so the card sits where it was and the neighbours' old spots are clear of it again.
+- **Deleting a card.** (`MacroGroupControllerDeleteReflow.cpp`, inside the delete's undo step.) The neighbours the card
+  had pushed aside come home by the rule above, whether it was loose or a macro member. Then, only when the card was a
+  member of an OPEN macro, the hole closes: the cards of the same row that lie wholly to its right (they overlap the
+  card vertically) move left together, so the nearest lands exactly where the deleted card stood and the spacing among
+  them is kept; with nothing after it in its row, the cards of its column wholly below it (they overlap it
+  horizontally) move up the same way. A move that would hit another unit (12 px clearance) or leave the canvas is
+  shortened in 8 px steps, or dropped. The macro's border follows its members, so it shrinks with them. Cards that
+  stand beside a hole on the open canvas stay put, and a macro port or a card hidden in a collapsed macro leaves no
+  hole. One Cmd+Z puts every card back exactly.
 - **Placement blockers.** A module being dropped or dragged lands through `findFreeSlot` against the same layout
   units, flattened over every level (`MacroGroupController::placementBlockers`): each visible module, each collapsed
   card, each open hull. A node with no card at all (the canvas detached them for an AI edit plan) blocks through its
