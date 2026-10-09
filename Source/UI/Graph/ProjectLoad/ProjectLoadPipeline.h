@@ -24,9 +24,13 @@ class LoadStageLine;
 class ProjectLoadPipeline final : private juce::Timer {
 public:
     /** `overlayParent` (the app window's content) holds the stage line and the edit blocks, over `editor` and, when it
-     *  is inside `overlayParent`, `dock`. `status` shows a short status-bar message. All must outlive this. */
+     *  is inside `overlayParent`, `dock`. `status` shows a short status-bar message. `blockDetached`, when set, holds
+     *  edits in the panels' detached windows (a separate top-level window no overlay over `overlayParent` reaches):
+     *  called with true while edits wait and false when they are back, and the status-bar action for a refused
+     *  click. All must outlive this. */
     ProjectLoadPipeline(GraphEditor& editor, AudioEngine& engine, juce::Component& overlayParent, juce::Component* dock,
-                        std::function<void(const juce::String&)> status);
+                        std::function<void(const juce::String&)> status,
+                        std::function<void(bool, const std::function<void()>&)> blockDetached = {});
     ~ProjectLoadPipeline() override;
 
     /** Message thread, first thing in a project open. On screen: ends any open still running, closes the audio gate
@@ -66,6 +70,8 @@ private:
     AudioEngine& engine_;
     juce::Component& overlayParent_;
     std::function<void(const juce::String&)> status_;
+    std::function<void(bool, const std::function<void()>&)> blockDetached_;
+    std::function<void()> refused_;
     synth::DeferredAssetLoads loads_;
     std::unique_ptr<LoadStageLine> stageLine_;
     std::unique_ptr<EditBlockOverlay> canvasBlock_;

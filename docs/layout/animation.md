@@ -412,7 +412,7 @@ canvas side; the timing is the pure `load_reveal::Timeline` (`LoadRevealTimeline
   shows a faint outline at its spot and pops when its assets are in (or at its wave slot, if that is later); its cables
   follow. After the load has taken 400 ms a stage line over the top of the canvas says what it is waiting for
   ("Loading samples 1/3", then wavetables, then plugins) above a slim line of real items in over all items; it fades in
-  160 ms and out 110 ms (`LoadStageLine`). Until everything is in, edits wait: see
+  160 ms and out 110 ms (`LoadStageLine`). Until everything is in, edits wait (canvas, dock, detached panel windows, card knob and fader keys, AI edits): see
   [opening a project on screen](../architecture/project-bundle.md#opening-a-project-on-screen).
 - **Sound** starts only when the last cable has landed: the engine's load gate is closed for the whole open and ramps in
   over 15 ms when it opens ([audio-engine.md](../architecture/audio-engine.md#project-load-gate)).

@@ -13,6 +13,7 @@
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
@@ -236,6 +237,8 @@ void MainComponent::wireAiChatAndAccount() {
     // The host builds graph-side tracks (addInstrumentTrack) and wraps such a batch in one
     // graph + timeline + macro undo step; it is declared before aiService, so it outlives it.
     aiService.setTimelineOpsHost(&timelineOpsHost_);
+    // An AI edit waits for a project to finish loading, as a canvas edit does (same refusal, same status message).
+    aiService.setEditGate([this] { return graphEditor.getLoadReveal().refuseEdit(); });
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
         return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager, &timelineOpsHost_);
     });

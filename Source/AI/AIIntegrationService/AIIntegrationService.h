@@ -192,6 +192,11 @@ public:
      *  history. A stale or unknown handle is a safe no-op. */
     void cancelRequest(AIProvider::RequestId requestId);
 
+    /** Installed by the app: true (after saying why, in the status bar) while edits must wait, i.e. a project is still
+     *  loading. applyPatch, applyProjectEdit and applyTimelineOps then change nothing and fail with "Still loading";
+     *  the caller may apply again once it is done. Unset (a test, a plugin) never refuses. */
+    void setEditGate(std::function<bool()> refusesEdit) { editGate = std::move(refusesEdit); }
+
     /** Applies a JSON patch to the graph. */
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
 
@@ -295,6 +300,8 @@ private:
 
     // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
+    std::function<bool()> editGate; // see setEditGate()
+    bool editsRefused() const { return editGate && editGate(); }
     TimelineOpsHost* timelineOpsHost = nullptr; // see setTimelineOpsHost()
 
     // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt

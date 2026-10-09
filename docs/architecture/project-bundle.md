@@ -71,7 +71,13 @@ exactly as synchronous as it always was: nothing is deferred, hidden, blocked or
    outlined, the stage line says what is pending after 400 ms, and **edits wait**: a click on the canvas or the bottom
    dock, a canvas Delete or arrow key, a drop on the canvas, a library add and every `"Edit"` command are refused with a
    short "Still loading" status message, while scrolling and zooming still work (`EditBlockOverlay` passes wheel and
-   pinch through). A detached panel window and the AI panel are not blocked.
+   pinch through). The same wait holds on the other ways in: a detached panel window gets its own `EditBlockOverlay`
+   (`ProjectLoadPipeline`'s `blockDetached` hook, `BottomDockComponent::setDetachedEditsBlocked`; a panel detached
+   mid-load starts blocked), the arrow, Home, End and Page keys on a focused card knob or fader are swallowed without a
+   change (`CardControlGestures::refusesEdit`), and an AI edit (`AIIntegrationService::applyProjectEdit`, `applyPatch`,
+   `applyTimelineOps`, through the one `setEditGate` that `MainComponent` points at `LoadRevealAnimator::refuseEdit`)
+   changes nothing and fails with "Still loading", so the chat card stays and can be applied again after the load. All
+   of them ask the same `refuseEdit()` that the canvas does, so the status message is the same.
 4. **Done.** When every pending item is in, edits come back and the stage line leaves; once the reveal has drawn the last
    cable the gate opens. A failed load (`graphBuilt(false)`) releases everything at once.
 

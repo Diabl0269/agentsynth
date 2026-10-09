@@ -58,6 +58,11 @@ public:
             window_->sendLookAndFeelChange();
     }
 
+    /** While a project is still loading, a detached panel's window holds edits like the canvas does (see
+     *  DetachedPanelWindow::setEditsBlocked). Remembered, so a panel detached mid-load starts out blocked. */
+    void setEditsBlocked(bool blocked, std::function<void()> onRefused);
+    bool areEditsBlocked() const noexcept { return editsBlocked_; }
+
     /** When true, this host draws no header strip of its own while DOCKED -- its owner has
      *  embedded getDetachButton() into its own chrome (BottomDockComponent's tab strip in Tab
      *  placement). Has no effect on the DETACHED window's header, which always shows one
@@ -152,6 +157,8 @@ private:
     FadeVisibility headerFade_{&titleLabel_, &detachButton_};
     bool embeddedHeader_ = false;
     bool createsNativeWindows_ = false;
+    bool editsBlocked_ = false;
+    std::function<void()> onEditRefused_;
     juce::String focusRegionId_;
     juce::Component* focusRegionRoot_ = nullptr;
     std::unique_ptr<DetachedPanelWindow> window_;

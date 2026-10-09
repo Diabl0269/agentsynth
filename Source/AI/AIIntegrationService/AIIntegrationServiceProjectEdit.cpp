@@ -145,6 +145,8 @@ ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root
 // and the failure is returned. The macro set is the host's and is not restored here (the real host
 // removes what a failed build made; an EARLIER successful build in the same plan keeps its macro).
 ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) {
+    if (editsRefused())
+        return rejected("Still loading");
     TimelineDoc* doc = timelineOpsHost != nullptr ? timelineOpsHost->editableTimelineDoc() : nullptr;
     if (doc == nullptr)
         return applyPatchOnlyPlan(root);

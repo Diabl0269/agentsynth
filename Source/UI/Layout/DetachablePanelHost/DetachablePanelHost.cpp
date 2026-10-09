@@ -55,6 +55,13 @@ void DetachablePanelHost::setEmbeddedHeader(bool embedded) {
     repaint();
 }
 
+void DetachablePanelHost::setEditsBlocked(bool blocked, std::function<void()> onRefused) {
+    editsBlocked_ = blocked;
+    onEditRefused_ = std::move(onRefused);
+    if (window_ != nullptr)
+        window_->setEditsBlocked(editsBlocked_, onEditRefused_);
+}
+
 void DetachablePanelHost::setHostedPanelFocusRegion(juce::String id, juce::Component& root) {
     focusRegionId_ = std::move(id);
     focusRegionRoot_ = &root;
@@ -72,6 +79,8 @@ void DetachablePanelHost::setDetached(bool detached) {
                                                         lookAndFeel_, shortcutManager_);
         window_->onCloseRequested = [this] { setDetached(false); };
         window_->onAppShortcut = onAppShortcutFallback;
+        if (editsBlocked_)
+            window_->setEditsBlocked(true, onEditRefused_);
         if (focusRegionRoot_ != nullptr)
             window_->registerHostedPanelFocusRegion(focusRegionId_, *focusRegionRoot_);
         // Promote the window to a real native peer BEFORE setVisible(true) --

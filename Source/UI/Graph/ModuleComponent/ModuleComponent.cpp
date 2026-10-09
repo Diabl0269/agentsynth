@@ -19,6 +19,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -807,6 +808,7 @@ void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param
 // CardControlGestures, the hit zones in wantsModAmountGestureFor/wantsCablePickupGestureFor above.
 void ModuleComponent::wireCardControlGestures(juce::Slider& knob, synth::ui::CardControlGestures& gestures,
                                               juce::RangedAudioParameter* param) {
+    gestures.refusesEdit = [this] { return owner.getLoadReveal().refuseEdit(); };
     gestures.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsModAmountGestureFor(param, knob, e);
     };
