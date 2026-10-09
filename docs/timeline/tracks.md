@@ -1,6 +1,6 @@
 # Timeline Track Headers
 
-`Source/UI/Timeline/TimelineTrackHeaderComponent.h/.cpp`
+`Source/UI/Timeline/TimelineTrackHeaderComponent/` (`TimelineTrackHeaderComponent.h`, `.cpp`, and `TimelineTrackHeaderComponentPaint.cpp` for layout and painting)
 (`synth::ui::TimelineTrackHeaderComponent`) — one row per `synth::Track`, living in the timeline
 panel's track-header column. The `"+ Track"` menu and the flows it starts are
 [add-track](add-track.md); the clip rows the headers line up with are [clips](clips.md).

@@ -21,13 +21,12 @@
 //
 // The name is also double-click-to-rename in place -- nameLabel_ reuses the exact
 // juce::Label(false, true, false) + onTextChange pattern TimelineTrackHeaderComponent::nameLabel_
-// already established (Source/UI/Timeline/TimelineTrackHeaderComponent.cpp), not a bespoke text
-// editor, so the two only "double-click a name to rename it" surfaces in the app behave alike. Same
-// accepted trade-off that file's own comment documents: a click landing ON the label is consumed by
-// it (never reaches mouseUp() below), so onHeaderClicked's "select on canvas" only fires for a click
-// elsewhere in the header. What committing a rename actually MEANS (rename the boxing macro, or the
-// strip's own persisted name) is MixerColumnComponent's call, via onNameEdited -- this class only
-// hosts the edit gesture.
+// already established (Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp), not a bespoke
+// text editor, so the two only "double-click a name to rename it" surfaces in the app behave alike. Same accepted
+// trade-off that file's own comment documents: a click landing ON the label is consumed by it (never reaches mouseUp()
+// below), so onHeaderClicked's "select on canvas" only fires for a click elsewhere in the header. What committing a
+// rename actually MEANS (rename the boxing macro, or the strip's own persisted name) is MixerColumnComponent's call,
+// via onNameEdited -- this class only hosts the edit gesture.
 
 namespace synth::ui {
 

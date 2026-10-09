@@ -8,7 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

@@ -1,11 +1,8 @@
 #pragma once
 
-#include "ChannelChipComponent.h"
-#include "MidiDestinationPicker.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -16,6 +13,9 @@
 #include "UI/Timeline/AutomationLanes/LaneTarget.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
+#include "UI/Timeline/ChannelChipComponent.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
+#include "UI/Timeline/TrackChannelLinkSurface.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>

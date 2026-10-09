@@ -6,7 +6,7 @@
 #include "AutomationLanesTestFixture.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 
 using namespace automation_lanes_test;
 using synth::TrackKind;

@@ -5,7 +5,7 @@
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <cmath>
 #include <limits>
 

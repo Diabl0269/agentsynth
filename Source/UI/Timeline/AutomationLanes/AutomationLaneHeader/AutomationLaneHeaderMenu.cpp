@@ -7,7 +7,7 @@
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 
 namespace synth::ui {
 

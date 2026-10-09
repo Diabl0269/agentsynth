@@ -7,7 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 
 using synth::TimelineDoc;

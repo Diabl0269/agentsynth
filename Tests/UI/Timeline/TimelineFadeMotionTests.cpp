@@ -11,7 +11,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkSurface.h"
 #include <gtest/gtest.h>
 

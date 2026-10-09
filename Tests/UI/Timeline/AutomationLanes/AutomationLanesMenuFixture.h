@@ -9,7 +9,7 @@
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <map>
 #include <optional>
 

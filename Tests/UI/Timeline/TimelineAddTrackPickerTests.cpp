@@ -7,7 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

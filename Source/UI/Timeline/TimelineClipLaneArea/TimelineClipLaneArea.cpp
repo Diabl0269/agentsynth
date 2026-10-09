@@ -11,7 +11,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <cmath>

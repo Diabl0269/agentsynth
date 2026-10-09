@@ -16,7 +16,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <map>
 #include <set>

@@ -11,7 +11,7 @@
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UserSettings.h"
 
 class ChannelFlowTest : public ::testing::Test {
