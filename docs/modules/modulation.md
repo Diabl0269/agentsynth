@@ -539,7 +539,9 @@ the arrows keep working.
 * **New module.** While the search has text, a last group "New module" offers "New <module>" rows, each with a small
   "New" tag, for the module types that match the query and can be a source: the authorable LFO, envelope, macro,
   sequencer and oscillator types (`newModuleSources`, probed from the module factory once, like the Dual I/O list; the
-  new source reads the module's first modulation output). Choosing one creates the module beside the knob's card and
+  new source reads the module's first modulation output). The ADSR, Amp Env and Filter Env factory keys are one
+  module class, so they are ONE row, "New Env" (it creates an ADSR; "envelope", "adsr", "amp env" and "filter env" all
+  find it, and every key stays loadable). Choosing one creates the module beside the knob's card and
   connects it, as ONE undo step (`GraphEditor::addModulationSourceModule`: the card, its place and any room made for it,
   the cable through the macro-port seam, its depth, and joining the card's macro when it is in one). Return prefers an
   existing match to a new module.

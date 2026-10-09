@@ -216,7 +216,8 @@ std::vector<ModDotAddSourcePage::Choice> ModDotPopover::buildChoices(bool fresh)
     }
     for (const auto& type : newModuleSources()) {
         ModDotAddSourcePage::Choice choice;
-        choice.item.moduleTitle = "New " + type.typeName;
+        choice.item.moduleTitle = "New " + type.label;
+        choice.item.aliases = type.aliases;
         choice.item.channel = type.channel;
         choice.item.group = ModSourceGroup::NewModule;
         choice.newType = type.typeName;

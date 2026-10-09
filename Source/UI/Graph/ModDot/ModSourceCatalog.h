@@ -47,15 +47,20 @@ struct ModSourceItem {
 /** Every source in `graph`, in the Mod Matrix's order: by ModulationCategory, then graph order, then output. */
 std::vector<ModSourceItem> enumerateModSources(juce::AudioProcessorGraph& graph);
 
-/** A module type the search can create as a new source ("New ADSR"): its factory key and the output channel the
- *  new source is read from (its first modulation output). */
+/** A module type the search can create as a new source ("New Env"): its factory key, the name its row shows after
+ *  "New ", the extra words a search matches, and the output channel the new source is read from (its first
+ *  modulation output). */
 struct NewModuleSource {
     juce::String typeName;
+    juce::String label;
+    juce::String aliases;
     int channel = 0;
 };
 
 /** The factory types worth offering as a new source: the authorable modulators (LFOs, envelopes, macros, sequencers,
- *  oscillators) that are not singletons. Probed from the factory once, in factory-key order. */
+ *  oscillators) that are not singletons. Probed from the factory once, in factory-key order. Keys that make the same
+ *  module class (the ADSR, Amp Env and Filter Env keys are one class) are one entry under the first key, so the
+ *  list offers a single "New Env"; the other keys stay loadable and searchable through `aliases`. */
 const std::vector<NewModuleSource>& newModuleSources();
 
 /** How many things each source moves: the modulation routings leaving it (macro ports looked through), counting each
