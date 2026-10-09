@@ -42,7 +42,7 @@ bool AppUndoManager::redo() { return applyHistoryStep(true); }
 // a card the restore removes shrinks away and one it creates grows back (CardGlideAnimatorGhosts.cpp).
 void AppUndoManager::beginRestore() {
     restoring_ = true;
-    if (graphEditor != nullptr)
+    if (graphEditor.getComponent() != nullptr)
         glideScope_ = std::make_shared<CardGlideAnimator::Scope>(graphEditor->getCardGlide(), /*restore=*/true);
 }
 

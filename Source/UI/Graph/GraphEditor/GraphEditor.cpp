@@ -27,6 +27,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     , undoManager(undoMgr)
     , cardKeyboard_(std::make_unique<CanvasCardKeyboard>(*this, undoMgr)) {
     canvasMemo_ = std::make_unique<graph_editor_paint::CanvasMemo>(*this);
+    if (undoMgr != nullptr)
+        undoMgr->setGraphEditor(this); // so an undo detaches the cards of the nodes it frees, whoever built this
     addAndMakeVisible(content);
     addChildComponent(modMatrix); // closed until toggled (isMatrixVisible); a closed matrix does no work
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
