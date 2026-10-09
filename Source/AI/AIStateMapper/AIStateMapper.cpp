@@ -6,6 +6,7 @@
 // AIStateMapperSnapshots.cpp, and AI-facing schema generation in AIStateMapperSchema.cpp.
 
 #include "AIStateMapper.h"
+#include "GraphRebuildBatch.h"
 
 #include "AIStateMapperInternal.h"
 #include "AudioEngine/ConnectionIndex.h"
@@ -56,7 +57,7 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
 // pasting or duplicating cost (ops x graph size): seconds per duplicated track in a 30-track project.
 struct RebuildOnExit {
     juce::AudioProcessorGraph& graph;
-    ~RebuildOnExit() { graph.rebuild(); }
+    ~RebuildOnExit() { GraphRebuildBatch::rebuild(graph); } // once, or at the end of an enclosing batch
 };
 
 bool connectDeferred(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& c) {

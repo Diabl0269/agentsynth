@@ -152,6 +152,10 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Show/Hide Track Automation";
     if (actionId == "timelineDuplicateFocusedTrack")
         return "Duplicate Focused Track";
+    if (actionId == "timelineCopyFocusedTracks")
+        return "Copy Selected Tracks";
+    if (actionId == "timelinePasteTracks")
+        return "Paste Tracks";
     if (actionId == "timelineShowFocusedTrackModule")
         return "Show Focused Track Module";
     if (actionId == "timelineToggleFocusedTrackPluginWindow")

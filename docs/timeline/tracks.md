@@ -195,6 +195,26 @@ Each row exposes the selected state to assistive tech (a list item that is selec
 selected), and its title stays the track name. The mixer does not mirror timeline track selection (its
 strips are selected only by "reveal"), so it is unchanged.
 
+### What acts on the selection
+
+With two or more tracks selected, these act on all of them, each as **one** undo step (a track outside the selection
+is acted on alone, as in Finder and Logic; one selected track behaves exactly as before). Each reuses the single-track
+path per track, grouped by `AppUndoManager::ScopedUndoGroup`, which folds every `record*Change` inside it into one
+transaction:
+
+| Gesture | Result |
+|---|---|
+| **Cmd+D** (or the row menu's Duplicate Track) | A copy of every selected track, in the same relative order, after the **last** selected track. The copies become the selection. One audio-graph rebuild for all of them (`GraphRebuildBatch`), not one per track. |
+| **Cmd+C**, then **Cmd+V** on a row | Cmd+C remembers the selected tracks; Cmd+V pastes a copy of each, in order, directly below the row that has focus (the primary track), through the same duplicate path, and selects the copies. A copied track deleted since is skipped. |
+| **Cmd+Backspace** (or the row menu's Delete Track) | One confirmation ("Delete 3 tracks?", unless switched off in Preferences), then `deleteTrack` per track, one undo step. |
+| **M** / **S** button or key | The clicked track toggles as before and every other selected track takes the state it ended in (a linked track's channel strip included), so a mixed selection ends uniform. |
+| Colour swatch | One pick colours every selected track, live preview included. Every selected track that owns its channel macro has the macro recoloured too, inside the same undo step. |
+| Dragging a selected row | Pressing a selected row keeps the selection (a plain click without a drag collapses it on release), and the drop moves the whole selection as a block, keeping its relative order, to where the dragged row lands among the unselected tracks. The grabbed row is the one that lifts; the others glide into place on the drop. |
+
+Cmd+C and Cmd+V on a row are the rebindable `timelineCopyFocusedTracks` / `timelinePasteTracks`; the row claims
+Cmd+C only with two or more tracks selected and Cmd+V only while tracks are copied, so everywhere else they keep their
+General meaning (copy / paste modules). The track clipboard holds ids, so it survives nothing but the session.
+
 ## Drag to reorder
 
 `TimelineDoc::moveTrack(id, newIndex)` moves a track within `tracks[]` — display and serialization

@@ -107,6 +107,27 @@ struct TrackHeaderHost {
      *  automation, as ONE compound undo step. Non-pure inert default so every existing implementer keeps compiling. */
     virtual void duplicateTrack(synth::TrackId track) { juce::ignoreUnused(track); }
 
+    /** The tracks a command clicked on `clicked` acts on (docs/timeline/tracks.md#selecting-several-tracks): the
+     *  whole selection, in timeline order, when `clicked` is one of two or more selected tracks, else just `clicked`
+     *  (a track outside the selection is acted on alone, as in Finder and Logic). */
+    virtual std::vector<synth::TrackId> tracksActedOnBy(synth::TrackId clicked) const { return {clicked}; }
+
+    /** Runs `edits` -- several single-track edits, each of which records its own undo step -- as ONE undo step. */
+    virtual void performTrackGroupEdit(const std::function<void()>& edits) {
+        if (edits)
+            edits();
+    }
+
+    /** Cmd+C on a row whose track is one of several selected: remembers those tracks (in timeline order) for
+     *  pasteTracks. Inert by default. */
+    virtual void copyTracks(const std::vector<synth::TrackId>& tracks) { juce::ignoreUnused(tracks); }
+
+    /** True while copyTracks has remembered tracks that still exist. */
+    virtual bool canPasteTracks() const { return false; }
+
+    /** Cmd+V on a row: a copy of every remembered track, in order, directly below `after`, as ONE undo step. */
+    virtual void pasteTracks(synth::TrackId after) { juce::ignoreUnused(after); }
+
     /** Runs a doc mutation as ONE undoable timeline step. Everything the header writes (name,
      *  colour, mute, solo, arm) goes through here rather than touching the doc directly, so the
      *  header never has to know an AppUndoManager exists. */
@@ -515,6 +536,11 @@ public:
      *  waiting on an OS focus event that may never arrive. */
     std::function<void(const juce::ModifierKeys& mods)> onSelectRequested;
 
+    /** Fired from mouseUp() when the press that selected this row never became a drag: a plain click on a row that
+     *  is one of several selected collapses the selection to it only now, so pressing a selected row and dragging
+     *  moves the whole selection. */
+    std::function<void()> onRowClickReleased;
+
     /** Shift+Up (-1) / Shift+Down (+1): grow or shrink the selection by one row from the anchor. Same
      *  sibling-blind division of labour as onFocusMoveRequested; the key is claimed either way. */
     std::function<void(int direction)> onExtendSelectionRequested;
@@ -772,6 +798,16 @@ private:
     // "toggle" means. No-op when the track is gone (mid-delete race).
     void toggleMuted();
     void toggleSoloed();
+    // toggleMuted/toggleSoloed for the clicked track alone (the single-track path), and the follow-up that makes
+    // every other selected track take the state it ended in (TimelineTrackHeaderBulk.cpp).
+    void toggleMutedOne();
+    void toggleSoloedOne();
+    void setOtherTrackMuted(synth::TrackId id, bool muted);
+    void setOtherTrackSoloed(synth::TrackId id, bool soloed);
+    bool isMutedNow(synth::TrackId id) const;
+    bool isSoloedNow(synth::TrackId id) const;
+    std::vector<synth::TrackId> bulkTargets() const;
+    bool handleTrackClipboardKey(const juce::KeyPress& key);
     void toggleArmed();
     // Position of this track in the doc's track list — the index resolveTrackColour falls back to
     // for a track that has never been coloured. -1 when the track is gone.

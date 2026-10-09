@@ -15,6 +15,8 @@ struct DeleteTrackConfirmText {
     juce::String message;
 };
 DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName);
+/** The one question for deleting `count` selected tracks at once ("Delete 3 tracks?"). */
+DeleteTrackConfirmText deleteTrackConfirmText(int count);
 
 /** Shows the dialog (a hook answers it in tests). `done(confirmed, dontAskAgain)` runs once after it closes. */
 void confirmDeleteTrack(const DeleteTrackConfirmText& text,

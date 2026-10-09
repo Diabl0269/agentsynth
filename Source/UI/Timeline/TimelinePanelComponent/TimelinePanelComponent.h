@@ -407,6 +407,8 @@ public:
      *  Cmd/Ctrl-click took it out. */
     std::vector<synth::TrackId> selectedTracks() const;
     bool isTrackSelected(synth::TrackId id) const { return trackSelection_.contains(id); }
+    /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
+    void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
 
     // ---- Track headers ----
     // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
@@ -605,6 +607,9 @@ private:
     // The shared tail of a keyboard move to row `index`: focus, scroll into view, routing pane.
     void focusTrackRowAt(int index);
     synth::ui::TrackSelectionModel trackSelection_;
+    // A plain press on a track that is one of several selected: the selection collapses to it on release, not on
+    // press, so the same press can drag the whole selection.
+    synth::TrackId pendingClickCollapse_;
     // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down) -- see its definition
     // in TimelinePanelTrackHeaders.cpp for the clamping rule.
     void moveFocusedTrack(int direction);

@@ -2,7 +2,9 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include <functional>
 #include <memory>
+#include <optional>
 
 // TrackChannelLinkSurface.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything a track
 // header needs from the app about the CHANNEL its track plays into.
@@ -82,6 +84,32 @@ struct TrackChannelLinkSurface {
      * ChannelStripModule::setSoloed (Source/CLAUDE.md). */
     virtual bool toggleLinkedChannelMuted(synth::TrackId track) = 0;
     virtual bool toggleLinkedChannelSoloed(synth::TrackId track) = 0;
+
+    /** The mute / solo a LINKED track's channel strip holds right now; nullopt for a track that is not linked (its
+     *  state is on the doc). Lets a bulk M/S click make every selected track end in the clicked track's state. */
+    virtual std::optional<bool> linkedChannelMuted(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+    virtual std::optional<bool> linkedChannelSoloed(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+
+    /** The colour of the channel macro `track` owns (the first track in timeline order that plays it), or nullopt when
+     *  it owns none. With setOwnedMacroColour and recordColourEdit it lets one pick recolour several tracks AND the
+     *  macros they own, as buildOwnedMacroColourPicker does for one. */
+    virtual std::optional<juce::Colour> ownedMacroColour(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+    /** Writes the owned macro's colour with no undo step; a no-op for a track that owns none. */
+    virtual void setOwnedMacroColour(synth::TrackId track, juce::Colour colour) { juce::ignoreUnused(track, colour); }
+    /** Runs `mutation` as ONE graph + timeline + macro undo step; false (nothing run) when this surface has no undo. */
+    virtual bool recordColourEdit(const std::function<void()>& mutation) {
+        juce::ignoreUnused(mutation);
+        return false;
+    }
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's channel chip click: scrolls the channel into view and
      * selects it (the Locate Master contract), so a chip on a MIDI track is how the user finds where its audio went.

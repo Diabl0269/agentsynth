@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <utility>
 
 namespace synth::ui {
 
@@ -463,6 +464,10 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     header->onSelectRequested = [this, trackId](const juce::ModifierKeys& mods) {
         selectTrackFromClick(trackId, mods);
     };
+    header->onRowClickReleased = [this] {
+        if (const auto id = std::exchange(pendingClickCollapse_, synth::TrackId{}); id.isValid())
+            setFocusedTrack(id);
+    };
     header->onExtendSelectionRequested = [this](int direction) { extendTrackSelection(direction); };
     header->onToggleSelectionRequested = [this] { toggleFocusedTrackSelection(); };
     header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
@@ -542,11 +547,25 @@ void TimelinePanelComponent::applyTrackSelectionToHeaders() {
         header->setSelected(trackSelection_.contains(header->getTrackId()));
 }
 
+void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary) {
+    duplicateGlideSource_ = {};
+    focusTrackKeepingSelection(primary);
+    trackSelection_.selectAll(ids);
+    applyTrackSelectionToHeaders();
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+        ensureTrackVisible(focusedTrackIndex_);
+    }
+}
+
 void TimelinePanelComponent::selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods) {
+    pendingClickCollapse_ = {};
     if (mods.isShiftDown()) {
         trackSelection_.extendTo(id, trackOrder());
     } else if (mods.isCommandDown()) {
         trackSelection_.toggle(id);
+    } else if (trackSelection_.contains(id) && trackSelection_.size() > 1) {
+        pendingClickCollapse_ = id; // see the member: the release (or a drag) decides
     } else {
         setFocusedTrack(id);
         return;

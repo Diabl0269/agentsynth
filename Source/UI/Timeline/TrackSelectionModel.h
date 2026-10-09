@@ -44,6 +44,17 @@ public:
         anchor_ = id;
     }
 
+    /** Exactly these tracks (a duplicate's copies, a paste); the last one is the anchor. */
+    void selectAll(const std::vector<synth::TrackId>& ids) {
+        clear();
+        for (const auto id : ids)
+            if (id.isValid())
+                ids_.insert(id);
+        base_ = ids_;
+        if (!ids.empty())
+            anchor_ = ids.back();
+    }
+
     /** Cmd/Ctrl-click: adds the track when absent, removes it when present; the anchor moves to it.
      *  @return the track's selected state after the toggle. */
     bool toggle(synth::TrackId id) {

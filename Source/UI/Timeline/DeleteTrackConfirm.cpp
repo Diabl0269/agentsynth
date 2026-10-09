@@ -20,6 +20,11 @@ DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName) {
                                              undoShortcutText() + " brings it back."};
 }
 
+DeleteTrackConfirmText deleteTrackConfirmText(int count) {
+    return {"Delete " + juce::String(count) + " tracks?",
+            "The tracks, their clips and their instrument nodes go. " + undoShortcutText() + " brings them back."};
+}
+
 void confirmDeleteTrack(const DeleteTrackConfirmText& text, std::function<void(bool, bool)> done) {
     if (auto& hook = test_hooks::deleteTrackConfirmHookForTest()) {
         hook(text, std::move(done));

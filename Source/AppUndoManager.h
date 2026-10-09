@@ -269,7 +269,26 @@ public:
     /** True inside an undo/redo step whose after-restore hook will run (an action has fired fireBeforeRestore()). */
     bool isRestoringWithAfterHook() const noexcept { return restoring_ && stepHooksOpen_; }
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
-    void beginNewTransaction() { undoManager.beginNewTransaction(); }
+    void beginNewTransaction() { beginTransaction(); }
+
+    /** Folds every undo step pushed while it lives into ONE: it opens a transaction and, until the outermost scope
+     *  ends, every record*Change call (and beginNewTransaction) appends to that transaction instead of opening its
+     *  own. For a bulk gesture that must call single-item entry points that each record their own change (delete N
+     *  tracks), so one Cmd+Z undoes the whole gesture. Nests; only the outermost scope opens the transaction. */
+    class ScopedUndoGroup {
+    public:
+        explicit ScopedUndoGroup(AppUndoManager& manager)
+            : manager_(manager) {
+            if (manager_.groupDepth_++ == 0)
+                manager_.undoManager.beginNewTransaction();
+        }
+        ~ScopedUndoGroup() { --manager_.groupDepth_; }
+        ScopedUndoGroup(const ScopedUndoGroup&) = delete;
+        ScopedUndoGroup& operator=(const ScopedUndoGroup&) = delete;
+
+    private:
+        AppUndoManager& manager_;
+    };
 
     /** Counts every change this manager has actually applied to the document — one per pushed
      *  action, plus one per undo/redo. Monotonic, never reset.
@@ -307,6 +326,12 @@ private:
     // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
     int editSerial_ = 0;
     int restoreSerial_ = 0;
+    int groupDepth_ = 0; // > 0 inside a ScopedUndoGroup: beginTransaction() opens nothing new
+    // The one place a record*Change call opens its undo transaction, so a ScopedUndoGroup can fold them into one.
+    void beginTransaction(const juce::String& name = {}) {
+        if (groupDepth_ == 0)
+            undoManager.beginNewTransaction(name);
+    }
     bool restoring_ = false;
     bool stepHooksOpen_ = false, stepAfterRestorePending_ = false; // see fireBeforeRestore()
     std::shared_ptr<void> glideScope_;                             // a CardGlideAnimator::Scope, see beginRestore()

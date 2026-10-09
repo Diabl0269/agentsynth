@@ -41,6 +41,7 @@ set(APPUI_SOURCES
     Source/Timeline/TrackRemovalSet.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
     Source/MainComponent/MainComponentTrackDuplicate.cpp
+    Source/MainComponent/MainComponentTrackSelectionActions.cpp
     Source/MainComponent/MainComponentShortcutHints.h
     Source/MainComponent/MainComponentShortcutHints.cpp
     Source/UserSettings.h
@@ -81,6 +82,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h
     Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp
     Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponentPaint.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponentBulk.cpp
     Source/UI/Timeline/ChannelChipComponent.h
     Source/UI/Timeline/ChannelChipComponent.cpp
     Source/UI/Timeline/TrackRoutingMenus.h

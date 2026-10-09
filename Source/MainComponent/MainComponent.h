@@ -478,6 +478,19 @@ private:
     void deleteTrackAfterConfirm(synth::TrackId track) override;
     void deleteTrack(synth::TrackId track) override;
     void duplicateTrack(synth::TrackId track) override;
+    // docs/timeline/tracks.md#selecting-several-tracks -- the bulk half of the track-row commands
+    // (MainComponentTrackSelectionActions.cpp); each reuses the single-track path per track inside one undo step.
+    std::vector<synth::TrackId> tracksActedOnBy(synth::TrackId clicked) const override;
+    void performTrackGroupEdit(const std::function<void()>& edits) override;
+    void copyTracks(const std::vector<synth::TrackId>& tracks) override;
+    bool canPasteTracks() const override;
+    void pasteTracks(synth::TrackId after) override;
+    /** A copy of every one of `sources` (timeline order) directly below `after`, in the same order, as ONE undo step;
+     *  the copies become the selection. `verb` words the status line ("Duplicated" / "Pasted"). */
+    void duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
+                              const juce::String& verb);
+    void deleteTracksAfterConfirm(const std::vector<synth::TrackId>& tracks);
+    std::vector<synth::TrackId> trackClipboard_; // copyTracks' tracks, timeline order
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;
     void addAudioTrack() override;

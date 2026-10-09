@@ -330,6 +330,11 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // on purpose: conflicts are per category, and the row's own keyPressed claims the key before the
     // command layer sees it, so Cmd+D elsewhere keeps its current meaning.
     bindings["timelineDuplicateFocusedTrack"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+C / Cmd+V copy and paste the selected tracks from a track row. Same arrangement as Cmd+D above: the row's
+    // keyPressed claims the chord (only with two or more tracks selected / tracks copied), everywhere else the
+    // General copy and paste keep it.
+    bindings["timelineCopyFocusedTracks"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
+    bindings["timelinePasteTracks"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
     // Ctrl+E shows the focused track's module. A REAL ctrlModifier on every platform (Cmd+E is taken on the Mac, and
     // off the Mac Cmd is Ctrl, so the one literal chord is the same everywhere). The Mixer's "mixerToggleEq" also
     // carries Ctrl+E on the Mac; conflicts are per category and the track row claims the key first, so neither moves.

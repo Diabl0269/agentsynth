@@ -58,7 +58,7 @@ bool AppUndoManager::recordMixerViewChange(synth::MixerViewDoc& doc, const juce:
     if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new MixerViewSnapshotAction(doc, beforeJson, afterJson, std::move(postRestore)));
     return true;
 }

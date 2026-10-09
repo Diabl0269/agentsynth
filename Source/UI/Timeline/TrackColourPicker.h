@@ -5,6 +5,7 @@
 #include "UI/Timeline/TrackChannelLinkSurface.h"
 #include <functional>
 #include <memory>
+#include <vector>
 
 // TrackColourPicker.h (docs/timeline/tracks.md#colour-swatch): the colour picker of one track, built the same way for
 // every surface that recolours a track -- the Timeline's track-header swatch and the mixer column's colour dot -- so a
@@ -18,6 +19,10 @@ struct TrackColourPickerContext {
     juce::PropertiesFile* favourites = nullptr;
     /** The track/macro colour link; null (or a track with no owned macro) picks the track alone. */
     TrackChannelLinkSurface* link = nullptr;
+    /** Every track one pick recolours (docs/timeline/tracks.md#selecting-several-tracks), the clicked one included;
+     *  fewer than two means the clicked track alone. Every one of them that owns its channel macro has the macro
+     *  recoloured too, in the same undo step. */
+    std::vector<synth::TrackId> targets;
     /** Runs `mutation` as one undo step (MainComponent::performTrackEdit); null runs it directly, unrecorded. */
     std::function<void(const std::function<void()>& mutation)> performEdit;
     /** False once the surface that opened the popup is gone, so a late commit does nothing; null means always alive. */

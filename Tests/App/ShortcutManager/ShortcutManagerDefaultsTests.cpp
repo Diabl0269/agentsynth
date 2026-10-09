@@ -107,6 +107,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineDecreaseTrackHeight",
         "timelineResetTrackHeight",
         "timelineDuplicateFocusedTrack",
+        "timelineCopyFocusedTracks",
+        "timelinePasteTracks",
         "timelineShowFocusedTrackModule",
         "timelineToggleFocusedTrackPluginWindow",
     };

@@ -141,8 +141,10 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineIncreaseTrackHeight", ShortcutCategory::Timeline},
         {"timelineDecreaseTrackHeight", ShortcutCategory::Timeline},
         {"timelineResetTrackHeight", ShortcutCategory::Timeline},
-        // Duplicates the focused track header (Cmd+D, the same chord the General "duplicateSelection" carries).
+        // Duplicate / copy / paste from a track row (Cmd+D / Cmd+C / Cmd+V, the General actions' chords).
         {"timelineDuplicateFocusedTrack", ShortcutCategory::Timeline},
+        {"timelineCopyFocusedTracks", ShortcutCategory::Timeline},
+        {"timelinePasteTracks", ShortcutCategory::Timeline},
         // Shows the focused track's module on the canvas, and opens or closes an instrument's window (Ctrl+E).
         {"timelineShowFocusedTrackModule", ShortcutCategory::Timeline},
         // Opens or closes the focused plugin track's own window (Ctrl+Cmd+E; Ctrl+Alt+E off the Mac).
