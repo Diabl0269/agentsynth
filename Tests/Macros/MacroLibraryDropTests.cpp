@@ -10,6 +10,7 @@
 #include "AppUndoManager.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 #include <set>
 
@@ -245,7 +246,16 @@ TEST(MacroLibraryDrop, DropOverAKnobOfAMemberCardJoinsTheMacro) {
 }
 
 // A second library drop into a macro that already took one this session must add a second member.
-TEST(MacroLibraryDrop, TwoConsecutiveDropsIntoTheSameOpenMacroBothJoin) {
+// Reduce Motion is a system setting (on in CI's macOS runner): pin it so both answers are covered on every machine.
+namespace {
+struct ReducedMotionPin {
+    explicit ReducedMotionPin(bool on) { synth::ui::setReducedMotionForTest(on); }
+    ~ReducedMotionPin() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+
+} // namespace
+
+static void twoConsecutiveDropsBothJoin() {
     LibraryDropCanvas c;
     const auto lfo1 = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 300, 300);
     const auto lfo2 = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 800, 300);
@@ -279,6 +289,18 @@ TEST(MacroLibraryDrop, TwoConsecutiveDropsIntoTheSameOpenMacroBothJoin) {
     ASSERT_EQ(c.engine.getGraph().getNodes().size(), nodesAfterFirst + 1) << "the second drop adds a module too";
     EXPECT_TRUE(c.isMember(macroId, second));
     EXPECT_NE(first, second);
+}
+
+TEST(MacroLibraryDrop, TwoConsecutiveDropsIntoTheSameOpenMacroBothJoin) { twoConsecutiveDropsBothJoin(); }
+
+// The gap a drop opens inside the macro must not decide the join; the borders as they stood do.
+TEST(MacroLibraryDrop, TwoConsecutiveDropsBothJoinUnderReducedMotion) {
+    ReducedMotionPin pin(true);
+    twoConsecutiveDropsBothJoin();
+}
+TEST(MacroLibraryDrop, TwoConsecutiveDropsBothJoinUnderFullMotion) {
+    ReducedMotionPin pin(false);
+    twoConsecutiveDropsBothJoin();
 }
 
 // A card dropped into a crowded macro lands WHERE it was dropped (under the pointer, as the ghost shows) and the

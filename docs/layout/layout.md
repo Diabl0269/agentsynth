@@ -206,6 +206,10 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card or a port widget never
   opens a gap. A card dragged from the canvas opens none while its centre is still over the place it was picked up
   from, so nudging a card never pushes its neighbours.
+  A drag whose centre is over a macro border it is not in yet (or has just left) opens no gap either, and a library
+  drop released over an open gap joins the macro the gap was made in: the join or leave is decided on the borders as
+  they stood, under any Animations setting (Reduce Motion moves cards at once, so a gap there would shift the border
+  under the pointer).
 - **Where it lands and what moves.** The module copies the spacing between the anchor and the card before it (at the
   start of a row, the spacing after the anchor; a lone card 40 px), held between 12 and 80 px, and takes the anchor's
   place: one spacing after the card before it, snapped up to the 8 px grid, level with the anchor. The anchor and every

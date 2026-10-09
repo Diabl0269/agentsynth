@@ -66,7 +66,12 @@ void InsertGap::hover(const Hover& request) {
         const auto* owner = macros_.macroForNode(self);
         hover.container = owner != nullptr ? owner->id : juce::String();
     }
-    if (committing_ || suppressed_ || hover.size.x <= 0 || hover.size.y <= 0 || !selfCanInsert(hover.selfKey)) {
+    // A drag whose centre is over a border it is not in yet (a library module before the canvas has named the macro it
+    // joins, a card that has just left or entered one) is crossing it: that is the macro's join/leave decision, made on
+    // the borders as they stand, so no gap opens and none stays open that could move them.
+    const bool crossing = macros_.macroHullAt(hover.pointer) != hover.container;
+    if (committing_ || suppressed_ || crossing || hover.size.x <= 0 || hover.size.y <= 0 ||
+        !selfCanInsert(hover.selfKey)) {
         if (!committing_ && !suppressed_ && isOpen())
             close();
         return;

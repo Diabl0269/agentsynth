@@ -6,6 +6,7 @@
 #include "MacroDragTestHelpers.h"
 #include "Modules/LFOModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -272,7 +273,16 @@ struct PortedLfoRig {
 
 // Regression test for FRO563: the cables re-routed only on the drop, so the port and its name stayed on the
 // border while the module sat inside, and everything jumped on release.
-TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesNotOnTheDrop) {
+// Reduce Motion is a system setting (on in CI's macOS runner): pin it so both answers are covered on every machine.
+namespace {
+struct ReducedMotionPin {
+    explicit ReducedMotionPin(bool on) { synth::ui::setReducedMotionForTest(on); }
+    ~ReducedMotionPin() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+
+} // namespace
+
+static void cablesRerouteAsTheCardCrosses() {
     PortedLfoRig r;
     ASSERT_EQ(r.ports(), 1u);
     const auto outside = findComponent(r.editor, r.lfo)->getBounds().getCentre();
@@ -288,6 +298,18 @@ TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesNotOnTheDrop) {
 
     EXPECT_TRUE(r.inside()) << "dropped where it was last carried: inside";
     EXPECT_EQ(r.ports(), 0u);
+}
+
+TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesNotOnTheDrop) { cablesRerouteAsTheCardCrosses(); }
+
+// Under Reduce Motion the insert gap must not move a macro's border out from under a crossing card.
+TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesUnderReducedMotion) {
+    ReducedMotionPin pin(true);
+    cablesRerouteAsTheCardCrosses();
+}
+TEST(MacroDragLiveReroute, CablesRerouteAsTheCardCrossesUnderFullMotion) {
+    ReducedMotionPin pin(false);
+    cablesRerouteAsTheCardCrosses();
 }
 
 TEST(MacroDragLiveReroute, OneUndoPutsBackTheWholeGestureHoweverOftenItCrossed) {
