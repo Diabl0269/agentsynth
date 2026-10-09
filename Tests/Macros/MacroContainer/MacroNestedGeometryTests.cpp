@@ -2,8 +2,8 @@
 // Nested macros on the canvas (docs/layout/macro-cards.md#nested-macros): the parent hull wraps its
 // child, a collapsed ancestor hides the child completely while the child keeps its own collapsed
 // flag, parents paint first, hit-tests pick the innermost macro (including the hull-drag
-// preference's real mouse path), selection/preview/bypass are transitive, and moving a parent
-// carries its collapsed child's bounds. Cable cases live in MacroNestedCableTests.cpp.
+// preference's real mouse path), selection/names/bypass are transitive (the preview shows a child as one box), and
+// moving a parent carries its collapsed child's bounds. Cable cases live in MacroNestedCableTests.cpp.
 
 #include "MacroDragTestHelpers.h"
 #include "MacroNestedTestFixture.h"
@@ -178,7 +178,7 @@ TEST(MacroNestedHitTest, HullDragPreferenceFromParentOnlySpaceMovesEverythingIns
 }
 
 // ============================================================================
-// Selection, previews and bypass are transitive
+// Selection, names and bypass are transitive; the card preview shows a child as one box
 // ============================================================================
 
 TEST(MacroNestedSelection, SelectingTheParentSelectsEveryNestedMemberAndReadsSelected) {
@@ -194,9 +194,9 @@ TEST(MacroNestedSelection, SelectingTheParentSelectsEveryNestedMemberAndReadsSel
     EXPECT_FALSE(f.ctl().isMacroSelected(f.parentId));
 }
 
-TEST(MacroNestedSelection, ParentCardPreviewAndNamesIncludeNestedModules) {
+TEST(MacroNestedSelection, ParentCardPreviewsTheChildAsOneBoxAndNamesIncludeNestedModules) {
     NestedMacroFixture f;
-    EXPECT_EQ(f.ctl().macroMemberPreviews(f.parentId).size(), 4u);
+    EXPECT_EQ(f.ctl().macroMemberPreviews(f.parentId).size(), 3u) << "two modules and one box for the child";
     EXPECT_EQ(f.ctl().macroMemberNames(f.parentId).size(), 4);
     EXPECT_EQ(f.ctl().macroMemberPreviews(f.childId).size(), 2u);
 }

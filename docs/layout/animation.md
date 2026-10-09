@@ -355,7 +355,24 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   calls `foldChangedMacros()` after it, which folds every macro whose collapsed state flipped, all in one animation.
   Those modules keep out of the delete and undo ghosts (`CardGlideAnimator::dropGhostsFor`).
 - **Interruption:** any pass that re-syncs the cards (`syncMacroCards`: a second toggle, a rename) lands the running
-  fold at once first. Nested macros are not folded: a nested child's card simply lands with its ancestor.
+  fold at once first.
+- **Nested macros** fold as one box of their parent (the parent's card previews a nested macro as one box, see
+  [the collapsed card](macro-cards.md#the-collapsed-card)), and each keeps its own collapsed flag, so it comes back
+  as it was left. Each level is its own plan with its own clock (`Plan::delayMs`), built parent-first by
+  `FoldTreeBuilder` in `MacroGroupControllerFold.cpp`; only the outermost macro whose state changed starts one.
+  - *Collapsing a parent with an open child:* the child folds first, exactly like a macro of its own (its modules fly
+    into the card it would fold into, `foldedCardBounds`, and its dashed border shrinks to it). As it hands over, its
+    border and boxes fade while a picture of that card fades in, and then the parent's flight starts: the card flies
+    into its box on the parent's card together with the parent's own modules. A folded child just flies in as its card.
+  - *Expanding the parent:* the reverse. The child's box flies out to its card; an open child then unfolds out of it
+    (its border is not drawn until then), and its picture fades as its modules start. A folded child's real card shows
+    the moment its box lands, and it stays folded.
+  - *Timing:* each level keeps the 320 ms cap, so a two-level collapse is done by 640 ms (three levels 960 ms); an
+    expand adds the 160 ms cable draw-out after the last landing. A cable from a child's module to one of its
+    parent's belongs to the child's plan: folding, it fades with the child's own cables; unfolding, it waits for the
+    child's module.
+  - Fold and Pack over a whole parent folds the child inside it the same way, and undo and redo play the same
+    motion. Reduce Motion is one 80 ms fade for every level; Animations Off and an off-screen canvas are instant.
 - **Reduce Motion:** no flight; the card that appears (the closed card, or the members) fades in over 80 ms. Animations
   Off, and an off-screen canvas, land at once (`Hooks::canAnimate`; tests force it with `setForceAnimateForTest` and
   step `MacroFoldAnimator::applyAtMs`).

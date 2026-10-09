@@ -189,7 +189,11 @@ no card there to host an inline editor.
 member-count text, the card draws one small filled rounded rect per member — the live union of member
 `ModuleComponent` bounds, scaled to fit the middle column. Each box is coloured by that member's module
 category (`GraphEditor::categoryPreviewColour`, the same `themeColourForCategory` token the canvas uses
-elsewhere), so the preview echoes what expanding would show. The boxes are laid out by one pure function,
+elsewhere), so the preview echoes what expanding would show. A macro nested directly in it is ONE box, at its
+footprint (its border while open, its card while folded), filled with that macro's own colour at 85% and marked with
+a white closed fold arrow (a right-pointing chevron, at most 6 px tall, 1.2 px stroke, left out of a box too small to
+hold it; `macro_preview::paintMacroBox`). White, not a theme token: the fill is the user's macro colour, as on the
+open border's chip. The boxes are laid out by one pure function,
 `macro_preview::boxes` (`MacroPreviewLayout.h`, inside `MacroCardComponent::getPreviewArea()`), which the fold
 animation also uses to fly each module onto its box ([Macro fold](animation.md#macro-fold)).
 
@@ -329,8 +333,12 @@ hit-tests them as described here, and ungroup, delete, collapse and drag in and 
   painter and `paintMacroPortStrips`), so a child's outline, chip and strips draw over its parent's.
 - **Selecting a macro selects everything inside it.** `selectMacro` selects the members of the macro
   and of every macro nested under it; `isMacroSelected` compares against that same set. The card's
-  module preview and name list, bypass/mute state and fan-out, and "Delete Macro and Members" are
-  transitive too (a nested macro's port nodes are still left out of the previews).
+  name list, bypass/mute state and fan-out, and "Delete Macro and Members" are transitive too (a
+  nested macro's port nodes are still left out). The card's preview is not: it shows each child as
+  one box ([the collapsed card](#the-collapsed-card) above,
+  `MacroGroupController::macroMemberPreviews`).
+- **Folding a parent folds an open child first,** then flies its card into the parent's card; expanding
+  the parent brings the child back as it was left ([Macro fold](animation.md#macro-fold)).
 - **Moving a parent carries its collapsed children.** A collapsed child is its own card component,
   which a member drag does not move. `dragSelectionBy` moves the live card of every collapsed macro
   carried by the drag, and the drop (`finalizeSelectionDrag`, which `finalizeMacroCardDrag` also

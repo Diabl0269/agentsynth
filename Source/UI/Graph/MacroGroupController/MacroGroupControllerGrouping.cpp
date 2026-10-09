@@ -599,38 +599,8 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     // A multi-macro toggle takes one snapshot for all of them and folds them together.
     const auto foldBefore = batchingFolds_ ? nullptr : snapshotFoldState();
 
-    if (collapsed) {
-        // Collapsing FROM expanded: seed the card at the current member bounding box's top-left,
-        // sized to the standard card footprint. Port members are EXCLUDED from this union, the
-        // same way macroHullBounds() excludes them.
-        std::set<juce::String> portNodeUuids;
-        for (const auto& p : m->ports)
-            portNodeUuids.insert(p.nodeUuid);
-
-        juce::Rectangle<int> groupBounds;
-        auto addBounds = [&groupBounds](juce::Rectangle<int> r) {
-            if (!r.isEmpty())
-                groupBounds = groupBounds.isEmpty() ? r : groupBounds.getUnion(r);
-        };
-        for (const auto& uuid : m->members) {
-            if (portNodeUuids.count(uuid) > 0)
-                continue;
-            auto nodeId = resolveMemberNodeId(uuid);
-            for (auto* comp : host_.modules()) {
-                if (comp != nullptr && comp->getNodeId() == nodeId) {
-                    addBounds(comp->getBounds());
-                    break;
-                }
-            }
-        }
-        // A nested child counts by its footprint (hull if open, card if collapsed), so a parent
-        // whose only content is a child still seeds its card where that child is drawn.
-        for (const auto& childId : host_.getMacros().childrenOf(macroId))
-            if (const auto* child = host_.getMacros().find(childId))
-                addBounds(child->collapsed ? macroCableAnchorBounds(*child) : macroHullBounds(childId));
-        const auto origin = groupBounds.isEmpty() ? m->bounds.getTopLeft() : groupBounds.getTopLeft();
-        m->bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
-    }
+    if (collapsed)
+        m->bounds = foldedCardBounds(macroId); // seeded at what the border wraps, card-sized
     const auto preExpandOrigin = m->bounds.getTopLeft();
     m->collapsed = collapsed;
     CardGlideAnimator::Scope glide(host_.cardGlide()); // one glide for the whole expand/collapse
@@ -648,6 +618,18 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
         returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
     }
     foldChangedMacros(foldBefore); // every card is final; this only animates how they got there
+}
+
+// The card a collapse seeds: at the top-left of the direct non-port members and every nested macro's footprint (its
+// border while open, its card while folded), sized to the standard card footprint. A macro whose only content is a
+// nested child seeds its card where that child is drawn; one with nothing to wrap keeps its last place.
+juce::Rectangle<int> MacroGroupController::foldedCardBounds(const juce::String& macroId) {
+    const auto* m = host_.getMacros().find(macroId);
+    if (m == nullptr)
+        return {};
+    const auto content = macroContentBounds(macroId);
+    const auto origin = content.isEmpty() ? m->bounds.getTopLeft() : content.getTopLeft();
+    return {origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight};
 }
 
 // The canvas content is (0,0) to the canvas frame plus slack (it grows right/down only) and anything left of or above
@@ -732,13 +714,19 @@ std::vector<juce::String> previewableMembers(const synth::MacroSet& macros, cons
 }
 } // namespace
 
-// Transitive: a parent's card previews its nested children's modules too. A member that fronts a
-// port of whichever macro directly owns it is a boundary jack, not a module, and is skipped.
+// A card previews what opening it shows: its own modules (a member that fronts one of its ports is a boundary jack, not
+// a module, and is skipped), then each macro nested directly in it as ONE box at its footprint.
 std::vector<MacroGroupController::MacroMemberPreview>
 MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
     std::vector<MacroMemberPreview> result;
+    const auto& macros = host_.getMacros();
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return result;
     auto& graph = host_.graph();
-    for (const auto& uuid : previewableMembers(host_.getMacros(), macroId)) {
+    for (const auto& uuid : macro->members) {
+        if (macro->memberIsPort(uuid))
+            continue;
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;
@@ -760,13 +748,24 @@ MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
         preview.category = categoryForNode(graph.getNodeForId(nodeId));
         result.push_back(preview);
     }
+    for (const auto& childId : macros.childrenOf(macroId)) {
+        const auto* child = macros.find(childId);
+        const auto footprint = macroFootprint(childId);
+        if (child == nullptr || footprint.isEmpty())
+            continue;
+        MacroMemberPreview preview;
+        preview.bounds = footprint;
+        preview.macroId = childId;
+        preview.colour = child->colour;
+        result.push_back(preview);
+    }
     return result;
 }
 
 juce::StringArray MacroGroupController::macroMemberNames(const juce::String& macroId) const {
     juce::StringArray names;
     auto& graph = host_.graph();
-    // Same transitive list and port exclusion as macroMemberPreviews above.
+    // Every module the card stands for, nested ones included (the card's tooltip), ports left out.
     for (const auto& uuid : previewableMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)

@@ -36,7 +36,9 @@ public:
         std::function<void(juce::Graphics&, const VisibleCable&, float alpha)> paintCable;
     };
 
-    /** One module of the macro: where its card stands on the open canvas and where its box sits on the closed card. */
+    /** One module of the macro: where its card stands on the open canvas and where its box sits on the closed card.
+     *  A macro nested in it flies as one of these too (`macroId` set, `nodeUid` 0): from its own card, the real one
+     *  when it is folded, the one it folds into when it is open (its own Plan then runs before or after this one). */
     struct Module {
         uint32_t nodeUid = 0;
         synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
@@ -44,6 +46,8 @@ public:
         juce::Rectangle<float> box;
         juce::Image picture; // the card's own raster; null draws a plain box
         juce::Component::SafePointer<juce::Component> comp;
+        juce::String macroId; // a nested macro
+        juce::Colour colour;  // a nested macro's colour, for its box
     };
 
     /** One macro's fold. Collapse: `cables` are the ones with both ends on a module; expand: the ones touching one. */
@@ -58,16 +62,17 @@ public:
         std::vector<VisibleCable> cables;
         /** The open macro's port widgets: held back until the border has grown to hold them. */
         std::vector<juce::Component::SafePointer<juce::Component>> ports;
+        /** When this macro starts, after the fold began: a nested macro folds before its parent's flight, and unfolds
+         *  once its box has flown out of the parent. A nested plan has no `cardComp`: its card is its box. */
+        double delayMs = 0.0;
     };
 
     /** What is captured before a collapse or expand changes the canvas, to be turned into a Plan once it has: for an
-     *  open macro the modules' rects, pictures, the border and the inner cables; for a closed one the card and boxes.
-     */
+     *  open macro the modules' rects, pictures and the border; for a closed one the card and boxes. */
     struct Before {
         bool wasCollapsed = false;
         juce::Rectangle<int> hull, card;
         std::vector<Module> modules;
-        std::vector<VisibleCable> cables;
     };
 
     /** A cable as drawn this frame. */
@@ -116,6 +121,10 @@ public:
     std::optional<juce::Rectangle<int>> expandOutlineFor(const juce::String& macroId) const;
     /** Whether the module's real card is still held back. */
     bool isHeld(uint32_t nodeUid) const;
+    /** The rect the nested macro `macroId` is drawn at now as one box of its parent's fold; empty when none is. */
+    juce::Rectangle<float> nestedRectFor(const juce::String& macroId) const;
+    /** When the fold of `macroId` starts and when its last module lands, in ms; nothing when it does not fold. */
+    std::optional<std::pair<double, double>> spanFor(const juce::String& macroId) const;
 
     /** An expanding macro's cables are drawn here (growing out of their ports), not by the canvas: removes them. */
     void applyTo(std::vector<VisibleCable>& cables) const;
@@ -141,13 +150,18 @@ private:
         std::vector<char> landed;
     };
 
+    double localMs(const Live& live) const noexcept { return elapsed_ - live.plan.delayMs; }
+    const Live* liveFor(const juce::String& macroId) const noexcept;
     float handover(const Live& live) const noexcept;
+    float nestedAlpha(const Live& live, size_t index) const noexcept;
+    juce::Point<float> cableEnd(uint32_t nodeUid, juce::Point<float> p) const;
     juce::Rectangle<float> moduleRect(const Live& live, size_t index) const noexcept;
     std::vector<juce::Rectangle<float>> moduleRects(const Live& live) const;
     juce::Rectangle<float> outline(const Live& live) const noexcept;
     int indexOf(const Live& live, uint32_t nodeUid) const noexcept;
     std::optional<DrawnCable> expandCable(const Live& live, const VisibleCable& cable) const;
     std::optional<DrawnCable> collapseCable(const Live& live, const VisibleCable& cable) const;
+    std::vector<DrawnCable> drawnCables(const Live& live) const;
     void paintModule(juce::Graphics& g, const Live& live, size_t index) const;
     void applySideEffects();
     void frameAt(float t);
