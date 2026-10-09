@@ -37,6 +37,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackModule.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
+    Source/MainComponent/MainComponentTrackDelete.cpp
+    Source/Timeline/TrackRemovalSet.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
     Source/MainComponent/MainComponentTrackDuplicate.cpp
     Source/MainComponent/MainComponentShortcutHints.h

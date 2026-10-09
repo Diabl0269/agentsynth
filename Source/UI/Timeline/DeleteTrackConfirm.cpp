@@ -16,8 +16,8 @@ juce::String undoShortcutText() {
 } // namespace
 
 DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName) {
-    return {"Delete " + trackName + "?",
-            "The track, its clips and its instrument node go. " + undoShortcutText() + " brings it back."};
+    return {"Delete " + trackName + "?", "The track, its clips, its macro and any modules only it uses go. " +
+                                             undoShortcutText() + " brings it back."};
 }
 
 void confirmDeleteTrack(const DeleteTrackConfirmText& text, std::function<void(bool, bool)> done) {
