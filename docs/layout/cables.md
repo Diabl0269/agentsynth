@@ -205,18 +205,48 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows under
   two or more. The rows come from `listPortConnections`, a filter over `buildVisibleCables()` by the jack's visible index
   (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
-  connection still show the panel (a later "Add connection" row goes below the rows).
+  connection still show the panel; with none, "Add connection" is its main action.
 - **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
   through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step). The panel follows
   the graph on the editor's 30 Hz tick, so an undo brings a row back. Removing the last connection keeps the panel open.
 - **Canvas highlight.** Hovering a row, or keyboard-focusing its remove button, draws that cable as hovered and dims
   every other cable to 35% (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
   pointer or focus leaves the row, the row goes, or the panel closes.
-- **Keyboard.** Tab visits each row's remove button then "Disconnect all" (Up/Down move between them), Return/Space press,
-  Esc closes. Every control has a name and a tooltip.
+- **Add connection.** Under the rows (above "Disconnect all") sits a split button in the mod dot's look
+  (`SplitButton`): **Add connection** and **Pick on canvas**. Add connection swaps the list for a search page in the
+  same panel, a cross-fade (the list's alpha 1 to 0, the page's 0 to 1) while the panel's height settles to the
+  page's: 160 ms ease-out going in, 110 ms ease-in coming back; under Reduce Motion an 80 ms fade with the height
+  changing at once. Focus lands in the search field. A **Back** link, Esc (after the search is cleared) or a pick
+  returns to the list. The search page (`PortTargetSearchPage`, modelled on the mod dot's Add source list) lists what
+  the jack could be cabled to with the cable drop's rules: an output lists input jacks and an input lists output
+  jacks of other modules (never its own), MIDI only with MIDI. A target already wired to the jack is greyed with
+  "Connected" and is not pickable. When the jack is a modulation output it also lists the other modules' knobs
+  ("Filter 1 · Cutoff", from `getModulationTargets()`; a knob already modulated by it shows "Connected"). Modules are
+  ordered nearest this jack's card first (canvas distance, title breaking a tie); a module with exactly one target is
+  ONE row "Module · port", one with several is a foldable group with its targets underneath. Typing uses the
+  [shared search](chrome.md#shared-search) (matched letters highlighted, aliases searched but not painted) and adds
+  "New <module>" rows (the New tag) for authorable module types with a compatible jack, once per class. Down from the
+  field enters the rows, Up/Down walk them, Return with nothing focused picks the best match (lowest `searchScore`,
+  existing targets before New rows), Esc clears the query and then goes back. Hovering or focusing a row previews a
+  dashed cable from the jack to its target on the canvas (`PortPanelController::setPreview`, painted over the cables;
+  it clears when the pointer or focus leaves, or the panel closes).
+- **Picking.** A pick is one undo step and goes through `PortConnector` (`Source/UI/Graph/PortPanel/`), a friend of
+  `GraphEditor`: a jack uses `connectJacks`, the **same function the cable drag's drop calls**, so a poly fan, MIDI, a
+  mono CV jack through its attenuverter, the macro-boundary auto ports and a Track In's auto channel behave exactly
+  as dropping a cable there would; a knob uses `GraphEditor::connectModulationSource` at the mod dot's new-source
+  depth; a "New <module>" row creates the module beside this jack's card (right of an output, left of an input; it
+  joins this card's macro) and cables its first compatible jack, all in the same undo step. The new cable grows out of
+  its source jack (the [cable grow-back](animation.md#motion-rules) armed after the connect), the panel swaps back to
+  the list and the new row grows in.
+- **Pick on canvas.** The mod dot's `ModDotCanvasPicker` in its jack mode: a layer over the canvas outlines the
+  eligible jack (or knob) under the pointer, a press on it connects, Esc stops. The panel stays open while picking
+  (`keepOpenOnOutsideClick`); the eligible set is the list of compatible targets above.
+- **Keyboard.** Tab visits each row's remove button, the two halves of the split button (Left/Right hop between
+  them), then "Disconnect all" (Up/Down move between them), Return/Space press, Esc steps back (stop picking, clear
+  the search, return to the list, close). Every control has a name and a tooltip.
 
 Code: `Source/UI/Graph/PortPanel/` (`PortPanelController`, `PortConnectionsPanel`, `PortConnectionRow`,
-`PortConnectionList`); the card hands a jack release and a jack double-click to the controller from
+`PortConnectionList`, `PortTargetList`, `PortTargetSearchPage`, `PortConnector`); the card hands a jack release and a jack double-click to the controller from
 `ModuleComponentInteraction.cpp`. Motion: [animation](animation.md#motion-rules) (Port connections panel row).
 
 ## Right-click menu

@@ -11,10 +11,13 @@
 //    several cables opens at once, and a double-click on one with several keeps the panel instead of disconnecting.
 //  * Hovering or keyboard-focusing a row highlights that cable on the canvas and dims all others (the canvas paint
 //    reads highlightedCable()).
+//  * The panel's Add connection page: a hovered or focused target previews a dashed cable from the jack to it
+//    (paintPreview(), drawn by the canvas), and a pick goes through connect() -> PortConnector.
 //
 // docs/layout/cables.md#port-connections-panel.
 
 #include "PortConnectionList.h"
+#include "PortTargetList.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <functional>
 #include <memory>
@@ -71,6 +74,22 @@ public:
     void clearHighlight();
     const std::optional<GraphEditor::CableId>& highlightedCable() const noexcept { return highlighted_; }
 
+    // ---- adding a connection ----
+    /** Connects `from` to `target` (one undo step; the new cable grows in). False when nothing was made. */
+    bool connect(const PortRef& from, const PortTarget& target);
+    /** Previews the cable `from` -> `target` as a dashed wire on the canvas; null clears it. */
+    void setPreview(const PortRef& from, const PortTarget* target);
+    void clearPreview();
+    bool hasPreview() const noexcept { return preview_.has_value(); }
+    /** The preview's ends in canvas coordinates (source end first), for the canvas paint and a test. */
+    struct Preview {
+        juce::Point<float> p1, p2;
+        juce::Colour colour;
+    };
+    const std::optional<Preview>& preview() const noexcept { return preview_; }
+    /** Draws the preview in canvas coordinates; nothing when there is none. */
+    void paintPreview(juce::Graphics& g) const;
+
     // Test seams.
     bool hasPendingOpenForTest() const noexcept { return pending_.isTimerRunning(); }
     /** Runs the deferred open now, as its timer would. */
@@ -97,6 +116,7 @@ private:
     juce::Component::SafePointer<juce::Component> frame_; // the window the panel sits in (null with a test launcher)
     bool dismissed_ = false;
     std::optional<GraphEditor::CableId> highlighted_;
+    std::optional<Preview> preview_;
     PendingOpen pending_;
 };
 

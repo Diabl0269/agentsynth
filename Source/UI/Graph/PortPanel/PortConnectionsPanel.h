@@ -1,18 +1,28 @@
 #pragma once
 
-// The panel a plain click on a jack opens: the cables on that jack, one row each (PortConnectionRow), a "Disconnect
-// all" button under two or more, and the title that counts them. It is the content of a ModDotPanelFrame window, built
-// from the mod dot panel's parts (palette, rows, remove glyph, motion). Edits go straight to the graph through
-// GraphEditor (one undo step each); the list follows the graph while open. A removed row shrinks toward its centre and
-// the rows below close the gap; an undo makes room, grows the row back and fades an outline around it
-// (ExitEnterRowSlots.h); the panel's height follows frame by frame. Removing the last connection keeps the panel open
-// showing "No connections yet". Esc closes it. docs/layout/cables.md#port-connections-panel.
+// The panel a plain click on a jack opens: the cables on that jack, one row each (PortConnectionRow), an "Add
+// connection | Pick on canvas" split button under them, a "Disconnect all" button under two or more, and the title
+// that counts them. It is the content of a ModDotPanelFrame window, built from the mod dot panel's parts (palette,
+// rows, remove glyph, motion). Edits go straight to the graph through GraphEditor (one undo step each); the list
+// follows the graph while open. A removed row shrinks toward its centre and the rows below close the gap; an undo
+// makes room, grows the row back and fades an outline around it (ExitEnterRowSlots.h); the panel's height follows
+// frame by frame. Removing the last connection keeps the panel open showing "No connections yet".
+//
+// "Add connection" swaps the list for the search page (PortTargetSearchPage) in the SAME panel: the two pages
+// cross-fade while the height settles to the new page's (160 ms ease-out going in, 110 ms ease-in coming back; under
+// Reduce Motion an 80 ms fade with the height changing at once). A pick connects, goes back to the list and the new
+// row grows in. "Pick on canvas" (ModDotCanvasPicker's jack mode) connects to the jack or knob clicked on the canvas.
+// Esc steps back: stop picking, clear the search, return to the list, then close.
+// docs/layout/cables.md#port-connections-panel.
 
 #include "PortConnectionList.h"
 #include "PortConnectionRow.h"
+#include "PortTargetSearchPage.h"
 #include "UI/Graph/ModDot/ModDotAddSourceParts.h"
+#include "UI/Graph/ModDot/ModDotCanvasPicker.h"
 #include "UI/Graph/ModDot/ModDotPage.h"
 #include "UI/Layout/ExitEnterRowSlots.h"
+#include "UI/Layout/SplitButton.h"
 #include <memory>
 #include <vector>
 
@@ -28,14 +38,16 @@ public:
     static constexpr int kFooterHeight = 32;
     static constexpr int kBottomPad = 6;
     static constexpr int kScrollBar = 10;
-    // PHASE 2 ("Add connection" row, fed by the same ports the cable drag can reach) goes between the rows and the
-    // footer, in arrange(); it needs no change to the rows above it.
+    static constexpr int kSplitRowHeight = 32; // the Add connection | Pick on canvas row
+    static constexpr double kPageInMs = 160.0; // list -> search page
+    static constexpr double kPageOutMs = 110.0;
+    static constexpr double kPageReducedMs = 80.0; // Reduce Motion: a plain fade
 
     PortConnectionsPanel(GraphEditor& editor, PortPanelController& controller, PortRef port);
     ~PortConnectionsPanel() override;
 
     const PortRef& port() const noexcept { return port_; }
-    int preferredHeight() const override { return desiredHeight_; }
+    int preferredHeight() const override;
     void focusEntry() override;
 
     /** Re-reads the jack's cables: new ones grow in, gone ones shrink out. Dismisses the panel when the node is gone.
@@ -49,7 +61,30 @@ public:
     void dismiss();
     std::function<void()> onDismiss;
 
+    // ---- Add connection ----
+    /** Swaps to the search page (focus in its field) or back to the list, cross-fading and settling the height. */
+    void setSearchOpen(bool open);
+    bool isSearchOpen() const noexcept { return searchOpen_; }
+    /** "Pick on canvas": the next press on a jack or knob the jack can connect to connects it; Esc stops. */
+    void startPick();
+    void stopPick();
+    void togglePick();
+    bool isPicking() const noexcept { return picker_ != nullptr; }
+
     // Test seams and inspection.
+    PortTargetSearchPage& searchPage() noexcept { return *searchPage_; }
+    ModDotCanvasPicker* canvasPicker() noexcept { return picker_.get(); }
+    SplitButton& splitButton() noexcept { return split_; }
+    juce::Button& addConnectionButton() noexcept { return split_.leftHalf(); }
+    /** 0 = the list is showing, 1 = the search page; between them the two are cross-fading. */
+    float searchAmount() const noexcept { return searchAmount_; }
+    /** The height the panel settles at with the search page open or closed. */
+    int settledHeight(bool searchOpen) const;
+    /** Puts the page swap at eased progress `t` (what each frame does). */
+    void applyPageTweenAt(float t);
+    bool isPageAnimating() const noexcept { return pageAnim_.isRunning(); }
+    /** Re-reads the targets now (the tick does it a few times a second). */
+    void refreshTargets();
     int rowCount() const; // rows not shrinking out
     PortConnectionRow* rowAt(int index) const;
     PortConnectionRow* rowFor(const GraphEditor::CableId& id) const;
@@ -84,6 +119,9 @@ private:
     };
     class RowsHolder;
 
+    void connectTarget(const PortTarget& target);
+    const PortTarget* pickableTargetFor(const ModDotCanvasPicker::JackHit& hit) const;
+    void applyPages();
     void wireRow(PortConnectionRow& row);
     void removeConnection(PortConnectionRow& row);
     void disconnectEverything();
@@ -106,14 +144,28 @@ private:
     juce::String ownTitle_;
     std::vector<Entry> entries_;
     std::unique_ptr<RowsHolder> holder_;
+    juce::Component listLayer_; // the list page: title area, rows, split button and footer, faded as one
     juce::Viewport viewport_;
+    SplitButton split_;
     ModDotLinkButton disconnectAll_;
+    std::unique_ptr<PortTargetSearchPage> searchPage_;
+    std::unique_ptr<ModDotCanvasPicker> picker_;
+    std::unique_ptr<ModDotCanvasPicker> retiredPicker_; // parked: stopPick can run inside the layer's own handler
+    std::vector<PortTargetModule> pickTargets_;
     Footer footer_;
     int maxHeight_ = 0;
     int rowsTotal_ = 0;
-    int desiredHeight_ = kTitleHeight + kBottomPad;
+    int desiredHeight_ = kTitleHeight + kSplitRowHeight + kBottomPad; // the list page's own height
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver anim_;
+    juce::VBlankAnimatorUpdater pageUpdater_;
+    AnimationDriver pageAnim_;
+    bool searchOpen_ = false;
+    float searchAmount_ = 0.0f;
+    float pageFrom_ = 0.0f;
+    float pageTo_ = 0.0f;
+    bool heightFollowsFade_ = true; // false under Reduce Motion: the height is the new page's from the first frame
+    juce::uint32 lastRefreshMs_ = 0;
     ExitEnterTimeline timeline_;
     bool motionActive_ = false;
     bool forceAnimate_ = false;

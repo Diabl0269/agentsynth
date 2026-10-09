@@ -78,6 +78,18 @@ bool landsOn(GraphEditor& editor, const GraphEditor::VisibleCable& cable, const 
     return visibleJackOf(processorFor(editor, port.node), raw, port.isInput) == port.jack;
 }
 
+// The jack at the other end of a cable that lands on `port`.
+PortRef farEnd(GraphEditor& editor, const GraphEditor::VisibleCable& cable, const PortRef& port) {
+    const bool farIsDestination = !port.isInput;
+    const juce::AudioProcessorGraph::NodeID id{farIsDestination ? cable.id.dstUid : cable.id.srcUid};
+    const bool midi = cable.signal == CableSignal::Midi;
+    const int raw = farIsDestination ? cable.id.dstPort : cable.id.srcPort;
+    return {id,
+            midi ? juce::AudioProcessorGraph::midiChannelIndex
+                 : visibleJackOf(processorFor(editor, id), raw, farIsDestination),
+            farIsDestination, midi};
+}
+
 } // namespace
 
 std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port) {
@@ -88,11 +100,22 @@ std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortR
             continue;
         PortConnection entry;
         entry.cable = cable;
+        entry.far = farEnd(editor, cable, port);
+        entry.farRawChannel = port.isInput ? cable.id.srcPort : cable.destChannel;
         entry.label = endName(editor, cable, /*farIsDestination=*/!port.isInput);
         entry.colour = editor.colourForCable(cable);
         out.push_back(std::move(entry));
     }
     return out;
+}
+
+juce::String portSeparator() { return dotSeparator(); }
+
+juce::String jackName(GraphEditor& editor, const PortRef& port) {
+    auto* processor = processorFor(editor, port.node);
+    if (processor == nullptr)
+        return {};
+    return port.isMidi ? midiLabel(port.isInput) : jackLabel(processor, port.jack, port.isInput);
 }
 
 juce::String portTitle(GraphEditor& editor, const PortRef& port) {

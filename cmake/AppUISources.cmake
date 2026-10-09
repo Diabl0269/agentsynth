@@ -506,6 +506,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotSourceRow.cpp
     Source/UI/Graph/ModDot/ModDotSourcesPage.cpp
     Source/UI/Graph/ModDot/ModSourceCatalog.cpp
+    Source/UI/Graph/PortPanel/PortConnector.h
+    Source/UI/Graph/PortPanel/PortConnector.cpp
+    Source/UI/Graph/PortPanel/PortConnectorNewModule.cpp
     Source/UI/Graph/PortPanel/PortConnectionList.h
     Source/UI/Graph/PortPanel/PortConnectionList.cpp
     Source/UI/Graph/PortPanel/PortConnectionRow.h
@@ -513,6 +516,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/PortPanel/PortConnectionsPanel.h
     Source/UI/Graph/PortPanel/PortConnectionsPanel.cpp
     Source/UI/Graph/PortPanel/PortConnectionsPanelMotion.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanelPages.cpp
+    Source/UI/Graph/PortPanel/PortTargetList.h
+    Source/UI/Graph/PortPanel/PortTargetList.cpp
+    Source/UI/Graph/PortPanel/PortTargetSearchPage.h
+    Source/UI/Graph/PortPanel/PortTargetSearchPage.cpp
     Source/UI/Graph/PortPanel/PortPanelController.h
     Source/UI/Graph/PortPanel/PortPanelController.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp

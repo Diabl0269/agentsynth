@@ -242,7 +242,7 @@ TEST_F(GraphEditorTest, EscapeClosesThePanel) {
     EXPECT_EQ(f.panel(), nullptr);
 }
 
-TEST_F(GraphEditorTest, TabReachesEveryRowsRemoveButtonThenDisconnectAll) {
+TEST_F(GraphEditorTest, TabReachesEveryRowsRemoveButtonThenTheSplitButtonThenDisconnectAll) {
     PortFixture f(3);
     f.clickOscOutput();
     auto* panel = f.panel();
@@ -251,10 +251,12 @@ TEST_F(GraphEditorTest, TabReachesEveryRowsRemoveButtonThenDisconnectAll) {
     for (auto* c : traverser->getAllComponents(panel))
         if (c->getWantsKeyboardFocus() && c != panel)
             stops.push_back(c);
-    ASSERT_EQ(stops.size(), 4u);
+    ASSERT_EQ(stops.size(), 6u);
     for (int i = 0; i < 3; ++i)
         EXPECT_EQ(stops[(size_t)i], &panel->rowAt(i)->removeButton()) << "stop " << i;
-    EXPECT_EQ(stops[3], &panel->disconnectAllButton());
+    EXPECT_EQ(stops[3], &panel->splitButton().leftHalf()) << "Add connection";
+    EXPECT_EQ(stops[4], &panel->splitButton().rightHalf()) << "Pick on canvas";
+    EXPECT_EQ(stops[5], &panel->disconnectAllButton());
 }
 
 TEST_F(GraphEditorTest, ReturnAndSpaceRemoveAConnectionFromTheKeyboard) {

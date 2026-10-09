@@ -12,6 +12,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PortPanel/PortConnector.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UserSettings.h"
 
@@ -308,52 +309,12 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
-                // A MIDI cable from a Track In node landing here may newly make some audio reach the output with no
-                // channel — build one, in the SAME undo step as the connection itself (and as any auto-created macro
-                // port the connection below also mints, so a Track In dragged across a macro boundary straight onto an
-                // unchanneled instrument gets ALL of it undone by one Cmd+Z). Gated by
-                // autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a MIDI drag from a Track In) falls
-                // straight through to the plain-connect branch below
-                // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
-                if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
-                    nodeIsTimelineMidiSource(realSrc->nodeID)) {
-                    const auto realSrcId = realSrc->nodeID;
-                    const auto realDstId = realDst->nodeID;
-                    auto doMutation = [this, realSrcId, srcJack, realDstId, dstJack] {
-                        if (!autoCreateMacroPortsOnDragEnabled ||
-                            !macroController_.maybeAutoCreateMacroPortsForDrag(realSrcId, srcJack, realDstId, dstJack,
-                                                                               /*isMidi=*/true, /*recordUndo=*/false))
-                            connectPorts(realSrcId, srcJack, realDstId, dstJack, /*isMidi=*/true,
-                                         /*recordUndo=*/false);
-                        // realDstId is always the real destination node, whether or not either
-                        // side just got a minted macro port above — maybeAutoCreateMacroPortsForDrag
-                        // wires any port it mints straight through to this same node — so the
-                        // search for un-channeled output feeds always starts here.
-                        maybeAutoCreateChannelAfterConnect(realDstId);
-                        updateComponents();
-                    };
-                    if (undoManager)
-                        undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-                    else
-                        doMutation();
-                } else {
-                    // If this completed drag crosses a macro boundary (an EXPANDED macro's member on
-                    // one side, something outside that same macro on the other — the collapsed-card
-                    // drop above is a different code path), mint and wire a matching port instead of
-                    // the plain direct connection. Gated by autoCreateMacroPortsOnDragEnabled
-                    // (Preferences); when it handles the drag the plain connectPorts is skipped entirely
-                    // and the cables it made slide in from the drop point
-                    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
-                    std::vector<VisibleCable> cablesBeforeDrop;
-                    if (autoCreateMacroPortsOnDragEnabled)
-                        cablesBeforeDrop = rebuildVisibleCables();
-                    if (autoCreateMacroPortsOnDragEnabled &&
-                        macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
-                                                                          dstJack, dragSourceIsMidi))
-                        armMacroPortSlide(cablesBeforeDrop, content.getLocalPoint(nullptr, screenPos).toFloat());
-                    else
-                        connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
-                }
+                // The drop rules (poly fan, MIDI, attenuverter for mono CV, macro auto ports, a Track In's auto
+                // channel) live in PortConnector, shared with the port connections panel's Add connection so they
+                // cannot drift.
+                synth::ui::PortConnector::connectJacks(*this, realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
+                                                       dragSourceIsMidi, /*recordUndo=*/true,
+                                                       content.getLocalPoint(nullptr, screenPos).toFloat());
                 connectedToAModule = true;
             }
         }

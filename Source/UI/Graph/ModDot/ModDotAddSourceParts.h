@@ -64,6 +64,9 @@ public:
     const juce::String& query() const noexcept { return query_; }
 
     std::function<void(const ModDotChoiceRow&)> onPick;
+    /** The pointer is over the row or it has keyboard focus (true), or neither any more (false): the port panel
+     *  previews the cable the row would make. */
+    std::function<void(const ModDotChoiceRow&, bool lit)> onHighlight;
 
     /** Picks it, as a click or Return would; an added source does nothing. */
     void pick() {
@@ -91,8 +94,16 @@ public:
                                   added_ ? p.disabled : p.text, p.accent.withAlpha(0.28f), p.accent);
         paintFocusRing(g, area, *this, 6.0f);
     }
-    void mouseEnter(const juce::MouseEvent&) override { hover_.setHovered(true); }
-    void mouseExit(const juce::MouseEvent&) override { hover_.setHovered(false); }
+    void mouseEnter(const juce::MouseEvent&) override {
+        hover_.setHovered(true);
+        hovered_ = true;
+        notifyHighlight();
+    }
+    void mouseExit(const juce::MouseEvent&) override {
+        hover_.setHovered(false);
+        hovered_ = false;
+        notifyHighlight();
+    }
     void mouseUp(const juce::MouseEvent& e) override {
         if (getLocalBounds().contains(e.getPosition()))
             pick();
@@ -104,10 +115,26 @@ public:
         }
         return false;
     }
-    void focusGained(FocusChangeType) override { repaint(); }
-    void focusLost(FocusChangeType) override { repaint(); }
+    void focusGained(FocusChangeType) override {
+        focused_ = true;
+        repaint();
+        notifyHighlight();
+    }
+    void focusLost(FocusChangeType) override {
+        focused_ = false;
+        repaint();
+        notifyHighlight();
+    }
 
 private:
+    void notifyHighlight() {
+        const bool lit = hovered_ || focused_;
+        if (lit != lit_ && onHighlight) {
+            lit_ = lit;
+            onHighlight(*this, lit);
+        }
+    }
+
     static void paintNewTag(juce::Graphics& g, const ModDotPalette& p, juce::Rectangle<int> area) {
         const auto pill = area.toFloat().withSizeKeepingCentre((float)area.getWidth(), 14.0f);
         g.setColour(p.accent.withAlpha(0.18f));
@@ -123,6 +150,9 @@ private:
     juce::String newType_;
     juce::String query_;
     ModDotHoverFade hover_;
+    bool hovered_ = false;
+    bool focused_ = false;
+    bool lit_ = false;
 };
 
 /** A group's header: fold arrow, name, count. Click, Return or Space toggles; Left folds, Right unfolds. */

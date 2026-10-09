@@ -8,6 +8,17 @@
 
 namespace synth::ui {
 
+namespace {
+SplitButtonHalfSpec addConnectionHalf() {
+    return {ModDotGlyph::List, "Add connection", "Add connection", "Add connection, search open",
+            "Search for a jack or knob to connect to"};
+}
+SplitButtonHalfSpec pickOnCanvasHalf() {
+    return {ModDotGlyph::Crosshair, "Pick on canvas", "Pick on canvas", "Pick on canvas, on",
+            "Click the jack or knob to connect to on the canvas. Esc stops"};
+}
+} // namespace
+
 // The rows live in a holder inside a viewport so a jack with a long fan-out scrolls instead of outgrowing the screen;
 // the outline of a row an undo brought back is drawn over them.
 class PortConnectionsPanel::RowsHolder final : public juce::Component {
@@ -28,8 +39,11 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     , controller_(&controller)
     , port_(port)
     , holder_(std::make_unique<RowsHolder>())
+    , split_(addConnectionHalf(), pickOnCanvasHalf(), "Add a connection")
     , disconnectAll_("Disconnect all", "Disconnect all connections")
-    , updater_(this) {
+    , searchPage_(std::make_unique<PortTargetSearchPage>(portTitle(editor, port)))
+    , updater_(this)
+    , pageUpdater_(this) {
     ownTitle_ = portTitle(editor_, port_);
     setComponentID("portConnectionsPanel");
     setWantsKeyboardFocus(true); // a fallback target: Esc still reaches the panel when it has no row to hold the keys
@@ -38,10 +52,22 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     viewport_.setScrollBarsShown(true, false);
     viewport_.setScrollBarThickness(kScrollBar);
     viewport_.setWantsKeyboardFocus(false);
-    addAndMakeVisible(viewport_);
+    addAndMakeVisible(listLayer_);
+    listLayer_.addAndMakeVisible(viewport_);
+    listLayer_.addAndMakeVisible(split_);
+    split_.leftHalf().onClick = [this] { setSearchOpen(true); };
+    split_.rightHalf().onClick = [this] { togglePick(); };
     disconnectAll_.setTooltip("Remove every connection on this jack");
     disconnectAll_.onClick = [this] { disconnectEverything(); };
-    addChildComponent(disconnectAll_);
+    listLayer_.addChildComponent(disconnectAll_);
+    addChildComponent(*searchPage_);
+    searchPage_->onBackRequested = [this] { setSearchOpen(false); };
+    searchPage_->onPick = [this](const PortTarget& target) { connectTarget(target); };
+    searchPage_->onPreview = [this](const PortTarget* target) {
+        if (controller_ != nullptr)
+            controller_->setPreview(port_, target);
+    };
+    searchPage_->onHeightChanged = [this] { applyPages(); };
     for (const auto& connection : listPortConnections(editor_, port_)) {
         Entry entry;
         entry.row = std::make_unique<PortConnectionRow>(connection);
@@ -56,6 +82,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
 
 PortConnectionsPanel::~PortConnectionsPanel() {
     anim_.stop(updater_);
+    pageAnim_.stop(pageUpdater_);
     stopTimer();
     if (controller_ != nullptr)
         controller_->panelClosed(this);
@@ -152,6 +179,13 @@ void PortConnectionsPanel::sync() {
         dismiss();
         return;
     }
+    if (searchOpen_ || picker_ != nullptr) {
+        const auto now = juce::Time::getMillisecondCounter();
+        if (now - lastRefreshMs_ >= 200) { // the graph can change under the page; a few reads a second are plenty
+            lastRefreshMs_ = now;
+            refreshTargets();
+        }
+    }
     const auto list = listPortConnections(editor_, port_);
     // The same cables as the motion in flight was started for: only names and colours follow, the motion plays on.
     if (motionActive_ && followsSameConnections(list)) {
@@ -203,14 +237,18 @@ void PortConnectionsPanel::sync() {
 
 void PortConnectionsPanel::dismiss() {
     stopTimer(); // a leaving panel must not go back for the keyboard
-    if (controller_ != nullptr)
+    stopPick();
+    if (controller_ != nullptr) {
         controller_->clearHighlight();
+        controller_->clearPreview();
+    }
     if (onDismiss)
         onDismiss();
 }
 
 void PortConnectionsPanel::setMaxHeight(int height) {
     maxHeight_ = height;
+    searchPage_->setMaxHeight(height);
     layoutRows();
 }
 
@@ -221,7 +259,9 @@ void PortConnectionsPanel::layoutRows() {
     for (const auto& e : entries_)
         natural += juce::roundToInt(e.current);
     const int footerHeight = juce::roundToInt(footer_.current);
-    const int room = maxHeight_ > 0 ? juce::jmax(0, maxHeight_ - kTitleHeight - footerHeight - kBottomPad) : natural;
+    const int room = maxHeight_ > 0
+                         ? juce::jmax(0, maxHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - kBottomPad)
+                         : natural;
     const int viewHeight = juce::jmin(natural, room);
     const int rowWidth = natural > viewHeight ? kWidth - kScrollBar : kWidth;
     int y = 0;
@@ -234,53 +274,65 @@ void PortConnectionsPanel::layoutRows() {
     rowsTotal_ = y;
     holder_->setSize(rowWidth, rowsTotal_);
     holder_->repaint();
-    desiredHeight_ = kTitleHeight + viewHeight + footerHeight + kBottomPad;
-    if (getHeight() != desiredHeight_ || getWidth() != kWidth)
-        setSize(kWidth, desiredHeight_);
-    else
-        arrange();
-    heightChanged();
+    desiredHeight_ = kTitleHeight + viewHeight + kSplitRowHeight + footerHeight + kBottomPad;
+    listLayer_.setSize(kWidth, desiredHeight_);
+    arrange();
+    applyPages();
 }
 
 void PortConnectionsPanel::resized() { arrange(); }
 
+// The list page is laid out at its own height inside listLayer_, whatever height the panel has while the pages swap.
 void PortConnectionsPanel::arrange() {
     const int footerHeight = juce::roundToInt(footer_.current);
-    const int viewHeight = juce::jmax(0, getHeight() - kTitleHeight - footerHeight - kBottomPad);
-    viewport_.setBounds(0, kTitleHeight, getWidth(), viewHeight);
-    const int footerY = kTitleHeight + viewHeight;
+    const int viewHeight = juce::jmax(0, desiredHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - kBottomPad);
+    viewport_.setBounds(0, kTitleHeight, kWidth, viewHeight);
+    split_.setBounds(6, kTitleHeight + viewHeight + 3, kWidth - 12, SplitButton::kHeight);
+    const int footerY = kTitleHeight + viewHeight + kSplitRowHeight;
     disconnectAll_.setVisible(footerHeight > 0 && footer_.to > 0.0f);
     disconnectAll_.setAlpha(footer_.to > 0.0f ? juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)
                                               : 1.0f);
     const int w = disconnectAll_.preferredWidth();
-    disconnectAll_.setBounds((getWidth() - w) / 2, footerY + 4, w, kFooterHeight - 8);
+    disconnectAll_.setBounds((kWidth - w) / 2, footerY + 4, w, kFooterHeight - 8);
 }
 
 void PortConnectionsPanel::paint(juce::Graphics& g) {
     const auto p = modDotPaletteFor(*this);
-    g.setColour(p.text);
+    const float listAlpha = 1.0f - searchAmount_; // the title and rules belong to the list page, which fades out
+    if (listAlpha <= 0.0f)
+        return;
+    g.setColour(p.text.withMultipliedAlpha(listAlpha));
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
     g.drawText(titleText(), juce::Rectangle<int>(0, 0, getWidth(), kTitleHeight).reduced(12, 0),
                juce::Justification::centredLeft, true);
+    const int footerTop = desiredHeight_ - kBottomPad - juce::roundToInt(footer_.current);
     if (footer_.current > 1.0f) {
-        g.setColour(p.border.withAlpha(juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)));
-        g.fillRect(
-            juce::Rectangle<int>(8, getHeight() - kBottomPad - juce::roundToInt(footer_.current), getWidth() - 16, 1));
+        g.setColour(p.border.withAlpha(listAlpha * juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)));
+        g.fillRect(juce::Rectangle<int>(8, footerTop, kWidth - 16, 1));
+    }
+    if (rowsTotal_ > 0) { // a rule between the connections and the actions under them
+        g.setColour(p.border.withAlpha(listAlpha));
+        g.fillRect(juce::Rectangle<int>(8, footerTop - kSplitRowHeight, kWidth - 16, 1));
     }
 }
 
 // ---- keyboard ----
 
 void PortConnectionsPanel::focusEntry() {
+    if (searchOpen_) {
+        searchPage_->focusEntry();
+        return;
+    }
     for (auto& e : entries_)
         if (!e.leaving) {
             e.row->removeButton().grabKeyboardFocus();
             return;
         }
-    grabKeyboardFocus();
+    split_.leftHalf().grabKeyboardFocus(); // nothing to remove: adding one is the main action
 }
 
-// Up/Down walk the rows' remove buttons and end on "Disconnect all" when it is showing.
+// Up/Down walk the rows' remove buttons, then the Add connection | Pick on canvas buttons, and end on "Disconnect all"
+// when it is showing.
 void PortConnectionsPanel::navigate(juce::Component* from, int step) {
     struct Stop {
         juce::Component* control;
@@ -290,6 +342,7 @@ void PortConnectionsPanel::navigate(juce::Component* from, int step) {
     for (auto& e : entries_)
         if (!e.leaving)
             stops.push_back({&e.row->removeButton(), e.row.get()});
+    stops.push_back({&split_.leftHalf(), &split_});
     if (footer_.to > 0.0f)
         stops.push_back({&disconnectAll_, &disconnectAll_});
     if (stops.empty())
@@ -314,9 +367,16 @@ void PortConnectionsPanel::scrollRowIntoView(const PortConnectionRow& row) {
 
 bool PortConnectionsPanel::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
-        dismiss();
+        if (picker_ != nullptr)
+            stopPick();
+        else if (searchOpen_)
+            searchPage_->stepBack();
+        else
+            dismiss();
         return true;
     }
+    if (searchOpen_)
+        return false; // the search page walks its own rows
     if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
         navigate(juce::Component::getCurrentlyFocusedComponent(), key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
         return true;

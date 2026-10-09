@@ -32,6 +32,8 @@
 namespace synth::ui {
 class ModDotController;    // UI/Graph/ModDot/ModDotController.h
 class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
+class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
+class ColourPickerPopup;   // a unique_ptr return type only; 89 files include this header
 } // namespace synth::ui
 class AudioEngine;
 class CanvasCardKeyboard;
@@ -43,9 +45,6 @@ struct ViewDoc;              // Forward declaration (Source/Project/ViewDoc.h)
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
 class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 } // namespace synth
-namespace synth::ui {
-class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
-}
 namespace graph_editor_paint {
 class CanvasMemo;
 } // namespace graph_editor_paint
@@ -973,6 +972,7 @@ private:
     void repaintCanvas() override;
     std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
     friend class graph_editor_paint::CanvasMemo;
+    friend class synth::ui::PortConnector;
 
     // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
     // Post-passes of rebuildVisibleCables(); the knob re-anchor MUST run before the collapsed-macro pass.

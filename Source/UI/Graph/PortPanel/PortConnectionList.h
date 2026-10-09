@@ -23,7 +23,9 @@ struct PortRef {
 
 struct PortConnection {
     GraphEditor::VisibleCable cable;
-    juce::String label; // "<other module title> . <other port name>" (a macro port: its own name)
+    PortRef far;           // the jack at the other end (VISIBLE index; a MIDI jack answers the MIDI channel index)
+    int farRawChannel = 0; // the RAW channel there: a knob's CV channel, what a Knob target is matched by
+    juce::String label;    // "<other module title> . <other port name>" (a macro port: its own name)
     juce::Colour colour;
 };
 
@@ -31,6 +33,10 @@ struct PortConnection {
 std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port);
 /** "<module title> . <port name>" for the jack itself (a macro port: its own name); empty when the node is gone. */
 juce::String portTitle(GraphEditor& editor, const PortRef& port);
+/** The jack's own name ("Out 1", "Cutoff CV", "Midi input"); empty when the node is gone. */
+juce::String jackName(GraphEditor& editor, const PortRef& port);
+/** " . " as the panel writes it between a module and a port. */
+juce::String portSeparator();
 /** "No connections yet", "1 connection" or "N connections". */
 juce::String connectionCountText(int count);
 

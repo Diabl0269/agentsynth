@@ -20,6 +20,17 @@ ModDotCanvasPicker::ModDotCanvasPicker(GraphEditor& editor,
     setComponentID("modDotCanvasPicker");
 }
 
+// The jack-picking mode: a layer over the canvas that picks a jack or a knob, not a module.
+ModDotCanvasPicker::ModDotCanvasPicker(GraphEditor& editor, std::function<bool(const JackHit&)> isEligible)
+    : editor_(editor)
+    , isEligibleJack_(std::move(isEligible)) {
+    setInterceptsMouseClicks(true, false);
+    setWantsKeyboardFocus(true);
+    setMouseCursor(juce::MouseCursor::CrosshairCursor);
+    setTitle("Pick a jack to connect");
+    setComponentID("modDotCanvasPicker");
+}
+
 ModDotCanvasPicker::~ModDotCanvasPicker() = default;
 
 void ModDotCanvasPicker::begin() {
@@ -49,13 +60,57 @@ void ModDotCanvasPicker::setHovered(juce::AudioProcessorGraph::NodeID node) {
     repaint();
 }
 
-void ModDotCanvasPicker::mouseMove(const juce::MouseEvent& e) { setHovered(eligibleNodeAt(e.getScreenPosition())); }
-void ModDotCanvasPicker::mouseExit(const juce::MouseEvent&) { setHovered({}); }
+std::optional<ModDotCanvasPicker::JackHit> ModDotCanvasPicker::eligibleJackAt(juce::Point<int> screenPoint) const {
+    std::optional<JackHit> found;
+    if (!isEligibleJack_)
+        return found;
+    for (auto* card : editor_.getModuleComponents()) {
+        if (card == nullptr || !card->isVisible() || !card->getScreenBounds().contains(screenPoint))
+            continue;
+        const auto local = card->getLocalPoint(nullptr, screenPoint);
+        std::optional<JackHit> hit;
+        if (const auto port = card->getPortForPoint(local))
+            hit = JackHit{card->getNodeId(), port->area, port->index, port->isInput, port->isMidi, false};
+        else if (const auto knob = card->getModTargetPortForPoint(local))
+            hit = JackHit{card->getNodeId(), knob->area, knob->index, true, false, true};
+        if (hit.has_value() && isEligibleJack_(*hit))
+            found = hit;
+    }
+    return found;
+}
+
+void ModDotCanvasPicker::setHoveredJack(std::optional<JackHit> hit) {
+    const auto same = [](const std::optional<JackHit>& a, const std::optional<JackHit>& b) {
+        return a.has_value() == b.has_value() &&
+               (!a.has_value() || (a->node == b->node && a->index == b->index && a->isInput == b->isInput &&
+                                   a->isMidi == b->isMidi && a->knob == b->knob));
+    };
+    if (same(hit, hoveredJack_))
+        return;
+    hoveredJack_ = hit;
+    repaint();
+}
+
+void ModDotCanvasPicker::mouseMove(const juce::MouseEvent& e) {
+    if (isEligibleJack_)
+        setHoveredJack(eligibleJackAt(e.getScreenPosition()));
+    else
+        setHovered(eligibleNodeAt(e.getScreenPosition()));
+}
+void ModDotCanvasPicker::mouseExit(const juce::MouseEvent&) {
+    setHovered({});
+    setHoveredJack(std::nullopt);
+}
 
 void ModDotCanvasPicker::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     if (!e.mods.isLeftButtonDown())
         return;
+    if (isEligibleJack_) {
+        if (const auto hit = eligibleJackAt(e.getScreenPosition()); hit.has_value() && onPickedJack)
+            onPickedJack(*hit);
+        return;
+    }
     const auto node = eligibleNodeAt(e.getScreenPosition());
     if (node.uid != 0 && onPicked)
         onPicked(node);
@@ -75,6 +130,20 @@ bool ModDotCanvasPicker::keyPressed(const juce::KeyPress& key) {
 }
 
 void ModDotCanvasPicker::paint(juce::Graphics& g) {
+    if (hoveredJack_.has_value()) {
+        const auto p = modDotPaletteFor(*this);
+        for (auto* card : editor_.getModuleComponents()) {
+            if (card == nullptr || card->getNodeId() != hoveredJack_->node)
+                continue;
+            auto area = getLocalArea(card, hoveredJack_->area).toFloat();
+            area = hoveredJack_->knob ? area.expanded(2.0f) : area.withSizeKeepingCentre(22.0f, 22.0f);
+            g.setColour(p.accent.withAlpha(0.16f));
+            g.fillRoundedRectangle(area, hoveredJack_->knob ? 8.0f : 11.0f);
+            g.setColour(p.accent);
+            g.drawRoundedRectangle(area.reduced(1.0f), hoveredJack_->knob ? 8.0f : 10.0f, 2.0f);
+        }
+        return;
+    }
     if (hovered_.uid == 0)
         return;
     const auto p = modDotPaletteFor(*this);
