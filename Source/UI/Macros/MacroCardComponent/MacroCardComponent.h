@@ -103,7 +103,7 @@ public:
     // definition for the choice list and why it doesn't show the popup itself.
     juce::PopupMenu buildAddPortMenu(bool isInput);
 
-    // Test accessors for the '+'/'x' hit-testing below — same *ForTest pattern as above.
+    // Test accessors for the '+'/'-' hit-testing below — same *ForTest pattern as above.
     juce::Rectangle<float> getAddPortButtonBoundsForTest(bool isInput) const { return getAddPortButtonBounds(isInput); }
     juce::Rectangle<float> getRemovePortButtonBoundsForTest(bool isInput) const {
         return getRemovePortButtonBounds(isInput);
@@ -147,7 +147,7 @@ private:
     // The middle column between the two port strips (title, preview, count), card-local.
     juce::Rectangle<int> getContentArea() const;
 
-    // Both strips, the jacks, the names, the '+'/'-' pair and the hovered-jack cross
+    // Both strips, the jacks, the names, the '+'/'-' pair and the hovered-jack ring
     // (MacroCardComponentPorts.cpp).
     void paintPortStrips(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
 
@@ -164,15 +164,18 @@ private:
     // faded in.
     juce::Rectangle<float> removePortButtonSlot(bool isInput) const;
 
-    // Deletes the bottom port on one side, through the same path the hovered jack's cross uses.
+    // Deletes the bottom port on one side, through the same path the port panel's Delete port uses.
     void removeBottomPort(bool isInput);
+
+    // The release of a press that landed on a port dot: a plain click opens the port connections panel for that
+    // port's node (PortPanelController); a drag or a modified click is the controller's to ignore.
+    void portReleased(const juce::MouseEvent& e);
+    // Folds away this card's own port panel (and a deferred open) before the card expands or hides.
+    void closeOwnPortPanel();
 
     // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;
     int hoveredPortJack_ = -1; // the hovered row's MacroCardPort::visibleJack (-1 = whole port)
-
-    // Click position an 'x' delete just suppressed hover at — see mouseMove()'s definition.
-    std::optional<juce::Point<int>> suppressHoverAtPosition_;
 
     GraphEditor& owner;
     juce::String macroId;

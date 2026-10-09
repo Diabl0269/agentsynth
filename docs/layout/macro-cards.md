@@ -225,7 +225,7 @@ add a port, delete a port — are reachable straight from the collapsed card, wi
 modal.** `MacroPortConfigDialog` (see [`docs/macros/configure-io.md`](../macros/configure-io.md)) stays
 for everything a single click can't express: rename, reorder, shape and colour. The founder's
 open-ended "make them even slicker" look-and-feel exploration for these jacks is a separate,
-still-unscoped ticket — this covers only the concrete '+'/'x' pair.
+still-unscoped ticket — this covers only the concrete add/delete pair.
 
 **The '+' and '-' affordances.** One small '+' per side sits at the foot of that side's strip
 (`MacroCardComponent::getAddPortButtonBounds`: 12 px above the card's bottom edge, 4 px in from the
@@ -244,46 +244,30 @@ SAME `MacroGroupController::addMacroPort()` Configure I/O's Add button calls, wi
 The direction is fixed by which side's '+' was clicked. `addMacroPort()`'s own
 `recordGraphAndMacroChange` transaction makes this one undo step. '-' removes the **bottom** port on
 its side (`MacroGroupController::deleteBottomMacroPort`) through the same
-`deleteMacroPortManually()` path the hovered jack's 'x' uses, so it is also one undo step.
+`deleteMacroPortManually()` path the port panel's Delete port uses, so it is also one undo step.
 
-**The 'x' affordance.** Hovering a configured jack reveals a small 'x' overlaid on that ONE jack's
-dot (`MacroCardComponent::mouseMove`/`mouseExit` track `hoveredPortUuid_` via the SAME
-`macroCardPortForPoint()` hit-test the drop-target path and the hover overlay both read, so
-hovering, drawing and deleting can never disagree about which jack the mouse is on). Clicking it
-calls `MacroGroupController::deleteMacroPortManually()` — the FRO235 entry point that drops the
-cable by default and splices it back only when the "splice the cable back" preference is on, the
-same as Configure I/O's own Delete Port and the port's right-click Delete Port
+**Delete a port from its panel.** Hovering a configured jack draws a ring round that ONE jack's dot
+(`MacroCardComponent::mouseMove`/`mouseExit` track `hoveredPortUuid_` via the SAME `macroCardPortForPoint()`
+hit-test the drop-target path and the hover ring both read, so hovering, drawing and clicking can never disagree about
+which jack the mouse is on). A plain click on the dot opens the
+[port connections panel](cables.md#port-connections-panel), whose **Delete port** button calls
+`MacroGroupController::deleteMacroPortManually()` — the FRO235 entry point that drops the cable by default and
+splices it back only when the "splice the cable back" preference is on, the same as Configure I/O's own Delete Port
+and the port's right-click Delete Port
 ([`docs/macros/configure-io.md#deleting-a-port-from-the-dialog`](../macros/configure-io.md#deleting-a-port-from-the-dialog)).
-No confirm dialog — undo covers it, same as every other macro mutation.
+No confirm dialog — undo covers it. Because the delete is two clicks apart (dot, then button), a double-click on a
+dot can no longer delete a port; it expands the macro.
 
-**Deleting a port suppresses hover at that exact spot until the mouse really moves.** A delete
-reflows `macroCardPortLayout()` for the survivors, so the jack that used to be one slot away can
-slide underneath the still-resting cursor and land within `kMacroCardJackHitRadius` of the click —
-a quick double-click then deleted two ports, one per click (founder in-app review, 2026-09-27).
-`mouseDown()`'s delete branch clears `hoveredPortUuid_` AND records the click position in
-`suppressHoverAtPosition_`; `mouseMove()` refuses to re-arm hover while its reported position
-still equals that stored one — a plain clear alone is not enough, since a `mouseMove` JUCE
-dispatches at the same pixel as part of the click plumbing itself would otherwise re-arm hover on
-whatever jack the reflow just moved there. Any position that genuinely differs clears the
-suppression and resumes ordinary hover tracking, so this closes exactly the one stale re-arm, not
-hovering forever.
-
-**Neither affordance steals a card body-drag or a real cable drag.** Both hit-tests are checked in
-`mouseDown()` at the SAME precedence `getExpandButtonBounds()` already has — before the shift/cmd
-multi-select branch and the drag-arm fallback — so a click that misses both falls straight through
-to the card's ordinary selection/drag handling, unchanged. The 'x' re-runs
-`macroCardPortForPoint()` against the click position rather than trusting the cached
-`hoveredPortUuid_` alone, so a `mouseDown` with no preceding `mouseMove` (a real click landing where
-the mouse already rested, or a test driving `mouseDown` directly) falls through to the ordinary
-click handling instead of deleting a jack it was never shown hovering — which is also why a plain
-click on an un-hovered jack still behaves exactly as it did before this change. Dragging a cable
-FROM a collapsed card's own jack is not a thing this card supports (jacks here are drop targets
-only, via `endConnectionDrag`'s own hit-test, independent of this component's `mouseDown`), so
-there is nothing for either affordance to steal there either.
+**Neither affordance steals a card body-drag or a real cable drag.** The '+' and '-' hit-tests are checked in
+`mouseDown()` at the SAME precedence `getExpandButtonBounds()` already has — before the shift/cmd multi-select branch
+and the drag-arm fallback — so a click that misses both falls straight through to the card's ordinary
+selection/drag handling. A press on a port dot arms the body drag like any body press; only its release, without a
+drag, opens the panel. Dragging a cable FROM a collapsed card's own jack is not a thing this card supports (jacks here
+are drop targets only, via `endConnectionDrag`'s own hit-test).
 
 **No macro type is excluded.** Configure I/O's own "Configure I/O..." menu item carries no
 guard — it is offered unconditionally for every resolved macro, channel macros included — so the
-'+'/'x' pair follows the same "always available" rule rather than inventing a restriction Configure
+add/delete pair follows the same "always available" rule rather than inventing a restriction Configure
 I/O itself doesn't have.
 
 ## Cables re-anchor around a collapsed macro

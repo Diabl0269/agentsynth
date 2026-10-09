@@ -252,13 +252,17 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   `ModuleComponent` that draws only its jacks (10 px on the boundary side, 7 px on the interior side)
   and its name; the strips (fill and divider from the hull's top edge, under the name chip; the rows still
 start below the chip row) are painted under it by `paintMacroPortStrips` from
-  `GraphContentComponent::paint`, before the dashed outline. There is no hover cross on the open
-  macro, because a widget's jacks are where cable drags start; removal is the strip's '-' or the
-  port's right-click Delete Port.
+  `GraphContentComponent::paint`, before the dashed outline. A widget's jacks are where cable drags start, so
+  removal is the strip's '-', the port's right-click Delete Port, or the "Delete port" button in its connections panel.
+- **Clicking a card's port.** A plain click on a port dot of the collapsed card opens the
+  [port connections panel](../layout/cables.md#port-connections-panel) for that port (`MacroCardComponent::portReleased`).
+  Hovering a dot draws a ring round it (no delete on the press). The '+', '-' and chevron take the press first; a drag
+  still moves the card. The panel of a macro port (on the card or an expanded macro's boundary port node) ends with a
+  **Delete port** button: `deleteMacroPortManually`, one undo step, the cables retract, then the panel closes.
 - **The '+' and '-'.** '+' opens the kind/shape menu (`MacroGroupController::buildAddPortMenu`, one
   menu for the card and the hull). '-' removes the **bottom** port on that side
-  (`deleteBottomMacroPort`, through `deleteMacroPortManually`, so undo is identical to a hovered jack's
-  cross).
+  (`deleteBottomMacroPort`, through `deleteMacroPortManually`, so undo is identical to the panel's
+  Delete port).
 - **The drawn dot and the clickable target are two different knobs.** `getPortForPoint()`'s hit test
   keeps the same generous radius every module's jack uses (10 px). Rows are 16 px apart, so on the
   card `macroCardPortForPoint` picks the nearest jack within that radius.

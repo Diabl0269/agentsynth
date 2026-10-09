@@ -13,6 +13,9 @@
 // Reduce Motion an 80 ms fade with the height changing at once). A pick connects, goes back to the list and the new
 // row grows in. "Pick on canvas" (ModDotCanvasPicker's jack mode) connects to the jack or knob clicked on the canvas.
 // Esc steps back: stop picking, clear the search, return to the list, then close.
+// On a macro's port (a collapsed card's dot, or an expanded macro's boundary port node) a "Delete port" link sits under
+// the other buttons: MacroGroupController::deleteMacroPortManually (one undo step, cables retract), then the panel
+// closes.
 // docs/layout/cables.md#port-connections-panel.
 
 #include "PortConnectionList.h"
@@ -38,8 +41,9 @@ public:
     static constexpr int kFooterHeight = 32;
     static constexpr int kBottomPad = 6;
     static constexpr int kScrollBar = 10;
-    static constexpr int kSplitRowHeight = 32; // the Add connection | Pick on canvas row
-    static constexpr double kPageInMs = 160.0; // list -> search page
+    static constexpr int kSplitRowHeight = 32;  // the Add connection | Pick on canvas row
+    static constexpr int kDeleteRowHeight = 32; // the "Delete port" row, only on a macro's port
+    static constexpr double kPageInMs = 160.0;  // list -> search page
     static constexpr double kPageOutMs = 110.0;
     static constexpr double kPageReducedMs = 80.0; // Reduce Motion: a plain fade
 
@@ -91,6 +95,9 @@ public:
     juce::String titleText() const;
     juce::Button& disconnectAllButton() noexcept { return disconnectAll_; }
     bool isDisconnectAllShown() const noexcept { return footer_.to > 0.0f; }
+    /** "Delete port": shown when the jack is a macro's port (collapsed card or expanded boundary node). */
+    juce::Button& deletePortButton() noexcept { return deletePort_; }
+    bool isDeletePortShown() const noexcept { return isMacroPort_; }
     bool isAnimating() const noexcept { return anim_.isRunning(); }
     /** Test seam: animate even though the panel is not showing. */
     void setForceAnimateForTest(bool on) noexcept { forceAnimate_ = on; }
@@ -125,6 +132,7 @@ private:
     void wireRow(PortConnectionRow& row);
     void removeConnection(PortConnectionRow& row);
     void disconnectEverything();
+    void deleteThePort();
     bool followsSameConnections(const std::vector<PortConnection>& list) const;
     void animateLayout();
     void startRemovalMotion();
@@ -148,6 +156,9 @@ private:
     juce::Viewport viewport_;
     SplitButton split_;
     ModDotLinkButton disconnectAll_;
+    ModDotLinkButton deletePort_;
+    bool isMacroPort_ = false;
+    juce::String macroId_, portNodeUuid_; // the macro and port node "Delete port" removes
     std::unique_ptr<PortTargetSearchPage> searchPage_;
     std::unique_ptr<ModDotCanvasPicker> picker_;
     std::unique_ptr<ModDotCanvasPicker> retiredPicker_; // parked: stopPick can run inside the layer's own handler

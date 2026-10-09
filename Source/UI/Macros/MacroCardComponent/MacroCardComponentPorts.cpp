@@ -9,6 +9,8 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/PortPanel/PortConnectionsPanel.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
@@ -55,6 +57,33 @@ juce::Rectangle<float> MacroCardComponent::removePortButtonSlot(bool isInput) co
 void MacroCardComponent::removeBottomPort(bool isInput) {
     hoveredPortUuid_.reset();
     owner.getMacroController().deleteBottomMacroPort(macroId, isInput);
+}
+
+void MacroCardComponent::portReleased(const juce::MouseEvent& e) {
+    auto& controller = owner.getMacroController();
+    const auto hit = controller.macroCardPortForPoint(macroId, e.getMouseDownPosition());
+    if (!hit.has_value())
+        return;
+    const auto node = controller.resolveMemberNodeId(hit->nodeUuid);
+    if (node.uid == 0)
+        return;
+    // The cables drawn to the card land on the port node's OUTSIDE jack: an inlet's input, an outlet's output.
+    const bool midi = hit->kind == synth::MacroPortKind::Midi;
+    const synth::ui::PortRef ref{
+        node, midi ? juce::AudioProcessorGraph::midiChannelIndex : juce::jmax(0, hit->visibleJack), hit->isInput, midi};
+    constexpr int kDot = 10; // the painted dot (see the hover ring in paintPortStrips)
+    const auto dot = juce::Rectangle<int>(kDot, kDot).withCentre(hit->jackPos);
+    owner.getPortPanel().jackReleased(*this, dot, ref, e);
+}
+
+void MacroCardComponent::closeOwnPortPanel() {
+    auto& portPanel = owner.getPortPanel();
+    portPanel.cancelPendingOpen();
+    if (auto* open = portPanel.getPanel()) {
+        const auto portOwner = owner.getMacroController().macroPortOwnerFor(open->port().node);
+        if (portOwner.macro != nullptr && portOwner.macro->id == macroId)
+            portPanel.close();
+    }
 }
 
 void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& macro,
@@ -107,20 +136,15 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
             paintMacroPortFooterButton(g, minus, glyphColour.withMultipliedAlpha(nameAlpha), false);
     }
 
-    // Hovered jack: a cross over the dot (hoveredPortUuid_ is kept fresh by mouseMove/mouseExit;
-    // this Component has no child Button of its own to hover). mouseDown re-checks the same hit-test
-    // before deleting.
+    // Hovered jack: a ring round the dot (hoveredPortUuid_ is kept fresh by mouseMove/mouseExit; this Component has no
+    // child Button of its own to hover). A click on it opens the port connections panel.
     if (hoveredPortUuid_.has_value()) {
         for (const auto& port : layout) {
             if (port.nodeUuid != *hoveredPortUuid_ || port.visibleJack != hoveredPortJack_)
                 continue;
             const juce::Rectangle<float> dot((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
-            g.setColour(themeColors.surface.withAlpha(0.9f));
-            g.fillEllipse(dot);
-            g.setColour(themeColors.error);
-            const auto cross = dot.reduced(dot.getWidth() * 0.22f);
-            g.drawLine(cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.6f);
-            g.drawLine(cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.6f);
+            g.setColour(themeColors.textPrimary.withAlpha(0.85f));
+            g.drawEllipse(dot.expanded(2.5f), 1.5f);
             break;
         }
     }

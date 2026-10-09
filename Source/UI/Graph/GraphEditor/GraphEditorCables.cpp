@@ -621,7 +621,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         for (int d = 0; d < 3; ++d) {
             float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
             auto pt = wire.getPointAlongPath(t * len);
-            g.setColour(colour.withAlpha(0.7f));
+            g.setColour(colour.withMultipliedAlpha(0.7f)); // multiplied: a dimmed cable's dots dim with it
             g.fillEllipse(pt.x - 2.5f, pt.y - 2.5f, 5.0f, 5.0f);
         }
     };

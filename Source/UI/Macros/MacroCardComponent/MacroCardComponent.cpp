@@ -189,30 +189,10 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // A hovered
-    // port's 'x' deletes it and a side's '+' opens the add-port choice menu — both checked at the
-    // SAME precedence getExpandButtonBounds() already has below (before shift/cmd multi-select
-    // and the drag-arm fallback), so neither steals a card body drag or an expand click. The 'x'
-    // re-runs macroCardPortForPoint() rather than trusting hoveredPortUuid_ alone, since a
-    // mouseDown with no preceding mouseMove (a real click landing where the mouse already
-    // rested, or a test driving mouseDown directly with no mouseMove first) must never delete a
-    // jack it never actually hovered.
-    if (hoveredPortUuid_.has_value()) {
-        const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
-        if (hit.has_value() && hit->nodeUuid == *hoveredPortUuid_) {
-            owner.getMacroController().deleteMacroPortManually(macroId, *hoveredPortUuid_);
-            // A quick double-click must not delete TWO
-            // ports: the delete reflows macroCardPortLayout(), so the very next jack slides
-            // under the still-resting cursor and immediately shows ITS OWN 'x', which the second
-            // click of the double-click then hit. Clearing the hover here is not enough on its
-            // own (the next mouseMove would just re-arm it at the same pixel); suppressing hover
-            // at this exact click position until the mouse genuinely moves away from it is what
-            // actually closes the gap — see mouseMove()'s own comment.
-            hoveredPortUuid_.reset();
-            suppressHoverAtPosition_ = e.getPosition();
-            return;
-        }
-    }
+    // A side's '+' opens the add-port choice menu and its '-' removes the bottom port - checked at the SAME precedence
+    // getExpandButtonBounds() has below (before shift/cmd multi-select and the drag-arm fallback), so neither steals a
+    // card body drag or an expand click. A press on a port dot is not handled here: it arms the body drag below and
+    // its release opens the port connections panel (portReleased).
     for (const bool isInput : {true, false}) {
         if (getAddPortButtonBounds(isInput).contains(e.position)) {
             auto menu = buildAddPortMenu(isInput);
@@ -226,6 +206,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     if (getExpandButtonBounds().contains(e.position)) {
+        closeOwnPortPanel();
         owner.getMacroController().setMacroCollapsed(macroId, false);
         return;
     }
@@ -258,7 +239,8 @@ void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     owner.dragMacroCardBy(macroId, getPosition() - dragStartPosition);
 }
 
-void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
+void MacroCardComponent::mouseUp(const juce::MouseEvent& e) {
+    // Only a press that reached the body-drag arming (not the +/-, expand or a modifier click) can be a port click.
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
@@ -268,6 +250,7 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
         owner.finalizeMacroCardDrag(macroId, getPosition());
     else
         owner.cancelMacroCardDrag(macroId);
+    portReleased(e); // a press that became a drag is the controller's to ignore: the card was dragged as before
 }
 
 void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
@@ -290,25 +273,14 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     }
 
+    closeOwnPortPanel(); // the first click of this double-click may have opened (or queued) a port panel
     owner.getMacroController().setMacroCollapsed(macroId, false);
 }
 
 void MacroCardComponent::mouseMove(const juce::MouseEvent& e) {
-    // A position suppressed by a just-completed 'x' delete (mouseDown's own
-    // comment on suppressHoverAtPosition_) stays suppressed until a mouseMove reports a
-    // DIFFERENT position — a mouseMove at the identical position (JUCE can dispatch one even with
-    // no real movement, e.g. as part of the click plumbing itself) must not re-arm hover on
-    // whatever port the reflow just slid underneath the resting cursor. Any position that
-    // genuinely differs means the mouse moved for real, so normal hover tracking resumes.
-    if (suppressHoverAtPosition_.has_value()) {
-        if (e.getPosition() == *suppressHoverAtPosition_)
-            return;
-        suppressHoverAtPosition_.reset();
-    }
-
     // The ONE place hoveredPortUuid_ is armed — macroCardPortForPoint() is the SAME hit-test the
-    // drop-target path (GraphEditor::endConnectionDrag) and paint()'s hovered-'x' overlay both
-    // read, so hovering, drawing and deleting can never disagree about which jack the mouse is on.
+    // drop-target path (GraphEditor::endConnectionDrag) and paint()'s hover ring both
+    // read, so hovering, drawing and clicking can never disagree about which jack the mouse is on.
     const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
     const std::optional<juce::String> newHover =
         hit.has_value() ? std::optional<juce::String>(hit->nodeUuid) : std::nullopt;
@@ -321,7 +293,6 @@ void MacroCardComponent::mouseMove(const juce::MouseEvent& e) {
 }
 
 void MacroCardComponent::mouseExit(const juce::MouseEvent&) {
-    suppressHoverAtPosition_.reset(); // leaving the card is itself real movement
     if (hoveredPortUuid_.has_value()) {
         hoveredPortUuid_.reset();
         repaint();
