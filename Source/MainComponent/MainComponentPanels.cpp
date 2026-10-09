@@ -548,7 +548,7 @@ void MainComponent::applyToolbarIcons() {
     saveButton.setTooltip(hint("Save project", "savePreset"));
     loadButton.setTooltip(hint("Load a patch or project", "openProject"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
-    feedbackButton.setTooltip("Send feedback");
+    feedbackButton.setTooltip(hint("Send feedback", "openFeedback"));
     undoButton.setTooltip(hint("Undo", "undo"));
     redoButton.setTooltip(hint("Redo", "redo"));
     autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));

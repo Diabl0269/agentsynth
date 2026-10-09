@@ -42,7 +42,7 @@ hardcoded colour `0xff0B0D10`.
 `prefWidth` becomes 32 (icon-only). In wide mode each button has a labelled preferred width —
 Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104,
 ToggleAiPanel 92. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
-for both, so no separator is drawn between them) and is 84 px wide, enough for its "Feedback" caption
+for both, so no separator is drawn between them; its tooltip and Cmd-hold key-cap name Cmd+Shift+F, `openFeedback`) and is 84 px wide, enough for its "Feedback" caption
 at full size.
 
 **Sub-group visual grouping.** `ToolbarComponent`'s local `groupOf(slot)` helper maps each `Slot`

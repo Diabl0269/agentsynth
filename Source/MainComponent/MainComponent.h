@@ -275,6 +275,7 @@ public:
     bool changeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) {
         return changeModulatorSource(modulator, lfoUuid);
     }
+    synth::ui::ToolbarButton& getFeedbackButtonForTest() noexcept { return feedbackButton; }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
     void setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect);

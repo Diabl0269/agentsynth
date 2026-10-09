@@ -66,6 +66,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
+| Cmd+Shift+F | Send Feedback (`openFeedback`) — opens the Send feedback window from anywhere (canvas, timeline, mixer): the same action as the top bar's **Feedback** button, whose tooltip names the live chord. Rebindable. Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen; Cmd+F is Focus Library Search and bare F is Follow Playhead, so Cmd+Shift+F is free |
 | Ctrl+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add Track (`openAddTrackMenu`) — shows the Timeline, focuses its **+ Track** button and opens the searchable Add Track picker with the search field ready; Enter adds the first match, Escape closes and focus stays on **+ Track**. A real Control on the Mac (Cmd+T is Toggle Bottom Panel); off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
 
 Cmd+T (now `toggleBottomPanel`) and Space are always active (see

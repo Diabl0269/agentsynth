@@ -72,6 +72,18 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              m.timelinePanel.openAddTrackMenuFromShortcut();
              return true;
          }},
+        // The same action as the top bar's Feedback button, so the chord works from the canvas, timeline and mixer.
+        {AppCommands::openFeedback,
+         "Send Feedback",
+         "Open the send-feedback window",
+         "General",
+         "openFeedback",
+         {},
+         [](MainComponent& m) {
+             if (m.feedbackButton.onClick)
+                 m.feedbackButton.onClick();
+             return true;
+         }},
         // Registered unconditionally (unlike checkForUpdates below) -- neither command needs OS
         // integration, only ownedAudioEngine != nullptr, which is fixed for this instance's whole
         // lifetime.

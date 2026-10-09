@@ -549,6 +549,20 @@ TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleHasNoConflictInItsCate
         << "collides with " << manager.getConflictingAction("timelineShowFocusedTrackModule", binding);
 }
 
+// openFeedback -- Cmd+Shift+F, General category, command-dispatched to the top bar's Feedback button.
+TEST_F(ShortcutManagerTest, OpenFeedbackIsRegisteredWithCmdShiftFAndItsOwnCommand) {
+    EXPECT_TRUE(manager.getActionIds().contains("openFeedback"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("openFeedback"), "Send Feedback");
+    EXPECT_EQ(ShortcutManager::getCategory("openFeedback"), ShortcutCategory::General);
+    const auto kp = manager.getBinding("openFeedback");
+    EXPECT_EQ(kp.getKeyCode(), 'f');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier));
+    EXPECT_TRUE(manager.getConflictingAction("openFeedback", kp).isEmpty())
+        << "collides with " << manager.getConflictingAction("openFeedback", kp);
+    EXPECT_NE(AppCommands::getCommandForAction("openFeedback"), AppCommands::kNoCommand);
+}
+
 // timelineToggleFocusedTrackPluginWindow -- Ctrl+Cmd+E on the Mac, Ctrl+Alt+E elsewhere (Cmd IS Ctrl there, so the Mac
 // chord would collapse into Ctrl+E), Timeline category.
 TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowIsRegisteredWithCtrlCmdEOnMacAndCtrlAltEElsewhere) {

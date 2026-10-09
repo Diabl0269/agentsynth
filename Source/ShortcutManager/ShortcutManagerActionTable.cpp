@@ -60,6 +60,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"focusLibrarySearch", ShortcutCategory::General},
         {"openContextMenu", ShortcutCategory::General},
         {"openAddTrackMenu", ShortcutCategory::General},
+        // Opens the Send feedback window from anywhere (Cmd+Shift+F), the top bar's Feedback button.
+        {"openFeedback", ShortcutCategory::General},
         // Transport verbs promoted to command-dispatched actions (the prerequisite for
         // docs/control/midi-remote.md#action-targets) -- deliberately UNBOUND by default (see resetToDefaults()),
         // unlike every other row above. They exist as command/MIDI-Remote targets first; a

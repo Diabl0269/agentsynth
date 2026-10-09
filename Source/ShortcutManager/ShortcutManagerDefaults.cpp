@@ -127,6 +127,10 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["openAddTrackMenu"] =
         isMac ? juce::KeyPress('t', juce::ModifierKeys::ctrlModifier, 0)
               : juce::KeyPress('t', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
+    // Cmd+Shift+F opens the Send feedback window. Free: Cmd+F is Focus Library Search and bare F is Follow Playhead;
+    // Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen.
+    bindings["openFeedback"] =
+        juce::KeyPress('f', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["focusLibrary"] =
         juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no

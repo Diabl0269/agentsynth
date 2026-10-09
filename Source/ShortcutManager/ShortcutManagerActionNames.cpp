@@ -189,6 +189,8 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
         return "Fold and Pack Macros";
     if (actionId == "openAddTrackMenu")
         return "Add Track...";
+    if (actionId == "openFeedback")
+        return "Send Feedback";
     if (actionId == "renameSelectedModule")
         return "Rename Module";
     if (actionId == "replaceSelectedModule")

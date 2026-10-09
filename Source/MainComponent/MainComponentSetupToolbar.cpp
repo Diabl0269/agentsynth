@@ -320,14 +320,15 @@ void MainComponent::assembleToolbar() {
     setSize(1600, 900);
 
     // Cmd-hold shortcut hints: which buttons carry a key-cap bubble, and the action behind each. The
-    // overlay reads the current key from shortcutManager every time it appears. Feedback and the theme
-    // toggle have no shortcut action, so they are simply not listed.
+    // overlay reads the current key from shortcutManager every time it appears. The theme toggle has
+    // no shortcut action, so it is simply not listed.
     synth::ui::MainWindowHintParts hintParts;
     hintParts.buttons = {{&toggleLibraryButton, "toggleLibrary"},
                          {&newButton, "newPatch"},
                          {&saveButton, "savePreset"},
                          {&loadButton, "openProject"},
                          {&settingsButton, "openSettings"},
+                         {&feedbackButton, "openFeedback"},
                          {&undoButton, "undo"},
                          {&redoButton, "redo"},
                          {&autoArrangeButton, "autoArrange"},
