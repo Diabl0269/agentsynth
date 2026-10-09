@@ -15,6 +15,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
+#include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 
 namespace {
 // Mirrors GraphEditor::rightAudioLegOf + audioChannelReachableFromJack's rule (the Dual
@@ -287,11 +288,14 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
 // instead of calling either primitive directly, so a flip of the "splice the cable back"
 // preference always applies to both at once. Ungroup and the auto-delete-on-last-cable path are
 // untouched — neither goes through this.
+// The cables the delete takes away retract into their jack like any other removal (a splice re-joins the rest).
 void MacroGroupController::deleteMacroPortManually(const juce::String& macroId, const juce::String& nodeUuid) {
+    const auto cablesBefore = host_.snapshotCablesForRetract();
     if (host_.getSpliceCableOnMacroPortDeleteEnabled())
         deleteMacroPortNode(macroId, nodeUuid);
     else
         removeMacroPort(macroId, nodeUuid);
+    host_.retractCablesGoneSince(cablesBefore);
 }
 
 void MacroGroupController::deleteBottomMacroPort(const juce::String& macroId, bool isInput) {

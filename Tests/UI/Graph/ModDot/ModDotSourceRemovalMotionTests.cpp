@@ -116,6 +116,36 @@ TEST_F(ModuleComponentTest, UndoOpensTheGapThenGrowsTheRowBackThenFadesAnOutline
     EXPECT_FLOAT_EQ(s.page->outlineAlphaFor(s.first), 0.0f);
 }
 
+// The mod dot's remove button retracts the source's cable, and Cmd+Z (AppUndoManager::undo, the path every undo
+// takes) grows that same cable back out of its source.
+TEST_F(ModuleComponentTest, RemovingASourceRetractsItsCableAndUndoGrowsItBack) {
+    ReducedMotionGuard guard(false);
+    TwoSources s;
+    const auto cableOf = [&s](juce::AudioProcessorGraph::NodeID atten) -> std::optional<GraphEditor::VisibleCable> {
+        for (const auto& c : s.f.editor->buildVisibleCables())
+            if (c.id.attenUid == atten.uid)
+                return c;
+        return std::nullopt;
+    };
+    const auto drawn = cableOf(s.first);
+    ASSERT_TRUE(drawn.has_value()) << "sanity: the first source's cable is drawn";
+    const auto& anim = s.f.editor->getCableRetractForTest();
+
+    clickNow(s.page->rowAt(0)->removeButton());
+
+    EXPECT_FALSE(cableOf(s.first).has_value());
+    ASSERT_EQ(anim.ghosts().size(), 1u) << "the cable retracts";
+    EXPECT_EQ(anim.ghosts()[0].id, drawn->id);
+    s.f.editor->finishCableRetractForTest();
+
+    ASSERT_TRUE(s.f.undo.undo());
+    s.f.refresh();
+
+    ASSERT_TRUE(cableOf(s.first).has_value());
+    EXPECT_EQ(anim.numGrowing(), 1u) << "the undo grows the cable back";
+    EXPECT_TRUE(anim.isGrowing(drawn->id));
+}
+
 TEST_F(ModuleComponentTest, ReduceMotionFadesTheRowInPlaceInsteadOfShrinkingIt) {
     ReducedMotionGuard guard(true);
     TwoSources s;

@@ -78,12 +78,25 @@ each matched endpoint from its LIVE anchor, so a slide started mid-drag stays at
 
 ### Retracting removed cables
 
-A cable that goes away does not vanish: it retracts into its source jack and fades over 180 ms (linear
-progress, `easeInCubic` pull). `CableRetractAnimator` (`Source/UI/Graph/CableRetractAnimator/`) is pure
-state, armed by `GraphEditor::retractCablesGoneSince(before)` from `disconnectCable`, `disconnectPort`,
-`removeModulator` and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away animates too. The
-ghosts paint in `GraphContentComponent::paint` after the live cables. Project load and New do not go
-through undo/redo and do not animate.
+A cable that goes away does not vanish, and one that comes back does not blink in. `CableRetractAnimator`
+(`Source/UI/Graph/CableRetractAnimator/`) is pure state, armed by `GraphEditor::retractCablesGoneSince(before,
+growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`), and driven by one 220 ms tween.
+
+- **Retract.** A cable no longer drawn pulls back into its source jack (`easeInOutCubic`), staying fully opaque
+  until 60% of the tween and then fading to 0 linearly. Callers: `disconnectCable`, `disconnectPort`,
+  `removeModulator` (and so the mod dot panel's remove button), `MacroGroupController::deleteMacroPortManually`
+  (through the `GraphCanvasHost` seam) and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away
+  animates too. The ghosts paint in `GraphContentComponent::paint` after the live cables.
+- **Grow.** Only undo and redo pass `growAdded`: a cable in the graph now that was not drawn before grows from its
+  source jack out to its destination (`easeOutCubic`) while its opacity rises over the first 40%. The cable is real
+  already, so the normal cable pass skips its id and the growing wire is drawn instead (no flow dots or knob until
+  it lands). More than 16 cables in one step skip the grow (a mass undo shows them at once). Undoing the mod dot
+  panel's remove button grows the cable back this way.
+- **Reduce Motion** is an 80 ms alpha fade, out or in, with no geometry change. **Animations: Off** shows the result
+  at once.
+- Each frame repaints only the area the moving wires were and are drawn in (`CableRetractAnimator::paintArea`).
+
+Project load and New do not go through undo/redo and do not animate.
 
 ## Knob landing
 

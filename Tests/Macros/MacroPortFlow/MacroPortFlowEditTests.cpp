@@ -51,6 +51,23 @@ TEST(MacroPortFlow, ManualDeleteDropsTheCableByDefault) {
     EXPECT_FALSE(hasConnection(engine, fx.ext, 0, fx.a, 0)) << "default: the cable is DROPPED, not spliced";
 }
 
+// The cables a manual delete takes away retract into their jack like any other removal.
+TEST(MacroPortFlow, ManualDeleteRetractsTheCablesItDrops) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto fx = makeManualDeletePortFixture(editor, engine);
+    editor.getMacroController().setMacroCollapsed(fx.macroId, false); // the port's cables are drawn while expanded
+    editor.updateComponents();
+    editor.finishCableRetractForTest();
+    ASSERT_FALSE(editor.buildVisibleCables().empty()) << "sanity: the port's cables are drawn";
+
+    editor.getMacroController().deleteMacroPortManually(fx.macroId, fx.portUuid);
+
+    EXPECT_TRUE(editor.getCableRetractForTest().isLive()) << "the dropped cables retract instead of vanishing";
+    EXPECT_FALSE(editor.getCableRetractForTest().ghosts().empty());
+}
+
 TEST(MacroPortFlow, ManualDeleteSplicesWhenThePreferenceIsOn) {
     AudioEngine engine;
     GraphEditor editor(engine);

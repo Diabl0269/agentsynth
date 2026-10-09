@@ -628,10 +628,17 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
             continue;
-        ++graph_editor_paint::workCounters().cablesPainted;
-        const bool hovered = editor.isCableHovered(cable);
         const juce::Colour colour = editor.colourForCable(cable);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
+        // A cable growing back (undo, redo) is real already: this pass skips it and its growing wire is drawn instead.
+        if (editor.cableRetract_.isGrowing(cable.id)) {
+            const auto growing = editor.cableRetract_.grown(cable);
+            strokeWire(growing.p1, growing.p2, colour.withMultipliedAlpha(editor.cableRetract_.growOpacity()),
+                       isModulation, 0.0f, 2.0f, false);
+            continue;
+        }
+        ++graph_editor_paint::workCounters().cablesPainted;
+        const bool hovered = editor.isCableHovered(cable);
 
         float fallbackWidth = 2.0f;
         if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
@@ -672,7 +679,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
-    // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h).
+    // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h); the growing ones above.
     for (const auto& ghost : editor.cableRetract_.ghosts())
         strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
                    ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);

@@ -246,10 +246,10 @@ public:
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
     /** Single-undo-step finalize (position + leave + join). `module` must not be touched afterwards. */
     void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId, const juce::String& joinId);
-    /** The cables as drawn now, for retractCablesGoneSince() after a change that may remove some. */
-    std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract();
-    /** Retracts and fades every cable in `before` that is no longer drawn (CableRetractAnimator.h). */
-    void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before);
+    /** Cables as drawn now / retract those no longer drawn since; `growAdded` (undo, redo) also grows the new ones. */
+    std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract() override;
+    void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before,
+                                bool growAdded = false) override;
     /** The expanded macro borders as drawn now; hand it to glideHullsFrom() after a change that may move them. */
     MacroHullGlide::Hulls snapshotPaintedHulls() const;
     /** Glides every border that moved since `before` (a snapshotPaintedHulls()) to its live bounds. */
