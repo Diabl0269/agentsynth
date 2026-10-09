@@ -457,7 +457,9 @@ editing commands below handle nesting. A patch with no nesting behaves exactly a
   one undo step.
 - **Collapse toggle** (Cmd+G and the menu): a selected module hidden inside a collapsed macro resolves to
   the outermost collapsed macro above it, so the toggle expands the card the user sees, not an inner
-  macro they cannot.
+  macro they cannot. Collapsing a parent never changes its children's own collapsed flags: an open child folds into
+  the parent's card first, and expanding the parent brings each child back open or folded as it was
+  ([Macro fold](../layout/animation.md#macro-fold)).
 - **Remove from Macro** moves a module up ONE level, into its macro's parent; from a top-level macro it
   leaves entirely, as before. A macro left with no direct members and no children dissolves.
 - **Cmd drag** (see [the hull border section](#cmd-drag-across-a-hull-border)): the join candidate is the

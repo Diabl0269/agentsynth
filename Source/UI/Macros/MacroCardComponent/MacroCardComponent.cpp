@@ -54,7 +54,8 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // small "minimap" of the member module boxes — their LIVE canvas bounds (still tracking, even
     // hidden — see syncMacroCards), scaled to fit the strip left between the title and the count
     // line, one filled rect per member coloured by module CATEGORY so it echoes what expanding
-    // the macro would show. Drawn in the middle column between the two port strips.
+    // the macro would show, and one box per nested macro (macro_preview::paintMacroBox). Drawn in the middle column
+    // between the two port strips.
     const auto previewArea = getPreviewArea();
     if (!previewArea.isEmpty()) {
         const auto members = owner.getMacroController().macroMemberPreviews(macroId);
@@ -63,6 +64,10 @@ void MacroCardComponent::paint(juce::Graphics& g) {
             memberBounds.push_back(member.bounds);
         const auto boxes = macro_preview::boxes(memberBounds, previewArea);
         for (size_t i = 0; i < boxes.size(); ++i) {
+            if (members[i].isMacro()) {
+                macro_preview::paintMacroBox(g, boxes[i], members[i].colour); // a nested macro is one box
+                continue;
+            }
             g.setColour(owner.categoryPreviewColour(members[i].category).withAlpha(0.85f));
             g.fillRoundedRectangle(boxes[i], 1.5f);
         }

@@ -60,13 +60,17 @@ public:
         const synth::MacroPort* port = nullptr;
     };
 
-    /** Live bounds + colour category for one resolvable MODULE member (a port node is excluded) — the data a collapsed
-     * card's content preview scales into itself. See GraphEditor::MacroMemberPreview. */
+    /** One box of a collapsed card's content preview: a direct MODULE member (a port node is excluded), or a macro
+     * nested directly in this one, which previews as ONE box (docs/layout/macro-cards.md#nested-macros). Live bounds,
+     * so the card's preview scales them into itself. See GraphEditor::MacroMemberPreview. */
     struct MacroMemberPreview {
-        juce::Rectangle<int> bounds;
+        juce::Rectangle<int> bounds; // a nested macro: its footprint (its border while open, its card while folded)
         synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
-        uint32_t nodeUid = 0;            // the module's node id
+        uint32_t nodeUid = 0;            // the module's node id; 0 for a nested macro
         ModuleComponent* comp = nullptr; // its card on the canvas (hidden while the macro is collapsed)
+        juce::String macroId;            // a nested macro's id; empty for a module
+        juce::Colour colour;             // a nested macro's colour
+        bool isMacro() const noexcept { return macroId.isNotEmpty(); }
     };
 
     /** One port's on-card jack, in the collapsed card's OWN local coordinates (add the live
@@ -186,6 +190,8 @@ public:
     std::shared_ptr<const FoldSnapshot> snapshotFoldState();
     /** After the change: folds every macro in `before` whose collapsed state changed, all in one animation. */
     void foldChangedMacros(const std::shared_ptr<const FoldSnapshot>& before);
+    /** Where `macroId`'s card stands when it folds now: at the top-left of what its border wraps, card-sized. */
+    juce::Rectangle<int> foldedCardBounds(const juce::String& macroId);
 
     void renameMacro(const juce::String& macroId, const juce::String& newName);
 
@@ -228,6 +234,10 @@ public:
     // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
+    /** What a nested macro takes up inside its parent, shown or not: its border while open, its card while folded. */
+    juce::Rectangle<int> macroFootprint(const juce::String& macroId) const;
+    /** The union of `macroId`'s direct non-port members and its nested macros' footprints (what its border wraps). */
+    juce::Rectangle<int> macroContentBounds(const juce::String& macroId) const;
     /** Reparent-drag border freeze: snapshots the live hull of `draggedNodeId`'s macro and ancestors. */
     void freezeHullsForDrag(juce::AudioProcessorGraph::NodeID draggedNodeId);
     void clearFrozenDragHulls();
