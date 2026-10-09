@@ -2,9 +2,11 @@
 
 // The window the mod dot's panel lives in: it draws the panel's one outline (body and arrow together), its shadow
 // and its fill, and keeps the panel beside the dot, sliding it up or down as the panel grows so it stays on screen
-// while the arrow stays level with the dot. Not modal: a click outside closes it (unless `keepOpenOnOutsideClick`
-// says a canvas pick is under way), Esc closes it, and the panel's own controls take the keyboard.
-// docs/modules/modulation.md#the-mod-dot-menu.
+// while the arrow stays level with the dot. The window itself is transparent and never changes size; everything it
+// draws (the outline, the shadow and the panel) lives in one full-size child "body", which is what grows out of the
+// dot and shrinks back into it (a native window cannot be scaled, a child can). Not modal: a click outside closes it
+// (unless `keepOpenOnOutsideClick` says a canvas pick is under way), Esc closes it, and the panel's own controls take
+// the keyboard. docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotPanelGeometry.h"
 #include "UI/Layout/AppTooltipWindow.h"
@@ -20,8 +22,14 @@ class ModDotPanelFrame final
     , private juce::ComponentListener
     , private juce::Timer {
 public:
-    static constexpr float kInSlidePx = 12.0f; // the soft entrance: out of the dot, 3% overshoot
-    static constexpr float kOutSlidePx = 6.0f;
+    // The grow: the panel scales from 40% to 100% about the dot's centre with a 3% overshoot over 200 ms while it
+    // fades in over the first 120 ms; it shrinks to 50% toward the dot while fading over 140 ms. Reduce Motion is the
+    // shared plain 80 ms fade with no scale.
+    static constexpr float kInStartScale = 0.4f;
+    static constexpr float kOutEndScale = 0.5f;
+    static constexpr double kInMs = 200.0;
+    static constexpr double kOutMs = 140.0;
+    static constexpr float kFadeInFraction = 0.6f; // 120 ms of the 200
     static constexpr int kShadow = 10; // transparent margin around the panel: the arrow and the shadow live in it
 
     /** `content` is the panel; `anchor` the dot it points at, `dot` its bounds and `area` the room the panel may use
@@ -49,22 +57,26 @@ public:
     int maxContentHeight() const;
     /** Where the panel body sits, in the frame's own coordinates. */
     const modDotPanel::Placement& placement() const noexcept { return local_; }
+    /** The child that draws the panel and takes the grow's scale. */
+    juce::Component& body() noexcept;
 
     std::function<void()> onClosed;
     /** Asked on a press outside the panel; true keeps the panel open. */
     std::function<bool()> keepOpenOnOutsideClick;
 
-    void paint(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
+    void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
+    class Body;
     void reposition();
     void componentMovedOrResized(juce::Component& component, bool wasMoved, bool wasResized) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void timerCallback() override;
 
     std::unique_ptr<juce::Component> content_;
+    std::unique_ptr<Body> body_;
     juce::Component::SafePointer<juce::Component> anchor_;
     juce::Rectangle<int> area_;
     juce::Rectangle<int> dot_; // the anchor's bounds when the panel opened

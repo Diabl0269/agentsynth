@@ -499,7 +499,7 @@ is no separate callout arrow) in a window of its own, `ModDotPanelFrame`: right 
 no room. Near the bottom of the screen it slides up to stay fully on screen while the arrow tip stays level with the
 dot's centre, and it keeps doing so frame by frame as the panel grows (`ModDotPanelGeometry::place`, pinned by
 `ModDotPanelGeometryTests`). The window is not modal: a press anywhere else closes it (the edits already applied),
-except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`), sliding out of the dot with a 3% overshoot and leaving softly on Esc, click-away or a pick. `ModDotPopover`
+except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`), growing out of the dot (the whole panel scales from 40% with a 3% overshoot while it fades in) and shrinking back toward it on Esc, click-away or a pick. `ModDotPopover`
 (`Source/UI/Graph/ModDot/`) is the panel inside it; everything it paints uses the theme tokens itself (`ModDotPalette`).
 The window owns a tooltip window of its own (`ModDotPanelFrame::installTooltipWindow`, the shared
 `AppTooltipWindow` with its fade and the "Show info tooltips" preference), a child of the frame, because the main
