@@ -9,6 +9,7 @@
 #include "KnobModSources.h"
 #include "ModDotPage.h"
 #include "ModDotSourceRow.h"
+#include "UI/Layout/ExitEnterRowSlots.h"
 #include "UI/Layout/ExitEnterTimeline.h"
 #include "UI/Layout/SplitButton.h"
 #include <memory>
@@ -70,16 +71,8 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
-    struct Entry {
+    struct Entry : ExitEnterSlot {
         std::unique_ptr<ModDotSourceRow> row;
-        float from = 0.0f;
-        float to = 0.0f;
-        float current = 0.0f;
-        bool leaving = false;
-        bool restored = false; // brought back by an undo or redo: makes room, grows, gets an outline
-        float scale = 1.0f;    // the look during a removal or restore (a shrink or grow; a fade under Reduce Motion)
-        float alpha = 1.0f;
-        float outline = 0.0f;
     };
 
     void wireRow(ModDotSourceRow& row);

@@ -67,6 +67,8 @@ public:
         repaint();
     }
     bool isDanger() const noexcept { return danger_; }
+    /** Told when the button gains or loses keyboard focus (a row that lights up while one of its controls has it). */
+    std::function<void(bool focused)> onFocusChanged;
     /** The colour the glyph is drawn in right now. */
     juce::Colour glyphColour() const { return modDotGlyphColour(modDotPaletteFor(*this), glyph_, hover_.value()); }
 
@@ -76,6 +78,16 @@ public:
             return true;
         }
         return false;
+    }
+    void focusGained(FocusChangeType type) override {
+        juce::Button::focusGained(type);
+        if (onFocusChanged)
+            onFocusChanged(true);
+    }
+    void focusLost(FocusChangeType type) override {
+        juce::Button::focusLost(type);
+        if (onFocusChanged)
+            onFocusChanged(false);
     }
     void mouseEnter(const juce::MouseEvent& e) override {
         juce::Button::mouseEnter(e);

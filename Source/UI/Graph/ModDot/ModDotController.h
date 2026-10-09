@@ -36,6 +36,7 @@ class GraphEditor;
 namespace synth::ui {
 
 class ModDotPopover;
+class ModDotPanelFrame;
 
 /** The amount a source added from the dot's panel starts at: a quarter way, clearly audible with room both ways. */
 inline constexpr float kModDotNewSourceDepth = 0.25f;
@@ -141,6 +142,7 @@ private:
         bool doubleClick = false; // handled on the press; the rest of the press does nothing
     };
 
+    ModDotPanelFrame* launchPopoverFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor);
     void setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target);
     void showTooltip(juce::AudioProcessorGraph::NodeID card, int destChannel,
                      juce::AudioProcessorGraph::NodeID attenuverter, juce::Slider& knob);

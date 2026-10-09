@@ -142,7 +142,8 @@ void ModDotPanelFrame::close() {
     });
 }
 
-// A press anywhere that is not this window or the dot closes the panel (the dot's own click toggles it).
+// A press anywhere that is not this window or the dot (or the jack region) closes the panel; the owner's own click
+// toggles it.
 void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
     if (closing_ || e.eventComponent == nullptr)
         return;
@@ -150,9 +151,13 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
         return;
     if (keepOpenOnOutsideClick && keepOpenOnOutsideClick())
         return;
-    if (auto* anchor = anchor_.getComponent();
-        anchor != nullptr && (e.eventComponent == anchor || anchor->isParentOf(e.eventComponent)))
+    if (anchorIsRegion_) {
+        if (dot_.contains(e.getScreenPosition()))
+            return;
+    } else if (auto* anchor = anchor_.getComponent();
+               anchor != nullptr && (e.eventComponent == anchor || anchor->isParentOf(e.eventComponent))) {
         return;
+    }
     close();
 }
 

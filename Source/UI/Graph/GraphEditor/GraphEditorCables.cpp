@@ -13,6 +13,7 @@
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Layout/CableCurve.h"
 
 #include "Modules/AttenuverterModule.h"
@@ -633,13 +634,17 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // have it clipped away cost more than the rest of that paint.
     const auto clip = g.getClipBounds().toFloat();
     auto& reveal = editor.getLoadReveal();
+    // The cable a port connections panel row points at is drawn as hovered and every other one dims.
+    const auto& focusedCable = editor.getPortPanel().highlightedCable();
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
             continue;
         const float drawn = reveal.cableProgress(cable.id.srcUid, cable.id.dstUid); // < 1 while a project opens
         if (drawn <= 0.0f)
             continue;
-        const juce::Colour colour = editor.colourForCable(cable);
+        const bool dimmed = focusedCable.has_value() && *focusedCable != cable.id;
+        const juce::Colour colour =
+            editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
         // A cable growing back (undo, redo) is real already: this pass skips it and its growing wire is drawn instead.
         if (editor.cableRetract_.isGrowing(cable.id)) {
@@ -649,7 +654,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             continue;
         }
         ++graph_editor_paint::workCounters().cablesPainted;
-        const bool hovered = editor.isCableHovered(cable);
+        const bool hovered = editor.isCableHovered(cable) || (focusedCable.has_value() && *focusedCable == cable.id);
 
         float fallbackWidth = 2.0f;
         if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)

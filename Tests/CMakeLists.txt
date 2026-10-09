@@ -326,19 +326,6 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentModBandTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModAmountGestureTests.cpp
-    UI/Graph/ModDot/ModDotGestureTests.cpp
-    UI/Graph/ModDot/ModDotTooltipGeometryTests.cpp
-    UI/Graph/ModDot/KnobModSourcesTests.cpp
-    UI/Graph/ModDot/ModDotAddSourceTests.cpp
-    UI/Graph/ModDot/ModDotMacroRoutingTests.cpp
-    UI/Graph/ModDot/ModDotPopoverTests.cpp
-    UI/Graph/ModDot/ModDotSourceRemovalMotionTests.cpp
-    UI/Graph/ModDot/ModDotRowPolishTests.cpp
-    UI/Graph/ModDot/ModDotDoubleClickTests.cpp
-    UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
-    UI/Graph/ModDot/ModDotInlineAddTests.cpp
-    UI/Graph/ModDot/ModDotPickOnCanvasTests.cpp
-    UI/Graph/ModDot/ModDotPanelGeometryTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
@@ -923,6 +910,7 @@ target_compile_definitions(Tests PRIVATE
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

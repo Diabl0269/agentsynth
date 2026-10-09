@@ -186,6 +186,39 @@ and highlights that knob's ring. The same state runs the other way: hovering the
 checks. See [modulation rings on knobs](../modules/modulation.md#modulation-rings-on-knobs) for the
 ring-side treatment and the hover chip.
 
+## Port connections panel
+
+A plain click on any jack (audio, CV or MIDI; a regular module, a macro boundary port node, Track In, Audio Output) opens a
+small panel in a window beside the jack that lists what the jack is wired to. Collapsed macro cards are not covered yet.
+It is built from the [mod dot menu](../modules/modulation.md#the-mod-dot-menu)'s parts: the same window (`ModDotPanelFrame`
+through the shared `launchInFrame`, which grows out of the jack and shrinks back, closes on a click outside or Esc), width
+(`ModDotPage::kWidth`), palette, row look and remove button.
+
+- **Click.** A left press and release under 3 px apart that is the first click of its run. A drag from the jack still
+  makes a cable and opens nothing; the right-click menu is unchanged. A second click on the same jack closes the panel.
+- **Double-click.** With *Double-click port to disconnect* on, a jack with exactly one cable waits one double-click
+  interval before opening, so the double-click that disconnects it never flashes the panel. A jack with none or several
+  cables opens at once, and a double-click on one with several keeps the panel and disconnects nothing. The knob-bound
+  CV jack's double-click is the mod dot's and is unchanged.
+- **Content.** The title reads "Module · port (N connections)" ("1 connection", "No connections yet"). One row per
+  cable: a swatch in the cable's colour (`GraphEditor::colourForCable`), "other module · other port" and a remove button.
+  A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows under
+  two or more. The rows come from `listPortConnections`, a filter over `buildVisibleCables()` by the jack's visible index
+  (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
+  connection still show the panel (a later "Add connection" row goes below the rows).
+- **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
+  through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step). The panel follows
+  the graph on the editor's 30 Hz tick, so an undo brings a row back. Removing the last connection keeps the panel open.
+- **Canvas highlight.** Hovering a row, or keyboard-focusing its remove button, draws that cable as hovered and dims
+  every other cable to 35% (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
+  pointer or focus leaves the row, the row goes, or the panel closes.
+- **Keyboard.** Tab visits each row's remove button then "Disconnect all" (Up/Down move between them), Return/Space press,
+  Esc closes. Every control has a name and a tooltip.
+
+Code: `Source/UI/Graph/PortPanel/` (`PortPanelController`, `PortConnectionsPanel`, `PortConnectionRow`,
+`PortConnectionList`); the card hands a jack release and a jack double-click to the controller from
+`ModuleComponentInteraction.cpp`. Motion: [animation](animation.md#motion-rules) (Port connections panel row).
+
 ## Right-click menu
 
 Right-clicking a cable opens a menu with **Disconnect Cable**. Before this the only way to remove a

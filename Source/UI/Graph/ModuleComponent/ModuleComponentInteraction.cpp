@@ -18,6 +18,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -503,6 +504,20 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     return m;
 }
 
+// A double-click on a jack: the knob's mod dot answers a knob-bound CV jack; several cables keep the port connections
+// panel open (nothing disconnected); a single cable is disconnected. An unconnected jack does nothing.
+void ModuleComponent::portDoubleClicked(const Port& port) {
+    if (!owner.isPortConnected(this, port.index, port.isInput, port.isMidi))
+        return;
+    auto& portPanel = owner.getPortPanel();
+    if (port.isInput && !port.isMidi && handleModJackDoubleClick(port.index)) {
+        portPanel.cancelPendingOpen(); // the knob's own panel answers this double-click
+        portPanel.close();
+    } else if (!portPanel.keepPanelForDoubleClick(*this, port)) {
+        owner.disconnectPort(this, port.index, port.isInput, port.isMidi);
+    }
+}
+
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // Clicking anywhere on a card commits an open inline title editor — this card's or another's.
     // FIRST, before the child-control guard below returns, so a press on a knob dismisses it too.
@@ -574,9 +589,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
         } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
             // Intercept the second click so it does not start another cable drag.
-            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi) &&
-                !(port->isInput && !port->isMidi && handleModJackDoubleClick(port->index)))
-                owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
+            portDoubleClicked(*port);
             return;
         } else {
             // Start Connection Drag
@@ -876,8 +889,9 @@ void ModuleComponent::showRealContextMenu(juce::PopupMenu& menu) {
 }
 
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
-    if (getPortForPoint(e.getMouseDownPosition())) {
+    if (const auto port = getPortForPoint(e.getMouseDownPosition())) {
         owner.endConnectionDrag(e.getScreenPosition());
+        owner.getPortPanel().jackReleased(*this, *port, e); // a plain click on the jack opens its connections panel
         return;
     }
 

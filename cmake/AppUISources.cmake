@@ -277,6 +277,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderDragSession.h
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
+    Source/UI/Layout/ExitEnterRowSlots.h
     Source/UI/Layout/FocusRing.h
     Source/UI/Layout/FocusRing.cpp
     Source/UI/Layout/TooltipHelpHandler.h
@@ -478,6 +479,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotCanvasPicker.cpp
     Source/UI/Graph/ModDot/ModDotPanelFrame.h
     Source/UI/Graph/ModDot/ModDotPanelFrame.cpp
+    Source/UI/Graph/ModDot/ModDotPanelLaunch.h
+    Source/UI/Graph/ModDot/ModDotPanelLaunch.cpp
     Source/UI/Graph/ModDot/ModDotPanelGeometry.h
     Source/UI/Graph/ModDot/ModDotPanelGeometry.cpp
     Source/UI/Graph/ModDot/ModDotController.h
@@ -503,6 +506,15 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModDot/ModDotSourceRow.cpp
     Source/UI/Graph/ModDot/ModDotSourcesPage.cpp
     Source/UI/Graph/ModDot/ModSourceCatalog.cpp
+    Source/UI/Graph/PortPanel/PortConnectionList.h
+    Source/UI/Graph/PortPanel/PortConnectionList.cpp
+    Source/UI/Graph/PortPanel/PortConnectionRow.h
+    Source/UI/Graph/PortPanel/PortConnectionRow.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanel.h
+    Source/UI/Graph/PortPanel/PortConnectionsPanel.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanelMotion.cpp
+    Source/UI/Graph/PortPanel/PortPanelController.h
+    Source/UI/Graph/PortPanel/PortPanelController.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp

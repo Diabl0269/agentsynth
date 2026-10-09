@@ -492,6 +492,8 @@ opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::on
 
 ### The mod dot menu
 
+(A click on a plain jack opens the sibling [port connections panel](../layout/cables.md#port-connections-panel), built from the same parts.)
+
 A click on a knob's mod dot (or Return/Space on its Tab stop) opens a small panel beside the dot, with an arrow on its
 edge pointing at the dot; a second click on the dot closes it. While it is open the dot carries the `accent` ring. The
 panel is one outlined shape (`ModDotPanelGeometry::outline`: the rounded body and the arrow are a single path, so there

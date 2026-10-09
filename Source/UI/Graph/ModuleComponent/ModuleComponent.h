@@ -281,6 +281,7 @@ public:
     /** A double-click on visible CV jack `visibleInputIndex`: handled by the knob's mod dot when it drives a
      *  modulated knob (true), else false and the caller disconnects. */
     bool handleModJackDoubleClick(int visibleInputIndex);
+    void portDoubleClicked(const Port& port);
 
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;

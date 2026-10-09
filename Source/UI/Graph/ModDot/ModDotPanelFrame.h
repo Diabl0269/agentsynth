@@ -60,6 +60,10 @@ public:
     /** The child that draws the panel and takes the grow's scale. */
     juce::Component& body() noexcept;
 
+    /** The anchor is a region of a bigger component: only a press inside the anchor bounds the frame was made with is
+     *  the owner's own click (it toggles the panel itself); a press elsewhere on that component closes the panel. */
+    void setAnchorIsRegion(bool region) noexcept { anchorIsRegion_ = region; }
+
     std::function<void()> onClosed;
     /** Asked on a press outside the panel; true keeps the panel open. */
     std::function<bool()> keepOpenOnOutsideClick;
@@ -85,6 +89,7 @@ private:
     std::unique_ptr<AppTooltipWindow> tooltipWindow_;
     bool closing_ = false;
     bool listening_ = false;
+    bool anchorIsRegion_ = false;
 };
 
 } // namespace synth::ui
