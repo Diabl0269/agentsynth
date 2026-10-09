@@ -368,11 +368,12 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(8);
     // The All view (with no filter) has one fold-all strip, pinned top-right of the rows; every other
     // view gives that height back.
-    const bool showFoldAll = sectionHeadersActive();
-    foldAllButton.setVisible(showFoldAll);
-    if (showFoldAll) {
+    steerSectionChrome(sectionHeadersActive());
+    if (foldAllFade_->isShown() || foldAllFade_->isFading()) {
+        // A strip that is fading in or out takes `progress()` of its height, so the rows below slide.
         foldAllButton.setAllFolded(areAllSectionsCollapsed());
-        foldAllButton.setBounds(bounds.removeFromTop(synth::ui::FoldAllButton::kStripHeight));
+        foldAllButton.setBounds(bounds.removeFromTop(
+            juce::roundToInt((float)synth::ui::FoldAllButton::kStripHeight * foldAllFade_->progress())));
     }
     bounds.removeFromTop(4);
 

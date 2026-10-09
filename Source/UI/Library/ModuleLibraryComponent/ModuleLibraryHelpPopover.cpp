@@ -1,6 +1,7 @@
 // ModuleLibraryHelpPopover.cpp -- the "?" help popover: pin/float vs CallOutBox hosting,
 // its floating position/clamping, and the button bounds paint() and the mouse handlers share.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/PopupMotion.h"
 
 juce::Rectangle<int> ModuleLibraryComponent::getHelpButtonBounds() noexcept {
     return {kHelpButtonMargin, kSearchHeight + (kTopStripHeight - kHelpButtonSize) / 2, kHelpButtonSize,
@@ -18,10 +19,14 @@ void ModuleLibraryComponent::refreshHelpPopoverForTest() {
 }
 
 void ModuleLibraryComponent::showHelpPopover() {
+    // A call-out that is still fading out from its close is left to finish; the click that asked for it again lands
+    // on a window that ignores the mouse anyway.
+    if (helpCallOutBox_ != nullptr && synth::ui::PopupMotion::isDismissing(*helpCallOutBox_))
+        return;
     ensureHelpPopupCreated();
     helpPopup_->refreshShortcutSection(shortcutManager);
     if (helpPopup_->isPinned()) {
-        helpPopup_->setVisible(true);
+        helpFade_->setShown(true); // a panel that was fading out turns back from where its opacity is
         helpPopup_->toFront(true);
         return;
     }
@@ -29,6 +34,8 @@ void ModuleLibraryComponent::showHelpPopover() {
 }
 
 void ModuleLibraryComponent::launchHelpCallOutBox() {
+    if (helpFade_ != nullptr)
+        helpFade_->snapTo(true); // the content is about to move into the box: no fade of the panel may run on it
     helpCallOutBox_ =
         std::make_unique<juce::CallOutBox>(*helpPopup_, localAreaToGlobal(getHelpButtonBounds()), nullptr);
     helpCallOutBox_->setVisible(true);
@@ -42,6 +49,7 @@ void ModuleLibraryComponent::ensureHelpPopupCreated() {
     if (helpPopup_)
         return;
     helpPopup_ = std::make_unique<synth::ui::ModuleLibraryHelpPopup>(shortcutManager);
+    helpFade_ = std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{helpPopup_.get()});
     helpPopup_->onPinToggleRequested = [this] { setHelpPopoverPinned(!helpPopup_->isPinned()); };
     helpPopup_->onCloseRequested = [this] { closeHelpPopover(); };
 }
@@ -90,6 +98,7 @@ void ModuleLibraryComponent::setHelpPopoverPinned(bool wantPinned) {
             helpCallOutBox_.reset(); // does NOT delete *helpPopup_ — see the class comment
         }
         auto* host = floatingHelpHostFor(*this);
+        helpFade_->snapTo(true);
         host->addAndMakeVisible(*helpPopup_); // auto-detaches from any previous parent
         helpPopup_->setTopLeftPosition(defaultFloatingPosition(*host));
         helpPopup_->setVisible(true);
@@ -100,6 +109,27 @@ void ModuleLibraryComponent::setHelpPopoverPinned(bool wantPinned) {
 }
 
 void ModuleLibraryComponent::closeHelpPopover() {
+    if (!helpPopup_)
+        return;
+    if (helpCallOutBox_) {
+        // The live call-out fades out, then the box goes (at once when it is not on screen).
+        juce::Component::SafePointer<ModuleLibraryComponent> self(this);
+        synth::ui::PopupMotion::dismiss(*helpCallOutBox_, [self] {
+            if (self != nullptr)
+                self->finishHelpPopoverClose();
+        });
+        return;
+    }
+    if (helpPopup_->getParentComponent() != nullptr) {
+        helpFade_->onHidden = [this] { finishHelpPopoverClose(); };
+        helpFade_->setShown(false);
+        if (helpFade_->isFading())
+            return;
+    }
+    finishHelpPopoverClose();
+}
+
+void ModuleLibraryComponent::finishHelpPopoverClose() {
     if (!helpPopup_)
         return;
     if (helpCallOutBox_) {

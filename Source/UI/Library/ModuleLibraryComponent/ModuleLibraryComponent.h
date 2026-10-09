@@ -3,6 +3,7 @@
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/SearchMatch.h"
@@ -583,8 +584,11 @@ private:
 
     /** Hides and detaches the popup from whichever host currently shows it, and resets pin state
      *  so the next "?" click (or setHelpPopoverPinned(true)) starts clean. The popup object itself
-     *  survives — closing is not the same as never having opened it. */
+     *  survives — closing is not the same as never having opened it. The call-out fades out through
+     *  PopupMotion::dismiss and the pinned panel through a FadeVisibility; off screen both land at once. */
     void closeHelpPopover();
+    /** The close itself, once the popup has faded out (at once when it is not on screen). */
+    void finishHelpPopoverClose();
 
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
 
@@ -708,5 +712,6 @@ private:
     // (reverse declaration order) — it holds a non-owning `Component&` to *helpPopup_, so tearing
     // it down after would leave a dangling reference for the instant before its own destructor ran.
     std::unique_ptr<synth::ui::ModuleLibraryHelpPopup> helpPopup_;
+    std::unique_ptr<synth::ui::FadeVisibility> helpFade_; // fades the pinned (floating) popup in and out
     std::unique_ptr<juce::CallOutBox> helpCallOutBox_;
 };

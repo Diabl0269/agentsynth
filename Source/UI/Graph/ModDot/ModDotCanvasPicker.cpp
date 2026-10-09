@@ -39,6 +39,25 @@ void ModDotCanvasPicker::begin() {
     toFront(false);
 }
 
+void ModDotCanvasPicker::end() {
+    setInterceptsMouseClicks(false, false);
+    setWantsKeyboardFocus(false);
+    if (hasKeyboardFocus(false))
+        giveAwayKeyboardFocus();
+    hovered_ = {};
+    hoveredJack_ = std::nullopt;
+    outline_.onSettled = [this] { leaveParent(); };
+    outline_.setShown(false);
+    if (!outline_.isFading())
+        leaveParent();
+}
+
+void ModDotCanvasPicker::leaveParent() {
+    setVisible(false);
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent(this);
+}
+
 void ModDotCanvasPicker::parentSizeChanged() {
     if (auto* parent = getParentComponent())
         setBounds(parent->getLocalBounds());
@@ -57,6 +76,9 @@ void ModDotCanvasPicker::setHovered(juce::AudioProcessorGraph::NodeID node) {
     if (node == hovered_)
         return;
     hovered_ = node;
+    if (node.uid != 0)
+        outlined_ = node;
+    outline_.setShown(node.uid != 0);
     repaint();
 }
 
@@ -88,6 +110,9 @@ void ModDotCanvasPicker::setHoveredJack(std::optional<JackHit> hit) {
     if (same(hit, hoveredJack_))
         return;
     hoveredJack_ = hit;
+    if (hit.has_value())
+        outlinedJack_ = hit;
+    outline_.setShown(hit.has_value());
     repaint();
 }
 
@@ -130,30 +155,31 @@ bool ModDotCanvasPicker::keyPressed(const juce::KeyPress& key) {
 }
 
 void ModDotCanvasPicker::paint(juce::Graphics& g) {
-    if (hoveredJack_.has_value()) {
+    const float amount = outline_.value();
+    if (outlinedJack_.has_value() && amount > 0.0f) {
         const auto p = modDotPaletteFor(*this);
         for (auto* card : editor_.getModuleComponents()) {
-            if (card == nullptr || card->getNodeId() != hoveredJack_->node)
+            if (card == nullptr || card->getNodeId() != outlinedJack_->node)
                 continue;
-            auto area = getLocalArea(card, hoveredJack_->area).toFloat();
-            area = hoveredJack_->knob ? area.expanded(2.0f) : area.withSizeKeepingCentre(22.0f, 22.0f);
-            g.setColour(p.accent.withAlpha(0.16f));
-            g.fillRoundedRectangle(area, hoveredJack_->knob ? 8.0f : 11.0f);
-            g.setColour(p.accent);
-            g.drawRoundedRectangle(area.reduced(1.0f), hoveredJack_->knob ? 8.0f : 10.0f, 2.0f);
+            auto area = getLocalArea(card, outlinedJack_->area).toFloat();
+            area = outlinedJack_->knob ? area.expanded(2.0f) : area.withSizeKeepingCentre(22.0f, 22.0f);
+            g.setColour(p.accent.withAlpha(0.16f * amount));
+            g.fillRoundedRectangle(area, outlinedJack_->knob ? 8.0f : 11.0f);
+            g.setColour(p.accent.withAlpha(amount));
+            g.drawRoundedRectangle(area.reduced(1.0f), outlinedJack_->knob ? 8.0f : 10.0f, 2.0f);
         }
         return;
     }
-    if (hovered_.uid == 0)
+    if (outlined_.uid == 0 || amount <= 0.0f)
         return;
     const auto p = modDotPaletteFor(*this);
     for (auto* card : editor_.getModuleComponents()) {
-        if (card == nullptr || card->getNodeId() != hovered_)
+        if (card == nullptr || card->getNodeId() != outlined_)
             continue;
         const auto bounds = getLocalArea(nullptr, card->getScreenBounds()).toFloat();
-        g.setColour(p.accent.withAlpha(0.14f));
+        g.setColour(p.accent.withAlpha(0.14f * amount));
         g.fillRoundedRectangle(bounds, 8.0f);
-        g.setColour(p.accent);
+        g.setColour(p.accent.withAlpha(amount));
         g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, 2.0f);
     }
 }

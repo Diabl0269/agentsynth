@@ -232,6 +232,7 @@ ModMatrixPicker::~ModMatrixPicker() {
 }
 
 void ModMatrixPicker::rebuildRows() {
+    fades_.clear();
     rowColumn_.removeAllChildren();
     rows_.clear();
 
@@ -259,14 +260,24 @@ void ModMatrixPicker::rebuildRows() {
         rows_.back()->setPickable(item.enabled);
         rowColumn_.addAndMakeVisible(*rows_.back());
     }
+    std::vector<juce::Component*> components;
+    for (const auto& row : rows_)
+        components.push_back(row.get());
+    fades_.reset(components);
+    fades_.onFrame = [this] {
+        layoutRowColumn();
+        if (!fades_.anyFading())
+            setHighlight(highlighted_); // the rows have settled: keep the highlighted one in view
+    };
     applyFilter();
 }
 
+// The rows a pick can land on: the item rows the filter keeps (a row that is fading out is not one of them).
 std::vector<ModMatrixPicker::Row*> ModMatrixPicker::visibleItemRows() const {
     std::vector<Row*> out;
-    for (const auto& row : rows_)
-        if (row->kind() == Row::Kind::Item && row->isVisible())
-            out.push_back(row.get());
+    for (size_t i = 0; i < rows_.size(); ++i)
+        if (rows_[i]->kind() == Row::Kind::Item && fades_.isShown(i))
+            out.push_back(rows_[i].get());
     return out;
 }
 
@@ -274,23 +285,24 @@ std::vector<ModMatrixPicker::Row*> ModMatrixPicker::visibleItemRows() const {
 // here (see preferredHeight), so the popup keeps its size while the list shrinks.
 void ModMatrixPicker::applyFilter() {
     const auto query = searchEditor_->getText().trim();
-    Row* pendingHeader = nullptr;
+    int pendingHeader = -1;
     bool headerHasMatch = false;
     // Word by word, in any order, ignoring case: "osc 8" finds "Oscillator 8" (synth::ui::searchMatches).
     int bestIndex = -1;
     int bestScore = 0;
     int visibleIndex = 0;
-    for (const auto& row : rows_) {
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        const auto& row = rows_[i];
         if (row->kind() == Row::Kind::Header) {
-            if (pendingHeader != nullptr)
-                pendingHeader->setVisible(headerHasMatch);
-            pendingHeader = row.get();
+            if (pendingHeader >= 0)
+                fades_.steer((size_t)pendingHeader, headerHasMatch);
+            pendingHeader = (int)i;
             headerHasMatch = false;
             continue;
         }
         const auto haystack = row->text() + " " + row->detail() + " " + row->searchText();
         const bool matches = searchMatches(haystack, query);
-        row->setVisible(matches);
+        fades_.steer(i, matches);
         row->setQuery(query);
         headerHasMatch = headerHasMatch || matches;
         if (matches) {
@@ -302,8 +314,9 @@ void ModMatrixPicker::applyFilter() {
             ++visibleIndex;
         }
     }
-    if (pendingHeader != nullptr)
-        pendingHeader->setVisible(headerHasMatch);
+    if (pendingHeader >= 0)
+        fades_.steer((size_t)pendingHeader, headerHasMatch);
+    fades_.markLaidOut();
 
     layoutRowColumn();
     // The best match leads on a query (the first among equals); with none pickable the highlight stays on the first
@@ -314,12 +327,15 @@ void ModMatrixPicker::applyFilter() {
 
 void ModMatrixPicker::layoutRowColumn() {
     const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
+    // A row the filter is taking out keeps a slot squeezed to its fade's progress(), so the rows below slide up while
+    // it goes and one that comes back opens its slot the same way.
     int y = 0;
-    for (const auto& row : rows_) {
-        if (!row->isVisible())
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        if (!fades_.occupies(i))
             continue;
-        row->setBounds(0, y, width, row->preferredHeight());
-        y += row->preferredHeight();
+        const int slot = fades_.slot(i, rows_[i]->preferredHeight());
+        rows_[i]->setBounds(0, y, width, slot);
+        y += slot;
     }
     rowColumn_.setSize(width, juce::jmax(y, 1));
 }
@@ -446,9 +462,9 @@ juce::String ModMatrixPicker::getSearchTextForTest() const { return searchEditor
 
 std::vector<juce::String> ModMatrixPicker::getVisibleRowNamesForTest() const {
     std::vector<juce::String> names;
-    for (const auto& row : rows_)
-        if (row->isVisible())
-            names.push_back(row->text());
+    for (size_t i = 0; i < rows_.size(); ++i)
+        if (fades_.isShown(i))
+            names.push_back(rows_[i]->text());
     return names;
 }
 

@@ -73,6 +73,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     gapHooks.afterMove = [this] { refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); };
     gapHooks.keyHost = this;
     macroController_.insertGap().setHooks(std::move(gapHooks));
+    emptyCanvasHint.repaintArea = [this] { return getLocalBounds().withSizeKeepingCentre(getWidth(), 64); };
+    emptyCanvasHint.snapTo(true); // an empty canvas starts with its hint; updateComponents() fades it from here
     startTimerHz(30);
 }
 

@@ -2,6 +2,7 @@
 // focus-region Tab cycling, and the plugin-mode LookAndFeel seam.
 #include "DetachedPanelWindow.h"
 #include "UI/Graph/ProjectLoad/EditBlockOverlay.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -84,6 +85,13 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     // Repaints our own focus-region root's accent outline on focus changes -- see
     // MainComponent::globalFocusChanged, the same idiom, scoped to this window's own registry.
     juce::Desktop::getInstance().addFocusChangeListener(this);
+
+    // The window fades in when it opens and out when it closes. It never slides: it persists its own position, and a
+    // slide would be written back to the saved bounds a frame at a time.
+    popup_motion::Style style;
+    style.inSlidePx = 0.0f;
+    style.outSlidePx = 0.0f;
+    PopupMotion::attach(*this, std::move(style));
 }
 
 DetachedPanelWindow::~DetachedPanelWindow() {
@@ -116,8 +124,15 @@ void DetachedPanelWindow::closeButtonPressed() {
     // Never self-destroys -- DetachablePanelHost owns this window in a unique_ptr and is the only
     // thing allowed to reset (and so destroy) it, via setDetached(false). Same contract as
     // HostedPluginEditorWindow::closeButtonPressed.
-    if (onCloseRequested)
-        onCloseRequested();
+    if (!onCloseRequested)
+        return;
+    // The live window fades out first; the host redocks (and so destroys this window) one turn after. Off screen it
+    // redocks before this returns.
+    juce::Component::SafePointer<DetachedPanelWindow> safe(this);
+    PopupMotion::dismiss(*this, [safe] {
+        if (safe != nullptr && safe->onCloseRequested)
+            safe->onCloseRequested();
+    });
 }
 
 void DetachedPanelWindow::moved() {

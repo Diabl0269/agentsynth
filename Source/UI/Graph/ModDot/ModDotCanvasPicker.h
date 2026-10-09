@@ -2,10 +2,12 @@
 
 // "Pick on canvas": a transparent layer over the graph canvas that outlines the module under the pointer when it can
 // be a source for the knob, swallows every press, and reports a press on such a module. Esc stops it. It never
-// edits the graph itself. A second mode (the port connections panel's) picks a JACK or a knob instead of a module: the
-// jack or knob under the pointer is outlined when the owner calls it eligible, and a press on it is reported.
-// docs/modules/modulation.md#the-mod-dot-menu, docs/layout/cables.md#port-connections-panel.
+// edits the graph itself. The outline fades in when the pointer comes onto an eligible module and out when it leaves
+// or the layer ends (synth::ui::FadeAmount). A second mode (the port connections panel's) picks a JACK or a knob
+// instead of a module: the jack or knob under the pointer is outlined (same fade) when the owner calls it eligible,
+// and a press on it is reported. docs/modules/modulation.md#the-mod-dot-menu, docs/layout/cables.md#port-connections-panel.
 
+#include "UI/Layout/FadeAmount.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -36,6 +38,11 @@ public:
 
     /** Covers `editor` and starts swallowing presses. */
     void begin();
+    /** Stops swallowing presses and keys at once; the outline fades out, then the layer leaves its parent (at once
+     *  when nothing is outlined or the canvas is not on screen). The owner keeps the layer alive until then. */
+    void end();
+    float getOutlineAlphaForTest() const noexcept { return outline_.value(); }
+    bool isOutlineFadingForTest() const noexcept { return outline_.isFading(); }
     /** The topmost eligible module card under `screenPoint`, or an invalid id. */
     juce::AudioProcessorGraph::NodeID eligibleNodeAt(juce::Point<int> screenPoint) const;
 
@@ -59,12 +66,16 @@ public:
 private:
     void setHovered(juce::AudioProcessorGraph::NodeID node);
     void setHoveredJack(std::optional<JackHit> hit);
+    void leaveParent();
 
     GraphEditor& editor_;
     std::function<bool(juce::AudioProcessorGraph::NodeID)> isEligible_;
     juce::AudioProcessorGraph::NodeID hovered_;
     std::function<bool(const JackHit&)> isEligibleJack_;
     std::optional<JackHit> hoveredJack_;
+    std::optional<JackHit> outlinedJack_; // the jack the outline is on; stays while the outline fades out
+    juce::AudioProcessorGraph::NodeID outlined_; // the module the outline is on; stays while the outline fades out
+    FadeAmount outline_{*this};
 };
 
 } // namespace synth::ui

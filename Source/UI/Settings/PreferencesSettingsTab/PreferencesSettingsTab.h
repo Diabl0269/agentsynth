@@ -4,6 +4,7 @@
 #include "PatchSaveLocation.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
@@ -256,6 +257,14 @@ public:
     // run the layout a fade's last frame asked for, and ask whether any group is still fading.
     void flushLayoutForTest() { relayoutUpdater_.handleUpdateNowIfNeeded(); }
     bool anyGroupFadingForTest() const;
+    // Test seams for the All view's chrome: the section headers and the fold-all strip fade when the view shows or
+    // hides them, the strip's height following the fade, and a header's chevron turns.
+    bool areSectionHeadersFadingForTest() const {
+        return sectionHeaderFade_ != nullptr && sectionHeaderFade_->isFading();
+    }
+    bool isFoldAllFadingForTest() const { return foldAllFade_ != nullptr && foldAllFade_->isFading(); }
+    float getSectionChevronOpennessForTest(Category category) const;
+    bool isSectionChevronTurningForTest(Category category) const;
 
     // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
@@ -307,6 +316,7 @@ private:
     bool categoryShown(Category category) const;
     bool sectionHeadersActive() const { return selectedCategory == Category::All && searchQuery.isEmpty(); }
     void placeSectionHeaders(int contentWidth);
+    void steerSectionChrome(bool headersAndStrip);
     void refreshSectionTitles();
     void setupSectionControls(); // chained from setupCategorySelector(); restores the saved folds
     void saveSectionFolds();     // remembers which sections are folded (user setting preferencesFolded)
@@ -497,10 +507,15 @@ private:
         void paintButton(juce::Graphics& g, bool hot, bool down) override;
         PreferencesSettingsTab& owner;
         Category category;
+        synth::ui::ChevronTurn turn{*this}; // the arrow's turn between open and folded
     };
     std::unique_ptr<SectionHeader> sectionHeaders[kNumSections];
     // The one Collapse all / Expand all strip button, pinned top-right of the rows in the All view.
     synth::ui::FoldAllButton foldAllButton;
+    // The headers fade as one when the view shows or hides them, and the strip fades with its height following.
+    std::unique_ptr<synth::ui::FadeVisibility> sectionHeaderFade_;
+    std::unique_ptr<synth::ui::FadeVisibility> foldAllFade_;
+    bool chromeLaidOut_ = false;
     juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;

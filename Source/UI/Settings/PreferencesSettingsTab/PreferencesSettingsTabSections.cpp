@@ -47,6 +47,7 @@ void PreferencesSettingsTab::SectionHeader::setFolded(bool folded) { owner.setSe
 // The accessible name carries the state ("Graph, expanded"), so a screen reader hears it change.
 void PreferencesSettingsTab::SectionHeader::refreshTitle() {
     setTitle(categoryName(category) + (owner.isSectionCollapsed(category) ? ", collapsed" : ", expanded"));
+    turn.setOpen(!owner.isSectionCollapsed(category));
 }
 
 void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool hot, bool /*down*/) {
@@ -56,8 +57,7 @@ void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool 
     synth::theme::paintDisclosureChevron(g,
                                          juce::Rectangle<float>(6.0f, (float)(bounds.getHeight() - kChevronSize) * 0.5f,
                                                                 (float)kChevronSize, (float)kChevronSize),
-                                         owner.isSectionCollapsed(category) ? 0.0f : 1.0f, synth::theme::themeOf(*this),
-                                         hot || hasKeyboardFocus(false));
+                                         turn.openness(), synth::theme::themeOf(*this), hot || hasKeyboardFocus(false));
     g.setColour(colour);
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
     g.drawText(categoryName(category), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);
@@ -80,6 +80,37 @@ void PreferencesSettingsTab::setupSectionControls() {
     refreshSectionTitles();
     addChildComponent(foldAllButton);
     foldAllButton.onClick = [this] { setAllSectionsCollapsed(!areAllSectionsCollapsed()); };
+
+    // The headers and the strip fade as the view shows or hides them; each frame lays out again (coalesced).
+    std::vector<juce::Component*> headerComponents;
+    for (auto& header : sectionHeaders)
+        if (header != nullptr)
+            headerComponents.push_back(header.get());
+    sectionHeaderFade_ = std::make_unique<synth::ui::FadeVisibility>(headerComponents);
+    foldAllFade_ = std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{&foldAllButton});
+    relayoutUpdater_.run = [this] { resized(); };
+    sectionHeaderFade_->onFrame = [this] { relayoutUpdater_.triggerAsyncUpdate(); };
+    foldAllFade_->onFrame = [this] { relayoutUpdater_.triggerAsyncUpdate(); };
+}
+
+// What is there when the tab is first laid out does not fade; after that the chrome fades in and out.
+void PreferencesSettingsTab::steerSectionChrome(bool headersAndStrip) {
+    if (!chromeLaidOut_) {
+        sectionHeaderFade_->snapTo(headersAndStrip);
+        foldAllFade_->snapTo(headersAndStrip);
+        chromeLaidOut_ = true;
+        return;
+    }
+    sectionHeaderFade_->setShown(headersAndStrip);
+    foldAllFade_->setShown(headersAndStrip);
+}
+
+float PreferencesSettingsTab::getSectionChevronOpennessForTest(Category category) const {
+    return sectionHeaders[indexOf(category)]->turn.openness();
+}
+
+bool PreferencesSettingsTab::isSectionChevronTurningForTest(Category category) const {
+    return sectionHeaders[indexOf(category)]->turn.isTurning();
 }
 
 void PreferencesSettingsTab::saveSectionFolds() {
@@ -151,9 +182,6 @@ void PreferencesSettingsTab::enterCategory(Category category, int y) {
 // so a shifted row is never mistaken for a member of the next band.
 void PreferencesSettingsTab::placeSectionHeaders(int contentWidth) {
     const bool active = sectionHeadersActive();
-    for (auto& header : sectionHeaders)
-        if (header != nullptr)
-            header->setVisible(active);
     if (!active)
         return;
 

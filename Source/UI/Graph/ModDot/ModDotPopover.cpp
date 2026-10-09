@@ -174,14 +174,13 @@ void ModDotPopover::startPick() {
                                                  juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
-// The layer is parked, not deleted: this can run from inside one of its own event handlers.
+// The layer is parked, not deleted: this can run from inside one of its own event handlers, and its outline may
+// still be fading out.
 void ModDotPopover::stopPick() {
     sourcesPage_.splitButton().setRightLit(false);
     if (picker_ == nullptr)
         return;
-    picker_->setVisible(false);
-    if (auto* parent = picker_->getParentComponent())
-        parent->removeChildComponent(picker_.get());
+    picker_->end();
     retiredPicker_ = std::move(picker_);
 }
 

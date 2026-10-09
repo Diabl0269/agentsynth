@@ -269,6 +269,7 @@ void GraphEditor::updateComponents() {
     applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     refreshCanvasFrame(CanvasFrame::Mode::Animate);
+    emptyCanvasHint.setShown(isCanvasEmpty(modules.size()));
     repaint();
 }
 
@@ -303,16 +304,17 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
     // virtual canvas (the canvas frame plus slack) — any rect drawn there would land off-screen once the
     // user pans or zooms. Drawing here, in getLocalBounds(), guarantees centre alignment.
     //
-    // Gate: only when canvas is empty. Show/hide is driven by the existing updateComponents()
-    // repaint path — no extra timer or per-tick repaint is added.
-    if (!GraphEditor::isCanvasEmpty(static_cast<int>(content.getModules().size())))
+    // Gate: it paints while the canvas is empty and while it fades out after the first module lands. updateComponents()
+    // starts the fade (160 ms in, 110 ms out); frames run only while it does, so nothing repaints at rest.
+    const float hintAmount = emptyCanvasHint.value();
+    if (hintAmount <= 0.0f)
         return;
 
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     // textMuted token at ~60% alpha — tasteful, non-distracting.
     const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
-    g.setColour(textMutedColour.withAlpha(0.6f));
+    g.setColour(textMutedColour.withAlpha(0.6f * hintAmount));
 
     // Use the theme h1 font (~18pt) for comfortable legibility; fall back to 16pt headless.
     juce::Font hintFont;
