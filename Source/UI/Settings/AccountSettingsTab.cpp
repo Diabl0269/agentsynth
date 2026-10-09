@@ -77,12 +77,25 @@ void AccountSettingsTab::visibilityChanged() {
     if (isShowing()) {
         syncFromSnapshot();
         startTimer(kTimerMs);
+        wasForeground = foregroundCheck();
         // The plan may have changed since the tab last showed (a purchase in the browser).
-        if (accountService != nullptr && accountService->getSnapshot().state == synth::AccountState::SignedIn)
-            accountService->refreshEntitlement();
+        refreshEntitlementIfSignedIn();
     } else {
         stopTimer();
     }
+}
+
+void AccountSettingsTab::refreshEntitlementIfSignedIn() {
+    if (accountService != nullptr && accountService->getSnapshot().state == synth::AccountState::SignedIn)
+        accountService->refreshEntitlement();
+}
+
+void AccountSettingsTab::refreshOnReturnToForeground() {
+    const bool foreground = foregroundCheck();
+    const bool returned = foreground && !wasForeground;
+    wasForeground = foreground;
+    if (returned)
+        refreshEntitlementIfSignedIn();
 }
 
 void AccountSettingsTab::lookAndFeelChanged() {

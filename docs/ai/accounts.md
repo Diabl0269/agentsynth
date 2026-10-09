@@ -113,7 +113,8 @@ Requests run through `AccountRequests` (a detached worker with a copied `AuthCli
 message thread), like the Feedback tab's sync. Unlike the other calls there is no refresh-and-retry on a 401: the
 client has none, so an expired session shows "sign in again". Esc closes a panel and focus returns to its button.
 The tab watches the snapshot with a 250 ms timer that runs only while it is showing, because the AI chat owns
-`onStateChanged`. Tests: `Tests/UI/Settings/Account*Tests.cpp`, `LeavingSurveyPanelTests.cpp`,
+`onStateChanged`; the same timer re-fetches the plan when the app returns to the foreground (so "Renews" turns
+into "Ends" after a cancel in the browser portal), via the injectable `setForegroundCheckForTesting`. Tests: `Tests/UI/Settings/Account*Tests.cpp`, `LeavingSurveyPanelTests.cpp`,
 `Tests/Account/AuthClient/AuthClientExitSurveyTests.cpp`.
 
 ## Device id and anonymous trial

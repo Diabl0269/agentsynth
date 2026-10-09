@@ -144,6 +144,64 @@ TEST(AccountSettingsTabTest, TabReachesManageThenSignOutThenDelete) {
     EXPECT_EQ(traverser.getNextComponent(second), &tab.getDeleteButtonForTest());
 }
 
+namespace {
+// A tab on `service` whose foreground state the test sets; the poll it runs is the one the timer runs.
+struct ForegroundHarness {
+    bool foreground = true;
+    std::unique_ptr<AccountSettingsTab> tab;
+    explicit ForegroundHarness(synth::AccountService* service) {
+        tab = std::make_unique<AccountSettingsTab>(service);
+        tab->setForegroundCheckForTesting([this] { return foreground; });
+        tab->setVisible(true); // not on a desktop, so isShowing() stays false and no timer runs: poll by hand
+        tab->pollForegroundForTest();
+    }
+};
+} // namespace
+
+TEST(AccountSettingsTabTest, ReturningToTheAppWhileSignedInRefreshesThePlanOnce) {
+    FakeAccountServer server;
+    auto service = makeSignedInService(server);
+    ForegroundHarness h(service.get());
+    const int before = server.count("GET", "/v1/entitlement");
+
+    h.foreground = false;
+    h.tab->pollForegroundForTest();
+    h.foreground = true;
+    h.tab->pollForegroundForTest();
+    h.tab->pollForegroundForTest(); // still in the foreground: no second request
+
+    EXPECT_TRUE(account_test::waitUntil([&] { return server.count("GET", "/v1/entitlement") == before + 1; }));
+    account_test::waitUntil([] { return false; }, std::chrono::milliseconds{150});
+    EXPECT_EQ(server.count("GET", "/v1/entitlement"), before + 1);
+}
+
+TEST(AccountSettingsTabTest, StayingInTheForegroundDoesNotRefreshThePlan) {
+    FakeAccountServer server;
+    auto service = makeSignedInService(server);
+    ForegroundHarness h(service.get());
+    const int before = server.count("GET", "/v1/entitlement");
+
+    for (int i = 0; i < 3; ++i)
+        h.tab->pollForegroundForTest();
+    account_test::waitUntil([] { return false; }, std::chrono::milliseconds{150});
+
+    EXPECT_EQ(server.count("GET", "/v1/entitlement"), before);
+}
+
+TEST(AccountSettingsTabTest, ReturningToTheAppSignedOutDoesNotRefreshThePlan) {
+    FakeAccountServer server;
+    auto service = makeSignedOutService(server);
+    ForegroundHarness h(service.get());
+
+    h.foreground = false;
+    h.tab->pollForegroundForTest();
+    h.foreground = true;
+    h.tab->pollForegroundForTest();
+    account_test::waitUntil([] { return false; }, std::chrono::milliseconds{150});
+
+    EXPECT_EQ(server.count("GET", "/v1/entitlement"), 0);
+}
+
 TEST(PlanTextTest, FormatTextAndPeriodLine) {
     synth::AccountSnapshot snapshot;
     EXPECT_TRUE(synth::PlanBadge::formatText(snapshot).isEmpty());

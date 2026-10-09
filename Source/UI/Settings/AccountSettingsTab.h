@@ -43,6 +43,10 @@ public:
     void setFlowLauncherForTesting(std::function<void(std::unique_ptr<synth::AccountFlowPanel>)> launcher) {
         flowLauncher = std::move(launcher);
     }
+    // Replaces juce::Process::isForegroundProcess for the return-to-the-app refresh.
+    void setForegroundCheckForTesting(std::function<bool()> check) { foregroundCheck = std::move(check); }
+    // Runs one foreground check, as the timer does while the tab is showing.
+    void pollForegroundForTest() { refreshOnReturnToForeground(); }
     std::unique_ptr<synth::AccountFlowPanel> createFlowPanelForTest(synth::AccountFlowPanel::Flow flow,
                                                                     juce::Component& opener);
 
@@ -57,7 +61,13 @@ public:
     juce::String getNoticeTextForTest() const { return noticeLabel.getText(); }
 
 private:
-    void timerCallback() override { syncFromSnapshot(); }
+    void timerCallback() override {
+        syncFromSnapshot();
+        refreshOnReturnToForeground();
+    }
+    // Re-fetches the plan when the app comes back to the foreground (a cancel or upgrade done in the browser).
+    void refreshOnReturnToForeground();
+    void refreshEntitlementIfSignedIn();
     void applySnapshot(const synth::AccountSnapshot& snapshot);
     void openFlow(synth::AccountFlowPanel::Flow flow, juce::Component& opener);
     std::unique_ptr<synth::AccountFlowPanel> buildFlowPanel(synth::AccountFlowPanel::Flow flow,
@@ -68,6 +78,8 @@ private:
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
     std::function<void(std::unique_ptr<synth::AccountFlowPanel>)> flowLauncher;
+    std::function<bool()> foregroundCheck = [] { return juce::Process::isForegroundProcess(); };
+    bool wasForeground = true;
 
     juce::String lastSignature;
     bool accountDeleted = false;
