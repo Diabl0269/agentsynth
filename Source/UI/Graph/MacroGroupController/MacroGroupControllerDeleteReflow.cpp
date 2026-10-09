@@ -100,6 +100,10 @@ void MacroGroupController::closeGapAt(const juce::String& macroId, juce::Rectang
     if (macro == nullptr || host_.getMacros().isEffectivelyCollapsed(macroId))
         return;
     const auto units = buildLayoutUnits(macroId);
+    // A neighbour the deleted card had pushed aside may already be back in its place (it landed between them): then
+    // there is no hole left to close.
+    if (std::any_of(units.begin(), units.end(), [&slot](const LayoutUnit& unit) { return unit.rect.intersects(slot); }))
+        return;
 
     for (const bool horizontal : {true, false}) {
         std::vector<const LayoutUnit*> after;

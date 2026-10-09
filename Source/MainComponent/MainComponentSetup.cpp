@@ -12,6 +12,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/InsertGap/InsertGapKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
@@ -421,9 +422,11 @@ void MainComponent::wirePluginScanAndRecents() {
     // row kinds otherwise lack (mouseDown starts a drag for them immediately; see
     // ModuleLibraryComponent's own comment on onModuleActivated/onSnippetActivated). Both land at
     // the viewport centre, mirroring onPluginActivated above and the "drop with no cursor position"
-    // fallback GraphEditor::itemDropped already uses.
+    // fallback GraphEditor::itemDropped already uses. With exactly one card selected, a module goes right after that
+    // card instead, the cards after it making room (synth::insertModuleAfterSelectedCard).
     moduleLibrary.onModuleActivated = [this](const juce::String& name) {
-        graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
+        if (!synth::insertModuleAfterSelectedCard(graphEditor, name))
+            graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
     };
     moduleLibrary.onSnippetActivated = [this](const juce::String& name) {
         if (!graphEditor.snippetProvider)

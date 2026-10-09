@@ -314,6 +314,16 @@ void MacroGroupController::forgetModuleDisplacements(juce::AudioProcessorGraph::
     moduleDisplaced_.erase(nodeKey(nodeId));
 }
 
+void MacroGroupController::notePushesBy(const juce::String& growerKey,
+                                        const std::vector<synth::Macro::DisplacedNeighbour>& records) {
+    if (records.empty())
+        return;
+    auto& kept = moduleDisplaced_[growerKey];
+    kept.insert(kept.end(), records.begin(), records.end());
+}
+
+void MacroGroupController::refreshAfterUnitMoves() { refreshAfterMove(); }
+
 // Boxes for findFreeSlot, built like buildLayoutUnits but flattened over every level instead of one: a module being
 // placed must clear a collapsed card, an open hull and every visible module wherever they nest. The hidden members of a
 // collapsed macro sit at their pre-collapse positions and are skipped (their card stands in for them).

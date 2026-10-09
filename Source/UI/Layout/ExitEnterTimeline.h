@@ -25,6 +25,10 @@ struct ExitEnterTimeline {
     bool hasExit = false;
     bool hasGap = false;
     bool hasEnter = false;
+    /** The fading outline after the grow marks something an undo brought back; a card that is simply new has none. */
+    bool outline = true;
+    /** The grow overshoots by the 8% bounce (easeOutBackGrow) and settles, the way a new card lands. */
+    bool bounce = false;
 
     /** Eased progress of each phase, 0..1. A phase that is absent reads 1 once the time is past its slot. */
     struct Frame {
@@ -32,12 +36,13 @@ struct ExitEnterTimeline {
         float gap = 0.0f;
         float grow = 0.0f;
         float outline = 0.0f; // linear: the outline's alpha is 1 - outline
+        bool grown = false;   // the grow phase is over (a bouncing grow passes 1 before it ends)
     };
 
     double exitMs() const noexcept { return hasExit ? kExitMs : 0.0; }
     double gapMs() const noexcept { return hasGap ? kGapMs : 0.0; }
     double growMs() const noexcept { return hasEnter ? kGrowMs : 0.0; }
-    double outlineMs() const noexcept { return hasEnter ? kOutlineMs : 0.0; }
+    double outlineMs() const noexcept { return hasEnter && outline ? kOutlineMs : 0.0; }
 
     double totalMs() const noexcept { return exitMs() + gapMs() + growMs() + outlineMs(); }
 
@@ -49,8 +54,10 @@ struct ExitEnterTimeline {
         start += exitMs();
         f.gap = phase(elapsedMs, start, gapMs(), easeOutCubic);
         start += gapMs();
-        f.grow = phase(elapsedMs, start, growMs(), easeOutCubic);
+        f.grow = bounce ? phase(elapsedMs, start, growMs(), easeOutBackGrow)
+                        : phase(elapsedMs, start, growMs(), easeOutCubic);
         start += growMs();
+        f.grown = elapsedMs >= start;
         f.outline = phase(elapsedMs, start, outlineMs(), [](float t) { return t; });
         return f;
     }

@@ -19,13 +19,6 @@ add_executable(Tests
     UI/Layout/HierarchicalArrangeTests.cpp
     UI/Graph/AutoArrangeTests.cpp
     UI/Graph/AutoArrangeMacroTests.cpp
-    UI/Graph/CardGlide/CardGlideTests.cpp
-    UI/Graph/CardGlide/CardGlideUndoTests.cpp
-    UI/Graph/CardGlide/CardGlideDeleteTests.cpp
-    UI/Graph/CardGlide/CardGlideMacroDeleteTests.cpp
-    UI/Graph/CardGlide/CardGlideMacroGapTests.cpp
-    UI/Graph/CardGlide/CardGlideMacroTakeOutUndoTests.cpp
-    UI/Graph/CardGlide/CardGlideFrameCostTests.cpp
     UI/Graph/CanvasFrame/CanvasFrameTests.cpp
     UI/Graph/CanvasFrame/CanvasEdgeDragTests.cpp
     UI/Graph/MacroHullGlideTests.cpp
@@ -913,6 +906,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load r
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

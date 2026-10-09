@@ -794,7 +794,7 @@ private:
     juce::var resolveSnippetPayload(const juce::String& name) const override;
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
-    GraphDragDropController dragDropController_{*this};
+    GraphDragDropController dragDropController_{*this, macroController_.insertGap()};
     std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
     std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
