@@ -28,22 +28,30 @@ public:
         never collide with) a real user's stored token. */
     explicit KeychainTokenStore(juce::String serviceName);
 
+    /** Process-wide switch for the test binary: every store built afterwards with the default
+        (production) constructor keeps its token in memory and never touches the platform
+        credential store, so a MainComponent a test builds cannot read the developer's real
+        sign-in item (which prompts for the login keychain password under an unsigned or
+        re-signed build). Call once at startup, before any AccountService exists. */
+    static void useInMemoryStoreForProcess(bool enable);
+
+    /** True when this instance keeps its token in memory only (the switch above, or Linux). */
+    bool isMemoryOnly() const;
+
     bool save(const juce::String& refreshToken) override;
     juce::String load() const override;
     void clear() override;
 
 private:
     juce::String service;
+    bool memoryOnly = false;
+    InMemoryTokenStore memory;
 
 #if JUCE_MAC
     // Read once per process (see load()); guarded because save() runs on the worker thread.
     mutable juce::CriticalSection lock;
     mutable juce::String cached;
     mutable bool cacheValid = false;
-#endif
-
-#if !JUCE_MAC && !JUCE_WINDOWS
-    InMemoryTokenStore fallback;
 #endif
 };
 

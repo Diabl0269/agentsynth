@@ -45,6 +45,12 @@ that ad-hoc and Apple Development builds do not have (`errSecMissingEntitlement`
 signing, `scripts/dev-sign-app.sh` locally and Developer ID for releases, is what stops the prompt
 after the first Always Allow.
 
+The test binary never touches the real item: `Tests/TestMain.cpp` calls
+`KeychainTokenStore::useInMemoryStoreForProcess(true)`, so every default-constructed store (the one
+each `MainComponent`'s `AccountService` builds, whose `attemptSilentSignIn()` reads the token at
+startup) keeps its token in memory. `KeychainTokenStoreIsolationTests.cpp` fails if that switch is
+missing. `KeychainTokenStore` tests use an explicit per-test service name, never the production one.
+
 `completeSignIn()` also re-checks for cancellation before persisting. Without that check, a
 `cancelSignIn()` or `signOut()` landing in the window between "the round trip completed" and "the
 tokens are persisted and published" would be silently overwritten, signing the user back in a moment

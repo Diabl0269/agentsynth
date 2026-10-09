@@ -232,6 +232,7 @@ add_executable(Tests
     Account/AuthClient/AuthClientFeedbackTests.cpp
     Account/AccountServiceTests.cpp
     Account/KeychainTokenStoreTests.cpp
+    Account/KeychainTokenStoreIsolationTests.cpp
     Account/DeviceIdStoreTests.cpp
     Telemetry/TelemetryIdStoreTests.cpp
     Telemetry/TelemetryJsonTests.cpp

@@ -1,5 +1,6 @@
 #include "KeychainTokenStore.h"
 #include "../Branding.h"
+#include <atomic>
 
 #if JUCE_MAC
 #include <Security/Security.h>
@@ -22,10 +23,16 @@ namespace synth {
 
 namespace {
 constexpr const char* kAccount = "default";
-}
+std::atomic<bool> gInMemoryForProcess{false};
+} // namespace
+
+void KeychainTokenStore::useInMemoryStoreForProcess(bool enable) { gInMemoryForProcess.store(enable); }
+
+bool KeychainTokenStore::isMemoryOnly() const { return memoryOnly; }
 
 KeychainTokenStore::KeychainTokenStore()
-    : service(juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken") {}
+    : service(juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken")
+    , memoryOnly(gInMemoryForProcess.load()) {}
 
 KeychainTokenStore::KeychainTokenStore(juce::String serviceName)
     : service(std::move(serviceName)) {}
@@ -63,6 +70,8 @@ CFDataRef makeData(const juce::String& text) {
 } // namespace
 
 bool KeychainTokenStore::save(const juce::String& refreshToken) {
+    if (memoryOnly)
+        return memory.save(refreshToken);
     const juce::ScopedLock sl(lock);
 
     // The same token again (a refresh that did not rotate it) needs no Keychain access at all.
@@ -107,6 +116,8 @@ bool KeychainTokenStore::save(const juce::String& refreshToken) {
 }
 
 juce::String KeychainTokenStore::load() const {
+    if (memoryOnly)
+        return memory.load();
     const juce::ScopedLock sl(lock);
 
     // Every Keychain read can raise a permission prompt when the running build is not the one that
@@ -146,6 +157,10 @@ juce::String KeychainTokenStore::load() const {
 }
 
 void KeychainTokenStore::clear() {
+    if (memoryOnly) {
+        memory.clear();
+        return;
+    }
     const juce::ScopedLock sl(lock);
 
     CFStringRef serviceRef = nullptr;
@@ -180,6 +195,8 @@ void KeychainTokenStore::clear() {
 // fixed account. A generic credential's blob is capped at CRED_MAX_CREDENTIAL_BLOB_SIZE (2560
 // bytes), far above any refresh token this app stores; an oversized token makes save() return false.
 bool KeychainTokenStore::save(const juce::String& refreshToken) {
+    if (memoryOnly)
+        return memory.save(refreshToken);
     const auto target = service.toWideCharPointer();
     const auto account = juce::String(kAccount);
 
@@ -195,6 +212,8 @@ bool KeychainTokenStore::save(const juce::String& refreshToken) {
 }
 
 juce::String KeychainTokenStore::load() const {
+    if (memoryOnly)
+        return memory.load();
     PCREDENTIALW credential = nullptr;
     if (!CredReadW(service.toWideCharPointer(), CRED_TYPE_GENERIC, 0, &credential) || credential == nullptr)
         return {};
@@ -205,7 +224,13 @@ juce::String KeychainTokenStore::load() const {
     return value;
 }
 
-void KeychainTokenStore::clear() { CredDeleteW(service.toWideCharPointer(), CRED_TYPE_GENERIC, 0); }
+void KeychainTokenStore::clear() {
+    if (memoryOnly) {
+        memory.clear();
+        return;
+    }
+    CredDeleteW(service.toWideCharPointer(), CRED_TYPE_GENERIC, 0);
+}
 
 #else // Linux and anything else
 
@@ -213,12 +238,12 @@ void KeychainTokenStore::clear() { CredDeleteW(service.toWideCharPointer(), CRED
 // -Wunused-private-field quiet on the remaining platform without an #ifdef around the member itself.
 bool KeychainTokenStore::save(const juce::String& refreshToken) {
     juce::ignoreUnused(service);
-    return fallback.save(refreshToken);
+    return memory.save(refreshToken);
 }
 
-juce::String KeychainTokenStore::load() const { return fallback.load(); }
+juce::String KeychainTokenStore::load() const { return memory.load(); }
 
-void KeychainTokenStore::clear() { fallback.clear(); }
+void KeychainTokenStore::clear() { memory.clear(); }
 
 #endif
 

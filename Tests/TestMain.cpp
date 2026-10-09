@@ -1,3 +1,4 @@
+#include "Auth/KeychainTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "UserSettings.h"
@@ -62,6 +63,12 @@ int main(int argc, char** argv) {
         juce::File(settingsDirOverride).getChildFile("agentsynth-tests-controller-profiles");
     controllerProfilesDir.deleteRecursively();
     MainComponent::setControllerProfileTestDirectory(controllerProfilesDir);
+
+    // Every MainComponent builds an AccountService that reads the stored sign-in token at
+    // startup. Keep that in memory so the suite never touches the developer's real Keychain item
+    // (an unsigned or re-signed Tests binary would otherwise raise the login-keychain password
+    // prompt on every run).
+    synth::KeychainTokenStore::useInMemoryStoreForProcess(true);
 
     const int result = RUN_ALL_TESTS();
     if (ownedSettingsDir != juce::File())
