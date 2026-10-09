@@ -72,8 +72,8 @@ Notes on individual entries:
   page-flips the view to keep the playhead on screen while playing — see
   [playhead](../timeline/playhead.md#follow-playhead). The glyph is the playhead (a down-pointing
   head on a line) with two chevrons chasing it from the left. Its colour carries the toggle state:
-  the library tints it `textMuted` and the panel clones a `textPrimary` hover and an `accent` on
-  variant, on top of the button's accent wash.
+  the library tints it `textMuted` and the panel clones a `textPrimary` hover variant and an `iconInk`
+  on variant (the button is filled solid accent while on, so an accent glyph was invisible).
 - **`CatIO`** (41) is the speaker glyph for the module library's "I/O" category header (Audio Input
   and Audio Output), and doubles as the Audio Output card's identity glyph in
   `ModuleComponent::paint()` — see

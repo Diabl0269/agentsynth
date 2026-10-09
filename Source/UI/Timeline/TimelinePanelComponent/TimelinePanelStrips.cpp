@@ -92,14 +92,17 @@ void TimelinePanelComponent::applyToolStripTheme() {
     // LnF in a headless build; getIcon returns nullptr when the asset library isn't linked in), so
     // the button stays imageless but fully functional either way.
     if (lf != nullptr) {
-        // Unlike the edit tools, this glyph's colour carries the on/off state (the button has no
-        // label to fall back on): muted at rest, full ink on hover, accent while following.
+        // Muted at rest, full ink on hover, and the dark `iconInk` while following: a toggled-on
+        // juce::DrawableButton with a background style is filled SOLID accent (TextButton::
+        // buttonOnColourId, via drawButtonBackground), and the glyph on a light fill is `iconInk`
+        // by the same rule the toolbar buttons' lit state follows. An accent glyph on that accent
+        // fill vanished.
         if (auto base = lf->getIcon(synth::theme::Icon::FollowPlayhead)) {
             const auto& colours = lf->getTheme().colors;
             auto hover = base->createCopy();
             hover->replaceColour(colours.textMuted, colours.textPrimary);
             auto on = base->createCopy();
-            on->replaceColour(colours.textMuted, colours.accent);
+            on->replaceColour(colours.textMuted, colours.iconInk);
             followPlayheadButton_.setImages(base.get(), hover.get(), hover.get(), nullptr, on.get(), on.get(),
                                             on.get());
         }

@@ -70,8 +70,11 @@ A toggle button sits immediately next to the snap toggle in the panel's snap/too
 (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see
 [`layout/icons.md`](../layout/icons.md)). `kFollowPlayheadButtonWidth` is 30 px; the snap
 toggle's `kSnapToggleButtonWidth` is **46 px**, wide enough for the word `"Snap"`.
-The glyph is the playhead with two chevrons chasing it; its colour is the on/off cue (muted at
-rest, accent while following).
+The glyph is the playhead with two chevrons chasing it. Off, it is muted ink; on, it is the
+theme's dark `iconInk`, because a toggled-on `DrawableButton` is filled solid accent and `iconInk`
+is the glyph colour for a light fill (the same rule the toolbar buttons' lit state follows). The
+glyph is never the accent itself: it vanished on the accent fill (FRO618). A paint test checks the
+glyph/fill contrast (>= 3:1) in every built-in theme, on and off.
 
 **The button is labelled with the VERB, not with its key.** A button that spells its own letter
 goes stale the moment a user rebinds it, so the live key is in the tooltip, resolved through
@@ -89,6 +92,14 @@ repaint in `updateFromTransport` uses — no new timer — and is gated on **all
   would fight the gesture the user is mid-way through).
 
 Any one of the four false costs zero work.
+
+**Scrolling by hand turns it off.** A sideways scroll the user makes (wheel, trackpad swipe,
+Shift+wheel, the eased wheel tween; all of them end in `applyWheelScroll`) calls
+`setFollowPlayheadEnabled(false)`, so the flag, the button, the persisted preference and the
+roll's mirror all go off together, rather than the next 10 Hz poll snapping the view back to the
+playhead. Follow's own page-flip (`pageViewToShowBeat`) never goes through that path and leaves it
+on; vertical scroll and zoom do not touch it. Press the button or F to follow again. (The roll's
+own manual scroll is different: it only suspends the roll's follow until re-armed, see below.)
 
 When the latency-compensated drawn playhead beat moves outside `[firstVisibleBeat, firstVisibleBeat
 + visibleBeats)`, the view re-centres so the beat lands **10% into the new page** rather than flush
