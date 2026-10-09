@@ -546,6 +546,10 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
     }
 
     g.fillAll(colours.surface);
+    if (selected_) {
+        g.setColour(colours.accent.withAlpha(0.16f));
+        g.fillRect(getLocalBounds());
+    }
 
     // Tinted left edge in the track's colour — the row's identity at a glance, even when the
     // swatch button itself is under the cursor.
@@ -633,7 +637,7 @@ void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     // wait on a real focusGained() round trip).
     grabKeyboardFocus();
     if (onSelectRequested)
-        onSelectRequested();
+        onSelectRequested(e.mods);
 }
 
 void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
@@ -682,6 +686,19 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     // nor the shared scroll state, so it just reports the direction (see onFocusMoveRequested's own
     // comment). Deliberately NOT a ShortcutManager action (arrow-key row navigation isn't rebindable
     // anywhere else in this app either — see ModuleLibraryComponent's row navigation).
+    // Shift+Up/Down grows the selection a row at a time; Cmd/Ctrl+Space toggles this row in or out of it.
+    const auto mods = key.getModifiers();
+    const bool shiftOnly = mods.isShiftDown() && !mods.isCommandDown() && !mods.isAltDown() && !mods.isCtrlDown();
+    if (shiftOnly && (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey))) {
+        if (onExtendSelectionRequested)
+            onExtendSelectionRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    if (key.isKeyCode(juce::KeyPress::spaceKey) && mods.isCommandDown() && !mods.isShiftDown()) {
+        if (onToggleSelectionRequested)
+            onToggleSelectionRequested();
+        return true;
+    }
     if (key.isKeyCode(juce::KeyPress::upKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(-1);
@@ -764,6 +781,37 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     // to TimelinePanelComponent::keyPressed exactly like it already does from the clip lane area and
     // the piano roll.
     return false;
+}
+
+void TimelineTrackHeaderComponent::setSelected(bool selected) {
+    if (selected == selected_)
+        return;
+    selected_ = selected;
+    repaint();
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+}
+
+namespace {
+// The row is one selectable item of the track list; the stock handler has no selected state to report.
+class TrackRowAccessibilityHandler : public juce::AccessibilityHandler {
+public:
+    TrackRowAccessibilityHandler(TimelineTrackHeaderComponent& row)
+        : juce::AccessibilityHandler(row, juce::AccessibilityRole::listItem)
+        , row_(row) {}
+
+    juce::AccessibleState getCurrentState() const override {
+        auto state = juce::AccessibilityHandler::getCurrentState().withSelectable().withMultiSelectable();
+        return row_.isSelected() ? state.withSelected() : state;
+    }
+
+private:
+    TimelineTrackHeaderComponent& row_;
+};
+} // namespace
+
+std::unique_ptr<juce::AccessibilityHandler> TimelineTrackHeaderComponent::createAccessibilityHandler() {
+    return std::make_unique<TrackRowAccessibilityHandler>(*this);
 }
 
 void TimelineTrackHeaderComponent::focusGained(juce::Component::FocusChangeType) { repaint(); }

@@ -26,6 +26,7 @@
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 #include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -399,6 +400,13 @@ public:
     void refreshRoutingPane();
     /** The selected track: the header row that was last clicked or moved to with the arrow keys; invalid when none. */
     synth::TrackId getSelectedTrackId() const;
+    /** Every selected track, in timeline order (not click order). Cmd/Ctrl-click toggles, Shift-click selects
+     *  a range from the anchor, a plain click or an arrow key resets to one. A view-state selection:
+     *  never on TimelineDoc, never undoable. The primary track (getSelectedTrackId(): the one last clicked
+     *  or moved to, and the one the single-track commands act on) may be absent from it after a
+     *  Cmd/Ctrl-click took it out. */
+    std::vector<synth::TrackId> selectedTracks() const;
+    bool isTrackSelected(synth::TrackId id) const { return trackSelection_.contains(id); }
 
     // ---- Track headers ----
     // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
@@ -584,6 +592,19 @@ private:
     // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
     // if track order/set changed between the header being built and the click landing.
     void setFocusedTrack(synth::TrackId id);
+    // Same focus move without resetting the selection (a modifier click or key edits it itself).
+    void focusTrackKeepingSelection(synth::TrackId id);
+    // onSelectRequested: plain click resets, Cmd/Ctrl toggles, Shift extends from the anchor.
+    void selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods);
+    // Shift+Up/Down: moves focus a row and extends the selection to it. Cmd/Ctrl+Space: toggles the focused row.
+    void extendTrackSelection(int direction);
+    void toggleFocusedTrackSelection();
+    // Every header's selected look follows trackSelection_ (after a change, and after the rows are rebuilt).
+    void applyTrackSelectionToHeaders();
+    std::vector<synth::TrackId> trackOrder() const;
+    // The shared tail of a keyboard move to row `index`: focus, scroll into view, routing pane.
+    void focusTrackRowAt(int index);
+    synth::ui::TrackSelectionModel trackSelection_;
     // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down) -- see its definition
     // in TimelinePanelTrackHeaders.cpp for the clamping rule.
     void moveFocusedTrack(int direction);

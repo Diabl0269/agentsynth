@@ -511,7 +511,21 @@ public:
      *  no-op without a native peer (headless tests included — see docs/control/shortcuts.md's Focus regions
      *  section), so TimelinePanelComponent::focusedTrackIndex_ has to be told directly rather than
      *  waiting on an OS focus event that may never arrive. */
-    std::function<void()> onSelectRequested;
+    std::function<void(const juce::ModifierKeys& mods)> onSelectRequested;
+
+    /** Shift+Up (-1) / Shift+Down (+1): grow or shrink the selection by one row from the anchor. Same
+     *  sibling-blind division of labour as onFocusMoveRequested; the key is claimed either way. */
+    std::function<void(int direction)> onExtendSelectionRequested;
+
+    /** Cmd/Ctrl+Space: add this row to the selection or take it out. */
+    std::function<void()> onToggleSelectionRequested;
+
+    /** Whether the panel's track selection holds this row's track. Painted as a wash plus the
+     *  selected state for assistive tech; the row that also has keyboard focus keeps its focus ring. */
+    void setSelected(bool selected);
+    bool isSelected() const noexcept { return selected_; }
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     /** The "Next Clip" key was pressed; returns false (key not consumed) when the track has no clips. */
     std::function<bool()> onEnterClipsRequested;
@@ -846,6 +860,7 @@ private:
     // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
     // see that callback's own ordering-hazard comment.
     bool draggingRow_ = false;
+    bool selected_ = false; // setSelected()
     float lift_ = 0.0f;
     // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
     // this is only a hit-rect for tests, not a cache of the badge's text.

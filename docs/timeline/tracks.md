@@ -168,6 +168,31 @@ focus machinery for double-click rename. The row's `focusOfChildComponentChanged
 repaints for that case (and for the binding chip), since `hasKeyboardFocus(true)` — what the focus
 outline checks — includes descendants.
 
+## Selecting several tracks
+
+The header column follows the list conventions of Finder and Logic. A plain click selects one track and resets
+the rest. **Cmd-click** (Ctrl-click on Windows and Linux) adds the track or, if it is already selected, takes
+it out. **Shift-click** selects the clicked track and every track between it and the **anchor** (the last
+plainly clicked or Cmd-clicked track), keeping what was selected before that click; shift-clicking elsewhere moves
+the far end of the range instead of stacking ranges. Every selected row is washed in the accent colour, and the
+row that has keyboard focus keeps its focus ring (the wash is not animated: it follows the selection
+immediately, as the focus ring does).
+
+From the keyboard: **Shift+Up/Down** moves focus a row and extends the selection from the anchor to it
+(going back the other way shrinks it), and **Cmd/Ctrl+Space** toggles the focused row. A plain Up/Down moves
+focus and resets the selection to that one row.
+
+The model is `TrackSelectionModel` (`Source/UI/Timeline/TrackSelectionModel.h`, pure state, owned by
+`TimelinePanelComponent`). It is ephemeral view state like `focusedTrackIndex_`: it is not on `TimelineDoc`,
+is not an undo step and is not saved. `TimelinePanelComponent::selectedTracks()` returns the selected
+`TrackId`s in timeline order, and `isTrackSelected(id)` asks about one. Selection is by id, so it survives
+relayouts, rebuilds and reorders; a deleted track drops out of it. The **primary** track (`getSelectedTrackId()`,
+the row last clicked or moved to) is still what the single-track commands act on and what the
+[routing pane](#routing-from-the-side-pane) follows; after a Cmd-click that removes it, it is focused but not selected.
+Each row exposes the selected state to assistive tech (a list item that is selectable and, when chosen,
+selected), and its title stays the track name. The mixer does not mirror timeline track selection (its
+strips are selected only by "reveal"), so it is unchanged.
+
 ## Drag to reorder
 
 `TimelineDoc::moveTrack(id, newIndex)` moves a track within `tracks[]` — display and serialization
