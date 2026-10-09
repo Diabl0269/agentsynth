@@ -3,6 +3,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -31,14 +32,17 @@
 // so Tab visits them top to bottom and Space/Return act on them; while a row listens for its new
 // key, that row's button keeps focus and takes every key, Escape cancelling.
 //
-// Two things it deliberately does NOT copy from the library sidebar:
-//   - No fold ANIMATION. The library's accordion is a VBlank-driven AnimationDriver over a
-//     hand-laid-out row list; here the rows are real child components inside a juce::Viewport, so a
-//     fold would have to animate child bounds every frame for no benefit in a modal settings dialog.
-//     Collapsing is instant.
-//   - The folds ARE remembered (user setting shortcutsFolded, the folded categories by stable name):
-//     the tab is constructed fresh each time the Settings window opens, and it restores them before
-//     its first layout, so it opens as it was left.
+// Folding and filtering animate the way the Preferences groups do (docs/layout/animation.md#fading-things-in-and-out):
+// a row a fold or the search takes out fades (synth::ui::FadeVisibility) while its slot is squeezed to the fade's
+// progress(), so the rows below slide up; a row that comes back does the reverse. Reduce Motion is the plain 80 ms
+// fade, and Animations Off or a tab that is not on screen land at once. A section that the search drops entirely
+// fades its header and gaps the same way. The section headers' chevrons turn at once, as the Preferences
+// headers' do. The animation library's accordion (ModuleLibraryComponent) is laid out by hand and drives its own
+// tween; here the rows are real child components, so the fade and the squeezed slot are what move them.
+//
+// The folds ARE remembered (user setting shortcutsFolded, the folded categories by stable name):
+// the tab is constructed fresh each time the Settings window opens, and it restores them before
+// its first layout, so it opens as it was left, with nothing fading on that first layout.
 //
 // ROW INDEXING IS A CONTRACT: row i is ShortcutManager::getActionIds()[i], sections or no sections.
 // The section headers are separate widgets, never entries in the row vectors, and
@@ -130,6 +134,14 @@ public:
      *  and expanded and it survived the filter. The one observable that answers "did the filter hide
      *  this" without decoding pixels. */
     bool isRowVisible(int index) const;
+
+    /** True while any row or header is still fading in or out. */
+    bool anyFadeRunningForTest() const;
+    /** Content height of the scrolled rows, so a test can watch the slots squeeze. */
+    int getContentHeightForTest() const { return rowsHost.getHeight(); }
+    /** The on-screen component of row [index] (its rebind button), which fades with the row. */
+    juce::Component& getRowButtonForTest(int index) { return *bindButtons[(size_t)index]; }
+    juce::Component& getRowLabelForTest(int index) { return *descLabels[(size_t)index]; }
 
     /** True when `category`'s header is currently laid out. */
     bool isSectionVisible(ShortcutCategory category) const;
@@ -233,5 +245,10 @@ private:
     synth::ui::ScrollIntoViewOnFocus followFocus_{rowsViewport};
     // Keyed by category, exactly as ModuleLibraryComponent keys its own set by header name.
     std::set<ShortcutCategory> collapsedSections;
+    // One fade per row (label and button together) and per header, made once every widget exists. `fadesReady_`
+    // is false until the first layout, which lands each on its state instead of fading it.
+    std::vector<std::unique_ptr<synth::ui::FadeVisibility>> rowFades_;
+    std::vector<std::unique_ptr<synth::ui::FadeVisibility>> headerFades_;
+    bool laidOutOnce_ = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutsSettingsTab)
 };

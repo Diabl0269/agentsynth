@@ -592,6 +592,10 @@ a control growing or shrinking on the card behind the call-out froze on one fram
 Every animation in the app follows these; a new one that cannot is a design question, not a
 shortcut.
 
+- **Everything animates.** Nothing in the app appears, disappears, resizes or moves without motion. Reduce Motion
+  turns that motion into a short fade (80 ms); Animations: Off makes it instant. A change that stays instant
+  needs a written reason in these docs (see the "kept instant on purpose" notes on the individual animations); a
+  change with no reason written down is a bug.
 - **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,
   call-outs and dialogs: see [Popup windows](#popup-windows). Reorder
   make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).
@@ -694,8 +698,9 @@ and voices editor, each row's voices editor (the shape box slides over as its bl
 "No outputs yet" hints (the section below slides with the hint's height), the piano roll scale panel's custom scale
 editor (its keys, name field and Save, clipped to the height reached while the controls below slide), and the AI
 settings tab's host label and address box and its Custom server / Use hosted server buttons (fixed slots). The
-Preferences section headers and the fold-all strip, and the Keyboard Shortcuts tab's folds (collapsing there is
-instant on purpose), are not faded. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
+Preferences section headers and the fold-all strip are not faded. The Keyboard Shortcuts tab folds the same way: each
+row (and a section header the search drops) is one `FadeVisibility` whose slot is squeezed to `progress()`, a fold and a
+search filter alike, so the rows below slide. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
 something already on screen so what was there from the start does not fade.
 
 The MIDI Remote panel uses it too: the inspector and the orphan view cross-fade in the same spot; the page strip
