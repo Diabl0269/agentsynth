@@ -355,8 +355,8 @@ void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceD
     // Modules only: a snippet or plugin payload never reaches here. Cmd (or the drag-without-Cmd
     // preference) over an expanded hull makes the new module a member, in the same undo step as its
     // creation.
-    // Released over an open gap, the macro it was made in is the one joined: the cards it pushed have moved the borders,
-    // and the join was decided on the borders as they stood when the pointer got there (InsertGap::hover).
+    // Released over an open gap, the macro it was made in is the one joined: the cards it pushed have moved the
+    // borders, and the join was decided on the borders as they stood when the pointer got there (InsertGap::hover).
     const bool inGap = insertGap_ != nullptr && insertGap_->isOpen();
     const juce::String joinMacroId = inGap ? insertGap_->container() : macroJoinTargetForDrop(dragSourceDetails);
     host_.addModuleAtCanvasPosition(name, dropPos, {}, joinMacroId);

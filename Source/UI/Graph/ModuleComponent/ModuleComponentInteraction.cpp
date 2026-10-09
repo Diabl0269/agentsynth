@@ -944,12 +944,9 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
-    // Released over a gap the drag opened between two cards: the gap goes home before the undo record below and the
-    // finalize re-makes it inside, so the move and the push are one step (InsertGap.h).
-    std::optional<InsertGap::Commit> insertCommit;
-    if (owner.getMacroController().insertGap().isOpen())
-        insertCommit.emplace(owner.getMacroController().insertGap());
-
+    std::optional<InsertGap::Commit> insertCommit; // a drag-opened gap is undone and re-made in one step (InsertGap.h)
+    if (auto& gap = owner.getMacroController().insertGap(); gap.isOpen())
+        insertCommit.emplace(gap);
     // The Windows/Linux Ctrl-vs-Cmd arbitration (see mouseDown's/reparentArmed's own
     // comments): a reparent-armed drag that crossed a macro hull boundary reparents, landing
     // position + membership + port splicing in ONE undo step. The LIVE candidate every mouseDrag
