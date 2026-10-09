@@ -318,6 +318,7 @@ void TimelinePanelComponent::placeTrackHeaders() {
         if (lift > 0.0f)
             header->toFront(false);
     }
+    placeLaneSeamHandles(layout);
 }
 
 // The gap a lifted row leaves is that row's own clip-row height, which a per-track height can change.

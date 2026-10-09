@@ -30,6 +30,7 @@
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -653,6 +654,8 @@ private:
     float trackPointerY(int screenY) const;
     // Places every row: static slots, or the animator's positions while a reorder is in flight.
     void placeTrackHeaders();
+    // The resize strip along the bottom of a track's open lane block (see TimelinePanelTrackHeight.cpp).
+    void placeLaneSeamHandles(const TimelineRowLayout& layout);
 
     // Delete and undo motion: the picture of the rows taken before a removal, which tracks the last rebuild added and
     // removed, and the overlay that plays them.
@@ -925,6 +928,9 @@ private:
     };
     HeaderViewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_{*this};
+    // One per track whose automation/modulator rows are open: the same resize edge as the row's own, continued
+    // along the bottom of the block so the seam above the next track still resizes this track.
+    std::map<synth::TrackId, std::unique_ptr<EdgeResizeHandle>> laneSeamHandles_;
 
     // Declared in this order so the button unbinds from the pane, and the pane lets go of its content, before either
     // is destroyed.

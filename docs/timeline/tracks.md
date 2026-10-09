@@ -252,6 +252,10 @@ its clips, its lanes and the scroll all follow. A fixed override (the Unassigned
   release commits `TimelineDoc::setTrackHeightScale()` once through `TrackHeaderHost::performTrackEdit`,
   so one drag is one undo step. A double-click resets the track to the default height. The seam between
   two rows belongs to the row above it.
+  When the track has automation or modulator rows open, they hang between its row and the next track, so a
+  second strip (`trackHeightHandleBelowLanes`, owned by the panel, same name, tooltip, drag and double-click)
+  runs along the bottom of that lane block: the seam above the next track resizes the track it belongs to
+  with lanes open or folded.
 - **Vertical zoom:** zooming the tracks in or out (wheel, pinch or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
   for all of them. `TimelinePanelComponent::zoomTrackRows()` first clears every track's own height with
   `TimelineDoc::resetTrackHeightScales()` through `performTrackEdit` (one undo step that brings the mixed heights
