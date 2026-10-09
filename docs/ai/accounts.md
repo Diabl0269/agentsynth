@@ -88,6 +88,34 @@ silent sign-in attempt produces. `accountService` is default-constructed with th
 and `KeychainTokenStore`; on a machine with no stored refresh token that attempt is a fast, silent
 no-op, which is why every `MainComponent`-constructing test runs at its normal speed.
 
+## Account tab
+
+Settings > Account (`Source/UI/Settings/AccountSettingsTab`), next to the AI tab; it exists only when the
+window was given an `AccountService`. Signed out it shows one line and a Sign in button (the same
+`launchSignInDialog` the AI panel's row uses). Signed in it shows the email, the plan line
+(`PlanBadge::formatText`, "Pro · 42 of 500 requests this month"), "Renews <date>" or, once the
+subscription is set to stop, "Ends <date>" (`PlanBadge::formatPeriodLine`, from the snapshot's
+`periodEndIso` / `cancelAtPeriodEnd`), Sign out, and:
+
+- **Manage subscription** (Pro) opens a popover (`AccountFlowPanel`, a call-out growing out of the button) with
+  "Change payment or see invoices" (opens `kBillingPortalUrl`) and "Cancel my subscription" (the leaving
+  question first, then the portal). Free shows **Upgrade to Pro**, the existing checkout link.
+- **Delete account…** opens a confirmation that lists what is removed, then the leaving question, then
+  `DELETE /v1/account` (`AuthClient::deleteAccount`). 204 signs out locally (stored tokens cleared like Sign out)
+  and the tab says "Your account was deleted."; 409 `SUBSCRIPTION_ACTIVE` says to cancel first and offers Manage
+  subscription; any other error shows the server's message, or a network line, with Try again.
+- **The leaving question** (`LeavingSurveyPanel`): eight reason toggles, an optional comment (2000 characters),
+  Skip and Continue. Continue sends `POST /v1/exit-survey` `{kind: "cancel"|"delete", reasons, comment?}`
+  (`AuthClient::submitExitSurvey`), Skip sends nothing, and neither blocks leaving: a failed post is ignored. For
+  delete the answer is posted first (the token dies with the account), then the delete follows regardless.
+
+Requests run through `AccountRequests` (a detached worker with a copied `AuthClient`, the result handed back on the
+message thread), like the Feedback tab's sync. Unlike the other calls there is no refresh-and-retry on a 401: the
+client has none, so an expired session shows "sign in again". Esc closes a panel and focus returns to its button.
+The tab watches the snapshot with a 250 ms timer that runs only while it is showing, because the AI chat owns
+`onStateChanged`. Tests: `Tests/UI/Settings/Account*Tests.cpp`, `LeavingSurveyPanelTests.cpp`,
+`Tests/Account/AuthClient/AuthClientExitSurveyTests.cpp`.
+
 ## Device id and anonymous trial
 
 `Source/Auth/DeviceIdStore.h/.cpp` generates a stable per-install identifier (`juce::Uuid`, dashed

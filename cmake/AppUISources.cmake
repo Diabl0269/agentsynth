@@ -626,6 +626,15 @@ set(APPUI_SOURCES
     Source/UI/Settings/KnobStylePicker.h
     Source/UI/Settings/MeterColourStopsEditor.cpp
     Source/UI/Settings/MeterColourStopsEditor.h
+    Source/UI/Settings/AccountFlowPanel.cpp
+    Source/UI/Settings/AccountFlowPanel.h
+    Source/UI/Settings/AccountButtonStyle.h
+    Source/UI/Settings/AccountRequests.cpp
+    Source/UI/Settings/AccountRequests.h
+    Source/UI/Settings/AccountSettingsTab.cpp
+    Source/UI/Settings/AccountSettingsTab.h
+    Source/UI/Settings/LeavingSurveyPanel.cpp
+    Source/UI/Settings/LeavingSurveyPanel.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp

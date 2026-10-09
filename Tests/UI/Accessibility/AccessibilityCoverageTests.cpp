@@ -48,6 +48,9 @@
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
+#include "UI/Settings/AccountFlowPanel.h"
+#include "UI/Settings/AccountSettingsTab.h"
+#include "UI/Settings/LeavingSurveyPanel.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
@@ -306,6 +309,47 @@ TEST(AccessibilityCoverageTest, PianoRoll) {
 // =====================================================================}
 
 // ============================================================================
+
+// The Account tab signed in, plus the popover pages it opens and the leaving question.
+TEST(AccessibilityCoverageTest, AccountTabAndItsPanels) {
+    auto store = std::make_unique<synth::InMemoryTokenStore>();
+    store->save("stored-refresh-token");
+    synth::AccountService service(
+        "http://mock-host:8787",
+        [](const juce::String&, const juce::String& url, const juce::StringPairArray&, const juce::String&, int,
+           const std::atomic<bool>&) {
+            synth::AuthClient::HttpResult r;
+            r.httpStatus = 200;
+            if (url.endsWith("/v1/auth/token"))
+                r.body = R"({"access_token":"a","token_type":"Bearer","expires_in":3600,"refresh_token":"r"})";
+            else if (url.endsWith("/v1/auth/me"))
+                r.body = R"({"id":"u","email":"jane@example.com"})";
+            else if (url.endsWith("/v1/entitlement"))
+                r.body = R"({"plan":"pro","status":"active","period_end":"2026-11-18T12:00:00Z",)"
+                         R"("cancel_at_period_end":false,"limits":{"monthly_requests":500},)"
+                         R"("usage":{"requests_used":42}})";
+            return r;
+        },
+        std::move(store));
+    service.attemptSilentSignIn();
+    const auto deadline = juce::Time::getMillisecondCounter() + 10000;
+    while (!service.getSnapshot().entitlementKnown && juce::Time::getMillisecondCounter() < deadline)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    ASSERT_TRUE(service.getSnapshot().entitlementKnown);
+
+    AccountSettingsTab tab(&service);
+    tab.setSize(520, 400);
+    EXPECT_TRUE(matchesBaseline("Settings/Account", auditAccessibility(tab)));
+
+    auto manage = tab.createFlowPanelForTest(synth::AccountFlowPanel::Flow::manage, tab.getManageButtonForTest());
+    EXPECT_TRUE(matchesBaseline("AccountFlowPanel", auditAccessibility(*manage)));
+    auto confirm =
+        tab.createFlowPanelForTest(synth::AccountFlowPanel::Flow::deleteAccount, tab.getDeleteButtonForTest());
+    EXPECT_TRUE(matchesBaseline("AccountFlowPanel", auditAccessibility(*confirm)));
+
+    synth::LeavingSurveyPanel survey(synth::LeavingSurveyPanel::Kind::cancel);
+    EXPECT_TRUE(matchesBaseline("LeavingSurveyPanel", auditAccessibility(survey)));
+}
 
 TEST_F(AccessibilitySettingsTest, DualIOPerModulePopup) {
     PreferencesSettingsTab tab(appProperties);

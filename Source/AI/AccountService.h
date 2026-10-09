@@ -29,6 +29,10 @@ struct AccountSnapshot {
     int monthlyRequestLimit = 0;
     int requestsUsed = 0;
     bool entitlementKnown = false;
+    // ISO-8601 end of the current billing period, empty when the server sent none (a Free account);
+    // cancelAtPeriodEnd is true once a Pro subscription is set to stop at that date.
+    juce::String periodEndIso;
+    bool cancelAtPeriodEnd = false;
 
     // Opt-in flag for hosted-mode prompt collection used for product learning (human review,
     // never training/fine-tuning — see docs/ai/feedback.md#opt-in-prompt-collection). Off by default, matching

@@ -111,3 +111,9 @@ usage statistics id and queue file at once, so the id row is accurate even where
 and Copy ID) is never shown while sharing is off, whatever the filter says. "What we collect" opens the privacy page
 through the owner's URL seam (`PreferencesSettingsTab::setUrlOpener`, set by `MainComponent` through
 `SettingsWindow::setUrlOpener`), the one `MainComponent::urlOpener_` the Help menu pages use.
+
+## The Account tab
+
+Settings > Account sits next to the AI tab when an account service is attached: plan and usage, Manage subscription
+or Upgrade to Pro, Sign out and Delete account, with the popovers they open. It is a plain stacked tab (no
+viewport); see [accounts](../ai/accounts.md#account-tab).

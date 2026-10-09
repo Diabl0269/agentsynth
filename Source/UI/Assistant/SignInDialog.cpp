@@ -1,5 +1,6 @@
 #include "SignInDialog.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth {
 
@@ -105,6 +106,21 @@ void SignInDialog::resized() {
     statusLabel.setBounds(b.removeFromTop(30));
     b.removeFromTop(10);
     cancelButton.setBounds(b.removeFromTop(30).withSizeKeepingCentre(100, 30));
+}
+
+juce::Component::SafePointer<SignInDialog> launchSignInDialog(AccountService& service, juce::Component& centreAround) {
+    auto* dialogContent = new SignInDialog(service);
+    dialogContent->setSize(360, 220);
+    juce::Component::SafePointer<SignInDialog> opened(dialogContent);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialogContent);
+    options.dialogTitle = "Sign in";
+    options.componentToCentreAround = &centreAround;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    synth::ui::PopupMotion::launchDialog(options);
+    return opened;
 }
 
 } // namespace synth

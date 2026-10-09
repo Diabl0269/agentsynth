@@ -1,6 +1,5 @@
 #include "AccountRow.h"
 #include "SignInDialog.h"
-#include "UI/Layout/PopupMotion.h"
 
 namespace synth {
 
@@ -94,20 +93,8 @@ void AccountRow::updateFromSnapshot(const AccountSnapshot& snapshot) {
 }
 
 void AccountRow::launchSignInDialog() {
-    if (accountService == nullptr)
-        return;
-
-    auto* dialogContent = new SignInDialog(*accountService);
-    dialogContent->setSize(360, 220);
-    openDialog = dialogContent;
-
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned(dialogContent);
-    options.dialogTitle = "Sign in";
-    options.componentToCentreAround = this;
-    options.useNativeTitleBar = true;
-    options.resizable = false;
-    synth::ui::PopupMotion::launchDialog(options);
+    if (accountService != nullptr)
+        openDialog = synth::launchSignInDialog(*accountService, *this);
 }
 
 void AccountRow::paint(juce::Graphics&) {

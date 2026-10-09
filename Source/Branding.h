@@ -58,6 +58,10 @@ constexpr const char* kSupportEmail = "support@agentsynth.app";
 // billing doc, "what this deliberately does not do", for why the app doesn't create checkout sessions.
 constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVtpl236TvS52omgYaZM26HGe1U0rbD75";
 
+// Polar customer portal, opened by the Account tab's "Manage subscription" (change payment details,
+// see invoices, cancel).
+constexpr const char* kBillingPortalUrl = "https://polar.sh/agentsynth/portal";
+
 // Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
 // apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
 // RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and

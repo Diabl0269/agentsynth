@@ -65,4 +65,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SignInDialog)
 };
 
+/** Opens the sign-in dialog in a window centred on `centreAround`. The caller starts the sign-in flow
+    (AccountService::beginSignIn) first. The returned pointer clears itself when the window goes. */
+juce::Component::SafePointer<SignInDialog> launchSignInDialog(AccountService& service, juce::Component& centreAround);
+
 } // namespace synth

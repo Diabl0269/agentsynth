@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 #include "AI/AIProviderRegistry.h"
 #include "AI/LocalHistoryStore.h"
+#include "AccountSettingsTab.h"
 #include "AppearanceSettingsTab.h"
 #include "AudioSettingsTab.h"
 #include "Branding.h"
@@ -465,6 +466,11 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);
     tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
+
+    // Plan, usage, subscription and account deletion. Only meaningful with an account service, and left out
+    // without one so a build with no accounts keeps its tab order.
+    if (accountService != nullptr)
+        tabs.addTab("Account", juce::Colours::transparentBlack, new AccountSettingsTab(accountService), true);
 
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager, &appProperties);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
