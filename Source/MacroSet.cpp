@@ -227,6 +227,16 @@ bool MacroSet::addMember(const juce::String& macroId, const juce::String& member
     return true;
 }
 
+// Puts `newUuid` where `oldUuid` stood in its macro's member list. "Replace with..." swaps a member's node for a
+// new one: same macro, same position, so member order (and with it the hull and the collapsed card) is unchanged.
+bool MacroSet::replaceMember(const juce::String& oldUuid, const juce::String& newUuid) {
+    auto* macro = findByMember(oldUuid);
+    if (macro == nullptr || newUuid.isEmpty())
+        return false;
+    std::replace(macro->members.begin(), macro->members.end(), oldUuid, newUuid);
+    return true;
+}
+
 juce::String MacroSet::removeMemberEverywhere(const juce::String& memberUuid) {
     for (auto it = macros_.begin(); it != macros_.end(); ++it) {
         auto memberIt = std::find(it->members.begin(), it->members.end(), memberUuid);

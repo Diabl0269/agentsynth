@@ -835,7 +835,7 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
 // (see docs/control/midi-remote.md#replace-and-duplicate).
 bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
                                                     const std::function<void()>& mutation,
-                                                    std::function<void()> postRestore) {
+                                                    std::function<void()> postRestore, synth::MacroSet* macros) {
     if (!mutation)
         return false;
 
@@ -843,21 +843,27 @@ bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& g
 
     const juce::var graphBefore = captureGraph(graph);
     const juce::var midiRemoteBefore = doc.toVar();
+    const juce::var macrosBefore = macros != nullptr ? macros->toVar() : juce::var();
 
     mutation();
 
     const juce::var graphAfter = captureGraph(graph);
     const juce::var midiRemoteAfter = doc.toVar();
+    const juce::var macrosAfter = macros != nullptr ? macros->toVar() : juce::var();
 
     const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
     const bool midiRemoteChanged = !synth::sameJson(midiRemoteBefore, midiRemoteAfter);
+    const bool macrosChanged = macros != nullptr && !synth::sameJson(macrosBefore, macrosAfter);
 
-    if (!graphChanged && !midiRemoteChanged)
-        return false; // neither domain changed: no transaction pushed
+    if (!graphChanged && !midiRemoteChanged && !macrosChanged)
+        return false; // no domain changed: no transaction pushed
 
-    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
-    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
-    if (graphChanged)
+    // Every perform() call lands in the same transaction (no beginNewTransaction between them), so a
+    // single undo()/redo() reverts or re-applies whichever domains actually changed, together.
+    if (macrosChanged)
+        pushGraphAndMacroActions(graph, *macros, graphBefore, graphAfter, macrosBefore, macrosAfter, graphChanged,
+                                 macrosChanged);
+    else if (graphChanged)
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     if (midiRemoteChanged)
         performAction(new MidiRemoteSnapshotAction(doc, midiRemoteBefore, midiRemoteAfter, postRestore));

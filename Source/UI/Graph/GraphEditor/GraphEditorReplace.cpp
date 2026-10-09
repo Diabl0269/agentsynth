@@ -11,6 +11,17 @@
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
+namespace {
+// The new node takes the old one's place in its macro before removeNode() lets updateComponents() prune the old
+// uuid, or a module replaced inside a macro lands outside it. The macro set is in the replace's undo record
+// (recordReplaceModuleUndo), so undo puts the old node back in the macro too.
+void handMacroMembershipToNewNode(synth::MacroSet& macros, const juce::String& oldNodeUuid,
+                                  juce::AudioProcessorGraph::Node& newNode) {
+    if (oldNodeUuid.isNotEmpty() && macros.findByMember(oldNodeUuid) != nullptr)
+        macros.replaceMember(oldNodeUuid, synth::AIStateMapper::ensureNodeUuid(&newNode));
+}
+} // namespace
+
 void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String& newModuleType,
                                 const std::function<void(juce::AudioProcessor&)>& configure) {
     auto& graph = audioEngine.getGraph();
@@ -26,7 +37,6 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
     if (oldNodeId.uid == 0)
         return;
 
-    // Use shared_ptr to make the lambda copyable (std::function requires it)
     auto newModuleTypeCopy = newModuleType;
 
     auto doReplace = [this, &graph, oldNodeId, newModuleTypeCopy, configure] {
@@ -132,6 +142,8 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         newNode->properties.set("x", posX);
         newNode->properties.set("y", posY);
 
+        handMacroMembershipToNewNode(macros, oldNodeUuid, *newNode);
+
         // 6. Remove the old node (this removes all its connections)
         modMatrix.clearRows();
         // removeNode() frees the old processor and its AudioProcessorParameters synchronously.
@@ -211,11 +223,13 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
 // A plain recordStructuralChange here would leave onModuleReplaced's MIDI Remote doc edit
 // either unrecorded or, if MidiLearnController pushed its own undo action, a second undo step the
 // user would have to Cmd+Z separately -- so this folds the doc into the SAME transaction as the
-// graph replace whenever MainComponent has wired one up (setMidiRemoteProjectDocForUndo). Headless
-// callers/tests that never call it keep the original graph-only behaviour.
+// graph replace whenever MainComponent has wired one up (setMidiRemoteProjectDocForUndo). The macro
+// set is always in the record: a replace inside a macro hands the old node's membership to the new
+// one, and undo has to hand it back.
 void GraphEditor::recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace) {
     if (midiRemoteDocForUndo_ != nullptr)
-        undoManager->recordGraphAndMidiRemoteChange(graph, *midiRemoteDocForUndo_, doReplace, onMidiRemoteDocRestored);
+        undoManager->recordGraphAndMidiRemoteChange(graph, *midiRemoteDocForUndo_, doReplace, onMidiRemoteDocRestored,
+                                                    &macros);
     else
-        undoManager->recordStructuralChange(graph, doReplace);
+        undoManager->recordGraphAndMacroChange(graph, macros, doReplace);
 }

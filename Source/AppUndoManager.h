@@ -191,9 +191,10 @@ public:
                               const std::function<void()>& mutation);
 
     /** recordCombinedChange's shape for graph + MidiRemoteProjectDoc (see the .cpp).
-     *  `postRestore` mirrors recordMidiRemoteChange's own. */
+     *  `postRestore` mirrors recordMidiRemoteChange's own. `macros` may be null (graph + doc only). */
     bool recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
-                                        const std::function<void()>& mutation, std::function<void()> postRestore = {});
+                                        const std::function<void()>& mutation, std::function<void()> postRestore = {},
+                                        synth::MacroSet* macros = nullptr);
 
     /**
      * @brief Records a mutation that may touch the graph and/or a synth::MacroSet as ONE undo
