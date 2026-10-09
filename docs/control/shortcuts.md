@@ -291,7 +291,9 @@ labels both transport buttons with their keys. An install that saved its setting
 both as unbound (and, off the Mac, holds Ctrl+R / Ctrl+M on Repeat and the matrix), so a one-shot migration
 (`ShortcutManager::migrateTransportCtrlChords`) moves Repeat / the matrix off the old chords when they still hold
 them, gives Record / Metronome the new chords unless another action already uses one, and leaves any key the
-user chose alone. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the
+user chose alone. Every migration writes the keys it changes back to the settings file (not only its done-flag), so
+the chords survive the next launch; the transport one runs under the flag `shortcutMigration_transportCtrlChords2`,
+which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the
 Windows/Linux defaults are tested from a Mac host:
 
 | Action id | Display name | Behaviour |

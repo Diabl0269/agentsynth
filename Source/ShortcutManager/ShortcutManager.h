@@ -72,9 +72,32 @@ public:
             if (settings->containsKey(key))
                 bindings[actionId] = parseKeyPress(settings->getValue(key));
         }
+        const auto loaded = bindings;
         migrateSaveAsChordSwap(*settings);
         migrateBottomPanelToggleKeys(*settings);
         migrateTransportCtrlChords(*settings);
+        persistMigratedBindings(*settings, loaded);
+    }
+
+    /** A migration's flag lands in the settings file, so its rewritten bindings must land there too.
+     *  They used to change in memory only: the next launch read the flag as "done" and the
+     *  stored (old) keys back, so the Ctrl+R / Ctrl+M defaults were adopted for one run and then
+     *  lost for good -- no key, and no shortcut in the tooltips. Writes only what a migration changed. */
+    void persistMigratedBindings(juce::PropertiesFile& settings, const std::map<juce::String, juce::KeyPress>& before) {
+        bool changed = false;
+        for (const auto& actionId : actionIds) {
+            const auto it = bindings.find(actionId);
+            const auto old = before.find(actionId);
+            if (it == bindings.end() || old == before.end())
+                continue;
+            if (it->second.getKeyCode() == old->second.getKeyCode() &&
+                it->second.getModifiers() == old->second.getModifiers())
+                continue;
+            settings.setValue("shortcut_" + actionId, encodeKeyPress(it->second));
+            changed = true;
+        }
+        if (changed)
+            settings.saveIfNeeded();
     }
 
     /** One-shot: Save Project As and Save Snippet swapped chords (Save As took the standard
@@ -130,7 +153,9 @@ public:
      *  transport chord is adopted only when no other General action holds it, so the migration can
      *  never create two actions on one chord. */
     void migrateTransportCtrlChords(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_transportCtrlChords";
+        // "2": v1 set its flag but never saved the bindings it adopted (see persistMigratedBindings), so
+        // installs that already ran it hold Record / Metronome unbound -- run the adoption once more.
+        constexpr auto flag = "shortcutMigration_transportCtrlChords2";
         if (settings.getBoolValue(flag, false))
             return;
         settings.setValue(flag, true);

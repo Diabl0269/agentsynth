@@ -7,7 +7,10 @@
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 
 namespace {
@@ -95,6 +98,37 @@ TEST_P(TransportCtrlChordsTest, CtrlRTogglesRecordFromAFocusedTimelineControl) {
     EXPECT_TRUE(dispatchFrom(bar.getMetronomeButton(), peerKey('r')));
     pump();
     EXPECT_FALSE(bar.isRecordingForTest());
+}
+
+// The same keys from the other two surfaces the user can have focused.
+TEST_P(TransportCtrlChordsTest, CtrlMAndCtrlRReachTheTransportFromTheCanvasTheTimelineAndTheMixer) {
+    auto& bar = mc_->getTimelinePanel().getTransportBar();
+    const std::vector<juce::Component*> surfaces{&mc_->getGraphEditor(), &mc_->getTimelinePanel(),
+                                                 &mc_->getBottomDock().getMixerPanel()};
+    for (auto* surface : surfaces) {
+        const bool metronomeBefore = bar.getMetronomeButton().getToggleState();
+        EXPECT_TRUE(dispatchFrom(*surface, peerKey('m')));
+        pump();
+        EXPECT_EQ(bar.getMetronomeButton().getToggleState(), !metronomeBefore);
+        EXPECT_TRUE(dispatchFrom(*surface, peerKey('m')));
+        pump();
+        EXPECT_EQ(bar.getMetronomeButton().getToggleState(), metronomeBefore);
+
+        EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
+        pump();
+        EXPECT_TRUE(bar.isRecordingForTest());
+        EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
+        pump();
+        EXPECT_FALSE(bar.isRecordingForTest());
+    }
+}
+
+TEST_P(TransportCtrlChordsTest, TheRecordAndMetronomeTooltipsNameTheirChords) {
+    auto& bar = mc_->getTimelinePanel().getTransportBar();
+    const auto record = bar.getRecordButton().getTooltip();
+    const auto metronome = bar.getMetronomeButton().getTooltip();
+    EXPECT_TRUE(record.containsIgnoreCase("Ctrl + R") || record.containsIgnoreCase("Ctrl+R")) << record;
+    EXPECT_TRUE(metronome.containsIgnoreCase("Ctrl + M") || metronome.containsIgnoreCase("Ctrl+M")) << metronome;
 }
 
 TEST_P(TransportCtrlChordsTest, TheDisplacedActionsStayReachableOnTheirOwnChords) {

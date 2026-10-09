@@ -96,7 +96,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, RunsOnlyOnce) {
 namespace {
 const juce::KeyPress kCtrlR('r', juce::ModifierKeys::ctrlModifier, 0);
 const juce::KeyPress kCtrlM('m', juce::ModifierKeys::ctrlModifier, 0);
-const juce::StringArray kTransportKeys{"shortcutMigration_transportCtrlChords", "shortcut_transportRecord",
+const juce::StringArray kTransportKeys{"shortcutMigration_transportCtrlChords2", "shortcut_transportRecord",
                                        "shortcut_transportToggleMetronome"};
 
 void seedTransportKeys(const juce::KeyPress& record, const juce::KeyPress& metronome, bool alreadyMigrated) {
@@ -104,7 +104,7 @@ void seedTransportKeys(const juce::KeyPress& record, const juce::KeyPress& metro
     props.setStorageParameters(synth::test::userSettingsTestOptions());
     auto* settings = props.getUserSettings();
     ASSERT_NE(settings, nullptr);
-    settings->setValue("shortcutMigration_transportCtrlChords", alreadyMigrated);
+    settings->setValue("shortcutMigration_transportCtrlChords2", alreadyMigrated);
     settings->setValue("shortcut_transportRecord", ShortcutManager::encodeKeyPress(record));
     settings->setValue("shortcut_transportToggleMetronome", ShortcutManager::encodeKeyPress(metronome));
     settings->saveIfNeeded();
