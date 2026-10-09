@@ -8,6 +8,8 @@
 #include "Modules/FilterModule.h"
 #include "UI/Graph/PortPanel/PortTargetList.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace {
 
@@ -87,7 +89,7 @@ struct MacroCardPortFixture {
                 return p;
         return {};
     }
-    // A press and release on the same spot, with no mouseMove before it (so no hover cross is armed).
+    // A press and release on the same spot, with no mouseMove before it (so no hover is armed).
     void click(juce::Point<int> p, int clicks = 1) {
         card()->mouseDown(portEvent(*card(), p, p, {}, clicks));
         card()->mouseUp(portEvent(*card(), p, p, {}, clicks));
@@ -160,18 +162,91 @@ TEST(PortPanelMacroCard, DraggingFromTheBodyOrFromAPortStillMovesTheCardAndOpens
     }
 }
 
-TEST(PortPanelMacroCard, TheHoveredCrossStillDeletesThePortAndOpensNothing) {
+TEST(PortPanelMacroCard, HoverThenClickOnADotOpensThePanelAndDeletesNothing) {
     MacroCardPortFixture f;
     const auto jack = f.dot(true).jackPos;
     f.card()->mouseMove(portEvent(*f.card(), jack, jack));
     ASSERT_EQ(f.card()->getHoveredPortUuidForTest(), f.inletUuid);
 
-    f.click(jack);
+    f.clickAndOpen(jack);
 
-    EXPECT_EQ(f.launches, 0);
-    EXPECT_EQ(f.panel(), nullptr);
+    ASSERT_NE(f.panel(), nullptr) << "a real click on a hovered dot reaches the panel";
+    EXPECT_EQ(f.panel()->port().node, f.inlet);
+    EXPECT_FALSE(f.nodeFor(f.inletUuid).uid == 0) << "the press no longer deletes the port";
+    EXPECT_EQ(f.editor->getMacros().find(f.macroId)->ports.size(), 2u);
+}
+
+TEST(PortPanelMacroCard, DeletePortInThePanelDeletesThePortInOneUndoStepAndClosesThePanel) {
+    MacroCardPortFixture f;
+    f.clickAndOpen(f.dot(true).jackPos);
+    auto* panel = f.panel();
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(panel->isDeletePortShown());
+    ASSERT_TRUE(f.connected(f.extOsc, f.inlet));
+    bool dismissed = false;
+    panel->onDismiss = [&dismissed] { dismissed = true; };
+
+    clickNow(panel->deletePortButton());
+
+    EXPECT_TRUE(f.nodeFor(f.inletUuid).uid == 0) << "the port node is gone";
     for (const auto& port : f.editor->getMacros().find(f.macroId)->ports)
-        EXPECT_NE(port.nodeUuid, f.inletUuid) << "the port was deleted";
+        EXPECT_NE(port.nodeUuid, f.inletUuid);
+    EXPECT_EQ(f.editor->getMacros().find(f.macroId)->ports.size(), 1u) << "the outlet is untouched";
+    EXPECT_TRUE(dismissed) << "the panel closes";
+
+    f.editor->finishCableRetractForTest();
+    ASSERT_TRUE(f.undo.undo()) << "one Cmd+Z";
+    EXPECT_FALSE(f.nodeFor(f.inletUuid).uid == 0) << "restores the port node";
+    EXPECT_EQ(f.editor->getMacros().find(f.macroId)->ports.size(), 2u);
+}
+
+TEST(PortPanelMacroCard, DeletePortHasATitleATooltipAndSitsLastInTheTabOrder) {
+    MacroCardPortFixture f(2);
+    f.click(f.dot(true).jackPos);
+    auto* panel = f.panel();
+    ASSERT_NE(panel, nullptr);
+    auto& button = panel->deletePortButton();
+    EXPECT_EQ(button.getTitle(), "Delete port");
+    EXPECT_EQ(button.getTooltip(), "Delete this macro port");
+    EXPECT_TRUE(button.getWantsKeyboardFocus());
+    ASSERT_TRUE(panel->isDisconnectAllShown());
+    auto order = panel->createFocusTraverser()->getAllComponents(panel);
+    const auto at = [&order](juce::Component* c) { return std::find(order.begin(), order.end(), c) - order.begin(); };
+    ASSERT_LT(at(&button), (std::ptrdiff_t)order.size()) << "reachable with Tab";
+    EXPECT_GT(at(&button), at(&panel->disconnectAllButton())) << "after Disconnect all";
+    EXPECT_GT(at(&button), at(&panel->addConnectionButton()));
+}
+
+TEST(PortPanelMacroCard, AnOrdinaryJacksPanelHasNoDeletePort) {
+    MacroCardPortFixture f;
+    ModuleComponent* ext = nullptr;
+    for (auto* c : f.editor->getModuleComponents())
+        if (c != nullptr && c->getNodeId() == f.extOsc)
+            ext = c;
+    ASSERT_NE(ext, nullptr);
+    f.controller().open(*ext, {}, synth::ui::PortRef{f.extOsc, 0, false, false});
+    ASSERT_NE(f.panel(), nullptr);
+    EXPECT_FALSE(f.panel()->isDeletePortShown());
+}
+
+TEST(PortPanelMacroCard, TheHoveredDotPaintsNoCrossOverIt) {
+    MacroCardPortFixture f;
+    synth::theme::AppLookAndFeel lf;
+    f.card()->setLookAndFeel(&lf);
+    const auto jack = f.dot(true).jackPos;
+    auto render = [&] {
+        juce::Image img(juce::Image::ARGB, f.card()->getWidth(), f.card()->getHeight(), true,
+                        juce::SoftwareImageType());
+        juce::Graphics g(img);
+        f.card()->paint(g);
+        return img;
+    };
+    const auto before = render();
+    f.card()->mouseMove(portEvent(*f.card(), jack, jack));
+    const auto after = render();
+    EXPECT_EQ(before.getPixelAt(jack.x, jack.y), after.getPixelAt(jack.x, jack.y)) << "no x over the dot";
+    EXPECT_NE(before.getPixelAt(jack.x + 7, jack.y), after.getPixelAt(jack.x + 7, jack.y)) << "a ring instead";
+    f.card()->setLookAndFeel(nullptr);
 }
 
 TEST(PortPanelMacroCard, ADoubleClickOnTheOnlyCablesPortNeverFlashesThePanelAndStillExpands) {

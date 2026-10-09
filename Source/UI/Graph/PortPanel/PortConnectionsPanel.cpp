@@ -2,6 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "PortPanelController.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/ModDotPalette.h"
 #include "UI/Layout/PopupMotion.h"
 #include <algorithm>
@@ -41,6 +42,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     , holder_(std::make_unique<RowsHolder>())
     , split_(addConnectionHalf(), pickOnCanvasHalf(), "Add a connection")
     , disconnectAll_("Disconnect all", "Disconnect all connections")
+    , deletePort_("Delete port", "Delete port")
     , searchPage_(std::make_unique<PortTargetSearchPage>(portTitle(editor, port)))
     , updater_(this)
     , pageUpdater_(this) {
@@ -60,6 +62,15 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     disconnectAll_.setTooltip("Remove every connection on this jack");
     disconnectAll_.onClick = [this] { disconnectEverything(); };
     listLayer_.addChildComponent(disconnectAll_);
+    if (const auto owner = editor_.getMacroController().macroPortOwnerFor(port_.node);
+        owner.macro != nullptr && owner.port != nullptr) {
+        isMacroPort_ = true;
+        macroId_ = owner.macro->id;
+        portNodeUuid_ = owner.port->nodeUuid;
+        deletePort_.setTooltip("Delete this macro port");
+        deletePort_.onClick = [this] { deleteThePort(); };
+        listLayer_.addAndMakeVisible(deletePort_); // after Disconnect all: the Tab order follows
+    }
     addChildComponent(*searchPage_);
     searchPage_->onBackRequested = [this] { setSearchOpen(false); };
     searchPage_->onPick = [this](const PortTarget& target) { connectTarget(target); };
@@ -115,6 +126,16 @@ void PortConnectionsPanel::disconnectEverything() {
         controller_->disconnectAll(port_);
     sync();
     focusEntry();
+}
+
+// One undo step, the cables retracting; the node is gone after it, so the panel folds away.
+void PortConnectionsPanel::deleteThePort() {
+    if (!isMacroPort_)
+        return;
+    const juce::Component::SafePointer<PortConnectionsPanel> safe(this);
+    editor_.getMacroController().deleteMacroPortManually(macroId_, portNodeUuid_);
+    if (safe != nullptr)
+        safe->dismiss();
 }
 
 juce::String PortConnectionsPanel::titleText() const {
@@ -259,9 +280,11 @@ void PortConnectionsPanel::layoutRows() {
     for (const auto& e : entries_)
         natural += juce::roundToInt(e.current);
     const int footerHeight = juce::roundToInt(footer_.current);
-    const int room = maxHeight_ > 0
-                         ? juce::jmax(0, maxHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - kBottomPad)
-                         : natural;
+    const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
+    const int room =
+        maxHeight_ > 0
+            ? juce::jmax(0, maxHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - deleteHeight - kBottomPad)
+            : natural;
     const int viewHeight = juce::jmin(natural, room);
     const int rowWidth = natural > viewHeight ? kWidth - kScrollBar : kWidth;
     int y = 0;
@@ -274,7 +297,7 @@ void PortConnectionsPanel::layoutRows() {
     rowsTotal_ = y;
     holder_->setSize(rowWidth, rowsTotal_);
     holder_->repaint();
-    desiredHeight_ = kTitleHeight + viewHeight + kSplitRowHeight + footerHeight + kBottomPad;
+    desiredHeight_ = kTitleHeight + viewHeight + kSplitRowHeight + footerHeight + deleteHeight + kBottomPad;
     listLayer_.setSize(kWidth, desiredHeight_);
     arrange();
     applyPages();
@@ -285,7 +308,9 @@ void PortConnectionsPanel::resized() { arrange(); }
 // The list page is laid out at its own height inside listLayer_, whatever height the panel has while the pages swap.
 void PortConnectionsPanel::arrange() {
     const int footerHeight = juce::roundToInt(footer_.current);
-    const int viewHeight = juce::jmax(0, desiredHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - kBottomPad);
+    const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
+    const int viewHeight =
+        juce::jmax(0, desiredHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - deleteHeight - kBottomPad);
     viewport_.setBounds(0, kTitleHeight, kWidth, viewHeight);
     split_.setBounds(6, kTitleHeight + viewHeight + 3, kWidth - 12, SplitButton::kHeight);
     const int footerY = kTitleHeight + viewHeight + kSplitRowHeight;
@@ -294,6 +319,10 @@ void PortConnectionsPanel::arrange() {
                                               : 1.0f);
     const int w = disconnectAll_.preferredWidth();
     disconnectAll_.setBounds((kWidth - w) / 2, footerY + 4, w, kFooterHeight - 8);
+    if (isMacroPort_) {
+        const int dw = deletePort_.preferredWidth();
+        deletePort_.setBounds((kWidth - dw) / 2, footerY + footerHeight + 4, dw, kDeleteRowHeight - 8);
+    }
 }
 
 void PortConnectionsPanel::paint(juce::Graphics& g) {
@@ -305,7 +334,12 @@ void PortConnectionsPanel::paint(juce::Graphics& g) {
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
     g.drawText(titleText(), juce::Rectangle<int>(0, 0, getWidth(), kTitleHeight).reduced(12, 0),
                juce::Justification::centredLeft, true);
-    const int footerTop = desiredHeight_ - kBottomPad - juce::roundToInt(footer_.current);
+    const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
+    if (isMacroPort_) { // a rule above the destructive action
+        g.setColour(p.border.withAlpha(listAlpha));
+        g.fillRect(juce::Rectangle<int>(8, desiredHeight_ - kBottomPad - deleteHeight, kWidth - 16, 1));
+    }
+    const int footerTop = desiredHeight_ - kBottomPad - deleteHeight - juce::roundToInt(footer_.current);
     if (footer_.current > 1.0f) {
         g.setColour(p.border.withAlpha(listAlpha * juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)));
         g.fillRect(juce::Rectangle<int>(8, footerTop, kWidth - 16, 1));
@@ -332,7 +366,7 @@ void PortConnectionsPanel::focusEntry() {
 }
 
 // Up/Down walk the rows' remove buttons, then the Add connection | Pick on canvas buttons, and end on "Disconnect all"
-// when it is showing.
+// when it is showing, then "Delete port" on a macro's port.
 void PortConnectionsPanel::navigate(juce::Component* from, int step) {
     struct Stop {
         juce::Component* control;
@@ -345,6 +379,8 @@ void PortConnectionsPanel::navigate(juce::Component* from, int step) {
     stops.push_back({&split_.leftHalf(), &split_});
     if (footer_.to > 0.0f)
         stops.push_back({&disconnectAll_, &disconnectAll_});
+    if (isMacroPort_)
+        stops.push_back({&deletePort_, &deletePort_});
     if (stops.empty())
         return;
     int index = (int)stops.size() - 1;

@@ -257,7 +257,7 @@ opening the whole dialog to retype one name) and "Configure I/O..." when the por
 live macro.
 
 **FRO235 (2026-09-27 founder decision): both manual delete affordances now agree by default.**
-Right-click "Delete Port" and the Configure I/O dialog's own "Delete Port" button both call
+Right-click "Delete Port", the port connections panel's "Delete port" and the Configure I/O dialog's own "Delete Port" button all call
 `MacroGroupController::deleteMacroPortManually`, which drops the cable by default — the same
 behaviour as any other node delete — rather than splicing it. A Preferences toggle, **"When
 deleting a macro port by hand, splice the cable back together instead of dropping it"**

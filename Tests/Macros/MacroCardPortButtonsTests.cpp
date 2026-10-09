@@ -1,4 +1,4 @@
-// The collapsed card's own '+' (add a port) and hover-'x' (delete a port) affordances
+// The collapsed card's own '+' (add a port) and hover-ring affordances
 // (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card).
 //
 // Driven through the REAL mouse path — synthesised juce::MouseEvents into the actual
@@ -67,9 +67,7 @@ juce::MouseEvent makeMouseEvent(juce::Component& comp, juce::Point<float> positi
                             mouseWasDragged);
 }
 
-/** Hovers then presses the given card-local point, the same two-call sequence a real gesture
- *  produces (mouseMove arms hoveredPortUuid_, mouseDown re-checks the same hit-test before
- *  acting) — a bare mouseDown with no preceding mouseMove is exercised separately below. */
+/** Hovers then presses the given card-local point, the same two-call sequence a real gesture produces. */
 void hoverThenClick(MacroCardComponent& card, juce::Point<float> pos) {
     card.mouseMove(makeMouseEvent(card, pos));
     card.mouseDown(makeMouseEvent(card, pos));
@@ -240,7 +238,7 @@ TEST(MacroCardPortButtons, ClickingElsewhereOnTheCardStillArmsTheBodyDrag) {
 }
 
 // ============================================================================
-// The hover-'x' affordance on an existing port jack.
+// The hover ring on an existing port jack (a click opens its panel: PortPanelMacroCardTests.cpp).
 // ============================================================================
 
 TEST(MacroCardPortButtons, HoveringAJackArmsItsHoverStateAndLeavingClearsIt) {
@@ -265,111 +263,8 @@ TEST(MacroCardPortButtons, HoveringAJackArmsItsHoverStateAndLeavingClearsIt) {
     EXPECT_TRUE(card->getHoveredPortUuidForTest().isEmpty());
 }
 
-TEST(MacroCardPortButtons, ClickingAHoveredJacksXDeletesItAndDropsTheCableByDefaultAsOneUndoStep) {
-    AudioEngine engine;
-    AppUndoManager undo;
-    GraphEditor editor(engine, &undo);
-    undo.setGraphEditor(&editor);
-    editor.setSize(1600, 1200);
-    auto macroId = makeTwoMemberMacro(editor, engine);
-    ASSERT_FALSE(editor.getSpliceCableOnMacroPortDeleteEnabled()) << "off by default (FRO235)";
-
-    const auto portUuid = editor.getMacroController().addMacroPort(
-        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
-    ASSERT_FALSE(portUuid.isEmpty());
-    const auto portNodeId = nodeIdForUuid(engine, portUuid);
-    auto* macro = editor.getMacros().find(macroId);
-    ASSERT_NE(macro, nullptr);
-    const auto memberNodeId = nodeIdForUuid(engine, macro->members[0]);
-
-    auto extId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
-    engine.getGraph().addConnection({{extId, 0}, {portNodeId, 0}});
-    editor.connectPorts(portNodeId, 0, memberNodeId, 0, /*isMidi=*/false, /*recordUndo=*/false);
-    ASSERT_TRUE(hasConnection(engine, extId, 0, portNodeId, 0));
-
-    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
-    ASSERT_NE(card, nullptr);
-    const auto layout = editor.getMacroController().macroCardPortLayout(macroId);
-    ASSERT_EQ(layout.size(), 1u);
-    const auto jackPos = layout[0].jackPos.toFloat();
-
-    hoverThenClick(*card, jackPos);
-
-    EXPECT_TRUE(nodeIdForUuid(engine, portUuid).uid == 0) << "the port node is gone";
-    EXPECT_TRUE(editor.getMacros().find(macroId)->ports.empty());
-    EXPECT_FALSE(hasConnection(engine, extId, 0, memberNodeId, 0)) << "default: dropped, not spliced (FRO235)";
-    EXPECT_FALSE(card->isBodyDragActive()) << "the 'x' click must not also arm a card body drag";
-
-    ASSERT_TRUE(undo.canUndo());
-    undo.undo();
-    ASSERT_FALSE(nodeIdForUuid(engine, portUuid).uid == 0) << "undo restores the deleted port node";
-    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
-}
-
-// Deleting a port via its 'x' reflows macroCardPortLayout() for the survivors, so the NEXT jack can
-// slide under the still-resting cursor and land within its own hit radius — a quick double-click
-// would then delete two ports, one per click. A mouseMove reporting the SAME position as the delete
-// click (JUCE can dispatch one as part of the click plumbing itself even with no real cursor
-// movement) must not re-arm hover on whatever port the reflow just moved there; only a mouseMove at
-// a genuinely different position may.
-TEST(MacroCardPortButtons, DeletingAPortSuppressesHoverAtThatSpotSoADoubleClickCannotDeleteTheNextPortToo) {
-    AudioEngine engine;
-    AppUndoManager undo;
-    GraphEditor editor(engine, &undo);
-    undo.setGraphEditor(&editor);
-    editor.setSize(1600, 1200);
-    auto macroId = makeTwoMemberMacro(editor, engine);
-
-    const auto uuidA = editor.getMacroController().addMacroPort(
-        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "A");
-    const auto uuidB = editor.getMacroController().addMacroPort(
-        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "B");
-    ASSERT_FALSE(uuidA.isEmpty());
-    ASSERT_FALSE(uuidB.isEmpty());
-
-    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
-    ASSERT_NE(card, nullptr);
-    auto layoutBefore = editor.getMacroController().macroCardPortLayout(macroId);
-    ASSERT_EQ(layoutBefore.size(), 2u);
-    ASSERT_EQ(layoutBefore[0].nodeUuid, uuidA); // topmost, added first
-    const auto posA = layoutBefore[0].jackPos.toFloat();
-
-    // Delete A at posA, exactly as HoveringAJack.../ClickingAHoveredJacksX... does above.
-    hoverThenClick(*card, posA);
-    ASSERT_TRUE(nodeIdForUuid(engine, uuidA).uid == 0) << "A is gone";
-    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "only B remains";
-
-    // B alone now reflows to a DIFFERENT y within kMacroCardJackHitRadius (10px) of posA's old
-    // spot — close enough that a hit-test at posA would still land on B, which is exactly what
-    // the bug exploited. Confirm the fixture actually reproduces that precondition rather than
-    // trivially passing because the reflowed jack moved out of reach.
-    const auto layoutAfter = editor.getMacroController().macroCardPortLayout(macroId);
-    ASSERT_EQ(layoutAfter.size(), 1u);
-    ASSERT_EQ(layoutAfter[0].nodeUuid, uuidB);
-    ASSERT_LT(std::abs(layoutAfter[0].jackPos.y - (int)posA.y), 10)
-        << "fixture precondition: B's reflowed jack must sit within the old click's hit radius";
-
-    // A mouseMove reporting the SAME position as the delete click — simulating the double-click's
-    // own plumbing landing on that exact pixel with no real movement — must not re-arm hover on B.
-    card->mouseMove(makeMouseEvent(*card, posA));
-    EXPECT_TRUE(card->getHoveredPortUuidForTest().isEmpty()) << "hover stays suppressed at the delete position";
-
-    // The second click of the double-click, still at posA: must NOT delete B.
-    card->mouseDown(makeMouseEvent(*card, posA));
-    EXPECT_FALSE(nodeIdForUuid(engine, uuidB).uid == 0) << "B must survive the second click of the double-click";
-    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
-
-    // A mouseMove to a genuinely different position clears the suppression, and moving back onto
-    // B's real jack now arms hover normally — the fix suppresses ONE stale re-arm, not hovering
-    // forever.
-    card->mouseMove(makeMouseEvent(*card, juce::Point<float>(posA.x, posA.y + 30.0f)));
-    card->mouseMove(makeMouseEvent(*card, layoutAfter[0].jackPos.toFloat()));
-    EXPECT_EQ(card->getHoveredPortUuidForTest(), uuidB) << "hover resumes normally once the mouse really moves";
-}
-
-// A mouseDown with no preceding mouseMove — a test driving the handler directly, or (in principle)
-// any input path that never fires a hover — must fall through to the card's ordinary click
-// handling rather than deleting a jack it was never shown hovering.
+// A press on a port dot, hovered or not, never deletes it (the panel's Delete port does that); it falls
+// through to the card's ordinary click handling, which arms the body drag.
 TEST(MacroCardPortButtons, MouseDownOnAJackWithNoPriorHoverDoesNotDeleteIt) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -387,6 +282,11 @@ TEST(MacroCardPortButtons, MouseDownOnAJackWithNoPriorHoverDoesNotDeleteIt) {
 
     EXPECT_FALSE(nodeIdForUuid(engine, portUuid).uid == 0) << "the port must survive an un-hovered click";
     EXPECT_TRUE(card->isBodyDragActive()) << "falls through to the ordinary card drag-arm, unchanged";
+    card->mouseUp(makeMouseEvent(*card, layout[0].jackPos.toFloat()));
+
+    hoverThenClick(*card, layout[0].jackPos.toFloat());
+    EXPECT_FALSE(nodeIdForUuid(engine, portUuid).uid == 0) << "nor does a hovered press delete it any more";
+    EXPECT_TRUE(card->isBodyDragActive());
 }
 
 // A real cable drop onto the port's jack (the drop path already covered end-to-end by
@@ -436,7 +336,7 @@ TEST(MacroCardPortButtons, HoveringDoesNotBreakARealCableDropOntoThePort) {
 // same reasoning ModuleComponentPaintTests.cpp's WavetableCardPaintsAndTicksWithoutCrashing gives).
 // ============================================================================
 
-TEST(MacroCardPortButtons, HoveredJackPaintsVisiblyDifferentlyFromUnhovered) {
+TEST(MacroCardPortButtons, HoveredJackPaintsARingAndNoCross) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -467,8 +367,10 @@ TEST(MacroCardPortButtons, HoveredJackPaintsVisiblyDifferentlyFromUnhovered) {
     auto hovered = renderCard();
     ASSERT_TRUE(hovered.isValid());
 
-    EXPECT_NE(unhovered.getPixelAt(jackPos.x, jackPos.y), hovered.getPixelAt(jackPos.x, jackPos.y))
-        << "the hovered jack must repaint with its 'x' overlay, not the plain dot";
+    EXPECT_EQ(unhovered.getPixelAt(jackPos.x, jackPos.y), hovered.getPixelAt(jackPos.x, jackPos.y))
+        << "the dot itself is untouched: no x drawn over it (FRO769)";
+    EXPECT_NE(unhovered.getPixelAt(jackPos.x + 7, jackPos.y), hovered.getPixelAt(jackPos.x + 7, jackPos.y))
+        << "the hovered jack gets a ring round the dot";
 
     card->setLookAndFeel(nullptr);
 }
@@ -535,28 +437,6 @@ TEST(MacroCardPortButtons, ClickingAddOnACardThatAlreadyHasThreeInputsStillReach
     undo.undo();
     EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 3u) << "one undo step takes the whole add back";
     card->setShowContextMenuHookForTest(nullptr);
-}
-
-TEST(MacroCardPortButtons, ClickingTheSecondOfThreeJacksDeletesThatPort) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    editor.setSize(1600, 1200);
-    auto macroId = makeTwoMemberMacro(editor, engine);
-    addInputs(editor, macroId, 3);
-    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
-    ASSERT_NE(card, nullptr);
-
-    const auto layout = editor.getMacroController().macroCardPortLayout(macroId);
-    ASSERT_EQ(layout.size(), 3u);
-    EXPECT_EQ(layout[1].jackPos.y, 54);
-    const juce::String second = layout[1].nodeUuid;
-
-    hoverThenClick(*card, layout[1].jackPos.toFloat());
-
-    auto* macro = editor.getMacros().find(macroId);
-    ASSERT_EQ(macro->ports.size(), 2u);
-    for (const auto& p : macro->ports)
-        EXPECT_NE(p.nodeUuid, second) << "the clicked (second) port is the one removed";
 }
 
 TEST(MacroCardPortButtons, MinusRemovesTheBottomPortOnThatSideAsOneUndoStep) {
