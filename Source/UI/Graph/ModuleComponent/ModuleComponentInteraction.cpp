@@ -13,6 +13,8 @@
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ReplaceWithPicker.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -451,24 +453,33 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // "Replace with..." opens a searchable picker of every module type and scanned hosted plugin (only for actual
-    // modules, not AudioGraphIOProcessor).
-    // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
-    // Oscillator would silently leave the patch with no way to get the device's input in,
-    // and the library row it came from greyed out.
-    if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
-        juce::Component::SafePointer<ModuleComponent> replaceThis(this);
-        m.addItem("Replace with...", [replaceThis] {
-            if (replaceThis == nullptr)
-                return;
-            std::optional<synth::PluginIdentity> hostedIdentity;
-            if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(replaceThis->module))
-                hostedIdentity = hosted->getIdentity();
-            synth::ui::showReplacePicker(replaceThis->owner, *replaceThis, getType(replaceThis->module),
-                                         hostedIdentity);
-        });
-        m.addSeparator();
+    // "Rename" and "Replace with..." (a searchable picker of every module type and scanned hosted plugin) show their
+    // live keyboard bindings; each appears only where its command is allowed (canRename / canReplace).
+    const auto keyText = [this](const char* actionId) {
+        const auto* shortcuts = owner.getCardKeyboard().getShortcutManager();
+        const auto key = shortcuts != nullptr ? shortcuts->getBinding(actionId) : juce::KeyPress();
+        return key.isValid() ? key.getTextDescriptionWithIcons() : juce::String();
+    };
+    if (canRename()) {
+        juce::PopupMenu::Item renameItem("Rename");
+        renameItem.shortcutKeyDescription = keyText("renameSelectedModule");
+        renameItem.action = [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->beginTitleRename();
+        };
+        m.addItem(renameItem);
     }
+    if (canReplace()) {
+        juce::PopupMenu::Item replaceItem("Replace with...");
+        replaceItem.shortcutKeyDescription = keyText("replaceSelectedModule");
+        replaceItem.action = [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->beginReplace();
+        };
+        m.addItem(replaceItem);
+    }
+    if (canRename() || canReplace())
+        m.addSeparator();
 
     // Greyed out, with the reason in the label (PopupMenu items have no tooltip), for the output dock's protected
     // cards.
@@ -691,9 +702,30 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
 juce::String ModuleComponent::cardTitle() const { return owner.getModuleTitle(nodeId, module); }
 
+// No header means nothing to rename here -- Configure I/O renames the PORT (its own name).
+bool ModuleComponent::canRename() const {
+    return module != nullptr && getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module));
+}
+
+// Shared by the context menu and the Replace Module command so the two cannot disagree. Audio Input is a
+// ModuleBase but a singleton I/O node: replacing it would leave the patch with no way to get the device's
+// input in, and the library row it came from greyed out.
+bool ModuleComponent::canReplace() const {
+    return dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName());
+}
+
+void ModuleComponent::beginReplace() {
+    if (!canReplace())
+        return;
+    std::optional<synth::PluginIdentity> hostedIdentity;
+    if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module))
+        hostedIdentity = hosted->getIdentity();
+    synth::ui::showReplacePicker(owner, *this, getType(module), hostedIdentity);
+}
+
 void ModuleComponent::beginTitleRename() {
-    if (module == nullptr || getType(module) == ModuleType::Attenuverter || isMacroPortType(getType(module)))
-        return; // no header, nothing to rename here — Configure I/O renames the PORT (its own name)
+    if (!canRename())
+        return;
 
     // Any editor already open commits first, and that mutates the graph — so nothing may hold state
     // across it. Same ordering as TimelineRulerComponent::beginRenameMarker.

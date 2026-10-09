@@ -66,6 +66,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
+| Ctrl+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add Track (`openAddTrackMenu`) — shows the Timeline, focuses its **+ Track** button and opens the searchable Add Track picker with the search field ready; Enter adds the first match, Escape closes and focus stays on **+ Track**. A real Control on the Mac (Cmd+T is Toggle Bottom Panel); off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
 
 Cmd+T (now `toggleBottomPanel`) and Space are always active (see
 [`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
@@ -365,6 +366,8 @@ Cmd+Backspace never fires while typing.
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
 | Cmd+Ctrl+G | Fold and Pack Macros (`foldAndPackMacros`; Ctrl+Alt+Shift+G on Windows/Linux, where Cmd is Ctrl and Ctrl+G is Group): folds every selected macro and, with the Graph preference "Collapsing also packs macros together" on, tidies the cards into a grid; all folded already: expands them. See [Fold and Pack Macros](../macros/menu-and-membership.md#fold-and-pack-macros-cmdctrlg) |
 | Cmd+Shift+M | Go to Output (was "Locate Master") — selects Master (falling back to Audio Output when there is no Master yet) and centres the view on the whole output dock (Master, Rec Tap, Audio Output); a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
+| F2 | Rename Module (`renameSelectedModule`) — opens the inline title editor on the one selected module card. The standard rename key; on a Mac laptop it needs Fn unless the system setting "Use F1, F2, etc. keys as standard function keys" is on, and it is rebindable |
+| Cmd+Alt+R (macOS) / Ctrl+Alt+R (Windows, Linux) | Replace Module With... (`replaceSelectedModule`) — opens the searchable "Replace with..." picker over the one selected module card (not Audio Input/Output). Cmd+R is Repeat and Ctrl+R is Record, so neither was free for it |
 
 | ← / → / ↑ / ↓ | Select the nearest card in that direction (`canvasSelectCardLeft` / `Right` / `Up` / `Down`). See [**Canvas card keys**](#canvas-card-keys) |
 | Alt+← / → / ↑ / ↓ | Move the selected cards one grid step (`canvasMoveCardLeft` / `Right` / `Up` / `Down`), one undo step |

@@ -116,9 +116,9 @@ TEST_F(ShortcutHintMainWindowTest, TheTimelineListsEveryShortcutButtonItOwnsAsAH
          {"timelineToolSelect", "timelineToolRange", "timelineToolSplit", "timelineToolGlue", "timelineToolErase",
           "timelineToolMute", "timelineToolDraw", "timelineSnapToggle", "timelineFollowPlayheadToggle",
           "timelineShapeFree", "timelineShapeLine", "timelineShapeSine", "timelineShapeTriangle", "timelineShapeSaw",
-          "timelineShapeSquare"})
+          "timelineShapeSquare", "openAddTrackMenu"})
         EXPECT_NE(std::find(ids.begin(), ids.end(), juce::String(expected)), ids.end()) << expected;
-    EXPECT_EQ(ids.size(), 15u);
+    EXPECT_EQ(ids.size(), 16u);
     for (auto tool : synth::ui::kAllEditTools)
         EXPECT_NE(std::find_if(targets.begin(), targets.end(),
                                [&](const auto& t) { return t.first == panel.getToolButton(tool); }),

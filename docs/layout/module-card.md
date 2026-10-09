@@ -376,6 +376,16 @@ A module inside a macro stays inside it: the new node takes the old node's place
 macro set is recorded in the same undo step as the graph (and the MIDI Remote doc when the app wires one), so Cmd+Z puts
 the old module back inside the macro (`Tests/Macros/MacroReplaceMemberTests.cpp`).
 
+## Keyboard: rename and replace
+
+With exactly one card selected, **F2** opens the inline title editor (Rename Module) and **Cmd+Alt+R** (Ctrl+Alt+R off
+the Mac) opens the "Replace with..." picker (Replace Module With...). Both are rebindable Graph actions
+(`renameSelectedModule`, `replaceSelectedModule`) dispatched through the command table, which greys them out with no
+selection, several cards, an Attenuverter or macro port (rename) or the singleton Audio Input and Output (replace). The
+checks are `ModuleComponent::canRename()` / `canReplace()`, shared with the right-click menu, whose "Rename" and "Replace
+with..." rows show the live binding. Plain Cmd+R is Repeat and Ctrl+R is Record, so Replace takes the Alt chord. Code:
+`CanvasCardKeyboard::renameSelectedModule` / `replaceSelectedModule`.
+
 ## Header buttons
 
 The header area holds `DrawableButton` instances, not `TextButton`s, positioned in `resized()`

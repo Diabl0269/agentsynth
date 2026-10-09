@@ -121,6 +121,12 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // entirely), and no component keyPressed() override hardcodes either chord.
     bindings["focusTimeline"] =
         juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Ctrl+T opens the Add Track menu. On the Mac a REAL ctrlModifier (Cmd+T is Toggle Bottom Panel and Ctrl is a
+    // distinct physical key there, the same trick as toggleAiPanel). Off the Mac Cmd IS Ctrl, so the one literal
+    // chord would collide with Toggle Bottom Panel and the key takes Ctrl+Alt+T instead.
+    bindings["openAddTrackMenu"] =
+        isMac ? juce::KeyPress('t', juce::ModifierKeys::ctrlModifier, 0)
+              : juce::KeyPress('t', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
     bindings["focusLibrary"] =
         juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no
@@ -211,6 +217,12 @@ void ShortcutManager::addGraphDefaultBindings() {
     // hardcodes it either.
     bindings["locateMaster"] =
         juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Rename and Replace on the selected module card. F2 is the cross-platform rename key (on a Mac laptop it
+    // needs Fn unless "Use F1, F2, etc. keys as standard function keys" is on; rebindable). Cmd+R is Repeat on the
+    // Mac and Ctrl+R is Record everywhere, so Replace takes Cmd+Alt+R (Ctrl+Alt+R off the Mac), free on both counts.
+    bindings["renameSelectedModule"] = juce::KeyPress(juce::KeyPress::F2Key, juce::ModifierKeys::noModifiers, 0);
+    bindings["replaceSelectedModule"] =
+        juce::KeyPress('r', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     // The canvas's card keys, exactly the defaults CanvasCardKeyboard falls back to with no manager.
     // No other Graph action uses an arrow or Return; the timeline's and the piano roll's bare arrows
     // are other categories, and those surfaces never hold focus together with the canvas.

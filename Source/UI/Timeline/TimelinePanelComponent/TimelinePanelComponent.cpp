@@ -35,7 +35,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
-    addTrackButton_.setTooltip("Add a MIDI or Audio track");
+    // Tooltip text (it names the shortcut) is set by refreshShortcutTooltips() below.
     addTrackButton_.onClick = [this] { openAddTrackMenu(); };
 
     addAndMakeVisible(trackHeaderViewport_);
@@ -313,6 +313,9 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
                 editToolName(tool), shortcutHintFor(shortcuts_, actionIdForTool(tool), fallback)));
         }
     }
+
+    addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add a track or marker; type to search",
+                                                             shortcutHintFor(shortcuts_, "openAddTrackMenu", {})));
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
         "Snap on/off",

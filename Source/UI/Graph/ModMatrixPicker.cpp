@@ -226,7 +226,10 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
     setSize(kWidth, preferredHeight());
 }
 
-ModMatrixPicker::~ModMatrixPicker() = default;
+ModMatrixPicker::~ModMatrixPicker() {
+    if (onClosed)
+        onClosed();
+}
 
 void ModMatrixPicker::rebuildRows() {
     rowColumn_.removeAllChildren();

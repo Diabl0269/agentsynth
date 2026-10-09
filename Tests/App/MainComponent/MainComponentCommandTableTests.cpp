@@ -37,6 +37,8 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::collapseMacro,
     AppCommands::foldAndPackMacros,
     AppCommands::locateMaster,
+    AppCommands::renameSelectedModule,
+    AppCommands::replaceSelectedModule,
     AppCommands::toggleLibrary,
     AppCommands::selectAllModules,
     AppCommands::saveSnippet,
@@ -76,6 +78,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::focusLibrary,
     AppCommands::focusLibrarySearch,
     AppCommands::openContextMenu,
+    AppCommands::openAddTrackMenu,
     AppCommands::showWelcomeScreen,
     AppCommands::whatsNew,
 #if JUCE_MAC || JUCE_WINDOWS

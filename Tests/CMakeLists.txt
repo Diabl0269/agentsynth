@@ -263,6 +263,7 @@ add_executable(Tests
     App/MainComponent/MainComponentTeardownTests.cpp
     App/MainComponent/MainComponentMidiRemoteStartupTests.cpp
     App/MainComponent/MainComponentCommandTableTests.cpp
+    App/MainComponent/MainComponentModuleKeysTests.cpp
     App/MainComponent/MainComponentCollectArchiveTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     App/MainComponent/KnobStyleSettingsIntegrationTests.cpp
@@ -292,6 +293,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionSideBySideTests.cpp
     UI/Graph/GraphEditor/GraphEditorNodeActionsTests.cpp
+    UI/Graph/GraphEditor/GraphEditorModuleKeysTests.cpp
     UI/Graph/GraphEditor/GraphEditorDeleteHealTests.cpp
     UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp
     UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
@@ -617,6 +619,7 @@ add_executable(Tests
     UI/Timeline/TimelineTrackDeleteMotionTests.cpp
     UI/Timeline/TimelineTrackShowModuleTests.cpp
     UI/Timeline/TimelineAddTrackKeyboardTests.cpp
+    UI/Timeline/TimelineAddTrackPickerTests.cpp
     UI/Timeline/TimelineClipKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardNavTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
