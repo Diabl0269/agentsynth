@@ -10,6 +10,7 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -31,7 +32,7 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
         const auto& macro = *macroPtr;
         const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty())
+        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id))
             continue;
 
         const auto [inW, outW] = controller.macroHullStripWidths(macro.id);
@@ -72,6 +73,38 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
                 paintMacroPortFooterButton(g, minus.toFloat(), glyphColour.withMultipliedAlpha(nameAlpha), false);
         }
     }
+}
+
+std::vector<CardGlideAnimator::Border> captureMacroBorders(GraphEditor& editor, float zoom) {
+    std::vector<CardGlideAnimator::Border> out;
+    const auto& macros = editor.getMacros();
+    if (macros.empty())
+        return out;
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&editor.getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    auto& controller = editor.getMacroController();
+    const auto strip = colors.surfaceHi.withAlpha(macroStripFillAlpha(macroPortNameAlphaAtZoom(zoom)));
+    for (const auto& macro : macros.getAll()) {
+        CardGlideAnimator::Border b;
+        b.key = CardGlideAnimator::macroKey(macro.id);
+        b.name = macro.name;
+        b.colour = macro.colour;
+        b.stripFill = strip;
+        if (!macros.isEffectivelyCollapsed(macro.id)) {
+            b.hull = editor.paintedMacroHullBounds(macro.id);
+            b.open = !b.hull.isEmpty();
+        }
+        if (b.open) {
+            b.chip = controller.macroChipBounds(macro.id);
+            std::tie(b.inWidth, b.outWidth) = controller.macroHullStripWidths(macro.id);
+            for (const auto& uuid : macro_nesting::orderedDescendantMembers(macros, macro.id))
+                if (const auto id = controller.resolveMemberNodeId(uuid); id.uid != 0)
+                    b.members.push_back(id.uid);
+        }
+        out.push_back(std::move(b));
+    }
+    return out;
 }
 
 } // namespace detail

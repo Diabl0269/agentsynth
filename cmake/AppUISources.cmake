@@ -393,6 +393,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorGhosts.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorBorders.cpp
     Source/UI/Graph/MacroFoldAnimator/MacroFoldAnimator.cpp
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
@@ -413,6 +414,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDisplacement.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFold.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerFoldPack.cpp
+    Source/UI/Graph/MacroGroupController/MacroPackLayout.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp

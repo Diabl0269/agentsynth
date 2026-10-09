@@ -417,6 +417,32 @@ collapse the macro), and a whole macro plus a loose module beside it now **nests
 the macro). To collapse an open macro with Cmd+G, select it whole (its chip, or every module in it);
 Cmd+Alt+G still always toggles.
 
+### Fold and Pack Macros (Cmd+Ctrl+G)
+
+"Fold and Pack Macros" (`MacroGroupController::foldAndPackSelectionMacros`, default Cmd+Ctrl+G on macOS and
+Ctrl+Alt+Shift+G elsewhere, where Cmd and Ctrl are the same key; Edit menu, next to Collapse / Expand Macro; rebindable
+in the Keyboard Shortcuts list) acts on every macro the selection touches (Cmd+A selects them all):
+
+- **Any of them open:** every open one folds with the usual [fold motion](../layout/animation.md#macro-fold). With the
+  preference **Collapsing also packs macros together** on (Preferences > Graph, on by default, key
+  `packMacrosOnCollapse`), the folded cards then sit in a grid: rows of up to four, 24 px apart, in the order the cards
+  stood (top to bottom, then left to right), starting at the top-left corner of the first of them
+  (`macro_pack::packedPositions`, `MacroPackLayout.h`, a pure function). Loose modules and everything else stay put and
+  the space left behind closes up when the second preference, **Packing also tidies the rest of the canvas** (on by
+  default, key `tidyCanvasOnPack`, only applies while packing is on), runs the existing Auto Arrange
+  (`GraphEditor::autoArrange(false)`, the toolbar's `computeHierarchicalArrange`) over the whole canvas right after the
+  pack, in the same undo step and glide; turn it off and loose modules and everything else stay put, leaving the space
+  empty. A nested macro is folded but not moved: its parent holds it. A card that was
+  already folded joins the grid.
+- **Preference off:** only the folds, in place.
+- **All of them already folded:** they all expand where their cards sit, making room for neighbours as an expand
+  always does. Nothing is unpacked, and expanding one packed card later opens it where its card sits.
+
+The folds, the packing moves (`moveUnitBy`, the mover make-room uses) and the undo record are one step: Cmd+Z puts
+every module and every fold state back. The model is final at once, so the folds fly straight to the packed card
+positions and a card that was already folded glides there (160 ms): no card jumps. The plain Collapse / Expand Macro
+command never packs.
+
 ## Nested macros
 
 A macro can sit inside another (`Macro::parentId`); [grouping](#grouping-rules) creates one. The

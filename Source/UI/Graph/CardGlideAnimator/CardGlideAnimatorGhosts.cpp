@@ -43,7 +43,9 @@ void CardGlideAnimator::noteRestoreExits(const std::vector<Entry>& now) {
     const float scale = hooks_.snapshotScale ? hooks_.snapshotScale() : 1.0f;
     for (const auto& c : before_) {
         auto* comp = c.comp.getComponent();
-        if (comp == nullptr || c.nodeUid == 0 || !c.bounds.intersects(card_glide_detail::visibleCanvasArea(*comp)))
+        // A macro card that is only hidden (its macro expanded) stays; one that is removed was pictured by noteExit.
+        if (comp == nullptr || c.nodeUid == 0 || isMacroKey(c.nodeUid) ||
+            !c.bounds.intersects(card_glide_detail::visibleCanvasArea(*comp)))
             continue;
         const bool known = std::any_of(candidates_.begin(), candidates_.end(),
                                        [&c](const Candidate& cand) { return cand.nodeUid == c.nodeUid; });
@@ -122,9 +124,11 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
             if (e.nodeUid == 0 || e.comp == nullptr || !e.comp->isVisible() || e.comp->getBounds().isEmpty() ||
                 e.comp->isMouseButtonDown(true))
                 continue;
-            const bool existed = std::any_of(before.begin(), before.end(), [&e](const Captured& c) {
-                return c.comp.getComponent() == e.comp || c.nodeUid == e.nodeUid;
-            });
+            const bool existed = std::any_of(before.begin(), before.end(),
+                                             [&e](const Captured& c) {
+                                                 return c.comp.getComponent() == e.comp || c.nodeUid == e.nodeUid;
+                                             }) ||
+                                 preexistingMacros_.count(e.nodeUid) != 0; // a macro card that was only hidden
             if (existed || !e.comp->getBounds().intersects(card_glide_detail::visibleCanvasArea(*e.comp)))
                 continue;
             Item item;
@@ -140,6 +144,7 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
         }
     }
 
+    armBorderGhosts(now, anyExit, anyEnter);
     if (!anyExit && !anyEnter)
         return false;
     phased_ = true;
@@ -171,6 +176,15 @@ void CardGlideAnimator::applyTimelineAtMs(double elapsedMs) {
 
 void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
     using synth::ui::ExitEnterTimeline;
+    if (item.border != nullptr) {
+        const bool exiting = item.kind == Kind::Exit;
+        const float progress = exiting ? frame_.exit : frame_.grow;
+        if (item.grown || (!exiting && frame_.grow <= 0.0f))
+            return;
+        paintBorder(g, *item.border, ExitEnterTimeline::ghostScale(progress, exiting, reducedMotion_),
+                    ExitEnterTimeline::ghostAlpha(progress, exiting, reducedMotion_));
+        return;
+    }
     if (item.kind == Kind::Exit) {
         const float scale = ExitEnterTimeline::ghostScale(frame_.exit, true, reducedMotion_);
         const float alpha = ExitEnterTimeline::ghostAlpha(frame_.exit, true, reducedMotion_);

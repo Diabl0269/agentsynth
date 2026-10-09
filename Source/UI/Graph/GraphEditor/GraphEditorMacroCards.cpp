@@ -40,6 +40,9 @@ void GraphEditor::syncMacroCards() {
             // destroyed below. Cancel now rather than leaving selectionDragActive stuck.
             if (card->isBodyDragActive())
                 cancelLiveDragGestures();
+            // A collapsed macro's card shrinks away (a no-op for an open one, whose card is hidden, and outside a
+            // delete or undo Scope).
+            cardGlide_.noteExit(card, CardGlideAnimator::macroKey(card->getMacroId()));
             content.removeChildComponent(card);
             cards.remove(i);
         }

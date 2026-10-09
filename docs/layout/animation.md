@@ -302,7 +302,14 @@ every surface that animates a delete:
   then the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that
   appears after an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds
   just grows in (160 ms, no outline). See the "Mod-dot panel" row below.
-- Not yet covered: collapsed macro cards (those still remove at once).
+- **Macros:** a collapsed macro's card is a ghost of its own, keyed by its macro id (`CardGlideAnimator::macroKey`,
+  since a macro card has no node id), and shrinks and grows exactly like a module card. An open macro's
+  member cards ghost as usual, and its dashed border, name chip and port strips (a `CardGlideAnimator::Border`,
+  captured before the change by `noteMacroBorders`, drawn from that data since the macro itself is gone) shrink away
+  with them in the same exit phase. Cmd+Z holds the real border back (`isBorderHeld`) while the ghost grows with the
+  cards. A macro that only folds or unfolds is no delete: its card is hidden, not removed, so it never ghosts (the
+  [fold](#macro-fold) animates it). A macro that merely loses its border (ungrouped) keeps its modules and does not
+  ghost either.
 
 ### Macro fold
 
@@ -336,6 +343,10 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   `syncMacroCards` decides visibility again when the fold ends.
 - **Port widgets** of an unfolding macro dock to the open border at once, so they are held invisible with the module
   cards and shown when the border has grown to them (about 60% of the flights).
+- **Fold and Pack Macros** (Cmd+Ctrl+G, [details](../macros/menu-and-membership.md#fold-and-pack-macros-cmdctrlg))
+  adds no motion of its own: the model is final at once, the folds fly to the packed card positions, and a selected
+  card that was already folded glides there (160 ms) in the same glide scope. With "Packing also tidies the rest of the
+  canvas" the Auto Arrange glide joins the same scope.
 - **Several macros at once** (a multi-macro toggle, an undo step that flips more than one) fold together: the toggle
   takes one `snapshotFoldState()` and starts every plan in one `foldChangedMacros()`.
 - **Pictures come from the cards' rasters** (`ZoomFrozenCachedImage::lastRaster`); a card that was never painted (a

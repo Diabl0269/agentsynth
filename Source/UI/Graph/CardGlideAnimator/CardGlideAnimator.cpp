@@ -159,8 +159,9 @@ void CardGlideAnimator::pruneItems() {
             item.snapshot = {};
         }
     // An off-screen card's item has no snapshot but a live card; one whose card is gone or grabbed has neither.
-    items_.erase(std::remove_if(items_.begin(), items_.end(),
-                                [](const Item& it) { return it.snapshot.isNull() && it.comp == nullptr; }),
+    items_.erase(std::remove_if(
+                     items_.begin(), items_.end(),
+                     [](const Item& it) { return it.snapshot.isNull() && it.comp == nullptr && it.border == nullptr; }),
                  items_.end());
 }
 
@@ -215,7 +216,7 @@ void CardGlideAnimator::applyTo(std::vector<graph_editor_types::VisibleCable>& c
 std::vector<std::pair<uint32_t, juce::Point<float>>> CardGlideAnimator::currentOffsets() const {
     std::vector<std::pair<uint32_t, juce::Point<float>>> out;
     for (const auto& item : items_)
-        if (item.kind == Kind::Move && item.nodeUid != 0)
+        if (item.kind == Kind::Move && item.nodeUid != 0 && !isMacroKey(item.nodeUid))
             if (const auto offset = offsetFor(item.nodeUid); offset != juce::Point<float>())
                 out.emplace_back(item.nodeUid, offset);
     return out;
@@ -327,9 +328,17 @@ CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)
     : animator_(animator) {
     if (animator_.depth_++ != 0 || !animator_.hooks_.cards)
         return;
-    animator_.before_ = capture(animator_.hooks_.cards());
+    const auto entries = animator_.hooks_.cards();
+    animator_.before_ = capture(entries);
     animator_.restoring_ = restore && animator_.canAnimate();
     animator_.candidates_.clear();
+    animator_.borders_.clear();
+    animator_.preexistingMacros_.clear();
+    for (const auto& e : entries)
+        if (isMacroKey(e.nodeUid))
+            animator_.preexistingMacros_.insert(e.nodeUid);
+    if (animator_.restoring_)
+        animator_.noteMacroBorders();
 }
 
 CardGlideAnimator::Scope::~Scope() {
@@ -341,6 +350,8 @@ CardGlideAnimator::Scope::~Scope() {
     const bool ghosts = animator_.armGhosts(animator_.before_, now, scale);
     animator_.before_.clear();
     animator_.candidates_.clear();
+    animator_.borders_.clear();
+    animator_.preexistingMacros_.clear();
     animator_.restoring_ = false;
     if (!moved && !ghosts)
         return;

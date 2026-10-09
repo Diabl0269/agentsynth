@@ -35,6 +35,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::groupSelection,
     AppCommands::ungroupSelection,
     AppCommands::collapseMacro,
+    AppCommands::foldAndPackMacros,
     AppCommands::locateMaster,
     AppCommands::toggleLibrary,
     AppCommands::selectAllModules,

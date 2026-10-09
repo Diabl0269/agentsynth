@@ -122,6 +122,35 @@ TEST_F(ShortcutManagerTest, GetActionDescription_CollapseMacroIsTheStaticToggleL
 }
 
 // ---------------------------------------------------------------------------
+// Fold and Pack Macros
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosDefaultsToCmdCtrlGOnMac) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+    manager.resetToDefaults();
+    const auto kp = manager.getBinding("foldAndPackMacros");
+    EXPECT_EQ(kp.getKeyCode(), 'g');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isCtrlDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+}
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosDoesNotShadowGroupOnOtherPlatforms) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    manager.resetToDefaults();
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(manager.getBinding("foldAndPackMacros"),
+                                                  manager.getBinding("groupSelection")));
+    EXPECT_FALSE(manager.getBinding("foldAndPackMacros").getKeyCode() == 0);
+}
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosIsARebindableCommandWithAName) {
+    EXPECT_EQ(AppCommands::getCommandForAction("foldAndPackMacros"), AppCommands::foldAndPackMacros);
+    EXPECT_TRUE(manager.getActionIds().contains("foldAndPackMacros"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("foldAndPackMacros"), "Fold and Pack Macros");
+}
+
+// ---------------------------------------------------------------------------
 // Piano roll: scale panel toggle (Ctrl+S)
 // ---------------------------------------------------------------------------
 

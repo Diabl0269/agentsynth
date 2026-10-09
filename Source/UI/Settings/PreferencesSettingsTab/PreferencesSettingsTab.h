@@ -80,6 +80,13 @@ public:
     // Plain on/off, OFF by default (docs/layout/macro-cards.md).
     bool isMoveMacroOnHullDragEnabled() const;
     void setMoveMacroOnHullDragEnabled(bool enabled);
+    // "Collapsing also packs macros together": Fold and Pack Macros also tidies the folded cards into a grid. Plain
+    // on/off, ON by default (docs/macros/menu-and-membership.md).
+    bool isPackMacrosOnCollapseEnabled() const;
+    void setPackMacrosOnCollapseEnabled(bool enabled);
+    // "Packing also tidies the rest of the canvas": Auto Arrange runs after the pack. Plain on/off, ON by default.
+    bool isTidyCanvasOnPackEnabled() const;
+    void setTidyCanvasOnPackEnabled(bool enabled);
     // Plain on/off, ON by default — same shape as the two macro auto-port toggles above (a brand-new automation, not a
     // replacement for pre-existing silent behaviour)
     // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
@@ -301,6 +308,8 @@ private:
     void persistMacroSpliceCableOnPortDelete(bool enabled);
     void persistMacroDragWithoutCmd(bool enabled);
     void persistMoveMacroOnHullDrag(bool enabled);
+    void persistPackMacrosOnCollapse(bool enabled);
+    void persistTidyCanvasOnPack(bool enabled);
     void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
@@ -516,6 +525,8 @@ private:
                                                           "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
     juce::ToggleButton moveMacroOnHullDragToggle{"Drag inside a macro's outline to move the macro instead of panning"};
+    juce::ToggleButton packMacrosOnCollapseToggle{"Collapsing also packs macros together"};
+    juce::ToggleButton tidyCanvasOnPackToggle{"Packing also tidies the rest of the canvas"};
     // Not macro-specific -- see initMacroToggles()' own comment for why it lives here.
     juce::ToggleButton reconnectChainOnDeleteToggle{"Reconnect the chain when deleting a module"};
     // Plain on/off, ON by default — see the getter/setter declarations above for why this is a different

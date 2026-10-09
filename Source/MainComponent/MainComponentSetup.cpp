@@ -91,6 +91,10 @@ void MainComponent::restorePanelPreferences() {
     // Default OFF — see PreferencesSettingsTab's toggle comment.
     graphEditor.setMoveMacroOnHullDragEnabled(
         appProperties.getUserSettings()->getBoolValue("moveMacroOnHullDrag", false));
+    graphEditor.getMacroController().setPackMacrosOnCollapse(
+        appProperties.getUserSettings()->getBoolValue("packMacrosOnCollapse", true));
+    graphEditor.getMacroController().setTidyCanvasOnPack(
+        appProperties.getUserSettings()->getBoolValue("tidyCanvasOnPack", true));
     // Default ON — see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
     // rather than a tri-state preference (see docs/mixer/mixer.md#channels-follow-audio-not-tracks
     // "main workflow").
