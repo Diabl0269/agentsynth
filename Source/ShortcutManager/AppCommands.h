@@ -119,7 +119,9 @@ enum CommandIDs {
     openAddTrackMenu,
     // On the one selected module card: opens the inline title editor / the "Replace with..." search.
     renameSelectedModule,
-    replaceSelectedModule
+    replaceSelectedModule,
+    // Opens the Send feedback window (the top bar's Feedback button). Appended, like every id above.
+    openFeedback
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

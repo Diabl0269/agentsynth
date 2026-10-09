@@ -97,6 +97,15 @@ TEST_F(ShowTrackModuleTest, TheButtonDoesWhatTheKeyDoes) {
     EXPECT_NE(dynamic_cast<OscillatorModule*>(graph().getNodeForId(selected()[0])->getProcessor()), nullptr);
 }
 
+TEST_F(ShowTrackModuleTest, TheWindowChordOnABuiltInInstrumentTrackOpensNothing) {
+    const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    const auto toggleKey = mc->getShortcutManager().getBinding("timelineToggleFocusedTrackPluginWindow");
+
+    ASSERT_TRUE(headerOf(id).keyPressed(toggleKey));
+
+    EXPECT_EQ(mc->getPluginWindowManager().getOpenWindowCountForTest(), 0) << "a built-in card has no window";
+}
+
 TEST_F(ShowTrackModuleTest, CtrlEOnAnInstrumentTrackCentresItsCollapsedMacroCard) {
     const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
     auto& editor = mc->getGraphEditor();
@@ -137,7 +146,7 @@ TEST_F(ShowTrackModuleTest, CtrlEOnAnUnboundTrackDoesNothing) {
     EXPECT_EQ(mc->getPluginWindowManager().getOpenWindowCountForTest(), 0);
 }
 
-TEST_F(ShowTrackModuleTest, CtrlEOnAHostedPluginTrackOpensItsWindowThenClosesIt) {
+TEST_F(ShowTrackModuleTest, CtrlEOnAHostedPluginTrackFocusesItsModuleAndCtrlCmdEToggleTheWindow) {
     synth::test::StubBackend backend;
     const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddMidiTrackMenuId);
     const auto trackIn = nodeWithUuid(graph(), doc().getTrack(id)->bindingUuid);
@@ -165,17 +174,20 @@ TEST_F(ShowTrackModuleTest, CtrlEOnAHostedPluginTrackOpensItsWindowThenClosesIt)
     auto& windows = mc->getPluginWindowManager();
     auto& header = headerOf(id);
 
+    // Ctrl+E (and the row's button) only focus the module: the plugin's window stays shut.
     ASSERT_TRUE(header.keyPressed(kCtrlE));
-    EXPECT_TRUE(windows.hasWindowForTest(node->nodeID)) << "the first press opens the instrument's window";
+    EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "Ctrl+E no longer opens the window";
     ASSERT_EQ(selected().size(), 1u);
-    EXPECT_EQ(selected()[0], node->nodeID) << "and shows the plugin, not the Track In";
-
-    ASSERT_TRUE(header.keyPressed(kCtrlE));
-    EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "the second press closes it";
-
-    windows.closeAll();
+    EXPECT_EQ(selected()[0], node->nodeID) << "it shows the plugin, not the Track In";
     header.getShowModuleButton().triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
-    EXPECT_TRUE(windows.hasWindowForTest(node->nodeID)) << "the button opens it too";
+    EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "nor does the row's button";
+
+    // The window has its own rebindable chord (Ctrl+Cmd+E on the Mac, Ctrl+Alt+E elsewhere).
+    const auto toggleKey = mc->getShortcutManager().getBinding("timelineToggleFocusedTrackPluginWindow");
+    ASSERT_TRUE(header.keyPressed(toggleKey));
+    EXPECT_TRUE(windows.hasWindowForTest(node->nodeID)) << "the chord opens the instrument's window";
+    ASSERT_TRUE(header.keyPressed(toggleKey));
+    EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "and the next press closes it";
     windows.closeAll();
 }

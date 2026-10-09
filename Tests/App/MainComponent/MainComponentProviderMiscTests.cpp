@@ -129,6 +129,25 @@ TEST_F(MainComponentTest, LocateMasterCmdShiftMSelectsMasterThroughTheRealKeyPat
     EXPECT_EQ(selected[0], masterNode->nodeID);
 }
 
+// Cmd+Shift+F runs the same action as the top bar's Feedback button, through the real key path, and the button's
+// tooltip names the chord.
+TEST_F(MainComponentTest, CmdShiftFOpensFeedbackThroughTheRealKeyPathAndTheButtonTooltipNamesIt) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1200, 800);
+    int opened = 0;
+    mc.getFeedbackButtonForTest().onClick = [&opened] { ++opened; };
+
+    const auto binding = mc.getShortcutManager().getBinding("openFeedback");
+    ASSERT_TRUE(binding.isValid());
+    EXPECT_TRUE(mc.keyPressed(binding));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // commands dispatch asynchronously
+
+    EXPECT_EQ(opened, 1);
+    const auto chord = ShortcutManager::keyPressToDisplayString(binding);
+    EXPECT_NE(mc.getFeedbackButtonForTest().getTooltip().indexOf(chord), -1)
+        << "tooltip \"" << mc.getFeedbackButtonForTest().getTooltip() << "\" should name " << chord;
+}
+
 // MidiLearnController's own ControllerProfileStore ctor param used to default to the REAL,
 // resolved <settings folder>/MidiRemote/Controllers directory regardless of which MainComponent
 // ctor ran it -- so every one of the ~50 MainComponent*Tests.cpp files across this suite (this one

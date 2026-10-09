@@ -311,8 +311,10 @@ struct TrackHeaderHost {
                                   ParameterEditPhase /*phase*/) {}
     /** Selects the node on the canvas and brings it into view. */
     virtual void showNodeOnCanvas(const juce::String& uuid) { selectNodeInGraph(uuid); }
-    /** Ctrl+E / the row's button: the track's module on the canvas; an instrument's window opens, or closes if open. */
+    /** Ctrl+E / the row's button: the track's module, selected and centred on the canvas (no window). */
     virtual void showTrackModule(synth::TrackId track) { juce::ignoreUnused(track); }
+    /** Ctrl+Cmd+E (Ctrl+Alt+E off the Mac): opens a hosted-plugin track's own window, or closes it if open. */
+    virtual void toggleTrackPluginWindow(synth::TrackId track) { juce::ignoreUnused(track); }
 
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
      *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).

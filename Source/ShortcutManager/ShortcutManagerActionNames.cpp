@@ -154,6 +154,8 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Duplicate Focused Track";
     if (actionId == "timelineShowFocusedTrackModule")
         return "Show Focused Track Module";
+    if (actionId == "timelineToggleFocusedTrackPluginWindow")
+        return "Toggle Focused Track Plugin Window";
     if (actionId == "timelineIncreaseTrackHeight")
         return "Increase Track Height";
     if (actionId == "timelineDecreaseTrackHeight")
@@ -187,6 +189,8 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
         return "Fold and Pack Macros";
     if (actionId == "openAddTrackMenu")
         return "Add Track...";
+    if (actionId == "openFeedback")
+        return "Send Feedback";
     if (actionId == "renameSelectedModule")
         return "Rename Module";
     if (actionId == "replaceSelectedModule")

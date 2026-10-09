@@ -235,6 +235,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return locateMaster;
     if (actionId == "openAddTrackMenu")
         return openAddTrackMenu;
+    if (actionId == "openFeedback")
+        return openFeedback;
     if (actionId == "renameSelectedModule")
         return renameSelectedModule;
     if (actionId == "replaceSelectedModule")

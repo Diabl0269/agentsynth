@@ -127,6 +127,10 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["openAddTrackMenu"] =
         isMac ? juce::KeyPress('t', juce::ModifierKeys::ctrlModifier, 0)
               : juce::KeyPress('t', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
+    // Cmd+Shift+F opens the Send feedback window. Free: Cmd+F is Focus Library Search and bare F is Follow Playhead;
+    // Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen.
+    bindings["openFeedback"] =
+        juce::KeyPress('f', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["focusLibrary"] =
         juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no
@@ -330,6 +334,13 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // off the Mac Cmd is Ctrl, so the one literal chord is the same everywhere). The Mixer's "mixerToggleEq" also
     // carries Ctrl+E on the Mac; conflicts are per category and the track row claims the key first, so neither moves.
     bindings["timelineShowFocusedTrackModule"] = juce::KeyPress('e', juce::ModifierKeys::ctrlModifier, 0);
+    // Ctrl+Cmd+E opens or closes the focused plugin track's own window (Ctrl+E only focuses its module). A REAL
+    // Cmd+Ctrl+E on the Mac; off the Mac Cmd IS Ctrl, so that chord would collapse into Ctrl+E and the key takes
+    // Ctrl+Alt+E (free in the Timeline category; the Mixer's Ctrl+Alt+E is another category).
+    bindings["timelineToggleFocusedTrackPluginWindow"] =
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::KeyPress('e', juce::ModifierKeys::commandModifier | juce::ModifierKeys::ctrlModifier, 0)
+            : juce::KeyPress('e', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
     // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
     // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
     // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.

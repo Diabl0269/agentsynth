@@ -1,5 +1,6 @@
 // MainComponentTrackModule.cpp — "Show Module" for a track (Ctrl+E on a focused track row, and the row's button):
-// reveals the track's module on the canvas and, for a hosted plugin, opens or closes its editor window.
+// reveals the track's module on the canvas. A hosted plugin's editor window is its own command, Ctrl+Cmd+E
+// (toggleTrackPluginWindow).
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the sibling
 // MainComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
@@ -27,22 +28,31 @@ juce::AudioProcessorGraph::Node* instrumentOf(juce::AudioProcessorGraph& graph,
 } // namespace
 
 // The instrument when there is one (so a Serum track lands on Serum, not on its Track In), else the bound node
-// itself. Only a hosted plugin has a window; a built-in instrument just gets its card selected and centred. Whether
-// the window is open is read from the window manager every time, never cached, because the user can close it from
-// its own title bar. An unbound or orphaned track does nothing.
-void MainComponent::showTrackModule(synth::TrackId trackId) {
+// itself; null for an unbound or orphaned track.
+juce::AudioProcessorGraph::Node* MainComponent::trackModuleNode(synth::TrackId trackId) {
     const auto* track = timelineDoc.getTrack(trackId);
     if (track == nullptr || track->orphaned)
-        return;
+        return nullptr;
     auto* bound = findNodeByUuid(track->bindingUuid);
     if (bound == nullptr)
-        return;
+        return nullptr;
+    auto* instrument = instrumentOf(audioEngine.getGraph(), *bound);
+    return instrument != nullptr ? instrument : bound;
+}
 
-    auto& graph = audioEngine.getGraph();
-    auto* target = instrumentOf(graph, *bound);
+// Selects and centres the module; it never opens a window (that is toggleTrackPluginWindow's job).
+void MainComponent::showTrackModule(synth::TrackId trackId) {
+    if (auto* target = trackModuleNode(trackId))
+        showNodeOnCanvas(target->properties["uuid"].toString());
+}
+
+// Ctrl+Cmd+E: only a hosted plugin has a window, so a built-in instrument or audio track does nothing. Whether the
+// window is open is read from the window manager every time, never cached, because the user can close it from its
+// own title bar.
+void MainComponent::toggleTrackPluginWindow(synth::TrackId trackId) {
+    auto* target = trackModuleNode(trackId);
     if (target == nullptr)
-        target = bound;
-    showNodeOnCanvas(target->properties["uuid"].toString());
+        return;
     if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(target->getProcessor()))
         pluginWindowManager.toggleEditorFor(hosted, target->nodeID);
 }

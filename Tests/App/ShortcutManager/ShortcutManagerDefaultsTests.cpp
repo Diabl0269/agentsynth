@@ -108,6 +108,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineResetTrackHeight",
         "timelineDuplicateFocusedTrack",
         "timelineShowFocusedTrackModule",
+        "timelineToggleFocusedTrackPluginWindow",
     };
     return ids;
 }
