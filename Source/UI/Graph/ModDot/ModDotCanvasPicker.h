@@ -5,7 +5,8 @@
 // edits the graph itself. The outline fades in when the pointer comes onto an eligible module and out when it leaves
 // or the layer ends (synth::ui::FadeAmount). A second mode (the port connections panel's) picks a JACK or a knob
 // instead of a module: the jack or knob under the pointer is outlined (same fade) when the owner calls it eligible,
-// and a press on it is reported. docs/modules/modulation.md#the-mod-dot-menu, docs/layout/cables.md#port-connections-panel.
+// and a press on it is reported. docs/modules/modulation.md#the-mod-dot-menu,
+// docs/layout/cables.md#port-connections-panel.
 
 #include "UI/Layout/FadeAmount.h"
 #include <functional>
@@ -73,7 +74,7 @@ private:
     juce::AudioProcessorGraph::NodeID hovered_;
     std::function<bool(const JackHit&)> isEligibleJack_;
     std::optional<JackHit> hoveredJack_;
-    std::optional<JackHit> outlinedJack_; // the jack the outline is on; stays while the outline fades out
+    std::optional<JackHit> outlinedJack_;        // the jack the outline is on; stays while the outline fades out
     juce::AudioProcessorGraph::NodeID outlined_; // the module the outline is on; stays while the outline fades out
     FadeAmount outline_{*this};
 };

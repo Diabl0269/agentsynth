@@ -170,7 +170,7 @@ public:
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange(bool record = true); // record=false: inside the caller's own undo step
 
-    // ---- Output dock: Master, Rec Tap, Audio Output, always rightmost (GraphEditorOutputDock.cpp, docs/layout/layout.md#output-dock). x derived, never user-set; shared y is Audio Output's.
+    // ---- Output dock, always rightmost; x derived (GraphEditorOutputDock.cpp, layout.md#output-dock) ----
     /** Re-derives the dock's positions (node x/y and live bounds, synchronously). No undo step, no dirtiness. */
     void reflowOutputDock() override;
     bool isOutputDockNode(juce::AudioProcessorGraph::NodeID nodeId) const;
