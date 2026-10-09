@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
 #include <functional>
@@ -17,7 +18,8 @@ namespace synth::ui {
  *  Typing filters case-insensitively by the row text (module title plus output or target label) and its
  *  `searchText`, word by word: each space-separated word must appear somewhere in them (synth::ui::searchMatches), and
  *  highlights the matched letters in the row text and its detail line; a
- *  category header shows only while one of its rows does. The
+ *  category header shows only while one of its rows does. A row the filter takes out fades while its slot closes up
+ *  (FilteredRowFades); the highlight and a pick only ever land on rows that are still shown. The
  *  highlighted row on a query is the best match (synth::ui::searchScore), the first among equals. The popup's height is
  * fixed by the full list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
  *  picks it (the first match until moved), Escape closes.
@@ -82,6 +84,9 @@ public:
     int getHighlightedItemIndexForTest() const noexcept { return highlighted_; }
     int getHeightForTest() const noexcept { return getHeight(); }
     juce::TextEditor& getSearchEditorForTest() noexcept;
+    /** The column the rows live in, and whether any row is still fading in or out of the filter. */
+    juce::Component& getRowColumnForTest() noexcept { return rowColumn_; }
+    bool isFilterFadingForTest() const noexcept { return fades_.anyFading(); }
 
 private:
     class Row;
@@ -107,7 +112,8 @@ private:
     juce::Viewport viewport_;
     juce::Component rowColumn_;
     std::vector<std::unique_ptr<Row>> rows_;
-    int highlighted_ = 0; // index among the visible item rows
+    FilteredRowFades fades_; // index-aligned with rows_, declared after it so it goes first
+    int highlighted_ = 0;    // index among the visible item rows
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixPicker)
 };

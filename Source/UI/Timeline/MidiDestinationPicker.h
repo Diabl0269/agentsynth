@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -120,6 +121,9 @@ public:
     }
 
     // ---- Test seams -------------------------------------------------------------------------
+    /** The column the rows live in, and whether any row is still fading in or out of the filter. */
+    juce::Component& getRowColumnForTest() noexcept { return rowColumn_; }
+    bool isFilterFadingForTest() const noexcept { return fades_.anyFading(); }
     void setSearchTextForTest(const juce::String& text) {
         // dontSendNotification + an explicit applyFilter() call, mirroring
         // ModuleLibraryComponent::setSearchText — deterministic regardless of whether
@@ -135,9 +139,9 @@ public:
      *  returns the single hint row's text. */
     std::vector<juce::String> getVisibleRowNamesForTest() const {
         std::vector<juce::String> names;
-        for (auto* row : rows_)
-            if (row->isVisible())
-                names.push_back(row->getDisplayedText());
+        for (size_t i = 0; i < rows_.size(); ++i)
+            if (fades_.isShown(i))
+                names.push_back(rows_[i]->getDisplayedText());
         return names;
     }
 
@@ -145,15 +149,15 @@ public:
      *  getVisibleRowNamesForTest() enumerates) — a no-op when there is no such row or it is a
      *  non-interactive header/hint row. */
     void toggleRowForTest(int visibleIndex) {
-        int i = 0;
-        for (auto* row : rows_) {
-            if (!row->isVisible())
+        int shown = 0;
+        for (size_t i = 0; i < rows_.size(); ++i) {
+            if (!fades_.isShown(i))
                 continue;
-            if (i == visibleIndex) {
-                row->toggleForTest();
+            if (shown == visibleIndex) {
+                rows_[i]->toggleForTest();
                 return;
             }
-            ++i;
+            ++shown;
         }
     }
 
@@ -330,6 +334,7 @@ private:
     }
 
     void rebuildRows() {
+        fades_.clear();
         rowColumn_.removeAllChildren();
         rows_.clear();
         toggleRows_.clear();
@@ -337,6 +342,7 @@ private:
 
         if (options_.empty()) {
             addRow(std::make_unique<Row>(Row::Kind::Hint, "Bind this track to a Track In node first", nullptr));
+            resetFades();
             return;
         }
 
@@ -362,6 +368,19 @@ private:
             toggleRows_.push_back(row.get());
             addRow(std::move(row));
         }
+        resetFades();
+    }
+
+    // One fade per row, made once the rows exist; each frame of one lays the column out again.
+    void resetFades() {
+        std::vector<juce::Component*> components(rows_.begin(), rows_.end());
+        fades_.reset(components);
+        fades_.onFrame = [this] {
+            layoutRowColumn();
+            if (!fades_.anyFading())
+                viewport_.setViewPosition(
+                    viewport_.getViewPosition()); // settled: re-clamp the scroll to the new height
+        };
     }
 
     void addRow(std::unique_ptr<Row> row) {
@@ -393,26 +412,28 @@ private:
     // explanation.
     void applyFilter() {
         const juce::String query = searchEditor_.getText().trim();
-        Row* pendingHeader = nullptr;
+        int pendingHeader = -1;
         bool groupHasMatch = false;
 
-        for (auto* row : rows_) {
+        for (size_t i = 0; i < rows_.size(); ++i) {
+            auto* row = rows_[i];
             if (row->getKind() == Row::Kind::Header) {
-                if (pendingHeader != nullptr)
-                    pendingHeader->setVisible(groupHasMatch);
-                pendingHeader = row;
+                if (pendingHeader >= 0)
+                    fades_.steer((size_t)pendingHeader, groupHasMatch);
+                pendingHeader = (int)i;
                 groupHasMatch = false;
                 continue;
             }
             const bool matches =
                 row->getKind() != Row::Kind::Toggle || synth::ui::searchMatches(row->getDisplayedText(), query);
             row->setHighlightQuery(row->getKind() == Row::Kind::Toggle ? query : juce::String());
-            row->setVisible(matches);
+            fades_.steer(i, matches);
             if (matches)
                 groupHasMatch = true;
         }
-        if (pendingHeader != nullptr)
-            pendingHeader->setVisible(groupHasMatch);
+        if (pendingHeader >= 0)
+            fades_.steer((size_t)pendingHeader, groupHasMatch);
+        fades_.markLaidOut();
 
         layoutRowColumn();
     }
@@ -423,12 +444,14 @@ private:
         // again once real bounds exist, so the pre-layout pass just leaves the column at width 0
         // rather than something visually meaningful.
         const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
+        // A row the search takes out keeps a slot squeezed to its fade's progress(), so the rows below slide up while
+        // it goes; one that comes back opens its slot the same way.
         int y = 0;
-        for (auto* row : rows_) {
-            if (!row->isVisible())
+        for (size_t i = 0; i < rows_.size(); ++i) {
+            if (!fades_.occupies(i))
                 continue;
-            const int h = row->getPreferredHeight();
-            row->setBounds(0, y, width, h);
+            const int h = fades_.slot(i, rows_[i]->getPreferredHeight());
+            rows_[i]->setBounds(0, y, width, h);
             y += h;
         }
         rowColumn_.setSize(width, juce::jmax(y, 1));
@@ -503,6 +526,7 @@ private:
     std::vector<Row*> rows_;       // every row, in display order (headers + toggles + hint)
     std::vector<Row*> toggleRows_; // just the Toggle rows, index-aligned with options_
     std::vector<std::unique_ptr<Row>> ownedRows_;
+    FilteredRowFades fades_; // index-aligned with rows_, declared after ownedRows_ so it goes first
     std::vector<Option> options_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiDestinationPicker)

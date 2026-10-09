@@ -84,7 +84,9 @@ the Settings window is.
   `AsyncUpdater`, so a fold of many groups costs one pass per frame. The first layout of a group lands at once.
   A fold, "Collapse all", a category change and a search filter all go through `groupMatches`, so they all fade.
   The Privacy group's id row has a fade of its own (it follows the share switch and its group). The section
-  headers and the fold-all strip are not faded: they follow the state at once.
+  headers fade as one (`sectionHeaderFade_`) and the fold-all strip fades with its height following the fade
+  (`foldAllFade_`) when a category change or a search shows or hides them; a header's chevron turns
+  (`ChevronTurn`, [fold chevrons](animation.md#fold-chevrons)). What is there when the tab is first laid out does not fade.
 - Persistence is untouched: each row's getter/setter/`persist*` code and settings key is exactly what it
   was, so closing and reopening Settings (a new tab constructed from the same properties) reloads every
   value regardless of category.

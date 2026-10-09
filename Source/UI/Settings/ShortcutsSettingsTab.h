@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
@@ -36,9 +37,10 @@
 // a row a fold or the search takes out fades (synth::ui::FadeVisibility) while its slot is squeezed to the fade's
 // progress(), so the rows below slide up; a row that comes back does the reverse. Reduce Motion is the plain 80 ms
 // fade, and Animations Off or a tab that is not on screen land at once. A section that the search drops entirely
-// fades its header and gaps the same way. The section headers' chevrons turn at once, as the Preferences
-// headers' do. The animation library's accordion (ModuleLibraryComponent) is laid out by hand and drives its own
-// tween; here the rows are real child components, so the fade and the squeezed slot are what move them.
+// fades its header and gaps the same way. A section header's chevron turns (synth::ui::ChevronTurn) and the "No
+// matching shortcuts" line fades in and out as the rows close up. The animation library's accordion
+// (ModuleLibraryComponent) is laid out by hand and drives its own tween; here the rows are real child components, so
+// the fade and the squeezed slot are what move them.
 //
 // The folds ARE remembered (user setting shortcutsFolded, the folded categories by stable name):
 // the tab is constructed fresh each time the Settings window opens, and it restores them before
@@ -137,6 +139,12 @@ public:
 
     /** True while any row or header is still fading in or out. */
     bool anyFadeRunningForTest() const;
+    /** The "No matching shortcuts" line and the fade that shows and hides it. */
+    juce::Component& getNoMatchHintForTest() { return noMatchHint_; }
+    const synth::ui::FadeVisibility& getNoMatchFadeForTest() const { return *noMatchFade_; }
+    /** The chevron of `category`'s header: its openness (0 folded, 1 open) and whether it is still turning. */
+    float getChevronOpennessForTest(ShortcutCategory category) const;
+    bool isChevronTurningForTest(ShortcutCategory category) const;
     /** Content height of the scrolled rows, so a test can watch the slots squeeze. */
     int getContentHeightForTest() const { return rowsHost.getHeight(); }
     /** The on-screen component of row [index] (its rebind button), which fades with the row. */
@@ -175,16 +183,18 @@ private:
         bool isHeader = false;
     };
 
-    /** The scrolled content: a bare host whose paint delegates straight back to the tab, so the
-     *  rules and the empty-state text are drawn in the same coordinate space the rows are laid out
-     *  in. */
+    /** The scrolled content: a bare host the rows, headers and the empty-state line are children of. */
     struct RowsHost : juce::Component {
-        explicit RowsHost(ShortcutsSettingsTab& o)
-            : owner(o) {
-            setMouseClickGrabsKeyboardFocus(false);
+        RowsHost() { setMouseClickGrabsKeyboardFocus(false); }
+    };
+
+    /** The "No matching shortcuts" line: painted text only, no mouse, no accessibility node (it never had one). */
+    struct NoMatchHint : juce::Component {
+        NoMatchHint() {
+            setInterceptsMouseClicks(false, false);
+            setAccessible(false);
         }
-        void paint(juce::Graphics& g) override { owner.paintRows(g); }
-        ShortcutsSettingsTab& owner;
+        void paint(juce::Graphics& g) override;
     };
 
     /** A section header: a real button, so Tab reaches it and Space/Return fold the section. */
@@ -194,12 +204,16 @@ private:
     public:
         explicit HeaderButton(ShortcutCategory c);
         void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
-        void setCollapsed(bool isCollapsed);
+        /** `animate` false lands the chevron at once (the first layout, a header that was there from the start). */
+        void setCollapsed(bool isCollapsed, bool animate = true);
+        float chevronOpenness() const noexcept { return turn_.openness(); }
+        bool isChevronTurning() const noexcept { return turn_.isTurning(); }
         bool isFolded() const override { return collapsed_; }
         void setFolded(bool folded) override;
 
     private:
         bool collapsed_ = false;
+        synth::ui::ChevronTurn turn_{*this};
     };
 
     /** A rebind button. While its row is listening it hands every key to the tab, so any key
@@ -217,8 +231,6 @@ private:
                 onFocusLost();
         }
     };
-
-    void paintRows(juce::Graphics& g);
 
     ShortcutManager& shortcutManager;
     juce::ApplicationProperties* appProperties = nullptr; // weak, nullable
@@ -238,7 +250,9 @@ private:
     int listeningIndex = -1;
 
     juce::Viewport rowsViewport;
-    RowsHost rowsHost{*this};
+    RowsHost rowsHost;
+    NoMatchHint noMatchHint_;
+    std::unique_ptr<synth::ui::FadeVisibility> noMatchFade_;
     std::vector<LayoutEntry> layout;
     // Set by resized(): where the collapse-all strip button sits.
     juce::Rectangle<int> topStripBounds;

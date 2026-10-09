@@ -105,6 +105,7 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
     rowsViewport.setViewedComponent(&rowsHost, false);
     rowsViewport.setScrollBarsShown(true, false);
     rowsViewport.setWantsKeyboardFocus(false);
+    rowsHost.addChildComponent(noMatchHint_);
 
     for (auto category : ShortcutManager::getCategoryOrder()) {
         auto header = std::make_unique<HeaderButton>(category);
@@ -223,6 +224,8 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
             std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{header.get()}));
         headerFades_.back()->onFrame = [this] { rebuildLayout(); };
     }
+    noMatchFade_ = std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{&noMatchHint_});
+    noMatchFade_->onFrame = [this] { rebuildLayout(); };
 }
 
 //==============================================================================
@@ -324,7 +327,7 @@ void ShortcutsSettingsTab::rebuildLayout() {
         if (headerTakesSlot) {
             const int headerSlot = slot(headerFade, kSectionHeaderHeight + kRowGap);
             header.setBounds(0, y, contentWidth, juce::jmin(kSectionHeaderHeight, headerSlot));
-            header.setCollapsed(!filtering && isSectionCollapsed(category));
+            header.setCollapsed(!filtering && isSectionCollapsed(category), laidOutOnce_);
             if (sectionShown)
                 layout.push_back({-1, category, {0, y, contentWidth, kSectionHeaderHeight}, true});
             // The divider sits in the gap below the header; the header paints it at its own bottom
@@ -353,6 +356,14 @@ void ShortcutsSettingsTab::rebuildLayout() {
             y += slot(headerFade, kSectionGap);
     }
 
+    // "No matching shortcuts" follows the rows it replaces: it fades in under the last of them as they close up.
+    const bool showNoMatch = filtering && layout.empty();
+    steer(*noMatchFade_, showNoMatch);
+    if (showNoMatch || noMatchFade_->isFading()) {
+        noMatchHint_.setBounds(0, y, contentWidth, kRowHeight);
+        y += slot(*noMatchFade_, kRowHeight);
+    }
+
     laidOutOnce_ = true;
     rowsHost.setBounds(0, 0, juce::jmax(contentWidth, rowsViewport.getWidth()), juce::jmax(y, 1));
     rowsHost.repaint();
@@ -362,7 +373,17 @@ void ShortcutsSettingsTab::rebuildLayout() {
 bool ShortcutsSettingsTab::anyFadeRunningForTest() const {
     const auto running = [](const auto& fade) { return fade->isFading(); };
     return std::any_of(rowFades_.begin(), rowFades_.end(), running) ||
-           std::any_of(headerFades_.begin(), headerFades_.end(), running);
+           std::any_of(headerFades_.begin(), headerFades_.end(), running) || noMatchFade_->isFading();
+}
+
+float ShortcutsSettingsTab::getChevronOpennessForTest(ShortcutCategory category) const {
+    const auto& order = ShortcutManager::getCategoryOrder();
+    return headerButtons[(size_t)(std::find(order.begin(), order.end(), category) - order.begin())]->chevronOpenness();
+}
+
+bool ShortcutsSettingsTab::isChevronTurningForTest(ShortcutCategory category) const {
+    const auto& order = ShortcutManager::getCategoryOrder();
+    return headerButtons[(size_t)(std::find(order.begin(), order.end(), category) - order.begin())]->isChevronTurning();
 }
 
 //==============================================================================
@@ -390,11 +411,15 @@ void ShortcutsSettingsTab::HeaderButton::setFolded(bool folded) {
         onClick();
 }
 
-void ShortcutsSettingsTab::HeaderButton::setCollapsed(bool isCollapsed) {
+void ShortcutsSettingsTab::HeaderButton::setCollapsed(bool isCollapsed, bool animate) {
     if (collapsed_ == isCollapsed)
         return;
     collapsed_ = isCollapsed;
     setToggleState(!isCollapsed, juce::dontSendNotification);
+    if (animate)
+        turn_.setOpen(!isCollapsed);
+    else
+        turn_.snapTo(!isCollapsed);
     repaint();
 }
 
@@ -404,7 +429,7 @@ void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool hig
     synth::theme::paintDisclosureChevron(g,
                                          juce::Rectangle<float>(6.0f, (float)(getHeight() - kChevronSize) * 0.5f,
                                                                 (float)kChevronSize, (float)kChevronSize),
-                                         collapsed_ ? 0.0f : 1.0f, synth::theme::themeOf(*this), highlighted);
+                                         turn_.openness(), synth::theme::themeOf(*this), highlighted);
 
     g.setColour(textColour);
     g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
@@ -417,17 +442,10 @@ void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool hig
     synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
-void ShortcutsSettingsTab::paintRows(juce::Graphics& g) {
-    const auto textColour = findColour(juce::Label::textColourId);
-
-    if (layout.empty() && isSearchActive()) {
-        g.setColour(textColour.withAlpha(0.6f));
-        g.setFont(juce::Font(juce::FontOptions(13.0f)));
-        // rowsHost's bounds, not the tab's: this paints into the scrolled host.
-        g.drawText("No matching shortcuts",
-                   juce::Rectangle<int>(6, 0, juce::jmax(0, rowsHost.getWidth() - 12), kRowHeight),
-                   juce::Justification::centredLeft);
-    }
+void ShortcutsSettingsTab::NoMatchHint::paint(juce::Graphics& g) {
+    g.setColour(findColour(juce::Label::textColourId).withAlpha(0.6f));
+    g.setFont(juce::Font(juce::FontOptions(13.0f)));
+    g.drawText("No matching shortcuts", getLocalBounds().reduced(6, 0), juce::Justification::centredLeft);
 }
 
 //==============================================================================

@@ -19,6 +19,7 @@
 #include "UI/Graph/ModuleClipboard.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
@@ -169,8 +170,7 @@ public:
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange(bool record = true); // record=false: inside the caller's own undo step
 
-    // ---- Output dock: Master, Rec Tap and Audio Output, always the rightmost cards (GraphEditorOutputDock.cpp,
-    // docs/layout/layout.md#output-dock). Their x is derived, never user-set; their shared y is Audio Output's own.
+    // ---- Output dock, always rightmost; x derived (GraphEditorOutputDock.cpp, layout.md#output-dock) ----
     /** Re-derives the dock's positions (node x/y and live bounds, synchronously). No undo step, no dirtiness. */
     void reflowOutputDock() override;
     bool isOutputDockNode(juce::AudioProcessorGraph::NodeID nodeId) const;
@@ -575,8 +575,7 @@ public:
                                                bool isInput, bool isMidi);
 
     // ---- Onboarding helpers (headless-testable) ----
-    /** True when the canvas has no modules. nodeCount is the number of non-Attenuverter nodes
-     *  rendered as ModuleComponents. */
+    /** True when the canvas has no modules (nodeCount counts the non-Attenuverter ModuleComponents). */
     static bool isCanvasEmpty(int nodeCount) noexcept { return nodeCount <= 0; }
 
     /** The final snapped + anti-overlapped position for a newly dropped module. */
@@ -996,5 +995,6 @@ private:
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
+    synth::ui::FadeAmount emptyCanvasHint{*this}; // the first-run hint's fade, steered by updateComponents()
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

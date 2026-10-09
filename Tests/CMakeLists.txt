@@ -908,6 +908,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shor
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
+include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

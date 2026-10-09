@@ -584,24 +584,36 @@ time (a ~200 ms fade and shrink) after ours, and while it ran the app window's n
 a control growing or shrinking on the card behind the call-out froze on one frame and then jumped to the end
 (measured on the real app with a screen recording; the app itself painted every frame).
 
-**Not covered.**
-- Leaving, for a native-title window closed by JUCE itself (title-bar button) on Windows or Linux:
-  nothing is drawn, it vanishes at once (the opening still animates, and an app-decided close fades
-  the live window on every platform).
-- Closes left direct on purpose: the help call-out of the module library
-  (`ModuleLibraryComponent::closeHelpPopover` and its switch to the pinned panel, which hand the
-  popup's content between owners in the same call), a `ModDotController` being destroyed (its popover
-  must be gone with it), and `NonModalLabel`'s modal-state exit (not a window).
-- The leaving picture is a snapshot, not the live window: a menu row's hover highlight or text typed
-  into an alert after it opened is not in it, and a dialog closed within 160 ms of opening has none
-  and just disappears.
-- A tooltip (`TooltipWindow` is parented to the main component, so it has no window of its own to
-  fade), a call-out given a parent component, the main window, hosted-plugin editor windows and
-  detached panel windows are not animated.
-- Fading uses the window's own opacity: Windows and macOS honour it, a Linux X11 session without a
-  compositor shows the slide only.
-- The choose-a-row accent flash is not done (the menu's item components belong to JUCE and are gone
-  as the menu closes).
+**What leaves without a live fade, and what does not animate at all.** The "still instant" list at the end of this
+section is the whole of it, with a reason for each; everything else in the app that opens or closes a window fades.
+
+- The help call-out of the module library closes through `PopupMotion::dismiss` like any call-out (its box is hidden and
+  deleted one turn after the fade). Its pin and un-pin swap the popup between the call-out and the floating panel in
+  one call (the content cannot be in two hosts), so that switch is a hand-off, not a close. The pinned panel's own close
+  is a `FadeVisibility` ([fading things](#fading-things-in-and-out)).
+- A `ModDotController` destroyed with its popover, and a window that JUCE deletes while it is still shown, leave on the
+  picture taken while it was open (the leaving picture above), so they fade too.
+- Detached panel windows (`DetachedPanelWindow`) are attached to `PopupMotion` with a fade-only style (no slide, because
+  the window persists its own position): they fade in when they open, fade out when their close button asks the host to
+  redock (`PopupMotion::dismiss`), and leave on a picture when the host redocks them itself.
+- Tooltips fade ([Tooltips](#tooltips)); the app gives no call-out a parent component (every call-out is its own window),
+  so there is no parented call-out to fade.
+- The leaving picture is a snapshot, not the live window: a dialog closed within 160 ms of opening has none and just
+  disappears.
+- Fading uses the window's own opacity: Windows and macOS honour it, a Linux X11 session without a compositor shows the
+  slide only.
+
+**Still instant, and why.** Nothing else appears, disappears, resizes or moves without motion. These do, each for a reason
+that is not "nobody got to it":
+
+| What | Why it is instant |
+|---|---|
+| A native-title window closed by JUCE itself (title-bar button) on Windows or Linux | There is no way to take a picture of the title bar there, so there is nothing to fade; the opening still animates and an app-decided close fades the live window on every platform. |
+| Hosted-plugin editor windows (`HostedPluginEditorWindow`) | The window's content is the plugin's own native view, often GPU-drawn: a picture of it can come out blank or stale and the plugin owns how it redraws under a changing window opacity. |
+| The main window | The operating system owns its opening, closing and resizing (launch, quit, full screen, a drag of the edge). |
+| The choose-a-row accent flash of a menu | The menu's rows are JUCE's own components and JUCE reports the chosen id only once the window is closing, so the app has no row rectangle to flash; the leaving picture is taken from the window JUCE is already closing. Drawing the flash would mean replacing the popup menu with an app-made one. |
+| `NonModalLabel`'s modal-state exit | Nothing is drawn: it ends a modal state so the accessibility tree stays whole, not a window or a control. |
+| A fold arrow under Reduce Motion | A turn is movement, so it flips at once (the header's rows still fade); [fold chevrons](#fold-chevrons). |
 
 ## Motion rules
 
@@ -610,8 +622,8 @@ shortcut.
 
 - **Everything animates.** Nothing in the app appears, disappears, resizes or moves without motion. Reduce Motion
   turns that motion into a short fade (80 ms); Animations: Off makes it instant. A change that stays instant
-  needs a written reason in these docs (see the "kept instant on purpose" notes on the individual animations); a
-  change with no reason written down is a bug.
+  needs a written reason in these docs (the "still instant, and why" list in [Popup windows](#popup-windows), or a
+  note on the individual animation); a change with no reason written down is a bug.
 - **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,
   call-outs and dialogs: see [Popup windows](#popup-windows). Reorder
   make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).
@@ -708,7 +720,9 @@ conditional section that is not a swap is laid out at once when it comes and fad
 ([Controls swapping in place](#controls-swapping-in-place)) and starts no fade. Every fade frame invalidates the
 card's cached raster through the child's own `setAlpha`, so a card repaints exactly while a fade runs and not after.
 The Pick on canvas overlay (`PickTargetOverlay`) fades the same way as one whole component: it takes no click from the
-moment Esc or a click ends it, and its outlines stay painted until it has faded out. Settings and dialogs use it too: a Preferences group that a
+moment Esc or a click ends it, and its outlines stay painted until it has faded out. The mod dot's own Pick on canvas
+layer (`ModDotCanvasPicker`) fades the outline of the module under the pointer in and out (`FadeAmount`, below) and,
+when the mode ends, takes no press from that moment while its outline fades out and the layer then leaves the canvas. Settings and dialogs use it too: a Preferences group that a
 fold or a search filter takes out (the group's rows fade while their slot is squeezed to `progress()` of its height, so
 the rows below and the next section's header slide up; one group, one `FadeVisibility`, made on its first layout and
 landing at once then), the Export Audio dialog's options page (which cross-fades into the progress page) and its
@@ -717,9 +731,11 @@ and voices editor, each row's voices editor (the shape box slides over as its bl
 "No outputs yet" hints (the section below slides with the hint's height), the piano roll scale panel's custom scale
 editor (its keys, name field and Save, clipped to the height reached while the controls below slide), and the AI
 settings tab's host label and address box and its Custom server / Use hosted server buttons (fixed slots). The
-Preferences section headers and the fold-all strip are not faded. The Keyboard Shortcuts tab folds the same way: each
-row (and a section header the search drops) is one `FadeVisibility` whose slot is squeezed to `progress()`, a fold and a
-search filter alike, so the rows below slide. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
+Preferences section headers fade as one when the All view shows or hides them (a category change, a search), and the
+fold-all strip fades with its height following `progress()` so the rows below slide. The Keyboard Shortcuts tab folds
+the same way: each row (and a section header the search drops) is one `FadeVisibility` whose slot is squeezed to
+`progress()`, a fold and a search filter alike, so the rows below slide; its "No matching shortcuts" line is a small
+non-interactive child that fades in under the rows as they close up and out when the search clears. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
 something already on screen so what was there from the start does not fade.
 
 The MIDI Remote panel uses it too: the inspector and the orphan view cross-fade in the same spot; the page strip
@@ -739,9 +755,30 @@ ADSR strip's Controls switch (the "+ Add control" button slides over as it fades
 popover: a section's body fades while its height tweens, so the sections below slide and the call-out resizes each
 frame. A docked panel's header strip (`DetachablePanelHost`) when its header moves into the tab strip: the panel slides
 up as the strip fades; detaching or re-docking mid-fade lands it first (`snapTo`), since the window borrows the
-strip's components. Kept instant on purpose: the Mod Matrix and MIDI destination pickers' search filtering (rows
-filtered by every keystroke, not a state change), and the help popover's own close (the library owns the call-out box and re-parents the
-popup between it and the pinned panel, so closing deletes the box in the same call; a fade-out would outlive it).
+strip's components. The Mod Matrix and MIDI destination pickers fade the rows their search filter takes out or brings
+back, and the list closes up (`FilteredRowFades`, `Source/UI/Layout/FilteredRowFades.h`: one `FadeVisibility` per row
+and header, each leaving row keeping a slot squeezed to `progress()` so the rows below slide, and the highlight, Return
+and a click only ever land on rows still logically shown). The next keystroke retargets every fade from its current
+opacity, so typing never waits on a fade. The help popover's own close fades: the call-out through
+`PopupMotion::dismiss`, the pinned panel through a `FadeVisibility` (opening it again mid-fade turns back from the
+current opacity).
+
+**Painted things.** Something its owner paints, with no component to fade, uses `synth::ui::FadeAmount`
+(`Source/UI/Layout/FadeAmount.h`): the same numbers (160 ms in, 110 ms out, linear, 80 ms under Reduce Motion, none under
+Off), a reversal from the current amount, no animation off screen, and a `repaintArea` so a frame repaints only the
+painted thing. The empty-canvas first-run hint ("Drag modules here to build your patch") fades out when the first module
+lands and back in when the canvas is emptied (`GraphEditor::updateComponents` steers it; a new editor starts with it
+shown), repainting only a strip across the middle of the canvas.
+
+### Fold chevrons
+
+A fold arrow turns instead of flipping. `synth::ui::ChevronTurn` (`Source/UI/Layout/ChevronTurn.h`) holds the arrow's
+openness (0 folded, 1 open, the number `paintDisclosureChevron` takes), tweens it over 160 ms `easeOutCubic` and
+retargets from the current openness, so a second click mid-turn reverses from where the arrow is. The Preferences
+section headers and the Keyboard Shortcuts section headers use it (the module library's help popover and the mod dot
+panel have their own). A turn is movement: under Reduce Motion, with Animations Off, or when the header is not on
+screen the arrow lands at once, and a header laid out for the first time (a restored fold) starts where it belongs.
+Frames run only while an arrow turns.
 
 ## Tooltips
 
@@ -835,7 +872,7 @@ strings.
 | **Timeline panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver — same slide, bottom axis | `MainComponent` |
 | **Mixer Own-panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`) on the controller's OWN driver — not the shared one | `MixerPlacementController` |
 | **Macro port names zoom fade** | Alpha is a pure function of zoom (`easeInOutCubic` over 0.5 to 0.7), no driver or timer, so not a time-bounded-rule exception; the strip fill recedes; on an open macro the same factor also slides each port's interior jack onto its boundary jack and narrows the painted strip to a rail (layout widths fixed) | `GraphEditor` / `MacroCardComponent` |
-| **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
+| **Empty-canvas first-run hint** | Drawn text that fades out (110 ms) when the first module lands and in (160 ms) when the canvas is emptied; plain 80 ms under Reduce Motion; at once off screen or under Animations Off; repaints only a strip across the middle while it fades; see [Fading things in and out](#fading-things-in-and-out) | `GraphEditor` via `FadeAmount` |
 | **Automation lane reorder** | Dragging a lane header within its track: the lane's block (row plus modulator rows) lifts under the pointer, the other lanes glide aside (160 ms, `easeOutCubic`), settle on drop (140 ms), Esc returns it; Cmd+Alt+Up/Down glides the moved block into its slot; headers only (the curve editors follow on commit); at once when not on screen; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` via `ReorderDragSession` |
 | **Track delete and undo (timeline row, mixer column)** | A deleted track's row (header and lane line) shrinks toward its centre (180 ms) and the rows below close the gap (200 ms); a mixer column that leaves does the same sideways. Cmd+Z makes room (200 ms), grows it back (180 ms) and fades a 1 px accent outline (400 ms); phases never overlap; a plain fade under Reduce Motion; instant when off screen or Animations Off; see [delete and undo animation](#delete-and-undo-animation) | `ExitEnterListMotion` via `TimelinePanelComponent`, `MixerPanelComponent` |
 | **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
@@ -862,7 +899,7 @@ strings.
 | **Toolbar buttons** | Three tweens per button, each retargeting from its current value on one `AnimationDriver` apiece: hover 110 ms `easeOutCubic` in / 90 ms `easeInCubic` out (chip 16 -> 26 percent, ground, caption colour), press 80 ms (the chip and glyph squash to 0.92 x 0.86 about the chip's centre), lit 160 ms in / 110 ms out (the chip fills with the group colour while the glyph cross-fades to its ink art). On hover the glyph lifts 1 px and its moving part (the SVG's `mv` / `mv2` group, drawn as a separate `Drawable`) does one small thing: the cog and Light mode turn 30 degrees, Undo -22 and Redo +22 (the arrow swings about its elbow with an ease-out-back overshoot of about 10 percent while the hover arrives, a plain return on leaving), Save's shutter slides 1.5 down, Load's arrow drops 2, New's plus grows 1.2x, the feedback lines slide 1 right, Auto Arrange's right tiles part 1.5 up and down, the minimap view moves (2, 1), the matrix grows 1.12x, the panel rises 1.5, the library's leaning book tips 10 degrees further (distances in icon units). The AI button is the one looping glyph: a pulse runs along its cable and a spark blooms at the plug over one 2.8 s cycle (a linear `AnimationDriver` that restarts itself, the pulse placed with `Path::getPointAlongPath`), while the assistant is working (`setBusy`, from `AIChatComponent::onWaitingChanged`) or the button is hovered; its keyframes cross-fade with the rest glyph 140 ms in / 220 ms out and the cycle stops once they are gone, so an idle button schedules no frames. Under Reduce Motion (read when a hover starts, and when the button turns busy) nothing moves and only the colours change; lands at once when not on screen; nothing runs at rest; see [toolbar buttons](chrome.md#toolbar-buttons) | `ToolbarButton`, painted by `AppLookAndFeel::drawToolbarButton` |
 | **Velocity strip readout** | The value beside a hovered or dragged stick fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity and slides ~4 px from the stick head to its spot (`velocitylane::readoutSlidePx`); stick-to-stick moves and edits keep the current opacity; lands at once when not on screen; one `AnimationDriver` | `PianoRollVelocityLane` |
 | **Mod-dot tooltip** | The "LFO 1 · +42%" readout above-right of a knob whose landing dot is dragged (or stepped by key) fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity; a plain 80 ms linear fade under Reduce Motion; lands at once when not on screen; painted on the canvas over the cards; one `AnimationDriver`; see [mod dot](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot) | `ModDotTooltip` via `ModDotController` |
-| **Mod-dot panel** | The dot's panel grows out of its dot as a popup window (`PopupMotion`) with a `popup_motion::Style` of its own: the whole panel (outline, arrow, shadow and content, one child "body" of the transparent window) scales from 40% to 100% about the dot's centre (not the pointer) with a 3% overshoot (`easeOutBackSoft`) over 200 ms while it fades in over the first 120 ms, and shrinks to 50% toward the dot while it fades over 140 ms (`easeInCubic`) on Esc, click-away or a pick; Reduce Motion is the plain 80 ms fade with no scale; Animations: Off is instant; a second click on the dot while it fades out cuts the fade short and the new panel takes its place (`ModDotPanelFrame::finishClosingNow`). "Add source" unfolds the source list under the rows in the same panel: the panel's height grows 160 ms `easeOutCubic` and folds back 110 ms `easeInCubic` (one driver), and near the bottom of the screen the panel slides up with it, frame by frame, while its arrow stays level with the dot. A group's fold turns its arrow 90 degrees and opens or closes its rows over 160 ms `easeOutCubic`, the rows below sliding (never jumping), one driver for every group at once; a new source row grows in from zero height (160 ms `easeOutCubic`); a removed one shrinks toward its centre (180 ms) and then the rows below close the gap (200 ms), and Cmd+Z opens the gap, grows the row back and fades a 1 px accent outline around it (400 ms), the shared exit and gap timeline of [delete and undo](#delete-and-undo-animation) (a plain fade under Reduce Motion); row and button hover is a 100 ms fade. The Pick on canvas layer only outlines the hovered card (static, no animation). Everything lands at once when not on screen or under Reduce Motion; frames only while a tween runs; see [mod dot menu](../modules/modulation.md#the-mod-dot-menu) | `ModDotPopover`, `ModDotPanelFrame`, `ModDotSourcesPage`, `ModDotAddSourcePage` |
+| **Mod-dot panel** | The dot's panel grows out of its dot as a popup window (`PopupMotion`) with a `popup_motion::Style` of its own: the whole panel (outline, arrow, shadow and content, one child "body" of the transparent window) scales from 40% to 100% about the dot's centre (not the pointer) with a 3% overshoot (`easeOutBackSoft`) over 200 ms while it fades in over the first 120 ms, and shrinks to 50% toward the dot while it fades over 140 ms (`easeInCubic`) on Esc, click-away or a pick; Reduce Motion is the plain 80 ms fade with no scale; Animations: Off is instant; a second click on the dot while it fades out cuts the fade short and the new panel takes its place (`ModDotPanelFrame::finishClosingNow`). "Add source" unfolds the source list under the rows in the same panel: the panel's height grows 160 ms `easeOutCubic` and folds back 110 ms `easeInCubic` (one driver), and near the bottom of the screen the panel slides up with it, frame by frame, while its arrow stays level with the dot. A group's fold turns its arrow 90 degrees and opens or closes its rows over 160 ms `easeOutCubic`, the rows below sliding (never jumping), one driver for every group at once; a new source row grows in from zero height (160 ms `easeOutCubic`); a removed one shrinks toward its centre (180 ms) and then the rows below close the gap (200 ms), and Cmd+Z opens the gap, grows the row back and fades a 1 px accent outline around it (400 ms), the shared exit and gap timeline of [delete and undo](#delete-and-undo-animation) (a plain fade under Reduce Motion); row and button hover is a 100 ms fade. The Pick on canvas layer outlines the hovered card with an outline that fades in and out (160 ms in, 110 ms out from the current opacity; plain 80 ms under Reduce Motion). Everything lands at once when not on screen or under Reduce Motion; frames only while a tween runs; see [mod dot menu](../modules/modulation.md#the-mod-dot-menu) | `ModDotPopover`, `ModDotPanelFrame`, `ModDotSourcesPage`, `ModDotAddSourcePage` |
 | **Port connections panel** | A click on a jack opens the same panel window as the mod dot (`ModDotPanelFrame`: grows out of the jack 200 ms, shrinks back 140 ms, plain 80 ms fade under Reduce Motion, instant with Animations off). A removed connection's row shrinks toward its centre (180 ms) and then the rows below close the gap (200 ms), Cmd+Z opens the gap, grows the row back and fades a 1 px accent outline (400 ms): the shared `ExitEnterTimeline` through `ExitEnterRowSlots`, the same code as the mod dot's source rows; "Disconnect all" shrinks every row together and its footer closes with the gap phase; the panel's height follows frame by frame; a connection that appears while the panel is open grows in the same way as an undo; lands at once when not on screen. Row hover is a 100 ms fade. The canvas highlight of a hovered row's cable is a state change (no tween); the cable retract/grow is [the cable's own](cables.md#retracting-removed-cables). **Add connection:** the list and the search page cross-fade (outgoing alpha 1 to 0, incoming 0 to 1) while the panel's height settles to the new page's, 160 ms `easeOutCubic` going in and 110 ms `easeInCubic` coming back (an 80 ms plain fade with the height changing at once under Reduce Motion, instant when not on screen or with Animations off); a pick's new cable grows out of its source jack (the cable grow-back) as the panel swaps back and the new row grows into the list; a hovered row's preview cable is a state change (no tween); see [port connections panel](cables.md#port-connections-panel) | `PortConnectionsPanel` (`PortConnectionsPanelPages.cpp`), `PortConnectionRow`, `PortTargetSearchPage`, `PortPanelController` |
 | **Velocity strip show/hide** | The grid gives up `round(p * full)` px at the bottom while the strip keeps its full height and rises from the roll's bottom edge (clipped, never squashed); 200 ms (`kScalePanelAnimMs`) `easeInOutCubic`, same as the scale panel, retargets from the current progress, lands at once when not on screen or on a persisted restore | `PianoRollComponent` / `VelocityLaneSlide` |
 
