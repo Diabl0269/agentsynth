@@ -248,12 +248,6 @@ add_executable(Tests
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
     App/ManyTracksProfileTests.cpp
-    App/ProjectOpenProfileTests.cpp
-    Engine/LoadGateTests.cpp
-    Project/DeferredAssetLoadsTests.cpp
-    UI/Graph/ProjectLoad/LoadRevealTimelineTests.cpp
-    UI/Graph/ProjectLoad/ProjectLoadPipelineTests.cpp
-    UI/Graph/ProjectLoad/SignalFlowOrderTests.cpp
     App/EditRefreshWorkTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
@@ -587,7 +581,6 @@ add_executable(Tests
     Macros/MacroHullDisplacementTests.cpp
     Macros/MacroReplaceMemberTests.cpp
     Macros/MacroProjectLoadTests.cpp
-    Macros/MacroProjectLoadRevealTests.cpp
     Macros/MacroPortCanvasEdgeTests.cpp
     Macros/MacroProjectReopenTests.cpp
     Macros/MacroCardPortButtonsTests.cpp
@@ -996,6 +989,7 @@ target_compile_definitions(Tests PRIVATE
 # definitions only, with the module code taken from libJuceModules.a. Linking juce::juce_* here
 # would compile a second copy of those modules into this target.
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build
