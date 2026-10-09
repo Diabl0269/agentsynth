@@ -18,15 +18,18 @@ namespace synth::ui {
 namespace lr = load_reveal;
 
 ProjectLoadPipeline::ProjectLoadPipeline(GraphEditor& editor, AudioEngine& engine, juce::Component& overlayParent,
-                                         juce::Component* dock, std::function<void(const juce::String&)> status)
+                                         juce::Component* dock, std::function<void(const juce::String&)> status,
+                                         std::function<void(bool, const std::function<void()>&)> blockDetached)
     : editor_(editor)
     , engine_(engine)
     , overlayParent_(overlayParent)
-    , status_(std::move(status)) {
-    const auto refused = [this] {
+    , status_(std::move(status))
+    , blockDetached_(std::move(blockDetached)) {
+    refused_ = [this] {
         if (status_)
             status_("Still loading");
     };
+    const auto& refused = refused_;
     canvasBlock_ = std::make_unique<EditBlockOverlay>(editor_, refused);
     overlayParent_.addChildComponent(*canvasBlock_);
     if (dock != nullptr && overlayParent_.isParentOf(dock)) {
@@ -40,6 +43,8 @@ ProjectLoadPipeline::ProjectLoadPipeline(GraphEditor& editor, AudioEngine& engin
 
 ProjectLoadPipeline::~ProjectLoadPipeline() {
     stopTimer();
+    if (blockDetached_)
+        blockDetached_(false, {});
     loads_.onInstalled = nullptr;
     for (auto* overlay :
          {static_cast<juce::Component*>(canvasBlock_.get()), static_cast<juce::Component*>(dockBlock_.get()),
@@ -170,6 +175,8 @@ void ProjectLoadPipeline::setBlocking(bool blocking) {
     canvasBlock_->setBlocking(blocking);
     if (dockBlock_ != nullptr)
         dockBlock_->setBlocking(blocking);
+    if (blockDetached_)
+        blockDetached_(blocking, refused_);
 }
 
 bool ProjectLoadPipeline::refusesCommand(const juce::String& category) {

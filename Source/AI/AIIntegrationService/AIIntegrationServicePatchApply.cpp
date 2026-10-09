@@ -74,6 +74,11 @@ bool AIIntegrationService::hasExplicitMode(const juce::var& json) {
 }
 
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
+    if (editsRefused()) {
+        lastPatchError = "Still loading";
+        lastPatchErrorCode = PatchValidationError::None;
+        return false;
+    }
     juce::String extractedJson = extractJsonFromResponse(jsonString);
     juce::var json = juce::JSON::parse(extractedJson);
     bool clearExisting = !mergeMode;
@@ -212,6 +217,13 @@ void AIIntegrationService::applyPatchWithRetry(const juce::String& jsonString, b
         return;
     }
 
+    // A load in progress is no fault of the patch: report it as it is rather than asking the model to fix it.
+    if (editsRefused()) {
+        if (onComplete)
+            onComplete(false, lastPatchError);
+        return;
+    }
+
     // Nothing to ask for a correction — report the rejection as-is rather than pretending to retry.
     if (provider == nullptr) {
         if (onComplete)
@@ -269,6 +281,11 @@ void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeM
                 return;
             }
 
+            if (self->editsRefused()) {
+                if (onComplete)
+                    onComplete(false, self->lastPatchError);
+                return;
+            }
             self->requestPatchCorrection(failedAttempt + 1, mergeMode, originalRequest, onComplete, onRetry);
         },
         /*useStructuredOutput=*/true);

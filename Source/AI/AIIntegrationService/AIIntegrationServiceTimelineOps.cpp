@@ -31,6 +31,8 @@ TimelineOpsResult AIIntegrationService::previewTimelineOps(const juce::var& enve
 }
 
 TimelineOpsResult AIIntegrationService::applyTimelineOps(const juce::var& envelope) {
+    if (editsRefused())
+        return {false, "Still loading", {}};
     if (!timelineOpsApply)
         return {false, "Timeline changes cannot be applied from here.", {}};
 

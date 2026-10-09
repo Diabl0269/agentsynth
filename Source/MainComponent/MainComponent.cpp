@@ -243,7 +243,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // ORDER: after the canvas, the dock and the status bar exist; its overlays sit above both.
     projectLoad_ = std::make_unique<synth::ui::ProjectLoadPipeline>(
         graphEditor, audioEngine, *this, &bottomDock,
-        [this](const juce::String& message) { statusBar.showMessage(message); });
+        [this](const juce::String& message) { statusBar.showMessage(message); },
+        [this](bool blocked, const std::function<void()>& onRefused) {
+            bottomDock.setDetachedEditsBlocked(blocked, onRefused);
+        });
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
     // ordered step here because it is standalone-only and never a top-level call site.

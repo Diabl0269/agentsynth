@@ -212,6 +212,13 @@ public:
     /** The MIDI Remote panel's detach-to-window host, and the panel itself -- always owned and,
      *  since MidiRemote has no placement variant, always parented here (unlike getMixerHost()). */
     synth::ui::DetachablePanelHost& getMidiRemoteHost() noexcept { return midiRemoteHost_; }
+
+    /** Holds (or releases) edits in every panel's detached window while a project loads; `onRefused` runs on a
+     *  refused click. The docked panels are covered by one overlay over the whole dock instead. */
+    void setDetachedEditsBlocked(bool blocked, const std::function<void()>& onRefused) {
+        for (auto* host : {&timelineHost_, &mixerHost_, &midiRemoteHost_})
+            host->setEditsBlocked(blocked, onRefused);
+    }
     synth::ui::MidiRemotePanelComponent& getMidiRemotePanel() noexcept { return midiRemotePanel_; }
 
     /** MainComponent::wireMidiRemoteEngine(): wires the panel's live dependencies, which (like

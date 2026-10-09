@@ -17,6 +17,9 @@ public:
     EditBlockOverlay(juce::Component& covered, std::function<void()> onRefused);
     ~EditBlockOverlay() override;
 
+    /** Replaces what a refused click does. */
+    void setOnRefused(std::function<void()> onRefused) { onRefused_ = std::move(onRefused); }
+
     /** Shows the overlay over `covered`'s current bounds, or hides it. */
     void setBlocking(bool blocking);
 

@@ -8,6 +8,8 @@
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
+#include "UI/Graph/ProjectLoad/EditBlockOverlay.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -271,4 +273,106 @@ TEST_F(ProjectLoadPipelineTest, AnotherOpenMidLoadReleasesTheFirst) {
     EXPECT_FALSE(o.reveal().isBlockingEdits());
     o.reveal().applyAtMs(o.reveal().endMs());
     EXPECT_TRUE(o.engine().isLoadGateOpen());
+}
+
+// The edit block holds for every way in, not just the canvas: an AI edit, a detached panel and a knob's arrow keys.
+
+TEST_F(ProjectLoadPipelineTest, AnAiEditWaitsForTheLoadAndAppliesAfterIt) {
+    const auto bundle = saveProject(true);
+    Opener o;
+    o.pipeline().assetLoads().holdDecodesForTest(true);
+    ASSERT_TRUE(o.mc.openProjectForTest(bundle));
+    ASSERT_TRUE(o.pipeline().isLoading());
+    auto& graph = o.engine().getGraph();
+    auto& ai = o.mc.getAiServiceForTest();
+    const int nodes = graph.getNumNodes();
+    const juce::String plan = R"({"mode": "merge", "nodes": [{"id": 9101, "type": "LFO"}]})";
+    const auto envelope = juce::JSON::parse(R"({"timelineOps": []})");
+
+    o.mc.getStatusBar().showMessage("idle");
+    const auto result = ai.applyProjectEdit(juce::JSON::parse(plan));
+    EXPECT_FALSE(result.ok);
+    EXPECT_EQ(result.message, "Still loading");
+    EXPECT_EQ(o.mc.getStatusBar().getTransientMessageForTest(), "Still loading");
+    EXPECT_FALSE(ai.applyPatch(plan, true));
+    EXPECT_EQ(ai.getLastPatchError(), "Still loading");
+    const auto timeline = ai.applyTimelineOps(envelope);
+    EXPECT_FALSE(timeline.ok);
+    EXPECT_EQ(timeline.message, "Still loading");
+    EXPECT_EQ(graph.getNumNodes(), nodes) << "nothing applied half-way";
+
+    o.pipeline().assetLoads().finishAllForTest();
+    ASSERT_FALSE(o.pipeline().isLoading());
+    EXPECT_EQ(graph.getNumNodes(), nodes) << "and nothing arrives once the load is done";
+    const auto applied = ai.applyProjectEdit(juce::JSON::parse(plan));
+    EXPECT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(graph.getNumNodes(), nodes + 1);
+}
+
+TEST_F(ProjectLoadPipelineTest, ADetachedPanelRefusesClicksDuringTheLoadAndWorksAfterIt) {
+    const auto bundle = saveProject(true);
+    Opener o;
+    auto& host = o.mc.getBottomDock().getTimelineHost();
+    host.setDetached(true);
+    auto* window = host.getDetachedWindowForTest();
+    ASSERT_NE(window, nullptr);
+    EXPECT_FALSE(window->areEditsBlocked());
+
+    o.pipeline().assetLoads().holdDecodesForTest(true);
+    ASSERT_TRUE(o.mc.openProjectForTest(bundle));
+    ASSERT_TRUE(o.pipeline().isLoading());
+    EXPECT_TRUE(window->areEditsBlocked());
+    auto* block = window->getEditBlockForTest();
+    ASSERT_NE(block, nullptr);
+    EXPECT_TRUE(block->isVisible());
+    EXPECT_EQ(block->getBounds(), window->getPanelForTest().getBounds()) << "it covers the panel";
+
+    o.mc.getStatusBar().showMessage("idle");
+    const auto click = juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), {5.0f, 5.0f}, {}, 0.0f, 0.0f,
+                                        0.0f, 0.0f, 0.0f, block, block, juce::Time::getCurrentTime(), {}, {}, 1, false);
+    block->mouseDown(click);
+    EXPECT_EQ(o.mc.getStatusBar().getTransientMessageForTest(), "Still loading");
+
+    // A panel detached while the load runs starts out blocked too.
+    auto& mixerHost = o.mc.getBottomDock().getMixerHost();
+    mixerHost.setDetached(true);
+    ASSERT_NE(mixerHost.getDetachedWindowForTest(), nullptr);
+    EXPECT_TRUE(mixerHost.getDetachedWindowForTest()->areEditsBlocked());
+
+    o.pipeline().assetLoads().finishAllForTest();
+    ASSERT_FALSE(o.pipeline().isLoading());
+    EXPECT_FALSE(window->areEditsBlocked());
+    EXPECT_FALSE(block->isVisible());
+    EXPECT_FALSE(mixerHost.getDetachedWindowForTest()->areEditsBlocked());
+}
+
+TEST_F(ProjectLoadPipelineTest, KnobArrowKeysWaitForTheLoadAndTurnAfterIt) {
+    const auto bundle = saveProject(true);
+    Opener o;
+    o.pipeline().assetLoads().holdDecodesForTest(true);
+    ASSERT_TRUE(o.mc.openProjectForTest(bundle));
+    ASSERT_TRUE(o.pipeline().isLoading());
+    auto* card = cardFor(o.mc, findNode<OscillatorModule>(o.mc));
+    ASSERT_NE(card, nullptr);
+    synth::ui::CardKnobSlider* knob = nullptr;
+    for (auto* stop : card->getKeyboardControls())
+        if (knob == nullptr)
+            knob = dynamic_cast<synth::ui::CardKnobSlider*>(stop);
+    ASSERT_NE(knob, nullptr);
+    const double before = knob->getValue();
+    const juce::KeyPress up(juce::KeyPress::upKey);
+    ASSERT_TRUE(knob->valueForKey(up).has_value());
+    ASSERT_NE(*knob->valueForKey(up), before);
+
+    o.mc.getStatusBar().showMessage("idle");
+    EXPECT_TRUE(knob->keyPressed(up)) << "the key is taken, not passed on";
+    EXPECT_EQ(knob->getValue(), before);
+    EXPECT_FALSE(o.mc.getUndoManager().canUndo());
+    EXPECT_EQ(o.mc.getStatusBar().getTransientMessageForTest(), "Still loading");
+
+    o.pipeline().assetLoads().finishAllForTest();
+    ASSERT_FALSE(o.pipeline().isLoading());
+    EXPECT_EQ(knob->getValue(), before) << "nothing arrives once the load is done";
+    EXPECT_TRUE(knob->keyPressed(up));
+    EXPECT_NE(knob->getValue(), before);
 }

@@ -1,6 +1,7 @@
 // Concern: DetachedPanelWindow's content wrapper, bounds persistence, per-window
 // focus-region Tab cycling, and the plugin-mode LookAndFeel seam.
 #include "DetachedPanelWindow.h"
+#include "UI/Graph/ProjectLoad/EditBlockOverlay.h"
 
 namespace synth::ui {
 
@@ -94,6 +95,22 @@ DetachedPanelWindow::~DetachedPanelWindow() {
     setContentNonOwned(nullptr, false);
     setLookAndFeel(nullptr);
 }
+
+void DetachedPanelWindow::setEditsBlocked(bool blocked, std::function<void()> onRefused) {
+    if (content_ == nullptr)
+        return;
+    if (editBlock_ == nullptr) {
+        if (!blocked)
+            return;
+        editBlock_ = std::make_unique<EditBlockOverlay>(panel_, std::move(onRefused));
+        content_->addChildComponent(*editBlock_);
+    } else if (blocked) {
+        editBlock_->setOnRefused(std::move(onRefused));
+    }
+    editBlock_->setBlocking(blocked);
+}
+
+bool DetachedPanelWindow::areEditsBlocked() const noexcept { return editBlock_ != nullptr && editBlock_->isVisible(); }
 
 void DetachedPanelWindow::closeButtonPressed() {
     // Never self-destroys -- DetachablePanelHost owns this window in a unique_ptr and is the only

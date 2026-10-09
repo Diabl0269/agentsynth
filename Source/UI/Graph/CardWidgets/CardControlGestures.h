@@ -43,6 +43,10 @@ public:
     /** Down (0), drag (1), up (2) of a claimed cable pickup. */
     std::function<void(const juce::MouseEvent&, int phase)> onCablePickupGesture;
 
+    /** Asked before a value key changes the value: true (having said why) while edits must wait for a project to
+     *  finish loading, and the key is then swallowed without a change. Unset never refuses. */
+    std::function<bool()> refusesEdit;
+
     /** Keyboard steps: Up/Right and Down/Left one step (Shift a fine step), Page Up/Down a coarse
      *  step, Home/End the range ends. Nullopt when `key` is not a value key. */
     static std::optional<double> valueForKey(juce::Slider& slider, const juce::KeyPress& key) {
@@ -83,10 +87,12 @@ public:
 
     /** Applies a value key as one change gesture (one undo step, one automation touch); false when
      *  `key` is not a value key, so Tab, Escape and Return stay with the card. */
-    static bool applyValueKey(juce::Slider& slider, const juce::KeyPress& key) {
+    bool applyValueKey(juce::Slider& slider, const juce::KeyPress& key) {
         const auto target = valueForKey(slider, key);
         if (!target.has_value())
             return false;
+        if (refusesEdit && refusesEdit())
+            return true;
         if (*target != slider.getValue()) {
             juce::Slider::ScopedDragNotification gesture(slider);
             slider.setValue(*target, juce::sendNotificationSync);

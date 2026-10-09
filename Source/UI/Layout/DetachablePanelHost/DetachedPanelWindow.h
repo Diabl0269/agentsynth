@@ -11,6 +11,8 @@
 
 namespace synth::ui {
 
+class EditBlockOverlay;
+
 // DetachedPanelWindow.h (docs/mixer/panel.md): a native top-level window hosting one
 // panel a DetachablePanelHost has detached from its dock. Modeled on
 // Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}: constructed with addToDesktop=false, so
@@ -74,12 +76,18 @@ public:
      *  which DetachablePanelHost wires to the same dispatch MainComponent's own keyPressed uses. */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
+    /** While a project is still loading, edits wait here as they do on the canvas: a transparent layer over the panel
+     *  takes every click and calls `onRefused` (scroll and zoom pass through). Never focusable. */
+    void setEditsBlocked(bool blocked, std::function<void()> onRefused);
+    bool areEditsBlocked() const noexcept;
+
     static constexpr int kHeaderStripHeight = 24; // == DetachablePanelHost::kHeaderStripHeight
 
     // ---- Testing hooks (DetachedPanelWindowTests.cpp) ----
     synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }
     juce::Component* getContentForTest() const { return getContentComponent(); }
     juce::Component& getPanelForTest() const { return panel_; }
+    EditBlockOverlay* getEditBlockForTest() const noexcept { return editBlock_.get(); }
 
 private:
     void persistBounds();
@@ -123,6 +131,7 @@ private:
     // window's own teardown order delete; this destructor drops the window's reference to it before
     // its own members (content_ included) unwind, so nothing borrowed is ever touched after.
     std::unique_ptr<Content> content_;
+    std::unique_ptr<EditBlockOverlay> editBlock_; // after content_: it goes first
     std::unique_ptr<synth::ui::AppTooltipWindow> tooltipWindow_;
     synth::ui::FocusRegionRegistry focusRegions_;
     juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
