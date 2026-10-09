@@ -284,9 +284,9 @@ every surface that animates a delete:
   the row menu) shrinks its whole row on the timeline, header and the lane line beside it, toward its centre, and the
   rows below then close the gap. Cmd+Z (and a redo of an add) reverses it: the gap opens, the row grows back, a 1 px
   accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
-  Add Track or Duplicate Track, and the redo that brings it back). A deleted
-  track's own channel is not one of those: it stays in the mixer as an orphan strip that moves to the end, which lands at
-  once, as does any change that moves a column without adding or removing one.
+  Add Track or Duplicate Track, and the redo that brings it back), and when a track is deleted: its own channel is deleted
+  with it, so its column shrinks away in step with the row (exit 180 ms, then the gap), and Cmd+Z makes room, grows it
+  back and fades the outline beside the row. A change that moves a column without adding or removing one lands at once.
   The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
   pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
   its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the

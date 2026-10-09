@@ -512,8 +512,9 @@ undo, one for a duplicate, none for its undo.
 A column that leaves the scrolling group (the undo of Add Track or Duplicate Track) also shrinks away toward its centre
 and the columns after it close up, and the redo that brings it back makes room, grows it back and fades an outline around
 it: `MixerPanelColumnMotion.cpp` pictures the scrolling group before the change (`noteColumnsLeaving`) and plays the
-picture over the finished rebuild (`finishColumnChange`). A deleted track's own channel stays as an orphan strip that
-moves to the end of the mixer, and a pinned column, so those land at once ([delete and undo](../layout/animation.md#delete-and-undo-animation)).
+picture over the finished rebuild (`finishColumnChange`). A deleted track's own channel leaves the same way, in step
+with its row, and comes back with Cmd+Z; a column that only moves (a pinned one, a drag) lands at once
+([delete and undo](../layout/animation.md#delete-and-undo-animation)).
 
 **FRO133 (right-click MIDI Learn on the mixer, [`docs/control/midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage))
 adds one more thing to this list.** Both `unbindFromGraph()` methods above also clear a small MIDI
