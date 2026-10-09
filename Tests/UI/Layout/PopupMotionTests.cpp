@@ -452,6 +452,26 @@ struct RedWindow : juce::Component {
     void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::red); }
 };
 
+// The label-gated ASAN job's Xvfb display rejects a temporary native window with an X11 BadAtom error, which ends
+// the whole test process (as the lane point tests once did). These tests need a real window, so
+// they skip there; every other job still runs them.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define POPUP_MOTION_TESTS_ASAN 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__) && !defined(POPUP_MOTION_TESTS_ASAN)
+#define POPUP_MOTION_TESTS_ASAN 1
+#endif
+
+bool nativeWindowsAbortHere() {
+#if JUCE_LINUX && defined(POPUP_MOTION_TESTS_ASAN)
+    return true;
+#else
+    return false;
+#endif
+}
+
 std::unique_ptr<RedWindow> showNativeWindow() {
     auto window = std::make_unique<RedWindow>();
     window->setBounds(200, 200, 100, 60);
@@ -470,6 +490,8 @@ void letItSettle() {
 } // namespace
 
 TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -480,6 +502,8 @@ TEST(PopupMotionLeaving, AWindowJuceHidesLeavesAFadingPicture) {
 }
 
 TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -492,6 +516,8 @@ TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
 // A menu's picture outlives the menu: when juce brings the app window to the front as the menu closes, a picture
 // at the normal window level would be buried before it had faded (the menu then just vanished).
 TEST(PopupMotionLeaving, TheLeavingPictureStaysAboveTheAppWindow) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
@@ -505,6 +531,8 @@ TEST(PopupMotionLeaving, TheLeavingPictureStaysAboveTheAppWindow) {
 
 // The platform's own close animation ran after ours and froze the app window's frames behind it.
 TEST(PopupMotionLeaving, ThePlatformsOwnWindowAnimationIsOff) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     auto window = showNativeWindow();
     if (!window->isOnDesktop())
         GTEST_SKIP() << "no native window in this environment";
