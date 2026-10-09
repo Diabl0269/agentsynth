@@ -92,6 +92,7 @@ TEST(ShortcutManagerTransportChordsTests, TheHostPicksItsOwnPlatformByDefault) {
 namespace {
 
 const juce::StringArray kKeys{"shortcutMigration_transportCtrlChords",
+                              "shortcutMigration_transportCtrlChords2",
                               "shortcut_transportRecord",
                               "shortcut_transportToggleMetronome",
                               "shortcut_toggleModMatrix",
@@ -105,7 +106,7 @@ void seed(const std::map<juce::String, juce::KeyPress>& keys, bool alreadyMigrat
     ASSERT_NE(settings, nullptr);
     for (const auto& key : kKeys)
         settings->removeValue(key);
-    settings->setValue("shortcutMigration_transportCtrlChords", alreadyMigrated);
+    settings->setValue("shortcutMigration_transportCtrlChords2", alreadyMigrated);
     for (const auto& [id, key] : keys)
         settings->setValue("shortcut_" + id, ShortcutManager::encodeKeyPress(key));
     settings->saveIfNeeded();
@@ -181,6 +182,36 @@ TEST_P(TransportChordsMigrationTest, ItRunsOnceSoADeliberateUnbindSticks) {
     load(manager, GetParam());
     EXPECT_FALSE(manager.getBinding("transportRecord").isValid());
     EXPECT_FALSE(manager.getBinding("transportToggleMetronome").isValid());
+}
+
+// The adopted chords must reach the settings file, not just memory: a flag saved without its keys left the
+// NEXT launch reading "migrated" plus the old unbound keys, and Ctrl+R / Ctrl+M dead for good.
+TEST_P(TransportChordsMigrationTest, TheAdoptedChordsSurviveTheNextLaunch) {
+    seed({{"transportRecord", juce::KeyPress()}, {"transportToggleMetronome", juce::KeyPress()}}, false);
+    {
+        ShortcutManager firstLaunch;
+        load(firstLaunch, GetParam());
+        ASSERT_EQ(firstLaunch.getBinding("transportRecord"), kCtrlR);
+    }
+    ShortcutManager secondLaunch; // a new process: only the settings file carries anything over
+    load(secondLaunch, GetParam());
+    EXPECT_EQ(secondLaunch.getBinding("transportRecord"), kCtrlR);
+    EXPECT_EQ(secondLaunch.getBinding("transportToggleMetronome"), kCtrlM);
+}
+
+TEST_P(TransportChordsMigrationTest, AnInstallThatRanTheLossyFirstVersionIsRepaired) {
+    // What the first version of this migration left behind: its flag set, both keys unbound in the file.
+    seed({{"transportRecord", juce::KeyPress()}, {"transportToggleMetronome", juce::KeyPress()}}, false);
+    {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
+        props.getUserSettings()->setValue("shortcutMigration_transportCtrlChords", true);
+        props.saveIfNeeded();
+    }
+    ShortcutManager manager;
+    load(manager, GetParam());
+    EXPECT_EQ(manager.getBinding("transportRecord"), kCtrlR);
+    EXPECT_EQ(manager.getBinding("transportToggleMetronome"), kCtrlM);
 }
 
 INSTANTIATE_TEST_SUITE_P(Platforms, TransportChordsMigrationTest, ::testing::Values(Platform::Mac, Platform::Other),
