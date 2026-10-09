@@ -226,6 +226,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     if (getExpandButtonBounds().contains(e.position)) {
+        closeOwnPortPanel();
         owner.getMacroController().setMacroCollapsed(macroId, false);
         return;
     }
@@ -258,7 +259,8 @@ void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     owner.dragMacroCardBy(macroId, getPosition() - dragStartPosition);
 }
 
-void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
+void MacroCardComponent::mouseUp(const juce::MouseEvent& e) {
+    // Only a press that reached the body-drag arming (not the x, +/-, expand or a modifier click) can be a port click.
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
@@ -268,6 +270,7 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
         owner.finalizeMacroCardDrag(macroId, getPosition());
     else
         owner.cancelMacroCardDrag(macroId);
+    portReleased(e); // a press that became a drag is the controller's to ignore: the card was dragged as before
 }
 
 void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
@@ -290,6 +293,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     }
 
+    closeOwnPortPanel(); // the first click of this double-click may have opened (or queued) a port panel
     owner.getMacroController().setMacroCollapsed(macroId, false);
 }
 

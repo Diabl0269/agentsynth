@@ -2,7 +2,8 @@
 
 // The port connections panel's behaviour: a plain click on any jack opens a small panel beside it listing what the jack
 // is wired to (PortConnectionsPanel), a second click on the same jack closes it. One controller per GraphEditor; cards
-// route a jack's release and double-click here, and the panel's edits go through GraphEditor.
+// route a jack's release and double-click here, and the panel's edits go through GraphEditor. A collapsed macro card
+// has no module card to show, so its port dots enter by PortRef + anchor rectangle (the overloads below).
 //
 //  * A click is a left press and release under 3 px apart that is the first of its clicks (a drag from the jack still
 //    makes a cable and opens nothing; the right-click menu is unchanged).
@@ -42,6 +43,10 @@ public:
     /** A jack was released (`e` in the card's space): a plain click opens the panel, or closes it when it is this
      * jack's. */
     void jackReleased(ModuleComponent& card, const ModuleComponent::Port& port, const juce::MouseEvent& e);
+    /** The same for a jack that has no visible module card (a collapsed macro card's port dot): `anchor` is the
+     *  component it is drawn on, `jackArea` the dot in `anchor`'s space. */
+    void jackReleased(juce::Component& anchor, juce::Rectangle<int> jackArea, const PortRef& port,
+                      const juce::MouseEvent& e);
     /** A double-click on a connected jack, before it would disconnect. True when the jack has several cables: the panel
      *  is kept (opened when it was not) and nothing is disconnected. A single cable: drops the pending open and the
      *  panel and returns false, for the caller to disconnect. */
@@ -57,6 +62,8 @@ public:
     PanelLauncher panelLauncher;
     /** Opens the panel for `port` (replacing another). */
     void open(ModuleComponent& card, const ModuleComponent::Port& port);
+    /** Opens the panel for `port` beside `jackArea` (in `anchor`'s space), replacing another. */
+    void open(juce::Component& anchor, juce::Rectangle<int> jackArea, const PortRef& port);
     /** The open panel, or null. */
     PortConnectionsPanel* getPanel() const;
     bool isOpenFor(const PortRef& port) const;
@@ -109,7 +116,7 @@ private:
 
     ModuleComponent* cardFor(juce::AudioProcessorGraph::NodeID node) const;
     PortRef refFor(const ModuleComponent& card, const ModuleComponent::Port& port) const;
-    void launch(ModuleComponent& card, const ModuleComponent::Port& port, std::unique_ptr<PortConnectionsPanel> panel);
+    void launch(juce::Component& anchor, juce::Rectangle<int> jackArea, std::unique_ptr<PortConnectionsPanel> panel);
 
     GraphEditor& editor_;
     juce::Component::SafePointer<juce::Component> panel_;

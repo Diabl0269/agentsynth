@@ -189,7 +189,8 @@ ring-side treatment and the hover chip.
 ## Port connections panel
 
 A plain click on any jack (audio, CV or MIDI; a regular module, a macro boundary port node, Track In, Audio Output) opens a
-small panel in a window beside the jack that lists what the jack is wired to. Collapsed macro cards are not covered yet.
+small panel in a window beside the jack that lists what the jack is wired to. A port dot on a **collapsed macro card**
+does the same (see below).
 It is built from the [mod dot menu](../modules/modulation.md#the-mod-dot-menu)'s parts: the same window (`ModDotPanelFrame`
 through the shared `launchInFrame`, which grows out of the jack and shrinks back, closes on a click outside or Esc), width
 (`ModDotPage::kWidth`), palette, row look and remove button.
@@ -200,6 +201,16 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   interval before opening, so the double-click that disconnects it never flashes the panel. A jack with none or several
   cables opens at once, and a double-click on one with several keeps the panel and disconnects nothing. The knob-bound
   CV jack's double-click is the mod dot's and is unchanged.
+- **Collapsed macro cards.** A plain click on a port dot of a collapsed macro card (`MacroCardComponent::mouseUp`) opens
+  the same panel for that port's node, anchored on the dot, listing the cables drawn to the card: an inlet's outside
+  cables (its input jack), an outlet's cables out of the card. The title is the port's own name. The card's port node has
+  no visible module card, so the controller takes a `PortRef` plus an anchor rectangle
+  (`PortPanelController::jackReleased(anchor, area, ref, e)`, `open(anchor, area, ref)`); every other rule is the jack's.
+  The hovered dot's cross (delete) keeps priority over the click, as do the '+', '-', the chevron and a shift/cmd click; a
+  press that becomes a drag moves the card as before. A double-click still expands the macro (there is no port
+  disconnect on the card), folding away the card's own panel or a deferred open. Remove, Disconnect all, Add connection
+  and Pick on canvas behave as for any jack; the Add connection preview starts at the card's dot, and the cable
+  highlight matches the cables drawn to the card by id.
 - **Content.** The title reads "Module · port (N connections)" ("1 connection", "No connections yet"). One row per
   cable: a swatch in the cable's colour (`GraphEditor::colourForCable`), "other module · other port" and a remove button.
   A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows under
@@ -210,7 +221,7 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step). The panel follows
   the graph on the editor's 30 Hz tick, so an undo brings a row back. Removing the last connection keeps the panel open.
 - **Canvas highlight.** Hovering a row, or keyboard-focusing its remove button, draws that cable as hovered and dims
-  every other cable to 35% (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
+  every other cable to 35%, wire and travelling dots alike (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
   pointer or focus leaves the row, the row goes, or the panel closes.
 - **Add connection.** Under the rows (above "Disconnect all") sits a split button in the mod dot's look
   (`SplitButton`): **Add connection** and **Pick on canvas**. Add connection swaps the list for a search page in the

@@ -255,6 +255,9 @@ start below the chip row) are painted under it by `paintMacroPortStrips` from
   `GraphContentComponent::paint`, before the dashed outline. There is no hover cross on the open
   macro, because a widget's jacks are where cable drags start; removal is the strip's '-' or the
   port's right-click Delete Port.
+- **Clicking a card's port.** A plain click on a port dot of the collapsed card opens the
+  [port connections panel](../layout/cables.md#port-connections-panel) for that port (`MacroCardComponent::portReleased`).
+  The hovered cross's delete, the '+', '-' and chevron take the press first; a drag still moves the card.
 - **The '+' and '-'.** '+' opens the kind/shape menu (`MacroGroupController::buildAddPortMenu`, one
   menu for the card and the hull). '-' removes the **bottom** port on that side
   (`deleteBottomMacroPort`, through `deleteMacroPortManually`, so undo is identical to a hovered jack's

@@ -9,6 +9,7 @@
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
 #include "UI/Graph/ModDot/ModDotPanelLaunch.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 namespace synth::ui {
 
@@ -38,26 +39,30 @@ PortRef PortPanelController::refFor(const ModuleComponent& card, const ModuleCom
 
 void PortPanelController::jackReleased(ModuleComponent& card, const ModuleComponent::Port& port,
                                        const juce::MouseEvent& e) {
+    jackReleased(card, port.area, refFor(card, port), e);
+}
+
+void PortPanelController::jackReleased(juce::Component& anchor, juce::Rectangle<int> jackArea, const PortRef& ref,
+                                       const juce::MouseEvent& e) {
     const bool plainLeft = !e.mods.isPopupMenu() && !e.mods.isMiddleButtonDown() && !e.mods.isCommandDown() &&
                            !e.mods.isShiftDown() && !e.mods.isAltDown();
     if (!plainLeft || e.getNumberOfClicks() != 1 || e.getDistanceFromDragStart() >= (int)kClickThresholdPx)
         return;
     cancelPendingOpen();
-    const auto ref = refFor(card, port);
     if (isOpenFor(ref)) {
         close();
         return;
     }
     // One cable and a double-click that disconnects it: wait out the double-click before showing anything.
     if (editor_.getDoubleClickPortDisconnectEnabled() && listPortConnections(editor_, ref).size() == 1) {
-        pending_.action = [this, safe = juce::Component::SafePointer<ModuleComponent>(&card), port] {
-            if (safe != nullptr)
-                open(*safe, port);
+        pending_.action = [this, safe = juce::Component::SafePointer<juce::Component>(&anchor), jackArea, ref] {
+            if (safe != nullptr && safe->isVisible())
+                open(*safe, jackArea, ref);
         };
         pending_.startTimer(juce::MouseEvent::getDoubleClickTimeout());
         return;
     }
-    open(card, port);
+    open(anchor, jackArea, ref);
 }
 
 bool PortPanelController::keepPanelForDoubleClick(ModuleComponent& card, const ModuleComponent::Port& port) {
@@ -89,28 +94,32 @@ bool PortPanelController::isOpenFor(const PortRef& port) const {
 }
 
 void PortPanelController::open(ModuleComponent& card, const ModuleComponent::Port& port) {
+    open(card, port.area, refFor(card, port));
+}
+
+void PortPanelController::open(juce::Component& anchor, juce::Rectangle<int> jackArea, const PortRef& port) {
     cancelPendingOpen();
     // A jack clicked again while a panel is still fading out: the fade is cut short, the new panel takes the spot.
     if (auto* old = dynamic_cast<ModDotPanelFrame*>(frame_.getComponent()); old != nullptr && old->isClosing())
         old->finishClosingNow();
     frame_ = nullptr;
     close();
-    launch(card, port, std::make_unique<PortConnectionsPanel>(editor_, *this, refFor(card, port)));
+    launch(anchor, jackArea, std::make_unique<PortConnectionsPanel>(editor_, *this, port));
 }
 
-void PortPanelController::launch(ModuleComponent& card, const ModuleComponent::Port& port,
+void PortPanelController::launch(juce::Component& anchor, juce::Rectangle<int> jackArea,
                                  std::unique_ptr<PortConnectionsPanel> panel) {
     auto* raw = panel.get();
     panel_ = raw;
     dismissed_ = false;
-    const auto jack = card.localAreaToGlobal(port.area);
+    const auto jack = anchor.localAreaToGlobal(jackArea);
     if (panelLauncher) {
         raw->onDismiss = [this] {
             dismissed_ = true;
             clearHighlight();
             clearPreview();
         };
-        panelLauncher(std::move(panel), card, jack);
+        panelLauncher(std::move(panel), anchor, jack);
         return;
     }
     ModDotPanelLaunch options;
@@ -133,7 +142,7 @@ void PortPanelController::launch(ModuleComponent& card, const ModuleComponent::P
                     closeFrame();
                 };
         };
-    frame_ = launchInFrame(std::move(panel), card, jack, options);
+    frame_ = launchInFrame(std::move(panel), anchor, jack, options);
 }
 
 void PortPanelController::close() {
@@ -189,6 +198,22 @@ std::optional<juce::Point<float>> canvasAnchor(ModuleComponent& card, const Port
         jack.isMidi ? card.getMidiPortCenter(!jack.isInput) : card.getPortCenter(jack.jack, jack.isInput);
     return origin + centre.toFloat();
 }
+
+// A macro port of a COLLAPSED macro is drawn as a dot on the macro's card; its own (hidden) module card is elsewhere.
+std::optional<juce::Point<float>> collapsedMacroPortAnchor(GraphEditor& editor, const PortRef& jack) {
+    auto& macros = editor.getMacroController();
+    const auto owner = macros.macroPortOwnerFor(jack.node);
+    if (owner.macro == nullptr || owner.port == nullptr || !owner.macro->collapsed)
+        return std::nullopt;
+    auto* macroCard = macros.getMacroCard(owner.macro->id);
+    if (macroCard == nullptr || !macroCard->isVisible())
+        return std::nullopt;
+    for (const auto& dot : macros.macroCardPortLayout(owner.macro->id))
+        if (dot.nodeUuid == owner.port->nodeUuid && (dot.visibleJack < 0 || dot.visibleJack == jack.jack) &&
+            dot.isInput == jack.isInput)
+            return macroCard->getBounds().getPosition().toFloat() + dot.jackPos.toFloat();
+    return std::nullopt;
+}
 } // namespace
 
 void PortPanelController::setPreview(const PortRef& from, const PortTarget* target) {
@@ -196,8 +221,9 @@ void PortPanelController::setPreview(const PortRef& from, const PortTarget* targ
     preview_.reset();
     auto* fromCard = cardFor(from.node);
     auto* toCard = target != nullptr && !target->isNew() && !target->connected ? cardFor(target->node) : nullptr;
-    if (fromCard != nullptr && toCard != nullptr) {
-        const auto here = canvasAnchor(*fromCard, from, -1);
+    const auto macroDot = collapsedMacroPortAnchor(editor_, from);
+    if ((fromCard != nullptr || macroDot.has_value()) && toCard != nullptr) {
+        const auto here = macroDot.has_value() ? macroDot : canvasAnchor(*fromCard, from, -1);
         const auto there =
             canvasAnchor(*toCard, target->jack, target->kind == PortTarget::Kind::Knob ? target->knobChannel : -1);
         if (here.has_value() && there.has_value()) {

@@ -167,6 +167,12 @@ private:
     // Deletes the bottom port on one side, through the same path the hovered jack's cross uses.
     void removeBottomPort(bool isInput);
 
+    // The release of a press that landed on a port dot: a plain click opens the port connections panel for that
+    // port's node (PortPanelController); a drag or a modified click is the controller's to ignore.
+    void portReleased(const juce::MouseEvent& e);
+    // Folds away this card's own port panel (and a deferred open) before the card expands or hides.
+    void closeOwnPortPanel();
+
     // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;
     int hoveredPortJack_ = -1; // the hovered row's MacroCardPort::visibleJack (-1 = whole port)
