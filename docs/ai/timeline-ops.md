@@ -233,9 +233,9 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
   failure is returned. The host's macro set is not restored here: the real host removes what a
   failed build made, but an earlier successful build in the same plan keeps its macro.
 
-Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 5 (`kProjectGeneratePromptVersion`): 2 teaches `envelope` and
+Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 6 (`kProjectGeneratePromptVersion`): 2 teaches `envelope` and
 `instrumentParams`, 3 the whole-track rules, 4 a song layout the server expands into ordinary clips, 5 the
-`setTempo` and `addMarker` ops it derives from that layout's bpm and section names. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
+`setTempo` and `addMarker` ops it derives from that layout's bpm and section names, 6 the whole drum kit on one `Drum Kit` track. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (the rules, the preview, the
 backstop through a failing fake host, both request shapes),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step
