@@ -2,7 +2,7 @@
 // the menu live in ModulatorRowEdits.cpp; the band in the lanes region is ModulatorBand.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
-#include "Modules/Envelope/EnvelopeTempoSync.h"
+#include "Modules/LfoRateDivisions.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -67,7 +67,7 @@ void ModulatorRow::initLfoControls() {
     const juce::StringArray shapes{"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"};
     for (int i = 0; i < shapes.size(); ++i)
         shape_.addItem(shapes[i], i + 1);
-    const juce::StringArray& rates = synth::envelopeNoteDivisions();
+    const juce::StringArray& rates = synth::lfoRateDivisions();
     for (int i = 0; i < rates.size(); ++i)
         syncRate_.addItem(rates[i], i + 1);
 

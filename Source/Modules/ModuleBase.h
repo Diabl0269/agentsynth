@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CardViewState.h"
+#include "ModuleChoiceState.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
@@ -616,11 +617,21 @@ public:
         return {};
     }
     void changeProgramName(int index, const juce::String& newName) override { juce::ignoreUnused(index, newName); }
+    /** Choice count `paramId` had when state blobs without a saved choice name were written; override when
+     *  choices were appended, so an old normalised value still decodes. Default: the current count. */
+    virtual int legacyChoiceCount(const juce::String& paramId) const {
+        for (auto* param : getParameters())
+            if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(param); c != nullptr && c->paramID == paramId)
+                return c->choices.size();
+        return 0;
+    }
     void getStateInformation(juce::MemoryBlock& destData) override {
         juce::ValueTree state("ModuleState");
         for (auto* param : getParameters()) {
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
                 state.setProperty(p->paramID, p->getValue(), nullptr);
+                if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p))
+                    synth::saveChoiceName(state, *c);
             }
         }
         copyXmlToBinary(*state.createXml(), destData);
@@ -633,6 +644,10 @@ public:
                 juce::ValueTree state = juce::ValueTree::fromXml(*xmlState);
                 for (auto* param : getParameters()) {
                     if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+                        if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p)) {
+                            synth::loadChoice(state, *c, legacyChoiceCount(p->paramID));
+                            continue;
+                        }
                         if (state.hasProperty(p->paramID)) {
                             p->setValue((float)state.getProperty(p->paramID));
                         }

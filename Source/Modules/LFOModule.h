@@ -2,6 +2,7 @@
 
 #include "Envelope/EnvelopeTempoSync.h"
 #include "Lfo/LfoCustomWave.h"
+#include "LfoRateDivisions.h"
 #include "ModuleBase.h"
 #include "ParameterText.h"
 #include <atomic>
@@ -61,8 +62,8 @@ public:
                          "rateHz", "Rate (Hz)", juce::NormalisableRange<float>(0.01f, 20.0f, 0.01f, 0.5f), 1.0f));
 
         // Rate Sync
-        addParameter(rateSyncParam = new juce::AudioParameterChoice("rateSync", "Sync Rate",
-                                                                    synth::envelopeNoteDivisions(), 5)); // Default 1/4
+        addParameter(rateSyncParam = new juce::AudioParameterChoice("rateSync", "Sync Rate", synth::lfoRateDivisions(),
+                                                                    5)); // Default 1/4
 
         // Retrig
         addParameter(retrigParam = new juce::AudioParameterBool("retrig", "Retrig", false));
@@ -147,6 +148,22 @@ public:
         }
         const float fadeInSamples =
             modulateNormalised(*fadeInParam, fadeInParam->get(), fadeInCv) * 0.001f * (float)currentSampleRate;
+
+        // Sync mode while the song plays (Retrig off): the phase is the song position inside one cycle, so
+        // a 1-bar LFO starts its cycle on every bar line. Otherwise the phase free-runs as before.
+        if (modeParam->get() && !retrigParam->get()) {
+            if (auto* ph = getPlayHead()) {
+                if (auto pos = ph->getPosition()) {
+                    if (pos->getIsPlaying() && pos->getPpqPosition().hasValue()) {
+                        const double cycleBeats = (double)synth::lfoRateDivisionBeats(rateSyncParam->getIndex());
+                        const double cyclePos = *pos->getPpqPosition() / cycleBeats;
+                        phase = (float)(cyclePos - std::floor(cyclePos));
+                        if (phase >= 1.0f)
+                            phase = 0.0f;
+                    }
+                }
+            }
+        }
 
         const float rate = resolveRateHz(rateCv);
 
@@ -273,6 +290,12 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
 
+    /** "rateSync" gained "2/1".."8/1" at its end; plugin-host blobs saved before that hold a value
+     *  normalised over the old 8 choices. */
+    int legacyChoiceCount(const juce::String& paramId) const override {
+        return paramId == "rateSync" ? synth::kLfoLegacyRateDivisionCount : ModuleBase::legacyChoiceCount(paramId);
+    }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::LFO; }
     bool isModSourceBipolar() const override { return bipolarParam->get(); }
     juce::String getOutputPortLabel(int) const override { return "CV"; }
@@ -377,7 +400,7 @@ private:
                 }
             }
 
-            const float subdivision = synth::envelopeNoteDivisionBeats(rateSyncParam->getIndex());
+            const float subdivision = synth::lfoRateDivisionBeats(rateSyncParam->getIndex());
 
             // Frequency = BPM / 60 / subdivision_in_beats?
             // rate in Hz = 1 / (time associated with subdivision)

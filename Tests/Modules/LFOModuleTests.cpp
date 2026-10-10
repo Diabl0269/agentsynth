@@ -1,5 +1,5 @@
-#include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "Modules/LFOModule.h"
+#include "Modules/LfoRateDivisions.h"
 #include <gtest/gtest.h>
 
 class LFOModuleTest : public ::testing::Test {
@@ -140,7 +140,7 @@ TEST_F(LFOModuleTest, SyncModeAllSubdivisions) {
     auto* syncRate = dynamic_cast<juce::AudioParameterChoice*>(params[5]);
     mode->setValueNotifyingHost(1.0f); // Sync mode (true)
 
-    for (int i = 0; i < synth::envelopeNoteDivisions().size(); ++i) {
+    for (int i = 0; i < synth::lfoRateDivisions().size(); ++i) {
         *syncRate = i;
         juce::AudioBuffer<float> buffer(1, 512);
         buffer.clear();

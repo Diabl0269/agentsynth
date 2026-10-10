@@ -8,6 +8,7 @@
 #include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/LfoRateDivisions.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -73,7 +74,7 @@ TEST(TempoDivision, EveryDivisionPickerOffersTheSameList) {
         EXPECT_EQ(choiceOf(adsr, id)->choices, synth::envelopeNoteDivisions()) << id;
     }
     ASSERT_NE(choiceOf(lfo, "rateSync"), nullptr);
-    EXPECT_EQ(choiceOf(lfo, "rateSync")->choices, synth::envelopeNoteDivisions());
+    EXPECT_EQ(choiceOf(lfo, "rateSync")->choices, synth::lfoRateDivisions()) << "the LFO adds 2/1, 4/1, 8/1";
     ASSERT_NE(choiceOf(delay, "timeDiv"), nullptr);
     EXPECT_EQ(choiceOf(delay, "timeDiv")->choices, synth::envelopeNoteDivisions());
 }
@@ -126,4 +127,21 @@ TEST(TempoDivision, OldPatchSavedByNameLoadsAtTheNewIndex) {
         EXPECT_EQ(choiceOf(*lfo, "rateSync")->getIndex(), 7) << "trusted=" << trusted;
         EXPECT_EQ(choiceOf(*lfo, "rateSync")->getCurrentChoiceName(), "1/1");
     }
+}
+
+// The LFO's own list is the shared one with three longer cycles appended, so existing indices keep meaning.
+TEST(TempoDivision, LfoListAppendsTheLongerCyclesToTheSharedList) {
+    const auto& lfo = synth::lfoRateDivisions();
+    ASSERT_EQ(lfo.size(), 11);
+    for (int i = 0; i < synth::envelopeNoteDivisions().size(); ++i)
+        EXPECT_EQ(lfo[i], synth::envelopeNoteDivisions()[i]);
+    EXPECT_EQ(lfo[8], "2/1");
+    EXPECT_EQ(lfo[9], "4/1");
+    EXPECT_EQ(lfo[10], "8/1");
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(5), 1.0f);
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(7), 4.0f);
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(8), 8.0f);
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(9), 16.0f);
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(10), 32.0f);
+    EXPECT_FLOAT_EQ(synth::lfoRateDivisionBeats(99), 32.0f) << "clamps high";
 }

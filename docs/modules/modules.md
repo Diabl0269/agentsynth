@@ -385,7 +385,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Tempo sync (FRO113, BPM | MS toggle)**: `tempoSync` (bool, default false/MS mode) is REAL
   sync, not a display-only snap — each timed stage keeps its own note-division choice parameter
   (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing one six-entry division list, "1/1"
-  down to "1/32", the same entries and order as [LFO](#lfo-module)'s `rateSync`) and the
+  down to "1/32", the same entries and order as [LFO](#lfo-module)'s `rateSync`, which then appends "2/1", "4/1", "8/1") and the
   effective stage time is recomputed from that division and the current tempo **every block**,
   so it follows a live tempo change rather than snapping once. The ms parameters
   (`attack`/`hold`/`decay`/`release`) are untouched and stay in sole control whenever `tempoSync`

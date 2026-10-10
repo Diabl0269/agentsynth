@@ -83,6 +83,7 @@ add_executable(Tests
     Modules/Lfo/LfoCustomWaveTests.cpp
     Modules/Lfo/LFOModuleCustomShapeTests.cpp
     Modules/Lfo/LFOModulePhaseFadeInTests.cpp
+    Modules/Lfo/LFOSyncPhaseLockTests.cpp
     Modules/SampleHoldModuleTests.cpp
     Modules/SchmittTriggerTests.cpp
     Modules/ComparatorModuleTests.cpp
