@@ -247,3 +247,49 @@ TEST(ArrangementContextTest, ABoundNodeIsNamedByItsCardTitle) {
     const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
     EXPECT_TRUE(summary.contains("binding Wobble Lead")) << summary.toStdString();
 }
+
+// The marker names and beats ride in the context so a later edit can say "make the Drop louder".
+TEST(ArrangementContextTest, MarkersAreListedWithTheirBeats) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Lead");
+    doc.addMarker(8.0, "Drop", 0);
+    doc.addMarker(0.0, "Intro", 0);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("Markers (beats): \"Intro\" @ 0, \"Drop\" @ 8")) << summary.toStdString();
+    EXPECT_LT(summary.indexOf("Markers"), summary.indexOf("Track \"Lead\""))
+        << "the markers line sits above the tracks";
+
+    TimelineDoc none;
+    none.addTrack(TrackKind::Midi, "Lead");
+    EXPECT_FALSE(ArrangementContext::summarize(none, graph, makeSnapshot()).contains("Markers"));
+}
+
+TEST(ArrangementContextTest, ManyMarkersAreBoundedAndNeverPushOutEveryTrack) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Lead");
+    for (int i = 0; i < 100; ++i)
+        doc.addMarker(i * 4.0, "Section " + juce::String(i), 0);
+    doc.addMarker(500.0, "Line\nBreak", 0);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot(), 600);
+    EXPECT_TRUE(summary.contains("more")) << summary.toStdString();
+    EXPECT_TRUE(summary.contains("Track \"Lead\"")) << "the track still fits: " << summary.toStdString();
+    const juce::String markersLine =
+        summary.fromFirstOccurrenceOf("Markers", true, false).upToFirstOccurrenceOf("\n", false, false);
+    EXPECT_LE(markersLine.length(), 600 / 2 + 40);
+
+    TimelineDoc broken;
+    broken.addTrack(TrackKind::Midi, "Lead");
+    broken.addMarker(0.0, "Line\nBreak", 0);
+    EXPECT_TRUE(ArrangementContext::summarize(broken, graph, makeSnapshot()).contains("\"Line Break\" @ 0"));
+}
+
+TEST(ArrangementContextTest, AMarkerOnlyDocIsNotEmpty) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addMarker(0.0, "Intro", 0);
+    EXPECT_TRUE(ArrangementContext::summarize(doc, graph, makeSnapshot()).contains("\"Intro\" @ 0"));
+}

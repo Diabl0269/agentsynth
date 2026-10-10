@@ -76,3 +76,25 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
         EXPECT_TRUE(static_cast<bool>(envelopeParams.getProperty("additionalProperties", {})));
     }
 }
+
+// setTempo and addMarker must be expressible through the local grammar: their ops in the enum, their
+// "bpm" and "beat" fields typed (no other op-specific field is shared with them).
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsSetTempoAndAddMarker) {
+    const juce::var schema = synth::AIStateMapper::getPatchSchemaWithTimelineOps();
+    auto* opProperties = schema.getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject()
+                             ->getProperty("timelineOps")
+                             .getDynamicObject()
+                             ->getProperty("items")
+                             .getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject();
+    ASSERT_NE(opProperties, nullptr);
+    auto* ops = opProperties->getProperty("op").getProperty("enum", {}).getArray();
+    ASSERT_NE(ops, nullptr);
+    EXPECT_TRUE(ops->contains("setTempo"));
+    EXPECT_TRUE(ops->contains("addMarker"));
+    EXPECT_EQ(opProperties->getProperty("bpm").getProperty("type", {}).toString(), "number");
+    EXPECT_EQ(opProperties->getProperty("beat").getProperty("type", {}).toString(), "number");
+}

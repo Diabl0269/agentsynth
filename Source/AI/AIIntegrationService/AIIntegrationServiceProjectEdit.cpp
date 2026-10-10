@@ -211,16 +211,18 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // empty."). productName is the provider's to add, as for every capability.
 // setProjectPromptVersion() overrides it for the eval harness, which measures a newer server prompt before any
 // app build asks for it: an app may only pin a version once the deployed service serves it.
-static constexpr int kProjectGeneratePromptVersion = 2;
+static constexpr int kProjectGeneratePromptVersion = 5;
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
     const juce::var patch = buildStrippedPatchJson();
     if (auto* nodes = patch.getProperty("nodes", {}).getArray(); nodes != nullptr && !nodes->isEmpty())
         body.getDynamicObject()->setProperty("currentPatch", patch);
-    // Pins the server prompt that teaches addInstrumentTrack's "envelope" and "instrumentParams".
-    // A build that does not understand those fields sends no version and keeps getting version 1,
-    // so a server deploy can never hand an older app a field it would reject.
+    // Pins the server prompt this build understands: version 2 teaches addInstrumentTrack's "envelope" and
+    // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
+    // clips, and 5 the tempo and markers (setTempo and addMarker ops). A build that does not understand those
+    // fields sends no version and keeps getting version 1, so a server deploy can never hand an older app a
+    // field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
                                                               ? projectPromptVersionOverride
                                                               : kProjectGeneratePromptVersion);

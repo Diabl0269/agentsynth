@@ -146,7 +146,9 @@ juce::var timelineOpsArraySchema() {
             "type": "object",
             "properties": {
                 "op": {"type": "string", "enum": ["addTrack", "addInstrumentTrack", "placeClips", "writeLane",
-                                                        "placeMidiClip"]},
+                                                        "placeMidiClip", "setTempo", "addMarker"]},
+                "bpm": {"type": "number"},
+                "beat": {"type": "number"},
                 "kind": {"type": "string", "enum": ["midi", "automation"]},
                 "name": {"type": "string"},
                 "track": {"type": "string"},

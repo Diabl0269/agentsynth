@@ -8,6 +8,7 @@
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <optional>
+#include <vector>
 
 namespace synth {
 
@@ -45,7 +46,13 @@ public:
         return undo.recordGraphTimelineAndMacroChange(graph, doc, macros, mutation);
     }
     TimelineDoc* editableTimelineDoc() override { return &doc; }
+    bool canSetTempo() const override { return true; }
+    bool setTempo(double bpm) override {
+        tempos.push_back(bpm);
+        return true;
+    }
 
+    std::vector<double> tempos; // every setTempo the plan applied, in order
     TimelineDoc& doc;
     juce::AudioProcessorGraph& graph;
     AppUndoManager undo;

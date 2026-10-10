@@ -4,6 +4,7 @@
 #include "AutomationBinding.h"
 #include "InstrumentTrackOpReader.h"
 #include "MidiClipFile.h"
+#include "TimelineOpsTempoMarkers.h"
 #include "TimelineValidator.h"
 
 #include <algorithm>
@@ -280,14 +281,46 @@ TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::Dynamic
     return {};
 }
 
-bool carriesInstrumentTrackOp(const juce::var& envelope) {
+// -- setTempo / addMarker ---------------------------------------------------------------------
+// Neither touches tracks or the graph. A marker is a label on the document's timebase; the tempo lives on the
+// transport, not in the document, so it goes through the host (inside the batch's one undo step) and a build
+// with no host cannot take the op. Field checks and preview wording: TimelineOpsTempoMarkers.cpp.
+
+bool carriesHostOp(const juce::var& envelope) {
     if (auto* rootObj = envelope.getDynamicObject())
         if (auto* ops = rootObj->getProperty("timelineOps").getArray())
             for (const auto& opVar : *ops)
-                if (auto* opObj = opVar.getDynamicObject())
-                    if (opObj->getProperty("op").toString() == "addInstrumentTrack")
+                if (auto* opObj = opVar.getDynamicObject()) {
+                    const juce::String name = opObj->getProperty("op").toString();
+                    if (name == "addInstrumentTrack" || name == "setTempo")
                         return true;
+                }
     return false;
+}
+
+TimelineOpsResult runSetTempo(const juce::String& where, juce::DynamicObject& op, const TimelineOpsHost* host,
+                              TimelineOpsHost* applyHost, juce::StringArray& parts) {
+    double bpm = 0.0;
+    if (const auto error = readSetTempoOp(op, bpm); error.isNotEmpty())
+        return fail(where + error);
+    if (host == nullptr || !host->canSetTempo())
+        return fail(where + "This build cannot change the tempo from here.");
+    if (applyHost != nullptr && !applyHost->setTempo(bpm))
+        return fail(where + "could not set the tempo.");
+    parts.add(describeSetTempo(bpm));
+    return {};
+}
+
+TimelineOpsResult runAddMarker(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
+                               std::vector<MarkerOpFields>& markers) {
+    MarkerOpFields fields;
+    if (const auto error = readAddMarkerOp(op, fields); error.isNotEmpty())
+        return fail(where + error);
+    if (!doc.addMarker(fields.beat, fields.name, 0).isValid())
+        return fail(where + "would take the timeline past its limit of " + juce::String(TimelineDoc::kMaxMarkers) +
+                    " markers.");
+    markers.push_back(fields);
+    return {};
 }
 
 // -- placeClips -------------------------------------------------------------------------------
@@ -807,6 +840,7 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
                     juce::String(TimelineOps::kMaxOps) + " in one batch.");
 
     juce::StringArray parts;
+    std::vector<MarkerOpFields> markers;
     std::int64_t totalNotes = 0;
 
     for (int i = 0; i < ops.size(); ++i) {
@@ -832,14 +866,21 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
             result = runWriteLane(where, *opObj, doc, graph, parts);
         else if (opName == "placeMidiClip")
             result = runPlaceMidiClip(where, *opObj, doc, parts, totalNotes);
+        else if (opName == "setTempo")
+            result = runSetTempo(where, *opObj, host, applyHost, parts);
+        else if (opName == "addMarker")
+            result = runAddMarker(where, *opObj, doc, markers);
         else
             result = fail(index + " asks for unknown operation \"" + opName +
-                          "\". The operations are \"addTrack\", \"addInstrumentTrack\", \"placeClips\", \"writeLane\" "
-                          "and \"placeMidiClip\".");
+                          "\". The operations are \"addTrack\", \"addInstrumentTrack\", \"placeClips\", \"writeLane\", "
+                          "\"placeMidiClip\", \"setTempo\" and \"addMarker\".");
 
         if (!result.ok)
             return result;
     }
+
+    if (const auto markerText = describeMarkers(markers); markerText.isNotEmpty())
+        parts.add(markerText);
 
     // Sentence-cased once at the end rather than per part, so the parts read as one sentence
     // ("Adds midi track \"Bass\"; places 1 clip …") however they are combined.
@@ -888,6 +929,8 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
 //    the written span in one editBreakpoints call.
 //  - placeMidiClip (runPlaceMidiClip) imports through the same strict path a user's own
 //    "Import MIDI…" menu item uses.
+//  - setTempo (runSetTempo) sets the transport tempo through the host, which records it in the
+//    batch's undo step; addMarker (runAddMarker) adds a named marker to the document.
 TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc,
                                      const juce::AudioProcessorGraph& graph, AppUndoManager& undo,
                                      TimelineOpsHost* host) {
@@ -903,7 +946,7 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
     // ONE undo step for the whole batch, however many tracks, clips, notes and breakpoints it
     // touches — recordTimelineChange snapshots around the entire lambda (the same contract
     // MidiRecorder::stopAndCommit relies on for a take's clip plus its every note).
-    const bool buildsGraph = carriesInstrumentTrackOp(envelope);
+    const bool buildsGraph = carriesHostOp(envelope);
     const auto mutation = [&] {
         applied = applyInsideTransaction(envelope, doc, graph, host);
 
@@ -915,7 +958,7 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
         if (!applied.ok)
             doc.fromVar(before);
     };
-    // validate() rejects an addInstrumentTrack op with no host, so `host` is non-null here.
+    // validate() rejects an addInstrumentTrack or setTempo op with no host, so `host` is non-null here.
     const bool pushed = buildsGraph ? host->recordBatch(mutation) : undo.recordTimelineChange(doc, mutation);
 
     if (!applied.ok)
@@ -943,7 +986,7 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
 // "nodeUuid" only; a caller with in-response node references rewrites them to uuids first.
 TimelineOpsResult TimelineOps::applyInsideTransaction(const juce::var& envelope, TimelineDoc& doc,
                                                       const juce::AudioProcessorGraph& graph, TimelineOpsHost* host) {
-    return runBatch(envelope, doc, graph, host, carriesInstrumentTrackOp(envelope) ? host : nullptr);
+    return runBatch(envelope, doc, graph, host, carriesHostOp(envelope) ? host : nullptr);
 }
 
 } // namespace synth

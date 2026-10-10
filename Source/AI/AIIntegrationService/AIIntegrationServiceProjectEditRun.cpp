@@ -261,6 +261,8 @@ public:
     void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override {
         inner_.placeNewModules(created);
     }
+    bool canSetTempo() const override { return inner_.canSetTempo(); }
+    bool setTempo(double bpm) override { return inner_.setTempo(bpm); }
 
     std::vector<InstrumentTrackBuildResult> results;
 
@@ -456,6 +458,12 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
     for (const auto& insert : inserts)
         result.insertUuids.push_back(addStandIn(insert.type, insert.params));
     return result;
+}
+
+// A preview validates a setTempo op but never applies it, so there is nothing to set.
+bool StandInHost::setTempo(double bpm) {
+    juce::ignoreUnused(bpm);
+    return true;
 }
 
 bool StandInHost::recordBatch(const std::function<void()>& mutation) {

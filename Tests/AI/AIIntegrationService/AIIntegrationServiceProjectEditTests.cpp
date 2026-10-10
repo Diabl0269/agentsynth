@@ -131,6 +131,44 @@ TEST_F(AIIntegrationServiceProjectEditTest, ATrackOnlyPlanPreviewsJustTheTrack) 
     EXPECT_FALSE(preview.previewText.contains("changes nothing")) << preview.previewText;
 }
 
+// The song layout the server expands: a tempo, one marker per section, then the clips. Preview names them
+// and touches nothing; apply hands the tempo to the host and puts the markers in the doc.
+TEST_F(AIIntegrationServiceProjectEditTest, TempoAndMarkersPreviewAndApply) {
+    const auto plan = parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "setTempo", "bpm": 174},
+        {"op": "addMarker", "beat": 0, "name": "Intro"}, {"op": "addMarker", "beat": 16, "name": "Drop"}]})");
+    const auto docBefore = docDump();
+
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(preview.previewText.contains("Sets the tempo to 174 BPM")) << preview.previewText;
+    EXPECT_TRUE(preview.previewText.contains("adds 2 markers (\"Intro\" at beat 0, \"Drop\" at beat 16)"))
+        << preview.previewText;
+    EXPECT_EQ(docDump(), docBefore);
+    EXPECT_TRUE(host->tempos.empty()) << "a preview never sets the tempo";
+
+    const auto applied = service->applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+    ASSERT_EQ(host->tempos.size(), 1u);
+    EXPECT_EQ(host->tempos[0], 174.0);
+    ASSERT_EQ(doc.getMarkers().size(), 2u);
+    EXPECT_EQ(doc.getMarkers()[1].text, "Drop");
+    EXPECT_EQ(doc.getMarkers()[1].beat, 16.0);
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, OutOfRangeTempoOrMarkerRejectsThePlanBeforeAnythingChanges) {
+    for (const char* ops : {R"([{"op": "setTempo", "bpm": 300}])", R"([{"op": "addMarker", "beat": -1, "name": "A"}])",
+                            R"([{"op": "addMarker", "beat": 0, "name": ""}])"}) {
+        SCOPED_TRACE(ops);
+        const auto plan =
+            parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": )" + juce::String(ops) + "}");
+        EXPECT_FALSE(service->previewProjectEdit(plan).ok);
+        EXPECT_FALSE(service->applyProjectEdit(plan).ok);
+    }
+    EXPECT_TRUE(host->tempos.empty());
+    EXPECT_TRUE(doc.getMarkers().empty());
+}
+
 TEST_F(AIIntegrationServiceProjectEditTest, PreviewDescribesEveryPhaseAndMutatesNothing) {
     graph->addNode(std::make_unique<OscillatorModule>());
     const auto graphBefore = graphDump();
@@ -450,12 +488,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
     for (const char* key : {"userPrompt", "arrangementContext", "paramTargets", "availableTracks"})
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
-    EXPECT_EQ((int)body["promptVersion"], 2) << "the server prompt that knows envelope and instrumentParams";
+    EXPECT_EQ((int)body["promptVersion"], 5) << "the server prompt that also returns tempo and markers";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt
     EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 3);
     service->setProjectPromptVersion(0);
-    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 2) << "0 restores the default";
+    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 5) << "0 restores the default";
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsAndOffersTheWidenedSchema) {

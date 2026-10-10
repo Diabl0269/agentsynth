@@ -188,3 +188,65 @@ TEST_F(ChannelFlowTest, ProjectEditEnvelopeParamsLandOnTheBuiltAdsrAndItsIdModul
 
     expectOneUndoStepCFT(mc, before);
 }
+
+// A song's tempo and section markers through the real host: the tempo reaches the transport, the
+// markers the doc, and ONE undo restores the tempo, the markers and the track together. The
+// transport poll must not then record the tempo a second time as its own step.
+TEST_F(ChannelFlowTest, ProjectEditTempoAndMarkersAreOneUndoStepWithTheRest) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    auto& aiService = mc.getAiServiceForTest();
+    const auto before = snapshotCFT(mc);
+    const double bpmBefore = transport.getDocumentState().bpm;
+    ASSERT_NE(bpmBefore, 174.0);
+
+    const juce::var plan = juce::JSON::parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"},
+        {"op": "setTempo", "bpm": 174},
+        {"op": "addMarker", "beat": 0, "name": "Intro"}, {"op": "addMarker", "beat": 16, "name": "Drop"},
+        {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})");
+    const auto preview = aiService.previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_EQ(transport.getDocumentState().bpm, bpmBefore) << "a preview never moves the tempo";
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+
+    const auto applied = aiService.applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(transport.getDocumentState().bpm, 174.0);
+    ASSERT_EQ(mc.getTimelineDoc().getMarkers().size(), 2u);
+    EXPECT_EQ(mc.getTimelineDoc().getMarkers()[1].text, "Drop");
+
+    // The debounced poll finds the transport already recorded, so it adds no second step.
+    mc.pollTransportEditsForTest(1000);
+    mc.pollTransportEditsForTest(5000);
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(transport.getDocumentState().bpm, bpmBefore) << "undo restores the tempo";
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+    EXPECT_TRUE(mc.getTimelineDoc().getMarkers().empty());
+
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    EXPECT_EQ(transport.getDocumentState().bpm, 174.0) << "redo sets it again";
+    EXPECT_EQ(mc.getTimelineDoc().getMarkers().size(), 2u);
+}
+
+// A tempo-only plan (nothing graph-side) still lands as one undo step.
+TEST_F(ChannelFlowTest, ProjectEditTempoAloneIsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    const double bpmBefore = transport.getDocumentState().bpm;
+
+    const auto applied = mc.getAiServiceForTest().applyProjectEdit(juce::JSON::parse(
+        R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [{"op": "setTempo", "bpm": 90}]})"));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(transport.getDocumentState().bpm, 90.0);
+    EXPECT_NE(applied.message, "The project already matched this edit plan, so nothing changed.");
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(transport.getDocumentState().bpm, bpmBefore);
+}
