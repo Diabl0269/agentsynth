@@ -34,6 +34,11 @@ public:
 
     /** The owner opens the flyout here. */
     std::function<void()> onOpenFlyout;
+    /** After a press-hold opened the flyout, the release lands here (screen position) before the hold ends, so the
+     *  owner can pick the row it ended on. */
+    std::function<void(juce::Point<int>)> onHoldReleased;
+    /** True from the moment a hold opened the flyout until that press is released. */
+    bool isHoldGestureDown() const noexcept { return holdFired_; }
 
     /** Test seam: what the hold timer does when it fires (headless tests have no message loop). */
     void holdElapsedForTest() { timerCallback(); }

@@ -101,8 +101,11 @@ void DrawPenButton::mouseUp(const juce::MouseEvent& e) {
         return;
     }
     if (holdFired_) {
-        holdFired_ = false;
         setState(buttonNormal);
+        // holdFired_ stays set across the callback: the flyout ignores outside input while the press is down.
+        if (onHoldReleased)
+            onHoldReleased(e.getScreenPosition());
+        holdFired_ = false;
         return;
     }
     juce::DrawableButton::mouseUp(e);

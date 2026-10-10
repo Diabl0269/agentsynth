@@ -40,6 +40,7 @@ struct ShapeLane : LanesPanel {
     void captureFlyouts() {
         synth::ui::test_hooks::drawShapeFlyoutHookForTest() = [this](std::unique_ptr<DrawShapeFlyout> opened) {
             flyout = std::move(opened);
+            flyout->setTopLeftPosition(4000, 4000); // clear of the pen, so a release on the pen is not on a row
             ++flyoutsOpened;
         };
     }
@@ -243,6 +244,57 @@ TEST(AutomationLanesShapeTest, PressingAndHoldingOpensTheFlyoutWithoutReleaseAnd
     f.releasePen(centre);
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the release after a hold is not a click";
     EXPECT_EQ(f.flyoutsOpened, 1);
+}
+
+TEST(AutomationLanesShapeTest, TheHoldGestureIsDownFromTheHoldUntilTheRelease) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    EXPECT_FALSE(f.pen().isHoldGestureDown()) << "a plain press is not a hold yet";
+    f.pen().holdElapsedForTest();
+    EXPECT_TRUE(f.pen().isHoldGestureDown());
+    f.releasePen(centre);
+    EXPECT_FALSE(f.pen().isHoldGestureDown());
+    EXPECT_NE(f.flyout, nullptr);
+}
+
+TEST(AutomationLanesShapeTest, ReleasingAHoldOverARowPicksIt) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    f.pen().holdElapsedForTest();
+    ASSERT_NE(f.flyout, nullptr);
+    auto* row = f.flyout->getRow(DrawShape::Sine);
+    const auto onRow = f.pen().getLocalPoint(nullptr, row->localPointToGlobal(row->getLocalBounds().getCentre()));
+    f.releasePen(onRow.toFloat());
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Sine);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+}
+
+TEST(AutomationLanesShapeTest, ReleasingAHoldOffTheListPicksNothing) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    f.pen().holdElapsedForTest();
+    f.releasePen(centre);
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Free);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
+}
+
+TEST(AutomationLanesShapeTest, TheFlyoutBoxIgnoresOutsideInputWhileTheHoldIsDownAndClosesOnItAfter) {
+    juce::Component parent;
+    parent.setSize(600, 400);
+    DrawShapeFlyout content(DrawShape::Free, {}, {});
+    bool holdDown = true;
+    synth::ui::DrawShapeCallOutBox box(content, {280, 20, 20, 20}, &parent, [&holdDown] { return holdDown; });
+    box.inputAttemptWhenModal();
+    EXPECT_EQ(box.getDismissAttemptsForTest(), 0) << "the release that ends the opening press must not close it";
+    holdDown = false;
+    box.inputAttemptWhenModal();
+    EXPECT_EQ(box.getDismissAttemptsForTest(), 1) << "a later click outside closes it";
 }
 
 TEST(AutomationLanesShapeTest, DraggingOffThePenBeforeTheHoldTimeCancelsIt) {

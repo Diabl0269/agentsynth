@@ -32,6 +32,8 @@ public:
     DrawShape getFocusedShape() const noexcept { return focused_; }
     juce::Component* getRow(DrawShape shape) const noexcept;
     juce::String getRowTooltip(DrawShape shape) const;
+    /** Picks the row under a screen point (a press-hold-release that ends on the list). False when none is there. */
+    bool pickAtScreenPoint(juce::Point<int> screenPoint);
 
     bool keyPressed(const juce::KeyPress& key) override;
     void parentHierarchyChanged() override;
@@ -49,6 +51,29 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrawShapeFlyout)
 };
+
+// The CallOutBox the flyout opens in. While `holdGestureDown` says the press that opened it (a long press on the
+// pen) is still down, input outside the box is not a dismissal: the release that ends the press must not close it.
+// Once the press is up, input outside closes it through PopupMotion::dismissCallOut.
+class DrawShapeCallOutBox : public juce::CallOutBox {
+public:
+    DrawShapeCallOutBox(juce::Component& content, juce::Rectangle<int> area, juce::Component* parent,
+                        std::function<bool()> holdGestureDown)
+        : juce::CallOutBox(content, area, parent)
+        , holdGestureDown_(std::move(holdGestureDown)) {}
+
+    void inputAttemptWhenModal() override;
+    int getDismissAttemptsForTest() const noexcept { return dismissAttempts_; }
+
+private:
+    std::function<bool()> holdGestureDown_;
+    int dismissAttempts_ = 0;
+};
+
+/** Opens `flyout` modally in a DrawShapeCallOutBox pointing at `area` (screen), the way juce::CallOutBox's own
+ *  launchAsynchronously does; the box and the content go when the modal state ends. */
+DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
+                                            std::function<bool()> holdGestureDown);
 
 namespace test_hooks {
 /** When set, opening the pen's flyout hands the content here instead of launching a CallOutBox (which cannot open

@@ -31,6 +31,11 @@ juce::KeyPress shapeMenuFallbackKey() {
 void TimelinePanelComponent::initDrawShapes() {
     penButton_->onOpenFlyout = [this] { openShapeFlyout(); };
     penButton_->setShape(drawShape_);
+    // A hold that opened the flyout and ends over one of its rows picks that row, like a long-press menu.
+    penButton_->onHoldReleased = [this](juce::Point<int> screenPoint) {
+        if (shapeFlyout_ != nullptr)
+            shapeFlyout_->pickAtScreenPoint(screenPoint);
+    };
     // One range at a time across the whole timeline: a lane range starting drops the clip range.
     automationLanes_.onLaneRangeChanged = [this] {
         if (automationLanes_.getLaneRange().isActive())
@@ -58,11 +63,15 @@ void TimelinePanelComponent::openShapeFlyout() {
             if (safe != nullptr)
                 safe->pickDrawShape(shape);
         });
+    shapeFlyout_ = flyout.get();
     if (auto& hook = test_hooks::drawShapeFlyoutHookForTest()) {
         hook(std::move(flyout));
         return;
     }
-    auto& box = juce::CallOutBox::launchAsynchronously(std::move(flyout), penButton_->getScreenBounds(), nullptr);
+    // The press that opened a hold is still down until its release; that release must not dismiss the flyout.
+    juce::Component::SafePointer<DrawPenButton> pen(penButton_);
+    auto& box = launchDrawShapeCallOut(std::move(flyout), penButton_->getScreenBounds(),
+                                       [pen] { return pen != nullptr && pen->isHoldGestureDown(); });
     shapeFlyoutBox_ = &box;
 }
 

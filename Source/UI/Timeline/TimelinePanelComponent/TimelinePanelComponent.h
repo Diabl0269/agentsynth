@@ -978,6 +978,7 @@ private:
     DrawShape drawShape_ = DrawShape::Free;
     DrawPenButton* penButton_ = nullptr; // the Draw entry of toolButtons_
     juce::Component::SafePointer<juce::CallOutBox> shapeFlyoutBox_;
+    juce::Component::SafePointer<DrawShapeFlyout> shapeFlyout_; // the open flyout (or the test hook's)
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;
     juce::Rectangle<int> lanesBounds_;

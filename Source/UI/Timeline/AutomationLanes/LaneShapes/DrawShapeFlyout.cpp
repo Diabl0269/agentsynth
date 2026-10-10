@@ -2,6 +2,7 @@
 
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h"
@@ -120,6 +121,16 @@ void DrawShapeFlyout::pick(DrawShape shape) {
         callback(shape);
 }
 
+bool DrawShapeFlyout::pickAtScreenPoint(juce::Point<int> screenPoint) {
+    for (auto shape : kAllDrawShapes) {
+        if (rows_[(std::size_t)shape]->getScreenBounds().contains(screenPoint)) {
+            pick(shape);
+            return true;
+        }
+    }
+    return false;
+}
+
 void DrawShapeFlyout::moveFocus(int index) {
     const int count = (int)kAllDrawShapes.size();
     index = (index % count + count) % count;
@@ -147,7 +158,8 @@ bool DrawShapeFlyout::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-// Once the callout is showing, the reveal starts and keyboard focus lands on the current shape's row.
+// Once the callout is showing, the reveal starts and keyboard focus lands on the current shape's row. It uses
+// current_, not focused_: the callout first hands focus to the top row, which overwrites focused_.
 void DrawShapeFlyout::parentHierarchyChanged() {
     reveal_.startIfInCallout();
     if (findParentComponentOfClass<juce::CallOutBox>() == nullptr)
@@ -155,8 +167,41 @@ void DrawShapeFlyout::parentHierarchyChanged() {
     juce::Component::SafePointer<DrawShapeFlyout> safe(this);
     juce::MessageManager::callAsync([safe] {
         if (safe != nullptr)
-            safe->moveFocus((int)safe->focused_);
+            safe->moveFocus((int)safe->current_);
     });
+}
+
+void DrawShapeCallOutBox::inputAttemptWhenModal() {
+    if (holdGestureDown_ && holdGestureDown_())
+        return;
+    ++dismissAttempts_;
+    PopupMotion::dismissCallOut(*this);
+}
+
+namespace {
+
+// Owns the content and the box, and goes with the box's modal state (the same shape as juce's own launcher).
+class DrawShapeCallOutLauncher final : public juce::ModalComponentManager::Callback {
+public:
+    DrawShapeCallOutLauncher(std::unique_ptr<DrawShapeFlyout> c, juce::Rectangle<int> area,
+                             std::function<bool()> holdGestureDown)
+        : content(std::move(c))
+        , callout(*content, area, nullptr, std::move(holdGestureDown)) {
+        callout.setVisible(true);
+        callout.enterModalState(true, this);
+    }
+
+    void modalStateFinished(int) override {}
+
+    std::unique_ptr<DrawShapeFlyout> content;
+    DrawShapeCallOutBox callout;
+};
+
+} // namespace
+
+DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
+                                            std::function<bool()> holdGestureDown) {
+    return (new DrawShapeCallOutLauncher(std::move(flyout), area, std::move(holdGestureDown)))->callout;
 }
 
 namespace test_hooks {
