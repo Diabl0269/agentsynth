@@ -16,6 +16,7 @@
 // Headless/deterministic house rules apply: HostMode::Hosted only, no audio device, no sleeps.
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
+#include "../Mixer/MasterSafetyOff.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Mixer/MixerSends/MixerSends.h"
@@ -167,6 +168,7 @@ struct StemRig {
         setParam(*b, "gain", kGainBDb);
         setParam(*b, "pan", kPanB);
         setParam(*m, "gain", kMasterGainDb);
+        testutil::turnOffMasterSafetyLimiter(*m);
 
         driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
         return true;
@@ -777,6 +779,7 @@ struct SendStemRig {
         setParam(*sourceStrip, "gain", kGainADb);
         setParam(*sourceStrip, "pan", kPanA);
         setParam(*masterAt(graph, master), "gain", kMasterGainDb);
+        testutil::turnOffMasterSafetyLimiter(*masterAt(graph, master));
 
         driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
         return true;

@@ -10,6 +10,7 @@
 #include "CardBodyViews.h"
 #include "CardLayoutOverride.h"
 #include "ModuleCardLayoutResolver.h"
+#include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -284,6 +285,9 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
     toggle->setComponentID(param.getName(100));
     if (item.caption.has_value())
         toggle->setTooltip(param.getName(100));
+    // Master's Safety limiter says what it does, not just its name.
+    if (param.paramID == MasterModule::kSafetyLimiterId && dynamic_cast<MasterModule*>(&module_) != nullptr)
+        toggle->setTooltip(MasterModule::kSafetyLimiterTooltip);
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*toggle, &param);

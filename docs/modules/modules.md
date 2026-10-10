@@ -721,7 +721,8 @@ Changing `Knobs` resizes the module in place, anchored at its top-left, at `Layo
 `Source/Modules/MasterModule.h`. The mix bus every channel strip feeds, spliced in front of Rec Tap / Audio Output by `synth::ensureMasterNode` when the first channel is created (see [`architecture/app-wiring.md`](../architecture/app-wiring.md#audio-recording) (Audio recording) for the splice).
 
 - **Ports**: 4 in — `Mix L`/`Mix R` (ch0/1, where strips land) and `Direct L`/`Direct R` (ch2/3, whatever went straight to the output before the splice); 2 out, `Left`/`Right`. No MIDI. Opts out of the inherited Dual I/O toggle (`StereoAudio::None`): its inputs are two stereo blocks, not an FX pair plus CV.
-- **Parameters**: `gain` (dB, −60…+12), `muted`. Direct is summed into Mix **before** the fader.
+- **Parameters**: `gain` (dB, −60…+12), `safetyLimiter` (default ON, also for a project saved without it), `muted`. Direct is summed into Mix **before** the fader.
+- **Safety limiter** (FRO782): after the gain, an always-on brickwall at −1 dBFS (instant attack, 80 ms release) so a hot mix cannot clip the output. It is the Limiter's Ceiling stage (`synth::BrickwallCeiling`, `Source/Modules/FX/BrickwallCeiling.h`), out of the path below the ceiling; bypass and mute skip it. The card draws it as a plain toggle with a tooltip; no gain-reduction meter yet.
 - **Direct is gated while any strip is soloed** — it is not a channel, so a soloed mix silences it.
 - **Bypass** is a unity sum of Mix + Direct (dropping Direct would silence every unchanneled cable); **mute** clears. Meter as for Channel Strip.
 - **Internal-only**, a singleton by construction, same exclusions as Channel Strip.
