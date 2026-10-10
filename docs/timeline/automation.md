@@ -696,7 +696,8 @@ state).
   `LfoCustomWave` reads right-continuously) and, wherever a straight line between two neighbours strays from the curve
   by more than 1/10000 of the parameter's range (a segment with tension, a skewed parameter), adds readings of the curve
   there, up to the wave's 64 points (63 plus the tail point when the range is shorter than the cycle). When there are
-  more breakpoints than fit, it starts from the two ends and adds readings the same way, which rounds off any steps.
+  more breakpoints than fit, it reads the curve at evenly spaced beats instead, which rounds off any steps; Level and the
+  base value always come from every breakpoint in the range, so a dense wiggle is never called flat.
 - **The lane.** Inside the range every breakpoint goes and one Hold point at the range start sits at the base value; a
   Hold point 1e-6 beats before the start keeps a sloped segment arriving at the range as it was, and the point at the
   range end takes up the curve in the shape of the segment it was in (a point already there is put back as it was).
@@ -706,7 +707,7 @@ state).
   is flat)" (the curve moves less than 1/10000 of the parameter's range), "(lane has too many points)".
 - **Motion.** The old curve melts into the flat line: the editor keeps the old shape and cross-fades it out over the
   range (200 ms, 80 ms under Reduce Motion, at once under Animations Off or off screen) while the old points shrink away,
-  repainting only the range's rectangle. The new modulator row and band fade in like any new routing.
+  repainting only the range's rectangle. The new modulator row and band fade in like any new routing, and a row whose routing goes (Undo) fades out where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off).
 
 The math is `CustomLfoFromRange` (`LaneShapes/`, pure, one plan shared by the menu's enabled state and the command);
 the command is `TrackHeaderHost::createCustomLfoFromRange`, implemented by `MainComponent` as one

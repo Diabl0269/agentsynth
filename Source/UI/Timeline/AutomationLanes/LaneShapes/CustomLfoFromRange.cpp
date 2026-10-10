@@ -95,8 +95,15 @@ std::vector<Reading> readCurve(const synth::AutomationLane& lane, const LaneCurv
                                int budget, const ValueNormaliser& normalise) {
     std::vector<Reading> readings;
     auto knots = breakpointKnots(lane, curve, start, end, normalise);
-    if ((int)knots.size() > budget)
-        knots = {knots.front(), knots.back()};
+    if ((int)knots.size() > budget) {
+        // Too many to draw one by one: read the curve at evenly spaced beats instead (a dense wiggle has no flat
+        // stretch for the refinement below to start from).
+        knots.clear();
+        for (int i = 0; i < budget; ++i) {
+            const double beat = start + (end - start) * (double)i / (double)(budget - 1);
+            knots.push_back({beat, i == budget - 1 ? curve.at(end - kLeftLimit) : curve.at(beat)});
+        }
+    }
     for (const auto& k : knots)
         readings.push_back({k.beat, k.value, normalise(k.value)});
     for (size_t i = 0; i < readings.size(); ++i)
@@ -127,9 +134,16 @@ struct Levels {
     double lowValue = 0.0;
 };
 
-Levels levelsOf(const std::vector<Reading>& readings) {
+// The lowest and highest the curve reaches: every reading and every breakpoint inside the range, so a wave too dense to
+// be drawn point by point still gets its true extremes.
+Levels levelsOf(const std::vector<Reading>& readings, const synth::AutomationLane& lane, double start, double end,
+                const ValueNormaliser& normalise) {
     Levels out{std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0.0};
-    for (const auto& k : readings) {
+    std::vector<Reading> all = readings;
+    for (const auto& bp : lane.points)
+        if (bp.beat > start && bp.beat < end)
+            all.push_back({bp.beat, bp.value, normalise(bp.value)});
+    for (const auto& k : all) {
         if (k.norm < out.lowNorm) {
             out.lowNorm = k.norm;
             out.lowValue = k.value;
@@ -225,7 +239,7 @@ CustomLfoPlan planCustomLfoFromRange(const synth::AutomationLane& lane, double s
 
     const int budget = kMaxWavePoints - (needsTail ? 1 : 0);
     const auto readings = readCurve(lane, curve, startBeat, endBeat, budget, normalise);
-    const auto levels = levelsOf(readings);
+    const auto levels = levelsOf(readings, lane, startBeat, endBeat, normalise);
     if (!(levels.highNorm - levels.lowNorm >= kFlatHeight)) {
         plan.blocker = CustomLfoBlocker::Flat;
         return plan;

@@ -111,6 +111,8 @@ public:
     /** Re-reads the live values of modulator rows inside content rows [visibleTop, visibleBottom). */
     void tickModulatorValues(int visibleTop, int visibleBottom);
     int modulatorCount(synth::LaneId lane) const;
+    /** Rows still fading out after their routing went. */
+    int leavingModulatorCountForTest() const { return (int)leaving_.size(); }
     /** The lane's `index`th modulator row / band, or nullptr. */
     ModulatorRow* modulatorRowFor(synth::LaneId lane, int index) const;
     ModulatorBand* modulatorBandFor(synth::LaneId lane, int index) const;
@@ -181,6 +183,16 @@ private:
         // fades are gone before the components they drive.
         std::vector<std::unique_ptr<synth::ui::FadeVisibility>> fades;
     };
+
+    // A row and band whose routing is gone, fading out where they stood; swept once hidden.
+    struct LeavingModulator {
+        std::unique_ptr<ModulatorRow> row;
+        std::unique_ptr<ModulatorBand> band;
+        std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
+    };
+    std::vector<std::unique_ptr<LeavingModulator>> leaving_;
+    void retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying);
+    void sweepLeavingModulators();
 
     bool isVisibleLane(const synth::Track& track) const;
     bool deriveRoutings();

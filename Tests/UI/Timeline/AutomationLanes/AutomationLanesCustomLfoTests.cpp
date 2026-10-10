@@ -282,3 +282,32 @@ TEST_F(TimelinePanelIntegrationTest, UnderAnimationsOffTheCurveLandsAtOnce) {
     s.pick();
     EXPECT_FALSE(editor->isMeltingForTest());
 }
+
+TEST_F(TimelinePanelIntegrationTest, UndoFadesTheRemovedModulatorRowOutWhereItStoodAndThenDropsIt) {
+    CustomLfoScene s;
+    FadeAnimateGuard guard;
+    s.selectRange(1.0, 3.0);
+    s.pick();
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_NE(s.row(0), nullptr);
+    auto& lanes = s.panel().getAutomationLanes();
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 0);
+
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.row(0), nullptr) << "no longer a row of the lane";
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 1) << "but still on screen, fading out";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 1);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    s.panel().refreshModulators();
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 0) << "dropped once hidden";
+}
+
+TEST_F(TimelinePanelIntegrationTest, UnderAnimationsOffAnUndoneModulatorRowIsGoneAtOnce) {
+    CustomLfoScene s;
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    s.selectRange(1.0, 3.0);
+    s.pick();
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.panel().getAutomationLanes().leavingModulatorCountForTest(), 0);
+}

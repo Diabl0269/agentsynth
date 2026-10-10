@@ -5,6 +5,7 @@
 #include "Modules/LfoRateDivisions.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h"
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -271,4 +272,25 @@ TEST(CustomLfoFromRangeTest, AFullLaneIsRefusedRatherThanLeftHalfEdited) {
     // The range lies on a long slope with no point in it, so nothing is removed to make room for the 3 new ones.
     const auto plan = planCustomLfoFromRange(lane, 50.0, 52.0, straight());
     EXPECT_EQ(plan.blocker, CustomLfoBlocker::LaneFull);
+}
+
+TEST(CustomLfoFromRangeTest, ADenseSineOverOneBarIsNeverReadAsFlatAndKeepsItsTrueExtremes) {
+    for (const double cycles : {16.0, 3.0}) {
+        const auto lane =
+            makeLane(synth::ui::generateShapePoints(synth::ui::DrawShape::Sine, 0.0, 4.0, 4.0 / cycles, 0.0, 100.0));
+        const auto plan = planCustomLfoFromRange(lane, 0.0, 4.0, straight());
+        ASSERT_TRUE(plan.ok()) << cycles << " cycles";
+        EXPECT_NEAR(plan.baseValue, 0.0, 1e-6) << "the lowest value the sine reaches";
+        EXPECT_NEAR(plan.level, 1.0, 1e-9) << "the full height";
+        EXPECT_LE(plan.wave.points.size(), 64u);
+    }
+}
+
+TEST(CustomLfoFromRangeTest, ADenseSineOnASkewedRangeKeepsItsExtremesToo) {
+    const auto lane = makeLane(synth::ui::generateShapePoints(synth::ui::DrawShape::Sine, 0.0, 4.0, 0.25, 200.0, 800.0),
+                               0.0f, 1000.0f);
+    const auto plan = planCustomLfoFromRange(lane, 0.0, 4.0, skewed());
+    ASSERT_TRUE(plan.ok());
+    EXPECT_NEAR(plan.baseValue, 200.0, 1e-6);
+    EXPECT_GE(plan.level, skewed()(800.0) - skewed()(200.0) - 1e-9);
 }
