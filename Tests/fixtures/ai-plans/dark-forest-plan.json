@@ -1,0 +1,951 @@
+{
+ "nodes": [],
+ "connections": [],
+ "mode": "merge",
+ "timelineOps": [
+  {
+   "op": "addInstrumentTrack",
+   "name": "Forest Drums",
+   "instrument": "Drum Kit",
+   "instrumentId": 7010,
+   "instrumentParams": {
+    "kickDecay": 0.35
+   }
+  },
+  {
+   "op": "addInstrumentTrack",
+   "name": "Forest Bass",
+   "instrument": "Oscillator",
+   "instrumentId": 7001,
+   "instrumentParams": {
+    "waveform": "Saw",
+    "level": 0.4
+   },
+   "inserts": [
+    {
+     "type": "Filter",
+     "id": 7002,
+     "params": {
+      "cutoff": 300,
+      "resonance": 0.3
+     }
+    }
+   ],
+   "envelope": {
+    "id": 7003,
+    "params": {
+     "attack": 0.01,
+     "decay": 0.2,
+     "sustain": 0.6,
+     "release": 0.1
+    }
+   }
+  },
+  {
+   "op": "addInstrumentTrack",
+   "name": "Forest Lead",
+   "instrument": "Oscillator",
+   "instrumentId": 7004,
+   "instrumentParams": {
+    "waveform": "Square",
+    "level": 0.2
+   },
+   "inserts": [
+    {
+     "type": "Filter",
+     "id": 7005,
+     "params": {
+      "cutoff": 600,
+      "resonance": 0.4
+     }
+    }
+   ],
+   "envelope": {
+    "id": 7006,
+    "params": {
+     "attack": 0.005,
+     "decay": 0.25,
+     "sustain": 0.2,
+     "release": 0.2
+    }
+   }
+  },
+  {
+   "op": "addInstrumentTrack",
+   "name": "Forest Pad",
+   "instrument": "Oscillator",
+   "poly": true,
+   "instrumentId": 7007,
+   "instrumentParams": {
+    "waveform": "Saw",
+    "level": 0.2
+   },
+   "envelope": {
+    "id": 7009,
+    "params": {
+     "attack": 0.6,
+     "decay": 0.5,
+     "sustain": 0.7,
+     "release": 1.5
+    }
+   }
+  },
+  {
+   "op": "addMarker",
+   "beat": 0,
+   "name": "Intro"
+  },
+  {
+   "op": "addMarker",
+   "beat": 96,
+   "name": "Drop"
+  },
+  {
+   "op": "addMarker",
+   "beat": 160,
+   "name": "Break"
+  },
+  {
+   "op": "addMarker",
+   "beat": 256,
+   "name": "Drop 2"
+  },
+  {
+   "op": "addMarker",
+   "beat": 352,
+   "name": "Drop 3"
+  },
+  {
+   "op": "addMarker",
+   "beat": 416,
+   "name": "Outro"
+  },
+  {
+   "op": "writeLane",
+   "paramId": "cutoff",
+   "points": [
+    {
+     "beat": 0,
+     "value": 300,
+     "curve": 1
+    },
+    {
+     "beat": 64,
+     "value": 400,
+     "curve": 1
+    },
+    {
+     "beat": 96,
+     "value": 1400,
+     "curve": 1
+    },
+    {
+     "beat": 160,
+     "value": 500,
+     "curve": 1
+    },
+    {
+     "beat": 224,
+     "value": 900,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 1800,
+     "curve": 1
+    },
+    {
+     "beat": 352,
+     "value": 2200,
+     "curve": 1
+    },
+    {
+     "beat": 416,
+     "value": 600,
+     "curve": 1
+    },
+    {
+     "beat": 448,
+     "value": 300,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7002
+  },
+  {
+   "op": "writeLane",
+   "paramId": "cutoff",
+   "points": [
+    {
+     "beat": 0,
+     "value": 600,
+     "curve": 1
+    },
+    {
+     "beat": 64,
+     "value": 1200,
+     "curve": 1
+    },
+    {
+     "beat": 96,
+     "value": 2500,
+     "curve": 1
+    },
+    {
+     "beat": 160,
+     "value": 800,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 3000,
+     "curve": 1
+    },
+    {
+     "beat": 352,
+     "value": 3500,
+     "curve": 1
+    },
+    {
+     "beat": 416,
+     "value": 800,
+     "curve": 1
+    },
+    {
+     "beat": 448,
+     "value": 500,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7005
+  },
+  {
+   "op": "writeLane",
+   "paramId": "level",
+   "points": [
+    {
+     "beat": 0,
+     "value": 0.12,
+     "curve": 1
+    },
+    {
+     "beat": 96,
+     "value": 0.16,
+     "curve": 1
+    },
+    {
+     "beat": 160,
+     "value": 0.25,
+     "curve": 1
+    },
+    {
+     "beat": 224,
+     "value": 0.18,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 0.22,
+     "curve": 1
+    },
+    {
+     "beat": 416,
+     "value": 0.15,
+     "curve": 1
+    },
+    {
+     "beat": 448,
+     "value": 0.1,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7007
+  },
+  {
+   "op": "writeLane",
+   "paramId": "resonance",
+   "points": [
+    {
+     "beat": 0,
+     "value": 0.3,
+     "curve": 1
+    },
+    {
+     "beat": 96,
+     "value": 0.6,
+     "curve": 1
+    },
+    {
+     "beat": 160,
+     "value": 0.3,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 0.7,
+     "curve": 1
+    },
+    {
+     "beat": 448,
+     "value": 0.3,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7002
+  },
+  {
+   "op": "writeLane",
+   "paramId": "resonance",
+   "points": [
+    {
+     "beat": 0,
+     "value": 0.4,
+     "curve": 1
+    },
+    {
+     "beat": 96,
+     "value": 0.6,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 0.7,
+     "curve": 1
+    },
+    {
+     "beat": 448,
+     "value": 0.4,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7005
+  },
+  {
+   "op": "writeLane",
+   "paramId": "release",
+   "points": [
+    {
+     "beat": 0,
+     "value": 0.2,
+     "curve": 1
+    },
+    {
+     "beat": 160,
+     "value": 0.5,
+     "curve": 1
+    },
+    {
+     "beat": 256,
+     "value": 0.2,
+     "curve": 0
+    }
+   ],
+   "nodeId": 7006
+  },
+  {
+   "op": "setTempo",
+   "bpm": 138
+  },
+  {
+   "op": "addMarker",
+   "beat": 0,
+   "name": "Intro"
+  },
+  {
+   "op": "addMarker",
+   "beat": 64,
+   "name": "Build"
+  },
+  {
+   "op": "addMarker",
+   "beat": 96,
+   "name": "Drop"
+  },
+  {
+   "op": "addMarker",
+   "beat": 160,
+   "name": "Break"
+  },
+  {
+   "op": "addMarker",
+   "beat": 224,
+   "name": "Build 2"
+  },
+  {
+   "op": "addMarker",
+   "beat": 256,
+   "name": "Drop 2"
+  },
+  {
+   "op": "addMarker",
+   "beat": 320,
+   "name": "Break 2"
+  },
+  {
+   "op": "addMarker",
+   "beat": 352,
+   "name": "Drop 3"
+  },
+  {
+   "op": "addMarker",
+   "beat": 416,
+   "name": "Outro"
+  },
+  {
+   "op": "placeClips",
+   "track": "Forest Drums",
+   "clips": [
+    {
+     "startBeat": 0,
+     "lengthBeats": 64,
+     "name": "Intro",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.25,
+       "pitch": 44,
+       "velocity": 60
+      }
+     ]
+    },
+    {
+     "startBeat": 64,
+     "lengthBeats": 32,
+     "name": "Build",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 110
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 42,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 96,
+     "lengthBeats": 64,
+     "name": "Drop",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 110
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 42,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 160,
+     "lengthBeats": 64,
+     "name": "Break",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.25,
+       "pitch": 44,
+       "velocity": 60
+      }
+     ]
+    },
+    {
+     "startBeat": 224,
+     "lengthBeats": 32,
+     "name": "Build 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 110
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 42,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 256,
+     "lengthBeats": 64,
+     "name": "Drop 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 110
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 42,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 320,
+     "lengthBeats": 32,
+     "name": "Break 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.25,
+       "pitch": 44,
+       "velocity": 60
+      }
+     ]
+    },
+    {
+     "startBeat": 352,
+     "lengthBeats": 64,
+     "name": "Drop 3",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.5,
+       "pitch": 36,
+       "velocity": 121
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 42,
+       "velocity": 77
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "placeClips",
+   "track": "Forest Pad",
+   "clips": [
+    {
+     "startBeat": 0,
+     "lengthBeats": 64,
+     "name": "Intro",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 56
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 56
+      }
+     ]
+    },
+    {
+     "startBeat": 64,
+     "lengthBeats": 32,
+     "name": "Build",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 96,
+     "lengthBeats": 64,
+     "name": "Drop",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 56
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 56
+      }
+     ]
+    },
+    {
+     "startBeat": 160,
+     "lengthBeats": 64,
+     "name": "Break",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 224,
+     "lengthBeats": 32,
+     "name": "Build 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 256,
+     "lengthBeats": 64,
+     "name": "Drop 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 320,
+     "lengthBeats": 32,
+     "name": "Break 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 352,
+     "lengthBeats": 64,
+     "name": "Drop 3",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 70
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 70
+      }
+     ]
+    },
+    {
+     "startBeat": 416,
+     "lengthBeats": 32,
+     "name": "Outro",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 57,
+       "velocity": 49
+      },
+      {
+       "startBeat": 0,
+       "lengthBeats": 4,
+       "pitch": 60,
+       "velocity": 49
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "placeClips",
+   "track": "Forest Lead",
+   "clips": [
+    {
+     "startBeat": 64,
+     "lengthBeats": 32,
+     "name": "Build",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 63
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 56
+      }
+     ]
+    },
+    {
+     "startBeat": 96,
+     "lengthBeats": 64,
+     "name": "Drop",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 80
+      }
+     ]
+    },
+    {
+     "startBeat": 160,
+     "lengthBeats": 64,
+     "name": "Break",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 63
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 56
+      }
+     ]
+    },
+    {
+     "startBeat": 224,
+     "lengthBeats": 32,
+     "name": "Build 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 80
+      }
+     ]
+    },
+    {
+     "startBeat": 256,
+     "lengthBeats": 64,
+     "name": "Drop 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 90
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 80
+      }
+     ]
+    },
+    {
+     "startBeat": 320,
+     "lengthBeats": 32,
+     "name": "Break 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 63
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 56
+      }
+     ]
+    },
+    {
+     "startBeat": 352,
+     "lengthBeats": 64,
+     "name": "Drop 3",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 99
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 88
+      }
+     ]
+    },
+    {
+     "startBeat": 416,
+     "lengthBeats": 32,
+     "name": "Outro",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.2,
+       "pitch": 69,
+       "velocity": 45
+      },
+      {
+       "startBeat": 0.25,
+       "lengthBeats": 0.2,
+       "pitch": 72,
+       "velocity": 40
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "placeClips",
+   "track": "Forest Bass",
+   "clips": [
+    {
+     "startBeat": 96,
+     "lengthBeats": 64,
+     "name": "Drop",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.4,
+       "pitch": 33,
+       "velocity": 100
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 45,
+       "velocity": 80
+      }
+     ]
+    },
+    {
+     "startBeat": 256,
+     "lengthBeats": 64,
+     "name": "Drop 2",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.4,
+       "pitch": 33,
+       "velocity": 100
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 45,
+       "velocity": 80
+      }
+     ]
+    },
+    {
+     "startBeat": 352,
+     "lengthBeats": 64,
+     "name": "Drop 3",
+     "notes": [
+      {
+       "startBeat": 0,
+       "lengthBeats": 0.4,
+       "pitch": 33,
+       "velocity": 110
+      },
+      {
+       "startBeat": 0.5,
+       "lengthBeats": 0.2,
+       "pitch": 45,
+       "velocity": 88
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

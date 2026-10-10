@@ -250,3 +250,59 @@ TEST_F(ChannelFlowTest, ProjectEditTempoAloneIsOneUndoStep) {
     ASSERT_TRUE(mc.getUndoManager().undo());
     EXPECT_EQ(transport.getDocumentState().bpm, bpmBefore);
 }
+
+// Regression test: a real full-song answer (Tests/fixtures/ai-plans/dark-forest-plan.json, its ids offset by 7000
+// clear of a fresh project's live uids) writes six
+// lanes on its tracks' inserts, envelopes and instrument. Each must land on the track that plays its
+// module and read as a named parameter, not pile up in the Unassigned section of the shared Automation track.
+TEST_F(ChannelFlowTest, ProjectEditFullSongLanesLandOnTheirOwningTracks) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    const auto fixture = juce::File(TESTS_ROOT_DIR).getChildFile("fixtures/ai-plans/dark-forest-plan.json");
+    const juce::var plan = juce::JSON::parse(fixture.loadFileAsString());
+    ASSERT_FALSE(plan.isVoid()) << fixture.getFullPathName();
+
+    const auto tracksBefore = mc.getTimelineDoc().getTracks().size();
+    const auto applied = mc.getAiServiceForTest().applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+
+    const auto& doc = mc.getTimelineDoc();
+    const auto& graph = mc.getAudioEngine().getGraph();
+    const auto hasNode = [&](const juce::String& uuid) {
+        for (auto* node : graph.getNodes())
+            if (node->properties["uuid"].toString() == uuid)
+                return true;
+        return false;
+    };
+    int lanes = 0;
+    for (const auto& track : doc.getTracks()) {
+        EXPECT_NE(track.kind, synth::TrackKind::Automation)
+            << "no lane may be left on the shared Automation track (" << track.lanes.size() << " there)";
+        for (const auto& lane : track.lanes) {
+            ++lanes;
+            SCOPED_TRACE(track.name + " / " + lane.paramId);
+            EXPECT_TRUE(hasNode(lane.nodeUuid)) << "the lane names a real node";
+            EXPECT_FALSE(lane.orphaned);
+        }
+    }
+    EXPECT_EQ(lanes, 6);
+
+    const auto laneOn = [&](const char* trackName, const char* paramId) {
+        for (const auto& track : doc.getTracks())
+            if (track.name == trackName)
+                for (const auto& lane : track.lanes)
+                    if (lane.paramId == paramId)
+                        return true;
+        return false;
+    };
+    EXPECT_TRUE(laneOn("Forest Bass", "cutoff"));
+    EXPECT_TRUE(laneOn("Forest Bass", "resonance"));
+    EXPECT_TRUE(laneOn("Forest Lead", "cutoff"));
+    EXPECT_TRUE(laneOn("Forest Lead", "resonance"));
+    EXPECT_TRUE(laneOn("Forest Lead", "release"));
+    EXPECT_TRUE(laneOn("Forest Pad", "level"));
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(mc.getTimelineDoc().getTracks().size(), tracksBefore) << "one undo removes the tracks and every lane";
+}

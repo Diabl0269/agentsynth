@@ -59,6 +59,8 @@ struct TimelineOpsHost {
     virtual void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
         juce::ignoreUnused(created);
     }
+    /** Inside recordBatch after a batch applied: files each new lane under the track that plays its module. */
+    virtual void assignLanesToOwners() {}
     /** True if this host can change the project tempo; a `setTempo` op is rejected without one. */
     virtual bool canSetTempo() const { return false; }
     /** Sets the project tempo (BPM, already range-checked) inside recordBatch, so the same undo step reverts it.
