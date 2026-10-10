@@ -7,7 +7,7 @@ namespace synth::ui {
 
 // What the Draw tool puts on an automation lane. Free is the freehand pen (Shift+drag still draws a
 // straight line), Line is a straight line, and the periodic shapes are stamped into a dragged box or
-// over a lane range. The enumerator order is the shape strip's left-to-right order and the Shift+digit
+// over a lane range. The enumerator order is the flyout's top-to-bottom order and the Shift+digit
 // default of each shape's shortcut (Free = Shift+1). Append new shapes at the end.
 enum class DrawShape {
     Free,
@@ -28,7 +28,7 @@ constexpr bool isPeriodicShape(DrawShape shape) noexcept {
            shape == DrawShape::Square;
 }
 
-/** The shape's one-word name: "Sine". The button title is this plus " shape". */
+/** The shape's one-word name: "Sine". The row and button title is this plus " shape". */
 constexpr const char* drawShapeName(DrawShape shape) noexcept {
     switch (shape) {
     case DrawShape::Free:
@@ -50,7 +50,7 @@ constexpr const char* drawShapeName(DrawShape shape) noexcept {
 /** The digit of the shape's default Shift+digit shortcut (1..6). */
 constexpr int drawShapeKeyDigit(DrawShape shape) noexcept { return static_cast<int>(shape) + 1; }
 
-/** The next shape in strip order, wrapping from the last back to Free. */
+/** The next shape in flyout order, wrapping from the last back to Free. */
 constexpr DrawShape nextDrawShape(DrawShape shape) noexcept {
     const auto next = static_cast<std::size_t>(shape) + 1;
     return next < kAllDrawShapes.size() ? kAllDrawShapes[next] : kAllDrawShapes[0];

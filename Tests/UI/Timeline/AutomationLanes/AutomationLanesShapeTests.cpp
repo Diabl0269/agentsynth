@@ -1,15 +1,17 @@
 // AutomationLanesShapeTests.cpp -- the Draw tool's shapes on an automation lane: the box stamp, the
-// shape strip beside the Draw button, the Shift+digit shape keys, and the Range tool's lane range with
+// pen's shape flyout, the Shift+digit shape keys, and the Range tool's lane range with
 // the verbs that act on it. Real events on the real panel's children.
 
 #include "AutomationLanesTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h"
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
 using synth::ui::AutomationLaneEditor;
 using synth::ui::DrawShape;
+using synth::ui::DrawShapeFlyout;
 using synth::ui::EditTool;
 using synth::ui::TimelineViewState;
 
@@ -28,6 +30,35 @@ struct ShapeLane : LanesPanel {
         lane = addLane(bass, "cutoff");
         panel.setTrackAutomationExpanded(bass, true);
         editor = panel.laneEditorForTest(lane);
+    }
+
+    // The flyout the pen opened (the hook stands in for the CallOutBox), null until one opens.
+    std::unique_ptr<DrawShapeFlyout> flyout;
+    int flyoutsOpened = 0;
+
+    ~ShapeLane() { synth::ui::test_hooks::drawShapeFlyoutHookForTest() = nullptr; }
+    void captureFlyouts() {
+        synth::ui::test_hooks::drawShapeFlyoutHookForTest() = [this](std::unique_ptr<DrawShapeFlyout> opened) {
+            flyout = std::move(opened);
+            flyout->setTopLeftPosition(4000, 4000); // clear of the pen, so a release on the pen is not on a row
+            ++flyoutsOpened;
+        };
+    }
+    synth::ui::DrawPenButton& pen() { return panel.getDrawPenButton(); }
+    juce::Point<float> penCorner() { return {(float)pen().getWidth() - 4.0f, (float)pen().getHeight() - 4.0f}; }
+    void pressPen(juce::Point<float> at) {
+        auto& comp = static_cast<juce::Component&>(pen());
+        comp.mouseDown(makeClickEvent(comp, at, leftButton()));
+    }
+    void releasePen(juce::Point<float> at) {
+        auto& comp = static_cast<juce::Component&>(pen());
+        comp.mouseUp(makeClickEvent(comp, at, leftButton()));
+    }
+    void clickRow(DrawShape shape) {
+        auto* row = flyout->getRow(shape);
+        const auto centre = row->getLocalBounds().getCentre().toFloat();
+        row->mouseDown(makeClickEvent(*row, centre, leftButton()));
+        row->mouseUp(makeClickEvent(*row, centre, leftButton()));
     }
 
     const synth::AutomationLane& theLane() const { return *doc.getLane(lane); }
@@ -152,41 +183,241 @@ TEST(AutomationLanesShapeTest, FreeAndLineKeepThePenAndTheLine) {
 }
 
 //==============================================================================
-// ---- The shape strip and keys ----
+// ---- The pen button and its flyout ----
 
-TEST(AutomationLanesShapeTest, TheShapeStripIsOutOnlyWhileDrawIsTheTool) {
+TEST(AutomationLanesShapeTest, TheTransportRowIsTheSameWhateverTheTool) {
     ShapeLane f;
-    auto& strip = f.panel.getDrawShapeStrip();
-    EXPECT_FALSE(strip.isVisible());
-    EXPECT_EQ(strip.getWidth(), 0);
-
-    // Off screen there is no frame to wait for: the slide lands at once.
+    auto rowBounds = [&] {
+        return std::vector<juce::Rectangle<int>>{
+            f.panel.getFollowPlayheadButtonForTest().getBounds(), f.panel.getSnapToggleButton().getBounds(),
+            f.panel.getSnapCombo().getBounds(), f.panel.getToolButton(EditTool::Draw)->getBounds(),
+            f.panel.getTransportBar().getBounds()};
+    };
+    const auto select = rowBounds();
     f.panel.setActiveTool(EditTool::Draw);
-    EXPECT_TRUE(strip.isVisible());
-    EXPECT_EQ(strip.getWidth(), strip.getOpenWidth());
-    const auto drawButton = f.panel.getToolButton(EditTool::Draw)->getBounds();
-    EXPECT_GE(strip.getX(), drawButton.getRight()) << "it sits right of the Draw button";
-    for (auto shape : synth::ui::kAllDrawShapes) {
-        auto* button = strip.getButton(shape);
-        EXPECT_FALSE(button->getBounds().isEmpty());
-        EXPECT_EQ(button->getTitle(), juce::String(synth::ui::drawShapeName(shape)) + " shape");
-        EXPECT_TRUE(button->getTooltip().startsWith(button->getTitle()));
-    }
-    EXPECT_TRUE(strip.getButton(DrawShape::Free)->getToggleState()) << "the active shape is lit";
-
-    f.panel.setActiveTool(EditTool::Select);
-    EXPECT_FALSE(strip.isVisible());
-    EXPECT_EQ(strip.getWidth(), 0);
+    EXPECT_EQ(rowBounds(), select) << "no strip slides out any more";
 }
 
-TEST(AutomationLanesShapeTest, ClickingAShapeButtonPicksIt) {
+TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasACornerTriangleHitArea) {
     ShapeLane f;
-    f.panel.setActiveTool(EditTool::Draw);
-    clickButton(*f.panel.getDrawShapeStrip().getButton(DrawShape::Saw));
+    EXPECT_EQ(f.pen().getShape(), DrawShape::Free);
+    f.panel.setDrawShape(DrawShape::Saw);
+    EXPECT_EQ(f.pen().getShape(), DrawShape::Saw);
+    EXPECT_FLOAT_EQ(f.pen().getCrossfade(), 1.0f) << "off screen the icon swaps at once";
+    f.panel.keyPressed(kShift3);
+    EXPECT_EQ(f.pen().getShape(), DrawShape::Sine) << "a shape key moves the pen's icon";
+
+    EXPECT_TRUE(f.pen().isInCorner({f.pen().getWidth() - 2, f.pen().getHeight() - 2}));
+    EXPECT_FALSE(f.pen().isInCorner(f.pen().getLocalBounds().getCentre()));
+    EXPECT_FALSE(f.pen().isInCorner({f.pen().getWidth() - 2, 2}));
+}
+
+TEST(AutomationLanesShapeTest, TheCornerClickOpensTheFlyoutAndDoesNotPickTheTool) {
+    ShapeLane f;
+    f.captureFlyouts();
+    f.pressPen(f.penCorner());
+    f.releasePen(f.penCorner());
+    ASSERT_NE(f.flyout, nullptr);
+    EXPECT_EQ(f.flyoutsOpened, 1);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the corner opens the menu, it is not a click";
+    EXPECT_EQ(f.flyout->getCurrentShape(), DrawShape::Free);
+}
+
+TEST(AutomationLanesShapeTest, APlainClickOnTheButtonPicksDrawAndOpensNothing) {
+    ShapeLane f;
+    f.captureFlyouts();
+    clickButton(f.pen());
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+    EXPECT_EQ(f.flyoutsOpened, 0);
+    EXPECT_FALSE(f.pen().isHoldPendingForTest()) << "the release cancelled the hold";
+}
+
+TEST(AutomationLanesShapeTest, PressingAndHoldingOpensTheFlyoutWithoutReleaseAndTheReleaseDoesNotPickDraw) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    EXPECT_TRUE(f.pen().isHoldPendingForTest());
+    EXPECT_EQ(f.flyoutsOpened, 0) << "not before the hold time";
+    f.pen().holdElapsedForTest();
+    ASSERT_NE(f.flyout, nullptr) << "opens on the hold, before any release";
+    f.releasePen(centre);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the release after a hold is not a click";
+    EXPECT_EQ(f.flyoutsOpened, 1);
+}
+
+TEST(AutomationLanesShapeTest, TheHoldGestureIsDownFromTheHoldUntilTheRelease) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    EXPECT_FALSE(f.pen().isHoldGestureDown()) << "a plain press is not a hold yet";
+    f.pen().holdElapsedForTest();
+    EXPECT_TRUE(f.pen().isHoldGestureDown());
+    f.releasePen(centre);
+    EXPECT_FALSE(f.pen().isHoldGestureDown());
+    EXPECT_NE(f.flyout, nullptr);
+}
+
+TEST(AutomationLanesShapeTest, ReleasingAHoldOverARowPicksIt) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    f.pen().holdElapsedForTest();
+    ASSERT_NE(f.flyout, nullptr);
+    auto* row = f.flyout->getRow(DrawShape::Sine);
+    const auto onRow = f.pen().getLocalPoint(nullptr, row->localPointToGlobal(row->getLocalBounds().getCentre()));
+    f.releasePen(onRow.toFloat());
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Sine);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+}
+
+TEST(AutomationLanesShapeTest, ReleasingAHoldOffTheListPicksNothing) {
+    ShapeLane f;
+    f.captureFlyouts();
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    f.pen().holdElapsedForTest();
+    f.releasePen(centre);
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Free);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
+}
+
+TEST(AutomationLanesShapeTest, TheFlyoutBoxIgnoresOutsideInputWhileTheHoldIsDownAndClosesOnItAfter) {
+    juce::Component parent;
+    parent.setSize(600, 400);
+    DrawShapeFlyout content(DrawShape::Free, {}, {});
+    bool holdDown = true;
+    synth::ui::DrawShapeCallOutBox box(content, {280, 20, 20, 20}, &parent, [&holdDown] { return holdDown; });
+    box.inputAttemptWhenModal();
+    EXPECT_EQ(box.getDismissAttemptsForTest(), 0) << "the release that ends the opening press must not close it";
+    holdDown = false;
+    box.inputAttemptWhenModal();
+    EXPECT_EQ(box.getDismissAttemptsForTest(), 1) << "a later click outside closes it";
+}
+
+TEST(AutomationLanesShapeTest, DraggingOffThePenBeforeTheHoldTimeCancelsIt) {
+    ShapeLane f;
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    f.pressPen(centre);
+    auto& comp = static_cast<juce::Component&>(f.pen());
+    comp.mouseDrag(makeDragEvent(comp, centre + juce::Point<float>(12.0f, 0.0f), centre, leftButton()));
+    EXPECT_FALSE(f.pen().isHoldPendingForTest());
+    f.releasePen(centre);
+}
+
+TEST(AutomationLanesShapeTest, TheShapeMenuKeyOpensTheFlyoutAndIsRebindable) {
+    ShapeLane f;
+    f.captureFlyouts();
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8', juce::ModifierKeys::shiftModifier, 0)));
+    ASSERT_NE(f.flyout, nullptr);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "opening the menu is not picking a tool";
+
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('*', juce::ModifierKeys::shiftModifier, 0)))
+        << "the glyph macOS delivers for Shift+8";
+    EXPECT_EQ(f.flyoutsOpened, 2);
+    shortcuts.setBinding("timelineShapeMenu", juce::KeyPress('m', juce::ModifierKeys::altModifier, 0));
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('m', juce::ModifierKeys::altModifier, 0)));
+    EXPECT_EQ(f.flyoutsOpened, 3);
+    EXPECT_TRUE(f.pen().getTooltip().contains("shapes:")) << f.pen().getTooltip();
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(AutomationLanesShapeTest, TheDrawButtonTooltipNamesTheFlyoutKey) {
+    ShapeLane f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    const auto tip = f.pen().getTooltip();
+    EXPECT_TRUE(tip.startsWith("Draw")) << tip;
+    EXPECT_TRUE(tip.contains("8")) << tip;
+    EXPECT_TRUE(tip.contains("shapes: Shift + 8")) << tip;
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(AutomationLanesShapeTest, EachFlyoutRowHasANameATooltipWithItsShortcutAndTheCurrentOneIsKnown) {
+    ShapeLane f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    f.captureFlyouts();
+    f.panel.setDrawShape(DrawShape::Triangle);
+    f.panel.openShapeFlyout();
+    ASSERT_NE(f.flyout, nullptr);
+    EXPECT_EQ(f.flyout->getCurrentShape(), DrawShape::Triangle);
+    EXPECT_EQ(f.flyout->getFocusedShape(), DrawShape::Triangle) << "focus starts on the current shape";
+    for (auto shape : synth::ui::kAllDrawShapes) {
+        auto* row = f.flyout->getRow(shape);
+        ASSERT_NE(row, nullptr);
+        EXPECT_EQ(row->getTitle(), juce::String(synth::ui::drawShapeName(shape)) + " shape");
+        EXPECT_TRUE(f.flyout->getRowTooltip(shape).startsWith(row->getTitle()));
+        EXPECT_TRUE(
+            f.flyout->getRowTooltip(shape).contains("Shift + " + juce::String(synth::ui::drawShapeKeyDigit(shape))))
+            << f.flyout->getRowTooltip(shape);
+        EXPECT_TRUE(row->getWantsKeyboardFocus());
+    }
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(AutomationLanesShapeTest, ARowShowsARebindOfItsShortcut) {
+    ShapeLane f;
+    ShortcutManager shortcuts;
+    shortcuts.setBinding("timelineShapeSquare", juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
+    f.panel.setShortcutManager(&shortcuts);
+    f.captureFlyouts();
+    f.panel.openShapeFlyout();
+    ASSERT_NE(f.flyout, nullptr);
+    const auto tip = f.flyout->getRowTooltip(DrawShape::Square);
+    EXPECT_FALSE(tip.contains("Shift + 6")) << tip;
+    EXPECT_TRUE(tip.contains("Q") || tip.contains("q")) << tip;
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(AutomationLanesShapeTest, ClickingARowPicksThatShapeAndDraw) {
+    ShapeLane f;
+    f.captureFlyouts();
+    f.panel.openShapeFlyout();
+    ASSERT_NE(f.flyout, nullptr);
+    f.clickRow(DrawShape::Saw);
     EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Saw);
     EXPECT_EQ(f.editor->getDrawShape(), DrawShape::Saw);
-    EXPECT_TRUE(f.panel.getDrawShapeStrip().getButton(DrawShape::Saw)->getToggleState());
-    EXPECT_FALSE(f.panel.getDrawShapeStrip().getButton(DrawShape::Free)->getToggleState());
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+    EXPECT_EQ(f.pen().getShape(), DrawShape::Saw);
+}
+
+TEST(AutomationLanesShapeTest, TheFlyoutKeysMoveWrapPickAndClose) {
+    ShapeLane f;
+    f.captureFlyouts();
+    f.panel.openShapeFlyout();
+    ASSERT_NE(f.flyout, nullptr);
+    auto& fly = *f.flyout;
+    ASSERT_EQ(fly.getFocusedShape(), DrawShape::Free);
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(fly.getFocusedShape(), DrawShape::Square) << "Up wraps from the first row to the last";
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(fly.getFocusedShape(), DrawShape::Free) << "Down wraps back";
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::endKey)));
+    EXPECT_EQ(fly.getFocusedShape(), DrawShape::Square);
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::homeKey)));
+    EXPECT_EQ(fly.getFocusedShape(), DrawShape::Free);
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    ASSERT_EQ(fly.getFocusedShape(), DrawShape::Sine);
+
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Free) << "Escape picks nothing";
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
+
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Sine) << "Enter picks the focused row";
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw);
+
+    f.panel.setActiveTool(EditTool::Select);
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Line) << "Space picks too";
+    EXPECT_FALSE(fly.keyPressed(juce::KeyPress('x')));
 }
 
 TEST(AutomationLanesShapeTest, ShiftThreePicksDrawAndSine) {
@@ -204,7 +435,6 @@ TEST(AutomationLanesShapeTest, ShapeKeysAreRebindableAndMatchTheShiftedGlyphMacO
     f.panel.setShortcutManager(&shortcuts);
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('#', juce::ModifierKeys::shiftModifier, 0)));
     EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Sine);
-    EXPECT_TRUE(f.panel.getDrawShapeStrip().getButton(DrawShape::Sine)->getTooltip().contains("3"));
 
     shortcuts.setBinding("timelineShapeSquare", juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0)));
@@ -263,9 +493,11 @@ TEST(AutomationLanesShapeTest, ARangeThenAShapeButtonStampsAtTheLanesFullHeight)
     ASSERT_TRUE(f.doc.addBreakpoint(f.lane, 8.0, 40.0));
     f.undo.clearUndoHistory();
     f.selectRange(1.0, 3.0);
-    // The button path: Draw brings the strip out, the range stays, a click stamps.
+    // The button path: Draw, the flyout, a click on a row stamps.
+    f.captureFlyouts();
     f.panel.keyPressed(juce::KeyPress('8', juce::ModifierKeys::noModifiers, '8'));
-    clickButton(*f.panel.getDrawShapeStrip().getButton(DrawShape::Triangle));
+    f.panel.openShapeFlyout();
+    f.clickRow(DrawShape::Triangle);
 
     const auto& pts = f.theLane().points;
     ASSERT_EQ(pts.size(), 2u * 2u + 1u + 1u) << "two one-beat triangles, the close, the old point";
@@ -281,21 +513,17 @@ TEST(AutomationLanesShapeTest, ARangeThenAShapeButtonStampsAtTheLanesFullHeight)
     EXPECT_EQ(f.theLane().points.size(), 1u) << "one undo step";
 }
 
-TEST(AutomationLanesShapeTest, ALaneRangeBringsTheStripOutUnderTheRangeToolSoOneClickStamps) {
+TEST(AutomationLanesShapeTest, ALaneRangeUnderTheRangeToolStampsFromTheFlyoutInOnePick) {
     ShapeLane f;
-    auto& strip = f.panel.getDrawShapeStrip();
+    f.captureFlyouts();
     f.selectRange(1.0, 3.0);
     ASSERT_EQ(f.panel.getActiveTool(), EditTool::Range);
-    EXPECT_TRUE(strip.isVisible()) << "a lane range shows the shapes whatever the tool";
 
-    clickButton(*strip.getButton(DrawShape::Square));
+    f.panel.openShapeFlyout();
+    ASSERT_NE(f.flyout, nullptr);
+    f.clickRow(DrawShape::Square);
     EXPECT_EQ(f.theLane().points.size(), 2u * 2u + 1u) << "two one-beat squares and the close";
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Draw) << "a shape pick is a Draw pick";
-
-    f.panel.setActiveTool(EditTool::Range);
-    EXPECT_TRUE(strip.isVisible()) << "the range is still there";
-    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    EXPECT_FALSE(strip.isVisible()) << "no range and not Draw: the strip goes back";
 }
 
 TEST(AutomationLanesShapeTest, AShapeKeyWithALaneRangeStampsIt) {

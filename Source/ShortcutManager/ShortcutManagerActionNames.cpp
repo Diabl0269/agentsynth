@@ -184,6 +184,8 @@ juce::String drawShapeActionName(const juce::String& actionId) {
         return "Saw Shape";
     if (actionId == "timelineShapeSquare")
         return "Square Shape";
+    if (actionId == "timelineShapeMenu")
+        return "Open shape menu";
     return {};
 }
 

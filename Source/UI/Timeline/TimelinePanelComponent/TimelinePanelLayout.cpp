@@ -526,7 +526,7 @@ void TimelinePanelComponent::resized() {
     layoutTransportRow();
 }
 
-// Its own step so the shape strip's slide can re-run it every frame without laying out the whole panel.
+// Its own step so the transport row can be re-laid out without laying out the whole panel.
 void TimelinePanelComponent::layoutTransportRow() {
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
@@ -539,8 +539,6 @@ void TimelinePanelComponent::layoutTransportRow() {
     // The tool strip sits immediately left of the snap controls: both are "how the next edit
     // behaves" chrome, so they read as one group, and neither pushes the transport controls off
     // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).
-    // The shape strip sits between them, right of the Draw button, at the width its slide has reached.
-    shapeStrip_.setBounds(transportBar.removeFromRight(shapeStrip_.getCurrentWidth()));
     auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))

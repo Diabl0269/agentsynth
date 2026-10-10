@@ -13,7 +13,8 @@
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
-#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
@@ -159,7 +160,11 @@ public:
     DrawShape getDrawShape() const noexcept { return drawShape_; }
     /** Picks Draw and `shape`, and stamps it over the lane range when there is one: a shape button or key. */
     void pickDrawShape(DrawShape shape);
-    DrawShapeStrip& getDrawShapeStrip() noexcept { return shapeStrip_; }
+    /** The Draw tool button: shows the current shape and opens the flyout (corner click, hold or the shape-menu key).
+     */
+    DrawPenButton& getDrawPenButton() noexcept { return *penButton_; }
+    /** Opens the pen's shape flyout (a toggle: a second call closes it). */
+    void openShapeFlyout();
     TimelineAutomationLanes& getAutomationLanes() noexcept { return automationLanes_; }
     const TimelineAutomationLanes& getAutomationLanes() const noexcept { return automationLanes_; }
 
@@ -574,10 +579,9 @@ private:
 
     // ---- Draw shapes (TimelinePanelShapes.cpp) ----
     void initDrawShapes();
-    void updateShapeStripShowing();
     void refreshShapeTooltips();
     bool handleDrawShapeKey(const juce::KeyPress& key);
-    // Lays out the transport row (snap, follow, shape strip, tool strip, transport bar).
+    // Lays out the transport row (snap, follow, tool strip, transport bar).
     void layoutTransportRow();
 
     // ---- Side pane (TimelinePanelSidePane.cpp) ----
@@ -972,7 +976,9 @@ private:
     synth::LaneId selectedAutomationLane_;
 
     DrawShape drawShape_ = DrawShape::Free;
-    DrawShapeStrip shapeStrip_{*this};
+    DrawPenButton* penButton_ = nullptr; // the Draw entry of toolButtons_
+    juce::Component::SafePointer<juce::CallOutBox> shapeFlyoutBox_;
+    juce::Component::SafePointer<DrawShapeFlyout> shapeFlyout_; // the open flyout (or the test hook's)
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;
     juce::Rectangle<int> lanesBounds_;

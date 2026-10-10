@@ -145,8 +145,12 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.h
     Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.cpp
-    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.h
-    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandEdits.cpp

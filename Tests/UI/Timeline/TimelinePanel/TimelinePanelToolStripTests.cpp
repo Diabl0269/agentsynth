@@ -315,7 +315,8 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
         ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
 
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw  (8)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(),
+              juce::String::fromUTF8("Draw  (8) \xc2\xb7 shapes: Shift + 8"));
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
     for (auto tool : synth::ui::kAllEditTools)
