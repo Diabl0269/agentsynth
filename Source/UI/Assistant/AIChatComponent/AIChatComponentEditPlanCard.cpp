@@ -1,4 +1,5 @@
 #include "AIChatComponentEditPlanCard.h"
+#include "EditPlanDetailsText.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -6,21 +7,11 @@ namespace synth {
 
 // Concern: the edit-plan card (layout, details, thumbs feedback) and what its Apply does.
 
-namespace {
-
-// Round-trips `raw` through JUCE's JSON formatter for indentation, so the details panel isn't one
-// unbroken line in a ~280px-wide chat column. Falls back to the raw string on a parse failure.
-juce::String prettyPrintJson(const juce::String& raw) {
-    const juce::var parsed = juce::JSON::parse(raw);
-    return parsed.isVoid() ? raw : juce::JSON::toString(parsed, /*allOnOneLine=*/false);
-}
-
-} // namespace
-
 AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::function<bool()> onApply,
                                             RateCallback rateCallback)
     : planOk(data.planOk)
     , previewLines(data.planPreviewLines)
+    , planSummary(data.planDetails)
     , currentRating(data.ratingState)
     , onRate(std::move(rateCallback)) {
     setTitle("Edit plan");
@@ -45,9 +36,11 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
 
     addAndMakeVisible(detailsButton);
     detailsButton.setButtonText("Show details");
-    detailsButton.setTooltip("Show the module changes and the raw JSON behind this plan");
+    detailsButton.setTooltip("Show the changes this plan makes");
     detailsButton.onClick = [this] {
         isExpanded = !isExpanded;
+        if (isExpanded)
+            fillDetails();
         detailsButton.setButtonText(isExpanded ? "Hide details" : "Show details");
         detailsFade_.setShown(isExpanded);
         relayout();
@@ -98,9 +91,8 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     detailsDisplay.setMultiLine(true);
     detailsDisplay.setReadOnly(true);
     detailsDisplay.setTitle("Edit plan details");
-    detailsDisplay.setTooltip("The changes this plan makes, then its JSON");
-    detailsDisplay.setText((data.planDetails.isNotEmpty() ? data.planDetails + "\n\n" : juce::String()) +
-                           prettyPrintJson(data.planJson));
+    detailsDisplay.setTooltip("The changes this plan makes");
+    // Filled by fillDetails() the first time the panel opens: laying out a big plan's text is slow.
     synth::ui::removeHiddenTabStops(detailsDisplay);
 
     commentFade_.onFrame = [this] { relayout(); };
@@ -109,6 +101,14 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     commentFade_.setShown(currentRating != AIChatComponent::PatchRatingUiState::None);
 
     applyThemeColours();
+}
+
+void AIChatComponent::EditPlanCard::fillDetails() {
+    if (detailsFilled)
+        return;
+    detailsFilled = true;
+    detailsDisplay.setText(buildEditPlanDetailsText(planSummary), juce::dontSendNotification);
+    planSummary = {};
 }
 
 // A change of height needs AIChatComponent::resized(): it sizes each bubble.

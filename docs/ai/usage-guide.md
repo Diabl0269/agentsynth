@@ -40,8 +40,8 @@ Tips:
 - **Iterate.** Refine with follow-ups like "make it brighter" or "reduce the sustain".
 - **Use Agent Synth's own terminology.** Module names (Oscillator, Filter, ADSR) and parameter names
   (Cutoff, Frequency) yield more precise results than paraphrases.
-- **Review the details.** **Show details** on the card lists every change and the JSON, which shows
-  exactly how the AI read your request.
+- **Review the details.** **Show details** on the card lists every change the plan makes, which shows
+  how the AI read your request.
 
 Example prompts:
 
@@ -79,8 +79,8 @@ step by attaching a `.mid` file's notes to its answer.
 
 If the answer cannot be applied (it names a track you do not have, a value outside a parameter's
 range, or asks to replace the patch while adding a track), the card says why and offers no button,
-rather than failing silently. **Show details** on the card lists every module change and the JSON
-behind the answer; the thumbs let you rate it.
+rather than failing silently. **Show details** on the card lists every module change;
+the thumbs let you rate it.
 
 A question that asks for no change ("how does FM differ from subtractive?") gets a plain text
 answer with a local model. In hosted mode every message is answered with a card, since the hosted
@@ -101,8 +101,8 @@ under the conversation counts the wait.
 - **The AI replies with text but no patch is applied.** The response may not contain a valid JSON
   patch in the expected block format, or the JSON may be malformed. Rephrase the prompt to ask
   explicitly for a JSON patch.
-- **The patch does not sound as expected.** Open the card's details to review the generated JSON,
-  which shows how the AI interpreted the request, and refine the prompt accordingly.
+- **The patch does not sound as expected.** Open the card's details to review the changes,
+  which show how the AI interpreted the request, and refine the prompt accordingly.
 - **A request takes longer than expected and times out.** The request timeout defaults to 4 minutes
   and is configurable in Settings → AI → Request Timeout, with presets of 2, 4, 6 and 10 minutes. A
   large local model on modest hardware can legitimately need more than the default.
