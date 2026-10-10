@@ -7,6 +7,7 @@
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TimelineOps.h"
 #include <optional>
 #include <vector>
 
@@ -35,7 +36,7 @@ public:
             return std::nullopt;
         InstrumentTrackBuildResult result;
         result.instrumentUuid = add(type, instrumentParams);
-        if (type != "Sampler" && !withoutEnvelope)
+        if (!TimelineOps::instrumentOwnsItsEnvelope(type) && !withoutEnvelope)
             result.envelopeUuid = add("ADSR", envelopeParams);
         for (const auto& insert : inserts)
             result.insertUuids.push_back(add(insert.type, insert.params));

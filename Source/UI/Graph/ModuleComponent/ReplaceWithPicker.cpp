@@ -24,6 +24,7 @@ const std::vector<Category>& replaceCategories() {
           {"Wavetable", ModuleType::Wavetable},
           {"Noise", ModuleType::Noise},
           {"Sampler", ModuleType::Sampler},
+          {"Drum Kit", ModuleType::DrumKit},
           {"LFO", ModuleType::LFO}}},
         {"Sequencing",
          {{"Sequencer", ModuleType::Sequencer},

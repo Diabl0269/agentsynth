@@ -143,10 +143,10 @@ struct TrackHeaderHost {
     virtual void addAudioTrack() = 0;
 
     /** The "+ Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
-     *  "Wavetable" or "Sampler") wired as Track In -> instrument -> default chain (EQ/Compressor
+     *  "Wavetable", "Sampler" or "Drum Kit") wired as Track In -> instrument -> default chain (EQ/Compressor
      *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
      *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (Oscillator/
-     *  Wavetable only, ignored for Sampler which has no "poly" parameter) turns the new instrument's
+     *  Wavetable only, ignored for Sampler and Drum Kit, which have no "poly" parameter) turns the new instrument's
      *  poly mode on before the rest of the wiring runs, so the poly-envelope auto-wire picks
      *  it up. */
     virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;

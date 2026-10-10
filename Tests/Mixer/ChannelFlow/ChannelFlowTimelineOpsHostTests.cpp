@@ -227,3 +227,38 @@ TEST_F(ChannelFlowTest, TimelineOpsHostReturnsTheEnvelopeUuidAndAppliesItsParams
     EXPECT_NEAR(rawParamValue(monoOsc->getProcessor(), "waveform"), 0.0, 1.0e-3);
     EXPECT_TRUE(sampler->envelopeUuid.isEmpty()) << "a Sampler plays through its own one-shot envelope";
 }
+
+// A Drum Kit track is Track In -> kit -> channel strip: the kit owns its envelopes, so no ADSR or VCA is built,
+// and its own params land on the kit.
+TEST_F(ChannelFlowTest, TimelineOpsHostBuildsADrumKitTrackWithoutAnEnvelope) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& host = mc.getTimelineOpsHostForTest();
+
+    std::optional<synth::InstrumentTrackBuildResult> result;
+    EXPECT_TRUE(host.recordBatch([&] {
+        result = host.addInstrumentTrack("Beat", "Drum Kit", false, {}, {}, juce::JSON::parse(R"({"kickDecay": 0.6})"));
+    }));
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(result->envelopeUuid.isEmpty());
+
+    auto* kit = nodeForUuidCFT(graph, result->instrumentUuid);
+    ASSERT_NE(kit, nullptr);
+    EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(kit->getProcessor()), "Drum Kit");
+    EXPECT_NEAR(rawParamValue(kit->getProcessor(), "kickDecay"), 0.6, 1.0e-3);
+
+    const auto* macro = findMacroNamed(mc, "Beat");
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(result->instrumentUuid));
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ADSR), nullptr);
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, *macro, ModuleType::VCA), nullptr);
+
+    bool trackInReachesKit = false;
+    for (const auto& connection : graph.getConnections())
+        if (connection.destination.nodeID == kit->nodeID && connection.source.isMIDI() &&
+            connection.destination.isMIDI())
+            trackInReachesKit = true;
+    EXPECT_TRUE(trackInReachesKit) << "Track In feeds the kit's MIDI input";
+}

@@ -47,6 +47,7 @@ add_executable(Tests
     Modules/MathModuleTests.cpp
     Modules/MacroControlModuleTests.cpp
     Modules/SamplerModuleTests.cpp
+    Modules/DrumKit/DrumKitModuleTests.cpp
     Modules/Sampler/SamplerRegionTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp

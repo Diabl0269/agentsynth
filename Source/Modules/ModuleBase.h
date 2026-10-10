@@ -65,6 +65,7 @@ enum class ModuleType {
     Noise,
     Math,
     Sampler,
+    DrumKit,
     Wavetable,
     MacroControl,
     SampleHold,
@@ -134,6 +135,7 @@ inline bool isMidiInstrumentType(ModuleType type) noexcept {
     case ModuleType::Oscillator:
     case ModuleType::Wavetable:
     case ModuleType::Sampler:
+    case ModuleType::DrumKit:
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
         return true;

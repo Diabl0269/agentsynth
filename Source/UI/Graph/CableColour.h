@@ -123,6 +123,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Wavetable:
     case ModuleType::Noise:
     case ModuleType::Sampler:
+    case ModuleType::DrumKit:
     case ModuleType::LFO:
     // Track Audio is bucketed with the Sampler rather than with its sibling Track In: in
     // ByModuleCategory mode the bucket colours the CABLE, and what leaves this node is audio read

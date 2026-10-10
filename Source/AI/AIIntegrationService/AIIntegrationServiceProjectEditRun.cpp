@@ -8,6 +8,7 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "Timeline/TimelineOps.h"
 
 #include <cmath>
 #include <limits>
@@ -453,7 +454,7 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
     };
     InstrumentTrackBuildResult result;
     result.instrumentUuid = addStandIn(instrumentType, instrumentParams);
-    if (instrumentType != "Sampler")
+    if (!TimelineOps::instrumentOwnsItsEnvelope(instrumentType))
         result.envelopeUuid = addStandIn("ADSR", envelopeParams);
     for (const auto& insert : inserts)
         result.insertUuids.push_back(addStandIn(insert.type, insert.params));

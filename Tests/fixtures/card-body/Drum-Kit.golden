@@ -1,0 +1,59 @@
+type Drum Kit size 280x333
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,293 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 6 knob id="Kick level" at 12,227 85x58 visible=1 title="Kick level" tip="Kick level" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,209 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Kick tune" at 97,227 85x58 visible=1 title="Kick tune" tip="Kick tune" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 97,209 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Kick decay" at 182,227 85x58 visible=1 title="Kick decay" tip="Kick decay" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 182,209 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Snare level" at 0,0 0x0 visible=0 title="Snare level" tip="Snare level" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Snare tune" at 0,0 0x0 visible=0 title="Snare tune" tip="Snare tune" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Snare decay" at 0,0 0x0 visible=0 title="Snare decay" tip="Snare decay" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Clap level" at 0,0 0x0 visible=0 title="Clap level" tip="Clap level" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Clap tune" at 0,0 0x0 visible=0 title="Clap tune" tip="Clap tune" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Clap decay" at 0,0 0x0 visible=0 title="Clap decay" tip="Clap decay" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Hat level" at 0,0 0x0 visible=0 title="Hat level" tip="Hat level" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Hat tune" at 0,0 0x0 visible=0 title="Hat tune" tip="Hat tune" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Closed decay" at 0,0 0x0 visible=0 title="Closed decay" tip="Closed decay" focusOrder=0 wantsFocus=1
+  child 29 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 knob id="Open decay" at 0,0 0x0 visible=0 title="Open decay" tip="Open decay" focusOrder=0 wantsFocus=1
+  child 31 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 knob id="Tom level" at 0,0 0x0 visible=0 title="Tom level" tip="Tom level" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 knob id="Tom tune" at 0,0 0x0 visible=0 title="Tom tune" tip="Tom tune" focusOrder=0 wantsFocus=1
+  child 35 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 knob id="Tom decay" at 0,0 0x0 visible=0 title="Tom decay" tip="Tom decay" focusOrder=0 wantsFocus=1
+  child 37 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 38 knob id="Cymbal level" at 0,0 0x0 visible=0 title="Cymbal level" tip="Cymbal level" focusOrder=0 wantsFocus=1
+  child 39 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 40 knob id="Cymbal tune" at 0,0 0x0 visible=0 title="Cymbal tune" tip="Cymbal tune" focusOrder=0 wantsFocus=1
+  child 41 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 42 knob id="Cymbal decay" at 0,0 0x0 visible=0 title="Cymbal decay" tip="Cymbal decay" focusOrder=0 wantsFocus=1
+  child 43 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 44 knob id="Cowbell level" at 0,0 0x0 visible=0 title="Cowbell level" tip="Cowbell level" focusOrder=0 wantsFocus=1
+  child 45 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 46 knob id="Cowbell tune" at 0,0 0x0 visible=0 title="Cowbell tune" tip="Cowbell tune" focusOrder=0 wantsFocus=1
+  child 47 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 48 knob id="Cowbell decay" at 0,0 0x0 visible=0 title="Cowbell decay" tip="Cowbell decay" focusOrder=0 wantsFocus=1
+  child 49 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 50 knob id="Level" at 12,111 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 51 label id="" at 12,93 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 52 component id="cardTabStrip" at 12,177 256x24 visible=1 title="Control tabs" tip="Pages of this card's controls: Left and Right switch between them" focusOrder=0 wantsFocus=1
+  child 53 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 54 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 55 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  out 0 270, 58
+  out 1 270, 78

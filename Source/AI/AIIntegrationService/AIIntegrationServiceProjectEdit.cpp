@@ -211,7 +211,9 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // empty."). productName is the provider's to add, as for every capability.
 // setProjectPromptVersion() overrides it for the eval harness, which measures a newer server prompt before any
 // app build asks for it: an app may only pin a version once the deployed service serves it.
-static constexpr int kProjectGeneratePromptVersion = 5;
+// Prompt versions: 2 envelope and instrumentParams, 3 whole-track rules, 4 song layout, 5 tempo and
+// section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum.
+static constexpr int kProjectGeneratePromptVersion = 6;
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);

@@ -50,7 +50,7 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
 | Op | What it does | What it deliberately does not do |
 | --- | --- | --- |
 | `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
-| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path);
+| `addInstrumentTrack` | Builds a **bound, playing** MIDI track exactly like "+ Track -> Instrument": `Track In -> instrument -> [Voice Mixer / ADSR+VCA as that flow decides] -> inserts -> Gate -> EQ -> Compressor -> Channel Strip -> Master`, boxed into one macro named after the track, palette colour. `name` (required, `addTrack`'s rules, and **new** — no existing track may have it, since later ops address it by name); `instrument` (required: `kAuthorableInstrumentTypes` = Oscillator, Wavetable, Sampler, Drum Kit); `poly` (optional bool, Oscillator/Wavetable only); `instrumentId` (optional int: inert to `TimelineOps` itself, an in-response node reference inside an [edit plan](#one-edit-plan)); `inserts` (optional, at most `kMaxInstrumentInserts` = 8, each `{type, id?, params?}`, `id` likewise: an authorable module that is not a MIDI instrument or MIDI source and takes audio in and out, its `params` checked by `validatePatch`'s own `validateNodeParams` and applied through the untrusted apply path);
 `instrumentParams` (
     optional object : the instrument 's own params, e.g. `{"waveform": "Saw"}`, checked against the instrument type' s real params and applied to the built instrument; `poly` is
         refused there); `envelope` (optional object `{
@@ -102,7 +102,7 @@ installs on `AIIntegrationService::setTimelineOpsHost` beside the apply callback
   (`MainComponent::buildInstrumentTrackBody`, shared with the menu), skipping the default track
   preset so the preview cannot lie, inside the batch's transaction. Returns an
   `InstrumentTrackBuildResult` — the uuids of the Track In, the instrument, each insert (in op
-  order) and the envelope's ADSR (`envelopeUuid`, empty for a Sampler) — which an [edit
+  order) and the envelope's ADSR (`envelopeUuid`, empty for a Sampler or Drum Kit) — which an [edit
   plan](#one-edit-plan)'s in-response references (an insert's `id`, the op's `instrumentId`, the
   envelope's `id`) resolve against. `TimelineOps` on its own never reads them. Returns `nullopt`
   having removed anything it created.
@@ -124,7 +124,7 @@ Otherwise it runs the batch inside `host->recordBatch`, and the op calls `host->
 
 Preview parts, pinned by `TimelineOpsInstrumentTrackTest.PreviewStringsArePinned`:
 `adds instrument track "Bass" (Oscillator with envelope and channel strip)`, `(Sampler with channel
-strip)` for a Sampler, a `poly ` prefix before the type when `poly` is on, `, inserts: Filter,
+strip)` for a Sampler (likewise `Drum Kit`), a `poly ` prefix before the type when `poly` is on, `, inserts: Filter,
 Distortion` appended when the op has inserts, and `, envelope: attack 0.005, decay 0.2, sustain 0,
 release 0.15` after that listing only the envelope params the op set (attack, decay, sustain,
 release in that order, then any other by name; no suffix when it set none).
@@ -150,7 +150,11 @@ ADSR, so a model could not make a pluck or pad on a new track. `envelope` is `{
   (`MainComponent::applyInstrumentEnvelopeParams`, the poly and the mono path alike). `poly` is
   rejected in them: the track's own `poly` decides whether the envelope is per-voice.
 - A Sampler plays through its own one-shot envelope, so `envelope` on a Sampler is rejected with
-  `Sampler tracks have no envelope; leave "envelope" out.`
+  `Sampler tracks have no envelope; leave "envelope" out.` A Drum Kit synthesizes every drum with its own
+  envelopes, so it gets the same rejection (`Drum Kit tracks have no envelope; leave "envelope" out.`) and its
+  `poly` is refused too. `TimelineOps::instrumentOwnsItsEnvelope` is the one place that names these two. The kit is
+  one track with a note map (36 kick, 38 snare, 37 rim, 39 clap, 42/44 closed hat, 46 open hat, toms 41 to 50,
+  49 crash, 51 ride; [module doc](../modules/modules.md#drum-kit-module)); the local-model system prompt teaches it.
 - `id` is inert to `TimelineOps`; in an [edit plan](#one-edit-plan) it names the ADSR, so a
   modulation can use it as `source`, a `writeLane` as `nodeId`, and `remove` can delete it. That is
   how "plucky" (sustain 0, short decay) and "filter envelope" (the track's envelope onto a Filter
@@ -229,9 +233,9 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
   failure is returned. The host's macro set is not restored here: the real host removes what a
   failed build made, but an earlier successful build in the same plan keeps its macro.
 
-Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 5 (`kProjectGeneratePromptVersion`): 2 teaches `envelope` and
+Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 6 (`kProjectGeneratePromptVersion`): 2 teaches `envelope` and
 `instrumentParams`, 3 the whole-track rules, 4 a song layout the server expands into ordinary clips, 5 the
-`setTempo` and `addMarker` ops it derives from that layout's bpm and section names. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
+`setTempo` and `addMarker` ops it derives from that layout's bpm and section names, 6 the whole drum kit on one `Drum Kit` track. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (the rules, the preview, the
 backstop through a failing fake host, both request shapes),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step

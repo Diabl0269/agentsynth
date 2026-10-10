@@ -16,6 +16,7 @@
 #include "../../Modules/FX/ChorusModule.h"
 
 #include "../../Modules/ComparatorModule.h"
+#include "../../Modules/DrumKit/DrumKitModule.h"
 #include "../../Modules/EnvelopeFollowerModule.h"
 #include "../../Modules/FX/BitcrusherModule.h"
 #include "../../Modules/FX/CompressorModule.h"
@@ -112,6 +113,7 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
         {"Comparator", []() { return std::make_unique<ComparatorModule>(); }},
         {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
+        {"Drum Kit", []() { return std::make_unique<DrumKitModule>(); }},
         {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
         {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
         // A third-party VST3/AU plugin as a module. In the factory so our own saves reload it (the

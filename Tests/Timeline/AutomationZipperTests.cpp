@@ -95,6 +95,8 @@ struct ModuleConfig {
 //   Sampler                     renders silence until a file is loaded, and loading one from a
 //                               parameterised suite would make it a filesystem test.
 //                               SamplerModuleTests covers it; its Level knob is smoothed.
+//   Drum Kit                    silent for the sweep's held note 60 (only the GM drum notes sound);
+//                               DrumKitModuleTests covers its master Level smoothing.
 //
 // Modules with no float parameters at all (Poly MIDI, MIDI Keyboard, External MIDI, Math,
 // Track In, and the three AudioGraphIOProcessor endpoints) are outside the suite by
@@ -237,6 +239,9 @@ const std::vector<ModuleConfig>& moduleConfigs() {
          "declares zero audio channels; BPM / Gate only time discrete MIDI events"},
         {/*factoryName*/ "Sampler", true,
          "renders silence until a sample file is loaded; covered by SamplerModuleTests"},
+        {/*factoryName*/ "Drum Kit", true,
+         "plays only the notes in its map (the sweep holds note 60, which is silent); its group settings are read "
+         "when a drum is struck and the master Level is smoothed, covered by DrumKitModuleTests"},
     };
     return configs;
 }

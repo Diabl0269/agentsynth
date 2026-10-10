@@ -53,7 +53,7 @@ The exceptions are stated in the constructor call, and there are only three kind
 | `ModuleBase::StereoAudio` | Modules | Meaning |
 |---|---|---|
 | `Auto` (the default) | every FX, Voice Mixer, Ring Modulator | shape decides; toggle ships **collapsed** |
-| `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler | a second audio leg the shape cannot see — its own `kRightBase` block, or a ch0/ch1 pair alongside further outputs. Toggle ships **split**; the module owns its jack maps. |
+| `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler, Drum Kit | a second audio leg the shape cannot see — its own `kRightBase` block, or a ch0/ch1 pair alongside further outputs. Toggle ships **split**; the module owns its jack maps. |
 | `None` | Comparator, Rec Tap | the shape matches by accident. Comparator's ch0/ch1 are Signal + Threshold CV in and Gate + inverted Gate out (no audio output at all); Rec Tap is a hidden recording tap whose two channels are the take's capture pair, wired by the record flow and never patched. |
 
 Why it moved: `addDualIOParameter()` was a call you could forget, and the Ring Modulator did ship a

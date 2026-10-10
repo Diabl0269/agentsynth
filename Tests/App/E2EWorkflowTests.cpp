@@ -267,6 +267,7 @@ TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
                                            "Wavetable",
                                            "Noise",
                                            "Sampler",
+                                           "Drum Kit",
                                            "Filter",
                                            "ADSR",
                                            "VCA",
