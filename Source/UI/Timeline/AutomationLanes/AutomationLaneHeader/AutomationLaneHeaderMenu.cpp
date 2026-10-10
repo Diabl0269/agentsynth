@@ -1,12 +1,13 @@
 // Concern: the automation lane header's edits -- the record-mode selector and the lane menu
-// (Add modulator..., Change parameter..., Duplicate, Move to track, Delete lane), opened from the "..." button, a
-// right-click anywhere on the header, or the keyboard. Every edit is one undo step: the lane edits go
+// (Create custom LFO, Add modulator..., Change parameter..., Duplicate, Move to track, Delete lane), opened from the
+// "..." button, a right-click anywhere on the header, or the keyboard. Every edit is one undo step: the lane edits go
 // through AutomationLaneActions, the modulator through the host, which owns the graph.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 
 namespace synth::ui {
@@ -28,6 +29,8 @@ juce::PopupMenu AutomationLaneHeaderComponent::buildMenu() {
     const bool canPick = canPickParameter();
     const juce::String noneFree = canPick ? juce::String() : juce::String(" (no free parameter)");
     juce::PopupMenu menu;
+    addCreateCustomLfoItem(menu);
+    menu.addSeparator();
     addModulatorItem(menu);
     menu.addItem(kChangeParameterMenuId, "Change parameter..." + noneFree, canPick);
     menu.addItem(kDuplicateMenuId, "Duplicate" + noneFree, canPick);
@@ -46,6 +49,32 @@ void AutomationLaneHeaderComponent::addModulatorItem(juce::PopupMenu& menu) cons
     menu.addItem(kAddModulatorMenuId,
                  canModulate ? juce::String("Add modulator...") : juce::String("Add modulator... (no CV input)"),
                  canModulate);
+}
+
+// First in the menu. It acts on the Range tool's selection, so it is enabled only when that sits on this lane, the
+// parameter has a CV jack and the range can become an LFO; a disabled item says why in its own text (a menu item has no
+// tooltip, and the reason must reach a screen reader too).
+void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu) const {
+    const auto* lane = doc_.getLane(laneId_);
+    const auto range = lane != nullptr && laneRangeProvider ? laneRangeProvider() : std::nullopt;
+    auto blocker = synth::ui::CustomLfoBlocker::NoRange;
+    juce::String text = synth::ui::customLfoMenuText(blocker);
+    bool enabled = false;
+    if (range.has_value()) {
+        const bool canModulate = host_ != nullptr && host_->canModulate(lane->nodeUuid, lane->paramId) &&
+                                 host_->normaliseParameterValue(lane->nodeUuid, lane->paramId, 0.0).has_value();
+        if (!canModulate) {
+            text = "Create custom LFO (no CV input)";
+        } else {
+            const auto plan =
+                synth::ui::planCustomLfoFromRange(*lane, range->first, range->second, [this, lane](double v) {
+                    return host_->normaliseParameterValue(lane->nodeUuid, lane->paramId, v).value_or(0.0);
+                });
+            text = synth::ui::customLfoMenuText(plan.blocker);
+            enabled = plan.ok();
+        }
+    }
+    menu.addItem(kCreateCustomLfoMenuId, text, enabled);
 }
 
 // The picker's pick comes back after the call-out closes. A new LFO and an existing one are each ONE undo step
@@ -84,6 +113,13 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
     }
     if (menuId == kAddModulatorMenuId) {
         openAddModulatorPicker();
+        return;
+    }
+    if (menuId == kCreateCustomLfoMenuId) {
+        const auto range = laneRangeProvider ? laneRangeProvider() : std::nullopt;
+        auto create = onCreateCustomLfo;
+        if (range.has_value() && create)
+            create(range->first, range->second);
         return;
     }
     if (menuId == kChangeParameterMenuId) {

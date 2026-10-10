@@ -675,6 +675,45 @@ Select moves them, the eraser removes them.
 `AutomationLaneShapeGesture` holds all of this for one editor. The editor forwards its mouse, key and paint
 calls to it first, so the editor's own tools are unchanged.
 
+## Create custom LFO from a range
+
+Right-click a lane that holds the lane range (its header, or the curve editor away from a handle) and the lane menu's
+first item, **Create custom LFO**, turns the drawn movement inside the range into a NEW LFO whose Custom wave is that
+shape, so playback sounds the same and the LFO can then be reused elsewhere by drawing its amount band over other bars.
+It always adds an LFO (a lane that already has modulators gets another row). One Cmd+Z removes the LFO, its row, its
+amount lane and puts the lane's points back; Redo re-applies all of it, the wave included (it rides the node's saved
+state).
+
+- **What it makes.** An LFO on Custom, Sync, Retrig off, unipolar. Its rate is the smallest of the LFO's rates (1/128
+  up to 8/1, i.e. 8 bars) that fits the range, so 1 bar is 1/1, 3 beats is also 1/1 (the drawn part fills the first
+  three quarters of the cycle and the last value holds to the end), 2 bars is 2/1. Its Level is the drawn movement's
+  height in the parameter's own normalised range (skew included), rounded up to the knob's 0.01 step with the wave drawn
+  that much lower so the product is exact, and the lane is flattened inside the range at the
+  lowest value the curve reaches, so base plus the LFO equals the drawn curve. Its Phase offset is `frac(-start /
+  cycleBeats) * 360` degrees, so under the song-locked phase of a synced LFO the cycle begins on the range's first
+  beat. The routing's depth is full and its amount lane is 0 outside the range and +1 inside.
+- **The wave.** It starts from the range's breakpoints (a Hold segment becomes a step: two points at one `x`, which
+  `LfoCustomWave` reads right-continuously) and, wherever a straight line between two neighbours strays from the curve
+  by more than 1/10000 of the parameter's range (a segment with tension, a skewed parameter), adds readings of the curve
+  there, up to the wave's 64 points (63 plus the tail point when the range is shorter than the cycle). When there are
+  more breakpoints than fit, it reads the curve at evenly spaced beats instead, which rounds off any steps; Level and the
+  base value always come from every breakpoint in the range, so a dense wiggle is never called flat.
+- **The lane.** Inside the range every breakpoint goes and one Hold point at the range start sits at the base value; a
+  Hold point 1e-6 beats before the start keeps a sloped segment arriving at the range as it was, and the point at the
+  range end takes up the curve in the shape of the segment it was in (a point already there is put back as it was).
+  A tension on the segment around the end is kept but its curve restarts at the end.
+- **Disabled, and why.** The item stays in the menu and says why in its own text: "(select a range first)" (no range, or
+  the range is on another lane), "(no CV input)" (the parameter has no CV jack), "(range longer than 8 bars)", "(range
+  is flat)" (the curve moves less than 1/10000 of the parameter's range), "(lane has too many points)".
+- **Motion.** The old curve melts into the flat line: the editor keeps the old shape and cross-fades it out over the
+  range (200 ms, 80 ms under Reduce Motion, at once under Animations Off or off screen) while the old points shrink away,
+  repainting only the range's rectangle. The new modulator row and band fade in like any new routing, and a row whose routing goes (Undo) fades out where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off).
+
+The math is `CustomLfoFromRange` (`LaneShapes/`, pure, one plan shared by the menu's enabled state and the command);
+the command is `TrackHeaderHost::createCustomLfoFromRange`, implemented by `MainComponent` as one
+`recordGraphTimelineAndMacroChange` around `GraphEditor::addLfoModulator`, the LFO's settings, the amount lane
+and `TimelineDoc::editBreakpoints`; `TimelineAutomationLanes` arms the lane's melt first and spends the range after.
+
 ## One gesture, one mutation
 
 Every preview above is strictly component-local (a handful of `preview*_` members, read back by
@@ -816,6 +855,11 @@ undo step, Delete/Backspace, nudge, the keyboard cursor, copy/cut/paste, the sel
 dot read back from pixels, the description) and `LanePointMathTests.cpp` (the selection set, rigid-block move,
 replace, box test, clipboard and the glide's state machine); the surface routing of Cmd+A/C/X/V is in
 `FocusArbitrationAutomationLaneTests.cpp`,
+`CustomLfoFromRangeTests.cpp` (the rate chosen per range length, the wave and level, the phase offset, base plus the
+LFO reproducing linear, held, bent and skewed-range lanes, the 64-point budget, the flattening leaving every beat outside
+the range as it was) and `AutomationLanesCustomLfoTests.cpp` (the menu item first, its disabled texts, the command
+against a real `MainComponent`: the new LFO's settings and wave, its row and amount lane, one undo and redo, a second
+row beside an existing LFO, the melt and the row's fade),
 `AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
 cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
 Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key

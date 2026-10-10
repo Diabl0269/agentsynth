@@ -298,6 +298,18 @@ struct TrackHeaderHost {
     virtual juce::String addLfoModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
         return {};
     }
+    /** `value` (in the parameter's own units) as a position in the parameter's normalised 0..1 range, skew included;
+     *  nullopt when the parameter does not resolve. */
+    virtual std::optional<double> normaliseParameterValue(const juce::String& /*nodeUuid*/,
+                                                          const juce::String& /*paramId*/, double /*value*/) {
+        return std::nullopt;
+    }
+    /** "Create custom LFO": turns the movement of lane `lane` between `startBeat` and `endBeat` into a new LFO whose
+     *  Custom wave is that movement, cabled into the lane's parameter, with its amount drawn over the range and the
+     *  lane flattened there, as ONE undo step. False (nothing changed) when the range cannot become an LFO. */
+    virtual bool createCustomLfoFromRange(synth::LaneId /*lane*/, double /*startBeat*/, double /*endBeat*/) {
+        return false;
+    }
     /** One LFO the "Add modulator..." picker can offer for a parameter: where it lives and what it moves. */
     struct LfoChoice {
         juce::String uuid;

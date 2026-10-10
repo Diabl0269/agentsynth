@@ -38,6 +38,14 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
         if (onKeyboardStopFocused)
             onKeyboardStopFocused(header);
     };
+    header.laneRangeProvider = [this, id]() -> std::optional<std::pair<double, double>> {
+        if (hasLaneRange() && laneRange_.getLane() == id)
+            return std::make_pair(laneRange_.getStartBeat(), laneRange_.getEndBeat());
+        return std::nullopt;
+    };
+    header.onCreateCustomLfo = [this, id](double startBeat, double endBeat) {
+        createCustomLfoFromRange(id, startBeat, endBeat);
+    };
 }
 
 // The lanes of `track` that have a row (a modulator's amount lane has none), in track order.

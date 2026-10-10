@@ -133,6 +133,13 @@ public:
     // The shared lane range (non-owning, may be null) and this lane's shape/range gestures.
     void setLaneRange(LaneRangeSelection* range) noexcept { shapeGesture_.setLaneRange(range); }
     AutomationLaneShapeGesture& getShapeGesture() noexcept { return shapeGesture_; }
+    /** The next change of this lane's points animates as the old curve melting into the new one inside [startBeat,
+     *  endBeat]; call before the edit, and disarmMelt() after it in case the edit changed nothing. */
+    void meltRangeNext(double startBeat, double endBeat);
+    void disarmMelt() noexcept { glide_.disarmMelt(); }
+    /** Tests: animate as if the editor were on screen. */
+    void forceGlideAnimateForTest(bool force) noexcept { glide_.forceAnimateForTest(force); }
+    bool isMeltingForTest() const noexcept { return glide_.isMelting(); }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
@@ -242,6 +249,9 @@ private:
 
     void paintGridBackdrop(juce::Graphics& g);
     void paintCommittedCurve(juce::Graphics& g, const synth::AutomationLane& lane);
+    void paintMeltedCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now, const synth::AutomationLane& lane,
+                          juce::Colour colour);
+    juce::Rectangle<int> meltRect() const;
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,

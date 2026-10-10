@@ -67,6 +67,35 @@ void AutomationLaneEditor::syncToDoc() {
     closeValueFieldIfPointGone();
 }
 
+//==============================================================================
+// ---- Melting a range into a flat line ----
+
+void AutomationLaneEditor::meltRangeNext(double startBeat, double endBeat) {
+    glide_.meltNext(startBeat, endBeat, [this] { return meltRect(); });
+}
+
+// The melting beat range in pixels, a couple of pixels wider for the stroke, over the lane's full height.
+juce::Rectangle<int> AutomationLaneEditor::meltRect() const {
+    const int x0 = (int)std::floor(viewState_.beatToX(glide_.meltStartBeat())) - 3;
+    const int x1 = (int)std::ceil(viewState_.beatToX(glide_.meltEndBeat())) + 3;
+    return juce::Rectangle<int>(x0, 0, x1 - x0, getHeight()).getIntersection(getLocalBounds());
+}
+
+// Outside the range the new curve is already final; inside it the old curve fades out as the new one fades in.
+void AutomationLaneEditor::paintMeltedCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now,
+                                            const synth::AutomationLane& lane, juce::Colour colour) {
+    const auto area = meltRect();
+    {
+        juce::Graphics::ScopedSaveState outside(g);
+        g.excludeClipRegion(area);
+        strokeCurve(g, now, lane, colour, 1.5f);
+    }
+    juce::Graphics::ScopedSaveState inside(g);
+    g.reduceClipRegion(area);
+    strokeCurve(g, glide_.before(), lane, colour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
+    strokeCurve(g, now, lane, colour.withMultipliedAlpha(glide_.amount()), 1.5f);
+}
+
 void AutomationLaneEditor::laneDocChanged() {
     syncToDoc();
     repaint();

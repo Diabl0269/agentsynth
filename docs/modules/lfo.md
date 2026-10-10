@@ -22,6 +22,7 @@ the module reference is in [`modules.md`](modules.md).
   unchanged from every other shape (a shared `phase` in `[0, 1)`, reset to 0 by Retrig). The
   default (and what a freshly-appended Custom shape starts as) is the Triangle preset. Unipolar
   output equals the curve's own `y`; bipolar maps it to `-1..1` like every other shape.
+- **From a lane range**: the timeline lane menu's "Create custom LFO" makes a new LFO whose Custom wave is the movement drawn inside a lane range ([`timeline/automation.md`](../timeline/automation.md#create-custom-lfo-from-a-range)).
 - **Extra state** (FRO114): `LFOModule::getExtraState()`/`setExtraState()` carry the custom wave
   as `{"version":1,"points":[{"x":..,"y":..,"bend":..}, ...]}` — emitted only when the wave is
   non-default, and regardless of the CURRENT shape (a sculpted wave survives switching to another
@@ -51,7 +52,9 @@ the module reference is in [`modules.md`](modules.md).
   unchanged-value early return skips redundant repaints.
 - **Rate modes**:
     - **Hz mode**: Free-running, 0.01–20.0 Hz (default 1.0 Hz, skewed range). Rate CV (ch0) applies here.
-    - **Sync mode**: Tempo-locked to host BPM (falls back to 120 BPM if no PlayHead). Subdivisions: 1/1, 1/2, 1/4 (default), 1/8, 1/16, 1/32. The rate is the tempo division, not the `rateHz` knob, so Rate CV is deliberately ignored in this mode.
+    - **Sync mode**: Tempo-locked to host BPM (falls back to 120 BPM if no PlayHead). The LFO has its own rate list (`synth::lfoRateDivisions()`, `Source/Modules/LfoRateDivisions.h`), shortest first: 1/128, 1/64, 1/32, 1/16, 1/8, 1/4 (default), 1/2, 1/1, then 2/1, 4/1, 8/1 (cycles of 2, 4 and 8 bars of 4/4). ADSR and Delay keep the shorter list ending at 1/1. **Transport-locked phase**: with Sync on, Retrig off and the transport playing, the phase at the start of each block is the song position inside one cycle (`frac(ppq / cycleBeats)`), so a 1-bar LFO starts its cycle on every bar line and a 4/1 LFO on every fourth; the Phase offset still adds on top. Stopped transport, Free (Hz) mode or Retrig on keep the free-running phase. The rate is the tempo division, not the `rateHz` knob, so Rate CV is deliberately ignored in this mode.
+- **Custom-wave grid**: the editor's grid combo offers Off, 1/4, 1/8 (default), 1/16, 1/32, 1/64 and 1/128.
+- **Saved state**: projects store `rateSync` by choice name, so the longer rates cannot change what an old project means. Plugin-host state (`ModuleBase::getStateInformation`) now also stores each choice parameter's name (`<id>__name`) and prefers it on load; a legacy blob without it is decoded with `ModuleBase::legacyChoiceCount(paramId)`, which LFO overrides to 8 for `rateSync`.
 - **Parameters**: Shape (choice), Sync (bool mode toggle), Rate Hz (float), Sync Rate (choice), Bipolar (bool, default true), Retrig (bool), Level (0.0–1.0, default 1.0), Glide (0.0–1.0, S&H only), Phase (0–360 degrees, default 0), Fade In (0–10000 ms, default 0).
 - **Bipolar/Unipolar**: When `Bipolar` is true, output range is −1 to +1. When false (unipolar), mapped to 0 to +1.
 - **S&H Glide**: On each phase wrap a new random value is drawn; `Glide > 0` ramps to it over up to 0.5 s using `juce::LinearSmoothedValue`.

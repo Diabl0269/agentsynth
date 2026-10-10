@@ -32,7 +32,7 @@ CurveEditorComponent* findLfoCurveEditor(ModuleComponent& comp) {
 juce::ComboBox* findLfoGridCombo(ModuleComponent& comp) {
     for (auto* child : comp.getChildren())
         if (auto* combo = dynamic_cast<juce::ComboBox*>(child))
-            if (combo->getNumItems() == 5 && combo->getItemText(0) == "Grid Off")
+            if (combo->getNumItems() == 7 && combo->getItemText(0) == "Grid Off")
                 return combo;
     return nullptr;
 }
@@ -237,6 +237,30 @@ TEST_F(ModuleComponentTest, SnapOnCardDefaultsToEighthsAndOffDisablesIt) {
     curve->mouseDrag(curveMouseEvent(*curve, off, true, midPos));
     const double x = curve->getModel().getNode(1).x;
     EXPECT_NE(std::fmod(x * 4.0, 1.0), 0.0) << "Off disables snap entirely";
+}
+
+TEST_F(ModuleComponentTest, GridComboOffersTheFinerSixtyFourthAndHundredTwentyEighth) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    LFOModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    selectShape(processor, LFOModule::kCustomShapeIndex);
+
+    auto* combo = findLfoGridCombo(moduleComponent);
+    ASSERT_NE(combo, nullptr);
+    EXPECT_EQ(combo->getItemText(5), "Grid 1/64");
+    EXPECT_EQ(combo->getItemText(6), "Grid 1/128");
+
+    auto* curve = findLfoCurveEditor(moduleComponent);
+    ASSERT_NE(curve, nullptr);
+    combo->setSelectedItemIndex(6, juce::sendNotificationSync);
+    const CurveEditorGeometry geometry = lfoGeometry(*curve);
+    const auto midPos = geometry.nodePosition(1);
+    const auto off = midPos + juce::Point<float>(3.0f, 3.0f);
+    curve->mouseDown(curveMouseEvent(*curve, midPos, false, midPos));
+    curve->mouseDrag(curveMouseEvent(*curve, off, true, midPos));
+    const double x = curve->getModel().getNode(1).x * 128.0;
+    EXPECT_NEAR(x, std::round(x), 1e-6) << "1/128 snaps x to a 128th of the cycle";
 }
 
 TEST_F(ModuleComponentTest, PresetsAndToolsApplyAndAreUndoable) {

@@ -33,6 +33,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp
+    Source/MainComponent/MainComponentCustomLfo.cpp
     Source/MainComponent/MainComponentModulators.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackModule.cpp
@@ -135,6 +136,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesCustomLfo.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesReorder.cpp
@@ -144,6 +146,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h
     Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h
     Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.cpp

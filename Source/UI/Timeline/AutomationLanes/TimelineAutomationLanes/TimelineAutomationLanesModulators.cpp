@@ -6,6 +6,7 @@
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -80,6 +81,7 @@ int TimelineAutomationLanes::hiddenLaneCount(synth::TrackId track) const {
 // their titles, colours, values and amounts; a changed set of routings rebuilds that lane's rows.
 // Returns true when any lane's rows were rebuilt or dropped, i.e. when the layout must be redone.
 bool TimelineAutomationLanes::syncModulators() {
+    sweepLeavingModulators();
     bool rebuilt = false;
     std::set<synth::LaneId> visible;
     for (const auto& track : doc_->getTracks()) {
@@ -131,9 +133,11 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     std::set<juce::String> known; // routings that already had a row: they do not fade in again
     for (const auto& old : entry.infos)
         known.insert(old.key());
+    std::set<juce::String> staying;
+    for (const auto& info : infos)
+        staying.insert(info.key());
     entry.fades.clear();
-    entry.rows.clear();
-    entry.bands.clear();
+    retireModulatorRows(entry, staying);
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
         auto row = std::make_unique<ModulatorRow>(info, host_, parameterName);
@@ -167,6 +171,32 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
             entry.fades.back()->setShown(true);
         }
     }
+}
+
+// A row whose routing is gone (removed, undone) fades out where it stood instead of vanishing, when it is on screen;
+// otherwise it is dropped at once. Rows whose routing stays are rebuilt in place, as before.
+void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying) {
+    sweepLeavingModulators();
+    for (size_t i = 0; i < entry.rows.size(); ++i) {
+        if (staying.count(entry.infos[i].key()) > 0 || !FadeVisibility::canAnimateIn(&headerParent_))
+            continue;
+        auto leaving = std::make_unique<LeavingModulator>();
+        leaving->row = std::move(entry.rows[i]);
+        leaving->band = std::move(entry.bands[i]);
+        leaving->fade = std::make_unique<FadeVisibility>(
+            std::initializer_list<juce::Component*>{leaving->row.get(), leaving->band.get()});
+        leaving->fade->setShown(false);
+        leaving_.push_back(std::move(leaving));
+    }
+    entry.rows.clear();
+    entry.bands.clear();
+}
+
+// Drops the faded-out rows (never from inside their own fade callback).
+void TimelineAutomationLanes::sweepLeavingModulators() {
+    leaving_.erase(std::remove_if(leaving_.begin(), leaving_.end(),
+                                  [](const auto& l) { return !l->fade->isFading() && !l->fade->isShown(); }),
+                   leaving_.end());
 }
 
 // The graph changed under the timeline (an LFO added or removed, a cable patched, an undo): re-derive

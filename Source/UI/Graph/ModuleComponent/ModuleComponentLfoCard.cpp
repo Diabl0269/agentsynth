@@ -35,8 +35,9 @@ const char* const kLfoPresetNames[] = {"Triangle",  "Ramp Up",   "Ramp Down", "S
                                        "Pulse 1/4", "Steps (4)", "Soft Sine"};
 const char* const kLfoToolNames[] = {"Invert", "Reverse", "Straighten", "Clear", "Reset to Default"};
 // Grid combo entries: divisions-per-axis (0 == Off), index-parallel to the display label.
-const int kLfoGridDivisions[] = {0, 4, 8, 16, 32};
-const char* const kLfoGridLabels[] = {"Grid Off", "Grid 1/4", "Grid 1/8", "Grid 1/16", "Grid 1/32"};
+const int kLfoGridDivisions[] = {0, 4, 8, 16, 32, 64, 128};
+const char* const kLfoGridLabels[] = {"Grid Off",  "Grid 1/4",  "Grid 1/8",  "Grid 1/16",
+                                      "Grid 1/32", "Grid 1/64", "Grid 1/128"};
 
 // Free-mode CurveModel <-> LfoCustomWave: the LFO card's own topology (spec section 4 "Card
 // wiring"). Endpoints are pinned in x (a wave always spans phase 0..1); every point is movable

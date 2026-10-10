@@ -8,6 +8,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
@@ -38,6 +39,7 @@ public:
     static constexpr int kAddModulatorMenuId = 2;
     static constexpr int kChangeParameterMenuId = 3;
     static constexpr int kDuplicateMenuId = 4;
+    static constexpr int kCreateCustomLfoMenuId = 5;
     static constexpr int kMoveToTrackMenuIdBase = 100; // + index into the menu's move targets
 
     /** `doc` must outlive this component; `host` and `undo` may be null. */
@@ -81,6 +83,13 @@ public:
     /** The parameter name's hit area, in this component's coordinates. */
     juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameArea_; }
 
+    /** The Range tool's selection when it sits on this lane and has width, as {start, end} beats; the pool answers. May
+     * be null (no range ever). */
+    std::function<std::optional<std::pair<double, double>>()> laneRangeProvider;
+    /** "Create custom LFO" was picked for the range {start, end}; the pool animates the lane and runs the host's
+     * command. */
+    std::function<void(double startBeat, double endBeat)> onCreateCustomLfo;
+
     /** The drag-to-reorder gesture, owned by the lane pool: a press, every drag step (raw screen y) and the release,
      *  which answers true when the press never became a drag (a plain click). All may be null. */
     std::function<void(int screenY)> onDragPress;
@@ -112,6 +121,7 @@ private:
     void openParameterPicker(bool duplicate);
     bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
+    void addCreateCustomLfoItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     void applyRecordModeColour();
 

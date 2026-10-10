@@ -402,8 +402,7 @@ public:
 
     // ---- "Replace with..." keeps a module's MIDI Remote mappings (see replaceModule()'s definition) ----
 
-    /** Fires from inside replaceModule(), after the new node exists and the old node (and its
-     *  uuid) are gone, with the OLD node's uuid and the NEW node's id. May be null. */
+    /** Fires from replaceModule() once the new node exists and the old one is gone: OLD uuid, NEW id. May be null. */
     std::function<void(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId)> onModuleReplaced;
 
     /** Fires as the postRestore of the combined undo/redo this doc participates in (see
@@ -411,9 +410,8 @@ public:
     std::function<void()> onMidiRemoteDocRestored;
     std::function<std::vector<synth::PluginIdentity>()> installedPluginsProvider; // "Replace with..." plugin rows
 
-    /** Non-owning; null (the default, and every headless test) means replaceModule() falls back to
-     *  its plain graph-only undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must
-     *  outlive this editor. */
+    /** Non-owning; null (the default, every headless test) means replaceModule() falls back to its plain graph-only
+     *  undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must outlive this editor. */
     void setMidiRemoteProjectDocForUndo(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDocForUndo_ = doc; }
 
     // ---- Copy / paste / duplicate (snippet pipeline, docs/layout/snippets-clipboard.md) ----
@@ -530,30 +528,32 @@ public:
     // ---- Modulators added from a timeline lane (GraphEditorModulators.cpp) ----
     /** The raw CV channel that drives `paramId` on `nodeId`'s module; -1 when it has none. */
     int modulationChannelFor(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) const;
-    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack, as ONE undo step; invalid id when it can't. */
+    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack at `depth`, as ONE undo step (none with `recordUndo`
+     *  false); invalid id when it can't. `attenOut` gets the routing's hidden attenuverter. */
     juce::AudioProcessorGraph::NodeID addLfoModulator(juce::AudioProcessorGraph::NodeID targetId,
-                                                      const juce::String& paramId);
-    /** Cables the EXISTING LFO `lfoId` into `paramId`'s CV jack on `targetId`, as ONE undo step: no new card, a
-     *  routing at the default depth, and macro ports minted or reused when the two sit in different macros.
-     *  False (nothing changed) when either node, the jack or the LFO is missing, or the LFO already drives it. */
+                                                      const juce::String& paramId, bool recordUndo = true,
+                                                      float depth = 0.5f,
+                                                      juce::AudioProcessorGraph::NodeID* attenOut = nullptr);
+    /** Cables the EXISTING LFO `lfoId` into `paramId`'s CV jack on `targetId` at the default depth, as ONE undo step
+     *  (no new card; macro ports minted or reused). False (nothing changed) when a node, the jack or the LFO is
+     * missing. */
     bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
                                      juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
     /** A new module of factory type `typeName` beside `targetId`, cabled from its output `sourceChannel` into raw CV
-     *  channel `destChannel` at `depth`, as ONE undo step (the card, its place, the cable, its depth and any macro
-     *  join). Returns the new routing's hidden attenuverter; invalid (nothing changed) when it can't. */
+     *  channel `destChannel` at `depth`, as ONE undo step. Returns the new routing's hidden attenuverter; invalid
+     *  (nothing changed) when it can't. */
     juce::AudioProcessorGraph::NodeID addModulationSourceModule(const juce::String& typeName, int sourceChannel,
                                                                 juce::AudioProcessorGraph::NodeID targetId,
                                                                 int destChannel, float depth);
-    /** Cables any modulation source (`sourceChannel` is the raw output channel a ModSourceItem names) into raw CV
-     *  channel `destChannel` of `targetId` at `depth`, through the same macro-port seam, as ONE undo step. Returns
-     *  the new routing's hidden attenuverter; invalid (nothing changed) when it can't or the pair is already wired.
-     *  `recordUndo` false leaves the undo step to the caller (the timeline's Change source...). */
+    /** Cables any modulation source (`sourceChannel`: a ModSourceItem's raw output channel) into raw CV channel
+     *  `destChannel` of `targetId` at `depth` through the macro-port seam, as ONE undo step (none with `recordUndo`
+     *  false). Returns the routing's hidden attenuverter; invalid (nothing changed) when it can't or it is wired. */
     juce::AudioProcessorGraph::NodeID connectModulationSource(juce::AudioProcessorGraph::NodeID sourceId,
                                                               int sourceChannel,
                                                               juce::AudioProcessorGraph::NodeID targetId,
                                                               int destChannel, float depth, bool recordUndo = true);
-    /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step,
-     *  or, with `recordUndo` false, as a plain edit for a caller whose own undo step already surrounds it. */
+    /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step, or a
+     *  plain edit with `recordUndo` false. */
     void removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo = true);
     /** Removes the whole chain through hidden attenuverter `attenId` (ports it crossed included) as ONE undo step. */
     void removeModulationChain(juce::AudioProcessorGraph::NodeID attenId);
