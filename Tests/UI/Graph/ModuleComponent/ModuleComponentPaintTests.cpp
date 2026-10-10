@@ -3,6 +3,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -276,4 +277,32 @@ TEST_F(ModuleComponentTest, AudioOutputCardIconTintsToTheTitleColourNotTheLibrar
         << "the glyph must not still be (mostly) solid-filled in the library sidebar's muted grey";
 
     moduleComponent.setLookAndFeel(nullptr);
+}
+
+// Opt-in visual check of the Drum Kit card (seven tabs on one strip) with the app's real LookAndFeel.
+// Set DRUM_KIT_CARD_PNG=<path> to write it.
+TEST_F(ModuleComponentTest, DrumKitCardRendersToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    DrumKitModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    moduleComponent.timerCallback();
+
+    synth::theme::AppLookAndFeel lf;
+    moduleComponent.setLookAndFeel(&lf);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
+    juce::Graphics g(img);
+    moduleComponent.paintEntireComponent(g, true);
+    moduleComponent.setLookAndFeel(nullptr);
+
+    const char* pngPath = std::getenv("DRUM_KIT_CARD_PNG");
+    if (pngPath == nullptr || juce::String(pngPath).isEmpty())
+        GTEST_SKIP() << "set DRUM_KIT_CARD_PNG=<path> to write the rendered card for visual inspection";
+    juce::File outFile(pngPath);
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    ASSERT_TRUE(stream.openedOk());
+    juce::PNGImageFormat png;
+    ASSERT_TRUE(png.writeImageToStream(img, stream));
 }

@@ -80,7 +80,7 @@ CardLayout drumKitLayout() {
         tab("hats", "Hats", {param("hatLevel"), param("hatTune"), param("closedDecay"), param("openDecay")},
             kQuadColumns),
         tab("toms", "Toms", {param("tomLevel"), param("tomTune"), param("tomDecay")}),
-        tab("cymbals", "Cymbals", {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay")}),
+        tab("cymbals", "Cym", {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay")}),
         tab("cowbell", "Bell", {param("cowbellLevel"), param("cowbellTune"), param("cowbellDecay")}),
         footer({}),
     };
