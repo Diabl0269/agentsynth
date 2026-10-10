@@ -209,6 +209,8 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // availableTracks) plus "currentPatch": the same stripped graph JSON the patch path sends the model,
 // as an object, omitted when the graph has no nodes (project.generate then says "Current patch is
 // empty."). productName is the provider's to add, as for every capability.
+// setProjectPromptVersion() overrides it for the eval harness, which measures a newer server prompt before any
+// app build asks for it: an app may only pin a version once the deployed service serves it.
 static constexpr int kProjectGeneratePromptVersion = 2;
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
@@ -219,7 +221,9 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
     // Pins the server prompt that teaches addInstrumentTrack's "envelope" and "instrumentParams".
     // A build that does not understand those fields sends no version and keeps getting version 1,
     // so a server deploy can never hand an older app a field it would reject.
-    body.getDynamicObject()->setProperty("promptVersion", kProjectGeneratePromptVersion);
+    body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
+                                                              ? projectPromptVersionOverride
+                                                              : kProjectGeneratePromptVersion);
     return body;
 }
 

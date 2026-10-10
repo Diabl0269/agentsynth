@@ -25,6 +25,7 @@
                                                    [--mode patch|timeline|project|track]
                                                    [--timeout-ms N] [--save-projects DIR]
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
+                                                   [--project-prompt-version N]
                                                    [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
@@ -349,7 +350,9 @@ bool parseSampling(const juce::StringArray& args, SamplingArgs& sampling) {
     return true;
 }
 
-// --timeout-ms into `requestTimeoutMs` (0 = unset); false (after saying why) on a non-positive value.
+// --timeout-ms into `requestTimeoutMs` (0 = unset); false (after saying why) on a non-positive value. It is the
+// provider's request timeout; the harness's own waits are N + 30 s so the provider's message, not a vague outer
+// "timed out", is what gets reported. Unset keeps the 240 s defaults.
 bool parseTimeoutMs(const juce::StringArray& args, int& requestTimeoutMs) {
     const juce::String flag = argValue(args, "--timeout-ms", "");
     requestTimeoutMs = flag.getIntValue();
@@ -368,7 +371,8 @@ struct ProjectRun {
     juce::String modeFlag, jsonOut;
     SamplingArgs sampling;
     int requestTimeoutMs, outerWaitMs;
-    juce::File saveDir; // empty = do not save
+    juce::File saveDir;       // empty = do not save
+    int projectPromptVersion; // 0 = the app's own pin
 };
 
 int runProjectOrTrack(const ProjectRun& r) {
@@ -384,6 +388,7 @@ int runProjectOrTrack(const ProjectRun& r) {
     std::optional<save_projects::Environment> saveEnv;
     project_mode::RunOptions options;
     options.outerWaitMs = r.outerWaitMs;
+    options.projectPromptVersion = r.projectPromptVersion;
     if (r.saveDir != juce::File()) {
         saveEnv.emplace();
         options.saveHook = save_projects::makeSaveHook(*saveEnv, r.saveDir, r.model);
@@ -423,8 +428,6 @@ int main(int argc, char* argv[]) {
     const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
     const juce::String jsonOut = argValue(args, "--json", "");
 
-    // --timeout-ms N: the provider's request timeout; the harness's own waits are N + 30 s so the provider's
-    // message, not a vague outer "timed out", is what gets reported. Unset keeps the 240 s defaults.
     int requestTimeoutMs = 0;
     if (!parseTimeoutMs(args, requestTimeoutMs))
         return 1;
@@ -463,7 +466,8 @@ int main(int argc, char* argv[]) {
 
     if (modeFlag == "project" || modeFlag == "track")
         return runProjectOrTrack({providerKind, providerFlag, host, model, runs, modeFlag, jsonOut, sampling,
-                                  requestTimeoutMs, outerWaitMs, saveDir});
+                                  requestTimeoutMs, outerWaitMs, saveDir,
+                                  argValue(args, "--project-prompt-version", "0").getIntValue()});
 
     const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
 
