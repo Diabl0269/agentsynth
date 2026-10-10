@@ -29,6 +29,7 @@ cmake --build build --target AIEvalHarness
 | `--save-projects` | *(none)* | `--mode project`/`track`: apply every plan that previews valid and save it as `<dir>/<model>-<scenario>-run<N>.agsproj` (see Listening to results). With `--replay`: where the projects go. |
 | `--replay` | *(none)* | A `--json` file from an earlier `--mode project`/`track` run. Makes no model calls; applies and saves each of its records (needs `--save-projects`). |
 | `--check-project` | *(none)* | Print the tracks, clips, notes, lanes and Track In bindings in a saved `.agsproj` and exit (1 when it does not load or a track is unbound). |
+| `--render-peaks` | *(none)* | A `.agsproj` bundle, or a directory of them: render each offline (master mix and one stem per track, beat 0 to the last clip plus a 2 s tail, 32-bit float so overs are measured) and print the peak in dBFS, flagging `CLIPS` at 0.0 or above. With `--json FILE`, also writes `{bundle, masterPeakDb, tracks, clips}` records. Exit 1 when a bundle does not open or render. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
@@ -129,6 +130,8 @@ The run never touches your real app settings.
 A record that did not respond, or whose plan the app refuses, prints why and writes nothing. Replay
 needs the file's `mode` to be `project` or `track` and knows each scenario's starting patch by name.
 `--check-project projects/<name>.agsproj` prints what a bundle holds.
+
+`--render-peaks projects/` renders every bundle in the folder offline with the app's own bounce and stem export and prints each one's master and per-track peak in dBFS (`CLIPS` when the master reaches 0.0), so a mix that is far too loud shows up without opening the app.
 
 ## Scoring a model through the service (`--provider remote`)
 

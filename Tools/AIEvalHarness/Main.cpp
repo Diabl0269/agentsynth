@@ -25,6 +25,7 @@
                                                    [--mode patch|timeline|project|track]
                                                    [--timeout-ms N] [--save-projects DIR]
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
+                                                   [--render-peaks BUNDLE_OR_DIR]
                                                    [--project-prompt-version N]
                                                    [--think true|false] [--temperature X] [--seed N]
 
@@ -56,7 +57,9 @@
     DIR/<model>-<scenario>-run<N>.agsproj, to open in the app and listen to. --replay RESULTS.json
     (with --save-projects) makes no model calls: it does the same for each record of an earlier --json
     file. --check-project BUNDLE prints what a saved bundle holds. --timeout-ms N sets the provider's
-    request timeout; the harness's own waits become N + 30 s. See Tools/AIEvalHarness/README.md.
+    request timeout; the harness's own waits become N + 30 s. --render-peaks BUNDLE_OR_DIR (with
+    optional --json FILE) renders each bundle offline and prints its master and per-track peak in dBFS.
+    See Tools/AIEvalHarness/README.md.
 
     --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
     --provider remote) and are for REPRODUCIBILITY of a corruption investigation, not production
@@ -75,6 +78,7 @@
 #include "AI/PatchEval.h"
 #include "AI/RemoteProvider.h"
 #include "ProjectMode.h"
+#include "RenderPeaks.h"
 #include "SaveProjects.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -399,6 +403,20 @@ int runProjectOrTrack(const ProjectRun& r) {
         header, options);
 }
 
+// `--check-project` and `--render-peaks`: return -1 when neither flag is present.
+int runBundleFlagIfAsked(const juce::StringArray& args) {
+    const juce::String checkFlag = argValue(args, "--check-project", "");
+    if (checkFlag.isNotEmpty())
+        return save_projects::checkProject(juce::File::getCurrentWorkingDirectory().getChildFile(checkFlag));
+    const juce::String flag = argValue(args, "--render-peaks", "");
+    if (flag.isEmpty())
+        return -1;
+    const auto cwd = juce::File::getCurrentWorkingDirectory();
+    const juce::String json = argValue(args, "--json", "");
+    save_projects::Environment env;
+    return render_peaks::run(env, cwd.getChildFile(flag), json.isEmpty() ? juce::File() : cwd.getChildFile(json));
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -408,10 +426,9 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
 
-    // Reading a saved bundle needs neither a provider nor a model.
-    const juce::String checkFlag = argValue(args, "--check-project", "");
-    if (checkFlag.isNotEmpty())
-        return save_projects::checkProject(juce::File::getCurrentWorkingDirectory().getChildFile(checkFlag));
+    // Reading or rendering a saved bundle needs neither a provider nor a model.
+    if (const int bundleExit = runBundleFlagIfAsked(args); bundleExit >= 0)
+        return bundleExit;
 
     const juce::String providerFlag = argValue(args, "--provider", "ollama");
     if (providerFlag != "ollama" && providerFlag != "remote") {
