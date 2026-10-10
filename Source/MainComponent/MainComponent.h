@@ -418,7 +418,8 @@ private:
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
-    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody inside its recordBatch
+    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody and setTempoAsUndoStep inside its
+                                               // recordBatch
     /** Opens NO undo transaction (the caller must); on nullopt, nothing it created is left behind. */
     std::optional<synth::InstrumentTrackBuildResult>
     buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
@@ -671,6 +672,8 @@ private:
     void maybeAutosave();
     void performAutosave();
     void pollTransportEdits(juce::uint32 nowMs);
+    void recordTransportStep(const synth::TransportDoc& cur);
+    bool setTempoAsUndoStep(double bpm, bool& changed);
     void applyLoadedTransport(const synth::TransportDoc& loaded);
     void notifyDocumentTitleChanged();
 

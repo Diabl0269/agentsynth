@@ -34,8 +34,12 @@ void MainComponent::pollTransportEdits(juce::uint32 nowMs) {
     if (nowMs - pendingTransportSinceMs_ < kTransportEditDebounceMs)
         return;
 
-    // The lambda is what undo/redo run: it applies the state and moves the baseline with it, so the
-    // restore is not seen by the next poll as a fresh edit.
+    recordTransportStep(cur);
+}
+
+// The lambda is what undo/redo run: it applies the state and moves the baseline with it, so the
+// restore is not seen by the next poll as a fresh edit.
+void MainComponent::recordTransportStep(const synth::TransportDoc& cur) {
     undoManager.recordTransportChange(
         [this](const synth::TransportDoc& doc) {
             audioEngine.getTransport().applyDocumentState(doc);
@@ -44,6 +48,20 @@ void MainComponent::pollTransportEdits(juce::uint32 nowMs) {
         },
         committedTransport_, cur);
     committedTransport_ = cur;
+}
+
+// An AI edit's tempo: applied and recorded at once (no debounce) as a transport undo step, inside the edit's
+// undo group. `changed` reports whether the tempo actually moved. Folds any still-pending tempo edit into the
+// same step, since the baseline it is measured against is the last recorded state.
+bool MainComponent::setTempoAsUndoStep(double bpm, bool& changed) {
+    auto& transport = audioEngine.getTransport();
+    if (!transport.setBpm(bpm))
+        return false;
+    const synth::TransportDoc cur = transport.getDocumentState();
+    changed = cur != committedTransport_;
+    recordTransportStep(cur);
+    pendingTransport_ = cur;
+    return true;
 }
 
 // Opening a project applies its transport and rebases the baseline in the same step, so the load itself

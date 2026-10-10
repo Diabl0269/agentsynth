@@ -31,7 +31,7 @@ struct Plan {
     bool modeStated = false; // "mode" was given; false lets a replace that only validates as a merge repair
     bool merge = false;      // the mode the patch phase starts in
     juce::var trackOps;      // {"timelineOps": [addTrack/addInstrumentTrack ...]}, void when none
-    juce::var otherOps;      // {"timelineOps": [placeClips/writeLane/placeMidiClip ...]}, void when none
+    juce::var otherOps; // {"timelineOps": [placeClips/writeLane/placeMidiClip/setTempo/addMarker ...]}, void when none
     std::vector<int> trackOpIndex, otherOpIndex; // each phase op's index in the response's own list
     std::vector<Reservation> reservations;
     std::set<juce::uint32> patchNodeIds;
@@ -68,6 +68,8 @@ public:
                                                                  const juce::var& instrumentParams) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     TimelineDoc* editableTimelineDoc() override { return &doc_; }
+    bool canSetTempo() const override { return true; }
+    bool setTempo(double bpm) override;
 
 private:
     TimelineDoc& doc_;

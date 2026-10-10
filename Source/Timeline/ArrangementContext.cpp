@@ -146,17 +146,43 @@ juce::String buildHeader(std::size_t trackCount, const TransportService::Positio
            juce::String(transport.timeSigDenominator) + ", loop " + loopPart;
 }
 
+// The markers on one line, "Markers (beats): "Intro" @ 0, "Drop" @ 8", so a later edit can refer to a section by
+// name. Whole markers only, up to half the budget, with a "+K more" tail, so a heavily marked project cannot push
+// every track out. A name is user- or model-authored text: line breaks become spaces so it stays one line.
+juce::String buildMarkersLine(const std::vector<Marker>& markers, int maxChars) {
+    if (markers.empty())
+        return {};
+    const juce::String prefix = "Markers (beats): ";
+    juce::String line = prefix;
+    int included = 0;
+    for (const auto& marker : markers) {
+        const juce::String name = marker.text.replaceCharacters("\r\n", "  ");
+        const juce::String item = "\"" + name + "\" @ " + formatNumber(marker.beat);
+        const juce::String candidate = line + (included > 0 ? ", " : "") + item;
+        if (included > 0 && candidate.length() > maxChars / 2)
+            break;
+        line = candidate;
+        ++included;
+    }
+    const int remaining = static_cast<int>(markers.size()) - included;
+    if (remaining > 0)
+        line += ", +" + juce::String(remaining) + " more";
+    return line;
+}
+
 } // namespace
 
 juce::String ArrangementContext::summarize(const TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
                                            const TransportService::PositionSnapshot& transport, int maxChars) {
-    if (doc.isEmpty())
+    if (doc.isEmpty() && doc.getMarkers().empty())
         return {};
 
     const auto& tracks = doc.getTracks();
     const auto byUuid = buildDisplayNameByUuid(graph);
 
     juce::String result = buildHeader(tracks.size(), transport);
+    if (const auto markers = buildMarkersLine(doc.getMarkers(), maxChars); markers.isNotEmpty())
+        result += "\n" + markers;
 
     int includedTracks = 0;
     for (const auto& track : tracks) {

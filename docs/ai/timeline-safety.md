@@ -124,6 +124,7 @@ because the mechanism next to it enforces it, not because a prompt asks nicely.
 |---|---|---|
 | MIDI notes | `placeClips` note lists, or `.mid` blobs via `placeMidiClip` | note caps, pitch/velocity/channel ranges REJECTED not clamped; blob at most 256 KiB, PPQ-only SMF parsed by `MidiClipFile`, a format that structurally cannot carry a path, a plugin id, or code |
 | Automation lanes | `writeLane` | values validated against the **live** parameter's range intersected with the lane snapshot; `(nodeUuid, paramId)` must resolve against the live graph, so untrusted input can never author an orphan |
+| Tempo and markers | `setTempo`, `addMarker` | `bpm` 40-220 and marker names 1-40 characters, beats within `kMaxPpqUntrusted`, all REJECTED not clamped; closed objects (no colour, no time signature); the tempo only ever changes through a host inside the batch's one undo step |
 | Doc-only tracks | `addTrack`, kinds `midi` and `automation` only | unbound: wiring a Track In or Track Audio node stays a user gesture |
 
 **What AI output may never touch, and why:**

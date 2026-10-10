@@ -59,6 +59,8 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
     "index" : N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
 | `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track, creating that track if there is none (it has no graph, so it cannot pick the owning track the way `MainComponent::automateParameter` does; the next project open moves the lane), then REPLACES every point in the written span (min to max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
 | `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream`, placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat`. Clip length is `ceil` of its last note's end, floored at 1 beat, reusing `MidiClipFile::importIntoTrack`. | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
+| `setTempo` | Sets the project tempo to `bpm` (a number from 40 to 220, narrower than the transport's own clamp). The tempo lives on the transport, not in `TimelineDoc`, so it goes through the host (`TimelineOpsHost::setTempo`, with `canSetTempo()` to say a host can): a batch with this op runs inside `host->recordBatch`, and `MainComponentTimelineOpsHost` records the change as a transport undo step (`MainComponent::setTempoAsUndoStep`) inside the same undo group, so one Cmd+Z restores the tempo with the rest. The last `setTempo` in a batch wins. | Rejected with no host, or a host that cannot set it ("This build cannot change the tempo from here."). Never changes the time signature or loop. Validation never sets the tempo, only apply does. |
+| `addMarker` | Adds a marker `name` (1 to 40 characters) at `beat` (0 to `kMaxPpqUntrusted`) through `TimelineDoc::addMarker`; the preview folds all of a batch's markers into one phrase (`adds 3 markers ("Intro" at beat 0, ...)`, first four named). | No colour field (the doc's default applies). Rejects past `TimelineDoc::kMaxMarkers`. |
 
 ## The local path
 
@@ -67,7 +69,7 @@ The local (Ollama) path can author this envelope too, behind
 additionally gated on a timeline context being installed (`hasTimelineContext()`). While active,
 three things change and nothing else:
 
-- the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the five ops,
+- the system prompt gains a `TIMELINE & AUTOMATION OPERATIONS` section teaching the five original ops (`setTempo` and `addMarker` are in the grammar but not taught there; the song layout that produces them is the hosted prompt's),
   swapped into the existing history **in place**, so a mid-conversation toggle never clears the chat
   and off means byte-identical to the pre-timeline prompt;
 - the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
@@ -164,6 +166,7 @@ whether an answer has the right shape ([harness](#measuring-sound-shape)).
 Tests: `Tests/Timeline/TimelineOpsInstrumentTrackTests.cpp` (a fake host: field and insert checks,
 previews, one undo step, host never called for an invalid batch) and
 `Tests/Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp` (the real host end to end).
+`setTempo` and `addMarker`: `Tests/Timeline/TimelineOpsTempoMarkerTests.cpp` (bounds, previews, the host call, all-or-nothing) and, for the one undo step with the tempo through the real host, `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp`.
 
 ## One edit plan
 
@@ -226,8 +229,9 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
   failure is returned. The host's macro set is not restored here: the real host removes what a
   failed build made, but an earlier successful build in the same plan keeps its macro.
 
-Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 2, the server prompt that teaches `envelope` and
-`instrumentParams`; a request without a version gets prompt 1, so an older app never receives those fields. Tests:
+Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). The hosted body pins `promptVersion` 5 (`kProjectGeneratePromptVersion`): 2 teaches `envelope` and
+`instrumentParams`, 3 the whole-track rules, 4 a song layout the server expands into ordinary clips, 5 the
+`setTempo` and `addMarker` ops it derives from that layout's bpm and section names. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (the rules, the preview, the
 backstop through a failing fake host, both request shapes),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step

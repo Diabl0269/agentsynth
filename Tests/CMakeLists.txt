@@ -123,6 +123,7 @@ add_executable(Tests
     Timeline/TimelineOpsTests.cpp
     Timeline/TimelineOpsFixtureTests.cpp
     Timeline/TimelineOpsInstrumentTrackTests.cpp
+    Timeline/TimelineOpsTempoMarkerTests.cpp
     Timeline/ArrangementContextTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp

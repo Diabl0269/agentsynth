@@ -59,11 +59,19 @@ struct TimelineOpsHost {
     virtual void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
         juce::ignoreUnused(created);
     }
+    /** True if this host can change the project tempo; a `setTempo` op is rejected without one. */
+    virtual bool canSetTempo() const { return false; }
+    /** Sets the project tempo (BPM, already range-checked) inside recordBatch, so the same undo step reverts it.
+     * Called only while applying, never while validating. False = the tempo was not changed. */
+    virtual bool setTempo(double bpm) {
+        juce::ignoreUnused(bpm);
+        return false;
+    }
 };
 
 /**
  * @brief The app-side timeline tools: discrete, validated, previewable operations a model
- *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip), applied
+ *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip, setTempo, addMarker), applied
  *        as ONE undo step.
  *
  * A **sibling** of a patch suggestion, never nested inside one — `"timelineOps"` is a distinct
@@ -116,7 +124,8 @@ struct TimelineOps {
      * @param graph the LIVE graph — a `writeLane` op's `(nodeUuid, paramId)` must resolve against
      *              it, and the resolved parameter's real range is what bounds the values.
      */
-    /** @param host null fails any `addInstrumentTrack` op; only its presence is read here. */
+    /** @param host null fails any `addInstrumentTrack` or `setTempo` op; only its presence (and canSetTempo) is read
+     * here. */
     static TimelineOpsResult validate(const juce::var& envelope, const TimelineDoc& doc,
                                       const juce::AudioProcessorGraph& graph, const TimelineOpsHost* host = nullptr);
 
@@ -124,7 +133,7 @@ struct TimelineOps {
      * @brief Validates again, then applies the WHOLE batch as ONE undo step.
      *
      * Wrapped in one `AppUndoManager::recordTimelineChange`, or `host->recordBatch` (graph +
-     * timeline + macros) when it carries an `addInstrumentTrack` op: one Cmd+Z reverts all of it.
+     * timeline + macros) when it carries an `addInstrumentTrack` or `setTempo` op: one Cmd+Z reverts all of it.
      *
      * See TimelineOps.cpp for per-op behaviour (addTrack/placeClips/writeLane/placeMidiClip),
      * documented beside each op's own implementation there.

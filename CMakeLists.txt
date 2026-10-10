@@ -378,10 +378,6 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
-    Source/Timeline/InstrumentTrackOpReader.cpp
-    Source/Timeline/InstrumentTrackOpReader.h
-    Source/Timeline/TimelineOps.cpp
-    Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
     Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp
@@ -575,6 +571,7 @@ include(cmake/ToolbarButtonSources.cmake)
 include(cmake/AiSources.cmake)
 include(cmake/GraphQuerySources.cmake)
 include(cmake/ProjectLoadSources.cmake)
+include(cmake/TimelineOpsSources.cmake)
 # Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
 # licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
 # deliberately deferred: it would mean vendoring clap-juce-extensions or the CLAP headers, i.e. exactly the new

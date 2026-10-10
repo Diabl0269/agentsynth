@@ -29,12 +29,29 @@ MainComponentTimelineOpsHost::addInstrumentTrack(const juce::String& name, const
 }
 
 // ONE undo step over graph, timeline and macros -- the transaction addInstrumentTrack's own menu
-// flow opens -- then the reconcile every graph-changing track flow runs afterwards.
+// flow opens -- then the reconcile every graph-changing track flow runs afterwards. The tempo is not part
+// of those snapshots (it lives on the transport), so a setTempo op records its own transport step; the
+// group folds that step and the batch's into one Cmd+Z.
 bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& mutation) {
-    const bool pushed = owner_.undoManager.recordGraphTimelineAndMacroChange(
-        owner_.audioEngine.getGraph(), owner_.timelineDoc, owner_.graphEditor.getMacros(), mutation);
+    tempoRecorded_ = false;
+    bool pushed = false;
+    {
+        const AppUndoManager::ScopedUndoGroup group(owner_.undoManager);
+        pushed = owner_.undoManager.recordGraphTimelineAndMacroChange(owner_.audioEngine.getGraph(), owner_.timelineDoc,
+                                                                      owner_.graphEditor.getMacros(), mutation);
+    }
     owner_.reconcileTimelineAfterGraphChange();
-    return pushed;
+    return pushed || tempoRecorded_;
+}
+
+// Inside recordBatch: applies the tempo and records it as a transport undo step (joined to the batch's by the
+// group above), so the debounced transport poll never sees it as a separate, later edit.
+bool MainComponentTimelineOpsHost::setTempo(double bpm) {
+    bool changed = false;
+    if (!owner_.setTempoAsUndoStep(bpm, changed))
+        return false;
+    tempoRecorded_ = tempoRecorded_ || changed;
+    return true;
 }
 
 // The doc an AIIntegrationService edit plan writes to from inside recordBatch: the app's one live
