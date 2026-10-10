@@ -893,7 +893,14 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
 
 } // namespace
 
-const std::array<const char*, 3> TimelineOps::kAuthorableInstrumentTypes = {"Oscillator", "Wavetable", "Sampler"};
+const std::array<const char*, 4> TimelineOps::kAuthorableInstrumentTypes = {"Oscillator", "Wavetable", "Sampler",
+                                                                            "Drum Kit"};
+
+// Sampler plays through a one-shot envelope and the Drum Kit decays every drum itself, so neither needs the
+// ADSR + VCA the add-track flow gives a raw Oscillator or Wavetable; neither has a poly parameter either.
+bool TimelineOps::instrumentOwnsItsEnvelope(const juce::String& instrument) {
+    return instrument == "Sampler" || instrument == "Drum Kit";
+}
 
 // Deliberately keyed on PRESENCE, not on well-formedness: a malformed "timelineOps" is surfaced
 // as a rejection the user can see rather than silently dropped, which is the same reason

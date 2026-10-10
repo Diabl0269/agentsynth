@@ -200,8 +200,8 @@ inline bool isKnownMidiSourceName(const juce::String& name) {
 }
 
 inline bool isKnownMidiDestName(const juce::String& name) {
-    return name == "Oscillator" || name == "Sampler" || name == "Wavetable" || name == "ADSR" || name == "Sequencer" ||
-           name == "Poly Sequencer" || name == "Poly MIDI";
+    return name == "Oscillator" || name == "Sampler" || name == "Drum Kit" || name == "Wavetable" || name == "ADSR" ||
+           name == "Sequencer" || name == "Poly Sequencer" || name == "Poly MIDI";
 }
 
 inline bool isStereoLegLabel(const juce::String& label) {

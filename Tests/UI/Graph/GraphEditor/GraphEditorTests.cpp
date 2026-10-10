@@ -137,7 +137,7 @@ TEST_F(GraphEditorTest, DefaultDualIOPreferenceReachesVoiceModulesInBothDirectio
         return dual;
     };
 
-    for (const juce::String& type : {"Oscillator", "Filter", "VCA", "Wavetable", "Sampler", "Delay"}) {
+    for (const juce::String& type : {"Oscillator", "Filter", "VCA", "Wavetable", "Sampler", "Drum Kit", "Delay"}) {
         EXPECT_TRUE(dropAndFind(true, type)) << type << " ignored the split-jacks preference";
         EXPECT_FALSE(dropAndFind(false, type)) << type << " ignored the single-jack preference";
     }

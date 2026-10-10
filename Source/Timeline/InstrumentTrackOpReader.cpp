@@ -202,10 +202,10 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (!polyVar.isVoid() && !polyVar.isBool())
         return "has a non-boolean \"poly\".";
     out.poly = polyVar.isBool() && static_cast<bool>(polyVar);
-    // The menu offers no poly Sampler (it has no poly parameter), so the preview would describe a
-    // track the build cannot make.
-    if (out.poly && out.instrument == "Sampler")
-        return "asks for a poly Sampler. Only \"Oscillator\" and \"Wavetable\" have a poly mode.";
+    // The menu offers no poly Sampler or Drum Kit (neither has a poly parameter), so the preview would
+    // describe a track the build cannot make.
+    if (out.poly && TimelineOps::instrumentOwnsItsEnvelope(out.instrument))
+        return "asks for a poly " + out.instrument + ". Only \"Oscillator\" and \"Wavetable\" have a poly mode.";
 
     // An in-response node reference: inert here, resolved by AIIntegrationService's edit plan
     // (which also requires it, like an insert's "id", to be a non-negative id distinct from every
@@ -220,8 +220,8 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
 
     // Checked before the early return below: an op with an envelope and no inserts still has one.
     if (const juce::var envelopeVar = op.getProperty("envelope"); !envelopeVar.isVoid()) {
-        if (out.instrument == "Sampler")
-            return "Sampler tracks have no envelope; leave \"envelope\" out.";
+        if (TimelineOps::instrumentOwnsItsEnvelope(out.instrument))
+            return out.instrument + " tracks have no envelope; leave \"envelope\" out.";
         if (const auto error = readEnvelope(envelopeVar, out.envelopeParams); error.isNotEmpty())
             return error;
     }
@@ -246,8 +246,8 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
 
 juce::String describeInstrumentTrack(const InstrumentTrackOpFields& fields) {
     // Oscillator and Wavetable have no envelope of their own, so the build adds ADSR + VCA (a
-    // per-voice one when poly); Sampler plays through its own one-shot envelope.
-    const bool addsEnvelope = fields.instrument != "Sampler";
+    // per-voice one when poly); Sampler and Drum Kit shape their own amplitude.
+    const bool addsEnvelope = !TimelineOps::instrumentOwnsItsEnvelope(fields.instrument);
     juce::String text = (fields.poly ? "poly " : "") + fields.instrument +
                         (addsEnvelope ? " with envelope and channel strip" : " with channel strip");
     if (const auto own = describeParams(fields.instrumentParams, {}); own.isNotEmpty())

@@ -8,6 +8,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
+#include "Timeline/TimelineOps.h"
 
 #include <cmath>
 #include <map>
@@ -116,7 +117,7 @@ void collectTrackBuilds(const juce::var& root, Nodes& out) {
         if (op.getProperty("instrument", {}).toString() == "Oscillator")
             out.oscillators.push_back(op.getProperty("instrumentParams", {}));
         juce::int64 envelopeId = -1;
-        if (op.getProperty("instrument", {}).toString() != "Sampler") {
+        if (!TimelineOps::instrumentOwnsItsEnvelope(op.getProperty("instrument", {}).toString())) {
             const juce::var envelope = op.getProperty("envelope", {});
             const juce::var params = envelope.getProperty("params", {});
             out.trackEnvelopes.push_back(params);

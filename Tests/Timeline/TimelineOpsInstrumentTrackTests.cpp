@@ -317,6 +317,28 @@ TEST_F(TimelineOpsInstrumentTrackTest, RejectsAnEnvelopeOnASamplerTrack) {
                    "Sampler tracks have no envelope");
 }
 
+// A Drum Kit shapes each drum itself: no ADSR for the op to shape, and no poly mode.
+TEST_F(TimelineOpsInstrumentTrackTest, DrumKitTracksTakeNoEnvelopeAndNoPoly) {
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Beat", "instrument": "Drum Kit",
+                        "envelope": {"params": {"decay": 0.2}}}])",
+                   "Drum Kit tracks have no envelope; leave \"envelope\" out.");
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Beat", "instrument": "Drum Kit", "poly": true}])",
+                   "poly Drum Kit");
+}
+
+TEST_F(TimelineOpsInstrumentTrackTest, ADrumKitTrackValidatesWithItsOwnParamsAndPreviewsWithoutAnEnvelope) {
+    const auto result = validate(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Beat", "instrument": "Drum Kit",
+        "instrumentParams": {"kickDecay": 0.5, "hatTune": 2}}])"));
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(
+        result.previewText,
+        juce::String(
+            R"(Adds instrument track "Beat" (Drum Kit with channel strip, instrument: hatTune 2, kickDecay 0.5))"));
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Beat", "instrument": "Drum Kit",
+                        "instrumentParams": {"kickDecayy": 0.5}}])",
+                   "kickDecayy");
+}
+
 TEST_F(TimelineOpsInstrumentTrackTest, HostReceivesTheValidatedEnvelopeParams) {
     const auto applied = apply(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
         "envelope": {"id": 4, "params": {"sustain": 0, "decay": 1.5}}}])"));

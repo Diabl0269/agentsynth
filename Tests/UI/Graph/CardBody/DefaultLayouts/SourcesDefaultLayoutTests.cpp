@@ -299,7 +299,7 @@ TEST(SourcesDefaultLayout, EverySegmentedValueFitsItsSegment) {
 
 TEST(SourcesDefaultLayout, TheEstimateEqualsTheRealCardSize) {
     CardCanvas canvas;
-    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "LFO"}) {
+    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "Drum Kit", "LFO"}) {
         SCOPED_TRACE(type.toStdString());
         const auto card = build(canvas, type);
         const auto estimate = synth::measureDataDrivenCardSize(type);
@@ -312,7 +312,7 @@ TEST(SourcesDefaultLayout, TheEstimateEqualsTheRealCardSize) {
 
 TEST(SourcesDefaultLayout, EveryControlIsReachableNamedAndHasATooltip) {
     CardCanvas canvas;
-    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "LFO"}) {
+    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "Drum Kit", "LFO"}) {
         SCOPED_TRACE(type.toStdString());
         const auto card = build(canvas, type);
         const auto tabbable = card.card->createKeyboardFocusTraverser()->getAllComponents(card.card);
@@ -337,7 +337,7 @@ TEST(SourcesDefaultLayout, EveryControlIsReachableNamedAndHasATooltip) {
 
 TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
-    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "LFO", "Wavetable"}) {
+    for (const juce::String type : {"Oscillator", "Noise", "Sampler", "Drum Kit", "LFO", "Wavetable"}) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);

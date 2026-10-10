@@ -424,14 +424,15 @@ public:
     // It shares this menu because "+ Track" is where a user reaches for "add something to the
     // arrangement", and a second button for one item would not earn its pixels.
     static constexpr int kAddMarkerMenuId = 3;
-    // The Instrument submenu's three audio-producing MIDI instrument choices — see
-    // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these three (not
+    // The Instrument submenu's audio-producing MIDI instrument choices — see
+    // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these (not
     // every isMidiInstrumentType() member: Poly MIDI/Sequencer/Poly Sequencer don't produce audio).
     static constexpr int kAddInstrumentOscillatorMenuId = 4;
     static constexpr int kAddInstrumentWavetableMenuId = 5;
     static constexpr int kAddInstrumentSamplerMenuId = 6;
+    static constexpr int kAddInstrumentDrumKitMenuId = 12; // no poly entry either: a kit has no poly parameter
     // Poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
-    // parameter, so it has no poly entry.
+    // parameter, so it has no poly entry (nor does the Drum Kit).
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
     // docs/mixer/mixer.md#creating-channels-in-an-existing-project: "Create channels" for existing

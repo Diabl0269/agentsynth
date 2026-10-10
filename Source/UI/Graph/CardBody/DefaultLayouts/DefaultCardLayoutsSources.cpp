@@ -1,5 +1,5 @@
-// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, LFO and
-// Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
+// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, Drum Kit, LFO
+// and Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
 // cardlayout:: helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
 // No view is placed in any of these: the Sampler's waveform and load row, the Wavetable's display, Table
 // selector and load row, and the LFO's custom-wave editor are card chrome (ModuleComponent) that already
@@ -68,6 +68,24 @@ CardLayout samplerLayout() {
     return layout;
 }
 
+// The master Level stays above a strip of six tabs, one per drum group (level, tune, decay; the hats add
+// their two decays), so the card is no taller than a Noise card plus one row of knobs.
+CardLayout drumKitLayout() {
+    CardLayout layout;
+    layout.sections = {
+        section("output", std::nullopt, {param("level")}, 1),
+        tab("kick", "Kick", {param("kickLevel"), param("kickTune"), param("kickDecay")}),
+        tab("snare", "Snare", {param("snareLevel"), param("snareTune"), param("snareDecay")}),
+        tab("clap", "Clap", {param("clapLevel"), param("clapTune"), param("clapDecay")}),
+        tab("hats", "Hats", {param("hatLevel"), param("hatTune"), param("closedDecay"), param("openDecay")},
+            kQuadColumns),
+        tab("toms", "Toms", {param("tomLevel"), param("tomTune"), param("tomDecay")}),
+        tab("cymbals", "Cymbals", {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay")}),
+        footer({}),
+    };
+    return layout;
+}
+
 // Shape stays a combo: six values (Sawtooth, Triangle) do not fit one 256 px switch.
 // Rate is the one control the LFO is about: Hz and the tempo division share its cell, swapped by Sync.
 // The custom-wave editor stays card chrome and opens under the body while the shape is Custom.
@@ -113,6 +131,7 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Oscillator", oscillatorLayout(), kRevision, {detuneAtOneVoice()});
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kRevision);
+    defaults.add("Drum Kit", drumKitLayout(), kRevision);
     defaults.add("LFO", lfoLayout(), kRevision);
     defaults.add("Wavetable", wavetableLayout(), kRevision);
 }

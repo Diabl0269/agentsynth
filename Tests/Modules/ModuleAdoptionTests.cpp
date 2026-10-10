@@ -54,6 +54,7 @@ const std::vector<ModuleLevelPolicy>& levelPolicies() {
         {"Wavetable", LevelPolicy::OwnParameter, "level", nullptr},
         {"Noise", LevelPolicy::OwnParameter, "level", nullptr},
         {"Sampler", LevelPolicy::OwnParameter, "level", nullptr},
+        {"Drum Kit", LevelPolicy::OwnParameter, "level", nullptr},
         {"Voice Mixer", LevelPolicy::OwnParameter, "level", nullptr},
         {"VCA", LevelPolicy::OwnParameter, "gain", nullptr},
         {"Parametric EQ", LevelPolicy::OwnParameter, "outputGain", nullptr},

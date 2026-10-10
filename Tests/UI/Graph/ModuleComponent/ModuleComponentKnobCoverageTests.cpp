@@ -40,6 +40,9 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // Covered instead by the per-tab suites (ModuleComponentWavetableTests.cpp, WavetableDefaultLayoutTests.cpp,
     // Tests/Modules/WavetableOscillatorModule/*).
     "Wavetable",
+    // No CV jacks at all: every setting is read when a drum is struck, so there is no continuous input
+    // for a modulation cable to reach.
+    "Drum Kit",
     // Port widgets / graph plumbing with no ModuleComponent knobs at all.
     "Macros",
     "Macro In",

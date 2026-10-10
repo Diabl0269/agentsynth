@@ -15,7 +15,7 @@ field has focus, so typing filters at once (all words, any order); Up/Down move,
 moved, Escape closes. The rows sit under these headers:
 
 - **Tracks**: MIDI Track / Audio Track
-- **Instrument Tracks**: Oscillator / Wavetable / Sampler and the poly variants
+- **Instrument Tracks**: Oscillator / Wavetable / Sampler / Drum Kit and the poly variants (the Sampler and Drum Kit have no poly entry)
 - **Plugins**: the scanned instrument plugins (a greyed "Scanning for plugins..." or "No instrument plugins found" row when there are none)
 - one header per saved track preset kind (**Audio Track from Preset**, **Instrument Track from Preset**, **Bus from Preset**)
 - **More**: Insert Track Preset from File..., Add Marker, Create Channels (greyed, with the reason, when every track already has a channel)
@@ -195,7 +195,7 @@ factory default chain — see [`docs/mixer/mixer.md`](../mixer/mixer.md#an-instr
 full design.
 
 The picker offers exactly the audio-producing MIDI instruments (**Oscillator**, **Wavetable**,
-**Sampler**), deliberately not every module the MIDI entry's own auto-wire search recognises as
+**Sampler**, **Drum Kit**), deliberately not every module the MIDI entry's own auto-wire search recognises as
 "MIDI-driven": Poly MIDI outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them
 audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
 `MainComponent::addInstrumentTrack`):
@@ -216,8 +216,8 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    envelope of its own, so a held or released note drones forever.
    `synth::addEnvelopeAndVCAForRawInstrument` inserts an ADSR (gated by the same Track In MIDI as
    the instrument, forced non-poly) driving a VCA (also forced non-poly) ahead of the rest of the
-   chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, which
-   already has its own one-shot playback envelope.
+   chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler** and **Drum Kit**, which
+   already shape their own amplitude.
 5. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer or VCA, whichever
    step 3 or 4 last produced) into the same `Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor
    (bypassed) -> Channel Strip (Stereo)` chain the Audio entry uses, then splices Master. A split-block source

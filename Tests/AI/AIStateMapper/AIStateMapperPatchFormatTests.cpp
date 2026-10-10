@@ -137,6 +137,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
+        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapTune, closedDecay, cymbalDecay, cymbalLevel, cymbalTune, "
+                     "dualIO, hatLevel, hatTune, kickDecay, kickLevel, kickTune, level, muted, openDecay, "
+                     "snareDecay, snareLevel, snareTune, tomDecay, tomLevel, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, dualIO, filterType, keyTrack, muted, outputLevel, poly, resonance"},
@@ -233,43 +236,14 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
 // any registration changes the list and MUST consciously update the golden below, either by adding
 // the new type here or by adding it to kNonAuthorableModuleTypes in AIStateMapper/AIStateMapperInternal.h.
 TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
-    const juce::StringArray golden = {"ADSR",
-                                      "Amp Env",
-                                      "Audio Input",
-                                      "Audio Output",
-                                      "Bitcrusher",
-                                      "Chorus",
-                                      "Comparator",
-                                      "Compressor",
-                                      "Delay",
-                                      "Distortion",
-                                      "Envelope Follower",
-                                      "External MIDI",
-                                      "Filter",
-                                      "Filter Env",
-                                      "Flanger",
-                                      "Gate",
-                                      "LFO",
-                                      "Limiter",
-                                      "MIDI Keyboard",
-                                      "Macros",
-                                      "Math",
-                                      "Midi Input",
-                                      "Noise",
-                                      "Oscillator",
-                                      "Parametric EQ",
-                                      "Phaser",
-                                      "Pitch Shifter",
-                                      "Poly MIDI",
-                                      "Poly Sequencer",
-                                      "Reverb",
-                                      "Ring Modulator",
-                                      "Sample & Hold",
-                                      "Sampler",
-                                      "Sequencer",
-                                      "VCA",
-                                      "Voice Mixer",
-                                      "Wavetable"};
+    const juce::StringArray golden = {
+        "ADSR",          "Amp Env",        "Audio Input",   "Audio Output",  "Bitcrusher", "Chorus",
+        "Comparator",    "Compressor",     "Delay",         "Distortion",    "Drum Kit",   "Envelope Follower",
+        "External MIDI", "Filter",         "Filter Env",    "Flanger",       "Gate",       "LFO",
+        "Limiter",       "MIDI Keyboard",  "Macros",        "Math",          "Midi Input", "Noise",
+        "Oscillator",    "Parametric EQ",  "Phaser",        "Pitch Shifter", "Poly MIDI",  "Poly Sequencer",
+        "Reverb",        "Ring Modulator", "Sample & Hold", "Sampler",       "Sequencer",  "VCA",
+        "Voice Mixer",   "Wavetable"};
 
     const auto actual = synth::AIStateMapper::authorableModuleTypes();
     EXPECT_EQ(actual.joinIntoString(", "), golden.joinIntoString(", "))

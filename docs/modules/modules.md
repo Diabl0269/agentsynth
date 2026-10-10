@@ -20,7 +20,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 > | `ModuleBase::StereoAudio` | Modules | Why |
 > |---|---|---|
 > | `Auto` (default) | every FX, Voice Mixer, Ring Modulator | shape says stereo; toggle ships **collapsed** |
-> | `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler | a second leg the shape cannot see (own `kRightBase` block, or a ch0/ch1 pair alongside more outputs); ships **split** |
+> | `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler, Drum Kit | a second leg the shape cannot see (own `kRightBase` block, or a ch0/ch1 pair alongside more outputs); ships **split** |
 > | `None` | Comparator, Rec Tap | shape matches by accident. Comparator's ch0/ch1 are Signal + Threshold CV in and Gate + inverted Gate out — no audio output at all. Rec Tap is a hidden recording tap whose two channels are the take's capture pair, wired by the record flow and never patched. |
 >
 > This replaced a per-module `addDualIOParameter()` call, which is a thing you can forget: the Ring
@@ -255,6 +255,30 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Sample lifetime**: `loadSampleFile()` (message thread) publishes a reference-counted `SampleData` under a `SpinLock`; `processBlock` takes the *try*-lock, so the audio thread never blocks — a block that races a load renders silence. Replaced samples stay alive in a message-thread-owned array so no destructor ever runs on the audio thread. Files longer than `kMaxSampleSeconds` (120 s) are truncated, with one log line.
 - **Persistence**: the loaded path is *not* a parameter, so it round-trips through `ModuleBase::getExtraState()` / `setExtraState()`, which `AIStateMapper` serialises as the node's `"state"` object. Restored **only on the trusted path** (our own undo/redo snapshots and presets) — untrusted model output must never be able to name a file for the app to open. See [`ai/patch-format.md`](../ai/patch-format.md).
 - **Not a `PatchEval` sound source**: `evaluatePatch` deliberately does *not* count a Sampler towards `sourceReachesOutput`, because it is silent until a file is loaded and nothing in a model-authored patch can load one — counting it would let `AIIntegrationService`'s structural gate accept a patch that can only ever play silence. A patch whose output is fed *only* by a Sampler is rejected with a reason that names the Sampler and says to add an Oscillator or Noise module. This gate only applies to AI-authored patches; dragging a Sampler in by hand is unaffected.
+
+## Drum Kit Module
+A whole electronic drum kit on one MIDI track. Each MIDI note plays a synthesized drum (General MIDI numbers), so a beat is one clip of notes on one track instead of a stack of Oscillator tracks. It is a pure source: no audio or CV inputs, a mono-summed stereo pair out (Dual I/O ships split, like the Sampler), `acceptsMidi`. Code: `Source/Modules/DrumKit/` (`DrumKitModule` for the note map, parameters and mix; `DrumVoices.h` for the drums).
+
+| Notes | Drum | Sound |
+| :-- | :-- | :-- |
+| 35, 36 | Kick | Sine with an exponential pitch sweep from 160 Hz to 50 Hz (about 40 ms), a 2 ms band-passed noise click and soft saturation |
+| 38, 40 | Snare | 185 Hz sine body with a short pitch drop (decays at 0.55 x the Snare decay) plus noise high-passed at 1.5 kHz and low-passed at 6.5 kHz |
+| 37 | Rim | 1.75 kHz triangle click and a high-passed noise burst, about 30 ms |
+| 39 | Clap | Noise band-passed at 1.2 kHz: three 8 ms bursts 10 ms apart, then the tail (Clap decay) |
+| 42, 44 | Closed / pedal hat | Six square oscillators at 808 ratios (205, 304, 370, 523, 540, 800 Hz x Tune) plus a little noise, high-passed at 7 kHz and low-passed at 12 kHz (tames the aliasing of the squares); the pedal hat is 20 percent shorter and softer. Chokes the open hat |
+| 46 | Open hat | The same source with the Open decay |
+| 41, 43, 45, 47, 48, 50 | Toms, low to high | Sine at 82, 98, 117, 140, 165, 196 Hz with a 30 percent pitch drop over about 20 ms |
+| 49, 57 | Crash | Metallic source plus noise, band-passed 5 to 12 kHz |
+| 51, 59 | Ride | Metallic source band-passed 3 to 8 kHz, 0.8 x the Cymbal decay |
+
+Any other note is silent. Velocity scales the level linearly and brightens the filters slightly. A drum plays out its own decay, so Note-Off does nothing and a long note changes nothing.
+
+- **Parameters** (all plain knobs with tooltips): per group `Level`, `Tune` (semitones, -12..+12) and `Decay` (seconds to fall 60 dB) for Kick, Snare (the rim shares its Level and Tune), Clap, Toms and Cymbals; Hats have `Hat level`, `Hat tune`, `Closed decay` and `Open decay`; plus a master `Level`. Ids: `kickLevel kickTune kickDecay snareLevel snareTune snareDecay clapLevel clapTune clapDecay hatLevel hatTune closedDecay openDecay tomLevel tomTune tomDecay cymbalLevel cymbalTune cymbalDecay level`. Group settings are read when a drum is struck (so a change lands on the next hit); the master Level is smoothed over 10 ms.
+- **Owns its envelopes**: every drum has its own exponential amp decay, so the add-track flow builds no ADSR or VCA for it (it follows the Sampler path), and a Drum Kit has no poly mode.
+- **Sample-accurate**: note-ons are applied at their sample position inside the block. Each drum is monophonic; a repeated note restarts it. A closed or pedal hat fades the open hat out over about 3 ms.
+- **Headroom**: a single full-velocity hit peaks between -6 and -12 dBFS at the defaults; a pile-up of simultaneous drums is rounded softly above 0.9 so it never reaches full scale.
+- **Bypass / mute**: both clear the output (pure-source exception) as two branches, and either one cuts every drum still ringing.
+- **AI**: `addInstrumentTrack` accepts `"instrument": "Drum Kit"` (no `poly`, no `envelope`); `instrumentParams` may set any parameter above. `evaluatePatch` counts it as a sound source like an Oscillator, since a note makes it sound. Not telemetry-counted yet (the counters live in the shared contracts).
 
 ## Filter Module
 - **Types**: 7 filter types — `LPF24`, `LPF12`, `HPF24`, `HPF12`, `BPF24`, `BPF12`, `Notch`.
