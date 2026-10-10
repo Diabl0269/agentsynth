@@ -7,6 +7,7 @@
 // and not registered in Tests/CMakeLists.txt.
 
 #include "../../StubPluginInstance.h"
+#include "../MasterSafetyOff.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -327,6 +328,7 @@ struct HostedPatchCFT {
     }
     std::vector<float> render(int blocks) {
         if (!prepared) {
+            testutil::turnOffMasterSafetyLimiter(engine.getGraph()); // compares plumbing, not the limiter
             engine.prepareForHost(kSampleRateMCH, kBlockSizeMCH, 2, 2);
             prepared = true;
         }

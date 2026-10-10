@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Transport/TransportService.h"
+#include "FX/BrickwallCeiling.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "ModuleBase.h"
 #include <array>
@@ -25,6 +26,11 @@
  *
  * Direct is summed into Mix FIRST and the Master gain applied after, so Direct is post-fader like
  * any other input to the bus.
+ *
+ * SAFETY LIMITER: after the gain, an always-on brickwall at -1 dBFS (synth::BrickwallCeiling,
+ * LimiterModule's Ceiling stage; instant attack, 80 ms release), so a hot mix can't clip the output.
+ * The "safetyLimiter" param defaults ON, so a project saved without it loads limited. Out of the path
+ * below the ceiling. Bypass and mute skip it (bypass keeps its unity sum).
  *
  * BYPASS / MUTE — two separate branches (root CLAUDE.md). Bypass is a unity sum of Mix + Direct:
  * this module's dry path is "the bus without its fader", and dropping Direct would silence every
@@ -51,11 +57,16 @@ public:
     static constexpr float kMinGainDb = -60.0f;
     static constexpr float kMaxGainDb = 12.0f;
     static constexpr double kSmoothingSeconds = 0.02;
+    static constexpr float kSafetyCeilingDb = -1.0f;
+    static constexpr float kSafetyReleaseMs = 80.0f;
+    static constexpr const char* kSafetyLimiterId = "safetyLimiter";
+    static constexpr const char* kSafetyLimiterTooltip = "Keeps the master from clipping: limits peaks to -1 dB";
 
     MasterModule()
         : ModuleBase("Master", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
                          "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
+        addParameter(safetyLimiterParam_ = new juce::AudioParameterBool(kSafetyLimiterId, "Safety limiter", true));
         addMuteParameter();
     }
 
@@ -65,6 +76,8 @@ public:
         juce::ignoreUnused(samplesPerBlock);
         smoothedGain_.reset(sampleRate, kSmoothingSeconds);
         smoothedGain_.setCurrentAndTargetValue(targetGain());
+        sampleRate_ = sampleRate;
+        safetyLimiter_.reset();
         meterLatches_[0].reset();
         meterLatches_[1].reset();
     }
@@ -98,6 +111,10 @@ public:
             left[i] *= g;
             right[i] *= g;
         }
+        if (safetyLimiterParam_->get())
+            safetyLimiter_.process(left, right, numSamples, kSafetyCeilingDb, kSafetyReleaseMs, sampleRate_);
+        else
+            safetyLimiter_.reset();
         storeMeter(buffer, numSamples);
     }
 
@@ -181,6 +198,9 @@ private:
 
     juce::AudioParameterFloat* gainParam_ = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain_{1.0f};
+    juce::AudioParameterBool* safetyLimiterParam_ = nullptr;
+    synth::BrickwallCeiling safetyLimiter_;
+    double sampleRate_ = 44100.0;
     std::array<synth::PeakMeterLatch, 2> meterLatches_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MasterModule)

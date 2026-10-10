@@ -65,6 +65,10 @@ every audio connection that fed the output re-routed through it. The ordering be
 
 The bracketed part is empty until the user adds something to it — see [Master inserts](#master-inserts).
 
+### Safety limiter
+
+Master ends with an always-on brickwall at −1 dBFS (the `safetyLimiter` param, default ON, also for a project saved before it existed), so a hot mix or an AI-made song cannot clip the output. It is the Limiter module's Ceiling stage, runs after the gain and before the meter, and does nothing below the ceiling; bypass and mute skip it. Its toggle is on Master's card. See [`modules.md`](../modules/modules.md#master-module-mix-bus-hidden).
+
 **Placement and protection.** Master, the Rec Tap and Audio Output are the canvas's *output dock*: always the
 rightmost cards, x derived and y shared with Audio Output
 ([`docs/layout/layout.md#output-dock`](../layout/layout.md#output-dock)), so Master takes Audio Output's row the

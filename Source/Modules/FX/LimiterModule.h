@@ -2,6 +2,7 @@
 
 #include "../GainReductionMeterSource.h"
 #include "../ModuleBase.h"
+#include "BrickwallCeiling.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -51,7 +52,7 @@ public:
         // takes it through setThreshold), snapped at prepare so a static render is unchanged.
         smoothedThreshold.reset(sampleRate, 0.01);
         smoothedThreshold.setCurrentAndTargetValue(*thresholdParam);
-        ceilingGain = 1.0f;
+        ceilingStage.reset();
         meter.clear();
     }
 
@@ -206,30 +207,11 @@ private:
         outputVolume.reset(sampleRate_, 0.001);
     }
 
-    // Brickwall stage: one linked gain, down at once to whatever keeps the louder leg at or under
-    // the ceiling, back up over the release time. Out of the path (and reset) while the ceiling
-    // sits at 0 dBFS and the gain is back at unity. Returns the deepest reduction it took, in dB.
+    // Brickwall stage (synth::BrickwallCeiling, shared with Master's safety limiter): returns the deepest
+    // reduction it took, in dB.
     float applyCeiling(juce::AudioBuffer<float>& buffer, float ceilingDb, float releaseMs) {
-        const bool active = ceilingDb < -1.0e-4f;
-        if (!active && ceilingGain >= 0.9999f) {
-            ceilingGain = 1.0f;
-            return 0.0f;
-        }
-        // A ceiling returning to 0 dBFS lets the gain drift back to unity rather than snapping.
-        const float ceiling = active ? juce::Decibels::decibelsToGain(ceilingDb) * 0.99999f : 1.0e9f;
-        const float recovery = 1.0f - std::exp(-1.0f / std::max(1.0f, releaseMs * 0.001f * (float)sampleRate_));
-        float* left = buffer.getWritePointer(0);
-        float* right = buffer.getWritePointer(1);
-        float deepest = 1.0f;
-        for (int i = 0, n = buffer.getNumSamples(); i < n; ++i) {
-            const float peak = std::max(std::abs(left[i]), std::abs(right[i]));
-            const float needed = peak > ceiling ? ceiling / peak : 1.0f;
-            ceilingGain = std::min(needed, ceilingGain + (1.0f - ceilingGain) * recovery);
-            left[i] *= ceilingGain;
-            right[i] *= ceilingGain;
-            deepest = std::min(deepest, ceilingGain);
-        }
-        return -juce::Decibels::gainToDecibels(deepest, -100.0f);
+        return ceilingStage.process(buffer.getWritePointer(0), buffer.getWritePointer(1), buffer.getNumSamples(),
+                                    ceilingDb, releaseMs, sampleRate_);
     }
 
     juce::dsp::Compressor<float> firstStage, secondStage;
@@ -237,7 +219,7 @@ private:
     float stageThresholdDb = -10.0f, stageReleaseMs = 100.0f;
     synth::GainReductionMeter meter;
     double sampleRate_ = 44100.0;
-    float ceilingGain = 1.0f;
+    synth::BrickwallCeiling ceilingStage;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedInputGain;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedThreshold;

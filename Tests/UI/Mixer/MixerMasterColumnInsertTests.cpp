@@ -6,6 +6,7 @@
 //   * layout    -- the real MixerPanelComponent's Master column shows its rows and lays out without overlap;
 //   * meter     -- with no inserts the column reads Master's own latch, with >= 1 it reads the engine's post-graph
 //                  output peak, and a Limiter's ceiling shows on the meter (the acceptance test).
+#include "../../Mixer/MasterSafetyOff.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -495,6 +496,7 @@ TEST(MixerMasterColumnInsertTests, MeterShowsThePostLimiterLevelNotMastersPreIns
         return f.engine.takeOutputMeterPeak(synth::MeterReader::Mixer, leg);
     };
 
+    testutil::turnOffMasterSafetyLimiter(*f.master()); // this test is about the insert, not the safety limiter
     f.engine.prepareForHost(kSampleRate, kBlock, 2, 2);
     juce::AudioBuffer<float> buffer(2, kBlock);
     juce::MidiBuffer midi;

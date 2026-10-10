@@ -144,6 +144,7 @@ add_executable(Tests
     Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/MasterDualIOTests.cpp
+    Mixer/MasterSafetyLimiterTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
