@@ -184,8 +184,7 @@ inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& pl
 
 inline Outcome runScenario(const Scenario& scenario,
                            const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider,
-                           int outerWaitMs = 270000, int projectPromptVersion = 0,
-                           int requestTimeoutMs = 0) {
+                           int outerWaitMs = 270000, int projectPromptVersion = 0, int requestTimeoutMs = 0) {
     Outcome outcome;
     juce::AudioProcessorGraph graph;
     synth::prepareGraphForPatchEval(graph);
@@ -261,7 +260,7 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
         for (const auto& scenario : list) {
             const auto startMs = juce::Time::currentTimeMillis();
             const auto outcome = runScenario(scenario, makeProvider, options.outerWaitMs, options.projectPromptVersion,
-                                              options.requestTimeoutMs);
+                                             options.requestTimeoutMs);
             const auto endMs = juce::Time::currentTimeMillis();
             ++total;
             responded += outcome.responded ? 1 : 0;

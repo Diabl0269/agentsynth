@@ -5,8 +5,8 @@
     Each bundle is opened in a headless MainComponent through openProjectForTest, then bounced with
     synth::BounceExporter (master mix) and synth::StemExporter (one file per mixer channel, named after
     its track) over the whole arrangement plus a short tail. Renders are 32-bit float WAV so a mix
-    that goes over full scale is measured, not clipped by the file format. With --keep-audio DIR each master is also saved as DIR/<bundle name>.wav,
-    16-bit, for listening.
+    that goes over full scale is measured, not clipped by the file format. With --keep-audio DIR each master is also
+   saved as DIR/<bundle name>.wav, 16-bit, for listening.
 */
 #pragma once
 
