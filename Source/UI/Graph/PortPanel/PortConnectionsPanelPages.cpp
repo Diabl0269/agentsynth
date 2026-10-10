@@ -81,6 +81,7 @@ void PortConnectionsPanel::setSearchOpen(bool open) {
         reduced ? std::function<float(float)>([](float t) { return t; })
                 : (open ? std::function<float(float)>(easeOutCubic) : std::function<float(float)>(easeInCubic)),
         [this](float t) { applyPageTweenAt(t); }, settle);
+    applyPageTweenAt(0.0f); // frame 0 lands now, so the new height (Reduce Motion) is not a frame late
     if (open)
         searchPage_->focusEntry();
 }
