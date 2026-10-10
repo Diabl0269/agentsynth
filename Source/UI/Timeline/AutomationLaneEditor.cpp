@@ -327,6 +327,10 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
 
     const juce::Colour curveColour = getResolvedCurveColour();
     if (glide_.isRunning() && !previewing) {
+        if (glide_.isMelting()) {
+            paintMeltedCurve(g, pts, lane, curveColour);
+            return;
+        }
         // A delete, undo or paste re-forms the curve: the old shape fades out as the new one fades in.
         strokeCurve(g, glide_.before(), lane, curveColour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
         strokeCurve(g, pts, lane, curveColour.withMultipliedAlpha(glide_.amount()), 1.5f);

@@ -193,6 +193,7 @@ private:
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();
     void wireHeader(AutomationLaneHeaderComponent& header, synth::LaneId id);
+    bool createCustomLfoFromRange(synth::LaneId lane, double startBeat, double endBeat);
     bool handleLaneKey(synth::LaneId lane, const juce::KeyPress& key);
     void beginLaneDrag(synth::LaneId lane, int screenY);
     void dragLane(int screenY);

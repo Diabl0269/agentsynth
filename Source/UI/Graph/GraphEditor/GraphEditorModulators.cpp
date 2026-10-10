@@ -77,13 +77,14 @@ int GraphEditor::modulationChannelFor(NodeID nodeId, const juce::String& paramId
     return module != nullptr ? module->modulationChannelForParam(paramId) : -1;
 }
 
-// Everything is ONE undo step: the node, its uuid, its placement (and any room made for it), the cable
-// through the normal CV path (connectPorts -> addModRouting, hidden attenuverter included), the depth,
-// and -- when the target is a macro member -- the LFO joining that macro. The join runs after the cable
-// exists, so the crossing plan sees the cable as interior and mints no port for it. The final
+// Everything is ONE undo step (or none, with `recordUndo` false: the caller's own step surrounds it): the node, its
+// uuid, its placement (and any room made for it), the cable through the normal CV path (connectPorts -> addModRouting,
+// hidden attenuverter included), the depth, and -- when the target is a macro member -- the LFO joining that macro. The
+// join runs after the cable exists, so the crossing plan sees the cable as interior and mints no port for it. The final
 // updateComponents() also fires onGraphStructureChanged with the routing already in place, which is
 // what tells the timeline to show the new row.
-NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId) {
+NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId, bool recordUndo, float depth,
+                                    NodeID* attenOut) {
     auto& graph = audioEngine.getGraph();
     auto* target = graph.getNodeForId(targetId);
     const int raw = modulationChannelFor(targetId, paramId);
@@ -93,7 +94,7 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
     const juce::String macroId = macro != nullptr ? macro->id : juce::String();
 
     NodeID lfoId;
-    auto mutation = [this, &graph, &lfoId, targetId, raw, macroId] {
+    auto mutation = [this, &graph, &lfoId, attenOut, targetId, raw, macroId, depth] {
         // The hull the LFO is about to join is where it should land, not an obstacle (resolvePlacement).
         juce::ScopedValueSetter<juce::String> joinScope(macroDragJoinId_, macroId);
         auto node = graph.addNode(synth::AIStateMapper::createModule("LFO"));
@@ -109,7 +110,9 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
             return;
         connectPorts(lfoId, lfo->mapOutputChannel(0).visibleJackIndex, targetId,
                      dst->mapInputChannel(raw).visibleJackIndex, /*isMidi=*/false, /*recordUndo=*/false);
-        settleNewRouting(audioEngine, lfoId, targetId, raw, kDefaultModulatorDepth);
+        const auto settled = settleNewRouting(audioEngine, lfoId, targetId, raw, depth);
+        if (attenOut != nullptr)
+            *attenOut = settled;
 
         if (macroId.isNotEmpty())
             macroController_.addSelectionToMacro(macroId, {lfoUuid}, /*recordUndo=*/false);
@@ -118,7 +121,7 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
         reflowOutputDock();
         updateComponents();
     };
-    if (undoManager != nullptr)
+    if (undoManager != nullptr && recordUndo)
         undoManager->recordGraphAndMacroChange(graph, macros, mutation);
     else
         mutation();

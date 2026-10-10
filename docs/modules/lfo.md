@@ -22,6 +22,7 @@ the module reference is in [`modules.md`](modules.md).
   unchanged from every other shape (a shared `phase` in `[0, 1)`, reset to 0 by Retrig). The
   default (and what a freshly-appended Custom shape starts as) is the Triangle preset. Unipolar
   output equals the curve's own `y`; bipolar maps it to `-1..1` like every other shape.
+- **From a lane range**: the timeline lane menu's "Create custom LFO" makes a new LFO whose Custom wave is the movement drawn inside a lane range ([`timeline/automation.md`](../timeline/automation.md#create-custom-lfo-from-a-range)).
 - **Extra state** (FRO114): `LFOModule::getExtraState()`/`setExtraState()` carry the custom wave
   as `{"version":1,"points":[{"x":..,"y":..,"bend":..}, ...]}` — emitted only when the wave is
   non-default, and regardless of the CURRENT shape (a sculpted wave survives switching to another
