@@ -19,6 +19,16 @@ namespace synth::ui {
 namespace {
 // The edit-tool strip in the transport bar: square icon buttons in their own radio group.
 constexpr int kEditToolRadioGroupId = 4300;
+
+// A tool's button; Draw's is the pen (DrawPenButton), reported through `pen`.
+std::unique_ptr<juce::DrawableButton> makeToolButton(EditTool tool, DrawPenButton*& pen) {
+    const auto title = juce::String(editToolName(tool)) + " Tool";
+    if (tool != EditTool::Draw)
+        return std::make_unique<juce::DrawableButton>(title, juce::DrawableButton::ImageOnButtonBackground);
+    auto button = std::make_unique<DrawPenButton>(title);
+    pen = button.get();
+    return button;
+}
 } // namespace
 
 //==============================================================================
@@ -61,14 +71,12 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     initSnapCombo();
     initSidePane();
-    initDrawShapes();
 
     // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
     // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
     // and the seven glyphs are the row every DAW user already knows.
     for (auto tool : kAllEditTools) {
-        auto button = std::make_unique<juce::DrawableButton>(juce::String(editToolName(tool)) + " Tool",
-                                                             juce::DrawableButton::ImageOnButtonBackground);
+        auto button = makeToolButton(tool, penButton_);
         button->setComponentID("timelineTool" + juce::String(editToolName(tool)));
         // Tooltip text (the CURRENT binding, not this hardcoded digit) is set by
         // refreshShortcutTooltips() below, once every tool button exists.
@@ -90,6 +98,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // Select is the default, and the strip must say so from the first frame.
     toolButtons_[(std::size_t)EditTool::Select]->setToggleState(true, juce::dontSendNotification);
     applyToolStripTheme();
+    initDrawShapes();
 
     // The snap toggle lives in the transport bar so grid magnetism is discoverable without opening
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.

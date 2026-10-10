@@ -1,13 +1,14 @@
 // TimelinePanelShapes.cpp
 //
-// The Draw tool's shapes: the shape strip beside the Draw button, the Shift+digit shape keys, Draw
-// pressed again stepping through the shapes, and the panel-level keys of the lane range (Delete,
+// The Draw tool's shapes: the pen button's shape flyout, the Shift+digit shape keys, the shape-menu key,
+// Draw pressed again stepping through the shapes, and the panel-level keys of the lane range (Delete,
 // Escape). TimelinePanelComponent is declared in TimelinePanelComponent.h; sibling TimelinePanel*.cpp
 // files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -19,32 +20,56 @@ juce::KeyPress shapeFallbackKey(DrawShape shape) {
     return juce::KeyPress('0' + drawShapeKeyDigit(shape), juce::ModifierKeys::shiftModifier, 0);
 }
 
+constexpr const char* kShapeMenuActionId = "timelineShapeMenu";
+// Shift on the Draw key.
+juce::KeyPress shapeMenuFallbackKey() {
+    return juce::KeyPress('0' + editToolKeyDigit(EditTool::Draw), juce::ModifierKeys::shiftModifier, 0);
+}
+
 } // namespace
 
 void TimelinePanelComponent::initDrawShapes() {
-    addChildComponent(shapeStrip_);
-    shapeStrip_.onShapeClicked = [this](DrawShape shape) { pickDrawShape(shape); };
-    shapeStrip_.onSlideFrame = [this] { layoutTransportRow(); };
+    penButton_->onOpenFlyout = [this] { openShapeFlyout(); };
+    penButton_->setShape(drawShape_);
     // One range at a time across the whole timeline: a lane range starting drops the clip range.
     automationLanes_.onLaneRangeChanged = [this] {
         if (automationLanes_.getLaneRange().isActive())
             clipLaneArea_.clearRange();
-        updateShapeStripShowing();
     };
     // A press anywhere in the clip lanes is a "click elsewhere" for the lane range, a clip range included.
     clipLaneArea_.onPressed = [this] { automationLanes_.getLaneRange().clear(); };
 }
 
-// The strip slides out of the Draw button while Draw is the tool, and also while a lane range is selected
-// (whatever the tool), so Range-drag then a click on a shape stamps it without visiting Draw first.
-void TimelinePanelComponent::updateShapeStripShowing() {
-    shapeStrip_.setShowing(activeTool_ == EditTool::Draw || automationLanes_.hasLaneRange());
+// The flyout opens under the pen from a corner click, a held press or the shape-menu key. Opening while it is
+// open closes it. A pick runs pickDrawShape after the flyout has closed; the panel may be gone by then, hence the
+// safe pointer. Headless tests take the content through the hook instead of a CallOutBox.
+void TimelinePanelComponent::openShapeFlyout() {
+    if (shapeFlyoutBox_ != nullptr) {
+        PopupMotion::dismissCallOut(*shapeFlyoutBox_);
+        return;
+    }
+    juce::Component::SafePointer<TimelinePanelComponent> safe(this);
+    auto flyout = std::make_unique<DrawShapeFlyout>(
+        drawShape_,
+        [this](DrawShape shape) {
+            return shortcutHintFor(shortcuts_, shapeActionIdFor(shape), shapeFallbackKey(shape));
+        },
+        [safe](DrawShape shape) {
+            if (safe != nullptr)
+                safe->pickDrawShape(shape);
+        });
+    if (auto& hook = test_hooks::drawShapeFlyoutHookForTest()) {
+        hook(std::move(flyout));
+        return;
+    }
+    auto& box = juce::CallOutBox::launchAsynchronously(std::move(flyout), penButton_->getScreenBounds(), nullptr);
+    shapeFlyoutBox_ = &box;
 }
 
 void TimelinePanelComponent::setDrawShape(DrawShape shape) {
     drawShape_ = shape;
     automationLanes_.setDrawShape(shape);
-    shapeStrip_.setActiveShape(shape);
+    penButton_->setShape(shape);
 }
 
 // The lane range survives the switch to Draw (tools never clear it), so Range-drag, then a shape, stamps
@@ -57,12 +82,16 @@ void TimelinePanelComponent::pickDrawShape(DrawShape shape) {
         automationLanes_.stampShapeOnLaneRange(shape);
 }
 
+// The Draw button's tooltip names the flyout's key beside the tool's own.
 void TimelinePanelComponent::refreshShapeTooltips() {
-    for (auto shape : kAllDrawShapes)
-        if (auto* button = shapeStrip_.getButton(shape))
-            button->setTooltip(synth::ui::formatShortcutHint(
-                juce::String(drawShapeName(shape)) + " shape",
-                shortcutHintFor(shortcuts_, shapeActionIdFor(shape), shapeFallbackKey(shape))));
+    const auto drawKey =
+        shortcutHintFor(shortcuts_, "timelineToolDraw",
+                        juce::KeyPress('0' + editToolKeyDigit(EditTool::Draw), juce::ModifierKeys(), 0));
+    const auto menuKey = shortcutHintFor(shortcuts_, kShapeMenuActionId, shapeMenuFallbackKey());
+    auto tip = synth::ui::formatShortcutHint(editToolName(EditTool::Draw), drawKey);
+    if (menuKey.isNotEmpty())
+        tip += juce::String::fromUTF8(" \xc2\xb7 shapes: ") + menuKey;
+    penButton_->setTooltip(tip);
 }
 
 // Runs before the tool digits in keyPressed(): with no manager installed, a Shift+3 whose text character
@@ -73,6 +102,10 @@ bool TimelinePanelComponent::handleDrawShapeKey(const juce::KeyPress& key) {
             pickDrawShape(shape);
             return true;
         }
+    }
+    if (matchesAction(key, kShapeMenuActionId, shapeMenuFallbackKey())) {
+        openShapeFlyout();
+        return true;
     }
 
     // The Draw key while Draw is already the tool steps to the next shape, wrapping.

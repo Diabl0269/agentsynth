@@ -284,6 +284,9 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineShapeTriangle"] = juce::KeyPress('4', juce::ModifierKeys::shiftModifier, 0);
     bindings["timelineShapeSaw"] = juce::KeyPress('5', juce::ModifierKeys::shiftModifier, 0);
     bindings["timelineShapeSquare"] = juce::KeyPress('6', juce::ModifierKeys::shiftModifier, 0);
+    // Shift+8 opens the pen's shape flyout (Shift on the Draw key): no other action uses Shift+8
+    // (snapSetHundredTwentyEighth is Ctrl+Shift+8, and modifier equality is exact).
+    bindings["timelineShapeMenu"] = juce::KeyPress('8', juce::ModifierKeys::shiftModifier, 0);
     // Option+1 / Option+2: park the cursor on the left / right loop locator.
     //
     // A PLAIN Alt chord, deliberately NOT Ctrl+Shift+digit, and the reason is a real bug rather

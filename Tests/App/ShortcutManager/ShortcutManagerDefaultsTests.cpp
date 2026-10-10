@@ -84,6 +84,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineShapeTriangle",
         "timelineShapeSaw",
         "timelineShapeSquare",
+        "timelineShapeMenu",
         "timelineJumpToLocator1",
         "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)

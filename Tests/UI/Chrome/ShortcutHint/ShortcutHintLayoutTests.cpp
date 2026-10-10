@@ -79,7 +79,8 @@ TEST(ShortcutHintLayout, LaterBubbleStaggersIntoASecondRowWhenSlidingHalfItsWidt
 }
 
 TEST(ShortcutHintLayout, ARowOfNarrowButtonsWithWideKeyTextLabelsEveryButton) {
-    // The Draw shape strip off the Mac: six 22 px buttons 26 px apart, each with a ~54 px "Shift+N" bubble.
+    // A row of narrow buttons (the shape the Draw strip once had): six 22 px buttons 26 px apart, each with a ~54 px
+    // "Shift+N" bubble.
     std::vector<hint::BubbleRequest> requests;
     for (int i = 0; i < 6; ++i)
         requests.push_back({{400 + i * 26, 10, 22, 30}, {54, 16}, {}});

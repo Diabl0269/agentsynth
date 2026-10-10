@@ -27,10 +27,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"toggleMinimap", ShortcutCategory::General},
         {"toggleAiPanel", ShortcutCategory::General},
         {"toggleLibrary", ShortcutCategory::General},
-        // The ONE bottom-dock open/close toggle (docs/layout/chrome.md) -- opens or
-        // closes the whole dock, reopening on whichever tab was last active. The three rows
-        // below are no longer toggles themselves; each just SHOWS its tab (opening the dock if
-        // needed) -- see their own comments.
+        // The ONE bottom-dock open/close toggle (docs/layout/chrome.md), reopening on the last active tab.
+        // The three rows below only SHOW their tab (opening the dock if needed) -- see their own comments.
         {"toggleBottomPanel", ShortcutCategory::General},
         // "show the Timeline/Mixer/Controllers tab" -- default Cmd+1/2/3, in the bottom
         // dock's default tab order. A drag-reorder of the tab strip PERMUTES these three
@@ -130,6 +128,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"timelineShapeTriangle", ShortcutCategory::Timeline},
         {"timelineShapeSaw", ShortcutCategory::Timeline},
         {"timelineShapeSquare", ShortcutCategory::Timeline},
+        {"timelineShapeMenu", ShortcutCategory::Timeline},
         {"timelineJumpToLocator1", ShortcutCategory::Timeline},
         {"timelineJumpToLocator2", ShortcutCategory::Timeline},
         {"timelineMuteFocusedTrack", ShortcutCategory::Timeline},

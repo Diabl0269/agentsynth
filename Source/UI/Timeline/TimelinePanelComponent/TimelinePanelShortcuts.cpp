@@ -30,8 +30,7 @@ std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::g
     std::vector<std::pair<juce::Component*, juce::String>> targets;
     for (auto tool : kAllEditTools)
         targets.emplace_back(getToolButton(tool), toolActionIdFor(tool));
-    for (auto shape : kAllDrawShapes)
-        targets.emplace_back(shapeStrip_.getButton(shape), "timelineShape" + juce::String(drawShapeName(shape)));
+    targets.emplace_back(penButton_, "timelineShapeMenu");
     targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
     targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
     targets.emplace_back(&addTrackButton_, "openAddTrackMenu");

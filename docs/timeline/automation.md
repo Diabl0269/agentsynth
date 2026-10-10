@@ -619,20 +619,33 @@ tool and pushes it to every lane editor the same way (`TimelinePanelComponent::s
 [amount lanes](#amount-lane)' editors included (`ModulatorBand::setDrawShape`), so a box stamp works on an LFO's
 amount too and creates its lane like a first pen stroke. The lane range is for ordinary lanes only.
 
-**The shape strip.** Six small icon buttons (`DrawShapeStrip`) slide out of the right side of the Draw button
-while Draw is the active tool or a lane range is selected (whatever the tool, so Range-drag then one click on a
-shape stamps it), and slide back when neither holds (`updateShapeStripShowing`): one `PanelSlide` on one
-`AnimationDriver`, 160 ms `easeOutCubic` in and 110 ms `easeInCubic` out, retargeted from where it is on an
-interruption, landing at once when the panel is not on screen. The transport row gives the strip a width
-proportional to the slide (`layoutTransportRow`, re-run on every frame instead of the whole panel layout), and
-the buttons ride on the strip's right edge so they come out from behind the Draw button. Closed, the strip is
-hidden, so it is neither a hint target nor in the accessibility tree. Each button is titled "Sine shape", its
-tooltip names its key ("Sine shape  (Shift+3)"), the active shape is lit like the active tool, and like the tool
-buttons it never takes keyboard focus: its keyboard path is the shortcut.
+**The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
+always shows what the tool will draw, and a tiny triangle in its bottom-right corner says it opens more. When the
+shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
+Animations: Off and when the panel is not on screen). A click on the corner (the bottom-right 10 x 10 px), pressing
+and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
+also pick the tool), or the shape-menu key opens the flyout; a click anywhere else on the button just picks Draw.
+The transport row has the same layout whatever the tool.
+
+The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button with six rows: the shape's icon, its name and
+its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit. It
+enters with `CalloutReveal` (the plain `PopupMotion` fade under Reduce Motion; at once under Animations: Off) and
+closes only through `PopupMotion::dismissCallOut`. Picking a row (click, Enter or Space) closes it and calls
+`TimelinePanelComponent::pickDrawShape`, which sets the shape, switches to Draw and stamps it over a lane range if
+one is selected, so Range-drag, then a pick from the flyout, stamps in one go. Keyboard: focus lands on the current
+shape's row; Up/Down move (wrapping), Home/End jump, Escape closes. Each row is a Tab stop with the accent focus
+ring, is titled "Sine shape" and has a tooltip naming its key ("Sine shape  (Shift + 3)"). The Draw button's tooltip
+names the flyout key beside the tool's own ("Draw  (8) · shapes: Shift + 8"). Headless tests take the flyout
+through `test_hooks::drawShapeFlyoutHookForTest()` instead of a CallOutBox.
+
+**Icons.** Every icon is a stroke path in a 24 x 24 box with a 1.8 px round stroke
+(`LaneShapes/DrawShapeIcons.h`, shared by the pen and the rows). Free is a pen drawing a wobbly line, Sine the clean
+wave; the other shapes are the line and the three stepped waves.
 
 **Keys.** Shift+1..Shift+6 (`timelineShapeFree`..`timelineShapeSquare`, rebindable) pick Draw and that shape,
-and stamp it over the lane range when there is one. Pressing the Draw key again while Draw is the tool steps to
-the next shape, wrapping after Square.
+and stamp it over the lane range when there is one. Shift+8 (`timelineShapeMenu`, "Open shape menu", rebindable)
+opens the flyout; it only opens it. Pressing the Draw key again while Draw is the tool steps to the next shape,
+wrapping after Square.
 
 **The box stamp.** With a periodic shape, a drag on a lane draws a box: its x edges are the press and the
 pointer, both snapped; its y edges are the swing (low and high value). The shape previews inside a dashed box

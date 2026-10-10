@@ -58,7 +58,6 @@ void TimelinePanelComponent::setActiveTool(EditTool tool) {
     pianoRoll_.setActiveTool(tool);
     // The automation lanes have no tool row of their own either (see automationToolFor).
     automationLanes_.setEditTool(tool);
-    updateShapeStripShowing();
     // Every button is set explicitly rather than leaning on the radio group to untoggle its
     // siblings: this method is also reached from the number keys and from MainComponent, where no
     // button was clicked at all. dontSendNotification, or setting the state would re-enter here
@@ -78,15 +77,15 @@ void TimelinePanelComponent::applyToolStripTheme() {
         // getIcon returns nullptr when the asset library isn't linked in. The button stays
         // imageless but fully functional in either case.
         if (lf != nullptr) {
-            if (auto icon = lf->getIcon(iconForEditTool(tool)))
-                button->setImages(icon.get());
+            // The pen paints the current shape's icon itself (DrawPenButton).
+            if (tool != EditTool::Draw)
+                if (auto icon = lf->getIcon(iconForEditTool(tool)))
+                    button->setImages(icon.get());
             // The active tool's highlight is a BACKGROUND colour, not a different icon tint —
             // the glyph is the same in both states (see AppLookAndFeel::retintIcons).
             button->setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
         }
     }
-
-    shapeStrip_.applyTheme(&getLookAndFeel());
 
     // Same theme re-skin for the follow-playhead toggle: null-guarded on both counts (no themed
     // LnF in a headless build; getIcon returns nullptr when the asset library isn't linked in), so
