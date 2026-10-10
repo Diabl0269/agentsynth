@@ -582,6 +582,8 @@ TEST_F(GraphEditorTest, EveryNewControlOfTheAddConnectionPageHasANameAndATooltip
     }
 }
 
+// The swap is stepped by hand (applyPageTweenAt). Clicking through clickNow would run the message loop for a while and
+// let the real animator advance (or finish) the swap, so the click is made synchronously and no loop runs in between.
 TEST_F(GraphEditorTest, ThePagesCrossFadeWhileTheHeightSettlesAndUnderReducedMotionOnlyTheFadeIsSeen) {
     {
         ReducedMotionGuard motion(false);
@@ -590,7 +592,7 @@ TEST_F(GraphEditorTest, ThePagesCrossFadeWhileTheHeightSettlesAndUnderReducedMot
         ASSERT_NE(panel, nullptr);
         panel->setForceAnimateForTest(true);
         const int listHeight = panel->getHeight();
-        clickNow(panel->addConnectionButton());
+        panel->addConnectionButton().onClick();
         ASSERT_TRUE(panel->isSearchOpen());
         ASSERT_TRUE(panel->isPageAnimating());
         const int searchHeight = panel->settledHeight(true);
@@ -623,7 +625,7 @@ TEST_F(GraphEditorTest, ThePagesCrossFadeWhileTheHeightSettlesAndUnderReducedMot
         AddFixture f;
         auto* panel = f.openFor(f.oscId, 0, false);
         panel->setForceAnimateForTest(true);
-        clickNow(panel->addConnectionButton());
+        panel->addConnectionButton().onClick();
         ASSERT_TRUE(panel->isPageAnimating()) << "the fade still plays";
         EXPECT_EQ(panel->getHeight(), panel->settledHeight(true)) << "but the height is the new page's at once";
         panel->applyPageTweenAt(0.5f);
