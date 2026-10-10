@@ -36,6 +36,7 @@ private:
     void notifyRate();
     void applyThemeColours();
     void showApplied();
+    void fillDetails();
     int previewHeight(int width) const;
     void relayout();
     int commentRowSlot() const;
@@ -53,6 +54,9 @@ private:
     bool applied = false;
     juce::StringArray previewLines;
     bool isExpanded = false;
+    // What the details panel shows, held until it first opens (see fillDetails).
+    juce::String planSummary;
+    bool detailsFilled = false;
     AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
     RateCallback onRate;
 

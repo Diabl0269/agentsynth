@@ -63,7 +63,9 @@ the same card (the engine treats it as a plan with no ops).
 - the thumbs rating, with the comment row once a rating is picked (recorded with the plan's JSON in
   `PatchFeedbackStore`, as the patch card's was);
 - the details panel when open: the per-change list (`computeDiff` grouped for a merge,
-  `summarizePatch` for a replace) and the plan's JSON.
+  `summarizePatch` for a replace), filled when it first opens and capped at 20,000 characters. The
+  plan's JSON is not shown (a full song's is megabytes and froze the UI thread when laid out); it is
+  only kept in `MessageData::planJson` for Apply and the feedback record.
 
 The card has no entrance animation, like the patch and timeline cards it replaces:
 `updateChatDisplay()` rebuilds every bubble on each redraw, so a tween would replay on every

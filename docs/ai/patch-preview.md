@@ -22,8 +22,8 @@ snapshots (`ProjectEditResult::patchBefore`/`patchAfter`):
 - **Replace mode**: "New patch: 12 modules" followed by each node's type name, plus a connection
   count if any. **Never a diff against the old graph**; see below.
 
-Below the list the panel shows the plan's JSON, pretty-printed (`juce::JSON::toString(parsed,
-allOnOneLine=false)`), falling back to the raw string if it fails to parse. A patch the scratch
+The panel shows only this list, never the plan's JSON: it is filled when first opened and capped at
+20,000 characters ("... N KB more not shown"), since laying out a full song's plan froze the UI. A patch the scratch
 apply rejects never reaches a diff: the card says "This plan was rejected and was not applied:
 <reason>" and offers no Apply.
 
