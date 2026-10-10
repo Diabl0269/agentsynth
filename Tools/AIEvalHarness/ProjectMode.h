@@ -153,6 +153,7 @@ using SaveHook =
     std::function<juce::String(const Scenario&, int run, const juce::String& response, juce::String& savedPath)>;
 
 struct RunOptions {
+    int requestTimeoutMs = 0;     // --timeout-ms (0 = the service's default); re-applied after setProvider
     int outerWaitMs = 270000;     // how long the harness waits for one answer (--timeout-ms + 30 s)
     SaveHook saveHook;            // empty = do not save
     int projectPromptVersion = 0; // --project-prompt-version; 0 = the app's own pin
@@ -183,7 +184,7 @@ inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& pl
 
 inline Outcome runScenario(const Scenario& scenario,
                            const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider,
-                           int outerWaitMs = 270000, int projectPromptVersion = 0) {
+                           int outerWaitMs = 270000, int projectPromptVersion = 0, int requestTimeoutMs = 0) {
     Outcome outcome;
     juce::AudioProcessorGraph graph;
     synth::prepareGraphForPatchEval(graph);
@@ -200,6 +201,9 @@ inline Outcome runScenario(const Scenario& scenario,
 
     synth::AIIntegrationService service(graph);
     service.setProvider(makeProvider());
+    // setProvider() re-pushes the service's own 240 s default, overwriting the timeout makeProvider() set.
+    if (requestTimeoutMs > 0)
+        service.setRequestTimeoutMs(requestTimeoutMs);
     synth::TimelineDoc timelineDoc;
     synth::TransportService transport;
     PreviewOnlyHost host;
@@ -255,7 +259,8 @@ inline int runAll(const std::vector<Scenario>& list, const char* label, int runs
     for (int run = 1; run <= runs; ++run) {
         for (const auto& scenario : list) {
             const auto startMs = juce::Time::currentTimeMillis();
-            const auto outcome = runScenario(scenario, makeProvider, options.outerWaitMs, options.projectPromptVersion);
+            const auto outcome = runScenario(scenario, makeProvider, options.outerWaitMs, options.projectPromptVersion,
+                                             options.requestTimeoutMs);
             const auto endMs = juce::Time::currentTimeMillis();
             ++total;
             responded += outcome.responded ? 1 : 0;

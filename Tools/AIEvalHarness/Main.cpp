@@ -25,7 +25,7 @@
                                                    [--mode patch|timeline|project|track]
                                                    [--timeout-ms N] [--save-projects DIR]
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
-                                                   [--render-peaks BUNDLE_OR_DIR]
+                                                   [--render-peaks BUNDLE_OR_DIR] [--keep-audio DIR]
                                                    [--project-prompt-version N]
                                                    [--think true|false] [--temperature X] [--seed N]
 
@@ -58,7 +58,8 @@
     (with --save-projects) makes no model calls: it does the same for each record of an earlier --json
     file. --check-project BUNDLE prints what a saved bundle holds. --timeout-ms N sets the provider's
     request timeout; the harness's own waits become N + 30 s. --render-peaks BUNDLE_OR_DIR (with
-    optional --json FILE) renders each bundle offline and prints its master and per-track peak in dBFS.
+    optional --json FILE) renders each bundle offline and prints its master and per-track peak in dBFS;
+    --keep-audio DIR also saves each master as DIR/<bundle name>.wav (16-bit) to listen to.
     See Tools/AIEvalHarness/README.md.
 
     --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
@@ -271,6 +272,9 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
 
     synth::AIIntegrationService service(graph);
     service.setProvider(makeProvider(providerKind, host, model, sampling, requestTimeoutMs));
+    // setProvider() re-pushes the service's own 240 s default, overwriting the timeout makeProvider() set.
+    if (requestTimeoutMs > 0)
+        service.setRequestTimeoutMs(requestTimeoutMs);
 
     synth::TimelineDoc timelineDoc;
     synth::TransportService transport;
@@ -392,6 +396,7 @@ int runProjectOrTrack(const ProjectRun& r) {
     std::optional<save_projects::Environment> saveEnv;
     project_mode::RunOptions options;
     options.outerWaitMs = r.outerWaitMs;
+    options.requestTimeoutMs = r.requestTimeoutMs;
     options.projectPromptVersion = r.projectPromptVersion;
     if (r.saveDir != juce::File()) {
         saveEnv.emplace();
@@ -414,7 +419,9 @@ int runBundleFlagIfAsked(const juce::StringArray& args) {
     const auto cwd = juce::File::getCurrentWorkingDirectory();
     const juce::String json = argValue(args, "--json", "");
     save_projects::Environment env;
-    return render_peaks::run(env, cwd.getChildFile(flag), json.isEmpty() ? juce::File() : cwd.getChildFile(json));
+    const juce::String keepAudio = argValue(args, "--keep-audio", "");
+    return render_peaks::run(env, cwd.getChildFile(flag), json.isEmpty() ? juce::File() : cwd.getChildFile(json),
+                             keepAudio.isEmpty() ? juce::File() : cwd.getChildFile(keepAudio));
 }
 
 } // namespace
