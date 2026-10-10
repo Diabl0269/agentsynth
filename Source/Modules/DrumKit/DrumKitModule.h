@@ -20,6 +20,7 @@
  *   | 41 43 45 47 48 50 | toms, low to high   | Tom level/tune/decay     |
  *   | 49, 57     | crash                      | Cymbal level/tune/decay  |
  *   | 51, 59     | ride                       | Cymbal level/tune/decay  |
+ *   | 56         | cowbell                    | Cowbell level/tune/decay |
  *
  * Any other note is ignored. A drum plays out its own decay whatever the note length, so Note-Off
  * does nothing. This module owns its amp envelopes: there is no ADSR or VCA in front of it.
@@ -32,7 +33,7 @@ public:
     static constexpr int kNumChannels = 2;
 
     /** The note-to-drum map, exposed for tests and docs. */
-    enum class Drum { Kick, Snare, Rim, Clap, ClosedHat, OpenHat, Tom, Crash, Ride, None };
+    enum class Drum { Kick, Snare, Rim, Clap, ClosedHat, OpenHat, Tom, Crash, Ride, Cowbell, None };
     static Drum drumForNote(int note) noexcept;
 
     DrumKitModule();
@@ -80,6 +81,9 @@ private:
     juce::AudioParameterFloat* cymbalLevel = nullptr;
     juce::AudioParameterFloat* cymbalTune = nullptr;
     juce::AudioParameterFloat* cymbalDecay = nullptr;
+    juce::AudioParameterFloat* cowbellLevel = nullptr;
+    juce::AudioParameterFloat* cowbellTune = nullptr;
+    juce::AudioParameterFloat* cowbellDecay = nullptr;
     juce::AudioParameterFloat* levelParam = nullptr;
 
     static constexpr int kNumToms = 6;
@@ -89,6 +93,7 @@ private:
     synth::drums::KickVoice kick_;
     synth::drums::SnareVoice snare_, rim_;
     synth::drums::ClapVoice clap_;
+    synth::drums::CowbellVoice cowbell_;
     synth::drums::MetallicVoice closedHat_, openHat_, crash_, ride_;
     std::array<synth::drums::TomVoice, kNumToms> toms_;
     juce::SmoothedValue<float> smoothedLevel_;

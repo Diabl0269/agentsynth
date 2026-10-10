@@ -41,6 +41,8 @@ DrumKitModule::Drum DrumKitModule::drumForNote(int note) noexcept {
     case 51:
     case 59:
         return Drum::Ride;
+    case 56:
+        return Drum::Cowbell;
     default:
         return tomIndexForNote(note) >= 0 ? Drum::Tom : Drum::None;
     }
@@ -74,6 +76,9 @@ DrumKitModule::DrumKitModule()
     cymbalLevel = addFloat("cymbalLevel", "Cymbal level", 0.0f, 1.0f, 0.5f);
     cymbalTune = addFloat("cymbalTune", "Cymbal tune", -12.0f, 12.0f, 0.0f);
     cymbalDecay = addFloat("cymbalDecay", "Cymbal decay", 0.3f, 4.0f, 1.5f);
+    cowbellLevel = addFloat("cowbellLevel", "Cowbell level", 0.0f, 1.0f, 0.8f);
+    cowbellTune = addFloat("cowbellTune", "Cowbell tune", -12.0f, 12.0f, 0.0f);
+    cowbellDecay = addFloat("cowbellDecay", "Cowbell decay", 0.1f, 0.6f, 0.25f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.7f);
     addMuteParameter();
     enableVisualBuffer(true);
@@ -95,6 +100,7 @@ void DrumKitModule::stopAll() noexcept {
     openHat_.stop();
     crash_.stop();
     ride_.stop();
+    cowbell_.stop();
     for (auto& tom : toms_)
         tom.stop();
 }
@@ -149,6 +155,9 @@ void DrumKitModule::trigger(int note, float velocity) {
         ride_.trigger(hitFor(cymbalLevel, cymbalTune, cymbalDecay->get() * 0.8f, velocity), MetallicKind::Ride,
                       sampleRate_);
         break;
+    case Drum::Cowbell:
+        cowbell_.trigger(hitFor(cowbellLevel, cowbellTune, cowbellDecay->get(), velocity), sampleRate_);
+        break;
     case Drum::None:
         break;
     }
@@ -172,6 +181,8 @@ float DrumKitModule::renderSample() noexcept {
         sum += crash_.tick(sampleRate_, noise_);
     if (ride_.active())
         sum += ride_.tick(sampleRate_, noise_);
+    if (cowbell_.active())
+        sum += cowbell_.tick(sampleRate_);
     for (auto& tom : toms_)
         if (tom.active())
             sum += tom.tick(sampleRate_);

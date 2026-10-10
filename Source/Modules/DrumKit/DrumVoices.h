@@ -216,6 +216,47 @@ private:
     double sampleRateHz = 44100.0;
 };
 
+/** The 808 cowbell: two square oscillators at 540 and 800 Hz, summed and band-passed around 2.6 kHz. The envelope
+ *  has two stages, a bright 15 ms knock on top of a quieter tail that takes the Cowbell decay. */
+struct CowbellVoice {
+    static constexpr float kLowHz = 540.0f;
+    static constexpr float kHighHz = 800.0f;
+    static constexpr float kCentreHz = 2600.0f;
+    static constexpr float kQ = 1.7f;
+    static constexpr float kKnockSeconds = 0.015f;
+    static constexpr float kKnockMix = 0.55f;
+    static constexpr float kTailMix = 0.45f;
+    static constexpr float kOutScale = 1.0f;
+
+    DecayEnv knock, tail;
+    Svf bpf;
+    float lowPhase = 0.0f, highPhase = 0.0f, tune = 1.0f, gain = 0.0f;
+
+    void trigger(const Hit& h, double sr) noexcept {
+        lowPhase = highPhase = 0.0f;
+        tune = h.tune;
+        gain = h.velocity * h.gain;
+        bpf.reset();
+        bpf.set(kCentreHz * brightness(h.velocity), kQ, sr);
+        knock.trigger(kKnockSeconds, sr);
+        tail.trigger(h.decay, sr);
+    }
+    bool active() const noexcept { return tail.active(); }
+    void stop() noexcept {
+        knock.stop();
+        tail.stop();
+    }
+    float tick(double sr) noexcept {
+        lowPhase += kLowHz * tune / static_cast<float>(sr);
+        highPhase += kHighHz * tune / static_cast<float>(sr);
+        lowPhase -= std::floor(lowPhase);
+        highPhase -= std::floor(highPhase);
+        const float squares = (lowPhase < 0.5f ? 0.5f : -0.5f) + (highPhase < 0.5f ? 0.5f : -0.5f);
+        bpf.process(squares);
+        return bpf.bp * (kKnockMix * knock.tick() + kTailMix * tail.tick()) * kOutScale * gain;
+    }
+};
+
 /** Six detuned square oscillators at 808-style ratios; the raw material of hats and cymbals. */
 struct MetallicBank {
     static constexpr std::array<float, 6> kHz = {205.3f, 304.4f, 369.6f, 522.7f, 540.0f, 800.0f};

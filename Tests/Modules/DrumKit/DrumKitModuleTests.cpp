@@ -88,7 +88,7 @@ const std::vector<MappedNote>& mappedNotes() {
         {47, "tom", "tomDecay", 1.0f, 0},           {48, "tom", "tomDecay", 1.0f, 0},
         {50, "tom", "tomDecay", 1.0f, 0},           {49, "crash", "cymbalDecay", 1.0f, 0},
         {57, "crash", "cymbalDecay", 1.0f, 0},      {51, "ride", "cymbalDecay", 0.8f, 0},
-        {59, "ride", "cymbalDecay", 0.8f, 0},
+        {59, "ride", "cymbalDecay", 0.8f, 0},       {56, "cowbell", "cowbellDecay", 1.0f, 0},
     };
     return notes;
 }
@@ -121,7 +121,7 @@ TEST(DrumKitModule, EveryMappedNoteSoundsAndDecaysToSilenceWithinItsDecay) {
 }
 
 TEST(DrumKitModule, AnUnmappedNoteIsSilent) {
-    for (const int note : {0, 34, 52, 53, 55, 56, 60, 72, 127}) {
+    for (const int note : {0, 34, 52, 53, 55, 58, 60, 72, 127}) {
         auto kit = makeKit();
         const auto out = render(*kit, {{note}}, 0.3);
         EXPECT_EQ(peakOf(out), 0.0f) << "note " << note;
@@ -228,6 +228,44 @@ TEST(DrumKitModule, HatsAreBrightHissWithNoLowToneToRingLikeACowbell) {
         EXPECT_GT(peakOf(hit), 0.01f);
         EXPECT_LT(energyShareBelow(hit, 5000.0), 0.02f) << "the hat's body is above 5 kHz";
     }
+}
+
+// Share of a hit's energy inside [lowHz, highHz), on the same grid as energyShareBelow.
+float energyShareBetween(const std::vector<float>& s, double lowHz, double highHz) {
+    return energyShareBelow(s, highHz) - energyShareBelow(s, lowHz);
+}
+
+TEST(DrumKitModule, NoteFiftySixIsTheCowbell) {
+    EXPECT_EQ(DrumKitModule::drumForNote(56), DrumKitModule::Drum::Cowbell);
+    EXPECT_EQ(DrumKitModule::drumForNote(55), DrumKitModule::Drum::None);
+    EXPECT_EQ(DrumKitModule::drumForNote(57), DrumKitModule::Drum::Crash);
+}
+
+TEST(DrumKitModule, TheCowbellIsTonalWithItsEnergyBetween400HzAnd4kHz) {
+    auto kit = makeKit();
+    const auto hit = render(*kit, {{56}}, 0.3);
+    EXPECT_GT(peakOf(hit), 0.1f);
+    EXPECT_GT(energyShareBetween(hit, 400.0, 4000.0), 0.8f) << "a tonal bell, not a hiss";
+}
+
+TEST(DrumKitModule, TheCowbellHasABrightKnockOverAQuieterTail) {
+    auto kit = makeKit();
+    const auto hit = render(*kit, {{56}}, 0.5);
+    EXPECT_GT(rmsOf(hit, 0.0, 0.015), rmsOf(hit, 0.05, 0.065) * 2.0f);
+    EXPECT_GT(rmsOf(hit, 0.05, 0.065), 0.003f) << "and the tail rings on";
+    auto longer = makeKit();
+    static_cast<juce::AudioParameterFloat*>(findParameterByID(longer.get(), "cowbellDecay"))
+        ->setValueNotifyingHost(1.0f);
+    EXPECT_GT(rmsOf(render(*longer, {{56}}, 0.7), 0.4, 0.5), rmsOf(hit, 0.4, 0.5) * 5.0f)
+        << "Cowbell decay sets the tail";
+}
+
+TEST(DrumKitModule, TheCowbellIsAboutAsLoudAsTheClap) {
+    auto cow = makeKit();
+    auto clap = makeKit();
+    const float ratio = peakOf(render(*cow, {{56}}, 0.5)) / peakOf(render(*clap, {{39}}, 0.5));
+    EXPECT_GT(ratio, 0.5f);
+    EXPECT_LT(ratio, 1.5f);
 }
 
 TEST(DrumKitModule, AnOpenHatDoesNotChokeAClosedHat) {

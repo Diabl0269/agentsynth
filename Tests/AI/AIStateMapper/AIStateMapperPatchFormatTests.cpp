@@ -137,8 +137,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
-        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapTune, closedDecay, cymbalDecay, cymbalLevel, cymbalTune, "
-                     "dualIO, hatLevel, hatTune, kickDecay, kickLevel, kickTune, level, muted, openDecay, "
+        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapTune, closedDecay, cowbellDecay, cowbellLevel, "
+                     "cowbellTune, cymbalDecay, cymbalLevel, cymbalTune, dualIO, hatLevel, hatTune, kickDecay, "
+                     "kickLevel, kickTune, level, muted, openDecay, "
                      "snareDecay, snareLevel, snareTune, tomDecay, tomLevel, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},

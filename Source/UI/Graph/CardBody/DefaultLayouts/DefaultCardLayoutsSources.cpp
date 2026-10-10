@@ -68,7 +68,7 @@ CardLayout samplerLayout() {
     return layout;
 }
 
-// The master Level stays above a strip of six tabs, one per drum group (level, tune, decay; the hats add
+// The master Level stays above a strip of seven tabs, one per drum group (level, tune, decay; the hats add
 // their two decays), so the card is no taller than a Noise card plus one row of knobs.
 CardLayout drumKitLayout() {
     CardLayout layout;
@@ -81,6 +81,7 @@ CardLayout drumKitLayout() {
             kQuadColumns),
         tab("toms", "Toms", {param("tomLevel"), param("tomTune"), param("tomDecay")}),
         tab("cymbals", "Cymbals", {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay")}),
+        tab("cowbell", "Bell", {param("cowbellLevel"), param("cowbellTune"), param("cowbellDecay")}),
         footer({}),
     };
     return layout;
