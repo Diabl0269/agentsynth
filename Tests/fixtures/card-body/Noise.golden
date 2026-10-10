@@ -10,7 +10,7 @@ type Noise size 280x245
   child 8 label id="" at 12,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 9 knob id="Level" at 97,139 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 10 label id="" at 97,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 toggle id="Poly" at 12,205 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 11 toggle id="Poly" at 12,205 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 12 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 37, 176
   in 1 122, 176

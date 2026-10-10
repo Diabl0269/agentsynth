@@ -395,6 +395,18 @@ Between the Recent Projects list and the footer the card carries a low-key contr
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
 
+## Toast
+
+`ToastComponent` (`Source/UI/Chrome/Toast/`) is a small message pill with one optional action, for a change that is
+bigger than what the user clicked ("Made 4 modules poly" with **Undo**). `MainComponent` owns one, a plain child laid
+out by `resized()` (centred, 20 px above the canvas' bottom edge) and raised when shown; a second `show()` replaces the
+first. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
+fades (80 ms), under Animations Off or while its parent is not on screen it lands at once. It hides itself 4 s after
+the last `show()` unless the pointer is over it or its action holds the keyboard focus; Esc dismisses it. The action
+is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this change"); it dismisses the toast, then
+runs. The Poly pill's Undo only undoes while its step is still the last edit (`AppUndoManager::getEditSerial()`).
+Colours are theme tokens only.
+
 ## Shortcut hint overlay
 
 `Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay` is a second full-window overlay: a child of

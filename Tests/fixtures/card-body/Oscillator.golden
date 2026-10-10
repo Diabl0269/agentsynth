@@ -15,7 +15,7 @@ type Oscillator size 280x471
   child 13 label id="" at 140,159 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 knob id="Level" at 12,365 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,347 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 toggle id="Poly" at 12,431 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 16 toggle id="Poly" at 12,431 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 17 knob id="Unison" at 12,271 85x58 visible=1 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
   child 18 label id="" at 12,253 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 19 knob id="Detune" at 97,271 85x58 visible=1 title="Detune" tip="Detune (inactive in this mode)" focusOrder=0 wantsFocus=1

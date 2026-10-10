@@ -19,6 +19,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -291,8 +292,31 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*toggle, &param);
-    buttonAttachments_.add(new juce::ButtonParameterAttachment(param, *toggle));
+    if (param.paramID == "poly")
+        installPolyPill(*toggle, param);
+    else
+        buttonAttachments_.add(new juce::ButtonParameterAttachment(param, *toggle));
     item.widget = toggle;
+}
+
+// The Poly pill is not a plain toggle: a click asks PolyChainController to switch the module's whole voice graph as
+// ONE undo step, so the pill never flips itself and has no ButtonParameterAttachment (whose gesture would add a
+// second, half undo step). Two things follow from that. onClick fires for a user click and ONLY for one, because the
+// pill's state is set with dontSendNotification: a ButtonParameterAttachment sets it with sendNotificationSync, which
+// runs onClick for every programmatic change too (undo restore, the AI, MIDI Learn, automation) and would propagate
+// them. The pill follows the parameter through a plain ParameterAttachment (marshalled to the message thread), so a
+// cancelled question leaves it as it was. Return/Space reach the same onClick through the button's own key handling.
+void CardBody::installPolyPill(juce::ToggleButton& toggle, juce::AudioParameterBool& param) {
+    toggle.setClickingTogglesState(false);
+    toggle.setTooltip("Play several notes at once. Switches every connected module in this track.");
+    toggle.onClick = [card = juce::Component::SafePointer<ModuleComponent>(&card_), &param] {
+        if (card != nullptr)
+            card->owner.getPolyChain().polyPillClicked(card->getNodeId(), !param.get());
+    };
+    auto* follow = new juce::ParameterAttachment(
+        param, [&toggle](float value) { toggle.setToggleState(value >= 0.5f, juce::dontSendNotification); });
+    paramAttachments_.add(follow);
+    follow->sendInitialUpdate();
 }
 
 // The caption above a fader, switch or stepper: the parameter's display name, as a knob's.

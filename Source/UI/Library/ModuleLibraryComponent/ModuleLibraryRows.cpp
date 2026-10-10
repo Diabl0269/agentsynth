@@ -11,7 +11,7 @@ juce::String ModuleLibraryComponent::subsectionKey(const juce::String& section, 
 juce::String ModuleLibraryComponent::descriptionFor(const juce::String& moduleName) {
     if (moduleName.equalsIgnoreCase("Oscillator"))
         return "Generates audio waveforms (sine, saw, square, triangle). Switch Poly on to run "
-               "8 voices driven by a Poly MIDI pitch fan.";
+               "8 voices; it switches every connected module and adds the Poly MIDI node for you.";
     if (moduleName.equalsIgnoreCase("Wavetable"))
         return "Scans through 3D wavetables - six built-ins or load your own file.";
     if (moduleName.equalsIgnoreCase("Noise"))
@@ -28,14 +28,15 @@ juce::String ModuleLibraryComponent::descriptionFor(const juce::String& moduleNa
         return "On-screen MIDI keyboard for note input.";
     if (moduleName.equalsIgnoreCase("Poly MIDI"))
         return "Converts MIDI into 8 voices of pitch and gate CV. Patch Poly Out to an "
-               "Oscillator's Pitch and an ADSR's Gate, and switch Poly on for every module in "
-               "the chain (Oscillator, ADSR, Filter, VCA) - with Poly off, only one voice sounds.";
+               "Oscillator's Pitch and an ADSR's Gate. Switching Poly on for any module of the "
+               "chain switches the whole chain and wires this in for you - with Poly off, only "
+               "one voice sounds.";
     if (moduleName.equalsIgnoreCase("External MIDI"))
         return "Routes external MIDI device input into the patch graph.";
     if (moduleName.equalsIgnoreCase("ADSR"))
         return "Attack-Decay-Sustain-Release envelope generator. Gate CV or MIDI starts the "
                "envelope; Threshold sets how high the gate must rise. Switch Poly on for one "
-               "envelope per voice.";
+               "envelope per voice (it switches the connected modules too).";
     if (moduleName.equalsIgnoreCase("Envelope Follower"))
         return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
     if (moduleName.equalsIgnoreCase("VCA"))

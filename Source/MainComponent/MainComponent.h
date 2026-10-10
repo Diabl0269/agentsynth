@@ -38,6 +38,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
@@ -836,6 +837,8 @@ private:
     void finishPanelSlide();
 
     void setAlignmentGuidesEnabled(bool enabled);
+
+    std::unique_ptr<synth::ui::ToastComponent> toast_; // transient message + Undo; a child laid out by resized()
 
     // Constructed last so all child components exist. Do NOT set tooltips here.
     std::unique_ptr<juce::Component> shortcutHints_; // Cmd-hold shortcut hints overlay

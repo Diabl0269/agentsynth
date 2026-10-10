@@ -191,14 +191,13 @@ public:
         return {"1. Drag a Poly MIDI module onto the canvas - this is your MIDI source.",
                 "2. Drag a MIDI Keyboard too (or bind a timeline track's piano roll instead), and "
                 "connect it into Poly MIDI so it has notes to play.",
-                "3. Drag an Oscillator, wire Poly MIDI's Poly Out to its Pitch input, and switch "
-                "Poly on.",
-                "4. Drag a VCA, wire the Oscillator's output into it, and switch Poly on.",
-                "5. Drag an ADSR, wire Poly MIDI's Poly Out to its Gate input and switch Poly on, "
-                "then wire the ADSR's output to the VCA's CV input - without this the VCA stays "
-                "silent.",
+                "3. Drag an Oscillator and wire Poly MIDI's Poly Out to its Pitch input.",
+                "4. Drag a VCA and wire the Oscillator's output into it.",
+                "5. Drag an ADSR, wire Poly MIDI's Poly Out to its Gate input, then wire the ADSR's "
+                "output to the VCA's CV input - without this the VCA stays silent.",
                 "6. Drag an Audio Output and wire the VCA's output to it.",
-                "7. Play the on-screen MIDI Keyboard (or notes from the piano roll) to hear it."};
+                "7. Click Poly on any one of them: the whole chain switches to 8 voices at once.",
+                "8. Play the on-screen MIDI Keyboard (or notes from the piano roll) to hear it."};
     }
 
     struct ShortcutEntry {

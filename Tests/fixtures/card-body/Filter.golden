@@ -16,7 +16,7 @@ type Filter size 280x477
   child 14 label id="" at 97,259 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 15 combo id="" at 40,131 200x24 visible=1 title="Filter Type" tip="Filter Type" focusOrder=0 wantsFocus=1
   child 16 label id="" at 40,113 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 toggle id="Poly" at 12,437 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 17 toggle id="Poly" at 12,437 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 18 knob id="Key Track" at 12,371 85x58 visible=1 title="Key Track" tip="Key Track" focusOrder=0 wantsFocus=1
   child 19 label id="" at 12,353 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Level" at 97,371 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1

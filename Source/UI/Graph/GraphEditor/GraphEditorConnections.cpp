@@ -12,6 +12,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Graph/PortPanel/PortConnector.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UserSettings.h"
@@ -213,28 +214,31 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
     if (srcNode == nullptr || dstNode == nullptr)
         return;
 
-    auto* srcModuleBase = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
-    auto* dstModuleBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor());
+    // Inside the cable's own undo step, and before the link is resolved: a module with no cables yet joins the poly
+    // state of the module it is first cabled to (PolyChainController::joinConnectedModules), which decides the fan.
+    auto doConnect = [this, &graph, srcId, dstId, srcJack, dstJack, isMidi] {
+        polyChain_->joinConnectedModules(srcId, dstId);
+        auto* srcModuleBase = dynamic_cast<ModuleBase*>(graph.getNodeForId(srcId)->getProcessor());
+        auto* dstModuleBase = dynamic_cast<ModuleBase*>(graph.getNodeForId(dstId)->getProcessor());
 
-    PolyLink link{srcJack, dstJack, 1};
-    if (!isMidi)
-        link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
+        PolyLink link{srcJack, dstJack, 1};
+        if (!isMidi)
+            link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
 
-    // An attenuverter sits in the path of a single mod wire; a poly fan stays direct so
-    // AudioEngine can collapse its N raw edges into one PolyBus. Structural pitch/gate
-    // sources are never wrapped either — see carriesStructuralSignal.
-    bool isCV = false;
-    if (!isMidi && link.voiceCount == 1 && dstModuleBase != nullptr &&
-        !carriesStructuralSignal(srcModuleBase, link.sourceRawChannel)) {
-        for (const auto& t : dstModuleBase->getModulationTargets()) {
-            if (t.channelIndex == link.destRawChannel) {
-                isCV = true;
-                break;
+        // An attenuverter sits in the path of a single mod wire; a poly fan stays direct so
+        // AudioEngine can collapse its N raw edges into one PolyBus. Structural pitch/gate
+        // sources are never wrapped either — see carriesStructuralSignal.
+        bool isCV = false;
+        if (!isMidi && link.voiceCount == 1 && dstModuleBase != nullptr &&
+            !carriesStructuralSignal(srcModuleBase, link.sourceRawChannel)) {
+            for (const auto& t : dstModuleBase->getModulationTargets()) {
+                if (t.channelIndex == link.destRawChannel) {
+                    isCV = true;
+                    break;
+                }
             }
         }
-    }
 
-    auto doConnect = [this, &graph, srcId, dstId, link, isMidi, isCV] {
         if (isMidi) {
             graph.addConnection({{srcId, juce::AudioProcessorGraph::midiChannelIndex},
                                  {dstId, juce::AudioProcessorGraph::midiChannelIndex}});

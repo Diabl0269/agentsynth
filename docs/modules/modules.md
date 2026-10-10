@@ -65,7 +65,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
     - Waveform crossfade (64-sample fade on waveform changes).
     - MIDI-to-Frequency tracking with unison and detune support.
     - Integrated visual buffer for real-time waveform display.
-- **Poly mode**: 8 voices driven by pitch CV (Hz). See [Poly Channel Layout](#poly-channel-layout) for channel details.
+- **Poly mode**: 8 voices driven by pitch CV (Hz). See [Poly Channel Layout](#poly-channel-layout) for channel details. The Poly pill switches the whole connected voice graph, not just this module ([`modulation.md`](modulation.md#the-poly-toggle)).
 - **Smoothing**: Level is smoothed over 10 ms, materialised into a per-block ramp before the voice loop so poly mode does not advance the smoother once per voice. Fine reaches the output through the existing 5 ms frequency smoother; Detune is a frequency ratio (phase-continuous) and is deliberately not smoothed.
 - **Stereo output (issue #219)**: two output jacks, `Audio L` and `Audio R`, plus a `Pan` parameter (−1…+1, default 0) and a `Pan` CV jack. `Audio R` lives on a dedicated block at `kRightBase` (ch14, fanning to ch14-21 in poly), **not** on ch1 — ch1 is the Waveform CV input. Poly gives each voice its own L/R pair, so a panned chord reaches the Voice Mixer as a stereo image rather than eight mono voices.
 - **Pulse Width** (`pulseWidth`, 5-95 %, default 50): the Square's duty cycle; 50 % is the plain square, sample for sample, and the other waveforms ignore it. The wave keeps its DC offset away from 50 % (the classic PWM character) and both edges stay PolyBLEP-corrected. Smoothed over 10 ms through a per-block ramp, materialised once so poly mode does not advance it per voice.
@@ -517,6 +517,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0..1).
 - **Visible ports**: 1 output jack ("Poly Out") representing the entire poly bus.
 - **Voice mask atomic**: `voiceMaskAtomic_` (`std::atomic<uint8_t>`) is written at the end of every `processBlock` with `std::memory_order_relaxed` — one bit per voice (bit 0 = voice 0, … bit 7 = voice 7), set when `voices[i].active` is true. `AudioEngine::getDisplayVoiceCount()` reads it lock-free and counts set bits via `std::popcount` (C++20 `<bit>`).
+- **You do not wire it by hand for a poly chain**: clicking Poly on any Oscillator, Wavetable, Filter, ADSR or VCA switches the whole connected voice graph and inserts a Poly MIDI node where a MIDI source feeds a module that just went poly (turning Poly off removes it again) -- see [`modulation.md`](modulation.md#the-poly-toggle). Placing and cabling Poly MIDI yourself still works.
 - **Default instrument-track chain (P9-3j, FRO46)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires a Poly MIDI node between Track In and the instrument when the instrument is poly, so the auto-wired ADSR+VCA (see the ADSR/VCA entries above) can be genuinely poly too instead of forced non-poly — see [`docs/mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope`](../mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope) for the full wiring.
 
 ### Poly note contract (machine MIDI)

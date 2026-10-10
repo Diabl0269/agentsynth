@@ -23,7 +23,7 @@ type Wavetable size 560x578
   child 21 label id="" at 190,406 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 knob id="Level" at 279,424 89x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 23 label id="" at 279,406 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 toggle id="Poly" at 12,538 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 24 toggle id="Poly" at 12,538 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 25 knob id="Unison" at 0,0 0x0 visible=0 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
   child 26 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 27 knob id="Detune" at 0,0 0x0 visible=0 title="Detune" tip="Detune" focusOrder=0 wantsFocus=1

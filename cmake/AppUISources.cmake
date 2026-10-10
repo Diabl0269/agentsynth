@@ -381,6 +381,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/DeleteTrackConfirm.h
     Source/UI/Chrome/ExportAudioDialog.cpp
     Source/UI/Chrome/ExportAudioDialog.h
+    Source/UI/Chrome/Toast/ToastComponent.h
+    Source/UI/Chrome/Toast/ToastComponent.cpp
     Source/UI/Chrome/ProgressTaskWindow.cpp
     Source/UI/Chrome/ProgressTaskWindow.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
@@ -540,6 +542,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/PortPanel/PortTargetList.cpp
     Source/UI/Graph/PortPanel/PortTargetSearchPage.h
     Source/UI/Graph/PortPanel/PortTargetSearchPage.cpp
+    Source/UI/Graph/PolyChain/PolyChainController.h
+    Source/UI/Graph/PolyChain/PolyChainController.cpp
     Source/UI/Graph/PortPanel/PortPanelController.h
     Source/UI/Graph/PortPanel/PortPanelController.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp

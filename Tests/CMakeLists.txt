@@ -147,6 +147,7 @@ add_executable(Tests
     Mixer/MasterSafetyLimiterTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
+    Mixer/ChannelFlow/PolyVoiceGraphTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
     Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp
     Mixer/ChannelFlow/ChannelFlowProjectEditPlacementTests.cpp
@@ -281,6 +282,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorCanvasTickTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
+    UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
@@ -783,6 +785,7 @@ add_executable(Tests
     UI/Chrome/ToolbarButton/ToolbarButtonMotionTests.cpp
     UI/Chrome/ToolbarButton/ToolbarAiSparkTests.cpp
     UI/Chrome/StatusBarAccessibilityTests.cpp
+    UI/Chrome/Toast/ToastComponentTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Layout/SearchMatchTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp

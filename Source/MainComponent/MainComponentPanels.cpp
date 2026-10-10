@@ -484,6 +484,8 @@ void MainComponent::resized() {
         moduleLibrary.setBounds(bounds.removeFromLeft(libW));
 
     graphEditor.setBounds(bounds);
+    if (toast_)
+        toast_->placeIn(bounds);
 
     // Full window bounds on EVERY layout pass, whether or not it's currently visible —
     // it must always cover the toolbar/canvas the moment it's shown, and a stale rect from before

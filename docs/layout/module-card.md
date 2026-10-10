@@ -179,7 +179,10 @@ layout adds it.
   of the row instead of full-width
   rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
   `poly` toggle in the footer unless the layout places it elsewhere or hides it, so a default layout
-  never lists it. A card without a footer section keeps today's chrome rows exactly.
+  never lists it. The Poly pill is the one pill that does not toggle itself: a click switches the module's whole
+  voice graph as one undo step ([`modulation.md`](../modules/modulation.md#the-poly-toggle)), and the pill then
+  follows the parameter. Its tooltip is "Play several notes at once. Switches every connected module in this track."
+  and its screen-reader name stays "Poly". A card without a footer section keeps today's chrome rows exactly.
 - **Bindings are the widgets' own.** A pill is the parameter's ordinary toggle (attachment, MIDI
   Learn, Tab stop, title, tooltip), drawn differently; a footer fader is a `CardFader` with every knob
   gesture, so a cable lands on it and a knob-bound jack stays off the gutter.
@@ -342,7 +345,7 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | Change | Entry point |
 |---|---|
 | Macros bank `Knobs` count | `applyMacroCountChange` |
-| Poly toggle | `applyPolyStateChange` |
+| Poly toggle (each module the click switches, not only the clicked one) | `applyPolyStateChange` |
 | Dual I/O toggle (and the stereo-pair sweep) | `applyDualIOLayoutChange` |
 | Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
 | LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
