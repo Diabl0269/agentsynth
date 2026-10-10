@@ -20,6 +20,7 @@ public:
     bool recordBatch(const std::function<void()>& mutation) override;
     synth::TimelineDoc* editableTimelineDoc() override;
     void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override;
+    void assignLanesToOwners() override;
     bool canSetTempo() const override { return true; }
     bool setTempo(double bpm) override;
 

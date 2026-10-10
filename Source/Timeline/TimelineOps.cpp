@@ -746,11 +746,9 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
         points.push_back(point);
     }
 
-    // The lane if one already exists for this parameter (anywhere in the doc — lane identity is
-    // doc-wide), otherwise a new lane on the document's ONE Automation track, creating that track too
-    // when there is none yet. This pure op has no graph, so unlike the user's own "Automate this
-    // parameter" gesture (MainComponent::automateParameter) it cannot place the lane on the track that
-    // plays the module; the next project open moves it there (MainComponent::moveLanesToOwningTracks).
+    // The lane if one already exists for this parameter (lane identity is doc-wide), otherwise a new lane on the
+    // document's ONE Automation track, created if absent. This pure op has no graph, so it cannot pick the track that
+    // plays the module; the host does after the batch (TimelineOpsHost::assignLanesToOwners).
     LaneId laneId;
     if (existing != nullptr) {
         laneId = existing->id;
@@ -993,7 +991,10 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
 // "nodeUuid" only; a caller with in-response node references rewrites them to uuids first.
 TimelineOpsResult TimelineOps::applyInsideTransaction(const juce::var& envelope, TimelineDoc& doc,
                                                       const juce::AudioProcessorGraph& graph, TimelineOpsHost* host) {
-    return runBatch(envelope, doc, graph, host, carriesHostOp(envelope) ? host : nullptr);
+    auto result = runBatch(envelope, doc, graph, host, carriesHostOp(envelope) ? host : nullptr);
+    if (result.ok && host != nullptr)
+        host->assignLanesToOwners();
+    return result;
 }
 
 } // namespace synth

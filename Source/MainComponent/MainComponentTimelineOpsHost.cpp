@@ -63,3 +63,8 @@ synth::TimelineDoc* MainComponentTimelineOpsHost::editableTimelineDoc() { return
 void MainComponentTimelineOpsHost::placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
     synth::placeNewModulesBesideConnections(owner_.graphEditor, created);
 }
+
+// Inside recordBatch: lanes a writeLane op created on the shared Automation track move to the track that plays their
+// module, the same rule project load applies (docs/timeline/automation.md#which-track-a-lane-lands-on), so the
+// move is part of the batch's one undo step.
+void MainComponentTimelineOpsHost::assignLanesToOwners() { owner_.moveLanesToOwningTracks(); }
