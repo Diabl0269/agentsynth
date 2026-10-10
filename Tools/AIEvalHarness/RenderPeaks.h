@@ -1,11 +1,12 @@
 /*
-    RenderPeaks.h -- AIEvalHarness `--render-peaks <bundle or directory> [--json FILE]`: render saved
+    RenderPeaks.h -- AIEvalHarness `--render-peaks <bundle or directory> [--json FILE] [--keep-audio DIR]`: render saved
     projects offline and report their loudest sample.
 
     Each bundle is opened in a headless MainComponent through openProjectForTest, then bounced with
     synth::BounceExporter (master mix) and synth::StemExporter (one file per mixer channel, named after
     its track) over the whole arrangement plus a short tail. Renders are 32-bit float WAV so a mix
-    that goes over full scale is measured, not clipped by the file format.
+    that goes over full scale is measured, not clipped by the file format. With --keep-audio DIR each master is also saved as DIR/<bundle name>.wav,
+    16-bit, for listening.
 */
 #pragma once
 
@@ -86,10 +87,42 @@ inline synth::BounceOptions wholeProjectOptions(double endBeat) {
     return options;
 }
 
+// Writes the float master render as a 16-bit WAV (same sample rate, stereo) to `dest`, for listening. The
+// float file stays the measured one; samples over full scale clip here, as they would on any 16-bit player.
+inline bool saveListenableCopy(const juce::File& floatWav, const juce::File& dest, juce::String& error) {
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(floatWav));
+    if (reader == nullptr) {
+        error = "cannot read " + floatWav.getFileName();
+        return false;
+    }
+    dest.deleteFile();
+    std::unique_ptr<juce::FileOutputStream> stream(dest.createOutputStream());
+    if (stream == nullptr) {
+        error = "cannot write " + dest.getFullPathName();
+        return false;
+    }
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatWriter> writer(
+        wav.createWriterFor(stream.get(), reader->sampleRate, (unsigned)reader->numChannels, 16, {}, 0));
+    if (writer == nullptr) {
+        error = "cannot create a 16-bit WAV writer";
+        return false;
+    }
+    stream.release(); // the writer owns it now
+    if (!writer->writeFromAudioReader(*reader, 0, -1)) {
+        error = "writing " + dest.getFileName() + " failed";
+        return false;
+    }
+    return true;
+}
+
 // Opens `bundle`, renders master and stems into a folder under `scratch`, and measures them. Returns false
 // with `error` set when the bundle does not open or the master render fails; a stem failure only leaves
 // `out.stemNote` (the master number is still the answer to "is it too loud").
-inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, BundlePeaks& out, juce::String& error) {
+inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, BundlePeaks& out, juce::String& error,
+                         const juce::File& keepAudioDir = {}) {
     out.bundle = bundle.getFileName();
     MainComponent mc(std::make_unique<save_projects::NullProvider>());
     mc.setSize(1600, 900);
@@ -115,6 +148,9 @@ inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, Bu
     }
     out.masterPeakDb = filePeakDb(master, error);
     if (error.isNotEmpty())
+        return false;
+    if (keepAudioDir != juce::File() &&
+        !saveListenableCopy(master, keepAudioDir.getChildFile(bundle.getFileNameWithoutExtension() + ".wav"), error))
         return false;
 
     if (!synth::StemExporter::hasChannelStrips(mc.getAudioEngine())) {
@@ -175,7 +211,8 @@ inline void writeJson(const juce::File& file, const std::vector<BundlePeaks>& al
 
 // `--render-peaks <bundle or directory>`: one line per bundle and a summary. A directory means every
 // *.agsproj directly inside it, sorted by name. Exit 1 when a bundle fails to open or render.
-inline int run(const save_projects::Environment& env, const juce::File& target, const juce::File& jsonOut) {
+inline int run(const save_projects::Environment& env, const juce::File& target, const juce::File& jsonOut,
+               const juce::File& keepAudioDir = {}) {
     juce::Array<juce::File> bundles;
     if (target.isDirectory() && !synth::ProjectBundle::isBundle(target))
         bundles = target.findChildFiles(juce::File::findDirectories, false,
@@ -189,6 +226,8 @@ inline int run(const save_projects::Environment& env, const juce::File& target, 
     std::sort(bundles.begin(), bundles.end(),
               [](const juce::File& a, const juce::File& b) { return a.getFileName() < b.getFileName(); });
 
+    if (keepAudioDir != juce::File())
+        keepAudioDir.createDirectory();
     const auto scratch = env.scratchDir().getChildFile("render-peaks");
     scratch.createDirectory();
     std::vector<BundlePeaks> all;
@@ -196,7 +235,7 @@ inline int run(const save_projects::Environment& env, const juce::File& target, 
     for (const auto& bundle : bundles) {
         BundlePeaks peaks;
         juce::String error;
-        if (!renderBundle(scratch, bundle, peaks, error)) {
+        if (!renderBundle(scratch, bundle, peaks, error, keepAudioDir)) {
             std::printf("%s: FAILED, %s\n", bundle.getFileName().toRawUTF8(), error.toRawUTF8());
             ++failed;
         } else {
