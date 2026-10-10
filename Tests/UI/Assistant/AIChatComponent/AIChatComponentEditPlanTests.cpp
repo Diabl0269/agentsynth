@@ -9,6 +9,7 @@
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
+#include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
 
 namespace {
 
@@ -474,4 +475,73 @@ TEST_F(AIChatComponentTest, EditPlanCardRatingAndDetailsLandAtOnceOffScreen) {
     dynamic_cast<juce::Button*>(rig.findTitled("This answer was helpful").front())->onClick();
     EXPECT_TRUE(rig.findTitled("Feedback comment").front()->isVisible());
     EXPECT_EQ(card->getHeight(), base + 8 + 24);
+}
+
+// A full song's plan is megabytes of JSON. The card used to lay all of it out in the details panel
+// when it was built (and so again on every reopen of the conversation), freezing the app. Built from
+// a real recorded full-song answer, repeated up to ~2 MB.
+TEST_F(AIChatComponentTest, EditPlanCardOfAFullSongBuildsFastAndCapsItsDetails) {
+    const juce::File fixture = juce::File(TESTS_ROOT_DIR).getChildFile("fixtures/ai-plans/full-song-answer.json");
+    ASSERT_TRUE(fixture.existsAsFile());
+    juce::var plan = juce::JSON::parse(fixture.loadFileAsString());
+    ASSERT_TRUE(plan.getProperty("timelineOps", {}).isArray());
+    auto* ops = plan.getProperty("timelineOps", {}).getArray();
+    const juce::Array<juce::var> original = *ops;
+    juce::String json = juce::JSON::toString(plan);
+    while (json.length() < 2'000'000) {
+        for (const auto& op : original)
+            ops->add(op);
+        json = juce::JSON::toString(plan);
+    }
+
+    PlanRig rig;
+    synth::LocalConversation conversation;
+    conversation.id = "full-song";
+    conversation.title = "Full song";
+    conversation.createdAt = conversation.updatedAt = "2026-10-10T00:00:00.000Z";
+    conversation.messages = {{"user", "write a full song", conversation.createdAt},
+                             {"assistant", json, conversation.createdAt}};
+    ASSERT_TRUE(synth::LocalHistoryStore::save(rig.historyDir, conversation, synth::LocalHistoryStore::kRetainForever));
+
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    rig.chat->simulateRestoreConversationForTesting("full-song", /*isCloud=*/false);
+    while (rig.findTitled("Edit plan").empty() && juce::Time::getMillisecondCounterHiRes() - start < 10000.0)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+    const auto restoreMs = juce::Time::getMillisecondCounterHiRes() - start;
+    EXPECT_LT(restoreMs, 1500.0) << "restore of a 2 MB plan took " << restoreMs << " ms";
+
+    const auto cards = rig.findTitled("Edit plan");
+    ASSERT_EQ(cards.size(), 1u);
+    auto* details = dynamic_cast<juce::TextEditor*>(rig.findTitled("Edit plan details").front());
+    ASSERT_NE(details, nullptr);
+    EXPECT_TRUE(details->isEmpty()) << "nothing is laid out until the panel opens";
+
+    juce::Button* detailsButton = nullptr;
+    for (auto* child : cards.front()->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
+            detailsButton = b;
+    ASSERT_NE(detailsButton, nullptr);
+    const auto openStart = juce::Time::getMillisecondCounterHiRes();
+    detailsButton->onClick();
+    const auto openMs = juce::Time::getMillisecondCounterHiRes() - openStart;
+    EXPECT_LT(openMs, 1500.0) << "opening the details took " << openMs << " ms";
+
+    const juce::String shown = details->getText();
+    EXPECT_LE(shown.length(), 20100);
+    EXPECT_FALSE(shown.contains("timelineOps")) << "the raw plan JSON is not shown";
+    EXPECT_FALSE(shown.contains("\"pitch\""));
+}
+
+// The summary itself is bounded too, and no run of characters without whitespace is long enough for
+// TextEditor to chunk glyph by glyph.
+TEST_F(AIChatComponentTest, EditPlanCardCapsAHugeSummaryAndBreaksLongTokens) {
+    juce::String huge;
+    for (int i = 0; i < 4000; ++i)
+        huge << "+ Note " << i << " on a track with a longish description\n";
+    huge << juce::String::repeatedString("x", 50000);
+    const juce::String shown = synth::buildEditPlanDetailsText(huge);
+    EXPECT_LE(shown.length(), 20100);
+    EXPECT_TRUE(shown.contains("KB more not shown"));
+    for (const auto& token : juce::StringArray::fromTokens(shown, " \t\r\n", ""))
+        EXPECT_LE(token.length(), 120);
 }
