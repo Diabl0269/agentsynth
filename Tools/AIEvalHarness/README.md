@@ -23,7 +23,7 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
-| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. `project` sends five sound-design requests through the edit-plan path and scores their SHAPE - see Scoring sound shape below. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. `project` sends five sound-design requests through the edit-plan path and scores their SHAPE - see Scoring sound shape below. `track` sends ten whole-track requests through the same path - see Whole tracks below. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
@@ -81,6 +81,23 @@ a plan that previews fine but leaves the envelope at its default (a drone) is `v
 `Tests/AI/SoundShapeChecksTests.cpp`. Local models need Ollama 0.34.4 or newer.
 
 Each `--json` record carries the model's raw `response`, so a failed scenario can be read back.
+
+## Whole tracks (`--mode track`)
+
+`--mode track` sends ten whole-track requests from an empty project ("make an upbeat dark techno
+track with sparkling sounds", lo-fi, progressive house, ambient, drum and bass, synthwave, acid
+techno, chillwave, trap, trance) through the same edit-plan path as `--mode project`. Its check only
+asks whether a track came back: at least 3 new tracks and notes on at least two of them. The reason
+column counts tracks, clips with notes, notes and automation lanes. Whether the track is any good is
+judged by listening, so keep `--json` and load the responses.
+
+```bash
+./build/Tools/AIEvalHarness/AIEvalHarness --mode track --provider remote --model claude-haiku-5-5 --runs 3 --json track-haiku.json
+```
+
+Every note is written out today, so expect answers to hit the service's output cap
+(`MAX_OUTPUT_TOKENS`, 4,096 by default); raise it on the service to see what the model does
+unconstrained.
 
 ## Scoring a model through the service (`--provider remote`)
 
