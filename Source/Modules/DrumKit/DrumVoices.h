@@ -231,32 +231,70 @@ struct MetallicBank {
         }
         return sum * (1.0f / 6.0f);
     }
+
+    /** The three pairs (0,3), (1,4), (2,5) multiplied together: a square times a square is a square-wave
+     *  XOR, so every partial lands on a sum or difference of the pair's two rates. That is a dense inharmonic
+     *  scatter with no strong line, where the plain sum keeps six clearly pitched lines (and 540 + 800 Hz is
+     *  the 808 cowbell). */
+    float tickRing(float tune, double sr) noexcept {
+        std::array<float, 6> sq{};
+        for (std::size_t i = 0; i < kHz.size(); ++i) {
+            phase[i] += kHz[i] * tune / static_cast<float>(sr);
+            phase[i] -= std::floor(phase[i]);
+            sq[i] = phase[i] < 0.5f ? 1.0f : -1.0f;
+        }
+        return (sq[0] * sq[3] + sq[1] * sq[4] + sq[2] * sq[5]) * (1.0f / 3.0f);
+    }
 };
+
+// Hat voicing: cutoffs of the two cascaded high-pass stages (Hz, before the velocity brightness), the
+// square-bank and noise levels, the 10 kHz presence band and the output scale that keeps the hit as loud as a
+// hat always was.
+inline constexpr float kHatClosedHpfHz = 7500.0f;
+inline constexpr float kHatOpenHpfHz = 6500.0f;
+inline constexpr float kHatBankMix = 0.2f;
+inline constexpr float kHatNoiseMix = 0.6f;
+inline constexpr float kHatPresenceMix = 0.5f;
+inline constexpr float kHatOutScale = 2.3f;
 
 enum class MetallicKind { ClosedHat, OpenHat, Crash, Ride };
 
-/** Hats, crash and ride: the metallic bank, a little noise, a high-pass and a low-pass (a band for the ride). */
+/** Hats, crash and ride: the metallic bank, noise, a high-pass and a low-pass (a band for the ride). The hats are
+ *  mostly noise through a 24 dB per octave high-pass with a presence band near 10 kHz, so they read as a hiss. */
 struct MetallicVoice {
     DecayEnv env;
     MetallicBank bank;
-    Svf hpf, lpf;
-    float tune = 1.0f, gain = 0.0f, noiseMix = 0.0f, outScale = 1.0f;
+    Svf hpf, hpf2, lpf, presence;
+    float tune = 1.0f, gain = 0.0f, noiseMix = 0.0f, outScale = 1.0f, bankMix = 0.8f, presenceMix = 0.0f;
+    bool isHat = false;
 
     void trigger(const Hit& h, MetallicKind kind, double sr) noexcept {
         bank.reset();
         hpf.reset();
+        hpf2.reset();
         lpf.reset();
+        presence.reset();
+        isHat = false;
+        bankMix = 0.8f;
+        presenceMix = 0.0f;
         tune = h.tune;
         gain = h.velocity * h.gain;
         const float bright = brightness(h.velocity);
         switch (kind) {
         case MetallicKind::ClosedHat:
-        case MetallicKind::OpenHat:
-            noiseMix = 0.15f;
-            outScale = 7.4f;
-            hpf.set(7000.0f * bright, 0.8f, sr);
-            lpf.set(12000.0f, 0.7f, sr); // tames the aliasing of the square oscillators
+        case MetallicKind::OpenHat: {
+            const float cutoff = (kind == MetallicKind::ClosedHat ? kHatClosedHpfHz : kHatOpenHpfHz) * bright;
+            isHat = true;
+            bankMix = kHatBankMix;
+            noiseMix = kHatNoiseMix;
+            outScale = kHatOutScale;
+            presenceMix = kHatPresenceMix;
+            hpf.set(cutoff, 0.707f, sr);
+            hpf2.set(cutoff, 0.707f, sr);
+            presence.set(10000.0f, 1.0f, sr);
+            lpf.set(14000.0f, 0.7f, sr);
             break;
+        }
         case MetallicKind::Crash:
             noiseMix = 0.4f;
             outScale = 3.6f;
@@ -277,6 +315,14 @@ struct MetallicVoice {
     /** Cuts the ring-out in about 3 ms (the closed hat choking the open hat). */
     void choke(double sr) noexcept { env.setDecay(0.003f, sr); }
     float tick(double sr, NoiseSource& noise) noexcept {
+        if (isHat) {
+            const float src = bank.tickRing(tune, sr) * bankMix + noise.next() * noiseMix;
+            hpf.process(src);
+            hpf2.process(hpf.hp);
+            presence.process(hpf2.hp);
+            lpf.process(hpf2.hp + presence.bp * presenceMix);
+            return lpf.lp * env.tick() * outScale * 0.6f * gain;
+        }
         const float src = bank.tick(tune, sr) * 0.8f + noise.next() * noiseMix;
         hpf.process(src);
         lpf.process(hpf.hp);

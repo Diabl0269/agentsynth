@@ -202,6 +202,34 @@ TEST(DrumKitModule, AClosedHatChokesTheOpenHat) {
     EXPECT_LT(rmsOf(render(*pedal, {{46}, {44, 1.0f, closedAt}}, 0.6), 0.2, 0.3), rmsOf(withoutChoke, 0.2, 0.3) * 0.1f);
 }
 
+// Share of a hit's energy below `splitHz`, from a Goertzel-style DFT sum over a coarse frequency grid.
+float energyShareBelow(const std::vector<float>& s, double splitHz) {
+    double below = 0.0, total = 0.0;
+    for (double hz = 200.0; hz < 20000.0; hz += 100.0) {
+        double re = 0.0, im = 0.0;
+        for (std::size_t i = 0; i < s.size(); ++i) {
+            const double ph = 2.0 * 3.14159265358979 * hz * static_cast<double>(i) / kRate;
+            re += s[i] * std::cos(ph);
+            im += s[i] * std::sin(ph);
+        }
+        const double power = re * re + im * im;
+        total += power;
+        if (hz < splitHz)
+            below += power;
+    }
+    return total > 0.0 ? static_cast<float>(below / total) : 1.0f;
+}
+
+TEST(DrumKitModule, HatsAreBrightHissWithNoLowToneToRingLikeACowbell) {
+    for (const int note : {42, 46}) {
+        SCOPED_TRACE("note " + std::to_string(note));
+        auto kit = makeKit();
+        auto hit = render(*kit, {{note}}, 0.2);
+        EXPECT_GT(peakOf(hit), 0.01f);
+        EXPECT_LT(energyShareBelow(hit, 5000.0), 0.02f) << "the hat's body is above 5 kHz";
+    }
+}
+
 TEST(DrumKitModule, AnOpenHatDoesNotChokeAClosedHat) {
     auto kit = makeKit();
     const int openAt = static_cast<int>(0.02 * kRate);
