@@ -23,7 +23,13 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
-| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. `project` sends five sound-design requests through the edit-plan path and scores their SHAPE - see Scoring sound shape below. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. `project` sends five sound-design requests through the edit-plan path and scores their SHAPE - see Scoring sound shape below. `track` sends ten whole-track requests through the same path - see Whole tracks below. |
+| `--timeout-ms` | *(unset: 240000)* | The provider's request timeout in ms. The harness's own waits for an answer become this + 30000, so the provider's message is the one reported. Raise it for a slow local model. |
+| `--project-prompt-version` | *(unset: the app's pin, 2)* | `--mode project`/`track` only: the project.generate prompt version the request asks the service for. Use it to measure a new server prompt before the app pins it. |
+| `--save-projects` | *(none)* | `--mode project`/`track`: apply every plan that previews valid and save it as `<dir>/<model>-<scenario>-run<N>.agsproj` (see Listening to results). With `--replay`: where the projects go. |
+| `--replay` | *(none)* | A `--json` file from an earlier `--mode project`/`track` run. Makes no model calls; applies and saves each of its records (needs `--save-projects`). |
+| `--check-project` | *(none)* | Print the tracks, clips, notes, lanes and Track In bindings in a saved `.agsproj` and exit (1 when it does not load or a track is unbound). |
+| `--render-peaks` | *(none)* | A `.agsproj` bundle, or a directory of them: render each offline (master mix and one stem per track, beat 0 to the last clip plus a 2 s tail, 32-bit float so overs are measured) and print the peak in dBFS, flagging `CLIPS` at 0.0 or above. With `--json FILE`, also writes `{bundle, masterPeakDb, tracks, clips}` records. Exit 1 when a bundle does not open or render. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
@@ -81,6 +87,51 @@ a plan that previews fine but leaves the envelope at its default (a drone) is `v
 `Tests/AI/SoundShapeChecksTests.cpp`. Local models need Ollama 0.34.4 or newer.
 
 Each `--json` record carries the model's raw `response`, so a failed scenario can be read back.
+
+## Whole tracks (`--mode track`)
+
+`--mode track` sends ten whole-track requests from an empty project ("make an upbeat dark techno
+track with sparkling sounds", lo-fi, progressive house, ambient, drum and bass, synthwave, acid
+techno, chillwave, trap, trance) through the same edit-plan path as `--mode project`. Its check only
+asks whether a track came back: at least 3 new tracks and notes on at least two of them. The reason
+column counts tracks, clips with notes, notes and automation lanes. Whether the track is any good is
+judged by listening, so keep `--json` and load the responses.
+
+```bash
+./build/Tools/AIEvalHarness/AIEvalHarness --mode track --provider remote --model claude-haiku-5-5 --runs 3 --json track-haiku.json
+```
+
+Every note is written out today, so expect answers to hit the service's output cap
+(`MAX_OUTPUT_TOKENS`, 4,096 by default); raise it on the service to see what the model does
+unconstrained.
+
+## Listening to results
+
+`--save-projects` turns the answers into projects you can open and play. A plan is applied with the
+app's own code: a real `MainComponent` is built headless, loaded with the scenario's starting patch,
+and `applyProjectEdit` runs on its service with its own timeline host, so tracks get their Track In,
+instrument, envelope, inserts, wiring and channel exactly as the chat's Apply gives them. The result
+is written by the same call as File > Save. Each bundle is then read back and compared with the plan
+(tracks, clips, notes, lanes, every track bound to a Track In); the line says `verified` or `MISMATCH`.
+The run never touches your real app settings.
+
+```bash
+# during a run
+./build/Tools/AIEvalHarness/AIEvalHarness --mode track --provider remote --model claude-haiku-5-5 \
+    --json track-haiku.json --save-projects projects/
+
+# from an earlier run: no model calls, one line per record
+./build/Tools/AIEvalHarness/AIEvalHarness --replay track-haiku.json --save-projects projects/
+
+# open one in the app
+"/Applications/Agent Synth.app/Contents/MacOS/Agent Synth" projects/claude-haiku-5-5-dark-techno-run1.agsproj
+```
+
+A record that did not respond, or whose plan the app refuses, prints why and writes nothing. Replay
+needs the file's `mode` to be `project` or `track` and knows each scenario's starting patch by name.
+`--check-project projects/<name>.agsproj` prints what a bundle holds.
+
+`--render-peaks projects/` renders every bundle in the folder offline with the app's own bounce and stem export and prints each one's master and per-track peak in dBFS (`CLIPS` when the master reaches 0.0), so a mix that is far too loud shows up without opening the app.
 
 ## Scoring a model through the service (`--provider remote`)
 

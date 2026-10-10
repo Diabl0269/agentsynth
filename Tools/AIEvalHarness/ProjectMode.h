@@ -10,6 +10,11 @@
 
     "valid" and "shape" are scored separately: a plan can preview fine and still leave the envelope at
     its drone-friendly default, which is the failure this mode exists to count.
+
+    `--mode track` runs the same path on whole-track requests ("an upbeat dark techno track with
+    sparkling sounds"). Its shape check only asks whether a track came back at all (several
+    instrument tracks, most with notes); whether it sounds good is judged by listening, so every
+    raw answer goes to --json.
 */
 #pragma once
 
@@ -29,7 +34,7 @@
 
 namespace project_mode {
 
-enum class Shape { pluck, filterEnvelope, acid };
+enum class Shape { pluck, filterEnvelope, acid, fullTrack };
 
 struct Scenario {
     const char* name;
@@ -72,6 +77,65 @@ inline const std::vector<Scenario>& scenarios() {
     return s;
 }
 
+// Whole-track requests, from an empty project. Genre, tempo and sound words vary so a model can't pass
+// on one template.
+inline const std::vector<Scenario>& fullTrackScenarios() {
+    static const std::vector<Scenario> s = {
+        {"dark-techno", "make an upbeat dark techno track with sparkling sounds", Shape::fullTrack, nullptr},
+        {"lofi", "make a melancholic lo-fi hip hop beat with dusty keys and a lazy bassline", Shape::fullTrack,
+         nullptr},
+        {"prog-house", "make a driving 128 bpm progressive house track with a big pluck lead and a rolling bassline",
+         Shape::fullTrack, nullptr},
+        {"ambient", "make an ambient track with slow evolving pads, a soft pulse and shimmering high bells",
+         Shape::fullTrack, nullptr},
+        {"dnb", "make a dark drum and bass track at 174 bpm with a reese bass and sparse atmospheric pads",
+         Shape::fullTrack, nullptr},
+        {"synthwave", "make a retro synthwave track with gated chords, an arpeggiated bass and a bright lead",
+         Shape::fullTrack, nullptr},
+        {"acid-techno", "make a minimal acid techno track with a squelchy 303-style line and tight hats",
+         Shape::fullTrack, nullptr},
+        {"chillwave", "make a dreamy chillwave track with washed-out chords, a simple melody and a laid-back groove",
+         Shape::fullTrack, nullptr},
+        {"trap", "make a hard-hitting trap beat with booming 808 bass, rolling hi-hats and a dark bell melody",
+         Shape::fullTrack, nullptr},
+        {"trance", "make a euphoric trance build with a supersaw lead, an offbeat bass and a rising filter sweep",
+         Shape::fullTrack, nullptr},
+    };
+    return s;
+}
+
+// A whole track came back: at least kMinTracks new tracks, and at least two of the tracks that got clips
+// have notes. The reason line carries the counts either way, so a thin answer is visible next to a pass.
+inline synth::soundshape::ShapeCheck checkFullTrack(const juce::var& plan) {
+    constexpr int kMinTracks = 3;
+    int tracks = 0, clipOps = 0, clipOpsWithNotes = 0, notes = 0, lanes = 0;
+    if (const auto* ops = plan.getProperty("timelineOps", juce::var()).getArray()) {
+        for (const auto& op : *ops) {
+            const auto kind = op.getProperty("op", juce::var()).toString();
+            if (kind == "addInstrumentTrack" || kind == "addTrack")
+                ++tracks;
+            else if (kind == "writeLane")
+                ++lanes;
+            else if (kind == "placeClips") {
+                ++clipOps;
+                int opNotes = 0;
+                if (const auto* clips = op.getProperty("clips", juce::var()).getArray())
+                    for (const auto& clip : *clips)
+                        if (const auto* clipNotes = clip.getProperty("notes", juce::var()).getArray())
+                            opNotes += clipNotes->size();
+                notes += opNotes;
+                clipOpsWithNotes += opNotes > 0 ? 1 : 0;
+            }
+        }
+    }
+    synth::soundshape::ShapeCheck result;
+    result.pass = tracks >= kMinTracks && clipOpsWithNotes >= 2;
+    result.reason = juce::String(tracks) + " tracks, " + juce::String(clipOpsWithNotes) + "/" + juce::String(clipOps) +
+                    " clip ops with notes, " + juce::String(notes) + " notes, " + juce::String(lanes) +
+                    " automation lanes";
+    return result;
+}
+
 // A host that only has to EXIST: previewProjectEdit refuses a plan that builds tracks without one, but
 // builds through its own stand-ins and never calls it.
 struct PreviewOnlyHost : synth::TimelineOpsHost {
@@ -81,6 +145,17 @@ struct PreviewOnlyHost : synth::TimelineOpsHost {
         return std::nullopt;
     }
     bool recordBatch(const std::function<void()>&) override { return false; }
+};
+
+// Called for each plan that previews valid (--save-projects): applies and saves it, returns the line to print
+// and sets `savedPath` to the bundle written (left empty when nothing was).
+using SaveHook =
+    std::function<juce::String(const Scenario&, int run, const juce::String& response, juce::String& savedPath)>;
+
+struct RunOptions {
+    int outerWaitMs = 270000;     // how long the harness waits for one answer (--timeout-ms + 30 s)
+    SaveHook saveHook;            // empty = do not save
+    int projectPromptVersion = 0; // --project-prompt-version; 0 = the app's own pin
 };
 
 struct Outcome {
@@ -100,12 +175,15 @@ inline synth::soundshape::ShapeCheck scoreShape(Shape shape, const juce::var& pl
         return synth::soundshape::checkFilterEnvelope(plan, existingPatch);
     case Shape::acid:
         return synth::soundshape::checkAcid(plan, existingPatch);
+    case Shape::fullTrack:
+        return checkFullTrack(plan);
     }
     return {};
 }
 
 inline Outcome runScenario(const Scenario& scenario,
-                           const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider) {
+                           const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider,
+                           int outerWaitMs = 270000, int projectPromptVersion = 0) {
     Outcome outcome;
     juce::AudioProcessorGraph graph;
     synth::prepareGraphForPatchEval(graph);
@@ -128,6 +206,7 @@ inline Outcome runScenario(const Scenario& scenario,
     service.setTimelineContext(&timelineDoc, &transport);
     service.setTimelineToolsEnabled(true);
     service.setTimelineOpsHost(&host);
+    service.setProjectPromptVersion(projectPromptVersion);
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -137,8 +216,8 @@ inline Outcome runScenario(const Scenario& scenario,
         success = response.success;
         done.signal();
     });
-    // Longer than either provider's own 240 s request timeout, so its message is the one reported.
-    if (!done.wait(270000)) {
+    // Longer than the provider's own request timeout, so its message is the one reported.
+    if (!done.wait(outerWaitMs)) {
         outcome.error = "timed out waiting for model";
         return outcome;
     }
@@ -164,17 +243,20 @@ inline Outcome runScenario(const Scenario& scenario,
     return outcome;
 }
 
-// Replays every scenario `runs` times and prints the scorecard; returns the process exit code (0 whenever
-// the run completed, like the other modes).
-inline int runAll(int runs, const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider,
-                  const juce::String& jsonOut, const juce::DynamicObject::Ptr& header) {
+// Replays every scenario in `list` `runs` times and prints the scorecard under `label`; returns the process
+// exit code (0 whenever the run completed, like the other modes).
+inline int runAll(const std::vector<Scenario>& list, const char* label, int runs,
+                  const std::function<std::unique_ptr<synth::AIProvider>()>& makeProvider, const juce::String& jsonOut,
+                  const juce::DynamicObject::Ptr& header, const RunOptions& options = {}) {
     std::printf("%-22s %-5s %-6s %-12s %s\n", "scenario", "run", "valid", "shape", "reason");
     std::printf("--------------------------------------------------------------------\n");
     int total = 0, responded = 0, valid = 0, shapeOk = 0;
     juce::Array<juce::var> records;
     for (int run = 1; run <= runs; ++run) {
-        for (const auto& scenario : scenarios()) {
-            const auto outcome = runScenario(scenario, makeProvider);
+        for (const auto& scenario : list) {
+            const auto startMs = juce::Time::currentTimeMillis();
+            const auto outcome = runScenario(scenario, makeProvider, options.outerWaitMs, options.projectPromptVersion);
+            const auto endMs = juce::Time::currentTimeMillis();
             ++total;
             responded += outcome.responded ? 1 : 0;
             valid += outcome.valid ? 1 : 0;
@@ -189,19 +271,31 @@ inline int runAll(int runs, const std::function<std::unique_ptr<synth::AIProvide
                         shape.toRawUTF8(), reason.toRawUTF8());
             std::fflush(stdout);
 
+            juce::String savedPath;
+            if (options.saveHook && outcome.valid) {
+                const auto line = options.saveHook(scenario, run, outcome.response, savedPath);
+                std::printf("  %s\n", line.toRawUTF8());
+                std::fflush(stdout);
+            }
+
             juce::DynamicObject::Ptr rec = new juce::DynamicObject();
             rec->setProperty("scenario", scenario.name);
             rec->setProperty("run", run);
+            rec->setProperty("prompt", scenario.prompt);
+            rec->setProperty("startMs", startMs);
+            rec->setProperty("endMs", endMs);
             rec->setProperty("responded", outcome.responded);
             rec->setProperty("valid", outcome.valid);
             rec->setProperty("shapeOk", outcome.shapeOk);
             rec->setProperty("shapeReason", outcome.shapeReason);
             rec->setProperty("error", outcome.error);
             rec->setProperty("response", outcome.response);
+            if (savedPath.isNotEmpty())
+                rec->setProperty("savedProject", savedPath);
             records.add(juce::var(rec.get()));
         }
     }
-    std::printf("\n=================== SUMMARY (project) ===================\n");
+    std::printf("\n=================== SUMMARY (%s) ===================\n", label);
     std::printf("attempts (model responded): %d / %d\n", responded, total);
     std::printf("valid (plan previews ok):   %3d  (%.1f%% of responses)\n", valid,
                 responded > 0 ? 100.0 * valid / responded : 0.0);

@@ -83,6 +83,9 @@ public:
         timelineToolsEnabled = enabled;
         refreshSystemPrompt();
     }
+
+    // 0 = the shipped pin; see kProjectGeneratePromptVersion.
+    void setProjectPromptVersion(int version) { projectPromptVersionOverride = version; }
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
@@ -307,6 +310,7 @@ private:
     // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt
     // section, schema extension and targets context only exist once the app explicitly opts in.
     bool timelineToolsEnabled = false;
+    int projectPromptVersionOverride = 0;
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite
