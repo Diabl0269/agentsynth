@@ -19,6 +19,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 
 #include <algorithm>
 #include <functional>
@@ -285,6 +286,8 @@ GraphEditor::captureHealSplices(const std::vector<juce::AudioProcessorGraph::Nod
 
 void GraphEditor::healDeletedChain(const std::vector<HealSplice>& splices) {
     auto& graph = audioEngine.getGraph();
+    // A heal restores wiring the survivors already had; it must not read as a first cable that makes a module poly.
+    synth::ui::PolyChainController::SuppressJoin keepPolyAsIs(*polyChain_);
     for (const auto& splice : splices) {
         auto* upNode = graph.getNodeForId(splice.upstreamId);
         auto* downNode = graph.getNodeForId(splice.downstreamId);

@@ -14,6 +14,7 @@
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/InsertGap/InsertGapKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
@@ -268,6 +269,21 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (track.bindingUuid.isNotEmpty())
                 uuids.push_back(track.bindingUuid);
         return uuids;
+    };
+    // The Poly pill switches a whole voice graph: it needs the tracks (to tell this track's modules from another's)
+    // and somewhere to say what it changed. The toast is a plain child laid out by resized(), raised when shown.
+    toast_ = std::make_unique<synth::ui::ToastComponent>();
+    addChildComponent(*toast_);
+    graphEditor.getPolyChain().trackProvider = [this] {
+        std::vector<synth::PolyTrackRef> tracks;
+        for (const auto& track : timelineDoc.getTracks())
+            if (track.bindingUuid.isNotEmpty())
+                tracks.push_back({track.bindingUuid, track.name});
+        return tracks;
+    };
+    graphEditor.getPolyChain().showToast = [this](const juce::String& message, const juce::String& actionLabel,
+                                                  std::function<void()> action, const juce::String& actionTooltip) {
+        toast_->show(message, actionLabel, std::move(action), actionTooltip);
     };
     // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };

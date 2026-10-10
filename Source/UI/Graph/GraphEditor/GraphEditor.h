@@ -34,6 +34,7 @@ namespace synth::ui {
 class ModDotController;    // UI/Graph/ModDot/ModDotController.h
 class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
 class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
+class PolyChainController; // UI/Graph/PolyChain/PolyChainController.h
 class ColourPickerPopup;   // a unique_ptr return type only; 89 files include this header
 } // namespace synth::ui
 class AudioEngine;
@@ -142,9 +143,8 @@ public:
     bool loadFactoryPreset(int index);
     void newPatch();
 
-    /** The per-loaded-file stash of top-level JSON keys this build doesn't understand (see
-     *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge it —
-     *  GraphEditor owns no file dialogs, and MainComponent owns no PatchDocument. */
+    /** The stash of top-level JSON keys this build doesn't understand (see `patchDocument` below), exposed so the
+     *  app's `.agsproj` save/load path can re-merge it -- GraphEditor owns no file dialogs. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
     /** GraphEditor's live set of Macros for the current patch (Source/MacroSet.h). Exposed for the
      *  same reason as getPatchDocument() above. */
@@ -161,9 +161,8 @@ public:
     void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
     void refreshIoModulesAfterDeviceChange();
 
-    /** Output-card identity treatment (docs/layout/module-card.md): installs the callback
-     *  MainComponent uses to describe where the signal actually goes. Set once; GraphEditor/
-     *  ModuleComponent stay ignorant of Standalone-vs-Hosted framing and just render the string. */
+    /** Output-card identity (docs/layout/module-card.md): MainComponent's description of where the signal goes,
+     *  set once; GraphEditor/ModuleComponent just render the string. */
     void setOutputDeviceInfoProvider(std::function<juce::String()> provider);
     void refreshOutputDeviceInfo();
     void completeStereoPairConnections(ModuleComponent* moduleComp);
@@ -199,8 +198,7 @@ public:
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
     /** deleteSelection()'s removal with no undo record, for a bigger gesture that records one (MainComponent::
-     *  deleteTrack, inside a CardGlideAnimator::Scope): cards of `ids` shrink away; `healChain` splices the survivors.
-     */
+     *  deleteTrack, inside a CardGlideAnimator::Scope): cards of `ids` shrink away; `healChain` splices survivors. */
     void removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain, bool narrowDetach);
     void pruneSelection();
 
@@ -283,6 +281,7 @@ public:
     synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
     /** The jack panel's controller: jack clicks, the open panel, the cable highlight (UI/Graph/PortPanel). */
     synth::ui::PortPanelController& getPortPanel() noexcept { return *portPanel_; }
+    synth::ui::PolyChainController& getPolyChain() noexcept { return *polyChain_; } // a Poly click's voice graph
     MacroGroupController& getMacroController() noexcept { return macroController_; }
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
     /** Opacity factor (0..1) of the smart-connection preview cables; 1 once they have faded in. */
@@ -583,8 +582,7 @@ public:
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
 
-    /** Fires at the end of every updateComponents() (the module set may have changed). Owners use
-     *  it to refresh UI that depends on patch contents. */
+    /** Fires at the end of every updateComponents(); owners refresh UI that depends on patch contents. */
     std::function<void()> onGraphStructureChanged;
     static bool isSingletonIOModule(const juce::String& typeName);
     static bool graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName);
@@ -796,6 +794,7 @@ private:
     GraphDragDropController dragDropController_{*this, macroController_.insertGap()};
     std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
     std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
+    std::unique_ptr<synth::ui::PolyChainController> polyChain_; // the Poly pill's whole-voice-graph switch
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;

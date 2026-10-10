@@ -13,6 +13,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
@@ -58,6 +59,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
     modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
     portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
+    polyChain_ = std::make_unique<synth::ui::PolyChainController>(*this);
     configureCardGlide();
     configureCanvasFrame();
     // A module dragged between cards opens a gap: its borders glide with the cards, the frame grows to hold the cards
@@ -81,6 +83,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 GraphEditor::~GraphEditor() {
     stopTimer();
     loadReveal_.reset(); // before the cards it may still be scaling
+    polyChain_.reset();
     portPanel_.reset();
     modDot_.reset(); // before `content`, which its tooltip animator is attached to
 }

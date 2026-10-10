@@ -317,6 +317,42 @@ rather than raw channel numbers.
    reflects the new layout — only the snapshot can say which visible jack an existing raw connection
    used to be anchored to.
 
+### The Poly toggle
+
+A user click on the **Poly** pill (or Space on it) of an Oscillator, Wavetable, Noise, Filter, ADSR or VCA
+switches the whole **voice graph** of that module, not the one card. `PolyChainController`
+(`Source/UI/Graph/PolyChain/`) does it as ONE undo step:
+
+1. **The voice graph** (`planPolyVoiceGraph`, `Source/Mixer/ChannelFlows/PolyVoiceGraph.cpp`) is an undirected walk
+   over every cable (audio, CV, MIDI) from the clicked module. It reaches but does not expand through a Channel
+   Strip, Master, a track source (Track In / Track Audio), a Gate / EQ / Compressor, a Record Tap and an Audio
+   Output (a different channel starts there), and never crosses a sidechain key. Macro port nodes and hidden
+   attenuverters are ordinary nodes to it, so a module inside a macro and one wired into the macro are one voice
+   graph. Parallel branches (two oscillators, several filters or envelopes) are in by construction.
+2. **Tracks.** A node belongs to track T when it is forward-reachable from T's source node (stopping at a strip). If
+   the voice graph holds modules owned only by other tracks, a question comes first: "This also changes N modules on
+   Bass and Lead." with **This track only** (default, Return), **Include connected tracks** and **Cancel** (Esc,
+   nothing changes). With none, there is no question.
+3. **The change** (`applyPolyVoiceGraph`). Every poly-capable module in the chosen set gets the clicked pill's new
+   value; each card re-anchors its own cables as it hears the parameter change (point 6 above).
+   - **Turning poly on:** for each MIDI source whose MIDI output feeds a module that just went poly (Oscillator,
+     Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
+     MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
+     gate, and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
+     MIDI cables stay: they are harmless in poly mode.
+   - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
+     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing), and a Poly MIDI left with no outgoing
+     cable is removed. The result is a mono patch that plays every note.
+4. **Feedback.** A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
+   modules mono", with **Undo** ([`chrome.md`](../layout/chrome.md#toast)).
+5. **Only a user click propagates.** The pill does not toggle itself (`setClickingTogglesState(false)`; its attachment
+   follows the parameter), so no second or half undo step exists. Setting the parameter any other way (undo/redo
+   restore, project load, the AI, MIDI Learn, automation) changes that one module and never reaches the controller.
+6. **A new module joins.** `GraphEditor::connectPorts` (every drag, smart connection, insert-between and port-panel
+   cable) asks `joinConnectedModules` first: a poly-capable module with **no cables at all** that is cabled to a
+   poly-ON poly-capable module or a Poly MIDI becomes poly too, inside the cable's own undo step. A module that
+   already had a cable is never flipped. A delete-heal restores wiring and does not count (`SuppressJoin`).
+
 ## isAutoPromotableModTarget
 
 ```cpp

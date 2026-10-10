@@ -191,6 +191,7 @@ The suite is split by topic, all sharing the `ChannelFlowTest` fixture, `MockPro
 | `ChannelFlowCreateChannelsTests.cpp` | "Create Channels" for existing projects, wrapping every channel-less track's chain as one undo step |
 | `ChannelFlowMakeChannelCoreTests.cpp` | "Make channel" core behaviour through a standalone `GraphEditor` (render-identity comparisons), plus the adversarial no-double-drive / three-way-merge / chained-merge probes |
 | `ChannelFlowMakeChannelAppTests.cpp` | The real app wiring — track header, canvas selection and module right-click menus, each as one undo step |
+| `PolyVoiceGraphTests.cpp` | The whole-voice-graph Poly switch at the Core layer (`PolyVoiceGraph.cpp`), on bare hand-wired graphs: the voice graph reaches the chain and parallel branches and walks through modulators, stops at a Channel Strip / Master, names another track a cable really joins, Poly on inserts (or reuses) one Poly MIDI wired pitch ch0-7 / gate ch8-15, Poly off restores raw MIDI and removes only an orphaned Poly MIDI (and drops it from its macro), and a Poly MIDI holds a chord on several voices |
 
 ## Mixer panel
 
@@ -352,6 +353,7 @@ sharing the `GraphEditorTest` fixture and drag/connection helpers in
 | `GraphEditorTests.cpp` | Core: init/resize, mod-matrix visibility, module drag-and-drop (incl. Dual I/O defaults, split-block collapse), audio-file drop, drag-to-knob modulation, port-drag connections, Replace Module |
 | `GraphEditorLayoutTests.cpp` | Grid-layout / anti-overlap, alignment-guide rendering, Macro Control bank runtime resize |
 | `GraphEditorPolyLinkTests.cpp` | Pure `resolvePolyLink` pairing/scoring, plus Dual I/O toggle stereo-leg completeness |
+| `GraphEditorPolyChainTests.cpp` | A Poly pill click switches the whole voice graph: the chain, parallel branches and macro members flip together, one Poly MIDI is inserted (and removed on Poly off, with raw MIDI restored), a held chord sounds on several voices, a track boundary stops it with no question while a real cable between tracks asks (This track only / Include / Cancel), one undo restores everything (and redo re-applies), the "Made N modules poly" toast and its Undo, a new unconnected module joining on its first cable (an already-connected one does not), and programmatic sets never propagating |
 | `GraphEditorDualIOTests.cpp` | Dual I/O split/collapse wiring (migrate-not-duplicate, mid-chain voice modules, one-undo-step) and render-identity checks |
 | `GraphEditorIntegrationTests.cpp` | Poly connection integration through a full graph |
 | `GraphEditorViewportTests.cpp` | Minimap visibility/model, zoom-perf cable memoization and zoom-gesture raster freeze |
@@ -550,6 +552,13 @@ originals, the split body + moving parts draw pixel-identical to the whole icon,
 is 84 px. Motion goes through synthesized `mouseEnter` / `mouseExit` / `mouseDown` on the button
 (headless, so each tween lands at once); with `setReducedMotionForTest(true)` no transform, lift or
 squash is applied while the chip still takes its hover colour.
+
+## Toast
+
+`Tests/UI/Chrome/Toast/ToastComponentTests.cpp` covers `Source/UI/Chrome/Toast/ToastComponent.h/.cpp`: the message and
+its focusable, titled, tooltipped action; the action dismisses and runs once; the auto-hide; a second toast replacing
+the first; placement centred above the bottom of its area; and the motion (frame 0 hidden and a slide below its resting
+place, a fade only under Reduce Motion, landing at once under Animations Off) with the off-screen animate seam.
 
 ## Status bar
 
