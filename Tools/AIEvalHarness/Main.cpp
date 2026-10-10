@@ -23,6 +23,8 @@
         ./build/Tools/AIEvalHarness/AIEvalHarness [--provider ollama|remote] [--model M]
                                                    [--runs N] [--host URL] [--json OUT]
                                                    [--mode patch|timeline|project|track]
+                                                   [--timeout-ms N] [--save-projects DIR]
+                                                   [--replay RESULTS.json] [--check-project BUNDLE]
                                                    [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
@@ -49,6 +51,12 @@
     sounds", ...) through the same path and checks only that a track came back (3+ tracks, notes on
     at least two). Listen to the --json responses for the rest.
 
+    --save-projects DIR (mode project/track) applies every plan that previews valid for real and saves it as
+    DIR/<model>-<scenario>-run<N>.agsproj, to open in the app and listen to. --replay RESULTS.json
+    (with --save-projects) makes no model calls: it does the same for each record of an earlier --json
+    file. --check-project BUNDLE prints what a saved bundle holds. --timeout-ms N sets the provider's
+    request timeout; the harness's own waits become N + 30 s. See Tools/AIEvalHarness/README.md.
+
     --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
     --provider remote) and are for REPRODUCIBILITY of a corruption investigation, not production
     defaults: all three are unset by default, which sends exactly the request body this harness
@@ -66,6 +74,7 @@
 #include "AI/PatchEval.h"
 #include "AI/RemoteProvider.h"
 #include "ProjectMode.h"
+#include "SaveProjects.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -199,11 +208,13 @@ struct SamplingArgs {
 // on the concrete type (not virtual on AIProvider) before it's upcast, so the callback below
 // fires synchronously with no message loop running here.
 std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host, const juce::String& model,
-                                                const SamplingArgs& sampling) {
+                                                const SamplingArgs& sampling, int requestTimeoutMs = 0) {
     if (kind == ProviderKind::remote) {
         auto provider = std::make_unique<synth::RemoteProvider>(host);
         provider->setTestMode(true);
         provider->setModel(model);
+        if (requestTimeoutMs > 0)
+            provider->setRequestTimeoutMs(requestTimeoutMs);
         return provider;
     }
 
@@ -211,6 +222,8 @@ std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::S
     provider->setTestMode(true);
     provider->setModel(model);
     provider->setSamplingOptions({sampling.think, sampling.temperature, sampling.seed});
+    if (requestTimeoutMs > 0)
+        provider->setRequestTimeoutMs(requestTimeoutMs);
     return provider;
 }
 
@@ -230,10 +243,13 @@ struct Outcome {
     bool timelineOpsPresent = false;
     bool timelineOpsOk = false;
     juce::String timelineOpsError;
+
+    juce::String response; // the model's raw answer, so a failure can be read back from --json
 };
 
 Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const juce::String& host,
-                    const juce::String& model, const SamplingArgs& sampling, bool timelineMode) {
+                    const juce::String& model, const SamplingArgs& sampling, bool timelineMode, int requestTimeoutMs,
+                    int outerWaitMs) {
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
@@ -249,7 +265,7 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     }
 
     synth::AIIntegrationService service(graph);
-    service.setProvider(makeProvider(providerKind, host, model, sampling));
+    service.setProvider(makeProvider(providerKind, host, model, sampling, requestTimeoutMs));
 
     synth::TimelineDoc timelineDoc;
     synth::TransportService transport;
@@ -271,10 +287,9 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
         },
         /*useStructuredOutput=*/true);
 
-    // Must exceed both OllamaProvider's kChatRequestTimeoutMs and RemoteProvider's
-    // kRequestTimeoutMs (currently 240s each) with margin, or this outer wait fires first and
-    // reports a vague "timed out" instead of the provider's own error message.
-    if (!done.wait(270000)) {
+    // Must exceed the provider's request timeout (240 s by default, --timeout-ms otherwise) with margin, or
+    // this outer wait fires first and reports a vague "timed out" instead of the provider's own message.
+    if (!done.wait(outerWaitMs)) {
         outcome.applyError = "timed out waiting for model";
         return outcome;
     }
@@ -283,6 +298,7 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
         return outcome;
     }
     outcome.responded = true;
+    outcome.response = responseText;
 
     if (timelineMode) {
         const juce::var envelope = synth::AIIntegrationService::extractTimelineOps(responseText);
@@ -301,7 +317,7 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
         applied.signal();
     });
 
-    if (!applied.wait(600000)) {
+    if (!applied.wait(juce::jmax(600000, outerWaitMs * 2))) {
         outcome.applyError = "timed out during retry";
         return outcome;
     }
@@ -314,6 +330,70 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     return outcome;
 }
 
+// --think/--temperature/--seed into `sampling`; false (after saying why) on a bad --think.
+bool parseSampling(const juce::StringArray& args, SamplingArgs& sampling) {
+    const juce::String thinkFlag = argValue(args, "--think", "");
+    if (thinkFlag.isNotEmpty()) {
+        if (thinkFlag != "true" && thinkFlag != "false") {
+            std::fprintf(stderr, "unknown --think \"%s\" (expected \"true\" or \"false\")\n", thinkFlag.toRawUTF8());
+            return false;
+        }
+        sampling.think = (thinkFlag == "true");
+    }
+    const juce::String temperatureFlag = argValue(args, "--temperature", "");
+    if (temperatureFlag.isNotEmpty())
+        sampling.temperature = temperatureFlag.getDoubleValue();
+    const juce::String seedFlag = argValue(args, "--seed", "");
+    if (seedFlag.isNotEmpty())
+        sampling.seed = seedFlag.getIntValue();
+    return true;
+}
+
+// --timeout-ms into `requestTimeoutMs` (0 = unset); false (after saying why) on a non-positive value.
+bool parseTimeoutMs(const juce::StringArray& args, int& requestTimeoutMs) {
+    const juce::String flag = argValue(args, "--timeout-ms", "");
+    requestTimeoutMs = flag.getIntValue();
+    if (flag.isNotEmpty() && requestTimeoutMs <= 0) {
+        std::fprintf(stderr, "--timeout-ms needs a positive number of milliseconds (got \"%s\")\n", flag.toRawUTF8());
+        return false;
+    }
+    return true;
+}
+
+// Everything `--mode project` / `--mode track` needs from the command line.
+struct ProjectRun {
+    ProviderKind providerKind;
+    juce::String providerFlag, host, model;
+    int runs;
+    juce::String modeFlag, jsonOut;
+    SamplingArgs sampling;
+    int requestTimeoutMs, outerWaitMs;
+    juce::File saveDir; // empty = do not save
+};
+
+int runProjectOrTrack(const ProjectRun& r) {
+    const auto& list = r.modeFlag == "track" ? project_mode::fullTrackScenarios() : project_mode::scenarios();
+    std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=%s  scenarios=%d\n",
+                r.providerFlag.toRawUTF8(), r.host.toRawUTF8(), r.model.toRawUTF8(), r.runs, r.modeFlag.toRawUTF8(),
+                (int)list.size());
+    juce::DynamicObject::Ptr header = new juce::DynamicObject();
+    header->setProperty("provider", r.providerFlag);
+    header->setProperty("model", r.model);
+    header->setProperty("runs", r.runs);
+    header->setProperty("mode", r.modeFlag);
+    std::optional<save_projects::Environment> saveEnv;
+    project_mode::RunOptions options;
+    options.outerWaitMs = r.outerWaitMs;
+    if (r.saveDir != juce::File()) {
+        saveEnv.emplace();
+        options.saveHook = save_projects::makeSaveHook(*saveEnv, r.saveDir, r.model);
+    }
+    return project_mode::runAll(
+        list, r.modeFlag.toRawUTF8(), r.runs,
+        [&] { return makeProvider(r.providerKind, r.host, r.model, r.sampling, r.requestTimeoutMs); }, r.jsonOut,
+        header, options);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -322,6 +402,11 @@ int main(int argc, char* argv[]) {
     juce::StringArray args;
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
+
+    // Reading a saved bundle needs neither a provider nor a model.
+    const juce::String checkFlag = argValue(args, "--check-project", "");
+    if (checkFlag.isNotEmpty())
+        return save_projects::checkProject(juce::File::getCurrentWorkingDirectory().getChildFile(checkFlag));
 
     const juce::String providerFlag = argValue(args, "--provider", "ollama");
     if (providerFlag != "ollama" && providerFlag != "remote") {
@@ -338,6 +423,26 @@ int main(int argc, char* argv[]) {
     const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
     const juce::String jsonOut = argValue(args, "--json", "");
 
+    // --timeout-ms N: the provider's request timeout; the harness's own waits are N + 30 s so the provider's
+    // message, not a vague outer "timed out", is what gets reported. Unset keeps the 240 s defaults.
+    int requestTimeoutMs = 0;
+    if (!parseTimeoutMs(args, requestTimeoutMs))
+        return 1;
+    const int outerWaitMs = requestTimeoutMs > 0 ? requestTimeoutMs + 30000 : 270000;
+
+    const juce::String saveDirFlag = argValue(args, "--save-projects", "");
+    const juce::File saveDir =
+        saveDirFlag.isEmpty() ? juce::File() : juce::File::getCurrentWorkingDirectory().getChildFile(saveDirFlag);
+    const juce::String replayFlag = argValue(args, "--replay", "");
+    if (replayFlag.isNotEmpty()) {
+        if (saveDirFlag.isEmpty()) {
+            std::fprintf(stderr, "--replay needs --save-projects <dir> to say where the projects go\n");
+            return 1;
+        }
+        const save_projects::Environment env;
+        return save_projects::replay(env, juce::File::getCurrentWorkingDirectory().getChildFile(replayFlag), saveDir);
+    }
+
     const juce::String modeFlag = argValue(args, "--mode", "patch");
     if (modeFlag != "patch" && modeFlag != "timeline" && modeFlag != "project" && modeFlag != "track") {
         std::fprintf(stderr, "unknown --mode \"%s\" (expected \"patch\", \"timeline\", \"project\" or \"track\")\n",
@@ -345,39 +450,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     const bool timelineMode = modeFlag == "timeline";
+    if (saveDirFlag.isNotEmpty() && modeFlag != "project" && modeFlag != "track") {
+        std::fprintf(stderr, "--save-projects needs --mode project or --mode track\n");
+        return 1;
+    }
 
     SamplingArgs sampling;
-    const juce::String thinkFlag = argValue(args, "--think", "");
-    if (thinkFlag.isNotEmpty()) {
-        if (thinkFlag != "true" && thinkFlag != "false") {
-            std::fprintf(stderr, "unknown --think \"%s\" (expected \"true\" or \"false\")\n", thinkFlag.toRawUTF8());
-            return 1;
-        }
-        sampling.think = (thinkFlag == "true");
-    }
-    const juce::String temperatureFlag = argValue(args, "--temperature", "");
-    if (temperatureFlag.isNotEmpty())
-        sampling.temperature = temperatureFlag.getDoubleValue();
-    const juce::String seedFlag = argValue(args, "--seed", "");
-    if (seedFlag.isNotEmpty())
-        sampling.seed = seedFlag.getIntValue();
+    if (!parseSampling(args, sampling))
+        return 1;
     if (providerKind == ProviderKind::remote && (sampling.think || sampling.temperature || sampling.seed))
         std::fprintf(stderr, "warning: --think/--temperature/--seed are --provider ollama only; ignored here\n");
 
-    if (modeFlag == "project" || modeFlag == "track") {
-        const auto& list = modeFlag == "track" ? project_mode::fullTrackScenarios() : project_mode::scenarios();
-        std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=%s  scenarios=%d\n",
-                    providerFlag.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs, modeFlag.toRawUTF8(),
-                    (int)list.size());
-        juce::DynamicObject::Ptr header = new juce::DynamicObject();
-        header->setProperty("provider", providerFlag);
-        header->setProperty("model", model);
-        header->setProperty("runs", runs);
-        header->setProperty("mode", modeFlag);
-        return project_mode::runAll(
-            list, modeFlag.toRawUTF8(), runs, [&] { return makeProvider(providerKind, host, model, sampling); },
-            jsonOut, header);
-    }
+    if (modeFlag == "project" || modeFlag == "track")
+        return runProjectOrTrack({providerKind, providerFlag, host, model, runs, modeFlag, jsonOut, sampling,
+                                  requestTimeoutMs, outerWaitMs, saveDir});
 
     const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
 
@@ -394,7 +480,10 @@ int main(int argc, char* argv[]) {
 
     for (int run = 1; run <= runs; ++run) {
         for (const auto& scenario : activeScenarios) {
-            const auto outcome = runScenario(scenario, providerKind, host, model, sampling, timelineMode);
+            const auto startMs = juce::Time::currentTimeMillis();
+            const auto outcome =
+                runScenario(scenario, providerKind, host, model, sampling, timelineMode, requestTimeoutMs, outerWaitMs);
+            const auto endMs = juce::Time::currentTimeMillis();
             ++total;
 
             juce::String label;
@@ -431,6 +520,9 @@ int main(int argc, char* argv[]) {
             juce::DynamicObject::Ptr rec = new juce::DynamicObject();
             rec->setProperty("scenario", scenario.name);
             rec->setProperty("run", run);
+            rec->setProperty("prompt", scenario.prompt);
+            rec->setProperty("startMs", startMs);
+            rec->setProperty("endMs", endMs);
             rec->setProperty("merge", scenario.mergeMode);
             rec->setProperty("responded", outcome.responded);
             rec->setProperty("appliedAfterRetry", outcome.appliedAfterRetry);
@@ -445,6 +537,7 @@ int main(int argc, char* argv[]) {
                 rec->setProperty("timelineOpsOk", outcome.timelineOpsOk);
                 rec->setProperty("timelineOpsError", outcome.timelineOpsError);
             }
+            rec->setProperty("response", outcome.response);
             records.add(juce::var(rec.get()));
         }
     }
