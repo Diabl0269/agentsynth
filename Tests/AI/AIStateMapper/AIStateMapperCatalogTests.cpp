@@ -56,6 +56,8 @@ TEST(AIStateMapperCatalogTest, FilterHasAChoiceParamWithChoices) {
     const auto cutoff = findParam(filter, "cutoff");
     ASSERT_TRUE(cutoff.isObject());
     EXPECT_EQ(cutoff.getProperty("kind", {}).toString(), "float");
+    EXPECT_TRUE((bool)cutoff.getProperty("modulatable", false));
+    EXPECT_FALSE(findParam(filter, "bypassed").hasProperty("modulatable"));
     EXPECT_LT((double)cutoff.getProperty("min", 0), (double)cutoff.getProperty("max", 0));
 }
 

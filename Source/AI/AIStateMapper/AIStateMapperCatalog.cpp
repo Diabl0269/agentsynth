@@ -26,7 +26,8 @@ juce::var stringArrayVar(const juce::StringArray& strings) {
     return juce::var(out);
 }
 
-juce::var parameterEntry(juce::RangedAudioParameter& p) {
+// `module` is null for a processor that is not a ModuleBase (no modulation destinations).
+juce::var parameterEntry(juce::RangedAudioParameter& p, ModuleBase* module) {
     juce::DynamicObject::Ptr entry = new juce::DynamicObject();
     entry->setProperty("id", p.paramID);
     const auto range = p.getNormalisableRange();
@@ -51,6 +52,9 @@ juce::var parameterEntry(juce::RangedAudioParameter& p) {
         entry->setProperty("max", tidy(range.end));
         entry->setProperty("default", tidy(defaultValue));
     }
+    // The rule validatePatch applies to a modulation's destParam.
+    if (module != nullptr && module->modulationChannelForParam(p.paramID) >= 0)
+        entry->setProperty("modulatable", true);
     return juce::var(entry.get());
 }
 
@@ -58,7 +62,7 @@ juce::var parameterList(juce::AudioProcessor& processor) {
     juce::Array<juce::var> params;
     for (auto* param : processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
-            params.add(parameterEntry(*ranged));
+            params.add(parameterEntry(*ranged, dynamic_cast<ModuleBase*>(&processor)));
     return juce::var(params);
 }
 

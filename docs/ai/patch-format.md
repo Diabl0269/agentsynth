@@ -58,7 +58,7 @@ is Hz (20 to 20000), not a 0 to 1 fraction. Oscillator has no `frequency` parame
 from the incoming MIDI note (or A4/440 Hz if none is connected) offset by `octave`, `coarse` and
 `fine`.
 
-The same registry is exported as JSON by `AIStateMapper::getModuleCatalogJson()` (`Source/AI/AIStateMapper/AIStateMapperCatalog.cpp`; version 1: per authorable module `audioIn`, `audioOut`, optional `category` and `params` of `{id, kind: float|choice|bool|int, min, max, default, choices}`, plus `instrumentTracks` with the `addInstrumentTrack` instruments and the ADSR envelope's params). `AIEvalHarness --dump-module-catalog FILE` writes it; the hosted AI server vendors the output so it sees the real parameter ids. Tests: `Tests/AI/AIStateMapper/AIStateMapperCatalogTests.cpp`.
+The same registry is exported as JSON by `AIStateMapper::getModuleCatalogJson()` (`Source/AI/AIStateMapper/AIStateMapperCatalog.cpp`; version 1: per authorable module `audioIn`, `audioOut`, optional `category` and `params` of `{id, kind: float|choice|bool|int, min, max, default, choices, modulatable}` (`modulatable` is set when a modulation may name the parameter as `destParam`), plus `instrumentTracks` with the `addInstrumentTrack` instruments and the ADSR envelope's params). `AIEvalHarness --dump-module-catalog FILE` writes it; the hosted AI server vendors the output so it sees the real parameter ids. Tests: `Tests/AI/AIStateMapper/AIStateMapperCatalogTests.cpp`.
 
 ## Per-node `state`
 
