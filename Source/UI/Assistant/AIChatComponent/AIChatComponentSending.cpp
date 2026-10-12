@@ -212,6 +212,8 @@ void AIChatComponent::attachPlanPreview(MessageData& data, const juce::var& plan
         return;
     }
     data.planPreviewLines = preview.previewLines;
+    data.planNotes = preview.notes;
+    data.planSkippedCount = preview.skippedCount;
     if (data.text.isEmpty())
         data.text = "Here is what I would change.";
 

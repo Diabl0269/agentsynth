@@ -461,6 +461,10 @@ private:
         bool planOk = false;
         juce::StringArray planPreviewLines;
         juce::String planDetails;
+        // Small mistakes the engine repaired around (ProjectEditResult::notes), plain words; the card shows one
+        // line for them. planSkippedCount of them dropped something, the rest adjusted a value.
+        juce::StringArray planNotes;
+        int planSkippedCount = 0;
 
         // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
         // (history restore, apply-failure messages).

@@ -25,6 +25,12 @@ struct ProjectEditResult {
     bool merge = false;             // the mode the patch phase ran in
     juce::var patchBefore;          // graphToJSON around the patch phase (preview: of the scratch); void without one
     juce::var patchAfter;
+    // Small mistakes the plan was repaired around instead of being refused for, in plain words
+    // (docs/ai/timeline-ops.md#one-bad-detail-does-not-sink-the-plan): `skippedCount` of them dropped an op or an
+    // id, `adjustedCount` moved a value into its range. Empty for a plan with nothing to repair.
+    juce::StringArray notes;
+    int skippedCount = 0;
+    int adjustedCount = 0;
 };
 
 /**

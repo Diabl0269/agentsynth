@@ -348,6 +348,7 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServiceSystemPromptTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceTimelineToolsTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceProjectEditSkipTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
     UI/Graph/ModMatrixMacroRoutingTests.cpp

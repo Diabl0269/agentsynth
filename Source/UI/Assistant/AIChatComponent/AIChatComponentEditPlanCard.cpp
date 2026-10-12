@@ -34,6 +34,20 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     previewLabel.setTitle(planOk ? "What this plan changes" : "Why this plan cannot apply");
     previewLabel.setDescription(preview);
 
+    notesLine = buildNotesLine(data.planNotes, data.planSkippedCount);
+    if (notesLine.isNotEmpty()) {
+        const juce::String all = data.planNotes.joinIntoString("\n");
+        addAndMakeVisible(notesLabel);
+        notesLabel.setText(notesLine, juce::dontSendNotification);
+        notesLabel.setFont(juce::Font(11.0f));
+        notesLabel.setMinimumHorizontalScale(1.0f);
+        notesLabel.setBorderSize(juce::BorderSize<int>(0));
+        notesLabel.setJustificationType(juce::Justification::topLeft);
+        notesLabel.setTitle("Parts of this plan that were left out or adjusted");
+        notesLabel.setDescription(all);
+        notesLabel.setTooltip(all);
+    }
+
     addAndMakeVisible(detailsButton);
     detailsButton.setButtonText("Show details");
     detailsButton.setTooltip("Show the changes this plan makes");
@@ -125,6 +139,7 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
     headerLabel.setColour(juce::Label::textColourId, planOk ? colours.accent2 : colours.warning);
     previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
+    notesLabel.setColour(juce::Label::textColourId, colours.textMuted);
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", colours.textMuted);
     if (applyButton) {
         applyButton->setColour(juce::TextButton::buttonColourId, applied ? colours.surfaceHi : colours.accent);
@@ -159,11 +174,34 @@ int AIChatComponent::EditPlanCard::previewHeight(int width) const {
     return juce::jmax(16, height);
 }
 
+juce::String AIChatComponent::EditPlanCard::buildNotesLine(const juce::StringArray& notes, int skippedCount) {
+    if (notes.isEmpty())
+        return {};
+    const int count = notes.size();
+    const bool allSkipped = skippedCount >= count;
+    juce::String line = juce::String(count) + (count == 1 ? " detail " : " details ") +
+                        (allSkipped ? "skipped: " : "adjusted: ") + notes[0];
+    if (count > 1)
+        line << " (and " << juce::String(count - 1) << " more)";
+    return line;
+}
+
+int AIChatComponent::EditPlanCard::notesHeight(int width) const {
+    if (notesLine.isEmpty())
+        return 0;
+    return kRowGap / 2 +
+           AIChatComponent::computeWrappedTextHeight(notesLabel.getFont(), notesLine, juce::jmax(40, width));
+}
+
 void AIChatComponent::EditPlanCard::resized() {
     auto b = getLocalBounds().reduced(kPadding);
     headerLabel.setBounds(b.removeFromTop(kHeaderHeight));
     b.removeFromTop(kRowGap);
     previewLabel.setBounds(b.removeFromTop(previewHeight(b.getWidth())));
+    if (notesLine.isNotEmpty()) {
+        b.removeFromTop(kRowGap / 2);
+        notesLabel.setBounds(b.removeFromTop(notesHeight(b.getWidth()) - kRowGap / 2));
+    }
     b.removeFromTop(kRowGap);
 
     auto buttonRow = b.removeFromTop(kButtonRowHeight);
@@ -197,8 +235,8 @@ int AIChatComponent::EditPlanCard::commentRowSlot() const {
 }
 
 int AIChatComponent::EditPlanCard::getRequiredHeight(int width) const {
-    int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) + kRowGap +
-                 kButtonRowHeight + kRowGap + kFeedbackRowHeight;
+    int height = kPadding * 2 + kHeaderHeight + kRowGap + previewHeight(width - kPadding * 2) +
+                 notesHeight(width - kPadding * 2) + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight;
     height += commentRowSlot();
     height += juce::roundToInt(static_cast<float>(kRowGap + kDetailsHeight) * detailsFade_.progress());
     return height;
