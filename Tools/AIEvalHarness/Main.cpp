@@ -25,6 +25,7 @@
                                                    [--mode patch|timeline|project|track]
                                                    [--timeout-ms N] [--save-projects DIR]
                                                    [--replay RESULTS.json] [--check-project BUNDLE]
+                                                   [--dump-module-catalog FILE]
                                                    [--render-peaks BUNDLE_OR_DIR] [--keep-audio DIR]
                                                    [--project-prompt-version N]
                                                    [--think true|false] [--temperature X] [--seed N]
@@ -424,6 +425,20 @@ int runBundleFlagIfAsked(const juce::StringArray& args) {
                              keepAudio.isEmpty() ? juce::File() : cwd.getChildFile(keepAudio));
 }
 
+// `--dump-module-catalog FILE` (no provider or model needed): write the catalog and exit; -1 if absent.
+int runDumpModuleCatalogIfAsked(const juce::StringArray& args) {
+    const juce::String flag = argValue(args, "--dump-module-catalog", "");
+    if (flag.isEmpty())
+        return -1;
+    const auto file = juce::File::getCurrentWorkingDirectory().getChildFile(flag);
+    if (!file.replaceWithText(synth::AIStateMapper::getModuleCatalogJson(), false, false, "\n")) {
+        std::fprintf(stderr, "could not write %s\n", file.getFullPathName().toRawUTF8());
+        return 1;
+    }
+    std::printf("wrote %s\n", file.getFullPathName().toRawUTF8());
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -433,6 +448,8 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
 
+    if (const int catalogExit = runDumpModuleCatalogIfAsked(args); catalogExit >= 0)
+        return catalogExit;
     // Reading or rendering a saved bundle needs neither a provider nor a model.
     if (const int bundleExit = runBundleFlagIfAsked(args); bundleExit >= 0)
         return bundleExit;
