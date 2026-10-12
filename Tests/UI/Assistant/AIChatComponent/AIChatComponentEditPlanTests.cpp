@@ -218,6 +218,36 @@ TEST_F(AIChatComponentTest, ThePlanPreviewIsNeverClipped) {
     EXPECT_GE(label->getHeight(), (int)std::floor(ga.getBoundingBox(0, -1, true).getHeight()));
 }
 
+// A plan with one bad detail still gets its card; the card says so in one short line, with every note in the
+// tooltip and the accessible description, and a clean plan shows no such line.
+TEST_F(AIChatComponentTest, APlanThatWasRepairedShowsOneShortLineWithATooltip) {
+    PlanRig rig;
+    rig.provider->answer = R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+         "inserts": [{"type": "Filter", "id": 7002}]},
+        {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]},
+        {"op": "writeLane", "nodeId": 7002, "paramId": "wobble", "points": [{"beat": 0, "value": 1}]}]})";
+    rig.send("a bass track");
+
+    const auto found = rig.findTitled("Parts of this plan that were left out or adjusted");
+    ASSERT_EQ(found.size(), 1u);
+    auto* label = dynamic_cast<juce::Label*>(found.front());
+    ASSERT_NE(label, nullptr);
+    EXPECT_EQ(label->getText(), "1 detail skipped: an automation lane on a setting the Filter doesn't have");
+    EXPECT_NE(label->getText(), label->getText().toUpperCase()) << "no ALL-CAPS text";
+    EXPECT_TRUE(label->getTooltip().contains("setting the Filter doesn't have")) << label->getTooltip();
+    EXPECT_TRUE(label->getDescription().contains("setting the Filter doesn't have"));
+    EXPECT_NE(rig.applyButton(), nullptr) << "a repaired plan can still be applied";
+}
+
+TEST_F(AIChatComponentTest, ACleanPlanShowsNoRepairLine) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    EXPECT_TRUE(rig.findTitled("Parts of this plan that were left out or adjusted").empty());
+}
+
 TEST_F(AIChatComponentTest, ApplyRunsTheWholePlanOnceAsOneUndoStep) {
     PlanRig rig;
     rig.provider->answer = kPlan;

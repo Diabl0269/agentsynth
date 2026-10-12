@@ -9,12 +9,27 @@
 
 #include "AI/PatchEval.h"
 #include "Timeline/TimelineOps.h"
+#include "Timeline/TimelineOpsLaneRepair.h"
 
 #include <cmath>
 #include <limits>
 #include <map>
 
 namespace synth::projectedit {
+
+bool exceedsBadDetailLimit(const std::vector<PlanNote>& notes) {
+    int bad = 0;
+    for (const auto& note : notes)
+        bad += note.kind == PlanNote::Kind::Clamped ? 0 : 1;
+    return bad > kMaxBadDetails;
+}
+
+juce::String firstBadDetailError(const std::vector<PlanNote>& notes) {
+    for (const auto& note : notes)
+        if (note.kind != PlanNote::Kind::Clamped)
+            return note.error;
+    return {};
+}
 
 namespace {
 
@@ -69,7 +84,9 @@ private:
 // Reads one addInstrumentTrack op's instrumentId, envelope id and insert ids into the namespace. TimelineOps
 // checks every other field of the op; this only adds what the plan needs on top: each id is a
 // usable node id, distinct from every other one, and not already the uid of a live node (a merge
-// patch addresses live nodes by uid, so such an id would name two nodes at once).
+// patch addresses live nodes by uid, so such an id would name two nodes at once). A bad instrumentId
+// refuses the plan (the track's other ids hang off it); a bad envelope or insert id is left out and
+// noted instead, and a writeLane that names it is skipped (see Plan::unusableIds).
 juce::String reserveBuildIds(int opIndex, juce::DynamicObject& op, int buildIndex,
                              const std::set<juce::uint32>& liveIds, IdNamespace& ids, Plan& out) {
     const juce::String where = opLabel(opIndex, "addInstrumentTrack");
@@ -77,15 +94,26 @@ juce::String reserveBuildIds(int opIndex, juce::DynamicObject& op, int buildInde
         if (idVar.isVoid())
             return {};
         juce::uint32 id = 0;
+        juce::String problem;
         if (!readPlanId(idVar, id))
-            return where + "\"" + what + "\" must be a non-negative integer id.";
-        if (liveIds.count(id) > 0)
-            return where + "\"" + what + "\" " + juce::String(id) +
-                   " is already the id of a node in the current patch. Pick an id no existing node uses.";
-        if (const auto clash = ids.claim(id, what + " of timelineOps[" + juce::String(opIndex) + "]");
-            clash.isNotEmpty())
-            return clash;
-        out.reservations.push_back({id, buildIndex, insertIndex});
+            problem = where + "\"" + what + "\" must be a non-negative integer id.";
+        else if (liveIds.count(id) > 0)
+            problem = where + "\"" + what + "\" " + juce::String(id) +
+                      " is already the id of a node in the current patch. Pick an id no existing node uses.";
+        else
+            problem = ids.claim(id, what + " of timelineOps[" + juce::String(opIndex) + "]");
+        if (problem.isEmpty()) {
+            out.reservations.push_back({id, buildIndex, insertIndex});
+            return {};
+        }
+        if (insertIndex == Reservation::kInstrument)
+            return problem;
+        out.notes.push_back(
+            {PlanNote::Kind::Ignored, problem,
+             "an id on " + juce::String(insertIndex == Reservation::kEnvelope ? "a track's envelope" : "an effect") +
+                 " was left out because another module already uses it"});
+        if (readPlanId(idVar, id))
+            out.unusableIds.insert(id);
         return {};
     };
 
@@ -106,29 +134,57 @@ juce::String reserveBuildIds(int opIndex, juce::DynamicObject& op, int buildInde
 }
 
 // A writeLane op names its node by exactly one of "nodeUuid" (a node that already exists) or
-// "nodeId" (a node this response creates). Checked here, before any phase runs, so a plan that
-// gets this wrong is rejected before its track ops would build anything.
-juce::String checkLaneAddress(int opIndex, juce::DynamicObject& op, const Plan& plan) {
+// "nodeId" (a node this response creates). Checked here, before any phase runs. A lane that gets this
+// wrong is skipped (with its error kept, for the case the plan is refused after all) rather than
+// refusing a plan whose tracks and notes are fine.
+struct LaneAddressProblem {
+    juce::String error, note;
+};
+
+LaneAddressProblem checkLaneAddress(int opIndex, juce::DynamicObject& op, const Plan& plan) {
     const juce::String where = opLabel(opIndex, "writeLane");
     const bool hasUuid = op.hasProperty("nodeUuid");
     const bool hasId = op.hasProperty("nodeId");
     if (hasUuid == hasId)
-        return where + "give exactly one of \"nodeUuid\" (a node that already exists) or \"nodeId\" (a node this "
-                       "response creates).";
+        return {where + "give exactly one of \"nodeUuid\" (a node that already exists) or \"nodeId\" (a node this "
+                        "response creates).",
+                "an automation lane that did not say clearly which module it belongs to"};
     if (!hasId)
         return {};
     juce::uint32 id = 0;
     if (!readPlanId(op.getProperty("nodeId"), id))
-        return where + "\"nodeId\" must be a non-negative integer id.";
+        return {where + "\"nodeId\" must be a non-negative integer id.",
+                "an automation lane that did not say clearly which module it belongs to"};
+    if (plan.unusableIds.count(id) > 0)
+        return {where + "\"nodeId\" " + juce::String(id) +
+                    " is an id the response used for more than one module, so it names none of them.",
+                "an automation lane on a module whose id was used twice"};
     bool created = plan.patchNodeIds.count(id) > 0;
     for (const auto& reservation : plan.reservations)
         created = created || reservation.id == id;
     if (!created)
-        return where + "\"nodeId\" " + juce::String(id) +
-               " is not a node this response creates. Use a patch node id, an instrumentId, an envelope id or an "
-               "insert id, or "
-               "address an existing node by \"nodeUuid\".";
+        return {where + "\"nodeId\" " + juce::String(id) +
+                    " is not a node this response creates. Use a patch node id, an instrumentId, an envelope id or an "
+                    "insert id, or "
+                    "address an existing node by \"nodeUuid\".",
+                "an automation lane on a module the answer never created"};
     return {};
+}
+
+// True if the op list places notes: a placeClips clip with a non-empty "notes" array, or a placeMidiClip.
+bool placesNotes(const juce::Array<juce::var>& ops) {
+    for (const auto& op : ops) {
+        const juce::String name = op.getProperty("op", {}).toString();
+        if (name == "placeMidiClip")
+            return true;
+        if (name != "placeClips")
+            continue;
+        if (auto* clips = op.getProperty("clips", {}).getArray())
+            for (const auto& clip : *clips)
+                if (auto* notes = clip.getProperty("notes", {}).getArray(); notes != nullptr && !notes->isEmpty())
+                    return true;
+    }
+    return false;
 }
 
 juce::String readMode(const juce::var& root, Plan& out) {
@@ -202,11 +258,32 @@ juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveI
             return error;
     }
 
-    for (size_t k = 0; k < out.otherOpIndex.size(); ++k)
+    // A writeLane that names its node wrongly is left out of the plan; everything else about the plan stands.
+    juce::Array<juce::var> keptOps;
+    std::vector<int> keptIndex;
+    for (size_t k = 0; k < out.otherOpIndex.size(); ++k) {
         if (auto* op = otherOps.getReference((int)k).getDynamicObject();
             op != nullptr && op->getProperty("op").toString() == "writeLane")
-            if (const auto error = checkLaneAddress(out.otherOpIndex[k], *op, out); error.isNotEmpty())
-                return error;
+            if (const auto problem = checkLaneAddress(out.otherOpIndex[k], *op, out); problem.error.isNotEmpty()) {
+                out.notes.push_back({PlanNote::Kind::Skipped, problem.error, problem.note});
+                continue;
+            }
+        keptOps.add(otherOps.getReference((int)k));
+        keptIndex.push_back(out.otherOpIndex[k]);
+    }
+    out.otherOps = envelopeOf(keptOps);
+    out.otherOpIndex = keptIndex;
+
+    // The refusals a repaired plan still gets: too many bad details, or nothing left that does anything - for a
+    // plan that builds tracks, no notes (a song of empty tracks is not the song that was asked for).
+    if (!out.notes.empty()) {
+        const auto first = firstBadDetailError(out.notes);
+        if (first.isNotEmpty()) {
+            const bool nothingLeft = !out.hasPatch && !out.hasTrackOps && keptOps.isEmpty();
+            if (exceedsBadDetailLimit(out.notes) || nothingLeft || (out.hasTrackOps && !placesNotes(keptOps)))
+                return first;
+        }
+    }
     return {};
 }
 
@@ -352,32 +429,73 @@ juce::String runPatch(const Plan& plan, const juce::var& root, juce::AudioProces
     return {};
 }
 
-// Phase 3's one rewrite: a writeLane "nodeId" becomes the "nodeUuid" of the node that id now
-// denotes, so TimelineOps only ever sees uuids. Done on a fresh copy in every run - the preview's
-// uuids are the scratch graph's, never the live one's.
-juce::String rewriteLaneNodeIds(juce::var& envelope, const Plan& plan, juce::AudioProcessorGraph& graph,
-                                const PatchIdScope& scope,
-                                const std::map<int, juce::AudioProcessorGraph::NodeID>& idMap) {
+// Phase 3's preparation of the writeLane ops, on a fresh copy in every run (the preview's uuids are the scratch
+// graph's, never the live one's). A "nodeId" becomes the "nodeUuid" of the node that id now denotes, so TimelineOps
+// only ever sees uuids; then each lane is checked against the graph and its values clamped into the parameter's
+// range (repairWriteLane). A lane whose node or parameter does not exist is dropped with a note instead of
+// failing the plan. `index` is rebuilt to follow the ops that stay.
+void prepareLaneOps(juce::var& envelope, const Plan& plan, const TimelineDoc& doc, juce::AudioProcessorGraph& graph,
+                    const PatchIdScope& scope, const std::map<int, juce::AudioProcessorGraph::NodeID>& idMap,
+                    std::vector<int>& index, std::vector<PlanNote>& notes) {
     auto* ops = envelope.getProperty("timelineOps", {}).getArray();
-    for (int i = 0; ops != nullptr && i < ops->size(); ++i) {
+    if (ops == nullptr)
+        return;
+    juce::Array<juce::var> kept;
+    std::vector<int> keptIndex;
+    for (int i = 0; i < ops->size(); ++i) {
         auto* op = ops->getReference(i).getDynamicObject();
-        if (op == nullptr || !op->hasProperty("nodeId"))
+        const int originalIndex = plan.otherOpIndex[(size_t)i];
+        if (op == nullptr || op->getProperty("op").toString() != "writeLane") {
+            kept.add(ops->getReference(i));
+            keptIndex.push_back(originalIndex);
             continue;
-        juce::uint32 id = 0;
-        readPlanId(op->getProperty("nodeId"), id); // checked by readPlan
-        std::optional<juce::AudioProcessorGraph::NodeID> nodeId;
-        if (auto bound = scope.boundIds.find(id); bound != scope.boundIds.end())
-            nodeId = bound->second;
-        else if (auto mapped = idMap.find((int)id); mapped != idMap.end() && plan.patchNodeIds.count(id) > 0)
-            nodeId = mapped->second;
-        auto* node = nodeId.has_value() ? graph.getNodeForId(*nodeId) : nullptr;
-        if (node == nullptr)
-            return opLabel(plan.otherOpIndex[(size_t)i], "writeLane") + "\"nodeId\" " + juce::String(id) +
-                   " names no node after the patch applied (did the patch remove it?).";
-        op->setProperty("nodeUuid", AIStateMapper::ensureNodeUuid(node));
-        op->removeProperty("nodeId");
+        }
+        const juce::String where = opLabel(originalIndex, "writeLane");
+        auto skip = [&](const juce::String& error, const juce::String& note) {
+            notes.push_back({PlanNote::Kind::Skipped, error, note});
+        };
+        if (op->hasProperty("nodeId")) {
+            juce::uint32 id = 0;
+            readPlanId(op->getProperty("nodeId"), id); // checked by readPlan
+            std::optional<juce::AudioProcessorGraph::NodeID> nodeId;
+            if (auto bound = scope.boundIds.find(id); bound != scope.boundIds.end())
+                nodeId = bound->second;
+            else if (auto mapped = idMap.find((int)id); mapped != idMap.end() && plan.patchNodeIds.count(id) > 0)
+                nodeId = mapped->second;
+            auto* node = nodeId.has_value() ? graph.getNodeForId(*nodeId) : nullptr;
+            if (node == nullptr) {
+                skip(where + "\"nodeId\" " + juce::String(id) +
+                         " names no node after the patch applied (did the patch remove it?).",
+                     "an automation lane on a module the answer removed again");
+                continue;
+            }
+            op->setProperty("nodeUuid", AIStateMapper::ensureNodeUuid(node));
+            op->removeProperty("nodeId");
+        }
+        const auto repair = repairWriteLane(*op, doc, graph);
+        if (repair.outcome == LaneRepair::Outcome::UnknownNode) {
+            skip(where + "writes to node uuid \"" + op->getProperty("nodeUuid").toString() +
+                     "\", which no module in the current patch has. Automate a module that exists.",
+                 "an automation lane on a module that is not in the patch");
+            continue;
+        }
+        if (repair.outcome == LaneRepair::Outcome::UnknownParam) {
+            skip(where + "writes parameter \"" + op->getProperty("paramId").toString() + "\", which module \"" +
+                     repair.moduleName + "\" does not have. Use one of that module's parameter ids.",
+                 "an automation lane on a setting the " + repair.moduleName + " doesn't have");
+            continue;
+        }
+        if (repair.clamped > 0)
+            notes.push_back({PlanNote::Kind::Clamped,
+                             {},
+                             "an automation value for " + repair.parameterName + " was brought back into its " +
+                                 juce::String(repair.minAllowed) + " to " + juce::String(repair.maxAllowed) +
+                                 " range"});
+        kept.add(ops->getReference(i));
+        keptIndex.push_back(originalIndex);
     }
-    return {};
+    envelope = envelopeOf(kept);
+    index = keptIndex;
 }
 
 } // namespace
@@ -385,6 +503,7 @@ juce::String rewriteLaneNodeIds(juce::var& envelope, const Plan& plan, juce::Aud
 RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juce::AudioProcessorGraph& graph,
                   TimelineOpsHost& buildHost, bool checkStructure) {
     RunResult out;
+    out.notes = plan.notes;
     auto fail = [&out](const juce::String& message) {
         out.ok = false;
         out.message = message;
@@ -413,10 +532,19 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
     // 3. Every other op, in list order, with nodeId references resolved to uuids.
     if (!plan.otherOps.isVoid()) {
         juce::var ops = juce::JSON::parse(juce::JSON::toString(plan.otherOps));
-        if (const auto error = rewriteLaneNodeIds(ops, plan, graph, scope, idMap); error.isNotEmpty())
-            return fail(error);
-        if (const auto error = runOps(ops, plan.otherOpIndex, doc, graph, buildHost, preview); error.isNotEmpty())
-            return fail(error);
+        std::vector<int> index;
+        prepareLaneOps(ops, plan, doc, graph, scope, idMap, index, out.notes);
+        if (exceedsBadDetailLimit(out.notes))
+            return fail(firstBadDetailError(out.notes));
+        if (!out.notes.empty() && firstBadDetailError(out.notes).isNotEmpty()) {
+            const bool nothingLeft = !plan.hasPatch && !plan.hasTrackOps && ops.isVoid();
+            const auto* kept = ops.getProperty("timelineOps", {}).getArray();
+            if (nothingLeft || (plan.hasTrackOps && (kept == nullptr || !placesNotes(*kept))))
+                return fail(firstBadDetailError(out.notes));
+        }
+        if (!ops.isVoid())
+            if (const auto error = runOps(ops, index, doc, graph, buildHost, preview); error.isNotEmpty())
+                return fail(error);
     }
 
     for (int i = 1; i < preview.size(); ++i)

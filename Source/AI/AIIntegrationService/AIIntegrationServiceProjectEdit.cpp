@@ -79,6 +79,10 @@ ProjectEditResult toResult(const projectedit::RunResult& run) {
     result.patchAfter = run.patchAfter;
     if (!run.ok)
         return result;
+    for (const auto& note : run.notes) {
+        result.notes.add(note.text);
+        (note.kind == projectedit::PlanNote::Kind::Skipped ? result.skippedCount : result.adjustedCount)++;
+    }
     juce::StringArray sentences;
     sentences.add(describePatchPhase(run));
     if (run.opsPreview.isNotEmpty())

@@ -37,6 +37,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -239,7 +240,10 @@ inline SaveOutcome applyAndSave(const Environment& env, const char* seedPatch, c
 
     // Read it back and compare with what the plan asked for.
     juce::String error;
-    const auto want = planCounts(plan);
+    auto want = planCounts(plan);
+    // A skipped op was a lane (the plan's other bad details leave the counts alone), so the bundle holds that many
+    // fewer.
+    want.lanes = std::max(0, want.lanes - applied.skippedCount);
     const auto got = readBundle(dest, error);
     out.saved = true;
     if (!got) {
@@ -248,8 +252,11 @@ inline SaveOutcome applyAndSave(const Environment& env, const char* seedPatch, c
     }
     const bool match = got->tracks == want.tracks && got->clips == want.clips && got->notes == want.notes &&
                        got->lanes == want.lanes && got->boundTracks == got->tracks;
+    juce::String repaired;
+    for (const auto& note : applied.notes)
+        repaired << "; repaired: " << note;
     out.message = (match ? "verified: " : "MISMATCH, plan " + want.text() + ", bundle ") + got->text() + ", " +
-                  juce::String(got->boundTracks) + "/" + juce::String(got->tracks) + " bound to a Track In";
+                  juce::String(got->boundTracks) + "/" + juce::String(got->tracks) + " bound to a Track In" + repaired;
     return out;
 }
 

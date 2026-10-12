@@ -5,6 +5,8 @@ target_sources(Core PRIVATE
     Source/Timeline/InstrumentTrackOpReader.h
     Source/Timeline/TimelineOps.cpp
     Source/Timeline/TimelineOps.h
+    Source/Timeline/TimelineOpsLaneRepair.cpp
+    Source/Timeline/TimelineOpsLaneRepair.h
     Source/Timeline/TimelineOpsTempoMarkers.cpp
     Source/Timeline/TimelineOpsTempoMarkers.h
 )

@@ -23,6 +23,10 @@ public:
     EditPlanCard(const MessageData& data, std::function<bool()> onApply, RateCallback onRate);
 
     void resized() override;
+
+    // The one line a plan with repairs shows under its preview: "1 detail skipped: <first note>", "(and N more)"
+    // after it when there are several. "skipped" when every note dropped something, else "adjusted". Empty for none.
+    static juce::String buildNotesLine(const juce::StringArray& notes, int skippedCount);
     void parentHierarchyChanged() override { applyThemeColours(); }
 
     // `width` must be the width this card is laid out at (MessageBubble passes its content width);
@@ -38,6 +42,7 @@ private:
     void showApplied();
     void fillDetails();
     int previewHeight(int width) const;
+    int notesHeight(int width) const;
     void relayout();
     int commentRowSlot() const;
 
@@ -53,6 +58,7 @@ private:
     const bool planOk;
     bool applied = false;
     juce::StringArray previewLines;
+    juce::String notesLine; // "1 detail skipped: ..."; empty when the plan needed no repair
     bool isExpanded = false;
     // What the details panel shows, held until it first opens (see fillDetails).
     juce::String planSummary;
@@ -62,6 +68,7 @@ private:
 
     juce::Label headerLabel;
     juce::Label previewLabel;
+    juce::Label notesLabel;
     juce::TextButton detailsButton;
     std::unique_ptr<juce::TextButton> applyButton;
     juce::TextButton thumbsUpButton;

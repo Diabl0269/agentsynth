@@ -185,8 +185,9 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
 
 - **One id namespace.** Patch node ids, every `instrumentId`, every `envelope.id` and every insert
   `id` must be distinct, and each must be a non-negative integer id; a repeat rejects the whole plan
-  with a message naming the id and both uses. An `instrumentId`, `envelope.id` or insert `id` that is
-  already the uid of a live node is rejected too (a merge patch addresses live nodes by uid, so it would name two nodes).
+  with a message naming the id and both uses, except a repeated `envelope.id` or insert `id`, which is
+  [left out and noted](#one-bad-detail-does-not-sink-the-plan). An `instrumentId`, `envelope.id` or insert `id` that is
+  already the uid of a live node is treated the same way (a merge patch addresses live nodes by uid, so it would name two nodes).
 - **Mode.** With a track-creating op (`addTrack`, `addInstrumentTrack`) the patch runs as a merge
   (an absent `mode` counts as `merge`); `"replace"` rejects, since it would delete the instruments
   step 1 built. Without one, `merge`/`replace` mean what they say and an absent `mode` is a replace
@@ -203,7 +204,8 @@ passes its own gate (`validatePatch`, `TimelineOps::validate`); the plan adds th
      new node in the preview). A patch node reusing a bound id is `DuplicateNodeId`;
   3. every other op (`placeClips`, `writeLane`, `placeMidiClip`), in list order.
 - **`writeLane` addressing.** Exactly one of `nodeUuid` (a node that already exists) or `nodeId` (a
-  patch node id, `instrumentId`, `envelope.id` or insert `id` from this response) - both or neither rejects. A
+  patch node id, `instrumentId`, `envelope.id` or insert `id` from this response) - both or neither
+  [skips that op](#one-bad-detail-does-not-sink-the-plan). A
   `nodeId` is rewritten to the `nodeUuid` of the node that id denotes after step 2, on a fresh copy
   of the ops in every run, so **`TimelineOps` only ever sees uuids** (on its own it still refuses
   `nodeId` as an unknown field). `applyJSONToGraph` mints a uuid for every node it creates, which is
@@ -238,8 +240,32 @@ Asking for a plan: `sendProjectMessage` - see [engine](engine.md#request-flow). 
 `setTempo` and `addMarker` ops it derives from that layout's bpm and section names, 6 the whole drum kit on one `Drum Kit` track. A request without a version gets prompt 1, so an older app never receives fields it would reject. Tests:
 `Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (the rules, the preview, the
 backstop through a failing fake host, both request shapes),
+`Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditSkipTests.cpp` (a bad detail is skipped, clamped or
+left out; the refusals),
 `Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp` (the apply order and the one undo step
 through the real host), `Tests/AI/AIStateMapper/AIStateMapperIdScopeTests.cpp` (the scope).
+
+### One bad detail does not sink the plan
+
+A plan whose tracks and notes are fine loses only the detail that is wrong, and says so
+(`ProjectEditResult::notes`, plain words; the chat's plan card shows one line, e.g. "1 detail skipped: an
+automation lane on a setting the Filter doesn't have", with every note in its tooltip). In `readPlan` and phase 3
+of `runPlan`:
+
+- **Skipped:** a `writeLane` that names its node wrongly (neither or both of `nodeUuid` / `nodeId`, a `nodeId`
+  the response never creates or that clashed, a node the patch removed again, a `nodeUuid` no module has) or
+  a parameter its module does not have (`repairWriteLane`, `Source/Timeline/TimelineOpsLaneRepair.cpp`). The op
+  leaves the plan before `TimelineOps` sees it; `Plan::otherOpIndex` follows the ops that stay, so messages still
+  carry the response's own `timelineOps[i]`.
+- **Left out:** an `envelope.id` or insert `id` that repeats another id or names a live node. The track is built
+  as asked; the id binds nothing, and a `writeLane` naming it is skipped (`Plan::unusableIds`), since it could
+  mean either module.
+- **Clamped:** a `writeLane` point outside the parameter's range moves to the nearest end of it (the same
+  bounds `runWriteLane` enforces, including an existing lane's narrower range). Not counted as a bad detail.
+- **Still refused,** with the first bad detail's own message: more than `kMaxBadDetails` (3) skipped or left-out
+  details; a bad `instrumentId` (every other id of the track hangs off it) or any error in a track op or
+  another op kind; nothing left to apply; a plan that builds tracks but places no notes once the bad
+  details are gone.
 
 ### Where things land
 
