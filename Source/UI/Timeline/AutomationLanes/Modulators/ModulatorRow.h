@@ -2,6 +2,7 @@
 
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
@@ -17,9 +18,10 @@ struct TrackHeaderHost;
 
 // The header-column half of one modulator row under an automation lane (a mod lane): a marker icon, the source card's
 // title as a button that opens the Change source picker, and -- for an LFO -- a picture of its shape, the shape, rate
-// and sync controls and a menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is
-// read-only. A click anywhere else on the row, not on a control, gives it keyboard focus. A routing through
-// an Attenuverter also shows its amount ("Amount  +72%"), which the band beside it edits (ModulatorBand).
+// and sync controls, a strip of control chips (the set every mod lane shows is the user's, see LaneControlStrip) and a
+// menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is read-only. A click anywhere else
+// on the row, not on a control, gives it keyboard focus. A routing through an Attenuverter also shows its amount
+// ("Amount  +72%"), which the band beside it edits (ModulatorBand).
 //
 // A fold arrow at the left of the title line collapses the row to that line (the title and the amount readout; the
 // shape, rate and sync controls are hidden) and expands it again; Left on the row collapses it and Right expands it,
@@ -44,8 +46,10 @@ public:
     static constexpr int kRemoveMenuId = 2;
     static constexpr int kChangeSourceMenuId = 3; // only when the host can re-point the routing
 
-    /** `host` may be null (every control then stays inert). `parameterName` words the controls' names. */
-    ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName);
+    /** `host` may be null (every control then stays inert). `parameterName` words the controls' names. `controls` may
+     *  be null (the chips then show the default set and the "+" row has nowhere to float). */
+    ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName,
+                 LaneControlSet* controls = nullptr);
 
     const ModulatorInfo& getInfo() const noexcept { return info_; }
     /** Same routing (same key()), possibly re-titled or re-coloured. */
@@ -74,6 +78,8 @@ public:
     /** How many plain clicks asked this row for keyboard focus (a headless test has no native focus to read). */
     int getClickFocusRequestsForTest() const noexcept { return clickFocusRequests_; }
     LaneNameButton& getNameButton() noexcept { return nameButton_; }
+    /** The control chips, the "+" button and edit mode. */
+    LaneControlStrip& getControlStrip() noexcept { return strip_; }
     LaneMarkerIcon& getMarkerIcon() noexcept { return marker_; }
     /** The source name button's bounds, in this row's coordinates. */
     juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameButton_.getBounds(); }
@@ -87,6 +93,7 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void moved() override;
 
     juce::ComboBox& getShapeCombo() noexcept { return shape_; }
     juce::ComboBox& getSyncRateCombo() noexcept { return syncRate_; }
@@ -134,6 +141,8 @@ private:
     void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
                        std::function<float(double)> toParameter);
     void applyCompact();
+    LaneControlStrip::Actions controlActions();
+    bool controlEnabled(LaneControl control) const;
     void layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine);
     void layoutAmount(juce::Rectangle<int> line);
     juce::Colour readableTrackColour() const;
@@ -159,6 +168,7 @@ private:
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Mod};
     LaneNameButton nameButton_;
+    LaneControlStrip strip_;
     juce::Rectangle<int> rateTextArea_;      // the Hz value, beside its bar (never over it: the bar has a cap)
     juce::Rectangle<int> amountArea_;        // "Amount" and its readout
     juce::Rectangle<int> compactAmountArea_; // the readout alone, on the title line of a folded row

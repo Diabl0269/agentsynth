@@ -41,6 +41,11 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
     header.onCreateCustomLfo = [this, id](double startBeat, double endBeat) {
         createCustomLfoFromRange(id, startBeat, endBeat);
     };
+    // The edit tray's height is part of the lane's block, so the rows below make room as it slides.
+    header.getControlStrip().onTrayExtentChanged = [this] {
+        if (onLayoutChanged)
+            onLayoutChanged();
+    };
 }
 
 // The lanes of `track` that have a row (a modulator's amount lane has none), in track order.

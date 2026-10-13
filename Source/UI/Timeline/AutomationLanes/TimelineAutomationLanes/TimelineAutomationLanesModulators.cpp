@@ -172,7 +172,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     retireModulatorRows(entry, staying);
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
-        auto row = std::make_unique<ModulatorRow>(info, host_, parameterName);
+        auto row = std::make_unique<ModulatorRow>(info, host_, parameterName, &laneControls_);
         headerParent_.addAndMakeVisible(*row);
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);
@@ -185,6 +185,10 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         rowPtr->onKeyboardFocused = [this, rowPtr] {
             if (onKeyboardStopFocused)
                 onKeyboardStopFocused(*rowPtr);
+        };
+        rowPtr->getControlStrip().onTrayExtentChanged = [this] {
+            if (onLayoutChanged)
+                onLayoutChanged();
         };
         rowPtr->onFoldRequested = [this, rowPtr](bool collapse) {
             setModulatorCollapsed(rowPtr->getInfo().key(), collapse);

@@ -65,6 +65,39 @@ void ModulatorRow::refreshValues() {
     }
 }
 
+// The chips are the row menu's own items.
+LaneControlStrip::Actions ModulatorRow::controlActions() {
+    LaneControlStrip::Actions actions;
+    actions.perform = [this](LaneControl control, juce::Component&) {
+        switch (control) {
+        case LaneControl::ChangeSource:
+            applyMenuChoice(kChangeSourceMenuId);
+            break;
+        case LaneControl::ShowInCanvas:
+            applyMenuChoice(kShowOnCanvasMenuId);
+            break;
+        case LaneControl::Remove:
+            applyMenuChoice(kRemoveMenuId);
+            break;
+        default:
+            break; // automation lane controls
+        }
+    };
+    actions.isEnabled = [this](LaneControl control) { return controlEnabled(control); };
+    actions.detail = [this](LaneControl control) {
+        return control == LaneControl::ChangeSource && !controlEnabled(control)
+                   ? juce::String(" (this source cannot be swapped here)")
+                   : juce::String();
+    };
+    return actions;
+}
+
+bool ModulatorRow::controlEnabled(LaneControl control) const {
+    if (control == LaneControl::ChangeSource)
+        return host_ != nullptr && host_->canChangeModulatorSource(info_);
+    return host_ != nullptr;
+}
+
 juce::PopupMenu ModulatorRow::buildMenu() const {
     juce::PopupMenu menu;
     menu.addItem(kShowOnCanvasMenuId, "Show on canvas");
@@ -204,6 +237,13 @@ void ModulatorRow::setLift(float lift) {
 bool ModulatorRow::keyPressed(const juce::KeyPress& key) {
     if (onMoveKey && onMoveKey(key))
         return true;
+    if (key.isKeyCode(juce::KeyPress::escapeKey) && (strip_.isEditing() || strip_.isRowOpen())) {
+        if (strip_.isEditing())
+            strip_.exitEdit();
+        else
+            strip_.closeRow();
+        return true;
+    }
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
     if (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)) {

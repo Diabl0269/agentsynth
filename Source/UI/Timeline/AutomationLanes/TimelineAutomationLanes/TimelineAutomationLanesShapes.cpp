@@ -15,6 +15,8 @@ void TimelineAutomationLanes::setDrawShape(DrawShape shape) {
 // Every editor repaints, not just the range's: the band may have just left another lane.
 void TimelineAutomationLanes::laneRangeChanged() {
     repaintEditors();
+    for (auto& [id, header] : headers_)
+        header->getControlStrip().refreshStates(); // Create custom LFO follows the range
     if (onLaneRangeChanged)
         onLaneRangeChanged();
 }

@@ -106,7 +106,7 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             header->setLift(lift);
             lastLaneY = staticY;
         }
-        int modY = y + rowHeight;
+        int modY = y + rowHeight + trayExtentOf(lane.id);
         for (int i = 0; i < modulatorCount(lane.id); ++i) {
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
@@ -116,7 +116,7 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             row->setLift(pose.lift);
             if (pose.lift > 0.0f)
                 row->toFront(false);
-            modY += height;
+            modY += height + trayExtentOf(lane.id, i);
         }
         if (lift > 0.0f) {
             if (auto* header = headerFor(lane.id))
@@ -210,6 +210,16 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
             if (pose.lift > 0.0f)
                 entry.bands[(size_t)i]->toFront(false);
         }
+    repositionOverlays();
+}
+
+// An open "+" row floats beside its header over the lanes region, so it follows the header when the list scrolls.
+void TimelineAutomationLanes::repositionOverlays() {
+    for (auto& [id, header] : headers_)
+        header->getControlStrip().repositionRow();
+    for (auto& [id, entry] : modulators_)
+        for (auto& row : entry.rows)
+            row->getControlStrip().repositionRow();
 }
 
 // Rides the panel's existing transport poll: nothing happens while the beat stands still, and only

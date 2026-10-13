@@ -224,7 +224,7 @@ void TimelineAutomationLanes::syncPools() {
             editors_[id] = std::move(editor);
         }
         if (headers_.count(id) == 0) {
-            auto header = std::make_unique<AutomationLaneHeaderComponent>(*doc_, id, host_, undo_);
+            auto header = std::make_unique<AutomationLaneHeaderComponent>(*doc_, id, host_, undo_, &laneControls_);
             wireHeader(*header, id);
             headerParent_.addAndMakeVisible(*header);
             headers_[id] = std::move(header);

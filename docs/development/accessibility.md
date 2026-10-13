@@ -53,6 +53,7 @@ beside "Duplicate Track" in its menu; focus follows the copy. It takes Ctrl+E (`
 right-click, Shift+F10 (`KeyboardContextMenuProvider`) or Return on the focused row, the row is named for what it is
 ("Cutoff automation lane") and its tooltip lists the three ways in. A picture that only shows state (the modulator
 shape icon) is named and tooltipped but is not a Tab stop; the control it mirrors stays the one that edits.
+A lane header's control chips, its "+" button and the "+" row's buttons are Tab stops with a name and a tooltip ("Name: what it does"); in Edit controls Left/Right walk the chips and Alt+Left/Right move one, as the arrows of a list of controls ([`lane-controls.md`](../timeline/lane-controls.md)).
 
 The track row's Cmd+Backspace question is an alert window: Delete is the default button (Return confirms; Cmd+Z undoes it),
 Escape cancels, Tab reaches the **Don't ask again** box (named, tooltipped, with the preference's way back) and **Delete**,

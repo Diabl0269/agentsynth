@@ -1,8 +1,9 @@
 // Concern: the automation lane header's construction, doc refresh, value readout, layout and paint.
-// The record-mode and lane menu actions live in AutomationLaneHeaderMenu.cpp, the parameter pickers in
-// AutomationLaneHeaderParameterPicker.cpp.
+// The record-mode and lane menu actions live in AutomationLaneHeaderMenu.cpp, the control chips' actions in
+// AutomationLaneHeaderControls.cpp, the parameter pickers in AutomationLaneHeaderParameterPicker.cpp.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
@@ -11,7 +12,7 @@ namespace synth::ui {
 
 namespace {
 constexpr int kPadding = 4;
-constexpr int kComboWidth = 62;
+constexpr int kMinNoteWidth = 40; // px of the module note kept when the chips want more
 constexpr float kStripeAlpha = 0.45f;
 constexpr int kMarkerGap = 2; // between the marker and the name button, whose own padding makes the rest
 constexpr int kNameButtonHeight = 20;
@@ -31,11 +32,13 @@ LaneHeaderColours coloursFor(const juce::Component& c) {
 } // namespace
 
 AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc& doc, synth::LaneId lane,
-                                                             TrackHeaderHost* host, AppUndoManager* undo)
+                                                             TrackHeaderHost* host, AppUndoManager* undo,
+                                                             LaneControlSet* controls)
     : doc_(doc)
     , laneId_(lane)
     , host_(host)
-    , undo_(undo) {
+    , undo_(undo)
+    , strip_(LaneControlKind::Automation, controls, controlActions()) {
     setComponentID("automationLaneHeader");
     // The row is a keyboard stop of its own (Up/Down walk the track list through it). A press does not grab focus (it
     // may become a reorder drag); a plain click on the row, not on a control, takes it on release (see mouseUp).
@@ -48,7 +51,10 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     addAndMakeVisible(nameButton_);
     nameButton_.onClick = [this] { openChangeParameterPicker(); };
 
-    addAndMakeVisible(recordMode_);
+    // The combo is the record-mode model: it carries the five modes and the lane's accessible mode name, and the Read /
+    // Write chip applies the same choices. It is a child (so the menu walk from it still finds this header) but never
+    // shown.
+    addChildComponent(recordMode_);
     recordMode_.setComponentID("automationLaneRecordMode");
     recordMode_.addItem("Off", 1);
     recordMode_.addItem("Read", 2);
@@ -59,6 +65,11 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     // where real focus sits.
     recordMode_.setMouseClickGrabsKeyboardFocus(false);
     recordMode_.onChange = [this] { applyRecordModeChoice(recordMode_.getSelectedId()); };
+
+    addAndMakeVisible(strip_);
+    strip_.onPreferredWidthChanged = [this] { resized(); };
+    strip_.onEditLookChanged = [this] { repaint(); };
+    strip_.onContextMenu = [this](juce::Point<int> screen) { showMenuAt(contextMenuOptionsAtPoint(screen)); };
 
     addAndMakeVisible(readout_);
     // The readout takes mouse clicks (for its tooltip), so a right-click on it is forwarded here to open the menu.
@@ -86,6 +97,7 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
 
     recordMode_.setSelectedId(lane->recordMode + 1, juce::dontSendNotification);
+    strip_.refresh();
     recordMode_.setTitle(parameterName_ + " record mode");
     recordMode_.setTooltip(parameterName_ + " record mode");
     setTooltip(parameterName_ + " lane: right-click, Shift+F10 or Return for the lane menu. Drag to reorder");
@@ -130,7 +142,11 @@ void AutomationLaneHeaderComponent::resized() {
     auto top = bounds.removeFromTop(bounds.getHeight() / 2);
     auto bottom = bounds;
     readout_.setBounds(top.removeFromRight(kReadoutWidth));
-    recordMode_.setBounds(bottom.removeFromRight(kComboWidth).reduced(0, 1));
+    // The chips take the bottom line's right end, as wide as the set wants but leaving the module note some room.
+    const int chipSize = juce::jmin(LaneControlChip::kSize, bottom.getHeight());
+    strip_.setChipSize(chipSize);
+    const int stripWidth = juce::jmin(strip_.preferredWidth(), juce::jmax(chipSize, bottom.getWidth() - kMinNoteWidth));
+    strip_.setBounds(bottom.removeFromRight(stripWidth));
     marker_.setBounds(
         top.removeFromLeft(LaneMarkerIcon::kSize).withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
     top.removeFromLeft(kMarkerGap);
@@ -139,6 +155,12 @@ void AutomationLaneHeaderComponent::resized() {
     nameButton_.setBounds(nameArea_);
     noteArea_ = bottom.withTrimmedLeft(LaneMarkerIcon::kSize + kMarkerGap + LaneNameButton::kPadding)
                     .withTrimmedRight(kPadding);
+    strip_.placeTray(getBounds());
+}
+
+void AutomationLaneHeaderComponent::moved() {
+    strip_.placeTray(getBounds());
+    strip_.repositionRow();
 }
 
 void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
@@ -165,7 +187,14 @@ void AutomationLaneHeaderComponent::paintOverChildren(juce::Graphics& g) {
         g.setColour(accent.withMultipliedAlpha(lift_));
         g.drawRect(getLocalBounds(), 1);
     }
-    synth::ui::paintFocusRing(g, recordMode_.getBounds().toFloat().expanded(1.0f), recordMode_, 3.0f);
+    if (const float edit = strip_.editAmount(); edit > 0.0f) {
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
+        const auto outline = getLocalBounds().withTrimmedLeft(kIndent);
+        g.setColour(accent.withMultipliedAlpha(0.22f * edit));
+        g.drawRect(outline.reduced(1), 2);
+        g.setColour(accent.withMultipliedAlpha(edit));
+        g.drawRect(outline, 1);
+    }
 }
 
 } // namespace synth::ui

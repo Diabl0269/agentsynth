@@ -63,9 +63,11 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
   `AnimationDriver` and lands at once under Reduce Motion or off screen; nothing repaints once settled.
   Its accessible name says which value it is ("Cutoff value at playhead" / "Cutoff selected point value"),
   with the text as its description, and its tooltip likewise;
-- a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
-  error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
-  gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
+- a strip of **control chips** on the bottom line, ending in a "+" button ([below](#the-control-chips)). The record mode
+  is its Read / Write chip: a menu of Off/Read/Touch/Latch/Write (ids = `LaneRecordMode` + 1, Write's chip in the error
+  colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a pick IS a user gesture, unlike
+  `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call. The `recordMode_` combo stays in the header as the
+  mode's model (it is a hidden child and is never shown);
 - a lane menu: **Add modulator...** ([below](#modulators)), **Change parameter...** and **Duplicate**
   ([below](#change-parameter-and-duplicate)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and
@@ -84,8 +86,17 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
-edit its last statement. Every control is a Tab stop with a title and tooltip ("Cutoff record mode") and the
-shared focus ring; the row itself is named "Cutoff automation lane".
+edit its last statement. Every control is a Tab stop with a title and tooltip ("Read / Write: Read or write automation
+(Read)") and the shared focus ring; the row itself is named "Cutoff automation lane".
+
+### The control chips
+
+The bottom line of a lane header (and the title line of a mod lane row) carries a strip of small icon buttons, each one
+an action of the lane menu (Read / Write, Add mod, Change parameter, Mute, Duplicate, Move to track, Create custom LFO,
+Remove lane; on a mod lane Change source, Show in canvas, Remove modulator), then a "+" button. The set shown is the
+user's, one per lane kind, kept in the user settings; the rest are listed in the "+" row, and Edit controls opens a tray
+under the header to show, hide and reorder them. Everything about them is in
+[`lane-controls.md`](lane-controls.md); the right-click menu is unchanged.
 
 ### Unassigned automation
 
@@ -177,7 +188,7 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
   their relative places. One undo step (`moveLaneOrderUndoable`); the order is saved and loaded with the track.
 - **Keyboard:** Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`, rebindable) move the lane whose
   header controls or editor hold focus one visible slot, one undo step, the block gliding into its slot. The keys reach
-  the lane before the record-mode combo (which would change its selection on Up/Down) and before the point keys.
+  the lane before the control chips and the point keys.
   The lane keeps its header, its accessible names and its focus.
 - **Modulator order.** The modulator rows of one lane have an order of their own, stored with the lane
   (`AutomationLane::modulatorOrder`, below), moved with the same keys and by their own drag: see [Modulators](#modulators).
@@ -189,7 +200,7 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
 Up/Down walk the track list as one column: a track's row, then each of its open lanes (a lane header, followed by its
 modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
 "+ Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
-Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. The record-mode combo keeps its own Up/Down, and Cmd+Alt+Up/Down still move the lane; any other modified
+Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. Up/Down on a control chip bubble to the row like any other key, and Cmd+Alt+Up/Down still move the lane; any other modified
 arrow is left alone. On a modulator row Left folds it to its title line and Right opens it (as a tree view does), and
 Cmd+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its
 lane's modulators, from the row, any of its controls or its band; see [Modulators](#modulators). Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
@@ -931,7 +942,7 @@ nothing); `AutomationLanesCarryTests.cpp` also covers the carried `modulatorOrde
 handle and segment keeping their menus, the menu key), `AutomationLanesRetargetTests.cpp` and
 `AutomationLanesDuplicateTests.cpp` (the pickers, one undo step, no duplicate parameter, dismissal),
 `AutomationLanesLaneMainTests.cpp` (the same against a real `MainComponent`, Cmd+D through its key handler) and
-`Tests/Timeline/TimelineDoc/TimelineDocLaneRetargetTests.cpp` (the doc operations).
+`Tests/Timeline/TimelineDoc/TimelineDocLaneRetargetTests.cpp` (the doc operations). The control chips' tests (`AutomationLanesControlChipsTests.cpp`) are in [`lane-controls.md`](lane-controls.md#tests).
 
 `Tests/UI/Timeline/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture and
 publish-discipline coverage (mirroring the `TimelineClipLaneArea` / `PianoRollComponent`

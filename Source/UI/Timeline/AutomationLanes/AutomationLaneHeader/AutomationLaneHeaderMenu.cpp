@@ -130,6 +130,10 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
         openDuplicatePicker();
         return;
     }
+    if (menuId >= kRecordModeMenuIdBase && menuId < kRecordModeMenuIdBase + 5) {
+        applyRecordModeChoice(menuId - kRecordModeMenuIdBase + 1);
+        return;
+    }
     const int index = menuId - kMoveToTrackMenuIdBase;
     if (index < 0 || index >= (int)moveTargets_.size())
         return;
@@ -214,6 +218,13 @@ bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::
 bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (onLaneKey && onLaneKey(key))
         return true;
+    if (key.isKeyCode(juce::KeyPress::escapeKey) && (strip_.isEditing() || strip_.isRowOpen())) {
+        if (strip_.isEditing())
+            strip_.exitEdit();
+        else
+            strip_.closeRow();
+        return true;
+    }
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
     if (key.isKeyCode(juce::KeyPress::returnKey))

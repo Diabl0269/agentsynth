@@ -22,6 +22,7 @@ constexpr int kRateTextWidth = 42;   // "20.0 Hz"
 constexpr int kMarkerGap = 2;        // between the marker and the name button, whose own padding makes the rest
 constexpr int kNameButtonHeight = 20;
 constexpr float kValueFontSize = 9.0f;
+constexpr int kMinNameWidth = 40; // px of the title kept for the name when the chips want more
 
 struct RowColours {
     juce::Colour surface;
@@ -47,10 +48,12 @@ void paintSliderValue(juce::Graphics& g, juce::Slider& slider, juce::Rectangle<i
 }
 } // namespace
 
-ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName)
+ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName,
+                           LaneControlSet* controls)
     : info_(info)
     , host_(host)
-    , parameterName_(parameterName) {
+    , parameterName_(parameterName)
+    , strip_(LaneControlKind::Mod, controls, controlActions()) {
     setComponentID("modulatorRow");
     // The row is a keyboard stop of its own, like a lane header (Up/Down walk the track list through it). A press does
     // not grab focus (it may become a drag); a plain click on the row, not on a control, takes it on release.
@@ -60,6 +63,10 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     marker_.addMouseListener(this, false);
     addAndMakeVisible(nameButton_);
     nameButton_.onClick = [this] { openChangeSourcePicker(); };
+    addAndMakeVisible(strip_);
+    strip_.onPreferredWidthChanged = [this] { resized(); };
+    strip_.onEditLookChanged = [this] { repaint(); };
+    strip_.onContextMenu = [this](juce::Point<int> screen) { showMenuAt(contextMenuOptionsAtPoint(screen)); };
     if (info_.isLfo)
         initLfoControls();
     // The arrow is a Tab stop and toggles on Return/Space or a click; a right-click on it is the row's menu.
@@ -145,6 +152,7 @@ void ModulatorRow::applyNames() {
     nameButton_.setActionText("Change source of " + info_.sourceTitle + " on " + parameterName_,
                               canChange ? "Pick a different source" : "This source cannot be swapped here");
     nameButton_.setEnabled(canChange);
+    strip_.refresh();
     name(shape_, who + " shape");
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
@@ -218,9 +226,21 @@ void ModulatorRow::resized() {
     } else {
         layoutAmount(middle);
     }
+    // The chips take the title line's right end (after the shape picture and the folded amount), leaving the name
+    // some room.
+    const int chipSize = juce::jmin(LaneControlChip::kSize, title.getHeight());
+    strip_.setChipSize(chipSize);
+    const int stripWidth = juce::jmin(strip_.preferredWidth(), juce::jmax(chipSize, title.getWidth() - kMinNameWidth));
+    strip_.setBounds(title.removeFromRight(stripWidth));
     const auto button = title.withWidth(juce::jmin(nameButton_.getPreferredWidth(), title.getWidth()));
     nameButton_.setBounds(
         button.withSizeKeepingCentre(button.getWidth(), juce::jmin(button.getHeight(), kNameButtonHeight)));
+    strip_.placeTray(getBounds());
+}
+
+void ModulatorRow::moved() {
+    strip_.placeTray(getBounds());
+    strip_.repositionRow();
 }
 
 // Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
@@ -302,11 +322,19 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
         g.setColour(synth::theme::themeOf(*this).colors.accent.withMultipliedAlpha(lift_));
         g.drawRect(getLocalBounds(), 1);
     }
+    if (const float edit = strip_.editAmount(); edit > 0.0f) {
+        const auto outlineAccent = synth::theme::themeOf(*this).colors.accent;
+        const auto outline = getLocalBounds().withTrimmedLeft(kIndent);
+        g.setColour(outlineAccent.withMultipliedAlpha(0.22f * edit));
+        g.drawRect(outline.reduced(1), 2);
+        g.setColour(outlineAccent.withMultipliedAlpha(edit));
+        g.drawRect(outline, 1);
+    }
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
         if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_ && child != &nameButton_ &&
-            child != &marker_) // the arrow and the name button paint their own ring
+            child != &marker_ && child != &strip_) // the arrow, the name button and the chips paint their own ring
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
 }
 

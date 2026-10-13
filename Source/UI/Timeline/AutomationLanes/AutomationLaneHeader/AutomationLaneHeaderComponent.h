@@ -4,6 +4,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
@@ -21,8 +22,9 @@ struct TrackHeaderHost;
 
 // The header-column half of one automation lane row, under the track that owns the lane: a stripe
 // in the track's colour, the parameter and module names, the curve's value at the playhead (or the
-// selected point's value, see setSelectedPointValue), the
-// lane's record mode and a menu (add a modulator, change the parameter, duplicate, move to another track, delete).
+// selected point's value, see setSelectedPointValue), a strip of control chips (the record mode, add a modulator... --
+// the set every automation lane shows is the user's, see LaneControlStrip) and a menu (add a modulator, change the
+// parameter, duplicate, move to another track, delete).
 // The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10).
 // A click anywhere on the header that is not a control gives it keyboard focus (Up/Down walk the rows from there); the
 // parameter name is a button of its own that opens the change-parameter picker, and a marker icon before it says
@@ -44,11 +46,13 @@ public:
     static constexpr int kChangeParameterMenuId = 3;
     static constexpr int kDuplicateMenuId = 4;
     static constexpr int kCreateCustomLfoMenuId = 5;
+    static constexpr int kRecordModeMenuIdBase = 50;   // + record mode (the Read / Write chip's menu)
     static constexpr int kMoveToTrackMenuIdBase = 100; // + index into the menu's move targets
 
-    /** `doc` must outlive this component; `host` and `undo` may be null. */
+    /** `doc` must outlive this component; `host`, `undo` and `controls` may be null (no `controls`: the chips show the
+     *  default set and the "+" row has nowhere to float). */
     AutomationLaneHeaderComponent(synth::TimelineDoc& doc, synth::LaneId lane, TrackHeaderHost* host,
-                                  AppUndoManager* undo);
+                                  AppUndoManager* undo, LaneControlSet* controls = nullptr);
 
     synth::LaneId getLaneId() const noexcept { return laneId_; }
 
@@ -66,8 +70,13 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void moved() override;
 
+    /** The record-mode model behind the Read / Write chip: it holds the mode and its names but is never shown (the
+     *  chip opens a menu with the same choices). */
     juce::ComboBox& getRecordModeCombo() noexcept { return recordMode_; }
+    /** The control chips, the "+" button and edit mode. */
+    LaneControlStrip& getControlStrip() noexcept { return strip_; }
 
     /** The lane menu (right-click, Shift+F10 or Return on the row); item ids are the k*MenuId constants above. */
     juce::PopupMenu buildMenu();
@@ -138,6 +147,16 @@ private:
     void addCreateCustomLfoItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     void applyRecordModeColour();
+    // The control chips (AutomationLaneHeaderControls.cpp).
+    LaneControlStrip::Actions controlActions();
+    void performControl(LaneControl control, juce::Component& anchor);
+    bool controlEnabled(LaneControl control) const;
+    juce::String controlDetail(LaneControl control) const;
+    void showChipMenu(juce::PopupMenu menu, juce::Component& anchor);
+    void showRecordModeMenu(juce::Component& anchor);
+    void showMoveMenu(juce::Component& anchor);
+    void toggleMute();
+    juce::PopupMenu::Item createCustomLfoItem() const;
 
     synth::TimelineDoc& doc_;
     synth::LaneId laneId_;
@@ -154,6 +173,8 @@ private:
 
     LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Automation};
     LaneNameButton nameButton_;
+    LaneControlStrip strip_;
+    int modeBeforeMute_ = -1;       // the record mode Mute put back to Off, for Mute to restore
     juce::Rectangle<int> nameArea_; // the name button's bounds: the press that opens the parameter picker
     juce::Rectangle<int> noteArea_; // the module's name under the lane's
     float lift_ = 0.0f;

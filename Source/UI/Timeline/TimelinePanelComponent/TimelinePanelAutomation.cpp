@@ -16,6 +16,7 @@ namespace synth::ui {
 // so the line still runs through the lanes. A fold toggle relayouts like a doc change does.
 void TimelinePanelComponent::initAutomationLanes() {
     addAndMakeVisible(automationLanes_.getBodies());
+    automationLanes_.setOverlayParent(this); // the "+" row of a lane header floats over the lanes
     automationLanes_.onLayoutChanged = [this] {
         pushAutomationGeometry();
         layoutAutomationRows();

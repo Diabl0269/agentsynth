@@ -7,6 +7,7 @@
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/LaneRangeSelection.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
@@ -57,6 +58,12 @@ public:
 
     /** The container the lane editors live in; the panel sizes it to its lanes region. */
     juce::Component& getBodies() noexcept;
+    /** The chips every lane header and modulator row shows, and the lane in edit mode (see LaneControlSet). */
+    LaneControlSet& getLaneControls() noexcept { return laneControls_; }
+    /** Where the chip sets are saved (the user settings); null keeps them in memory. Must outlive this. */
+    void setApplicationProperties(juce::ApplicationProperties* props) { laneControls_.setProperties(props); }
+    /** The component the "+" row floats on (the timeline panel). */
+    void setOverlayParent(juce::Component* parent) noexcept { laneControls_.setOverlayParent(parent); }
 
     // ---- Fold state ----
     bool isExpanded(synth::TrackId track) const;
@@ -276,6 +283,9 @@ private:
     void sweepLeavingModulators();
 
     bool isVisibleLane(const synth::Track& track) const;
+    int trayExtentOf(synth::LaneId lane) const;
+    int trayExtentOf(synth::LaneId lane, int modulatorIndex) const;
+    void repositionOverlays();
     bool deriveRoutings();
     int routingDerivations_ = 0;
     bool syncModulators();
@@ -315,6 +325,7 @@ private:
     LaneRangeSelection laneRange_;
     LanePointClipboard pointClipboard_; // Cmd+C/X/V across every lane editor
 
+    LaneControlSet laneControls_;                  // outlives the headers and rows whose strips listen to it
     std::set<synth::TrackId> expanded_;            // MIDI/Audio tracks the user opened
     std::set<synth::TrackId> collapsedUnassigned_; // Automation tracks the user closed
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneEditor>> editors_;
