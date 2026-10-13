@@ -5,6 +5,7 @@
 // screen-reader surface.
 
 #include "AutomationLanesAmountFixture.h"
+#include "UI/Layout/DragCursor.h"
 
 using namespace amount_test;
 
@@ -16,6 +17,8 @@ juce::Image renderBand(AmountScene& s) {
     editor->paintEntireComponent(g, false);
     return image;
 }
+
+const synth::ui::PointValueBubble& bandBubble(synth::ui::ModulatorBand& band) { return band.getKnobBubbleForTest(); }
 } // namespace
 
 TEST_F(TimelinePanelIntegrationTest, NoAmountLaneUntilTheFirstPenStrokeWhichCreatesItWithItsPointsInOneUndoStep) {
@@ -82,6 +85,57 @@ TEST_F(TimelinePanelIntegrationTest, WithNoLaneTheSelectToolDragsTheKnobAsOneGra
     s.flush();
     EXPECT_FLOAT_EQ(s.band()->getProxyDoc().getLane(band->getEditor()->getActiveLane())->range.defaultValue, 0.51f)
         << "the flat line follows the knob";
+}
+
+TEST_F(TimelinePanelIntegrationTest, TheKnobDragShowsTheGrabbingHandAndTheValueBubbleOnlyWhileItDrags) {
+    AmountScene s;
+    auto* band = s.band();
+    ASSERT_NE(band, nullptr);
+    const auto mid = juce::Point<float>(s.x(16.0), s.yFor(0.5));
+    ASSERT_EQ(s.target(mid).first, band);
+    const auto normal = juce::MouseCursor(juce::MouseCursor::NormalCursor);
+
+    band->mouseDown(makeClickEvent(*band, mid, leftButton()));
+    EXPECT_EQ(band->getMouseCursor(), normal) << "a press alone is not a drag";
+    EXPECT_FALSE(bandBubble(*band).isShown());
+
+    const auto to = mid.translated(0.0f, (float)band->getHeight() / 4.0f);
+    band->mouseDrag(makeDragEvent(*band, to, mid, leftButton()));
+    EXPECT_EQ(band->getMouseCursor(), synth::ui::dragGrabCursor()) << "the hand from the first real move";
+    EXPECT_TRUE(bandBubble(*band).isShown());
+    EXPECT_EQ(bandBubble(*band).getText(), synth::ui::amountText(s.amount()));
+    EXPECT_NEAR(s.amount(), 0.0f, 0.05f) << "a quarter of the height down from +50% is 0";
+
+    band->mouseUp(makeDragEvent(*band, to, mid, leftButton()));
+    EXPECT_EQ(band->getMouseCursor(), normal);
+    EXPECT_FALSE(bandBubble(*band).isShown());
+
+    // With a lane (even a single flat segment) the editor takes the press, so the band's knob path is not used.
+    s.doubleClick({s.x(16.0), s.yFor(-0.25)});
+    ASSERT_NE(s.amountLane(), nullptr);
+    s.flush();
+    EXPECT_EQ(s.target(mid).first, s.band()->getEditor());
+}
+
+TEST_F(TimelinePanelIntegrationTest, EscDuringTheKnobDragPutsTheValueBackAndEndsTheHandAndBubble) {
+    AmountScene s;
+    auto* band = s.band();
+    ASSERT_NE(band, nullptr);
+    const auto mid = juce::Point<float>(s.x(16.0), s.yFor(0.5));
+    const auto to = mid.translated(0.0f, (float)band->getHeight() / 4.0f);
+    band->mouseDown(makeClickEvent(*band, mid, leftButton()));
+    band->mouseDrag(makeDragEvent(*band, to, mid, leftButton()));
+    ASSERT_NEAR(s.amount(), 0.0f, 0.05f);
+
+    EXPECT_TRUE(band->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_NEAR(s.amount(), 0.5f, 1.0e-3f) << "back to where the drag started";
+    EXPECT_EQ(band->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::NormalCursor));
+    EXPECT_FALSE(band->getKnobBubbleForTest().isShown());
+
+    band->mouseDrag(makeDragEvent(*band, to.translated(0.0f, 10.0f), mid, leftButton()));
+    band->mouseUp(makeDragEvent(*band, to, mid, leftButton()));
+    EXPECT_NEAR(s.amount(), 0.5f, 1.0e-3f) << "the rest of the cancelled drag does nothing";
+    EXPECT_EQ(band->getMouseCursor(), juce::MouseCursor(juce::MouseCursor::NormalCursor));
 }
 
 TEST_F(TimelinePanelIntegrationTest, ADoubleClickWithTheSelectToolStartsTheLaneWithOnePoint) {
