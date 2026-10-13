@@ -1,7 +1,8 @@
 // AutomationLanesCarryTests.cpp -- a lane's modulators following it: "Change parameter..." moves every modulator
 // routing (and its amount lane, points untouched) onto the new parameter's CV jack, "Duplicate" gives the copy its own
 // routings with copies of the amount lanes while the original keeps its own, each in ONE graph + timeline undo step; a
-// parameter with no CV jack leaves the modulators where they are; and a pick in the real picker reaches the host call.
+// parameter with no CV jack leaves the modulators where they are; the lane's modulator order follows the routings; and
+// a pick in the real picker reaches the host call.
 
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
@@ -182,6 +183,44 @@ TEST_F(TimelinePanelIntegrationTest, DuplicateGivesTheCopyItsOwnModulatorsAndLea
     EXPECT_EQ(s.graph().getNodes().size(), nodesBefore);
     EXPECT_EQ(s.routingsInto("cutoff"), 2u);
     s.expectPoints(synth::ui::amountLaneFor(s.doc(), s.attenInto(s.lfoUuid, "cutoff")), s.lfoPoints);
+}
+
+TEST_F(TimelinePanelIntegrationTest, ChangeParameterCarriesTheLanesModulatorOrderOntoTheMovedRoutings) {
+    CarryScene s;
+    const std::vector<juce::String> before{s.adsrAttenUuid, s.attenUuid}; // the envelope above the LFO
+    s.undo().recordTimelineChange(s.doc(), [&] { s.doc().setModulatorOrder(s.lane, before); });
+    s.undo().clearUndoHistory();
+
+    ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    const auto newLfo = s.attenInto(s.lfoUuid, "resonance");
+    const auto newAdsr = s.attenInto(s.adsrUuid, "resonance");
+    ASSERT_TRUE(newLfo.isNotEmpty() && newAdsr.isNotEmpty());
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorOrder, (std::vector<juce::String>{newAdsr, newLfo}))
+        << "each old key became its new routing's key, positions kept";
+    ASSERT_EQ(s.panel().getAutomationLanes().modulatorCount(s.lane), 2);
+    EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 0)->getInfo().sourceUuid, s.adsrUuid)
+        << "the rows keep their order";
+
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorOrder, before) << "ONE undo restores the order with the routings";
+}
+
+TEST_F(TimelinePanelIntegrationTest, DuplicateGivesTheCopyTheMappedModulatorOrderAndLeavesTheOriginalsAlone) {
+    CarryScene s;
+    const std::vector<juce::String> before{s.adsrAttenUuid, s.attenUuid};
+    s.undo().recordTimelineChange(s.doc(), [&] { s.doc().setModulatorOrder(s.lane, before); });
+    s.undo().clearUndoHistory();
+
+    ASSERT_TRUE(s.pick(Header::kDuplicateMenuId, "Drive"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    const auto* copy = s.doc().getLaneForParam(s.targetUuid, "drive");
+    ASSERT_NE(copy, nullptr);
+    EXPECT_EQ(copy->modulatorOrder,
+              (std::vector<juce::String>{s.attenInto(s.adsrUuid, "drive"), s.attenInto(s.lfoUuid, "drive")}));
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorOrder, before) << "the original keeps its routings and its order";
 }
 
 TEST_F(TimelinePanelIntegrationTest, AParameterWithNoCvJackTakesTheLaneButLeavesTheModulatorsOnTheOldParameter) {

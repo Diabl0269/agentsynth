@@ -19,8 +19,12 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
     , headerParent_(headerParent)
     , bodies_(std::make_unique<Bodies>())
     , foldUpdater_(&headerParent)
-    , laneDrag_(headerParent, [this] { onLaneDragFrame(); }) {
+    , laneDrag_(headerParent, [this] { onLaneDragFrame(); })
+    , modDrag_(headerParent, [this] { onModulatorDragFrame(); }) {
     laneRange_.onChanged = [this] { laneRangeChanged(); };
+    dropIndicator_ = std::make_unique<DropIndicator>();
+    headerParent_.addChildComponent(*dropIndicator_);
+    dropFade_ = std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{dropIndicator_.get()});
 }
 
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
@@ -28,6 +32,9 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
 TimelineAutomationLanes::~TimelineAutomationLanes() {
     foldDriver_.stop(foldUpdater_);
     glideDriver_.stop(foldUpdater_);
+    dropDriver_.stop(foldUpdater_);
+    dropFade_.reset();
+    headerParent_.removeChildComponent(dropIndicator_.get());
     modulators_.clear();
     addRows_.clear();
     headers_.clear();
@@ -39,6 +46,7 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     discardLaneDrag();
+    discardModulatorDrag();
     rowOrigin_.clear();
     modulators_.clear();
     routings_.clear();

@@ -352,6 +352,18 @@ struct TrackHeaderHost {
                                        int /*sourceChannel*/) {
         return false;
     }
+    /** True when dragging `modulator`'s row onto the lane `destLane` can move it there: the lane's parameter has a CV
+     *  jack and the jack does not already have this source. Asked on every drag event for the drop indicator. */
+    virtual bool canMoveModulatorToLane(const ModulatorInfo& /*modulator*/, synth::LaneId /*destLane*/) {
+        return false;
+    }
+    /** Moves the routing to `destLane`'s parameter (its amount lane keeps its points) and puts its row at `destIndex`
+     *  among that lane's rows, dropping it from the old lane's order, as ONE undo step; false, nothing changed, when
+     *  the move is refused. */
+    virtual bool moveModulatorToLane(const ModulatorInfo& /*modulator*/, synth::LaneId /*destLane*/,
+                                     int /*destIndex*/) {
+        return false;
+    }
     /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */
     virtual void removeModulator(const ModulatorInfo& /*modulator*/) {}
     /** A live parameter's value in its own units (a choice's index, a bool's 0/1); 0 when it doesn't resolve. */

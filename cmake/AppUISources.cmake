@@ -141,6 +141,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorFold.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorDrag.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesReorder.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesShapes.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h

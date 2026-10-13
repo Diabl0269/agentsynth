@@ -7,10 +7,27 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
+#include <algorithm>
+#include <map>
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
+}
+
+// `lane`'s stored modulator order with every key a carried routing had swapped for its new routing's key, positions
+// kept (the order lives with the lane, but its keys are the routings' Attenuverter uuids, which a carry replaces). A
+// key that was not carried (a refused move, a stale key) stays as it is.
+void remapModulatorOrder(synth::TimelineDoc& doc, synth::LaneId lane,
+                         const std::map<juce::String, juce::String>& newKeys) {
+    const auto* current = doc.getLane(lane);
+    if (current == nullptr || current->modulatorOrder.empty() || newKeys.empty())
+        return;
+    auto order = current->modulatorOrder;
+    for (auto& key : order)
+        if (const auto it = newKeys.find(key); it != newKeys.end())
+            key = it->second;
+    doc.setModulatorOrder(lane, std::move(order));
 }
 } // namespace
 
@@ -18,15 +35,18 @@ juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
 // adds its own). Today a lane has one kind of attachment, the modulator routings into its parameter's CV jack with
 // their amount lanes; a new kind (anything else that hangs off a lane) adds its branch HERE, so Change parameter and
 // Duplicate carry it without a second edit. Records no undo: the caller wraps the doc edit and this in one step.
-void MainComponent::carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack,
-                                         CarryMode mode) {
+// `newKeys`, when given, receives each carried routing's old modulatorOrderKey -> its new routing's key, so the caller
+// can carry the lane's modulator order along with the routings.
+void MainComponent::carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack, CarryMode mode,
+                                         std::map<juce::String, juce::String>* newKeys) {
     if (from == to)
         return;
     for (const auto& modulator : getModulators(from.nodeUuid, from.paramId)) {
-        if (mode == CarryMode::Move)
-            moveModulatorRouting(modulator, to);
-        else
-            copyModulatorRouting(modulator, to, toTrack);
+        juce::String newKey;
+        const bool carried = mode == CarryMode::Move ? moveModulatorRouting(modulator, to, &newKey)
+                                                     : copyModulatorRouting(modulator, to, toTrack, &newKey);
+        if (carried && newKeys != nullptr)
+            (*newKeys)[synth::ui::modulatorOrderKey(modulator)] = newKey;
     }
 }
 
@@ -46,7 +66,9 @@ float depthOf(juce::AudioProcessorGraph& graph, const AudioEngine::ModulationRou
 // old depth, the amount lane (keyed by the routing's Attenuverter) is re-keyed to the new Attenuverter with its id,
 // track and points untouched, and the old routing is cut. False, nothing changed, when `to` has no CV jack or the
 // jack already has this source.
-bool MainComponent::moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to) {
+// `newOrderKey`, when given, receives the new routing's modulatorOrderKey.
+bool MainComponent::moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to,
+                                         juce::String* newOrderKey) {
     auto* target = findNodeByUuid(to.nodeUuid);
     auto* source = findNodeByUuid(modulator.sourceUuid);
     const auto old = findModulatorRouting(modulator);
@@ -60,16 +82,19 @@ bool MainComponent::moveModulatorRouting(const synth::ui::ModulatorInfo& modulat
                                                              raw, depthOf(graph, *old), /*recordUndo=*/false);
     if (created.uid == 0)
         return false;
+    const auto newAtten = uuidOf(graph.getNodeForId(created));
     if (const auto* amountLane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid))
-        timelineDoc.rebindLane(amountLane->id, uuidOf(graph.getNodeForId(created)));
+        timelineDoc.rebindLane(amountLane->id, newAtten);
     graphEditor.removeModulator(*old, /*removeLonelySource=*/false, /*recordUndo=*/false);
+    if (newOrderKey != nullptr)
+        *newOrderKey = newAtten;
     return true;
 }
 
 // Like moveModulatorRouting but the old routing stays: the new one has the same source and depth, and a copy of the
 // amount lane's points on `amountTrack`.
 bool MainComponent::copyModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to,
-                                         synth::TrackId amountTrack) {
+                                         synth::TrackId amountTrack, juce::String* newOrderKey) {
     auto* target = findNodeByUuid(to.nodeUuid);
     auto* source = findNodeByUuid(modulator.sourceUuid);
     const auto old = findModulatorRouting(modulator);
@@ -86,8 +111,11 @@ bool MainComponent::copyModulatorRouting(const synth::ui::ModulatorInfo& modulat
                                                              raw, depthOf(graph, *old), /*recordUndo=*/false);
     if (created.uid == 0)
         return false;
+    const auto newAtten = uuidOf(graph.getNodeForId(created));
     if (!points.empty())
-        synth::ui::writeAmountLane(timelineDoc, amountTrack, uuidOf(graph.getNodeForId(created)), points);
+        synth::ui::writeAmountLane(timelineDoc, amountTrack, newAtten, points);
+    if (newOrderKey != nullptr)
+        *newOrderKey = newAtten;
     return true;
 }
 
@@ -104,8 +132,11 @@ bool MainComponent::retargetLaneWithAttachments(synth::LaneId lane, const synth:
     bool retargeted = false;
     undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
         retargeted = timelineDoc.retargetLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
-        if (retargeted)
-            carryLaneAttachments(from, to, track, CarryMode::Move);
+        if (!retargeted)
+            return;
+        std::map<juce::String, juce::String> newKeys;
+        carryLaneAttachments(from, to, track, CarryMode::Move, &newKeys);
+        remapModulatorOrder(timelineDoc, lane, newKeys);
     });
     return retargeted;
 }
@@ -121,8 +152,66 @@ synth::LaneId MainComponent::duplicateLaneWithAttachments(synth::LaneId lane, co
     synth::LaneId created;
     undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
         created = timelineDoc.duplicateLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
-        if (const auto* owner = created.isValid() ? timelineDoc.getTrackForLane(created) : nullptr)
-            carryLaneAttachments(from, to, owner->id, CarryMode::Copy);
+        const auto* owner = created.isValid() ? timelineDoc.getTrackForLane(created) : nullptr;
+        if (owner == nullptr)
+            return;
+        std::map<juce::String, juce::String> newKeys;
+        carryLaneAttachments(from, to, owner->id, CarryMode::Copy, &newKeys);
+        remapModulatorOrder(timelineDoc, created, newKeys);
     });
     return created;
+}
+
+// Dragging a modulator row onto another lane: true when that lane's parameter has a CV jack that does not already carry
+// this source. The drop indicator asks this on every drag event, so it only reads.
+bool MainComponent::canMoveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane) {
+    const auto* dest = timelineDoc.getLane(destLane);
+    auto* target = dest != nullptr ? findNodeByUuid(dest->nodeUuid) : nullptr;
+    if (target == nullptr || (dest->nodeUuid == modulator.targetUuid && dest->paramId == modulator.paramId))
+        return false;
+    if (graphEditor.modulationChannelFor(target->nodeID, dest->paramId) < 0 || !findModulatorRouting(modulator))
+        return false;
+    for (const auto& existing : getModulators(dest->nodeUuid, dest->paramId))
+        if (existing.sourceUuid == modulator.sourceUuid && existing.sourceChannel == modulator.sourceChannel)
+            return false;
+    return true;
+}
+
+// The row's drop on another lane: the routing moves to that lane's parameter (moveModulatorRouting: the amount lane
+// keeps its id and points), the destination lane's order gets the moved routing's new key at `destIndex`, and the old
+// key leaves the order of every lane on the old jack -- ONE graph + timeline undo step.
+bool MainComponent::moveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane,
+                                        int destIndex) {
+    if (!canMoveModulatorToLane(modulator, destLane))
+        return false;
+    const auto* dest = timelineDoc.getLane(destLane);
+    const LaneEnd to{dest->nodeUuid, dest->paramId};
+    std::vector<juce::String> order; // the destination's rows as they show now, before the newcomer
+    for (const auto& info :
+         synth::ui::sortedByModulatorOrder(getModulators(to.nodeUuid, to.paramId), dest->modulatorOrder))
+        order.push_back(synth::ui::modulatorOrderKey(info));
+    std::vector<synth::LaneId> oldLanes;
+    for (const auto& track : timelineDoc.getTracks())
+        for (const auto& lane : track.lanes)
+            if (lane.nodeUuid == modulator.targetUuid && lane.paramId == modulator.paramId)
+                oldLanes.push_back(lane.id);
+    const auto oldKey = synth::ui::modulatorOrderKey(modulator);
+    bool moved = false;
+    undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
+        juce::String newKey;
+        if (!moveModulatorRouting(modulator, to, &newKey))
+            return;
+        moved = true;
+        order.insert(order.begin() + juce::jlimit(0, (int)order.size(), destIndex), newKey);
+        timelineDoc.setModulatorOrder(destLane, order);
+        for (const auto lane : oldLanes) {
+            const auto* current = timelineDoc.getLane(lane);
+            if (current == nullptr || current->modulatorOrder.empty())
+                continue;
+            auto kept = current->modulatorOrder;
+            kept.erase(std::remove(kept.begin(), kept.end(), oldKey), kept.end());
+            timelineDoc.setModulatorOrder(lane, std::move(kept));
+        }
+    });
+    return moved;
 }

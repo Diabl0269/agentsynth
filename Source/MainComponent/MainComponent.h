@@ -60,6 +60,7 @@
 #include "UserSettings.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -551,9 +552,14 @@ private:
     // A lane's modulators following it through Change parameter / Duplicate (MainComponentLaneSubtree.cpp).
     bool retargetLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
     synth::LaneId duplicateLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
-    void carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack, CarryMode mode);
-    bool moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to);
-    bool copyModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to, synth::TrackId amountTrack);
+    void carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack, CarryMode mode,
+                              std::map<juce::String, juce::String>* newKeys = nullptr);
+    bool moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to,
+                              juce::String* newOrderKey = nullptr);
+    bool copyModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to, synth::TrackId amountTrack,
+                              juce::String* newOrderKey = nullptr);
+    bool canMoveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane) override;
+    bool moveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane, int destIndex) override;
     std::optional<ModulationRouting> findModulatorRouting(const synth::ui::ModulatorInfo& modulator);
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
     /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its

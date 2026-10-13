@@ -131,6 +131,15 @@ bool TimelineAutomationLanes::syncModulators() {
     }
     applyModulatorFold();
     refreshModulatorAmounts(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+    if (!dragModKeys_.empty() && modDrag_.isReordering()) {
+        // The dragged routing went (removed, undone, moved by the drop itself): the gesture ends with it.
+        const auto entry = modulators_.find(dragModLane_);
+        const bool stays = entry != modulators_.end() &&
+                           std::any_of(entry->second.infos.begin(), entry->second.infos.end(),
+                                       [this](const ModulatorInfo& info) { return info.key() == dragModInfo_.key(); });
+        if (!stays)
+            discardModulatorDrag();
+    }
     for (auto it = modulators_.begin(); it != modulators_.end();) {
         if (visible.count(it->first) > 0) {
             ++it;
@@ -183,6 +192,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         rowPtr->onMoveKey = [this, lane, rowPtr](const juce::KeyPress& key) {
             return handleModulatorKey(lane, rowPtr->getInfo(), key);
         };
+        wireModulatorDrag(*rowPtr, lane);
         band->onMoveKey = [this, lane, bandPtr = band.get()](const juce::KeyPress& key) {
             return handleModulatorKey(lane, bandPtr->getInfo(), key);
         };

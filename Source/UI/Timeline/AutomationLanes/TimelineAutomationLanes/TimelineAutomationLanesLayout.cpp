@@ -111,7 +111,11 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
             row->setTitleLineHeight(modHeight / 3);
-            row->setBounds(0, modY + modulatorGlideOffset(row->getInfo().key()), width, height);
+            const auto pose = modulatorDragPose(lane.id, i, modY);
+            row->setBounds(0, modY + modulatorGlideOffset(row->getInfo().key()) + pose.shift, width, height);
+            row->setLift(pose.lift);
+            if (pose.lift > 0.0f)
+                row->toFront(false);
             modY += height;
         }
         if (lift > 0.0f) {
@@ -198,10 +202,14 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
         editor->setBounds(row.translated(0, -scroll));
     }
     for (auto& [id, entry] : modulators_)
-        for (int i = 0; i < (int)entry.bands.size(); ++i)
+        for (int i = 0; i < (int)entry.bands.size(); ++i) {
+            const auto rowBounds = modulatorRowContentBounds(id, i, layout);
+            const auto pose = modulatorDragPose(id, i, rowBounds.getY());
             entry.bands[(size_t)i]->setBounds(
-                modulatorRowContentBounds(id, i, layout)
-                    .translated(0, -scroll + modulatorGlideOffset(entry.infos[(size_t)i].key())));
+                rowBounds.translated(0, -scroll + modulatorGlideOffset(entry.infos[(size_t)i].key()) + pose.shift));
+            if (pose.lift > 0.0f)
+                entry.bands[(size_t)i]->toFront(false);
+        }
 }
 
 // Rides the panel's existing transport poll: nothing happens while the beat stands still, and only

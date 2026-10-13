@@ -132,7 +132,8 @@ void ModulatorRow::applyNames() {
             tip->setTooltip(text);
     };
     setTitle(who);
-    setTooltip("Right-click, Shift+F10 or Return for the " + who + " modulator menu");
+    setTooltip("Right-click, Shift+F10 or Return for the " + who +
+               " modulator menu. Drag to reorder or move to another lane");
     name(shape_, who + " shape");
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
@@ -285,6 +286,12 @@ void ModulatorRow::paint(juce::Graphics& g) {
 // look-and-feel draws, so focus reads the same on every control in the row.
 void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
+    if (lift_ > 0.0f) {
+        g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
+        g.fillRect(getLocalBounds());
+        g.setColour(synth::theme::themeOf(*this).colors.accent.withMultipliedAlpha(lift_));
+        g.drawRect(getLocalBounds(), 1);
+    }
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())

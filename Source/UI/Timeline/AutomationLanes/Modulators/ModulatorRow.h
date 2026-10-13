@@ -92,6 +92,15 @@ public:
      *  the keyboard. */
     void showMenuAt(const juce::PopupMenu::Options& options);
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    /** The drag that reorders the row or moves it to another lane, reported by screen y: the press, each drag event
+     *  (true once the pointer is really dragging, which gives the grabbing cursor) and the release. Any may be null. */
+    std::function<void(int screenY)> onDragPress;
+    std::function<bool(int screenY)> onDragMove;
+    std::function<void()> onDragRelease;
+    /** 0..1 strength of the lifted look while this row is dragged; repaints only on a change. */
+    void setLift(float lift);
     /** Up (-1) / Down (+1) on the focused row itself (not on its controls, which keep their own arrows); may be null.
      *  Return on the row opens its menu. */
     std::function<void(int direction)> onFocusMoveRequested;
@@ -127,6 +136,8 @@ private:
     TrackFoldArrow foldArrow_;
     bool collapsed_ = false;
     bool compact_ = false;
+    bool pressed_ = false;
+    float lift_ = 0.0f;
     int titleLineHeight_ = 0;
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     juce::Rectangle<int> tagArea_;

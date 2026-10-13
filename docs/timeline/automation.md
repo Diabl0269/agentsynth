@@ -168,7 +168,7 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
   the lane before the record-mode combo (which would change its selection on Up/Down) and before the point keys.
   The lane keeps its header, its accessible names and its focus.
 - **Modulator order.** The modulator rows of one lane have an order of their own, stored with the lane
-  (`AutomationLane::modulatorOrder`, below) and moved with the same keys: see [Modulators](#modulators).
+  (`AutomationLane::modulatorOrder`, below), moved with the same keys and by their own drag: see [Modulators](#modulators).
 - Not done: the drag does not auto-scroll the track list (a track's lanes normally fit on screen), and the slot the
   lifted block leaves is not outlined with the track list's dashed marker.
 
@@ -320,6 +320,30 @@ the moved row. The moved row, the row it swaps with and their bands slide from t
 `TimelineAutomationLanes::glideModulatorRows(lane, oldYs)`, which a drag of modulator rows can reuse); under Reduce
 Motion, Animations Off or with the timeline not showing they land at once. Left and Right fold the row only when the
 row itself has focus, never from one of its controls.
+
+**Drag.** Grab a modulator row's title or an empty part of it (a press on a control never starts a drag; a click without
+4 px of movement is a plain click) and drag it. It is the lane reorder's gesture on the shared `ReorderDragSession`
+(`TimelineAutomationLanesModulatorDrag.cpp`; 4 px threshold, lifted row drawn raised under the grabbing-hand cursor,
+160 ms make-room, 140 ms settle, Esc gives everything back, the animation lands at once when the panel is not showing);
+the row's band follows it. A line at the top of the slot marks where the drop lands, fading in and gliding between
+slots (`DropIndicator`).
+- *Within its lane* the other rows slide aside and the drop writes the new order through `moveModulatorInOrder`, the one
+  function the keyboard move uses: one undo step, the same row and band objects.
+- *Onto another lane* (any lane block of any open track; the slot is the gap between that lane's rows the pointer is at,
+  or right under the lane row when it has none) the modulation moves to that lane's parameter. The pointer's lane is the
+  drop target and `TrackHeaderHost::canMoveModulatorToLane(info, lane)` decides if it is valid: the parameter has a CV
+  jack and the jack does not already have this source. Over a lane that fails that, or over no lane, the drop is "not
+  here": no line is drawn, the lifted row dims, and releasing changes nothing (the row glides back).
+  `TrackHeaderHost::moveModulatorToLane(info, lane, index)` (default false) is ONE
+  `recordGraphTimelineAndMacroChange`: `MainComponent::moveModulatorRouting` cables the source into the new jack at the
+  old depth, re-keys the amount lane to the new Attenuverter (same lane id, track and points) and cuts the old routing;
+  then the destination lane's `modulatorOrder` gets the new routing's key at `index` and the old key leaves the order of
+  every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back. The moved routing has a
+  new key, so its row fades in under the destination lane like any new routing.
+- Change parameter and Duplicate carry the lane's `modulatorOrder` too: each carried routing's old key is replaced by its
+  new routing's key at the same position (`remapModulatorOrder` in `MainComponentLaneSubtree.cpp`).
+- The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
+  another lane". Not done: no auto-scroll while dragging, and the lane the row leaves does not close its gap until the drop.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: a `CV` tag,
 its card title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
@@ -866,7 +890,11 @@ and `Tests/Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp` (`moveLane`, save
 `modulatorOrder`) cover the reorder. `AutomationLanesModulatorFoldOrderTests.cpp` covers the modulator rows' fold (a real
 click on the arrow, Return/Space, Left/Right, the one-line height and the band following, the hidden controls, the names,
 the tween and Reduce Motion) and their order (rows sorted by the stored order, Cmd+Alt+Up/Down from the row, a control and
-the band, one undo step, the same row kept, the ends, a rebind).
+the band, one undo step, the same row kept, the ends, a rebind). `AutomationLanesModulatorDragTests.cpp` covers the row drag
+(a real press and drag on the row: reorder within the lane as one undo step, Esc, a click under 4 px, the drop line, a lane
+that cannot take the row, the host call on a drop onto another lane) and, against a real `MainComponent`, the move
+(routing on the new lane, the amount lane kept, the row at the drop index, one undo, a lane with no CV jack changing
+nothing); `AutomationLanesCarryTests.cpp` also covers the carried `modulatorOrder`.
 
 `Tests/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp` (right-click at the pointer on the header and the editor,
 handle and segment keeping their menus, the menu key), `AutomationLanesRetargetTests.cpp` and

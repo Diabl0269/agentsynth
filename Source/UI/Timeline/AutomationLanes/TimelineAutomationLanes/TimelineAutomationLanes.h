@@ -157,6 +157,23 @@ public:
      */
     bool moveModulatorBy(synth::LaneId lane, const juce::String& orderKey, int delta);
 
+    // ---- Dragging a modulator row (TimelineAutomationLanesModulatorDrag.cpp) ----
+    /** Where a dragged modulator row would land if released now. `valid` is false over a lane that can't take it (no CV
+     *  jack, or the jack already has the source) or over no lane at all: no slot is shown and the drop changes
+     *  nothing. `index` is the row's place among the destination lane's rows after the drop. */
+    struct ModulatorDrop {
+        synth::LaneId lane;
+        int index = -1;
+        bool valid = false;
+    };
+    /** True while a modulator row is lifted or still settling into its slot. */
+    bool isModulatorDragActive() const noexcept { return modDrag_.isReordering(); }
+    ModulatorDrop modulatorDrop() const noexcept { return modDrop_; }
+    /** The line that marks the slot the dragged row would take; visible only over a valid drop. */
+    juce::Component& modulatorDropIndicator() noexcept { return *dropIndicator_; }
+    /** Esc through the same listener a real key press reaches. */
+    bool sendModulatorDragEscapeForTest() { return modDrag_.sendEscapeForTest(); }
+
     // ---- Reordering lanes within their track (TimelineAutomationLanesReorder.cpp) ----
     /** Moves `lane` by `delta` visible lanes (negative = up) within its track as one undo step, gliding the header
      *  like a drop does; false at either end or when the lane is not shown. */
@@ -237,6 +254,24 @@ private:
     bool handleModulatorKey(synth::LaneId lane, const ModulatorInfo& info, const juce::KeyPress& key);
     int laneMoveDirection(const juce::KeyPress& key) const;
     void permuteModulators(LaneModulators& entry, const std::vector<ModulatorInfo>& infos);
+    void wireModulatorDrag(ModulatorRow& row, synth::LaneId lane);
+    void beginModulatorDrag(synth::LaneId lane, const ModulatorInfo& info, int screenY);
+    bool dragModulator(int screenY);
+    void endModulatorDrag();
+    void commitModulatorDrag();
+    void discardModulatorDrag(bool relayout = true);
+    void onModulatorDragFrame();
+    void updateDropIndicator();
+    ModulatorDrop modulatorDropAt(float pointerY) const;
+    ModulatorRow* draggedModulatorRow() const;
+    float laneBlockStartOf(synth::LaneId lane) const;
+    float modulatorSlotStart(synth::LaneId lane, int index) const;
+    std::vector<ReorderDragAnimator::Slot> modulatorSlotsFor(synth::LaneId lane) const;
+    struct ModulatorDragPose {
+        int shift = 0;
+        float lift = 0.0f;
+    };
+    ModulatorDragPose modulatorDragPose(synth::LaneId lane, int index, int restY) const;
     void retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying);
     void sweepLeavingModulators();
 
@@ -304,6 +339,26 @@ private:
     synth::TrackId dragTrack_;
     synth::LaneId liftedLane_;
     std::map<synth::TrackId, int> rowOrigin_; // where each open track's first lane row sits, as last placed
+
+    // The modulator row drag: slots are the source lane's rows (header-list coordinates), keys are indices into
+    // dragModKeys_ (ModulatorInfo::key() in row order), fixed at press time. The drop may be on any lane.
+    class DropIndicator : public juce::Component {
+    public:
+        DropIndicator();
+        void paint(juce::Graphics& g) override;
+    };
+    ReorderDragSession modDrag_;
+    synth::LaneId dragModLane_;
+    ModulatorInfo dragModInfo_;
+    std::vector<juce::String> dragModKeys_;
+    float dragModGrab_ = 0.0f;
+    float dragModPointer_ = 0.0f;
+    ModulatorDrop modDrop_;
+    std::unique_ptr<DropIndicator> dropIndicator_;
+    std::unique_ptr<FadeVisibility> dropFade_; // declared after the component it drives
+    AnimationDriver dropDriver_;
+    float dropFromY_ = 0.0f;
+    float dropToY_ = 0.0f;
     int rowWidth_ = 0;
 };
 

@@ -3,6 +3,8 @@
 // "..." menu (Show on canvas, Change source..., Remove modulator).
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
+#include "UI/Layout/DragCursor.h"
+
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -134,8 +136,39 @@ void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {
 // A right-click anywhere on the row that is not one of its controls (the shape picture counts as the row) opens the row
 // menu at the pointer.
 void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
-    if (e.mods.isPopupMenu())
+    if (e.mods.isPopupMenu()) {
         showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
+        return;
+    }
+    if (!e.mods.isLeftButtonDown())
+        return;
+    pressed_ = true;
+    if (onDragPress)
+        onDragPress(e.getScreenPosition().y);
+}
+
+// A press on the row itself (its title, its empty parts, the shape picture; never a control, which takes its own press)
+// is the start of a drag that reorders the row or moves it to another lane; the owner tells a drag from a click once
+// the pointer has travelled past the drag threshold.
+void ModulatorRow::mouseDrag(const juce::MouseEvent& e) {
+    if (pressed_ && onDragMove)
+        followDragCursor(*this, onDragMove(e.getScreenPosition().y));
+}
+
+void ModulatorRow::mouseUp(const juce::MouseEvent&) {
+    if (!pressed_)
+        return;
+    pressed_ = false;
+    endDragCursor(*this);
+    if (onDragRelease)
+        onDragRelease(); // a move to another lane can retire this row: nothing here touches it afterwards
+}
+
+void ModulatorRow::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
 }
 
 // Left folds the row and Right opens it (only with the row itself focused, never from a control). A bare Up/Down on the
