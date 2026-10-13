@@ -257,11 +257,15 @@ void MixerInsertList::mutateAndNotify(const std::function<bool()>& mutation) {
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr)
         return;
     bool changed = false;
+    // The edit can rebuild the mixer and destroy this list before it returns: the editor is copied first and the
+    // notification only runs while the list is still alive.
+    auto* graphEditor = graphEditor_;
+    juce::Component::SafePointer<MixerInsertList> alive(this);
     undoManager_->recordGraphAndMacroChange(*graph_, *macros_, [&] {
         changed = mutation();
-        graphEditor_->updateComponents();
+        graphEditor->updateComponents();
     });
-    if (changed && onMutated)
+    if (changed && alive != nullptr && onMutated)
         onMutated();
 }
 

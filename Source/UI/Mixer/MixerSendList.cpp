@@ -534,14 +534,18 @@ void MixerSendList::mutateAndNotify(const std::function<bool()>& mutation) {
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr)
         return;
     bool changed = false;
+    // The edit can rebuild the mixer and destroy this list before it returns, so nothing after it reads a member:
+    // the editor is copied first and the notification only runs while the list is still alive.
+    auto* graphEditor = graphEditor_;
+    juce::Component::SafePointer<MixerSendList> alive(this);
     // A send into (or out of) a strip that sits inside a macro enters through a macro port, like a
     // hand-drawn cable, and removing it takes the port it no longer needs -- all in this one step.
     undoManager_->recordGraphAndMacroChange(*graph_, *macros_, [&] {
-        changed = graphEditor_->getMacroController().applyProgrammaticConnectionChange(
-            graphEditor_->getAutoCreateMacroPortsOnDragEnabled(), mutation);
-        graphEditor_->updateComponents();
+        changed = graphEditor->getMacroController().applyProgrammaticConnectionChange(
+            graphEditor->getAutoCreateMacroPortsOnDragEnabled(), mutation);
+        graphEditor->updateComponents();
     });
-    if (changed && onMutated)
+    if (changed && alive != nullptr && onMutated)
         onMutated();
 }
 
