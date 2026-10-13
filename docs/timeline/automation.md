@@ -370,7 +370,9 @@ With a lane, every curve tool works as on any lane row. With no lane:
 
 - **Select** (and every tool but Draw and Erase): a vertical drag on the band sets the knob, relative like a
   knob (the band's height is the whole 200% span), as ONE graph undo step (`setNodeParameter` Begin/Change/End,
-  the step opening on the first move); **Up/Down** nudge it by 1%, **Shift** by 10%, each its own step;
+  the step opening on the first move). From that first move the cursor is the grabbing hand and a value bubble
+  (the amount, "+50%") floats at the pointer, as when dragging an empty lane's flat line; both go on release, and **Esc** puts
+  the value back and ends the drag; **Up/Down** nudge it by 1%, **Shift** by 10%, each its own step;
   **double-click** creates the lane with one point at the snapped beat.
 - **Draw**: the editor takes the press, and the stroke creates the lane.
 
@@ -841,7 +843,7 @@ and Remove through macro ports, nested and either chain shape, a shared LFO, the
 their undo, the CV moving across a render and stopping at depth 0, a saved project reopening with its row).
 Amount lanes: `AutomationLanesAmountModelTests.cpp` (`writeAmountLane`, the readout text, the sections format
 read back and turned into amount points), `AutomationLanesAmountBandTests.cpp` (real presses routed to the band
-or its editor: the first stroke creating the lane in one undo step, the knob drag and keys as graph steps,
+or its editor: the first stroke creating the lane in one undo step, the knob drag and keys as graph steps, the knob drag's hand cursor and bubble,
 double-click, editing and erasing the last point, the bipolar picture, names and the accessible value) and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with

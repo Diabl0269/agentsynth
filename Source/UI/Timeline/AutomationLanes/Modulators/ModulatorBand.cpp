@@ -5,6 +5,7 @@
 #include "UI/Layout/TooltipHelpHandler.h"
 
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -196,6 +197,7 @@ void ModulatorBand::paint(juce::Graphics& g) {
 void ModulatorBand::paintOverChildren(juce::Graphics& g) {
     if (isEditable())
         paintFocusRing(g, getLocalBounds().toFloat(), *this, kFocusRadius);
+    bubble_.paint(g);
 }
 
 //==============================================================================
@@ -218,6 +220,9 @@ void ModulatorBand::mouseDown(const juce::MouseEvent& e) {
     }
     grabKeyboardFocus();
     knobDragging_ = false;
+    knobCancelled_ = false;
+    endDragCursor(*this);
+    bubble_.hide();
     knobDragStart_ = knobAmount();
 }
 
@@ -232,7 +237,7 @@ bool ModulatorBand::showContextMenuForKeyboardFocus() {
 // first real move, so a plain click records nothing.
 void ModulatorBand::mouseDrag(const juce::MouseEvent& e) {
     if (host_ == nullptr || !isEditable() || amountLane() != nullptr || tool_ == EditTool::Erase ||
-        tool_ == EditTool::Draw || !e.mods.isLeftButtonDown() || getHeight() <= 0)
+        tool_ == EditTool::Draw || !e.mods.isLeftButtonDown() || getHeight() <= 0 || knobCancelled_)
         return;
     const double value =
         juce::jlimit(-1.0, 1.0, knobDragStart_ - (double)e.getDistanceFromDragStartY() * 2.0 / (double)getHeight());
@@ -240,12 +245,18 @@ void ModulatorBand::mouseDrag(const juce::MouseEvent& e) {
     knobDragging_ = true;
     host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)value, phase);
     setAmountReadout(value);
+    // The grabbing hand and the value bubble of a drag on an empty lane's flat line, from the first real move.
+    showDragCursor(*this);
+    if (editor_ != nullptr)
+        bubble_.show({(float)e.x, (float)editor_->valueToY(value)}, amountText(value));
 }
 
 void ModulatorBand::mouseUp(const juce::MouseEvent&) {
     if (!knobDragging_)
         return;
     knobDragging_ = false;
+    endDragCursor(*this);
+    bubble_.hide();
     if (host_ != nullptr)
         host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)knobAmount(), ParameterEditPhase::End);
 }
@@ -260,6 +271,17 @@ void ModulatorBand::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 bool ModulatorBand::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey && knobDragging_) {
+        // Like the lane's flat-line drag: back to the value the drag started from, and the rest of the drag does
+        // nothing.
+        knobDragging_ = false;
+        knobCancelled_ = true;
+        endDragCursor(*this);
+        bubble_.hide();
+        host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)knobDragStart_, ParameterEditPhase::End);
+        setAmountReadout(knobDragStart_);
+        return true;
+    }
     if (key == juce::KeyPress::escapeKey && editor_ != nullptr)
         return editor_->keyPressed(key); // the editor has no focus of its own: an Escape mid-stroke is its
     if (!isEditable() || amountLane() != nullptr)

@@ -4,6 +4,7 @@
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
+#include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <functional>
@@ -29,8 +30,8 @@ struct TrackHeaderHost;
 // default is the Attenuverter's current amount, so the editor paints that flat line), and every edit the
 // editor makes to the proxy is written into the real doc as ONE undo step that also creates the lane on
 // the first stroke and removes it with the last point. While no amount lane exists, the Select tool's
-// vertical drag and Up/Down set the Attenuverter's knob value instead (one graph undo step per gesture).
-// Message thread only.
+// vertical drag and Up/Down set the Attenuverter's knob value instead (one graph undo step per gesture), with the
+// grabbing hand and the value bubble a lane's flat line shows. Message thread only.
 class ModulatorBand
     : public juce::Component
     , public juce::TooltipClient
@@ -68,6 +69,8 @@ public:
     const synth::AutomationLane* amountLane() const;
     /** The curve editor over the proxy doc; nullptr for a decoration band. */
     AutomationLaneEditor* getEditor() noexcept { return editor_.get(); }
+    /** The value bubble of the knob drag (test seam). */
+    const PointValueBubble& getKnobBubbleForTest() const noexcept { return bubble_; }
     /** The proxy doc the editor edits (test seam). */
     const synth::TimelineDoc& getProxyDoc() const noexcept { return proxy_; }
 
@@ -131,7 +134,9 @@ private:
 
     // The knob drag (Select tool, no amount lane)
     bool knobDragging_ = false;
+    bool knobCancelled_ = false; // Esc ended the drag: the rest of the gesture is ignored
     double knobDragStart_ = 0.0;
+    PointValueBubble bubble_{*this}; // the amount above the pointer during that drag, as on a lane's flat line
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorBand)
 };
