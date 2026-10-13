@@ -34,6 +34,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp
     Source/MainComponent/MainComponentCustomLfo.cpp
+    Source/MainComponent/MainComponentLaneSubtree.cpp
     Source/MainComponent/MainComponentModulators.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackModule.cpp

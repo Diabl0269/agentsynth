@@ -29,6 +29,19 @@ enum class AutosaveRecoveryChoice { Restore, Discard };
 /** The choice when opening a `.json` patch: replace the current one, add on top, or cancel. */
 enum class PatchLoadMode { Replace, Append, Cancel };
 
+/** One end of a lane carry: the node (by uuid) and parameter an automation lane drives. */
+struct LaneEnd {
+    juce::String nodeUuid;
+    juce::String paramId;
+    bool operator==(const LaneEnd& other) const noexcept {
+        return nodeUuid == other.nodeUuid && paramId == other.paramId;
+    }
+};
+
+/** Whether carrying a lane's attachments takes them off the old lane (a Change parameter) or leaves them and
+ *  adds copies (a Duplicate). */
+enum class CarryMode { Move, Copy };
+
 /** Step state threaded through buildInstrumentTrackAndChain's helpers (MainComponentTrackCreation.cpp). */
 struct InstrumentChainBuild {
     synth::TrackId trackId;

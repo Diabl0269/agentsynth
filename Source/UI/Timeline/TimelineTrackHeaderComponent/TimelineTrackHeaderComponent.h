@@ -274,6 +274,13 @@ struct TrackHeaderHost {
         return std::nullopt;
     }
 
+    /** "Change parameter..." carrying the lane's modulators, as ONE undo step; false when the host can't. */
+    virtual bool retargetLaneWithAttachments(synth::LaneId /*lane*/, const LaneTarget& /*target*/) { return false; }
+    /** "Duplicate" carrying copies of the lane's modulators, as ONE undo step; invalid when the host can't. */
+    virtual synth::LaneId duplicateLaneWithAttachments(synth::LaneId /*lane*/, const LaneTarget& /*target*/) {
+        return {};
+    }
+
     // ---- Modulators under an automation lane (docs/timeline/automation.md#modulators) ----
     // Every default answers "nothing", so a stub host needs none of them.
 

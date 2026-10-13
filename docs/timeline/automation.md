@@ -206,13 +206,24 @@ no parameter is free.
 - **Change parameter...** (`TimelineDoc::retargetLane`, `retargetLaneUndoable`): the lane keeps its id, track, position,
   record mode and curve. Points are stored in the parameter's own units, so each value moves onto the new range by its
   position in the old one (a quarter of the way up stays a quarter of the way up); a lane with no points takes the new
-  parameter's default as its constant. One undo step. The lane's modulators stay bound to the OLD parameter, because the
-  graph is the truth: they leave the lane, and a modulator's amount lane whose routing no longer reaches a lane shows as
-  an ordinary lane row.
+  parameter's default as its constant. The lane's modulators go with it: every routing into the old parameter's CV
+  jack is cabled into the new one's at the same depth, its amount lane keeps its id, track and points (re-keyed to
+  the new routing's Attenuverter) and the old routing is cut. One undo step for the lane and its modulators together.
+  A parameter with no CV jack (a choice, say) still takes the lane, and the modulators stay on the old parameter; so
+  does a modulator whose source already drives the new parameter's jack.
 - **Duplicate** (`TimelineDoc::duplicateLane`, `duplicateLaneUndoable`; Cmd+D on a focused lane editor or header, the
   `duplicateSelection` action): the picker opens FIRST and the copy is created only when a parameter is picked, directly
   below its source on the same track with the same points (rescaled like above) and record mode, in one undo step.
-  Dismissing the picker changes nothing, so there is never a transient lane without a parameter.
+  Dismissing the picker changes nothing, so there is never a transient lane without a parameter. The copy gets its
+  own modulators: the same sources at the same depths into the new parameter's jack, each with a copy of the amount
+  lane's points; the original keeps its own. Same no-CV-jack exception, still one undo step.
+
+Both go through the host (`TrackHeaderHost::retargetLaneWithAttachments` / `duplicateLaneWithAttachments`,
+`MainComponentLaneSubtree.cpp`), which wraps the lane's doc edit and `MainComponent::carryLaneAttachments(from, to,
+track, Move|Copy)` in one graph + timeline undo step. That function is the one place that knows what hangs off a
+lane (today the modulator routings, via `moveModulatorRouting` / `copyModulatorRouting`); a new kind of lane
+attachment adds its branch there and is carried by both items. A host that cannot (a bare one) falls back to the
+doc-only `retargetLaneUndoable` / `duplicateLaneUndoable` when the lane has no modulators.
 
 A modulator row's **Change source...** (see [Modulators](#modulators)) is the same idea for the source of a routing.
 
@@ -884,7 +895,7 @@ or its editor: the first stroke creating the lane in one undo step, the knob dra
 double-click, editing and erasing the last point, the bipolar picture, names and the accessible value) and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with
-sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices for LFO and envelope rows, the real re-key, the source channel and the one undo step); the
+sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices for LFO and envelope rows, the real re-key, the source channel and the one undo step); the **Change parameter / Duplicate carrying modulators** is in `AutomationLanesCarryTests.cpp` (both routings and their amount lanes moving or copied, the original untouched, one undo step each, a parameter with no CV jack, and a pick reaching the host call); the
 applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
 partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from
