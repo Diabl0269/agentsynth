@@ -243,6 +243,15 @@ void MixerPanelComponent::applySavedBusOrder(synth::MixerSnapshot& snapshot) {
 void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
+    auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    applySavedBusOrder(snapshot);
+    rebuildFrom(std::move(snapshot));
+}
+
+void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
+    staleCheckPending_ = false;
+    rebuildPending_ = false;
+    ++rebuildCount_;
 
     // Every column below is either still bound or built and bound fresh (an unbound one is never kept), so whatever
     // unbindAllColumns() or unbindColumnsFor() detached is live again once this returns.
@@ -263,8 +272,6 @@ void MixerPanelComponent::rebuild() {
     columnEntries_.clear();
     focusedColumnIndex_ = -1;
 
-    auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
-    applySavedBusOrder(snapshot);
     snapshotShown_ = snapshot;
     trackColoursSeen_ = currentTrackColours(*doc_);
 
@@ -473,7 +480,31 @@ void MixerPanelComponent::unbindAllColumns() {
     columnsUnbound_ = true;
 }
 
+void MixerPanelComponent::visibilityChanged() {
+    if (!isVisible())
+        return;
+    if (rebuildPending_)
+        rebuild();
+    else if (staleCheckPending_) {
+        staleCheckPending_ = false;
+        rebuildIfStale();
+    }
+}
+
+void MixerPanelComponent::rebuildWhenShown() {
+    if (isVisible())
+        rebuild();
+    else
+        rebuildPending_ = true;
+}
+
 void MixerPanelComponent::rebuildIfStale() {
+    // A hidden panel does no work (docs/layout/rendering.md): the check waits for visibilityChanged(). Not isShowing():
+    // headless tests have no peer, so it is always false there.
+    if (!isVisible()) {
+        staleCheckPending_ = true;
+        return;
+    }
     if (columnsUnbound_ || anyStripColumnUnbound()) {
         rebuild();
         return;
@@ -484,7 +515,7 @@ void MixerPanelComponent::rebuildIfStale() {
     applySavedBusOrder(snapshot);
     if (snapshot.columns != snapshotShown_.columns || snapshot.hasDirect != snapshotShown_.hasDirect ||
         snapshot.hasMaster != snapshotShown_.hasMaster)
-        rebuild();
+        rebuildFrom(std::move(snapshot));
 }
 
 bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId) {

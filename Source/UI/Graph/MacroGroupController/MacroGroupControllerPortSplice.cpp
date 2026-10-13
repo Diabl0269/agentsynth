@@ -8,6 +8,7 @@
 #include "MacroGroupController.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
 #include "MacroNesting.h"
 #include "Modules/AttenuverterModule.h"
@@ -266,6 +267,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
     if (macro == nullptr)
         return;
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
 
     // The right leg of a Stereo macro port node's own raw layout
     // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's implementation note) — identical on
@@ -286,7 +288,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
                                                                       {group.internalNodeId, internalChannel}}
                               : juce::AudioProcessorGraph::Connection{{group.internalNodeId, internalChannel},
                                                                       {edge.externalNodeId, externalChannel}};
-            graph.removeConnection(c);
+            graph.removeConnection(c, juce::AudioProcessorGraph::UpdateKind::none);
         }
 
         // 2. Construct the port node with the derived shape/kind, named from the internal module +
@@ -311,7 +313,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
         const juce::String portName =
             autoMacroPortName(internalMbForName, group.isInput, group.visibleJack, group.isMidi);
 
-        auto node = graph.addNode(std::move(newProcessor));
+        auto node = graph.addNode(std::move(newProcessor), {}, juce::AudioProcessorGraph::UpdateKind::none);
         if (!node)
             continue;
         node->properties.set("x", macro->bounds.getX());
@@ -340,11 +342,15 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
             const int portChannel = group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : portRaw;
 
             if (group.isInput) {
-                graph.addConnection({{edge.externalNodeId, externalChannel}, {node->nodeID, portChannel}});
-                graph.addConnection({{node->nodeID, portChannel}, {group.internalNodeId, internalChannel}});
+                graph.addConnection({{edge.externalNodeId, externalChannel}, {node->nodeID, portChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
+                graph.addConnection({{node->nodeID, portChannel}, {group.internalNodeId, internalChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
             } else {
-                graph.addConnection({{group.internalNodeId, internalChannel}, {node->nodeID, portChannel}});
-                graph.addConnection({{node->nodeID, portChannel}, {edge.externalNodeId, externalChannel}});
+                graph.addConnection({{group.internalNodeId, internalChannel}, {node->nodeID, portChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
+                graph.addConnection({{node->nodeID, portChannel}, {edge.externalNodeId, externalChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
             }
         }
     }
@@ -533,6 +539,7 @@ void MacroGroupController::spliceOutMacroPort(synth::Macro& macro, const juce::S
     const auto nodeId = resolveMemberNodeId(portNodeUuid);
     if (nodeId.uid != 0) {
         auto& graph = host_.graph();
+        const synth::GraphRebuildScope rebuildScope{graph};
 
         // Every connection currently touching the port, split by which side of it they land on.
         struct InEdge {
@@ -557,13 +564,14 @@ void MacroGroupController::spliceOutMacroPort(synth::Macro& macro, const juce::S
         for (const auto& in : ins)
             for (const auto& out : outs)
                 if (in.portChannel == out.portChannel)
-                    graph.addConnection({{in.otherNode, in.otherChannel}, {out.otherNode, out.otherChannel}});
+                    graph.addConnection({{in.otherNode, in.otherChannel}, {out.otherNode, out.otherChannel}},
+                                        juce::AudioProcessorGraph::UpdateKind::none);
 
         // Same cleanup every other node-removal site performs first: removeNode() drops the
         // port's own connections as part of removing it, so nothing above needs an explicit
         // removeConnection pass.
         host_.clearModMatrixRows();
-        graph.removeNode(nodeId);
+        graph.removeNode(nodeId, juce::AudioProcessorGraph::UpdateKind::none);
     }
 
     macro.members.erase(std::remove(macro.members.begin(), macro.members.end(), portNodeUuid), macro.members.end());
@@ -610,6 +618,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
         return {};
 
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
     auto* internalNode = graph.getNodeForId(internalNodeId);
     auto* internalMb = internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
 
@@ -627,7 +636,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
             outlet->setPortShape(inferredShape, inferredVoices);
     }
 
-    auto node = graph.addNode(std::move(newProcessor));
+    auto node = graph.addNode(std::move(newProcessor), {}, juce::AudioProcessorGraph::UpdateKind::none);
     if (!node)
         return {};
     node->properties.set("x", macro->bounds.getX());

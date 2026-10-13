@@ -295,6 +295,7 @@ TEST(MixerMasterColumnInsertTests, GateSplicesIntoTheMasterChainLikeAnyOtherInse
 TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWithoutOverlap) {
     MainComponent mc(std::make_unique<MockProviderMMCI>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // the first channel creates Master
 
@@ -337,6 +338,7 @@ TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWitho
 TEST(MixerMasterColumnInsertTests, MasterColumnInsertsGiveWayInATightColumnInsteadOfCrowdingTheFader) {
     MainComponent mc(std::make_unique<MockProviderMMCI>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();

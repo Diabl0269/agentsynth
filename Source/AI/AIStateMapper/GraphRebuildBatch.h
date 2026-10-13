@@ -56,4 +56,23 @@ private:
     juce::AudioProcessorGraph& graph_;
 };
 
+/**
+ * A GraphRebuildBatch whose end also marks a rebuild due. Every topology op inside the scope passes
+ * UpdateKind::none (no per-op render-sequence rebuild); the scope rebuilds once when it ends, or once at the end of the
+ * outermost enclosing scope/batch, so a nested call costs nothing extra. Message thread only.
+ */
+class GraphRebuildScope {
+public:
+    explicit GraphRebuildScope(juce::AudioProcessorGraph& graph)
+        : batch_(graph)
+        , graph_(graph) {}
+    ~GraphRebuildScope() { GraphRebuildBatch::rebuild(graph_); } // batch_ (declared first) then runs it if outermost
+    GraphRebuildScope(const GraphRebuildScope&) = delete;
+    GraphRebuildScope& operator=(const GraphRebuildScope&) = delete;
+
+private:
+    GraphRebuildBatch batch_;
+    juce::AudioProcessorGraph& graph_;
+};
+
 } // namespace synth

@@ -10,6 +10,7 @@
 // arbitration, deferred click-vs-drag classification, the live highlight, the single undo step) actually works end to
 // end.
 
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
@@ -784,4 +785,52 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
 
     EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr)
         << "a plain macOS Ctrl-drag across a hull must stay insert-between only and must NOT join the macro";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Perf regression: one Cmd-drag membership change re-routes several cables through macro ports, but pays for ONE
+// audio-graph render-sequence rebuild (every topology op is deferred inside a synth::GraphRebuildScope), not one
+// per added/removed node and cable.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroDragMembership, CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExactlyOncePerGesture) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // A has three cables to modules outside the macro: two out of it, one into it.
+    const auto outA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    const auto outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 600);
+    const auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 1000);
+    auto& graph = engine.getGraph();
+    ASSERT_TRUE(graph.addConnection({{a, 0}, {outA, 0}}));
+    ASSERT_TRUE(graph.addConnection({{a, 0}, {outB, 0}}));
+    ASSERT_TRUE(graph.addConnection({{src, 0}, {a, 2}}));
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+
+    const int beforeOut = synth::GraphRebuildBatch::rebuildCountForTest();
+    dragBodyBy(*compA, {2400, 0}, kCmdClick);
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A left the macro";
+    EXPECT_EQ(synth::GraphRebuildBatch::rebuildCountForTest() - beforeOut, 1)
+        << "leaving a macro with three crossing cables must rebuild the render sequence exactly once";
+
+    auto* compAOut = findComponent(editor, a);
+    ASSERT_NE(compAOut, nullptr);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+    const auto delta = hull.getCentre() - compAOut->getBounds().getCentre();
+
+    const int beforeIn = synth::GraphRebuildBatch::rebuildCountForTest();
+    dragBodyBy(*compAOut, delta, kCmdClick);
+    const auto* macro = editor.getMacroController().macroForNode(a);
+    ASSERT_NE(macro, nullptr) << "sanity: A rejoined the macro";
+    EXPECT_EQ(macro->id, macroId);
+    EXPECT_EQ(synth::GraphRebuildBatch::rebuildCountForTest() - beforeIn, 1)
+        << "joining a macro with three crossing cables must rebuild the render sequence exactly once";
 }

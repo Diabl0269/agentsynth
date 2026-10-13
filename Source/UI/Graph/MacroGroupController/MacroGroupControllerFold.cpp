@@ -264,7 +264,9 @@ private:
                 out.rect = p.bounds;
                 out.comp = p.comp;
                 out.picture = Fold::cachedPicture(*p.comp);
-                if (out.picture.isNull() && previews.size() <= kMaxRenderedPictures)
+                // Only a card that will be seen gets a picture rendered: unfolding every macro rendered every member.
+                if (out.picture.isNull() && previews.size() <= kMaxRenderedPictures &&
+                    p.bounds.intersects(card_glide_detail::visibleCanvasArea(*p.comp)))
                     out.picture = p.comp->createComponentSnapshot(p.comp->getLocalBounds(), true, 1.0f);
             }
             note(out, index, depth);

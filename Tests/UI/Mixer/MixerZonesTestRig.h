@@ -45,6 +45,7 @@ struct MixerZonesRig {
 
     explicit MixerZonesRig(int tracks, int panelWidth = 1400) {
         mc.setSize(1400, 900);
+        mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
         mc.newPatchForTest();
         for (int i = 0; i < tracks; ++i)
             mc.simulateAddAudioTrackClick();

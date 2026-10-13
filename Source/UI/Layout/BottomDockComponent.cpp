@@ -323,7 +323,7 @@ bool BottomDockComponent::hasAnyVisibleTab() const noexcept {
 BottomDockComponent::~BottomDockComponent() = default;
 
 void BottomDockComponent::rebuildMixer() {
-    mixer_->rebuild();
+    mixer_->rebuildWhenShown();
     mixerMirror_.rebuildIfOpen();
 }
 

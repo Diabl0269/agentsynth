@@ -83,6 +83,7 @@ struct SendRig {
     SendRig() {
         mc = std::make_unique<MainComponent>(std::make_unique<MockProviderMSLT>());
         mc->setSize(1400, 900);
+        mc->getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
         mc->getAudioEngine().suspendDeviceCallback();
         mc->newPatchForTest();
         mc->simulateAddAudioTrackClick();

@@ -255,7 +255,9 @@ void GraphEditor::updateComponents() {
 
     // Let owners refresh anything that depends on which modules the patch now contains. Event-driven
     // on purpose: no timer and no per-tick repaint.
-    if (onGraphStructureChanged)
+    if (structureNotify_.first > 0)
+        structureNotify_.second = true; // fired once when the outermost hold ends
+    else if (onGraphStructureChanged)
         onGraphStructureChanged();
 
     // A card created mid-gesture (e.g. paste/duplicate while zooming) must join the freeze, or it

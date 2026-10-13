@@ -197,6 +197,25 @@ TEST(MacroFoldPack, AllFoldedExpandsThemWhereTheirCardsSit) {
         EXPECT_FALSE(c.macro(i).collapsed) << "macro " << i;
 }
 
+TEST(MacroFoldPack, FoldAndExpandAllNotifyGraphStructureOncePerCommand) {
+    PackCanvas c(4);
+    c.selectAll();
+    int notified = 0;
+    c.editor.onGraphStructureChanged = [&notified] { ++notified; };
+
+    c.ctl().foldAndPackSelectionMacros(); // fold all
+    EXPECT_EQ(notified, 1);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_TRUE(c.macro(i).collapsed) << "macro " << i;
+
+    notified = 0;
+    c.selectAll();
+    c.ctl().foldAndPackSelectionMacros(); // expand all
+    EXPECT_EQ(notified, 1);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_FALSE(c.macro(i).collapsed) << "macro " << i;
+}
+
 TEST(MacroFoldPack, FoldAndPackIsOneUndoStep) {
     PackCanvas c(4);
     const auto before = c.fingerprint();

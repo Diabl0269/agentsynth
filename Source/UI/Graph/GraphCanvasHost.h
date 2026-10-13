@@ -55,6 +55,26 @@ public:
     virtual void reflowOutputDock() = 0;
     virtual void updateComponents() = 0;
 
+    /** Holds back GraphEditor::onGraphStructureChanged (fired at the end of every updateComponents()) while a loop
+     *  of per-item updateComponents() calls runs; when the outermost hold ends, a single notification fires if any
+     *  was held. Default no-op for hosts with no such notification. Use StructureNotifyHold. */
+    virtual void holdStructureNotify(bool /*begin*/) {}
+
+    /** RAII pair for the two calls above; holds nest. */
+    class StructureNotifyHold {
+    public:
+        explicit StructureNotifyHold(GraphCanvasHost& h)
+            : host(h) {
+            host.holdStructureNotify(true);
+        }
+        ~StructureNotifyHold() { host.holdStructureNotify(false); }
+        StructureNotifyHold(const StructureNotifyHold&) = delete;
+        StructureNotifyHold& operator=(const StructureNotifyHold&) = delete;
+
+    private:
+        GraphCanvasHost& host;
+    };
+
     /** Null when the host was constructed with no undo manager (e.g. a headless test). */
     virtual AppUndoManager* undo() = 0;
 

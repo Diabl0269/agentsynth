@@ -62,6 +62,7 @@ void MacroGroupController::foldAndPackSelectionMacros() {
     const auto foldBefore = snapshotFoldState();
     CardGlideAnimator::Scope glide(host_.cardGlide()); // folded cards fly in, already-folded ones glide, together
     auto doAll = [this, targets, anyExpanded, pack] {
+        GraphCanvasHost::StructureNotifyHold hold(host_); // a fold changes no structure: notify once
         batchingFolds_ = true;
         for (const auto& macroId : targets)
             applyMacroCollapsed(macroId, anyExpanded);
