@@ -3,6 +3,7 @@
 
 #include "LoadRevealAnimator.h"
 
+#include "UI/Graph/CardOutline.h"
 #include "UI/Layout/CableCurve.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -263,11 +264,13 @@ void LoadRevealAnimator::paintOutlines(juce::Graphics& g) const {
             const auto* c = card.getComponent();
             if (c == nullptr || !clip.intersects(c->getBounds()))
                 continue;
-            const auto box = c->getBounds().toFloat().reduced(1.0f);
+            const auto box =
+                synth::ui::cardBodyRect(c->getBounds().toFloat()); // where the finished card's body will be
+            const float radius = hooks_.cornerRadius ? hooks_.cornerRadius() : 10.0f;
             g.setColour(colour.withAlpha(0.05f));
-            g.fillRoundedRectangle(box, 8.0f);
+            g.fillRoundedRectangle(box, radius);
             g.setColour(colour.withAlpha(0.35f));
-            g.drawRoundedRectangle(box, 8.0f, 1.0f);
+            g.drawRoundedRectangle(box, radius, 1.0f);
         }
     }
 }

@@ -82,7 +82,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
 GraphEditor::~GraphEditor() {
     stopTimer();
-    loadReveal_.reset(); // before the cards it may still be scaling
+    dragDropController_.getGhostSlide().reset(vblankUpdater); // its driver outlives the updater otherwise
+    loadReveal_.reset();                                      // before the cards it may still be scaling
     polyChain_.reset();
     portPanel_.reset();
     modDot_.reset(); // before `content`, which its tooltip animator is attached to
@@ -118,6 +119,7 @@ void GraphEditor::configureCardGlide() {
     hooks.updater = &vblankUpdater;
     hooks.canAnimate = [this] { return isShowing(); };
     hooks.accent = [this] { return synth::theme::themeOf(*this).colors.accent; };
+    hooks.cornerRadius = [this] { return synth::theme::themeOf(*this).metrics.cornerRadius; };
     // The macro fold (MacroFoldAnimator.h) draws the cables of the modules it flies itself, with the canvas' wire look.
     hooks.visibleCables = [this] { return buildVisibleCables(); };
     hooks.categoryColour = [this](synth::ui::ModuleCategory category) { return categoryPreviewColour(category); };

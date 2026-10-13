@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -646,6 +647,16 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         const juce::Colour colour =
             editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
+        // The cable two halves are still running onto (a deleted module's neighbours rejoining) appears when they
+        // arrive.
+        if (editor.cableRetract_.isHidden(cable.id))
+            continue;
+        // Half of a cable that just split around a new module: drawn running from the old cable's ends to its own.
+        if (editor.cableRetract_.isMorphing(cable.id)) {
+            const auto half = editor.cableRetract_.morphed(cable);
+            strokeWire(half.p1, half.p2, colour, isModulation, 0.0f, 2.0f, false);
+            continue;
+        }
         // A cable growing back (undo, redo) is real already: this pass skips it and its growing wire is drawn instead.
         if (editor.cableRetract_.isGrowing(cable.id)) {
             const auto growing = editor.cableRetract_.grown(cable);
@@ -704,6 +715,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     for (const auto& ghost : editor.cableRetract_.ghosts())
         strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
                    ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);
+    for (const auto& half : editor.cableRetract_.joinHalves())
+        strokeWire(half.p1, half.p2, editor.colourForCable(half), half.kind != GraphEditor::VisibleCable::Kind::Direct,
+                   0.0f, 2.0f, false);
     // ---- End cables ----
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
@@ -779,7 +793,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
-        auto ghostF = editor.getDragDropController().getDragPreviewGhost().toFloat();
+        // On the card body, with the card's corner radius, so the ghost's corners are the corners the card will have.
+        auto ghostF = synth::ui::cardBodyRect(
+            editor.getDragDropController().getGhostSlide().drawn()); // slides to where it is aimed
 
         // Fill: accent colour at ~18% alpha
         g.setColour(accentColour.withAlpha(0.18f));
@@ -896,15 +912,23 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
                 return s.isInsert ? insertTint(base) : base;
             };
 
+            // The ghost-side end of a leg rides the ghost while it slides to its spot.
+            const auto slide = editor.getDragDropController().getGhostSlide().offset();
             for (const auto& leg : s.upstreamPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.upstreamCategory), s.signal);
+                strokePreview(leg.p1, leg.p2 + slide, legColour(s.upstreamCategory), s.signal);
 
+            const auto ghostSide = [&s, slide](juce::Point<float> p1, juce::Point<float> p2) {
+                return s.ghostIsSource ? std::pair{p1 + slide, p2} : std::pair{p1, p2 + slide};
+            };
             if (s.mainPreviewLegs.empty()) {
-                strokePreview(s.p1, s.p2, legColour(s.sourceCategory), s.signal);
+                const auto [a, b] = ghostSide(s.p1, s.p2);
+                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
                 continue;
             }
-            for (const auto& leg : s.mainPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.sourceCategory), s.signal);
+            for (const auto& leg : s.mainPreviewLegs) {
+                const auto [a, b] = ghostSide(leg.p1, leg.p2);
+                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+            }
         }
     }
 
@@ -921,8 +945,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // Settles from a slightly oversized ring down onto the card, fading out as it lands —
         // "flash-or-settle" per the ticket, not a static outline held for the tween's whole
         // duration.
-        auto ring = bounds.toFloat().expanded(6.0f * (1.0f - t));
+        const float cardRadius = synth::theme::themeOf(*this).metrics.cornerRadius;
+        auto ring = synth::ui::cardBodyRect(bounds.toFloat()).expanded(6.0f * (1.0f - t));
         g.setColour(accentColour.withAlpha(0.55f * (1.0f - t)));
-        g.drawRoundedRectangle(ring, 10.0f, 2.0f);
+        g.drawRoundedRectangle(ring, cardRadius + 6.0f * (1.0f - t), 2.0f);
     }
 }

@@ -58,6 +58,9 @@ public:
     /** The open gap, or null. */
     const synth::insert_gap::Plan* plan() const noexcept { return plan_ ? &*plan_ : nullptr; }
     const juce::String& container() const noexcept { return container_; }
+    /** The unit key the pointer is aimed in front of: the open gap's anchor, or the anchor of a gap that is already
+     *  wide enough and so moved nothing. Empty when the pointer is over no gap. */
+    juce::String aimedAnchorKey() const { return plan_ ? plan_->target.anchorKey : fitAnchor_; }
 
     /** Keyboard insert: prepares a commit that puts a `size` card right after `afterKey` in its row, inside
      *  `container`. False when nothing follows it in its row (the caller places the card itself). */
@@ -121,7 +124,8 @@ private:
     std::vector<Applied> applied_; // every move the open gap made, in order
     std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::Point<int>>> dock_; // where the dock stood
     bool suppressed_ = false;
-    juce::String idle_; // the last target that needed no room, so a pointer resting on it plans nothing again
+    juce::String idle_;      // the last target that needed no room, so a pointer resting on it plans nothing again
+    juce::String fitAnchor_; // the anchor of that target (see aimedAnchorKey)
 
     std::optional<synth::insert_gap::Target> pending_; // a commit's target
     juce::String pendingContainer_;

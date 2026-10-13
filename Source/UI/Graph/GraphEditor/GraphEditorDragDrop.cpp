@@ -283,7 +283,9 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 
             // Auto-wire any smart-connection previews the user saw while dragging. Already inside
             // a structural undo transaction when one is open, so do not nest another.
+            const auto cablesBefore = snapshotCablesForRetract();
             smartConnections_.applySmartSuggestions(newNodeId, /*recordUndo=*/false);
+            morphCablesSince(cablesBefore); // an insert on a cable splits it in two, running to the new card
         };
 
         // Shared by the undo and no-undo paths; the node is handed over through a shared_ptr so the
@@ -455,8 +457,11 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
     // same two conditions, read through the engine instead of GraphEditor's own former fields.
     if (smartConnections_.shouldOfferSmartConnections(dragDropController_.buildDragPreviewState()) &&
-        smartConnections_.getSmartSuggestionCount() > 0)
+        smartConnections_.getSmartSuggestionCount() > 0) {
+        const auto cablesBefore = snapshotCablesForRetract();
         smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
+        morphCablesSince(cablesBefore);
+    }
 
     // A single-module drag can land the module fully outside the visible rect (drag it
     // under the bottom dock, or past the edge while zoomed in) without any pan/zoom of its own.

@@ -9,6 +9,7 @@
 
 #include "CardGlideAnimator.h"
 
+#include "UI/Graph/CardOutline.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 
@@ -280,7 +281,14 @@ void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
     }
     if (frame_.grown && frame_.outline < 1.0f && hooks_.accent) {
         g.setColour(hooks_.accent().withAlpha(1.0f - frame_.outline));
-        g.drawRoundedRectangle(item.to.toFloat().expanded(0.5f), 4.0f, 1.0f);
+        // On the card's body with the card's corner radius (CardOutline.h), so the ring hugs the card's corners. A
+        // macro card is drawn by MacroCardComponent: its body is the whole component, 8 px round, its border 1 px in.
+        if (isMacroKey(item.nodeUid)) {
+            g.drawRoundedRectangle(item.to.toFloat().reduced(1.0f), 8.0f, 1.0f);
+            return;
+        }
+        g.drawRoundedRectangle(synth::ui::cardBodyRect(item.to.toFloat()),
+                               hooks_.cornerRadius ? hooks_.cornerRadius() : 10.0f, 1.0f);
     }
 }
 

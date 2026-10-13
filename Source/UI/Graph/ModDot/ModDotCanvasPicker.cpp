@@ -4,6 +4,7 @@
 #include "ModDotCanvasPicker.h"
 
 #include "ModDotPalette.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -176,11 +177,13 @@ void ModDotCanvasPicker::paint(juce::Graphics& g) {
     for (auto* card : editor_.getModuleComponents()) {
         if (card == nullptr || card->getNodeId() != outlined_)
             continue;
-        const auto bounds = getLocalArea(nullptr, card->getScreenBounds()).toFloat();
+        // On the card's body with its corner radius (CardOutline.h), so the outline follows the card's corners.
+        const auto body = synth::ui::cardBodyRect(getLocalArea(nullptr, card->getScreenBounds()).toFloat());
+        const float radius = synth::theme::themeOf(*this).metrics.cornerRadius;
         g.setColour(p.accent.withAlpha(0.14f * amount));
-        g.fillRoundedRectangle(bounds, 8.0f);
+        g.fillRoundedRectangle(body, radius);
         g.setColour(p.accent.withAlpha(amount));
-        g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, 2.0f);
+        g.drawRoundedRectangle(body, radius, 2.0f);
     }
 }
 

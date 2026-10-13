@@ -41,6 +41,7 @@ LoadRevealAnimator& GraphEditor::getLoadReveal() {
         return zoomLevel * (display != nullptr ? static_cast<float>(display->scale) : 1.0f);
     };
     hooks.outlineColour = [this] { return synth::theme::themeOf(*this).colors.textPrimary; };
+    hooks.cornerRadius = [this] { return synth::theme::themeOf(*this).metrics.cornerRadius; };
     hooks.reportStatus = [this](const juce::String& message) { reportStatusMessage(message); };
     hooks.updater = &vblankUpdater;
     loadReveal_->setHooks(std::move(hooks));

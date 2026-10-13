@@ -248,6 +248,10 @@ SmartConnectionEngine::DragPreviewState GraphDragDropController::buildDragPrevie
     state.selfId = dragPreviewSelfId_;
     state.isSnippet = dragPreviewIsSnippet_;
     state.probe = dragPreviewProbe_.get();
+    if (const auto anchor = insertGap_ != nullptr ? insertGap_->aimedAnchorKey() : juce::String();
+        anchor.startsWith("n:"))
+        state.gapAnchorId = juce::AudioProcessorGraph::NodeID(
+            static_cast<juce::uint32>(anchor.fromFirstOccurrenceOf("n:", false, false).getLargeIntValue()));
     // shouldOfferSmartConnections' selection-drag guard: selection itself is not on
     // GraphCanvasHost for the selection MODEL directly, but getSelection()/isSelectionDragActive()
     // are — GraphEditor's own former precompute (selectionDragActive && selection.size() > 1)

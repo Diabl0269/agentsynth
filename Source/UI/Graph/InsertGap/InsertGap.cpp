@@ -74,6 +74,10 @@ void InsertGap::hover(const Hover& request) {
         !selfCanInsert(hover.selfKey)) {
         if (!committing_ && !suppressed_ && isOpen())
             close();
+        if (!committing_) {
+            fitAnchor_.clear(); // no gap is aimed at any more
+            idle_.clear();
+        }
         return;
     }
     const bool sameLevel = isOpen() && hover.container == container_ && hover.selfKey == selfKey_;
@@ -111,6 +115,7 @@ void InsertGap::retarget(const Hover& hover, const std::optional<ig::Target>& ta
 
     bool movedAny = revert();
     plan_.reset();
+    fitAnchor_.clear();
     if (target.has_value()) {
         const auto plan = ig::planBefore(unitsAt(hover.container, hover.selfKey), *target, hover.size);
         if (plan.has_value() && !plan->moves.empty()) {
@@ -125,6 +130,8 @@ void InsertGap::retarget(const Hover& hover, const std::optional<ig::Target>& ta
             movedAny = true;
             idle_.clear();
             armEscape();
+        } else if (plan.has_value()) {
+            fitAnchor_ = target->anchorKey; // room enough already: nothing moves, but the aim is still this gap
         }
     }
     if (movedAny)
@@ -150,6 +157,7 @@ void InsertGap::endSession() {
         close();
     suppressed_ = false;
     idle_.clear();
+    fitAnchor_.clear();
 }
 
 bool InsertGap::cancel() {
@@ -167,6 +175,7 @@ void InsertGap::forget() noexcept {
     dock_.clear();
     suppressed_ = false;
     idle_.clear();
+    fitAnchor_.clear();
     pending_.reset();
 }
 

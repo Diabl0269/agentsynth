@@ -5,6 +5,9 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapPlanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapHoverTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapDropTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapConnectTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapGhostTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMacroTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMotionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableChainMotionTests.cpp
 )
