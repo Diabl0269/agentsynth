@@ -1,5 +1,6 @@
 // TimelineDoc::moveLane: a lane changes its place within its own track only, the index is where it ends up (clamped),
-// a move that changes nothing is not a mutation, and the order survives a save and a load.
+// a move that changes nothing is not a mutation, and the order survives a save and a load. Also the order of a lane's
+// modulator rows (setModulatorOrder: saved additively, copied by duplicateLane, kept by retargetLane).
 
 #include "TimelineDocTestHelpers.h"
 
@@ -73,4 +74,57 @@ TEST_F(LaneOrderFixture, TheOrderSurvivesASaveAndALoad) {
     for (const auto& lane : loaded.getTrack(track)->lanes)
         got.push_back(lane.id);
     EXPECT_EQ(got, expected);
+}
+
+// ---- The order of a lane's modulator rows (AutomationLane::modulatorOrder) ----
+
+TEST_F(LaneOrderFixture, TheModulatorOrderRoundTripsAndAFileWithoutItLoadsEmpty) {
+    EXPECT_TRUE(doc.getLane(a)->modulatorOrder.empty());
+    const auto plain = doc.toVar();
+    EXPECT_FALSE(plain.getProperty("tracks", {})[0].getProperty("lanes", {})[0].getDynamicObject()->hasProperty(
+        "modulatorOrder"))
+        << "an empty order is not written, so the file stays as it was";
+    TimelineDoc untouched;
+    ASSERT_TRUE(untouched.fromVar(plain));
+    EXPECT_TRUE(untouched.getLane(a)->modulatorOrder.empty());
+
+    const std::vector<juce::String> order{"atten-2", "lfo-1/0//2", "atten-3"};
+    ASSERT_TRUE(doc.setModulatorOrder(a, order));
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(doc.toVar()));
+    EXPECT_EQ(loaded.getLane(a)->modulatorOrder, order);
+    EXPECT_TRUE(loaded.getLane(b)->modulatorOrder.empty()) << "per lane";
+}
+
+TEST_F(LaneOrderFixture, AMalformedModulatorOrderIsRejectedOnLoad) {
+    ASSERT_TRUE(doc.setModulatorOrder(a, {"x"}));
+    auto saved = doc.toVar();
+    auto* lane = saved.getProperty("tracks", {})[0].getProperty("lanes", {})[0].getDynamicObject();
+    ASSERT_NE(lane, nullptr);
+    lane->setProperty("modulatorOrder", "not an array");
+    TimelineDoc loaded;
+    EXPECT_FALSE(loaded.fromVar(saved));
+}
+
+TEST_F(LaneOrderFixture, SettingTheModulatorOrderIsOneMutationAndTheSameOrderOrAnUnknownLaneIsNot) {
+    const auto revision = doc.getRevision();
+    const auto calls = listener.calls;
+    ASSERT_TRUE(doc.setModulatorOrder(a, {"p", "q"}));
+    EXPECT_EQ(doc.getRevision(), revision + 1);
+    EXPECT_EQ(listener.calls, calls + 1);
+
+    EXPECT_FALSE(doc.setModulatorOrder(a, {"p", "q"})) << "already that order";
+    EXPECT_FALSE(doc.setModulatorOrder(LaneId{999}, {"p"}));
+    EXPECT_EQ(doc.getRevision(), revision + 1);
+    EXPECT_EQ(listener.calls, calls + 1);
+}
+
+TEST_F(LaneOrderFixture, ADuplicatedLaneCopiesTheOrderAndARetargetedLaneKeepsIt) {
+    ASSERT_TRUE(doc.setModulatorOrder(a, {"p", "q"}));
+    const auto copy = doc.duplicateLane(a, "u-d", "d", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(copy.isValid());
+    EXPECT_EQ(doc.getLane(copy)->modulatorOrder, (std::vector<juce::String>{"p", "q"}));
+
+    ASSERT_TRUE(doc.retargetLane(a, "u-e", "e", makeRange(0.0f, 2.0f, 0.0f)));
+    EXPECT_EQ(doc.getLane(a)->modulatorOrder, (std::vector<juce::String>{"p", "q"}));
 }

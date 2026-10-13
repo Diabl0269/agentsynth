@@ -36,6 +36,10 @@ std::vector<synth::LaneId> amountLanesTravellingWith(const synth::TimelineDoc& d
 /** Moves the lane to `newIndex` within its track's lane list (TimelineDoc::moveLane). False when nothing changed. */
 bool moveLaneOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, int newIndex);
 
+/** Stores the lane's modulator row order (routing keys, first to last) as one undo step; false when unchanged. */
+bool setModulatorOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
+                               std::vector<juce::String> order);
+
 /** Deletes the lane, removing an Automation track it leaves empty in the same step. */
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane);
 

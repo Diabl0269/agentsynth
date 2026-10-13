@@ -3,6 +3,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 #include "Modules/LfoRateDivisions.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -57,6 +58,13 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     setMouseClickGrabsKeyboardFocus(false);
     if (info_.isLfo)
         initLfoControls();
+    // The arrow is a Tab stop and toggles on Return/Space or a click; a right-click on it is the row's menu.
+    addAndMakeVisible(foldArrow_);
+    foldArrow_.onClick = [this] {
+        if (onFoldRequested)
+            onFoldRequested(!collapsed_);
+    };
+    foldArrow_.onPopupMenuRequested = [this] { showMenuAt(contextMenuOptionsAtPointer()); };
     applyNames();
     refreshValues();
 }
@@ -80,6 +88,7 @@ void ModulatorRow::initLfoControls() {
     for (juce::Component* c : std::initializer_list<juce::Component*>{&shape_, &syncRate_, &rateHz_, &sync_}) {
         c->setMouseClickGrabsKeyboardFocus(false);
         c->setWantsKeyboardFocus(true);
+        c->addKeyListener(this);
         addChildComponent(c);
     }
     shape_.setVisible(true);
@@ -128,15 +137,67 @@ void ModulatorRow::applyNames() {
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
     name(sync_, who + " sync");
+    const auto fold = info_.sourceTitle + (parameterName_.isNotEmpty() ? " on " + parameterName_ : juce::String());
+    foldArrow_.setStateWithText(!collapsed_, (collapsed_ ? "Expand " : "Collapse ") + fold,
+                                (collapsed_ ? "Expand " : "Collapse ") + fold +
+                                    (collapsed_ ? " (Right arrow on the row)" : " (Left arrow on the row)"));
+}
+
+void ModulatorRow::setCollapsed(bool collapsed) {
+    if (collapsed_ == collapsed)
+        return;
+    collapsed_ = collapsed;
+    applyNames();
+}
+
+void ModulatorRow::setCompact(bool compact) {
+    if (compact_ == compact)
+        return;
+    compact_ = compact;
+    applyCompact();
+}
+
+void ModulatorRow::setTitleLineHeight(int height) {
+    if (titleLineHeight_ == height)
+        return;
+    titleLineHeight_ = height;
+    resized();
+}
+
+// A folded row shows its title and amount only. Focus inside a control that is about to hide moves to the row, so the
+// keyboard keeps its place.
+void ModulatorRow::applyCompact() {
+    if (info_.isLfo) {
+        if (compact_) {
+            auto* focused = juce::Component::getCurrentlyFocusedComponent();
+            if (focused != nullptr && focused != this && isParentOf(focused) && focused != &foldArrow_)
+                grabKeyboardFocus();
+        }
+        shape_.setVisible(!compact_);
+        sync_.setVisible(!compact_);
+        shapeIcon_.setVisible(!compact_);
+        refreshValues(); // the sync-rate combo or the Hz bar, whichever the mode shows
+    }
+    resized();
+    repaint();
 }
 
 void ModulatorRow::resized() {
     auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kPadding).withTrimmedRight(kPadding);
-    const int lineHeight = bounds.getHeight() / 3;
+    const int lineHeight = titleLineHeight_ > 0 ? titleLineHeight_ : bounds.getHeight() / 3;
     auto title = bounds.removeFromTop(lineHeight);
     auto middle = bounds.removeFromTop(lineHeight);
+    bounds.setHeight(juce::jmax(bounds.getHeight(), lineHeight)); // while the row tweens, the last line is clipped
+    const auto arrow = title.removeFromLeft(TrackFoldArrow::kSize);
+    foldArrow_.setBounds(arrow.withSizeKeepingCentre(juce::jmin(arrow.getWidth(), TrackFoldArrow::kSize),
+                                                     juce::jmin(arrow.getHeight(), TrackFoldArrow::kSize)));
     tagArea_ = title.removeFromLeft(kTagWidth);
-    if (info_.isLfo) {
+    compactAmountArea_ = {};
+    if (compact_) {
+        if (amount_.has_value())
+            compactAmountArea_ = title.removeFromRight(kAmountTextWidth);
+        amountArea_ = {};
+    } else if (info_.isLfo) {
         shapeIcon_.setBounds(title.removeFromRight(kShapeIconWidth).reduced(0, 1));
         layoutLfoControls(middle, bounds);
     } else {
@@ -175,9 +236,12 @@ void ModulatorRow::setTrackColour(juce::Colour colour) {
 
 void ModulatorRow::setAmount(std::optional<double> amount) {
     const auto before = getAmountText();
+    const bool hadAmount = amount_.has_value();
     amount_ = amount;
+    if (compact_ && hadAmount != amount_.has_value())
+        resized(); // the folded row's title line gives the readout room only while there is one
     if (getAmountText() != before)
-        repaint(amountArea_);
+        repaint();
 }
 
 juce::String ModulatorRow::getAmountText() const { return amount_.has_value() ? amountText(*amount_) : juce::String(); }
@@ -203,7 +267,11 @@ void ModulatorRow::paint(juce::Graphics& g) {
     g.setColour(colours.text);
     g.setFont(juce::Font(juce::FontOptions(kTitleFontSize)));
     g.drawText(info_.sourceTitle, titleArea_, juce::Justification::centredLeft, true);
-    if (amount_.has_value() && !amountArea_.isEmpty()) {
+    if (compact_ && amount_.has_value() && !compactAmountArea_.isEmpty()) {
+        g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
+        g.setColour(accent);
+        g.drawText(getAmountText(), compactAmountArea_, juce::Justification::centredRight, false);
+    } else if (amount_.has_value() && !amountArea_.isEmpty()) {
         g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
         g.setColour(colours.textMuted);
         g.drawText("Amount", amountArea_, juce::Justification::centredLeft, false);
@@ -220,7 +288,7 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
-        if (child->isVisible() && child != &shapeIcon_) // the shape picture takes no focus
+        if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_) // the arrow paints its own ring
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
 }
 

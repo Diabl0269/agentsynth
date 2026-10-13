@@ -4,7 +4,6 @@
 // clip lanes follow a track reorder. A lane only ever moves inside its own track.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include <algorithm>
 #include <cmath>
@@ -17,10 +16,6 @@ int indexOfLane(const std::vector<synth::LaneId>& ids, synth::LaneId id) {
     return it == ids.end() ? -1 : static_cast<int>(it - ids.begin());
 }
 
-juce::KeyPress defaultMoveKey(int keyCode) {
-    return juce::KeyPress(keyCode,
-                          juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0);
-}
 } // namespace
 
 // Wires the header's gesture and keys to the pool. The header outlives neither the pool nor the doc, and every callback
@@ -173,16 +168,10 @@ void TimelineAutomationLanes::onLaneDragFrame() {
 // Cmd+Alt+Up / Down (rebindable: timelineMoveLaneUp / timelineMoveLaneDown), offered by the focused header's controls
 // and the focused editor.
 bool TimelineAutomationLanes::handleLaneKey(synth::LaneId lane, const juce::KeyPress& key) {
-    const auto matches = [this, &key](const char* action, int keyCode) {
-        if (shortcuts_ == nullptr)
-            return key == defaultMoveKey(keyCode);
-        return ShortcutManager::keyPressMatches(shortcuts_->getBinding(action), key);
-    };
-    const bool up = matches("timelineMoveLaneUp", juce::KeyPress::upKey);
-    const bool down = !up && matches("timelineMoveLaneDown", juce::KeyPress::downKey);
-    if (!up && !down)
+    const int direction = laneMoveDirection(key);
+    if (direction == 0)
         return false;
-    moveLaneBy(lane, up ? -1 : 1);
+    moveLaneBy(lane, direction);
     return true; // consumed even at an end, so the combo or the point nudge never sees a Cmd+Alt+arrow
 }
 

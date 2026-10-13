@@ -3,6 +3,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
@@ -106,8 +107,10 @@ public:
     // ---- Modulator rows (derived from the graph through the host; TimelineAutomationLanesModulators.cpp) ----
     /** Re-derives every visible lane's modulator rows. Call after any graph change. */
     void refreshModulators();
-    /** A modulator row's height at the current zoom, px. */
+    /** A modulator row's full (three line) height at the current zoom, px. */
     int modulatorRowHeight() const;
+    /** The height of the lane's `index`th modulator row now: full, one line when folded, between mid-tween. */
+    int modulatorRowHeightFor(synth::LaneId lane, int index) const;
     /** Re-reads the live values of modulator rows inside content rows [visibleTop, visibleBottom). */
     void tickModulatorValues(int visibleTop, int visibleBottom);
     int modulatorCount(synth::LaneId lane) const;
@@ -126,6 +129,33 @@ public:
     bool isAmountLane(synth::LaneId lane) const;
     /** How many of `track`'s lanes are shown as amount bands rather than as lane rows. */
     int hiddenLaneCount(synth::TrackId track) const;
+
+    // ---- Folding and ordering modulator rows (TimelineAutomationLanesModulatorFold.cpp) ----
+    /** Fold state of a routing's row, by ModulatorInfo::key(). Runtime-only, never saved; a routing that gets a new key
+     *  (its source changed) starts expanded. */
+    bool isModulatorCollapsed(const juce::String& key) const;
+    bool isModulatorCollapsed(synth::LaneId lane, int index) const;
+    /** Folds the row to its title line, or opens it, tweening the height unless the panel is not showing or Reduce
+     *  Motion is on (then it lands at once). */
+    void setModulatorCollapsed(const juce::String& key, bool collapsed);
+    /** Steps the fold tweens in flight by hand (t is the eased progress 0..1; 1 lands them): no VBlank reaches an
+     *  off-screen component. */
+    void stepModulatorFoldForTest(float t);
+    bool isModulatorFoldAnimating() const noexcept { return !foldTweens_.empty(); }
+    /** Moves the lane's modulator row stored under `orderKey` (modulatorOrderKey) to `newIndex` among the lane's rows
+     *  as one undo step; the one write the keyboard move (and later a drag) goes through. False when it does not
+     *  change the order. */
+    bool moveModulatorInOrder(synth::LaneId lane, const juce::String& orderKey, int newIndex);
+    /** Slides the lane's rows (and their bands) from the y each stood at in `oldYs` (header-list coordinates, by
+     *  ModulatorInfo::key()) to where the layout now puts them, 160 ms ease-out; lands at once when the timeline is not
+     *  showing or under Reduce Motion. Call it after the layout moved the rows. */
+    void glideModulatorRows(synth::LaneId lane, const std::map<juce::String, int>& oldYs);
+    bool isModulatorGlideAnimating() const noexcept { return !glideTweens_.empty(); }
+    /** Steps the glide in flight by hand (t is the eased progress 0..1; 1 lands it). */
+    void stepModulatorGlideForTest(float t);
+    /** Moves it by `delta` rows (negative = up), the moved row and the one it swaps with gliding; false at either end.
+     */
+    bool moveModulatorBy(synth::LaneId lane, const juce::String& orderKey, int delta);
 
     // ---- Reordering lanes within their track (TimelineAutomationLanesReorder.cpp) ----
     /** Moves `lane` by `delta` visible lanes (negative = up) within its track as one undo step, gliding the header
@@ -191,6 +221,22 @@ private:
         std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
     };
     std::vector<std::unique_ptr<LeavingModulator>> leaving_;
+    struct FoldTween {
+        float from = 1.0f;
+        float to = 1.0f;
+        float now = 1.0f;
+    };
+    int modulatorGlideOffset(const juce::String& key) const;
+    void frameModulatorGlide(float t);
+    void landModulatorGlide();
+    float modulatorOpenness(const juce::String& key) const;
+    int modulatorOffset(synth::LaneId lane, int count) const;
+    void applyModulatorFold();
+    void frameModulatorFold(float t);
+    void landModulatorFold();
+    bool handleModulatorKey(synth::LaneId lane, const ModulatorInfo& info, const juce::KeyPress& key);
+    int laneMoveDirection(const juce::KeyPress& key) const;
+    void permuteModulators(LaneModulators& entry, const std::vector<ModulatorInfo>& infos);
     void retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying);
     void sweepLeavingModulators();
 
@@ -240,10 +286,16 @@ private:
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneHeaderComponent>> headers_;
     std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
     std::map<synth::LaneId, LaneModulators> modulators_;                  // one per visible lane
-    std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_;        // what the graph routes into each open lane
-    std::set<synth::LaneId> amountLanes_;                                 // lanes drawn as a modulator's amount band
+    std::set<juce::String> collapsedMods_;                                // routing keys of the folded modulator rows
+    std::map<juce::String, FoldTween> glideTweens_; // rows sliding into a new slot: y offset left to travel, by key
+    std::map<juce::String, FoldTween> foldTweens_;  // folds in flight, by routing key
+    std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_; // what the graph routes into each open lane
+    std::set<synth::LaneId> amountLanes_;                          // lanes drawn as a modulator's amount band
     double lastReadoutBeat_ = -1.0;
     ShortcutManager* shortcuts_ = nullptr;
+    juce::VBlankAnimatorUpdater foldUpdater_; // drives the fold tween; declared before the driver that uses it
+    AnimationDriver foldDriver_;
+    AnimationDriver glideDriver_;
 
     // The lane reorder drag. Slots are the track's lane blocks (a lane row plus its modulator rows) in header-list
     // coordinates; keys are indices into dragLaneIds_, fixed at press time.

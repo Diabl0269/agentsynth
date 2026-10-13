@@ -167,6 +167,8 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
   header controls or editor hold focus one visible slot, one undo step, the block gliding into its slot. The keys reach
   the lane before the record-mode combo (which would change its selection on Up/Down) and before the point keys.
   The lane keeps its header, its accessible names and its focus.
+- **Modulator order.** The modulator rows of one lane have an order of their own, stored with the lane
+  (`AutomationLane::modulatorOrder`, below) and moved with the same keys: see [Modulators](#modulators).
 - Not done: the drag does not auto-scroll the track list (a track's lanes normally fit on screen), and the slot the
   lifted block leaves is not outlined with the track list's dashed marker.
 
@@ -176,7 +178,9 @@ Up/Down walk the track list as one column: a track's row, then each of its open 
 modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
 "+ Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
 Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. The record-mode combo keeps its own Up/Down, and Cmd+Alt+Up/Down still move the lane; any other modified
-arrow is left alone. Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
+arrow is left alone. On a modulator row Left folds it to its title line and Right opens it (as a tree view does), and
+Cmd+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its
+lane's modulators, from the row, any of its controls or its band; see [Modulators](#modulators). Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
 it holds focus. Tab from the timeline then goes to the routing pane and the scale pane
 ([focus regions](../control/focus-regions.md)). The panel's stop list is `TimelinePanelLaneKeyboard.cpp`.
 
@@ -276,6 +280,35 @@ rate; sync and amount):
 - an **Amount** label and a signed readout in the track's colour ("+72%", "-30%" with a real minus sign,
   "0%"): the [amount lane](#amount-lane)'s value at the playhead when the routing has one, else the
   attenuverter's own `amount`. The amount is edited on the band, not in the row.
+
+A **fold arrow** (`TrackFoldArrow`, the track header's arrow) sits at the left of the title line, a Tab stop that
+Return, Space or a click toggles; it is named and tooltipped "Collapse LFO 1 on Cutoff" / "Expand LFO 1 on Cutoff", the
+tooltip adding the key ("Left arrow" / "Right arrow" on the row). A folded row is one title line tall (a third of the row,
+times the row zoom): the title and the amount readout stay (the readout moves up to the right end of the title line),
+the shape picture and the shape, rate and sync controls are hidden, and its band shrinks with it, the rows and lanes
+below closing up. Left on a focused open row folds it, Right on a folded row opens it. Fold state is runtime-only, never
+saved: `TimelineAutomationLanes` keeps a set of folded routing keys (`ModulatorInfo::key()`), so a routing whose source
+was changed (a new key) starts open, and a key whose routing is gone is dropped. The height change is a 160 ms
+`easeOutCubic` tween driven by `TimelineAutomationLanes` (the row shrinks to, and grows from, its title line; the controls
+leave when it lands and return as it starts); it lands at once when the timeline is not showing, under Reduce Motion or
+with Animations Off ([Motion rules](../layout/animation.md#motion-rules)).
+
+**Order.** A lane's rows are in graph order until moved. Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` /
+`timelineMoveLaneDown`, rebindable) on a focused modulator row, one of its controls (a combo or bar would take the arrow
+itself, so the row's key listener is offered it first) or its band (where a bare Up/Down nudges the amount) move that
+modulator one slot up or down among the modulators of the SAME lane; the first row's Up and the last row's Down do
+nothing but still consume the key. One undo step (`setModulatorOrderUndoable`). The order is
+`AutomationLane::modulatorOrder`, a list of routing keys (`modulatorOrderKey`: the routing's Attenuverter uuid, else
+`ModulatorInfo::key()`) saved with the lane as an additive `modulatorOrder` array (absent = empty = graph order), copied by
+Duplicate and kept by Change parameter. The panel sorts the lane's routings by it (`sortedByModulatorOrder`): listed keys
+first in their stored order, every other routing after them in graph order; a stale key is ignored, never pruned. The
+move computes the new order from the lane's rows as shown now and writes it through
+`TimelineAutomationLanes::moveModulatorInOrder(lane, key, newIndex)`, the one function a later drag will also use. A
+reorder keeps the same row and band objects (they are moved to their new slots, not rebuilt), so keyboard focus stays on
+the moved row. The moved row, the row it swaps with and their bands slide from their old y to the new slot (160 ms `easeOutCubic`,
+`TimelineAutomationLanes::glideModulatorRows(lane, oldYs)`, which a drag of modulator rows can reuse); under Reduce
+Motion, Animations Off or with the timeline not showing they land at once. Left and Right fold the row only when the
+row itself has focus, never from one of its controls.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: a `CV` tag,
 its card title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
@@ -818,7 +851,11 @@ collide with the first's own new identity. `swapLaneParams` mutates both sides i
 ## Tests
 
 `AutomationLanesReorderTests.cpp` (the header drag, Esc, click versus drag, the track boundary, Cmd+Alt+Up/Down, a rebind)
-and `Tests/Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp` (`moveLane`, save and load) cover the reorder.
+and `Tests/Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp` (`moveLane`, save and load; the saved, copied and kept
+`modulatorOrder`) cover the reorder. `AutomationLanesModulatorFoldOrderTests.cpp` covers the modulator rows' fold (a real
+click on the arrow, Return/Space, Left/Right, the one-line height and the band following, the hidden controls, the names,
+the tween and Reduce Motion) and their order (rows sorted by the stored order, Cmd+Alt+Up/Down from the row, a control and
+the band, one undo step, the same row kept, the ends, a rebind).
 
 `Tests/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp` (right-click at the pointer on the header and the editor,
 handle and segment keeping their menus, the menu key), `AutomationLanesRetargetTests.cpp` and

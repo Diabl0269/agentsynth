@@ -213,6 +213,19 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     });
 }
 
+// Routing keys are ModulatorInfo's Attenuverter uuid, else its key(). A routing not listed shows after the listed ones
+// in graph order and a stale key is ignored, never pruned. False for an unknown lane or the order it already has (no
+// revision bump, no notification). A user gesture: wrap in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setModulatorOrder(LaneId id, std::vector<juce::String> order) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || lane->modulatorOrder == order)
+        return false;
+    return applyMutation([&] {
+        lane->modulatorOrder = std::move(order);
+        return true;
+    });
+}
+
 // The range default is what playback writes every block while the lane has no breakpoints, so it IS the lane's
 // constant. Clamped into the range; a non-finite value or unknown lane is rejected; the value already held is a
 // no-op. A user edit: callers wrap it in AppUndoManager::recordTimelineChange.
@@ -361,6 +374,7 @@ LaneId TimelineDoc::duplicateLane(LaneId source, const juce::String& nodeUuid, c
         copy.range = range;
         copy.paramIndexHint = paramIndexHint;
         copy.recordMode = original->recordMode;
+        copy.modulatorOrder = original->modulatorOrder;
         copy.points = rescalePoints(original->points, original->range, range);
         const auto id = copy.id;
         const auto position = (original - owner->lanes.data()) + 1;

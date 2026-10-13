@@ -23,6 +23,14 @@ bool sameRoutings(const std::vector<ModulatorInfo>& a, const std::vector<Modulat
             return false;
     return true;
 }
+
+bool sameRoutingSet(const std::vector<ModulatorInfo>& a, const std::vector<ModulatorInfo>& b) {
+    if (a.size() != b.size())
+        return false;
+    return std::all_of(b.begin(), b.end(), [&a](const ModulatorInfo& info) {
+        return std::any_of(a.begin(), a.end(), [&info](const ModulatorInfo& x) { return x.key() == info.key(); });
+    });
+}
 } // namespace
 
 int TimelineAutomationLanes::modulatorRowHeight() const {
@@ -59,6 +67,16 @@ bool TimelineAutomationLanes::deriveRoutings() {
                 amounts.insert(amount->id);
         }
     }
+    // A folded row's state goes with its routing: a routing that is gone (or re-keyed by a source change) starts open.
+    std::set<juce::String> live;
+    for (const auto& [laneId, infos] : routings_)
+        for (const auto& info : infos)
+            live.insert(info.key());
+    for (auto it = collapsedMods_.begin(); it != collapsedMods_.end();)
+        it = live.count(*it) == 0 ? collapsedMods_.erase(it) : std::next(it);
+    for (auto it = foldTweens_.begin(); it != foldTweens_.end();)
+        it = live.count(it->first) == 0 ? foldTweens_.erase(it) : std::next(it);
+
     const bool changed = amounts != amountLanes_;
     amountLanes_ = std::move(amounts);
     return changed;
@@ -91,13 +109,17 @@ bool TimelineAutomationLanes::syncModulators() {
             if (isAmountLane(lane.id))
                 continue;
             visible.insert(lane.id);
-            auto infos = routings_[lane.id];
+            auto infos = sortedByModulatorOrder(routings_[lane.id], lane.modulatorOrder);
             const auto parameterName = laneLabelsFor(lane, host_).parameter;
             auto& entry = modulators_[lane.id];
             if (!sameRoutings(entry.infos, infos)) {
-                rebuildModulators(entry, lane.id, std::move(infos), parameterName);
+                if (!sameRoutingSet(entry.infos, infos)) {
+                    rebuildModulators(entry, lane.id, std::move(infos), parameterName);
+                    rebuilt = true;
+                    continue;
+                }
+                permuteModulators(entry, infos); // only the order changed: the same rows take their new slots
                 rebuilt = true;
-                continue;
             }
             for (size_t i = 0; i < infos.size(); ++i) {
                 entry.rows[i]->setInfo(infos[i], parameterName);
@@ -107,6 +129,7 @@ bool TimelineAutomationLanes::syncModulators() {
             entry.infos = std::move(infos);
         }
     }
+    applyModulatorFold();
     refreshModulatorAmounts(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
     for (auto it = modulators_.begin(); it != modulators_.end();) {
         if (visible.count(it->first) > 0) {
@@ -153,6 +176,15 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         rowPtr->onKeyboardFocused = [this, rowPtr] {
             if (onKeyboardStopFocused)
                 onKeyboardStopFocused(*rowPtr);
+        };
+        rowPtr->onFoldRequested = [this, rowPtr](bool collapse) {
+            setModulatorCollapsed(rowPtr->getInfo().key(), collapse);
+        };
+        rowPtr->onMoveKey = [this, lane, rowPtr](const juce::KeyPress& key) {
+            return handleModulatorKey(lane, rowPtr->getInfo(), key);
+        };
+        band->onMoveKey = [this, lane, bandPtr = band.get()](const juce::KeyPress& key) {
+            return handleModulatorKey(lane, bandPtr->getInfo(), key);
         };
         band->onMenuRequested = [row = entry.rows.back().get()](const juce::PopupMenu::Options& options) {
             row->showMenuAt(options);

@@ -4,6 +4,7 @@
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h"
+#include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -17,6 +18,10 @@ struct TrackHeaderHost;
 // a menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is read-only. A routing through
 // an Attenuverter also shows its amount ("Amount  +72%"), which the band beside it edits (ModulatorBand).
 //
+// A fold arrow at the left of the title line collapses the row to that line (the title and the amount readout; the
+// shape, rate and sync controls are hidden) and expands it again; Left on the row collapses it and Right expands it,
+// as in a tree. The owner decides the fold state and the height; the row only shows it.
+//
 // Holds no parameter state: every control mirrors the live processor through the host
 // (refreshValues), and every edit goes back through TrackHeaderHost::setNodeParameter, the same undo
 // path the canvas knobs use. Message thread only. "Remove modulator" destroys this row before the
@@ -24,6 +29,7 @@ struct TrackHeaderHost;
 class ModulatorRow
     : public juce::Component
     , public juce::SettableTooltipClient
+    , public juce::KeyListener
     , public KeyboardContextMenuProvider {
 public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
@@ -49,6 +55,25 @@ public:
     /** The amount readout as drawn ("+72%"); empty for a direct cable. */
     juce::String getAmountText() const;
 
+    /** Folded to the title line: the arrow, its names and the Left/Right keys follow. The owner sets the height. */
+    void setCollapsed(bool collapsed);
+    bool isCollapsed() const noexcept { return collapsed_; }
+    /** True once the row is at its one-line height (or on its way out of it): hides the controls and moves the amount
+     *  readout up onto the title line. Kept apart from setCollapsed so a folding row keeps its controls until it
+     *  lands. */
+    void setCompact(bool compact);
+    bool isCompact() const noexcept { return compact_; }
+    /** The height of one line, px; 0 = a third of the row. The owner sets it so lines keep their place while the row's
+     *  height tweens. */
+    void setTitleLineHeight(int height);
+    TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
+    /** The arrow, Return/Space on it, or Left/Right on the row asked to collapse (true) or expand (false); may be
+     *  null. */
+    std::function<void(bool collapse)> onFoldRequested;
+    /** Offered every key that reaches the row or one of its controls first (a combo or bar would take Up/Down
+     *  itself); true when the owner used it (Move Lane Up/Down moves the modulator). May be null. */
+    std::function<bool(const juce::KeyPress&)> onMoveKey;
+
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
@@ -73,6 +98,7 @@ public:
     /** Fired when this row takes keyboard focus; may be null. */
     std::function<void()> onKeyboardFocused;
     bool keyPressed(const juce::KeyPress& key) override;
+    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
     void focusLost(juce::Component::FocusChangeType cause) override;
     bool showContextMenuForKeyboardFocus() override;
@@ -84,6 +110,7 @@ private:
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
                        std::function<float(double)> toParameter);
+    void applyCompact();
     void layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine);
     void layoutAmount(juce::Rectangle<int> line);
     juce::Colour readableTrackColour() const;
@@ -97,11 +124,16 @@ private:
     juce::Slider rateHz_;
     juce::ToggleButton sync_;
     ModulatorShapeIcon shapeIcon_;
+    TrackFoldArrow foldArrow_;
+    bool collapsed_ = false;
+    bool compact_ = false;
+    int titleLineHeight_ = 0;
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     juce::Rectangle<int> tagArea_;
     juce::Rectangle<int> titleArea_;
-    juce::Rectangle<int> rateTextArea_; // the Hz value, beside its bar (never over it: the bar has a cap)
-    juce::Rectangle<int> amountArea_;   // "Amount" and its readout
+    juce::Rectangle<int> rateTextArea_;      // the Hz value, beside its bar (never over it: the bar has a cap)
+    juce::Rectangle<int> amountArea_;        // "Amount" and its readout
+    juce::Rectangle<int> compactAmountArea_; // the readout alone, on the title line of a folded row
     std::optional<juce::Colour> trackColour_;
     std::optional<double> amount_;
 
