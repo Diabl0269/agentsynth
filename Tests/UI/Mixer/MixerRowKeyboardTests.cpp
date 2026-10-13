@@ -267,19 +267,25 @@ TEST(MixerRowKeyboardTest, DeleteRemovesTheFocusedInsertAndUndoRestoresIt) {
     EXPECT_EQ(rig.insertCount(), before);
 }
 
-TEST(MixerRowKeyboardTest, DeletingTheLastRowLeavesRowMode) {
+// With every insert and send gone, the column's one row is "+ Insert": deleting the last send lands there, and Delete
+// on "+ Insert" itself removes nothing and keeps it.
+TEST(MixerRowKeyboardTest, DeletingTheLastSendLandsOnPlusInsert) {
     RowRig rig;
-    while (rig.insertCount() > 0) {
+    while (rig.firstColumn().getInsertList().getEntryCountForTest() > 0) {
         rig.firstColumn().getInsertList().removeRow(0);
         rig.panel().rebuild();
     }
     rig.panel().keyPressed(rightKey());
-    ASSERT_TRUE(rig.panel().keyPressed(tabKey())) << "the send row is still there";
+    ASSERT_TRUE(rig.panel().keyPressed(tabKey()));
+    ASSERT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0})) << "+ Insert";
+    ASSERT_EQ(rig.firstColumn().getInsertList().getAddRowIndex(), 0);
+    ASSERT_TRUE(rig.panel().keyPressed(downKey())) << "the send row is still there";
     ASSERT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0}));
 
     EXPECT_TRUE(rig.panel().keyPressed(deleteKey()));
-    EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value());
-    EXPECT_EQ(rig.panel().getFocusedColumnIndexForTest(), 0) << "back on the column";
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0}));
+    EXPECT_TRUE(rig.panel().keyPressed(deleteKey()));
+    EXPECT_EQ(rig.firstColumn().getInsertList().getAddRowIndex(), 0) << "+ Insert cannot be removed";
 }
 
 TEST(MixerRowKeyboardTest, EscapeReturnsToColumnMode) {

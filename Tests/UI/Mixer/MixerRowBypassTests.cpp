@@ -233,7 +233,7 @@ TEST(MixerRowBypassTest, TheMasterInsertRowsHaveBypassButtonsThatToggleTheirModu
     rig.panel().getMasterColumnForTest()->getInsertList().addModule("Limiter");
     rig.panel().rebuild();
     auto& inserts = rig.panel().getMasterColumnForTest()->getInsertList();
-    if (inserts.getRowCount() == 0)
+    if (inserts.getEntryCountForTest() == 0)
         GTEST_SKIP() << "this rig's Master has no chain terminator to splice an insert into";
 
     auto* button = inserts.getBypassButtonForTest(0);

@@ -8,7 +8,9 @@
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
@@ -437,6 +439,12 @@ TEST(MixerPanelColumnDragTests, TheNameLabelShowsTheHeadersCursor) {
 TEST(MixerPanelColumnDragTests, ThePressAreaIsExactlyTheDrawnHeader) {
     ColumnDragRig r(2);
     r.mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer); // hit-testing skips a hidden panel
+    // A click on the insert list's "+ Insert" row opens the effect picker; keep it from launching a real call-out,
+    // which would stay open and swallow later tests' input.
+    synth::ui::MixerInsertList::pickerHookForTest() = [](auto) {};
+    struct HookReset {
+        ~HookReset() { synth::ui::MixerInsertList::pickerHookForTest() = nullptr; }
+    } hookReset;
     auto* strip = r.panel->getStripColumnForTest(0);
     ASSERT_NE(strip, nullptr);
     const auto handle = strip->getHeaderForTest().getBounds();
