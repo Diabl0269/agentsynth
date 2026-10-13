@@ -448,6 +448,8 @@ private:
     bool handleRowKey(const juce::KeyPress& key);
     bool stepRow(int direction);
     bool nudgeFocusedSend(float deltaDb);
+    /** On an insert split row, opens (Right) or folds (Left) it; Left on a path row steps up to its split row. */
+    bool foldFocusedRow(bool open);
     bool removeFocusedRow();
     bool toggleFocusedRowBypass();
     bool openFocusedRow();

@@ -6,19 +6,9 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace synth::ui {
-namespace {
 
-struct ModEntry {
-    const char* name;
-    ModuleType type;
-};
-struct Category {
-    const char* header;
-    std::vector<ModEntry> modules;
-};
-
-const std::vector<Category>& replaceCategories() {
-    static const std::vector<Category> categories = {
+const std::vector<ModuleChoiceCategory>& moduleChoiceCategories() {
+    static const std::vector<ModuleChoiceCategory> categories = {
         {"Sources",
          {{"Oscillator", ModuleType::Oscillator},
           {"Wavetable", ModuleType::Wavetable},
@@ -54,6 +44,8 @@ const std::vector<Category>& replaceCategories() {
     return categories;
 }
 
+namespace {
+
 // "AudioUnit" reads as "AU", the same short form the library sidebar and the Instrument -> Plugin menu use.
 juce::String formatLabel(const juce::String& format) { return format == "AudioUnit" ? juce::String("AU") : format; }
 
@@ -67,7 +59,7 @@ void addItem(ReplaceChoices& out, ReplaceChoice choice, ModMatrixPicker::Item it
 ReplaceChoices collectReplaceChoices(ModuleType current, const std::optional<synth::PluginIdentity>& currentPlugin,
                                      const std::vector<synth::PluginIdentity>& plugins) {
     ReplaceChoices out;
-    for (const auto& cat : replaceCategories()) {
+    for (const auto& cat : moduleChoiceCategories()) {
         for (const auto& mod : cat.modules) {
             if (mod.type == current)
                 continue;

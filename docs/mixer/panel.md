@@ -837,11 +837,14 @@ the other section, or back to column mode when none is left. Master has insert r
 - **Up and Down** step rows, clamped at either end. **Left and Right** lower and raise the focused
   send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:
   `captureBeforeState`, then the parameter's begin-gesture, set and end-gesture (what a knob drag produces),
-  then `pushSnapshotFromCapture`. On an insert row the arrows do nothing, and never walk columns.
+  then `pushSnapshotFromCapture`. On an insert split row Right opens its paths and Left folds them; Left on a
+  row inside a split's paths steps up to that split row ([parallel paths](mixer.md#parallel-paths)). Otherwise
+  the arrows do nothing on an insert row, and never walk columns.
 - **B** (`mixerToggleRowBypass`, rebindable, Mixer category, default bare B) bypasses the focused row -- see
   [Bypassing a row](#bypassing-a-row).
 - **Return** on an insert selects its channel on the canvas, the same `selectOnCanvas` the EQ thumbnail's
-  click and the insert list's "Edit on canvas" link use. **Delete** or **Backspace** removes the send or
+  click and the insert list's "Edit on canvas" link use; on a split row it opens or folds the paths, and on the
+  last insert row, "+ Insert", it opens the effect picker ([adding an insert](mixer.md#adding-an-insert)). **Delete** or **Backspace** removes the send or
   insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus
   use, undoable -- and a branching insert chain (read-only) keeps its rows. **Esc** returns to column mode.
 - Removing a row rebuilds the mixer and destroys the list that did it, so the panel touches nothing of
@@ -851,8 +854,9 @@ the other section, or back to column mode when none is left. Master has insert r
 - The focused row is outlined with `synth::ui::paintFocusRing` (the panel is the component that holds focus,
   so the ring is painted by the panel over its children, clipped to the section's frame) and scrolled into view
   with `MixerSectionViewport::revealRange()`. The panel's accessibility **description** carries the row text --
-  `"Send to Reverb Bus, -6.0 dB"` (plus `", muted"`), `"Insert 2, Compressor"` (plus `", bypassed"`) -- and
-  announces a change.
+  `"Send to Reverb Bus, -6.0 dB"` (plus `", muted"`), `"Insert 2, Compressor"` (plus `", bypassed"`),
+  `"Insert 3, split into 2 paths, folded"`, `"Insert 4, Delay 1, path 1"`, `"Add an insert"` -- and announces a
+  change.
 
 ### Bypassing a row
 
@@ -861,8 +865,8 @@ accent wash and glyph show the on state). It is the mouse twin of the **B** key,
 `toggleBypassForRow()` on the row's list, so a click and a key cannot diverge:
 
 - **An insert** toggles its module's own bypass parameter (`ModuleBase::setBypassed`, the one the canvas card's bypass
-  button flips), bracketed by `captureBeforeState`/`pushSnapshotFromCapture` as one undo step. A branching (read-only)
-  chain bypasses too: bypass changes no topology. The Master column's insert rows have the button and the key too.
+  button flips), bracketed by `captureBeforeState`/`pushSnapshotFromCapture` as one undo step. A split row bypasses
+  every module under it in that one step. A branching (read-only) chain bypasses too: bypass changes no topology. The Master column's insert rows have the button and the key too.
 - **A send** toggles its persisted bypass bit (`ChannelStripModule::isSendBypassed`, serialised as `"bypass"` in
   the send's extra state and carried through a reorder swap), through `synth::setSendBypassed` in one
   `recordGraphAndMacroChange`, like the send's mute. How the audio path treats it is in

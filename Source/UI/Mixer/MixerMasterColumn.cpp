@@ -54,6 +54,9 @@ MixerMasterColumn::MixerMasterColumn() {
         if (onMutated)
             onMutated();
     };
+    insertList_.onPreferredHeightChanged = [this] {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    };
     addAndMakeVisible(fader_);
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
@@ -102,7 +105,8 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.chainEndNodeId);
     const bool hasInserts = !column.inserts.empty();
-    insertsCollapsed_.setSummary(mixerSectionCountSummary((int)column.inserts.size(), "insert", "inserts"));
+    insertsCollapsed_.setSummary(
+        mixerSectionCountSummary(synth::countInsertModules(column.inserts), "insert", "inserts"));
     if (hasInserts != hasInserts_) {
         hasInserts_ = hasInserts;
         // Both sources are consume-on-read latches that keep the loudest peak since their last read, and only the

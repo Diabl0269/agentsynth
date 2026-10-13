@@ -225,6 +225,9 @@ void AppLookAndFeel::retintIcons() {
 
     // The mixer header's sources badge: a muted base the badge clones its hover and on variants from.
     iconLibrary_.setTintColour(Icon::MixerSources, c.textMuted);
+
+    // The mixer insert list's split row: the accent, like the paths' rails it heads.
+    iconLibrary_.setTintColour(Icon::MixerSplit, c.accent);
 }
 
 } // namespace synth::theme

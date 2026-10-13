@@ -165,6 +165,8 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::mixersources_svg, BinaryData::mixersources_svgSize},
         // The toolbar's Hide/Show panel glyph (appended after Icon::MixerSources).
         {BinaryData::togglepanel_svg, BinaryData::togglepanel_svgSize},
+        // The mixer insert list's split row (appended after Icon::TogglePanel).
+        {BinaryData::mixersplit_svg, BinaryData::mixersplit_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

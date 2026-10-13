@@ -85,6 +85,8 @@ juce_add_binary_data(Assets SOURCES
     # The toolbar's Hide/Show panel glyph (a window with its bottom panel filled). BinaryData
     # symbol: togglepanel_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/toggle-panel.svg
+    # The mixer insert list's split row (a line forking into two). BinaryData symbol: mixersplit_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-split.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

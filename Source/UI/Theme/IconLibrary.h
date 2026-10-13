@@ -80,6 +80,8 @@ enum class Icon : int {
     MixerSources,
     // The toolbar's Hide/Show panel glyph -- appended, as above.
     TogglePanel,
+    // The mixer insert list's split row (parallel paths) -- appended, as above.
+    MixerSplit,
     kCount
 };
 
