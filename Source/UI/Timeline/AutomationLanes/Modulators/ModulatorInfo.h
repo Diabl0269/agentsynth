@@ -1,7 +1,9 @@
 #pragma once
 
 #include "UI/Theme/Theme.h"
+#include <algorithm>
 #include <juce_graphics/juce_graphics.h>
+#include <vector>
 
 namespace synth::ui {
 
@@ -25,6 +27,31 @@ struct ModulatorInfo {
                juce::String(targetChannel);
     }
 };
+
+/** The key a routing is stored under in a lane's modulatorOrder: the Attenuverter's uuid when it has one (it survives a
+ *  source change, so the slot does), else key(). */
+inline juce::String modulatorOrderKey(const ModulatorInfo& info) {
+    return info.attenuverterUuid.isNotEmpty() ? info.attenuverterUuid : info.key();
+}
+
+/** `routings` (graph order) sorted by a lane's stored modulatorOrder: the routings whose key is listed come first, in
+ *  the stored order, then every routing not listed in graph order. A stale key (no routing) is ignored. */
+inline std::vector<ModulatorInfo> sortedByModulatorOrder(std::vector<ModulatorInfo> routings,
+                                                         const std::vector<juce::String>& order) {
+    std::vector<ModulatorInfo> sorted;
+    sorted.reserve(routings.size());
+    for (const auto& key : order) {
+        const auto it = std::find_if(routings.begin(), routings.end(),
+                                     [&key](const ModulatorInfo& info) { return modulatorOrderKey(info) == key; });
+        if (it != routings.end()) {
+            sorted.push_back(std::move(*it));
+            routings.erase(it);
+        }
+    }
+    for (auto& info : routings)
+        sorted.push_back(std::move(info));
+    return sorted;
+}
 
 // Where a parameter edit from a modulator row is in its gesture: Begin opens the undo step, Change
 // moves the live value, End closes the step; Once is all three for a single click or key press.

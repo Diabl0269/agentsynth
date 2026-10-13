@@ -18,6 +18,9 @@ public:
     /** Updates the glyph, name and tooltip. `trackName` is the row's current name; a folded arrow
      *  also says how many lanes it would show, since a track row has no room for a count badge. */
     void setState(bool expanded, const juce::String& trackName, int laneCount = 0);
+    /** Same, with the screen-reader name and the tooltip given whole (a modulator row's arrow: "Collapse LFO 1 on
+     *  Cutoff"). */
+    void setStateWithText(bool expanded, const juce::String& name, const juce::String& tooltip);
     bool isExpanded() const noexcept { return expanded_; }
 
     /** A right-click on the arrow; null = ignored. */

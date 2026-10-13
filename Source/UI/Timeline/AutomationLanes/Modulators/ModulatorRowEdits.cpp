@@ -56,8 +56,8 @@ void ModulatorRow::refreshValues() {
                                 juce::dontSendNotification);
         const bool synced = host_->getNodeParameter(lfo, "mode") >= 0.5f;
         sync_.setToggleState(synced, juce::dontSendNotification);
-        syncRate_.setVisible(synced);
-        rateHz_.setVisible(!synced);
+        syncRate_.setVisible(synced && !compact_);
+        rateHz_.setVisible(!synced && !compact_);
         if (dragging_ != &rateHz_)
             set(rateHz_, host_->getNodeParameter(lfo, "rateHz"));
     }
@@ -138,11 +138,27 @@ void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
         showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
 }
 
-// A bare Up/Down on the row itself moves focus to the row above or below (the track list's order), and a bare Return
-// opens its menu; the row's controls keep their own keys because those never reach here.
+// Left folds the row and Right opens it (only with the row itself focused, never from a control). A bare Up/Down on the
+// row itself moves focus to the row above or below (the track list's order), and a bare Return opens its menu; the
+// row's controls keep their own keys because those never reach here.
 bool ModulatorRow::keyPressed(const juce::KeyPress& key) {
+    if (onMoveKey && onMoveKey(key))
+        return true;
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
+    if (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)) {
+        // Only the row itself folds: a key that bubbled up from one of its controls (the arrow, the Sync toggle...) is
+        // the control's own. Nothing has focus in a headless test, so that case is the only one refused here.
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        if (focused != nullptr && focused != this)
+            return false;
+        const bool collapse = key.isKeyCode(juce::KeyPress::leftKey);
+        if (collapse == collapsed_)
+            return false; // already there: Left on a folded row and Right on an open one do nothing
+        if (onFoldRequested)
+            onFoldRequested(collapse);
+        return true;
+    }
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return showContextMenuForKeyboardFocus();
     if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
@@ -152,6 +168,9 @@ bool ModulatorRow::keyPressed(const juce::KeyPress& key) {
     }
     return false;
 }
+
+// A control of the row (a combo or bar would take the arrow key itself) offers the owner the move keys first.
+bool ModulatorRow::keyPressed(const juce::KeyPress& key, juce::Component*) { return onMoveKey && onMoveKey(key); }
 
 void ModulatorRow::focusGained(juce::Component::FocusChangeType) {
     repaint();

@@ -282,6 +282,8 @@ bool ModulatorBand::keyPressed(const juce::KeyPress& key) {
         setAmountReadout(knobDragStart_);
         return true;
     }
+    if (onMoveKey && onMoveKey(key))
+        return true;
     if (key == juce::KeyPress::escapeKey && editor_ != nullptr)
         return editor_->keyPressed(key); // the editor has no focus of its own: an Escape mid-stroke is its
     if (!isEditable() || amountLane() != nullptr)

@@ -35,6 +35,13 @@ void TrackFoldArrow::setState(bool expanded, const juce::String& trackName, int 
     repaint();
 }
 
+void TrackFoldArrow::setStateWithText(bool expanded, const juce::String& name, const juce::String& tooltip) {
+    expanded_ = expanded;
+    setTitle(name);
+    setTooltip(tooltip);
+    repaint();
+}
+
 void TrackFoldArrow::paintButton(juce::Graphics& g, bool highlighted, bool) {
     const auto bounds = getLocalBounds().toFloat();
     const auto glyph = juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre());

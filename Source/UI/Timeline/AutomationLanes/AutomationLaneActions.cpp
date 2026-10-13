@@ -68,6 +68,13 @@ bool moveLaneOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth:
     return applyEdit(doc, undo, [target, lane, newIndex] { return target->moveLane(lane, newIndex); });
 }
 
+bool setModulatorOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
+                               std::vector<juce::String> order) {
+    synth::TimelineDoc* target = &doc;
+    return applyEdit(doc, undo,
+                     [target, lane, order = std::move(order)] { return target->setModulatorOrder(lane, order); });
+}
+
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane) {
     synth::TimelineDoc* target = &doc;
     return applyEdit(doc, undo, [target, lane] {

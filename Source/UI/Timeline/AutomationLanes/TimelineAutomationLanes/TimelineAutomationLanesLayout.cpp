@@ -34,7 +34,7 @@ int TimelineAutomationLanes::addRowHeight() const {
 int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) const {
     if (isAmountLane(lane.id))
         return 0;
-    return laneRowHeight() + modulatorCount(lane.id) * modulatorRowHeight();
+    return laneRowHeight() + modulatorOffset(lane.id, modulatorCount(lane.id));
 }
 
 // A track with lanes gets its "+" in the gutter of its last lane header; only a track with none needs a whole row.
@@ -106,8 +106,14 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             header->setLift(lift);
             lastLaneY = staticY;
         }
-        for (int i = 0; i < modulatorCount(lane.id); ++i)
-            modulatorRowFor(lane.id, i)->setBounds(0, y + rowHeight + i * modHeight, width, modHeight);
+        int modY = y + rowHeight;
+        for (int i = 0; i < modulatorCount(lane.id); ++i) {
+            auto* row = modulatorRowFor(lane.id, i);
+            const int height = modulatorRowHeightFor(lane.id, i);
+            row->setTitleLineHeight(modHeight / 3);
+            row->setBounds(0, modY + modulatorGlideOffset(row->getInfo().key()), width, height);
+            modY += height;
+        }
         if (lift > 0.0f) {
             if (auto* header = headerFor(lane.id))
                 header->toFront(false);
@@ -159,8 +165,7 @@ juce::Rectangle<int> TimelineAutomationLanes::modulatorRowContentBounds(synth::L
     const auto row = laneRowContentBounds(lane, layout);
     if (row.isEmpty())
         return {};
-    const int height = modulatorRowHeight();
-    return {0, row.getBottom() + index * height, row.getWidth(), height};
+    return {0, row.getBottom() + modulatorOffset(lane, index), row.getWidth(), modulatorRowHeightFor(lane, index)};
 }
 
 juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId track,
@@ -194,7 +199,9 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
     }
     for (auto& [id, entry] : modulators_)
         for (int i = 0; i < (int)entry.bands.size(); ++i)
-            entry.bands[(size_t)i]->setBounds(modulatorRowContentBounds(id, i, layout).translated(0, -scroll));
+            entry.bands[(size_t)i]->setBounds(
+                modulatorRowContentBounds(id, i, layout)
+                    .translated(0, -scroll + modulatorGlideOffset(entry.infos[(size_t)i].key())));
 }
 
 // Rides the panel's existing transport poll: nothing happens while the beat stands still, and only

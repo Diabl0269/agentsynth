@@ -18,6 +18,7 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
     : viewState_(viewState)
     , headerParent_(headerParent)
     , bodies_(std::make_unique<Bodies>())
+    , foldUpdater_(&headerParent)
     , laneDrag_(headerParent, [this] { onLaneDragFrame(); }) {
     laneRange_.onChanged = [this] { laneRangeChanged(); };
 }
@@ -25,6 +26,8 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
 // dangling child pointer during the owner's own teardown.
 TimelineAutomationLanes::~TimelineAutomationLanes() {
+    foldDriver_.stop(foldUpdater_);
+    glideDriver_.stop(foldUpdater_);
     modulators_.clear();
     addRows_.clear();
     headers_.clear();
@@ -45,6 +48,11 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     editors_.clear();
     expanded_.clear();
     collapsedUnassigned_.clear();
+    collapsedMods_.clear();
+    foldTweens_.clear();
+    foldDriver_.stop(foldUpdater_);
+    glideTweens_.clear();
+    glideDriver_.stop(foldUpdater_);
     laneRange_.clear();
     doc_ = doc;
     sync();

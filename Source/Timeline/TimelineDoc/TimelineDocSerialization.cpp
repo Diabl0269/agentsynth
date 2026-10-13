@@ -106,6 +106,22 @@ bool readOptionalArray(const juce::var& v, const juce::Array<juce::var>*& out) {
     return out != nullptr;
 }
 
+// A lane's modulatorOrder: absent -> empty (graph order); present, an array of strings.
+bool readModulatorOrder(const juce::var& v, std::vector<juce::String>& out) {
+    const juce::Array<juce::var>* list = nullptr;
+    if (!readOptionalArray(v, list))
+        return false;
+    if (list == nullptr)
+        return true;
+    for (const auto& keyVar : *list) {
+        juce::String key;
+        if (!readString(keyVar, key))
+            return false;
+        out.push_back(key);
+    }
+    return true;
+}
+
 // A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
 // non-finite height is refused; a height outside its range is clamped, it is display data.
 bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
@@ -198,6 +214,12 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);
             l->setProperty("paramIndexHint", lane.paramIndexHint); // additive
+            if (!lane.modulatorOrder.empty()) {                    // additive; absent = empty = graph order
+                juce::Array<juce::var> orderVars;
+                for (const auto& key : lane.modulatorOrder)
+                    orderVars.add(key);
+                l->setProperty("modulatorOrder", orderVars);
+            }
 
             juce::DynamicObject::Ptr r = new juce::DynamicObject();
             r->setProperty("minValue", static_cast<double>(lane.range.minValue));
@@ -438,12 +460,10 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     if (!isValidRecordMode(lane.recordMode))
                         return false;
 
-                    // Additive: absent (every file written before this field existed) keeps
-                    // the -1 default already on `lane`. No range check beyond "must be an integer if
-                    // present" — resolveLaneParameter treats anything < 0 as "no hint" and bounds-
-                    // checks a non-negative one defensively, so there is nothing here that can turn a
-                    // malformed value into an out-of-bounds read downstream.
-                    if (!readOptionalInt(lObj->getProperty("paramIndexHint"), lane.paramIndexHint))
+                    // Additive: absent keeps the -1 default. Any integer is fine: resolveLaneParameter treats < 0 as
+                    // "no hint" and bounds-checks a non-negative one.
+                    if (!readOptionalInt(lObj->getProperty("paramIndexHint"), lane.paramIndexHint) ||
+                        !readModulatorOrder(lObj->getProperty("modulatorOrder"), lane.modulatorOrder))
                         return false;
 
                     const juce::Array<juce::var>* pointList = nullptr;

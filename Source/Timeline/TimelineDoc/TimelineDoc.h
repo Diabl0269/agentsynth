@@ -230,6 +230,9 @@ struct AutomationLane {
     // reach the snapshot, where the applier switches on it.
     int recordMode = static_cast<int>(LaneRecordMode::Read);
 
+    // Routing keys of the lane's modulator rows, in display order (saved; empty = graph order).
+    std::vector<juce::String> modulatorOrder;
+
     // RUNTIME-ONLY: true when nodeUuid is non-empty but does not resolve to any live
     // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
     // is the only writer, driven by synth::TimelineReconciler against a real graph. NOT written by
@@ -580,6 +583,9 @@ public:
     // Write-drops-to-Touch-on-stop rule calls this directly, and undoing the data a take wrote must
     // not silently re-arm the lane.
     bool setLaneRecordMode(LaneId id, int mode);
+
+    // Replaces the lane's modulatorOrder; false when unchanged (see the .cpp).
+    bool setModulatorOrder(LaneId id, std::vector<juce::String> order);
 
     // The value an automation lane holds while it has no breakpoints; a user edit (see the .cpp).
     bool setLaneConstantValue(LaneId id, double value);

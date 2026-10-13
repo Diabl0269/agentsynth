@@ -65,6 +65,10 @@ public:
     void setAmountReadout(double amount);
 
     /** True for a routing with an Attenuverter; a direct cable's band is a plain decoration. */
+    const ModulatorInfo& getInfo() const noexcept { return info_; }
+    /** Offered every key first (Up/Down nudge the knob); true when the owner used it (Move Lane Up/Down moves the
+     *  modulator). May be null. */
+    std::function<bool(const juce::KeyPress&)> onMoveKey;
     bool isEditable() const noexcept { return info_.attenuverterUuid.isNotEmpty(); }
     const synth::AutomationLane* amountLane() const;
     /** The curve editor over the proxy doc; nullptr for a decoration band. */
