@@ -14,7 +14,6 @@ namespace synth::ui {
 
 void AutomationLaneHeaderComponent::applyRecordModeChoice(int comboId) {
     setLaneRecordModeUndoable(doc_, undo_, laneId_, comboId - 1);
-    applyRecordModeColour();
 }
 
 // The move targets are captured here, as the menu is built, so a click resolves against the tracks
@@ -130,6 +129,10 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
         openDuplicatePicker();
         return;
     }
+    if (menuId >= kRecordModeMenuIdBase && menuId < kRecordModeMenuIdBase + 5) {
+        applyRecordModeChoice(menuId - kRecordModeMenuIdBase + 1);
+        return;
+    }
     const int index = menuId - kMoveToTrackMenuIdBase;
     if (index < 0 || index >= (int)moveTargets_.size())
         return;
@@ -150,9 +153,10 @@ void AutomationLaneHeaderComponent::showMenuAt(const juce::PopupMenu::Options& o
     });
 }
 
-// A right-click anywhere on the header opens the lane menu at the pointer; a left click on the parameter name
-// opens the picker that changes what the lane controls. The record-mode combo takes its own clicks. The value readout
-// forwards its events here (see the constructor).
+// A right-click anywhere on the header opens the lane menu at the pointer. A left click on the parameter name button
+// opens the picker that changes what the lane controls; anywhere else on the header (the marker and the value readout
+// forward their events here, see the constructor) it gives the row keyboard focus. The record-mode combo takes its own
+// clicks.
 void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     const auto local = e.getEventRelativeTo(this);
     if (e.mods.isPopupMenu()) {
@@ -167,8 +171,9 @@ void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
         onDragPress(e.getScreenPosition().y);
 }
 
-// A press on the header is either a click (on the name it opens the parameter picker, on release) or the start of a
-// drag that reorders the lane; the pool tells them apart once the pointer has travelled past the drag threshold.
+// A press on the header is either a click (on the name it opens the parameter picker, elsewhere it focuses the row,
+// both on release) or the start of a drag that reorders the lane; the pool tells them apart once the pointer has
+// travelled past the drag threshold.
 void AutomationLaneHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
     if (pressed_ && onDragMove)
         onDragMove(e.getScreenPosition().y);
@@ -181,12 +186,26 @@ void AutomationLaneHeaderComponent::mouseUp(const juce::MouseEvent& e) {
     const bool click = onDragRelease ? onDragRelease() : true;
     const bool wasName = pressedOnName_;
     pressedOnName_ = false;
-    if (click && wasName && nameArea_.contains(e.getEventRelativeTo(this).getPosition()))
-        openChangeParameterPicker();
+    if (!click)
+        return;
+    if (!wasName) {
+        ++clickFocusRequests_;
+        grabKeyboardFocus();
+    } else if (nameArea_.contains(e.getEventRelativeTo(this).getPosition()) && nameButton_.onClick)
+        nameButton_.onClick();
 }
 
-bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::Component*) {
-    return onLaneKey && onLaneKey(key);
+// The name button takes no mouse events, so the header tells it when the pointer is over it.
+void AutomationLaneHeaderComponent::mouseMove(const juce::MouseEvent& e) {
+    nameButton_.setHovered(nameArea_.contains(e.getEventRelativeTo(this).getPosition()));
+}
+
+void AutomationLaneHeaderComponent::mouseExit(const juce::MouseEvent&) { nameButton_.setHovered(false); }
+
+juce::String AutomationLaneHeaderComponent::getTooltip() {
+    if (nameArea_.contains(getMouseXYRelative()))
+        return nameButton_.getTooltip();
+    return juce::SettableTooltipClient::getTooltip();
 }
 
 // Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane
@@ -194,6 +213,13 @@ bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::
 bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (onLaneKey && onLaneKey(key))
         return true;
+    if (key.isKeyCode(juce::KeyPress::escapeKey) && (strip_.isEditing() || strip_.isRowOpen())) {
+        if (strip_.isEditing())
+            strip_.exitEdit();
+        else
+            strip_.closeRow();
+        return true;
+    }
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
     if (key.isKeyCode(juce::KeyPress::returnKey))

@@ -2,6 +2,9 @@
 
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
@@ -13,10 +16,12 @@ namespace synth::ui {
 
 struct TrackHeaderHost;
 
-// The header-column half of one modulator row under an automation lane: a tag in the owning track's
-// colour, the source card's title, and -- for an LFO -- a picture of its shape, the shape, rate and sync controls and
-// a menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is read-only. A routing through
-// an Attenuverter also shows its amount ("Amount  +72%"), which the band beside it edits (ModulatorBand).
+// The header-column half of one modulator row under an automation lane (a mod lane): a marker icon, the source card's
+// title as a button that opens the Change source picker, and -- for an LFO -- a picture of its shape, the shape, rate
+// and sync controls, a strip of control chips (the set every mod lane shows is the user's, see LaneControlStrip) and a
+// menu (right-click, Shift+F10 or Return: show on canvas, remove); any other source is read-only. A click anywhere else
+// on the row, not on a control, gives it keyboard focus. A routing through an Attenuverter also shows its amount
+// ("Amount  +72%"), which the band beside it edits (ModulatorBand).
 //
 // A fold arrow at the left of the title line collapses the row to that line (the title and the amount readout; the
 // shape, rate and sync controls are hidden) and expands it again; Left on the row collapses it and Right expands it,
@@ -35,13 +40,16 @@ public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
     // header column is ~200 px, too narrow for the app's combos and bars side by side on two lines.
     static constexpr int kBaseHeight = 54;
-    static constexpr int kIndent = 28; // one step further in than a lane header
+    static constexpr int kIndent = 16;     // the same inset as a lane header, so the marker and name line up with it
+    static constexpr int kStripeWidth = 4; // px of track colour at the row's left edge, as on a lane header
     static constexpr int kShowOnCanvasMenuId = 1;
     static constexpr int kRemoveMenuId = 2;
     static constexpr int kChangeSourceMenuId = 3; // only when the host can re-point the routing
 
-    /** `host` may be null (every control then stays inert). `parameterName` words the controls' names. */
-    ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName);
+    /** `host` may be null (every control then stays inert). `parameterName` words the controls' names. `controls` may
+     *  be null (the chips then show the default set and the "+" row has nowhere to float). */
+    ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName,
+                 LaneControlSet* controls = nullptr);
 
     const ModulatorInfo& getInfo() const noexcept { return info_; }
     /** Same routing (same key()), possibly re-titled or re-coloured. */
@@ -67,6 +75,14 @@ public:
      *  height tweens. */
     void setTitleLineHeight(int height);
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
+    /** How many plain clicks asked this row for keyboard focus (a headless test has no native focus to read). */
+    int getClickFocusRequestsForTest() const noexcept { return clickFocusRequests_; }
+    LaneNameButton& getNameButton() noexcept { return nameButton_; }
+    /** The control chips, the "+" button and edit mode. */
+    LaneControlStrip& getControlStrip() noexcept { return strip_; }
+    LaneMarkerIcon& getMarkerIcon() noexcept { return marker_; }
+    /** The source name button's bounds, in this row's coordinates. */
+    juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameButton_.getBounds(); }
     /** The arrow, Return/Space on it, or Left/Right on the row asked to collapse (true) or expand (false); may be
      *  null. */
     std::function<void(bool collapse)> onFoldRequested;
@@ -77,6 +93,7 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void moved() override;
 
     juce::ComboBox& getShapeCombo() noexcept { return shape_; }
     juce::ComboBox& getSyncRateCombo() noexcept { return syncRate_; }
@@ -92,6 +109,19 @@ public:
      *  the keyboard. */
     void showMenuAt(const juce::PopupMenu::Options& options);
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    /** The name button's tip while the pointer is over the name, else the row's own. */
+    juce::String getTooltip() override;
+    /** The drag that reorders the row or moves it to another lane, reported by screen y: the press, each drag event
+     *  (true once the pointer is really dragging, which gives the grabbing cursor) and the release. Any may be null. */
+    std::function<void(int screenY)> onDragPress;
+    std::function<bool(int screenY)> onDragMove;
+    std::function<void()> onDragRelease;
+    /** 0..1 strength of the lifted look while this row is dragged; repaints only on a change. */
+    void setLift(float lift);
     /** Up (-1) / Down (+1) on the focused row itself (not on its controls, which keep their own arrows); may be null.
      *  Return on the row opens its menu. */
     std::function<void(int direction)> onFocusMoveRequested;
@@ -106,11 +136,13 @@ public:
 private:
     void initLfoControls();
     void applyNames();
-    void openChangeSourcePicker();
+    void openChangeSourcePicker(); // the name button's press and the menu's "Change source..."
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
                        std::function<float(double)> toParameter);
     void applyCompact();
+    LaneControlStrip::Actions controlActions();
+    bool controlEnabled(LaneControl control) const;
     void layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine);
     void layoutAmount(juce::Rectangle<int> line);
     juce::Colour readableTrackColour() const;
@@ -127,10 +159,16 @@ private:
     TrackFoldArrow foldArrow_;
     bool collapsed_ = false;
     bool compact_ = false;
+    bool pressed_ = false;
+    bool pressedOnName_ = false; // a left press landed on the name button
+    bool dragged_ = false;       // ...and the pointer has really dragged the row since
+    int clickFocusRequests_ = 0;
+    float lift_ = 0.0f;
     int titleLineHeight_ = 0;
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
-    juce::Rectangle<int> tagArea_;
-    juce::Rectangle<int> titleArea_;
+    LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Mod};
+    LaneNameButton nameButton_;
+    LaneControlStrip strip_;
     juce::Rectangle<int> rateTextArea_;      // the Hz value, beside its bar (never over it: the bar has a cap)
     juce::Rectangle<int> amountArea_;        // "Amount" and its readout
     juce::Rectangle<int> compactAmountArea_; // the readout alone, on the title line of a folded row

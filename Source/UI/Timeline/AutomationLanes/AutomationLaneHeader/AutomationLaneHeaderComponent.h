@@ -4,6 +4,9 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,17 +22,19 @@ struct TrackHeaderHost;
 
 // The header-column half of one automation lane row, under the track that owns the lane: a stripe
 // in the track's colour, the parameter and module names, the curve's value at the playhead (or the
-// selected point's value, see setSelectedPointValue), the
-// lane's record mode and a menu (add a modulator, change the parameter, duplicate, move to another track, delete).
-// The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10);
-// a click on the parameter name opens the change-parameter picker. Holds no lane state of its own;
+// selected point's value, see setSelectedPointValue), a strip of control chips (the record mode, add a modulator... --
+// the set every automation lane shows is the user's, see LaneControlStrip) and a menu (add a modulator, change the
+// parameter, duplicate, move to another track, delete).
+// The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10).
+// A click anywhere on the header that is not a control gives it keyboard focus (Up/Down walk the rows from there); the
+// parameter name is a button of its own that opens the change-parameter picker, and a marker icon before it says
+// this is an automation lane. Holds no lane state of its own;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
 // returns (the owning panel prunes it on the doc notification).
 class AutomationLaneHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
-    , public juce::KeyListener
     , public KeyboardContextMenuProvider {
 public:
     static constexpr int kIndent = 16;       // px the row is inset from the track header's left edge
@@ -40,11 +45,13 @@ public:
     static constexpr int kChangeParameterMenuId = 3;
     static constexpr int kDuplicateMenuId = 4;
     static constexpr int kCreateCustomLfoMenuId = 5;
+    static constexpr int kRecordModeMenuIdBase = 50;   // + record mode (the Read / Write chip's menu)
     static constexpr int kMoveToTrackMenuIdBase = 100; // + index into the menu's move targets
 
-    /** `doc` must outlive this component; `host` and `undo` may be null. */
+    /** `doc` must outlive this component; `host`, `undo` and `controls` may be null (no `controls`: the chips show the
+     *  default set and the "+" row has nowhere to float). */
     AutomationLaneHeaderComponent(synth::TimelineDoc& doc, synth::LaneId lane, TrackHeaderHost* host,
-                                  AppUndoManager* undo);
+                                  AppUndoManager* undo, LaneControlSet* controls = nullptr);
 
     synth::LaneId getLaneId() const noexcept { return laneId_; }
 
@@ -62,8 +69,10 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void moved() override;
 
-    juce::ComboBox& getRecordModeCombo() noexcept { return recordMode_; }
+    /** The control chips, the "+" button and edit mode. */
+    LaneControlStrip& getControlStrip() noexcept { return strip_; }
 
     /** The lane menu (right-click, Shift+F10 or Return on the row); item ids are the k*MenuId constants above. */
     juce::PopupMenu buildMenu();
@@ -80,8 +89,14 @@ public:
     void openChangeParameterPicker();
     /** Opens the picker for a copy of this lane directly below it; the copy exists only once a parameter is picked. */
     void openDuplicatePicker();
-    /** The parameter name's hit area, in this component's coordinates. */
+    /** The parameter name button's area, in this component's coordinates. */
     juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameArea_; }
+    /** How many plain clicks asked this row for keyboard focus (a headless test has no native focus to read). */
+    int getClickFocusRequestsForTest() const noexcept { return clickFocusRequests_; }
+    LaneNameButton& getNameButton() noexcept { return nameButton_; }
+    LaneMarkerIcon& getMarkerIcon() noexcept { return marker_; }
+    /** Where the module note sits under the name, in this component's coordinates. */
+    juce::Rectangle<int> getNoteAreaForTest() const noexcept { return noteArea_; }
 
     /** The Range tool's selection when it sits on this lane and has width, as {start, end} beats; the pool answers. May
      * be null (no range ever). */
@@ -95,8 +110,8 @@ public:
     std::function<void(int screenY)> onDragPress;
     std::function<void(int screenY)> onDragMove;
     std::function<bool()> onDragRelease;
-    /** Offered every key that reaches the record-mode combo or the "..." button first (the combo would take
-     *  Up/Down itself); true when the pool used it (Move Lane Up/Down). May be null. */
+    /** Offered every key that reaches the row (a chip's unused keys bubble here) first; true when the pool used it
+     *  (Move Lane Up/Down). May be null. */
     std::function<bool(const juce::KeyPress&)> onLaneKey;
     /** 0..1 strength of the lifted look while this lane is reorder-dragged; repaints only on a change. */
     void setLift(float lift);
@@ -104,9 +119,12 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
-    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    /** The name button's tip while the pointer is over the name, else the row's own. */
+    juce::String getTooltip() override;
     /** Keys for the header row itself: Return opens the lane menu, Up/Down ask the owner to move keyboard focus
-     *  to the previous/next row; the record-mode combo keeps its own Up/Down. */
+     *  to the previous/next row. */
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
     void focusLost(juce::Component::FocusChangeType cause) override;
@@ -123,7 +141,16 @@ private:
     void addModulatorItem(juce::PopupMenu& menu) const;
     void addCreateCustomLfoItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
-    void applyRecordModeColour();
+    // The control chips (AutomationLaneHeaderControls.cpp).
+    LaneControlStrip::Actions controlActions();
+    void performControl(LaneControl control, juce::Component& anchor);
+    bool controlEnabled(LaneControl control) const;
+    juce::String controlDetail(LaneControl control) const;
+    void showChipMenu(juce::PopupMenu menu, juce::Component& anchor);
+    void showRecordModeMenu(juce::Component& anchor);
+    void showMoveMenu(juce::Component& anchor);
+    void toggleMute();
+    juce::PopupMenu::Item createCustomLfoItem() const;
 
     synth::TimelineDoc& doc_;
     synth::LaneId laneId_;
@@ -134,14 +161,19 @@ private:
     juce::String moduleName_;
     juce::String valueText_;
     juce::Colour trackColour_{juce::Colours::grey};
-    juce::ComboBox recordMode_;
     LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 
-    juce::Rectangle<int> nameArea_;
+    LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Automation};
+    LaneNameButton nameButton_;
+    LaneControlStrip strip_;
+    int modeBeforeMute_ = -1;       // the record mode Mute put back to Off, for Mute to restore
+    juce::Rectangle<int> nameArea_; // the name button's bounds: the press that opens the parameter picker
+    juce::Rectangle<int> noteArea_; // the module's name under the lane's
     float lift_ = 0.0f;
     bool pressed_ = false;       // a left press is down on the header
-    bool pressedOnName_ = false; // ...and landed on the parameter name
+    bool pressedOnName_ = false; // ...and landed on the parameter name button
+    int clickFocusRequests_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneHeaderComponent)
 };

@@ -106,11 +106,11 @@ TEST(AutomationLanesRetargetTest, TheHeaderRereadsItsNameAfterTheRetarget) {
     MenuPanel f;
     auto* header = f.header(f.lane);
     ASSERT_NE(header, nullptr);
-    EXPECT_EQ(header->getRecordModeCombo().getTitle(), "cutoff record mode");
+    EXPECT_EQ(header->getTitle(), "cutoff automation lane");
 
     const synth::ui::LaneTarget target{"node-detune", "detune", -1, {-100.0f, 100.0f, 0.0f}};
     ASSERT_TRUE(synth::ui::retargetLaneUndoable(f.doc, &f.undo, f.lane, target));
     f.panel.getAutomationLanes().sync();
 
-    EXPECT_EQ(header->getRecordModeCombo().getTitle(), "detune record mode");
+    EXPECT_EQ(header->getTitle(), "detune automation lane");
 }

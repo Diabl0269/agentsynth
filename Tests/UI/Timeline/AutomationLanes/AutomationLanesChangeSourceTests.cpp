@@ -1,6 +1,7 @@
 // AutomationLanesChangeSourceTests.cpp -- a modulator row's "Change source...": the item is there only when
 // the host says it can re-point the routing (an LFO row and an envelope row alike), the picker lists LFOs and
-// envelopes but leaves out the current source, and against a real MainComponent the lane follows the new source
+// envelopes under group headers with the current source ticked and disabled, then "New LFO" / "New envelope" last,
+// and against a real MainComponent the lane follows the new source
 // (reading the channel the source catalogue gives it), keeps its drawn amount curve (re-keyed to the new routing's
 // Attenuverter) and the whole change is ONE graph + timeline undo step.
 
@@ -21,6 +22,9 @@ struct SourceHost : synth::ui::TrackHeaderHost {
     bool canChange = true;
     bool oneLfoOnly = false;
     int changes = 0;
+    int newChanges = 0;
+    juce::String newType;
+    int newChannel = -1;
     juce::String changedTo;
     int changedChannel = -1;
     bool withEnvelope = false;
@@ -30,6 +34,12 @@ struct SourceHost : synth::ui::TrackHeaderHost {
         ++changes;
         changedTo = sourceUuid;
         changedChannel = sourceChannel;
+        return true;
+    }
+    bool changeModulatorSourceToNew(const ModulatorInfo&, const juce::String& typeName, int sourceChannel) override {
+        ++newChanges;
+        newType = typeName;
+        newChannel = sourceChannel;
         return true;
     }
     std::vector<LfoChoice> getChangeSourceChoices(const juce::String&, const juce::String&) override {
@@ -140,42 +150,94 @@ TEST(AutomationLanesChangeSourceTest, TheItemIsShownWhenTheHostSaysYes) {
     EXPECT_TRUE(item.isEnabled);
 }
 
-TEST(AutomationLanesChangeSourceTest, TheItemIsDisabledAndSaysWhyWhenNoOtherSourceExists) {
+TEST(AutomationLanesChangeSourceTest, TheItemStaysEnabledWithNoOtherSourceBecauseANewOneCanBeMade) {
     SourceHost host;
     host.oneLfoOnly = true;
     ModulatorRow row(lfoOne(), &host, "Cutoff");
     juce::PopupMenu::Item item;
     ASSERT_TRUE(findItem(row.buildMenu(), ModulatorRow::kChangeSourceMenuId, item));
-    EXPECT_EQ(item.text, "Change source... (no other source)");
-    EXPECT_FALSE(item.isEnabled);
+    EXPECT_EQ(item.text, "Change source...");
+    EXPECT_TRUE(item.isEnabled);
 
     SourcePickerCapture capture;
     row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
-    EXPECT_EQ(capture.picker, nullptr) << "nothing to pick from";
+    ASSERT_NE(capture.picker, nullptr);
+    EXPECT_EQ(capture.picker->getVisibleItemTextsForTest(),
+              (std::vector<juce::String>{"LFO 1", "New LFO", "New envelope"}));
 }
 
-TEST(AutomationLanesChangeSourceTest, ThePickerOffersEverySourceButTheCurrentOneAndAPickReachesTheHost) {
+TEST(AutomationLanesChangeSourceTest, ThePickerGroupsSourcesTicksTheCurrentOneAndAPickReachesTheHost) {
     SourceHost host;
     ModulatorRow row(lfoOne(), &host, "Cutoff");
     SourcePickerCapture capture;
     row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
 
-    const auto names = capture.picker->getVisibleItemTextsForTest();
-    ASSERT_EQ(names.size(), 1u) << "no New LFO and no current source";
-    EXPECT_EQ(names.front(), "LFO 2");
+    EXPECT_EQ(capture.picker->getVisibleRowNamesForTest(),
+              (std::vector<juce::String>{"LFOs", "LFO 1", "LFO 2", "New", "New LFO", "New envelope"}));
+    EXPECT_EQ(capture.picker->getSearchPlaceholderForTest(), "Search or create a source");
+    EXPECT_TRUE(capture.picker->isVisibleItemTickedForTest(0)) << "the current source is ticked...";
+    EXPECT_FALSE(capture.picker->isVisibleItemPickableForTest(0)) << "...and cannot be picked";
+    EXPECT_FALSE(capture.picker->isVisibleItemTickedForTest(1));
+    EXPECT_TRUE(capture.picker->isVisibleItemNewForTest(2));
+    EXPECT_TRUE(capture.picker->isVisibleItemNewForTest(3));
 
     capture.picker->chooseVisibleItemForTest(0);
+    EXPECT_EQ(host.changes, 0) << "the current source is not a pick";
+    capture.picker->chooseVisibleItemForTest(1);
     EXPECT_EQ(host.changes, 1);
     EXPECT_EQ(host.changedTo, "lfo-2");
+}
+
+TEST(AutomationLanesChangeSourceTest, TheNewRowsStayLastWhileFilteringAndMakeAFreshModuleOfTheirType) {
+    SourceHost host;
+    host.withEnvelope = true;
+    ModulatorRow row(lfoOne(), &host, "Cutoff");
+    SourcePickerCapture capture;
+    row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
+    ASSERT_NE(capture.picker, nullptr);
+
+    capture.picker->setSearchTextForTest("LFO");
+    auto names = capture.picker->getVisibleItemTextsForTest();
+    ASSERT_GE(names.size(), 3u);
+    EXPECT_EQ(names[names.size() - 2], "New LFO");
+    EXPECT_EQ(names.back(), "New envelope") << "a create row stays whatever the query finds";
+    EXPECT_EQ(names.front(), "LFO 1");
+    EXPECT_EQ(capture.picker->getHighlightedItemIndexForTest(), 1) << "Return picks the existing LFO 2, not a new one";
+
+    capture.picker->setSearchTextForTest("nothing matches this");
+    names = capture.picker->getVisibleItemTextsForTest();
+    EXPECT_EQ(names, (std::vector<juce::String>{"New LFO", "New envelope"}));
+
+    capture.picker->setSearchTextForTest({});
+    capture.picker->chooseVisibleItemForTest(3);
+    EXPECT_EQ(host.newChanges, 1);
+    EXPECT_EQ(host.newType, "LFO");
+    EXPECT_EQ(host.changes, 0);
+}
+
+TEST(AutomationLanesChangeSourceTest, NewEnvelopeCreatesTheCataloguesEnvelopeType) {
+    SourceHost host;
+    ModulatorRow row(lfoOne(), &host, "Cutoff");
+    SourcePickerCapture capture;
+    row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
+    ASSERT_NE(capture.picker, nullptr);
+    const auto names = capture.picker->getVisibleItemTextsForTest();
+    ASSERT_EQ(names.back(), "New envelope");
+    capture.picker->chooseVisibleItemForTest((int)names.size() - 1);
+    EXPECT_EQ(host.newChanges, 1);
+    EXPECT_EQ(host.newType, "ADSR");
+    EXPECT_GE(host.newChannel, 0);
 }
 
 TEST(AutomationLanesChangeSourceTest, ThePickerKeepsAnLfoThatAlreadyMovesTheParameterGreyedOut) {
     auto lfos = SourceHost().getChangeSourceChoices({}, {});
     lfos[1].movesThisParameter = true;
     const auto choices = synth::ui::collectChangeSourceChoices(lfos, "lfo-1", 0, "Cutoff");
-    ASSERT_EQ(choices.items.size(), 1u);
-    EXPECT_FALSE(choices.items.front().enabled);
+    const auto moving =
+        std::find_if(choices.items.begin(), choices.items.end(), [](const auto& item) { return item.text == "LFO 2"; });
+    ASSERT_NE(moving, choices.items.end());
+    EXPECT_FALSE(moving->enabled);
 }
 
 // An envelope row through the real right-click path: the menu offers an enabled item, the picker lists the LFOs but
@@ -198,9 +260,11 @@ TEST(AutomationLanesChangeSourceTest, AnEnvelopeRowOffersTheItemAndItsPickerList
     row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
     const auto names = capture.picker->getVisibleItemTextsForTest();
-    ASSERT_EQ(names.size(), 2u) << "both LFOs; the envelope's own output is the current source";
+    ASSERT_EQ(names.size(), 5u) << "both LFOs, the envelope, and the two New rows";
     EXPECT_EQ(names[0], "LFO 1");
     EXPECT_EQ(names[1], "LFO 2");
+    EXPECT_EQ(names[2], "Envelope 1");
+    EXPECT_TRUE(capture.picker->isVisibleItemTickedForTest(2)) << "the envelope's own output is the current source";
 
     capture.picker->chooseVisibleItemForTest(1);
     EXPECT_EQ(host.changedTo, "lfo-2");
@@ -215,9 +279,9 @@ TEST(AutomationLanesChangeSourceTest, AnLfoRowPickingAnEnvelopePassesItsChannel)
     row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
     const auto names = capture.picker->getVisibleItemTextsForTest();
-    ASSERT_EQ(names.size(), 2u);
-    EXPECT_EQ(names[1], "Envelope 1");
-    capture.picker->chooseVisibleItemForTest(1);
+    ASSERT_EQ(names.size(), 5u);
+    EXPECT_EQ(names[2], "Envelope 1");
+    capture.picker->chooseVisibleItemForTest(2);
     EXPECT_EQ(host.changedTo, "env-1");
     EXPECT_EQ(host.changedChannel, 3);
 }
@@ -250,12 +314,15 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceFollowsTheOtherLfoKeepsTheAmoun
     s.row()->applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
     const auto names = capture.picker->getVisibleItemTextsForTest();
-    // The two default envelopes and the other LFO; the current LFO is left out (both LFOs are titled "LFO").
-    ASSERT_EQ(names.size(), 3u) << "the current source is left out";
-    const auto otherPos = std::find(names.begin(), names.end(), juce::String("LFO"));
-    ASSERT_NE(otherPos, names.end());
+    // Both LFOs (titled "LFO"; the current one ticked and disabled), the two default envelopes, then the two New rows.
+    ASSERT_EQ(names.size(), 6u);
+    int otherIndex = -1;
+    for (int i = 0; i < (int)names.size(); ++i)
+        if (names[(size_t)i] == "LFO" && !capture.picker->isVisibleItemTickedForTest(i))
+            otherIndex = i;
+    ASSERT_GE(otherIndex, 0);
     const auto depthBefore = s.depthOf(s.chainsInto(oldLfo, raw).front());
-    capture.picker->chooseVisibleItemForTest((int)(otherPos - names.begin()));
+    capture.picker->chooseVisibleItemForTest(otherIndex);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
     // The lane follows the other LFO; the old routing is gone, the old LFO card stays.
@@ -473,9 +540,13 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRowsRealMenuOffersChangeSourceLis
     envRow->applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
     const auto names = capture.picker->getVisibleItemTextsForTest();
-    // The two default envelopes, the spare ADSR and the LFO (greyed: it already moves cutoff); the routed ADSR itself
-    // is left out.
-    ASSERT_EQ(names.size(), 4u);
+    // The LFO (greyed: it already moves cutoff), the two default envelopes, the spare ADSR and the routed one (ticked),
+    // then the two New rows.
+    ASSERT_EQ(names.size(), 7u);
     EXPECT_NE(std::find(names.begin(), names.end(), juce::String("LFO")), names.end());
-    EXPECT_EQ(std::count(names.begin(), names.end(), juce::String("ADSR")), 1);
+    EXPECT_EQ(std::count(names.begin(), names.end(), juce::String("ADSR")), 2);
+    int ticked = 0;
+    for (int i = 0; i < (int)names.size(); ++i)
+        ticked += capture.picker->isVisibleItemTickedForTest(i) ? 1 : 0;
+    EXPECT_EQ(ticked, 1);
 }

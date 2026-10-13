@@ -201,7 +201,6 @@ TEST(AutomationLanesEditingTest, LaneHeaderNamesItsParameterThroughThePanelsHost
     f.panel.setTrackAutomationExpanded(bass, true);
     auto* header = f.panel.laneHeaderForTest(lane);
     ASSERT_NE(header, nullptr);
-    EXPECT_EQ(header->getRecordModeCombo().getTitle(), "Cutoff record mode");
     EXPECT_EQ(header->getTitle(), "Cutoff automation lane");
     f.panel.setTrackHeaderHost(nullptr); // the host dies first
 }

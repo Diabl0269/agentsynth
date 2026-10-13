@@ -5,6 +5,7 @@
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 
 namespace synth::ui {
 
@@ -19,6 +20,8 @@ constexpr int kDetailRowHeight = 40; // a row with a second line
 constexpr float kDetailFontSize = 11.0f;
 constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
+constexpr int kGlyphGutter = 16; // before the text of every row when any row has a tick or a plus
+constexpr float kTagFontSize = 9.0f;
 
 struct Palette {
     juce::Colour panel = juce::Colours::darkgrey.darker(0.4f);
@@ -27,6 +30,7 @@ struct Palette {
     juce::Colour text = juce::Colours::white;
     juce::Colour muted = juce::Colours::grey;
     juce::Colour accent = juce::Colours::lightblue;
+    juce::Colour success = juce::Colours::limegreen;
     float radius = 6.0f;
 };
 
@@ -42,6 +46,7 @@ Palette paletteFor(juce::Component& comp) {
         p.text = c.textPrimary;
         p.muted = c.textMuted;
         p.accent = c.accent;
+        p.success = c.success;
         p.radius = lf->getTheme().metrics.cornerRadius;
     }
     return p;
@@ -89,6 +94,15 @@ public:
             setTooltip(text_ + ", " + detail_);
         }
     }
+    // A tick (the current item) or a plus and a "New" tag (a row that creates); `gutter` reserves the room for the
+    // glyph on every row of a list that has any, so the texts stay aligned.
+    void setMarks(bool ticked, bool isNew, bool gutter) {
+        ticked_ = ticked;
+        isNew_ = isNew;
+        gutter_ = gutter;
+    }
+    bool isNewRow() const noexcept { return isNew_; }
+    bool isTicked() const noexcept { return ticked_; }
     void setPickable(bool pickable) {
         setEnabled(pickable);
         setMouseCursor(pickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
@@ -134,16 +148,52 @@ public:
         const auto textColour = !isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text;
         const juce::Font rowFont(juce::FontOptions(kRowFontSize, isCurrent_ ? juce::Font::bold : juce::Font::plain));
         const auto fill = palette_.accent.withAlpha(0.28f);
+        auto content = bounds.reduced(12, 0);
+        if (gutter_) {
+            paintMark(g, content.removeFromLeft(kGlyphGutter));
+            if (isNew_)
+                paintNewTag(g, content);
+        }
         if (detail_.isEmpty()) {
-            drawSearchHighlightedText(g, text_, query_, bounds.reduced(12, 0), rowFont, textColour, fill,
-                                      palette_.accent);
+            drawSearchHighlightedText(g, text_, query_, content, rowFont, textColour, fill, palette_.accent);
             return;
         }
-        auto lines = bounds.reduced(12, 3);
+        auto lines = content.withTrimmedTop(3).withTrimmedBottom(3);
         drawSearchHighlightedText(g, text_, query_, lines.removeFromTop(lines.getHeight() / 2), rowFont, textColour,
                                   fill, palette_.accent);
         drawSearchHighlightedText(g, detail_, query_, lines, juce::Font(juce::FontOptions(kDetailFontSize)),
                                   palette_.muted, fill, palette_.accent);
+    }
+
+    // The tick of the current item, or the green plus of a row that creates, centred in its gutter.
+    void paintMark(juce::Graphics& g, juce::Rectangle<int> gutter) const {
+        const auto centre = gutter.toFloat().getCentre();
+        if (isNew_) {
+            g.setColour(palette_.success);
+            g.drawLine(centre.x - 4.0f, centre.y, centre.x + 4.0f, centre.y, 1.6f);
+            g.drawLine(centre.x, centre.y - 4.0f, centre.x, centre.y + 4.0f, 1.6f);
+        } else if (ticked_) {
+            juce::Path tick;
+            tick.startNewSubPath(centre.x - 4.0f, centre.y);
+            tick.lineTo(centre.x - 1.5f, centre.y + 3.0f);
+            tick.lineTo(centre.x + 4.0f, centre.y - 3.5f);
+            g.setColour(isEnabled() ? palette_.accent : palette_.muted);
+            g.strokePath(tick, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+    }
+
+    // The "New" tag at the row's right edge, which takes that width off `content`.
+    void paintNewTag(juce::Graphics& g, juce::Rectangle<int>& content) const {
+        const juce::Font font(juce::FontOptions(kTagFontSize, juce::Font::bold));
+        juce::GlyphArrangement glyphs;
+        glyphs.addLineOfText(font, "New", 0.0f, 0.0f);
+        const int width = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 10;
+        const auto tag = content.removeFromRight(width).withSizeKeepingCentre(width, 14).toFloat();
+        content.removeFromRight(6);
+        g.setColour(palette_.muted);
+        g.drawRoundedRectangle(tag.reduced(0.5f), 4.0f, 1.0f);
+        g.setFont(font);
+        g.drawText("New", tag, juce::Justification::centred, false);
     }
 
     void mouseEnter(const juce::MouseEvent&) override {
@@ -167,6 +217,9 @@ private:
     juce::String detail_;
     juce::String query_;
     bool isCurrent_;
+    bool ticked_ = false;
+    bool isNew_ = false;
+    bool gutter_ = false;
     std::function<void(Row&)> onClick_;
     std::function<void(Row&)> onHover_;
     Palette palette_;
@@ -238,6 +291,7 @@ void ModMatrixPicker::rebuildRows() {
 
     juce::String currentCategory;
     bool first = true;
+    const bool gutter = std::any_of(items_.begin(), items_.end(), [](const Item& i) { return i.ticked || i.isNew; });
     for (const auto& item : items_) {
         if (item.category.isNotEmpty() && (first || item.category != currentCategory)) {
             rows_.push_back(std::make_unique<Row>(Row::Kind::Header, 0, item.category, false, nullptr, nullptr));
@@ -258,6 +312,7 @@ void ModMatrixPicker::rebuildRows() {
         rows_.back()->setSearchText(item.searchText);
         rows_.back()->setDetail(item.detail);
         rows_.back()->setPickable(item.enabled);
+        rows_.back()->setMarks(item.ticked, item.isNew, gutter);
         rowColumn_.addAndMakeVisible(*rows_.back());
     }
     std::vector<juce::Component*> components;
@@ -301,13 +356,14 @@ void ModMatrixPicker::applyFilter() {
             continue;
         }
         const auto haystack = row->text() + " " + row->detail() + " " + row->searchText();
-        const bool matches = searchMatches(haystack, query);
+        const bool found = searchMatches(haystack, query);
+        const bool matches = found || row->isNewRow(); // a row that creates stays, however little the query finds
         fades_.steer(i, matches);
         row->setQuery(query);
         headerHasMatch = headerHasMatch || matches;
         if (matches) {
-            const int score = searchScore(haystack, query);
-            if (row->isEnabled() && (bestIndex < 0 || score < bestScore)) {
+            const int score = found ? searchScore(haystack, query) : 0;
+            if (found && row->isEnabled() && (bestIndex < 0 || score < bestScore)) {
                 bestIndex = visibleIndex;
                 bestScore = score;
             }
@@ -376,7 +432,8 @@ void ModMatrixPicker::applyColours() {
     searchEditor_->setColour(juce::TextEditor::textColourId, p.text);
     searchEditor_->setColour(juce::TextEditor::outlineColourId, p.border);
     searchEditor_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
-    searchEditor_->setTextToShowWhenEmpty("Search " + what_ + "s...", p.muted);
+    searchEditor_->setTextToShowWhenEmpty(placeholder_.isNotEmpty() ? placeholder_ : "Search " + what_ + "s...",
+                                          p.muted);
     for (const auto& row : rows_)
         row->setPalette(p);
     repaint();
@@ -446,6 +503,11 @@ void ModMatrixPicker::setAccessibleNames(const juce::String& pickerTitle, const 
     searchEditor_->setTitle(searchTitle);
 }
 
+void ModMatrixPicker::setSearchPlaceholder(const juce::String& text) {
+    placeholder_ = text;
+    applyColours();
+}
+
 void ModMatrixPicker::dismiss() {
     if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
         synth::ui::PopupMotion::dismissCallOut(*box);
@@ -488,6 +550,18 @@ std::vector<std::vector<SearchSpan>> ModMatrixPicker::getVisibleItemHighlightSpa
         spans.push_back(searchHighlightSpans(row->text(), row->query()));
     return spans;
 }
+
+bool ModMatrixPicker::isVisibleItemTickedForTest(int index) const {
+    const auto visible = visibleItemRows();
+    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isTicked();
+}
+
+bool ModMatrixPicker::isVisibleItemNewForTest(int index) const {
+    const auto visible = visibleItemRows();
+    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isNewRow();
+}
+
+juce::String ModMatrixPicker::getSearchPlaceholderForTest() const { return searchEditor_->getTextToShowWhenEmpty(); }
 
 bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
     const auto visible = visibleItemRows();

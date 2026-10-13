@@ -30,7 +30,10 @@ enum class Glyph {
     ShapeSaw,
     ShapeSquare,
     ShapeRandom, // sample and hold: a staircase of uneven steps
-    ShapeCustom  // a drawn wave: a curve with its points marked
+    ShapeCustom, // a drawn wave: a curve with its points marked
+    // The markers before a timeline lane header's name, drawn on a 14 px grid at any size.
+    LaneAutomation, // a rising and falling line with two points on it: changes drawn over time
+    LaneMod         // one wave: a modulator moves the parameter
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.

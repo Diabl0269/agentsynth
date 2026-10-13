@@ -132,15 +132,31 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderControls.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderParameterPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlChip.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlChip.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlIcons.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlMoreRow.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlMoreRow.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStripEdit.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesCustomLfo.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorFold.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorDrag.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesReorder.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesShapes.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h

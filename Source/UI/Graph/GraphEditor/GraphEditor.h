@@ -540,11 +540,11 @@ public:
     bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
                                      juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
     /** A new module of factory type `typeName` beside `targetId`, cabled from its output `sourceChannel` into raw CV
-     *  channel `destChannel` at `depth`, as ONE undo step. Returns the new routing's hidden attenuverter; invalid
-     *  (nothing changed) when it can't. */
+     *  channel `destChannel` at `depth`, as ONE undo step (none with `recordUndo` false). Returns the new routing's
+     *  hidden attenuverter; invalid (nothing changed) when it can't. */
     juce::AudioProcessorGraph::NodeID addModulationSourceModule(const juce::String& typeName, int sourceChannel,
                                                                 juce::AudioProcessorGraph::NodeID targetId,
-                                                                int destChannel, float depth);
+                                                                int destChannel, float depth, bool recordUndo = true);
     /** Cables any modulation source (`sourceChannel`: a ModSourceItem's raw output channel) into raw CV channel
      *  `destChannel` of `targetId` at `depth` through the macro-port seam, as ONE undo step (none with `recordUndo`
      *  false). Returns the routing's hidden attenuverter; invalid (nothing changed) when it can't or it is wired. */

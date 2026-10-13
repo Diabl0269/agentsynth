@@ -131,6 +131,15 @@ bool TimelineAutomationLanes::syncModulators() {
     }
     applyModulatorFold();
     refreshModulatorAmounts(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+    if (!dragModKeys_.empty() && modDrag_.isReordering()) {
+        // The dragged routing went (removed, undone, moved by the drop itself): the gesture ends with it.
+        const auto entry = modulators_.find(dragModLane_);
+        const bool stays = entry != modulators_.end() &&
+                           std::any_of(entry->second.infos.begin(), entry->second.infos.end(),
+                                       [this](const ModulatorInfo& info) { return info.key() == dragModInfo_.key(); });
+        if (!stays)
+            discardModulatorDrag();
+    }
     for (auto it = modulators_.begin(); it != modulators_.end();) {
         if (visible.count(it->first) > 0) {
             ++it;
@@ -163,7 +172,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     retireModulatorRows(entry, staying);
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
-        auto row = std::make_unique<ModulatorRow>(info, host_, parameterName);
+        auto row = std::make_unique<ModulatorRow>(info, host_, parameterName, &laneControls_);
         headerParent_.addAndMakeVisible(*row);
         entry.rows.push_back(std::move(row));
         auto band = std::make_unique<ModulatorBand>(viewState_);
@@ -177,12 +186,17 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
             if (onKeyboardStopFocused)
                 onKeyboardStopFocused(*rowPtr);
         };
+        rowPtr->getControlStrip().onTrayExtentChanged = [this] {
+            if (onLayoutChanged)
+                onLayoutChanged();
+        };
         rowPtr->onFoldRequested = [this, rowPtr](bool collapse) {
             setModulatorCollapsed(rowPtr->getInfo().key(), collapse);
         };
         rowPtr->onMoveKey = [this, lane, rowPtr](const juce::KeyPress& key) {
             return handleModulatorKey(lane, rowPtr->getInfo(), key);
         };
+        wireModulatorDrag(*rowPtr, lane);
         band->onMoveKey = [this, lane, bandPtr = band.get()](const juce::KeyPress& key) {
             return handleModulatorKey(lane, bandPtr->getInfo(), key);
         };

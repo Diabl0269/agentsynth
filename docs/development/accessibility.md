@@ -53,6 +53,7 @@ beside "Duplicate Track" in its menu; focus follows the copy. It takes Ctrl+E (`
 right-click, Shift+F10 (`KeyboardContextMenuProvider`) or Return on the focused row, the row is named for what it is
 ("Cutoff automation lane") and its tooltip lists the three ways in. A picture that only shows state (the modulator
 shape icon) is named and tooltipped but is not a Tab stop; the control it mirrors stays the one that edits.
+A lane header's control chips, its "+" button and the "+" row's buttons are Tab stops with a name and a tooltip ("Name: what it does"); in Edit controls Left/Right walk the chips and Alt+Left/Right move one, as the arrows of a list of controls ([`lane-controls.md`](../timeline/lane-controls.md)).
 
 The track row's Cmd+Backspace question is an alert window: Delete is the default button (Return confirms; Cmd+Z undoes it),
 Escape cancels, Tab reaches the **Don't ask again** box (named, tooltipped, with the preference's way back) and **Delete**,
@@ -93,7 +94,9 @@ note) calls `paintFocusRingAlways`, which draws the same ring without the focus 
 
 A control that is only painted (no child component), such as the piano roll's header chips, gets a
 transparent child button over it: it is the Tab stop and carries the name, role and tooltip, while
-the parent keeps handling the pointer (`PianoRollHeaderChip`).
+the parent keeps handling the pointer (`PianoRollHeaderChip`). A timeline lane header's name is the same
+idea with a painted button (`LaneNameButton`): mouse-inert, so a drag from the name still reorders the lane, with the
+header firing its `onClick` on a click and the button taking Return and Space itself.
 
 `AppLookAndFeel` already draws the ring for buttons, combo boxes, text editors, toggles, rotary
 knobs and sliders, so a stock control needs nothing. A custom-painted control calls

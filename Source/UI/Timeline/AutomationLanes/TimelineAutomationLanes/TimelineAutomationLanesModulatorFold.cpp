@@ -51,11 +51,23 @@ int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index
     return line + (int)std::lround((double)(full - line) * (double)open);
 }
 
-// Where the lane's `count`th modulator row starts under the lane row, px.
+// How far the edit tray of the lane's header (or of its `modulatorIndex`th row) pushes what lies below it, px.
+int TimelineAutomationLanes::trayExtentOf(synth::LaneId lane) const {
+    const auto it = headers_.find(lane);
+    return it != headers_.end() ? it->second->getControlStrip().trayExtent() : 0;
+}
+
+int TimelineAutomationLanes::trayExtentOf(synth::LaneId lane, int modulatorIndex) const {
+    auto* row = modulatorRowFor(lane, modulatorIndex);
+    return row != nullptr ? row->getControlStrip().trayExtent() : 0;
+}
+
+// Where the lane's `count`th modulator row starts under the lane row, px: past the lane header's edit tray (if open)
+// and every row above it with its own.
 int TimelineAutomationLanes::modulatorOffset(synth::LaneId lane, int count) const {
-    int offset = 0;
+    int offset = trayExtentOf(lane);
     for (int i = 0; i < count; ++i)
-        offset += modulatorRowHeightFor(lane, i);
+        offset += modulatorRowHeightFor(lane, i) + trayExtentOf(lane, i);
     return offset;
 }
 

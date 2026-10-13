@@ -64,6 +64,7 @@ constexpr int kFollowPlayheadButtonWidth = 30;
 // reloadPianoRollAppearancePrefs() once, below.
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
+    automationLanes_.setApplicationProperties(props); // the chips every lane header shows
     // Closed until first opened (unlike the Mixer's pane): the routing view is opt-in.
     sidePane_.setPersistence(props != nullptr ? props->getUserSettings() : nullptr, "timeline", /*defaultOpen=*/false);
     // Forwarded even when there is no user-settings file: both of these degrade to "in-memory

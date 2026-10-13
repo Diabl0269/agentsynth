@@ -40,6 +40,11 @@ public:
         juce::String detail;
         // False = shown greyed, never highlighted or picked; `detail` should say why.
         bool enabled = true;
+        // The row the list is about right now (the current source): a tick before the text.
+        bool ticked = false;
+        // A row that creates something ("New LFO"): a green plus before the text and a "New" tag at the right. It
+        // stays in the list whatever the search says, so a query that finds nothing can still create.
+        bool isNew = false;
     };
 
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);
@@ -60,6 +65,9 @@ public:
     /** Re-words what a screen reader announces for the box and its search field, for a caller that reuses the
      *  picker for something other than modulation. The search field's placeholder follows `what`. */
     void setAccessibleNames(const juce::String& pickerTitle, const juce::String& searchTitle);
+    /** The search field's placeholder, for a picker that also creates ("Search or create a source"); the default is
+     *  "Search <what>s...". */
+    void setSearchPlaceholder(const juce::String& text);
 
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();
@@ -77,6 +85,10 @@ public:
     std::vector<std::vector<SearchSpan>> getVisibleItemHighlightSpansForTest() const;
     /** False for a visible item row shown disabled. */
     bool isVisibleItemPickableForTest(int index) const;
+    /** True for a visible item row drawn with the current-item tick / the plus and "New" tag. */
+    bool isVisibleItemTickedForTest(int index) const;
+    bool isVisibleItemNewForTest(int index) const;
+    juce::String getSearchPlaceholderForTest() const;
     /** Picks the nth visible ITEM row, as a click on it would. */
     void chooseVisibleItemForTest(int index);
     /** Sends a key to the search field, as typing would. */
@@ -104,6 +116,7 @@ private:
     std::vector<Row*> visibleItemRows() const;
 
     juce::String what_;
+    juce::String placeholder_;
     std::vector<Item> items_;
     int selectedId_ = 0;
     std::function<void(int)> onChoose_;

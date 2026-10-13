@@ -121,7 +121,8 @@ TEST(AutomationLanesMenuTest, TheMenuKeyOnAFocusedLaneHeaderOrEditorOpensTheLane
     EXPECT_EQ(capture.count, 2);
     EXPECT_TRUE(hasItem(capture.itemTexts(), "Duplicate"));
     // The keyboard route resolves through the same walk the app's command uses: the nearest provider above focus.
-    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(&header->getRecordModeCombo()));
+    EXPECT_TRUE(synth::ui::openContextMenuForFocusedComponent(
+        header->getControlStrip().chipFor(synth::ui::LaneControl::ReadWrite)));
     EXPECT_EQ(capture.count, 3);
 }
 
