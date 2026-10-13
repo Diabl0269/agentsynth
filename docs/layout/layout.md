@@ -210,6 +210,9 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   drop released over an open gap joins the macro the gap was made in: the join or leave is decided on the borders as
   they stood, under any Animations setting (Reduce Motion moves cards at once, so a gap there would shift the border
   under the pointer).
+- **Wiring.** A module released in the gap between two connected cards is wired in series, source to module to
+  target, replacing the direct cable ([smart connections](smart-connections.md#how-a-suggestion-is-found)); the hovered
+  module's ghost slides to the slot ([motion](insert-motion.md#the-hovered-module-slides-to-the-gap)).
 - **Where it lands and what moves.** The module copies the spacing between the anchor and the card before it (at the
   start of a row, the spacing after the anchor; a lone card 40 px), held between 12 and 80 px, and takes the anchor's
   place: one spacing after the card before it, snapped up to the 8 px grid, level with the anchor. The anchor and every

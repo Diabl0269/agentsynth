@@ -335,7 +335,7 @@ back), after any glide still running; a card dragged from the canvas settles int
 A keyboard insert glides the cards aside, then grows the module in. Cmd+Z glides the cards back and shrinks the module
 away; redo is the reverse. A drop, a second drag or an undo while cards still move carries on from the drawn rects.
 Under Reduce Motion the cards move at once and the module fades in (plain fade, no growing); with Animations Off, or
-off screen, everything lands at once.
+off screen, everything lands at once. The hovered module's ghost slides to the gap: [insert-motion.md](insert-motion.md).
 
 ### Macro fold
 
@@ -667,7 +667,7 @@ shortcut.
   becomes the real item. Toggling Option mid-drag switches between copy and move without restarting
   the drag.
 - **Insert between.** A module dragged between two cards makes room for itself: the cards after it glide aside
-  (160 ms), it lands with the 8% bounce, Esc or moving away glides them back:
+  (160 ms), its ghost slides to the gap, it lands with the 8% bounce, Esc or moving away glides them back:
   [Adding a module between others](#adding-a-module-between-others).
 - **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its
   origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and

@@ -17,6 +17,7 @@
 // declare its `dragDropController_` member, so the reverse would cycle).
 #pragma once
 
+#include "UI/Graph/DragGhostSlide/DragGhostSlide.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
 #include <functional>
@@ -43,6 +44,9 @@ public:
 
     bool isDragPreviewActive() const noexcept { return dragPreviewActive_; }
     juce::Rectangle<int> getDragPreviewGhost() const noexcept { return dragPreviewGhost_; }
+    /** The landing ghost as drawn: it slides to getDragPreviewGhost() when its aim jumps
+     * (GraphEditor::refreshSmartSuggestions). */
+    DragGhostSlide& getGhostSlide() noexcept { return ghostSlide_; }
     /** Where the cursor pointed, before anti-overlap moved the landing rect (empty before the first move). */
     juce::Rectangle<int> getDragPreviewAim() const noexcept { return dragPreviewAim_; }
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const noexcept { return dragPreviewSelfId_; }
@@ -106,6 +110,7 @@ private:
     int dragPreviewW_ = 0, dragPreviewH_ = 0;
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId_{};
     juce::Rectangle<int> dragPreviewGhost_;
+    DragGhostSlide ghostSlide_;
     // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
     // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost_.
     juce::Rectangle<int> dragPreviewAim_;

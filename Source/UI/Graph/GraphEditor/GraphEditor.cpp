@@ -82,7 +82,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
 GraphEditor::~GraphEditor() {
     stopTimer();
-    loadReveal_.reset(); // before the cards it may still be scaling
+    dragDropController_.getGhostSlide().reset(vblankUpdater); // its driver outlives the updater otherwise
+    loadReveal_.reset();                                      // before the cards it may still be scaling
     polyChain_.reset();
     portPanel_.reset();
     modDot_.reset(); // before `content`, which its tooltip animator is attached to

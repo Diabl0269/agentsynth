@@ -470,6 +470,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroNesting.cpp
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
+    Source/UI/Graph/DragGhostSlide/DragGhostSlide.h
+    Source/UI/Graph/DragGhostSlide/DragGhostSlide.cpp
     Source/UI/Graph/InsertGap/InsertGap.h
     Source/UI/Graph/InsertGap/InsertGap.cpp
     Source/UI/Graph/InsertGap/InsertGapKeyboard.h

@@ -102,6 +102,10 @@ public:
         bool isSnippet = false;
         juce::AudioProcessor* probe = nullptr;
         bool selectionDragBlocksSuggestions = false;
+        /** The card an open insert-between gap sits in front of (the gap's anchor); uid 0 when no gap is open. The
+         *  ghost is then sitting in the slot between two cards, so that card is judged as an insert target the way
+         *  it is under Ctrl (see refreshSmartSuggestions). */
+        juce::AudioProcessorGraph::NodeID gapAnchorId{};
     };
 
     explicit SmartConnectionEngine(GraphCanvasHost& host)
@@ -109,6 +113,9 @@ public:
 
     void refreshSmartSuggestions(const DragPreviewState& drag);
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
+    /** Whether an insert into `neighbor` is judged by the aim, not jack-to-jack distance (see the unit). */
+    bool relaxesFlowForInsert(const DragPreviewState& drag, ModuleComponent* neighbor,
+                              const juce::Rectangle<int>& aim) const;
     void clearSmartSuggestions() { smartSuggestions_.clear(); }
 
     /** Re-evaluates the suggestions when the insert modifier changed since the last drag tick. A

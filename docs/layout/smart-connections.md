@@ -75,8 +75,16 @@ and the node:
 | **Ctrl held**, either setting | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
 
 Under **Always** the insert is found by the ordinary rule — the dragged module sits to the left of its
-neighbour within 96 px, jack to jack. Only an actual Ctrl press additionally relaxes that geometry so a
+neighbour within 96 px, jack to jack — except when the drag is plainly aimed between two wired cards: that is
+judged like the Ctrl aim below, no key needed. "Plainly aimed between" is either of: the drag has opened an
+insert-between gap in front of that card (or found the gap already wide enough,
+`InsertGap::aimedAnchorKey`; [layout](layout.md#making-room-for-a-module-dropped-between-others)), or the aim sits inside
+the box spanned by that card and a card that feeds it. Without this a dropped module wired itself only when
+its jacks happened to be within 96 px of the next card's, which a gap pushed open to the card's own size and a
+taller or shorter neighbour often missed. Only an actual Ctrl press additionally relaxes that geometry anywhere, so a
 ghost can be aimed *into* the gap or onto the doomed cable (an overlapping ghost fails the jack test).
+`InsertGapConnect` (`Tests/UI/Graph/InsertGap/InsertGapConnectTests.cpp`) drops a module into gaps of 12 to 400 px with the
+real drag calls and checks source, module and target are wired in series and the direct cable is gone.
 
 **Why the sink is special without a modifier (Only while holding Ctrl).** Audio Output is a bare
 `juce::AudioGraphIOProcessor` — never a `ModuleBase`, since the graph's output channel count is tied

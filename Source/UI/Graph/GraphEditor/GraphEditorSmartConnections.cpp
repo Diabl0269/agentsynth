@@ -36,6 +36,10 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
 // through the host interface, so it can't move onto SmartConnectionEngine even though every
 // other forwarder in this file already has.
 void GraphEditor::refreshSmartSuggestions() {
+    // The landing ghost follows the pointer a grid step at a time but jumps when the drag opens a gap between two cards
+    // (it takes the gap's slot) or dodges to a free spot: those jumps are a slide (DragGhostSlide).
+    dragDropController_.getGhostSlide().aim(dragDropController_.getDragPreviewGhost(), isShowing(), vblankUpdater,
+                                            [this](juce::Rectangle<int> area) { content.repaint(area); });
     refreshSmartSuggestionsWithReveal(
         [this] { smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState()); });
 }
@@ -80,7 +84,10 @@ void GraphEditor::refreshSmartSuggestionsWithReveal(const std::function<void()>&
 }
 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
-void GraphEditor::clearSmartSuggestions() { smartConnections_.clearSmartSuggestions(); }
+void GraphEditor::clearSmartSuggestions() {
+    smartConnections_.clearSmartSuggestions();
+    dragDropController_.getGhostSlide().reset(vblankUpdater); // a drag begins or ends: no ghost slides on
+}
 
 bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto& graph = audioEngine.getGraph();

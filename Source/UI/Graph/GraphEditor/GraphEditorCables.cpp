@@ -779,7 +779,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
-        auto ghostF = editor.getDragDropController().getDragPreviewGhost().toFloat();
+        auto ghostF = editor.getDragDropController().getGhostSlide().drawn(); // slides to where it is aimed
 
         // Fill: accent colour at ~18% alpha
         g.setColour(accentColour.withAlpha(0.18f));
@@ -896,15 +896,23 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
                 return s.isInsert ? insertTint(base) : base;
             };
 
+            // The ghost-side end of a leg rides the ghost while it slides to its spot.
+            const auto slide = editor.getDragDropController().getGhostSlide().offset();
             for (const auto& leg : s.upstreamPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.upstreamCategory), s.signal);
+                strokePreview(leg.p1, leg.p2 + slide, legColour(s.upstreamCategory), s.signal);
 
+            const auto ghostSide = [&s, slide](juce::Point<float> p1, juce::Point<float> p2) {
+                return s.ghostIsSource ? std::pair{p1 + slide, p2} : std::pair{p1, p2 + slide};
+            };
             if (s.mainPreviewLegs.empty()) {
-                strokePreview(s.p1, s.p2, legColour(s.sourceCategory), s.signal);
+                const auto [a, b] = ghostSide(s.p1, s.p2);
+                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
                 continue;
             }
-            for (const auto& leg : s.mainPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.sourceCategory), s.signal);
+            for (const auto& leg : s.mainPreviewLegs) {
+                const auto [a, b] = ghostSide(leg.p1, leg.p2);
+                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+            }
         }
     }
 

@@ -172,8 +172,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             // moved beyond, e.g. the upstream it is being spliced in after. Final geometry is
             // findFreeSlot's business either way, so a transiently overlapping ghost is harmless.
             const auto& insertAim = aimBounds.isEmpty() ? ghostBounds : aimBounds;
-            const bool relaxFlowForInsert =
-                ghostIsSource && isInsertModifierDown() && insertAim.getCentreX() <= neighborBounds.getRight();
+            const bool relaxFlowForInsert = ghostIsSource && relaxesFlowForInsert(drag, neighbor, insertAim);
 
             const size_t beforeProximity = pairs.size();
             if (!relaxFlowForInsert) {
@@ -565,6 +564,33 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
     if (smartSuggestions_ != previous)
         host_.repaintCanvas();
+}
+
+// Whether an insert into `neighbor` is judged by where it is aimed rather than by jack-to-jack distance (the comment at
+// the call). The aim's centre must not be past the neighbour's right edge; then Ctrl relaxes it anywhere, and without
+// Ctrl a drag plainly aimed between two wired cards does too: it has opened an insert-between gap in front of
+// `neighbor` (or found the gap already wide enough), or the aim sits inside the box spanned by `neighbor` and a card
+// that feeds it. The ghost is then in the slot between them, level with neither jack. Only where inserting is allowed.
+bool SmartConnectionEngine::relaxesFlowForInsert(const DragPreviewState& drag, ModuleComponent* neighbor,
+                                                 const juce::Rectangle<int>& aim) const {
+    if (aim.getCentreX() > neighbor->getBounds().getRight())
+        return false;
+    if (isInsertModifierDown())
+        return true;
+    if (!insertIsAllowedNow())
+        return false;
+    if (drag.gapAnchorId.uid != 0 && neighbor->getNodeId() == drag.gapAnchorId)
+        return true;
+    for (const auto& conn : host_.graph().getConnections()) {
+        if (conn.destination.nodeID != neighbor->getNodeId() || conn.destination.isMIDI() ||
+            conn.source.nodeID == drag.selfId)
+            continue;
+        if (auto* src = host_.moduleComponentFor(conn.source.nodeID);
+            src != nullptr && src != neighbor &&
+            src->getBounds().getUnion(neighbor->getBounds()).contains(aim.getCentre()))
+            return true;
+    }
+    return false;
 }
 
 void SmartConnectionEngine::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {
