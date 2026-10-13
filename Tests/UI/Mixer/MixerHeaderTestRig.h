@@ -69,6 +69,10 @@ struct HeaderRig {
             panel().getSectionLayout().setHidden(section, false);
         panel().setSize(1400, 700);
         panel().resized();
+        // Let the setup's queued edit notifications land first: the mixer re-checks itself against the graph on
+        // each one (a module's numbered name arrives after its column was built), and a test that holds a column's
+        // control must not have that column replaced under it.
+        pumpMessages();
     }
 
     synth::ui::MixerPanelComponent& panel() { return mc.getBottomDock().getMixerPanel(); }
