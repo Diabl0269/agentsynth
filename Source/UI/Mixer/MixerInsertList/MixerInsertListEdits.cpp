@@ -410,6 +410,7 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
         return;
     const auto neighbourUuid = nodeUuid(*graph_, predecessor == sourceNodeId_ ? successor : predecessor);
     rememberPick(moduleTypeName);
+    juce::Component::SafePointer<MixerInsertList> alive(this); // the edit can rebuild the mixer, as in mutateAndNotify
     const auto added = synth::insertModuleAfterNode(
         *graphEditor_, *undoManager_, *macros_, moduleTypeName, predecessor,
         [this, predecessor, successor, neighbourUuid](juce::AudioProcessorGraph::NodeID node) {
@@ -421,7 +422,7 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
                     macros_->addMember(neighbourMacro->id, uuid);
             return true;
         });
-    if (isSet(added) && onMutated)
+    if (isSet(added) && alive != nullptr && onMutated)
         onMutated();
 }
 
