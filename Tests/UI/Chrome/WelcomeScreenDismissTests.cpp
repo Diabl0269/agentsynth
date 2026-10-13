@@ -109,6 +109,7 @@ TEST_F(WelcomeDismissTest, CloseButtonIsAccessibleAndWorksFromTheKeyboard) {
 
     // juce::Button turns Space and Return on a focused button into this same click.
     close.triggerClick();
+    pump();
     EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest());
 }
 
@@ -116,6 +117,7 @@ TEST_F(WelcomeDismissTest, CloseButtonClickDismissesWithTheProjectStillThere) {
     MainComponent mc(std::make_unique<MockProvider>());
     reopenOverProject(mc);
     welcome->getCloseButtonForTest().triggerClick();
+    pump();
     EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest());
 }
 
