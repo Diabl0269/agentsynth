@@ -187,6 +187,9 @@ unit-tested by `scripts/tests/ci-local-test-lock.test.sh` in the Lint job:
   `75`, never conflated with a red suite.
 - **Only the test run is locked.** Builds run concurrently as before — ccache is safe under
   contention — so a waiting session still gets its compile errors immediately.
+- **Build parallelism is capped.** Concurrent builds each get `max(2, cores/4)` compile jobs, so
+  several worktrees building at once no longer starve the machine. Set `CI_LOCAL_JOBS=<n>`
+  (a positive integer) to override, e.g. on a quiet machine or a CI runner.
 
 So there is no longer a `lockf` wrapper to hand-roll around `build-ci-local/Tests/Tests`; run
 `bash scripts/ci-local.sh` and let it wait. Running the binary directly (a single filtered suite
