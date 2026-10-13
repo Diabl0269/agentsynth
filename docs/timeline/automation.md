@@ -278,7 +278,9 @@ rate; sync and amount):
   attenuverter's own `amount`. The amount is edited on the band, not in the row.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: a `CV` tag,
-its card title and the amount readout; its band edits the amount exactly like an LFO's. A direct cable with no
+its card title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
+(Show on canvas, Change source..., Remove modulator), and Change source... is offered for an envelope routed through
+an Attenuverter just as for an LFO. A direct cable with no
 attenuverter has no amount: no readout, and its band is a decoration.
 
 Every edit goes through `TrackHeaderHost::setNodeParameter(uuid, paramId, value, ParameterEditPhase)`, which
@@ -297,15 +299,18 @@ every port the removal leaves with nothing on one side, even when the "delete po
 is off (the person asked for the removal), all in the one undo step.
 
 **Change source...** (`TrackHeaderHost::canChangeModulatorSource` / `changeModulatorSource`, implemented by
-`MainComponent`) points the routing at a different LFO and keeps the drawn [amount lane](#amount-lane). The host says
-yes only for an LFO routed through an Attenuverter (the amount lane is keyed by that Attenuverter; a hand-patched
-direct cable has neither). The item opens the "Add modulator..." picker without "New LFO" and without the current
-source (an LFO that already moves the parameter is listed greyed out); with no other LFO it is disabled and says
-"(no other LFO)". On a pick, ONE `recordGraphTimelineAndMacroChange` step cables the new LFO in at the old routing's
+`MainComponent`) points the routing at a different LFO or envelope and keeps the drawn [amount lane](#amount-lane). The host says
+yes only for an LFO or an envelope (decided by the mod-source catalogue's group) routed through an Attenuverter (the
+amount lane is keyed by that Attenuverter; a hand-patched direct cable has neither). The item opens a picker
+(`TrackHeaderHost::getChangeSourceChoices`: every LFO and envelope output, macro ports skipped) without "New LFO" and
+without the current source (same card and same output; a source that already moves the parameter is listed greyed
+out); with no other source it is disabled and says "(no other source)". "Add modulator..." stays LFO-only. On a pick
+(the chosen output's channel comes from the catalogue, `LfoChoice::sourceChannel`), ONE
+`recordGraphTimelineAndMacroChange` step cables the new source in at the old routing's
 depth (`GraphEditor::connectModulationSource` with `recordUndo=false`, macro ports crossed as for "Add modulator..."),
 re-keys the amount lane to the new routing's Attenuverter with `TimelineDoc::rebindLane` (same lane id, track and
 points), and cuts the old routing (`removeModulator(..., removeLonelySource=false, recordUndo=false)`). There is no
-confirm dialog because nothing is deleted: the old LFO stays on the canvas, even when this was its last cable.
+confirm dialog because nothing is deleted: the old source stays on the canvas, even when this was its last cable.
 Cmd+Z restores the old source and the lane's old key together.
 
 **Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
@@ -840,7 +845,7 @@ or its editor: the first stroke creating the lane in one undo step, the knob dra
 double-click, editing and erasing the last point, the bipolar picture, names and the accessible value) and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with
-sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices, the real re-key and the one undo step); the
+sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices for LFO and envelope rows, the real re-key, the source channel and the one undo step); the
 applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
 partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from

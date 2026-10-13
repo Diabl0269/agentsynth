@@ -46,10 +46,12 @@ AddModulatorChoices collectAddModulatorChoices(std::vector<TrackHeaderHost::LfoC
 }
 
 AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
-                                               const juce::String& currentSourceUuid,
+                                               const juce::String& currentSourceUuid, int currentSourceChannel,
                                                const juce::String& parameterName) {
     lfos.erase(std::remove_if(lfos.begin(), lfos.end(),
-                              [&](const TrackHeaderHost::LfoChoice& lfo) { return lfo.uuid == currentSourceUuid; }),
+                              [&](const TrackHeaderHost::LfoChoice& lfo) {
+                                  return lfo.uuid == currentSourceUuid && lfo.sourceChannel == currentSourceChannel;
+                              }),
                lfos.end());
     auto choices = collectAddModulatorChoices(std::move(lfos), parameterName);
     choices.items.erase(choices.items.begin()); // "New LFO"
@@ -67,7 +69,7 @@ std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoic
             if (id == kNewLfoItemId)
                 onPick({true, {}});
             else if (id >= 2 && id - 2 < (int)lfos.size())
-                onPick({false, lfos[(size_t)(id - 2)].uuid});
+                onPick({false, lfos[(size_t)(id - 2)].uuid, lfos[(size_t)(id - 2)].sourceChannel});
         });
     picker->setAccessibleNames("Add modulator to " + parameterName, "Search modulators for " + parameterName);
     return picker;

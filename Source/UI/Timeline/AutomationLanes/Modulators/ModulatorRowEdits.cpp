@@ -67,11 +67,12 @@ juce::PopupMenu ModulatorRow::buildMenu() const {
     juce::PopupMenu menu;
     menu.addItem(kShowOnCanvasMenuId, "Show on canvas");
     if (host_ != nullptr && host_->canChangeModulatorSource(info_)) {
-        const auto lfos = host_->getLfoChoices(info_.targetUuid, info_.paramId);
-        const bool another = std::any_of(lfos.begin(), lfos.end(), [this](const TrackHeaderHost::LfoChoice& lfo) {
-            return lfo.uuid != info_.sourceUuid && !lfo.movesThisParameter;
+        const auto sources = host_->getChangeSourceChoices(info_.targetUuid, info_.paramId);
+        const bool another = std::any_of(sources.begin(), sources.end(), [this](const TrackHeaderHost::LfoChoice& s) {
+            return !(s.uuid == info_.sourceUuid && s.sourceChannel == info_.sourceChannel) && !s.movesThisParameter;
         });
-        menu.addItem(kChangeSourceMenuId, "Change source..." + (another ? juce::String() : " (no other LFO)"), another);
+        menu.addItem(kChangeSourceMenuId, "Change source..." + (another ? juce::String() : " (no other source)"),
+                     another);
     }
     menu.addSeparator();
     menu.addItem(kRemoveMenuId, "Remove modulator");
@@ -101,13 +102,13 @@ void ModulatorRow::openChangeSourcePicker() {
     auto* host = host_;
     const auto info = info_;
     const auto name = parameterName_.isNotEmpty() ? parameterName_ : info.paramId;
-    const auto choices =
-        collectChangeSourceChoices(host->getLfoChoices(info.targetUuid, info.paramId), info.sourceUuid, name);
+    const auto choices = collectChangeSourceChoices(host->getChangeSourceChoices(info.targetUuid, info.paramId),
+                                                    info.sourceUuid, info.sourceChannel, name);
     if (choices.lfos.empty())
         return;
     auto picker = buildAddModulatorPicker(choices, name, [host, info](const AddModulatorPick& pick) {
         if (!pick.isNew)
-            host->changeModulatorSource(info, pick.lfoUuid);
+            host->changeModulatorSource(info, pick.lfoUuid, pick.sourceChannel);
     });
     picker->setAccessibleNames("Change source of " + info.sourceTitle + " on " + name, "Search modulators for " + name);
     if (auto& hook = test_hooks::changeSourcePickerHookForTest()) {

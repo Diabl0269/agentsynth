@@ -1,10 +1,12 @@
 // AutomationLanesChangeSourceTests.cpp -- a modulator row's "Change source...": the item is there only when
-// the host says it can re-point the routing, the picker leaves out the current source, and against a real
-// MainComponent the lane follows the new LFO, keeps its drawn amount curve (re-keyed to the new routing's
+// the host says it can re-point the routing (an LFO row and an envelope row alike), the picker lists LFOs and
+// envelopes but leaves out the current source, and against a real MainComponent the lane follows the new source
+// (reading the channel the source catalogue gives it), keeps its drawn amount curve (re-keyed to the new routing's
 // Attenuverter) and the whole change is ONE graph + timeline undo step.
 
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
@@ -14,27 +16,37 @@ using synth::ui::ModulatorRow;
 
 namespace {
 
-// A host that offers two LFOs and records the re-point it is asked for.
+// A host that offers two LFOs (and optionally an envelope on output 3) and records the re-point it is asked for.
 struct SourceHost : synth::ui::TrackHeaderHost {
     bool canChange = true;
     bool oneLfoOnly = false;
     int changes = 0;
     juce::String changedTo;
+    int changedChannel = -1;
+    bool withEnvelope = false;
 
     bool canChangeModulatorSource(const ModulatorInfo&) override { return canChange; }
-    bool changeModulatorSource(const ModulatorInfo&, const juce::String& lfoUuid) override {
+    bool changeModulatorSource(const ModulatorInfo&, const juce::String& sourceUuid, int sourceChannel) override {
         ++changes;
-        changedTo = lfoUuid;
+        changedTo = sourceUuid;
+        changedChannel = sourceChannel;
         return true;
     }
-    std::vector<LfoChoice> getLfoChoices(const juce::String&, const juce::String&) override {
+    std::vector<LfoChoice> getChangeSourceChoices(const juce::String&, const juce::String&) override {
         LfoChoice current;
         current.uuid = "lfo-1";
         current.name = "LFO 1";
         LfoChoice other;
         other.uuid = "lfo-2";
         other.name = "LFO 2";
-        return oneLfoOnly ? std::vector<LfoChoice>{current} : std::vector<LfoChoice>{current, other};
+        LfoChoice env;
+        env.uuid = "env-1";
+        env.name = "Envelope 1";
+        env.sourceChannel = 3;
+        env.isEnvelope = true;
+        if (oneLfoOnly)
+            return {current};
+        return withEnvelope ? std::vector<LfoChoice>{current, other, env} : std::vector<LfoChoice>{current, other};
     }
     std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId) override { return {}; }
     juce::String getNodeDisplayName(const juce::String&) override { return "Filter"; }
@@ -52,6 +64,18 @@ struct SourceHost : synth::ui::TrackHeaderHost {
     std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
     synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
 };
+
+ModulatorInfo envelopeOne() {
+    ModulatorInfo info;
+    info.sourceUuid = "env-1";
+    info.sourceTitle = "Envelope 1";
+    info.sourceChannel = 3;
+    info.isLfo = false;
+    info.attenuverterUuid = "atten-2";
+    info.targetUuid = "filter";
+    info.paramId = "cutoff";
+    return info;
+}
 
 ModulatorInfo lfoOne() {
     ModulatorInfo info;
@@ -116,13 +140,13 @@ TEST(AutomationLanesChangeSourceTest, TheItemIsShownWhenTheHostSaysYes) {
     EXPECT_TRUE(item.isEnabled);
 }
 
-TEST(AutomationLanesChangeSourceTest, TheItemIsDisabledAndSaysWhyWhenNoOtherLfoExists) {
+TEST(AutomationLanesChangeSourceTest, TheItemIsDisabledAndSaysWhyWhenNoOtherSourceExists) {
     SourceHost host;
     host.oneLfoOnly = true;
     ModulatorRow row(lfoOne(), &host, "Cutoff");
     juce::PopupMenu::Item item;
     ASSERT_TRUE(findItem(row.buildMenu(), ModulatorRow::kChangeSourceMenuId, item));
-    EXPECT_EQ(item.text, "Change source... (no other LFO)");
+    EXPECT_EQ(item.text, "Change source... (no other source)");
     EXPECT_FALSE(item.isEnabled);
 
     SourcePickerCapture capture;
@@ -130,7 +154,7 @@ TEST(AutomationLanesChangeSourceTest, TheItemIsDisabledAndSaysWhyWhenNoOtherLfoE
     EXPECT_EQ(capture.picker, nullptr) << "nothing to pick from";
 }
 
-TEST(AutomationLanesChangeSourceTest, ThePickerOffersEveryLfoButTheCurrentOneAndAPickReachesTheHost) {
+TEST(AutomationLanesChangeSourceTest, ThePickerOffersEverySourceButTheCurrentOneAndAPickReachesTheHost) {
     SourceHost host;
     ModulatorRow row(lfoOne(), &host, "Cutoff");
     SourcePickerCapture capture;
@@ -147,11 +171,55 @@ TEST(AutomationLanesChangeSourceTest, ThePickerOffersEveryLfoButTheCurrentOneAnd
 }
 
 TEST(AutomationLanesChangeSourceTest, ThePickerKeepsAnLfoThatAlreadyMovesTheParameterGreyedOut) {
-    auto lfos = SourceHost().getLfoChoices({}, {});
+    auto lfos = SourceHost().getChangeSourceChoices({}, {});
     lfos[1].movesThisParameter = true;
-    const auto choices = synth::ui::collectChangeSourceChoices(lfos, "lfo-1", "Cutoff");
+    const auto choices = synth::ui::collectChangeSourceChoices(lfos, "lfo-1", 0, "Cutoff");
     ASSERT_EQ(choices.items.size(), 1u);
     EXPECT_FALSE(choices.items.front().enabled);
+}
+
+// An envelope row through the real right-click path: the menu offers an enabled item, the picker lists the LFOs but
+// not the current output, and a pick carries the chosen source's channel.
+TEST(AutomationLanesChangeSourceTest, AnEnvelopeRowOffersTheItemAndItsPickerListsLfosAndEnvelopes) {
+    SourceHost host;
+    host.withEnvelope = true;
+    ModulatorRow row(envelopeOne(), &host, "Cutoff");
+    row.setBounds(0, 0, 200, 80);
+    {
+        lane_menu_test::MenuCapture menu;
+        row.mouseDown(makeClickEvent(row, {5.0f, 5.0f}, lane_menu_test::rightButton()));
+        ASSERT_EQ(menu.count, 1);
+        juce::PopupMenu::Item item;
+        ASSERT_TRUE(findItem(menu.menu, ModulatorRow::kChangeSourceMenuId, item));
+        EXPECT_EQ(item.text, "Change source...");
+        EXPECT_TRUE(item.isEnabled);
+    }
+    SourcePickerCapture capture;
+    row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
+    ASSERT_NE(capture.picker, nullptr);
+    const auto names = capture.picker->getVisibleItemTextsForTest();
+    ASSERT_EQ(names.size(), 2u) << "both LFOs; the envelope's own output is the current source";
+    EXPECT_EQ(names[0], "LFO 1");
+    EXPECT_EQ(names[1], "LFO 2");
+
+    capture.picker->chooseVisibleItemForTest(1);
+    EXPECT_EQ(host.changedTo, "lfo-2");
+    EXPECT_EQ(host.changedChannel, 0);
+}
+
+TEST(AutomationLanesChangeSourceTest, AnLfoRowPickingAnEnvelopePassesItsChannel) {
+    SourceHost host;
+    host.withEnvelope = true;
+    ModulatorRow row(lfoOne(), &host, "Cutoff");
+    SourcePickerCapture capture;
+    row.applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
+    ASSERT_NE(capture.picker, nullptr);
+    const auto names = capture.picker->getVisibleItemTextsForTest();
+    ASSERT_EQ(names.size(), 2u);
+    EXPECT_EQ(names[1], "Envelope 1");
+    capture.picker->chooseVisibleItemForTest(1);
+    EXPECT_EQ(host.changedTo, "env-1");
+    EXPECT_EQ(host.changedChannel, 3);
 }
 
 TEST_F(TimelinePanelIntegrationTest, ChangeSourceFollowsTheOtherLfoKeepsTheAmountCurveAndIsOneUndoStep) {
@@ -182,9 +250,12 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceFollowsTheOtherLfoKeepsTheAmoun
     s.row()->applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
     ASSERT_NE(capture.picker, nullptr);
     const auto names = capture.picker->getVisibleItemTextsForTest();
-    ASSERT_EQ(names.size(), 1u) << "the current source is left out";
+    // The two default envelopes and the other LFO; the current LFO is left out (both LFOs are titled "LFO").
+    ASSERT_EQ(names.size(), 3u) << "the current source is left out";
+    const auto otherPos = std::find(names.begin(), names.end(), juce::String("LFO"));
+    ASSERT_NE(otherPos, names.end());
     const auto depthBefore = s.depthOf(s.chainsInto(oldLfo, raw).front());
-    capture.picker->chooseVisibleItemForTest(0);
+    capture.picker->chooseVisibleItemForTest((int)(otherPos - names.begin()));
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
     // The lane follows the other LFO; the old routing is gone, the old LFO card stays.
@@ -266,4 +337,145 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceRefusesTheCurrentSourceAndALfoT
     EXPECT_FALSE(s.mc.changeModulatorSourceForTest(info, otherUuid));
     EXPECT_EQ(s.chainsInto(s.lfoUuid, raw).size(), 1u) << "nothing changed";
     EXPECT_EQ(s.chainsInto(otherUuid, raw).size(), 1u);
+}
+
+namespace {
+// The first output the source catalogue offers for the node `uuid` (what the mod dot cables).
+int catalogueChannelOf(AmountScene& s, const juce::String& uuid) {
+    auto* node = s.byUuid(uuid);
+    for (const auto& item : synth::ui::enumerateModSources(s.mc.getAudioEngine().getGraph()))
+        if (node != nullptr && item.node == node->nodeID)
+            return item.channel;
+    return -1;
+}
+
+// The row whose source is `uuid`, or null.
+ModulatorRow* rowFor(AmountScene& s, const juce::String& uuid) {
+    for (int i = 0; i < 4; ++i)
+        if (auto* r = s.row(i); r != nullptr && r->getInfo().sourceUuid == uuid)
+            return r;
+    return nullptr;
+}
+
+// An ADSR cabled into the scene's cutoff the way the mod dot does it (through an Attenuverter chain).
+juce::String addEnvelopeRouting(AmountScene& s, int& channel) {
+    auto adsr = addNodeWithUuid(s.mc, "ADSR");
+    const auto uuid = adsr->properties["uuid"].toString();
+    s.mc.getGraphEditor().updateComponents();
+    channel = catalogueChannelOf(s, uuid);
+    EXPECT_GE(channel, 0);
+    EXPECT_NE(s.mc.getGraphEditor()
+                  .connectModulationSource(adsr->nodeID, channel, s.byUuid(s.targetUuid)->nodeID,
+                                           s.channelFor("cutoff"), 0.5f)
+                  .uid,
+              0u);
+    s.mc.getGraphEditor().updateComponents();
+    s.flush();
+    return uuid;
+}
+} // namespace
+
+TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRoutingChangesToAnLfoKeepsItsAmountLaneAndIsOneUndoStep) {
+    AmountScene s;
+    const int raw = s.channelFor("cutoff");
+    int adsrChannel = -1;
+    const auto adsrUuid = addEnvelopeRouting(s, adsrChannel);
+    auto spare = addNodeWithUuid(s.mc, "LFO");
+    const auto spareUuid = spare->properties["uuid"].toString();
+    s.mc.getGraphEditor().updateComponents();
+
+    auto* adsrRow = rowFor(s, adsrUuid);
+    ASSERT_NE(adsrRow, nullptr);
+    EXPECT_FALSE(adsrRow->getInfo().isLfo);
+    ASSERT_TRUE(adsrRow->getInfo().attenuverterUuid.isNotEmpty());
+    EXPECT_TRUE(s.mc.canChangeModulatorSourceForTest(adsrRow->getInfo()));
+    const auto oldAtten = adsrRow->getInfo().attenuverterUuid;
+
+    const std::vector<synth::AutomationLane::Breakpoint> drawn{{0.0, 0.25, 0.0f, kHold}, {4.0, -0.5, 0.0f, kHold}};
+    s.undo().recordTimelineChange(s.doc(), [&] { synth::ui::writeAmountLane(s.doc(), s.track, oldAtten, drawn); });
+    const auto* before = synth::ui::amountLaneFor(s.doc(), oldAtten);
+    ASSERT_NE(before, nullptr);
+    const auto laneId = before->id;
+
+    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(adsrRow->getInfo(), spareUuid, 0));
+    s.flush();
+    EXPECT_TRUE(s.chainsInto(adsrUuid, raw).empty());
+    ASSERT_EQ(s.chainsInto(spareUuid, raw).size(), 1u);
+    auto* moved = rowFor(s, spareUuid);
+    ASSERT_NE(moved, nullptr);
+    const auto newAtten = moved->getInfo().attenuverterUuid;
+    EXPECT_NE(newAtten, oldAtten);
+    EXPECT_EQ(synth::ui::amountLaneFor(s.doc(), oldAtten), nullptr);
+    const auto* after = synth::ui::amountLaneFor(s.doc(), newAtten);
+    ASSERT_NE(after, nullptr);
+    EXPECT_EQ(after->id, laneId);
+    ASSERT_EQ(after->points.size(), drawn.size());
+    EXPECT_DOUBLE_EQ(after->points[1].value, drawn[1].value);
+
+    ASSERT_TRUE(s.undo().undo());
+    ASSERT_EQ(s.chainsInto(adsrUuid, raw).size(), 1u);
+    EXPECT_EQ(s.chainsInto(adsrUuid, raw).front().sourceChannelIndex, adsrChannel);
+    EXPECT_TRUE(s.chainsInto(spareUuid, raw).empty());
+    auto* restoredRow = rowFor(s, adsrUuid);
+    ASSERT_NE(restoredRow, nullptr);
+    const auto* restored = synth::ui::amountLaneFor(s.doc(), restoredRow->getInfo().attenuverterUuid);
+    ASSERT_NE(restored, nullptr);
+    EXPECT_EQ(restored->points.size(), drawn.size());
+}
+
+TEST_F(TimelinePanelIntegrationTest, AnLfoRoutingChangesToAnEnvelopeReadingTheCataloguesChannel) {
+    AmountScene s;
+    const int raw = s.channelFor("cutoff");
+    auto adsr = addNodeWithUuid(s.mc, "ADSR");
+    const auto adsrUuid = adsr->properties["uuid"].toString();
+    s.mc.getGraphEditor().updateComponents();
+    const int adsrChannel = catalogueChannelOf(s, adsrUuid);
+    ASSERT_GE(adsrChannel, 0);
+    ASSERT_TRUE(s.mc.canChangeModulatorSourceForTest(s.row()->getInfo()));
+
+    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(s.row()->getInfo(), adsrUuid, adsrChannel));
+    s.flush();
+    EXPECT_TRUE(s.chainsInto(s.lfoUuid, raw).empty());
+    const auto chains = s.chainsInto(adsrUuid, raw);
+    ASSERT_EQ(chains.size(), 1u);
+    EXPECT_EQ(chains.front().sourceChannelIndex, adsrChannel);
+
+    // The same output again is a no-op; a channel the catalogue does not offer is refused.
+    auto* envRow = rowFor(s, adsrUuid);
+    ASSERT_NE(envRow, nullptr);
+    EXPECT_EQ(envRow->getInfo().sourceChannel, adsrChannel);
+    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(envRow->getInfo(), adsrUuid, adsrChannel));
+    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(envRow->getInfo(), s.lfoUuid, 999));
+
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.chainsInto(s.lfoUuid, raw).size(), 1u);
+    EXPECT_TRUE(s.chainsInto(adsrUuid, raw).empty());
+}
+
+TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRowsRealMenuOffersChangeSourceListingLfosAndEnvelopes) {
+    AmountScene s;
+    int adsrChannel = -1;
+    const auto adsrUuid = addEnvelopeRouting(s, adsrChannel);
+    auto spare = addNodeWithUuid(s.mc, "ADSR");
+    s.mc.getGraphEditor().updateComponents();
+    auto* envRow = rowFor(s, adsrUuid);
+    ASSERT_NE(envRow, nullptr);
+    {
+        lane_menu_test::MenuCapture menu;
+        envRow->showMenuAt(juce::PopupMenu::Options());
+        ASSERT_EQ(menu.count, 1);
+        juce::PopupMenu::Item item;
+        ASSERT_TRUE(findItem(menu.menu, ModulatorRow::kChangeSourceMenuId, item));
+        EXPECT_EQ(item.text, "Change source...");
+        EXPECT_TRUE(item.isEnabled);
+    }
+    SourcePickerCapture capture;
+    envRow->applyMenuChoice(ModulatorRow::kChangeSourceMenuId);
+    ASSERT_NE(capture.picker, nullptr);
+    const auto names = capture.picker->getVisibleItemTextsForTest();
+    // The two default envelopes, the spare ADSR and the LFO (greyed: it already moves cutoff); the routed ADSR itself
+    // is left out.
+    ASSERT_EQ(names.size(), 4u);
+    EXPECT_NE(std::find(names.begin(), names.end(), juce::String("LFO")), names.end());
+    EXPECT_EQ(std::count(names.begin(), names.end(), juce::String("ADSR")), 1);
 }

@@ -14,8 +14,9 @@ namespace synth::ui {
 // that already moves this parameter is listed greyed out, with that as its reason.
 
 struct AddModulatorPick {
-    bool isNew = true;    // "New LFO"
-    juce::String lfoUuid; // the chosen existing LFO when !isNew
+    bool isNew = true;     // "New LFO"
+    juce::String lfoUuid;  // the chosen existing LFO (or envelope) when !isNew
+    int sourceChannel = 0; // its output channel
 };
 
 struct AddModulatorChoices {
@@ -34,10 +35,11 @@ std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoic
                                                          const juce::String& parameterName,
                                                          std::function<void(const AddModulatorPick&)> onPick);
 
-/** The rows of a modulator row's "Change source..." picker: every LFO but the current source `currentSourceUuid`,
- *  and no "New LFO" (this re-points a routing at an existing LFO). `choices.lfos[n]` is item id n + 2 as above. */
+/** The rows of a modulator row's "Change source..." picker: every LFO and envelope output but the current source
+ *  (`currentSourceUuid`, `currentSourceChannel`), and no "New LFO" (this re-points a routing at an existing source).
+ *  `choices.lfos[n]` is item id n + 2 as above. */
 AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
-                                               const juce::String& currentSourceUuid,
+                                               const juce::String& currentSourceUuid, int currentSourceChannel,
                                                const juce::String& parameterName);
 
 namespace test_hooks {
