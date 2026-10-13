@@ -483,6 +483,7 @@ add_library(Core STATIC
     Source/AI/AIStateMapper/AIStateMapperValidation.cpp
     Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp
     Source/AI/AIStateMapper/AIStateMapperSchema.cpp
+    Source/AI/AIStateMapper/AIStateMapperCatalog.cpp
     Source/AI/AIStateMapper/AIStateMapperModulations.cpp
     Source/AI/AIProviderRegistry.h
     Source/AI/AIProviderRegistry.cpp

@@ -250,6 +250,9 @@ public:
      */
     static juce::String getModuleSchema();
 
+    /** @brief JSON twin of getModuleSchema(): the authorable modules' exact parameters, in a stable order. */
+    static juce::String getModuleCatalogJson();
+
     /**
      * @brief Generates a JSON schema for patch validation and structured AI output.
      */
