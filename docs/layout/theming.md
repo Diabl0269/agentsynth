@@ -291,6 +291,21 @@ implemented in `AppLookAndFeel`:
   for these drawn ones. The button never sets its own title, tooltip or description, and outside any
   `AppLookAndFeel` it paints with a default `Theme`. It lives in `Core` (not `AppUI`) because
   `StatusBarComponent` uses it.
+- **Button states** — every button the shared drawing paints eases between its states instead of snapping:
+  text buttons (`drawButtonBackground` / `drawButtonText`), `DrawableButton`s (`drawDrawableButton`), `IconButton`s
+  (`drawIconButton`, all four styles) and toggle buttons (the tick box and the footer pill). The states are
+  rest, hover, press, toggled-on and disabled; hover, press and toggled-on ease, disabled stays instant. The ease
+  is `synth::ui::ButtonStateEase` (`Source/UI/Layout/ButtonStateEase.h`): the look-and-feel calls
+  `ButtonStateEase::update(button, hot, down)` from its draw function and blends each colour with
+  `ButtonStateEase::blend(amounts, colourFor)`, where `colourFor(on, hot, down)` is the colour that state settles
+  to, so the settled look is exactly the old one. The ease lives on the button (a component property), so a
+  button's owner writes no code for it and a new button type that uses the shared drawing gets it for free; a
+  button with its own `paintButton` (a chip, a swatch) calls the same two functions to join in. 110 ms in
+  (`easeOutCubic`), 90 ms out (`easeInCubic`), retargeting from the current amounts so a reversal never jumps;
+  80 ms under Reduce Motion (colours only, nothing moves); Animations: Off and any button that is not on screen
+  (headless tests, pixel goldens) land on the final state at once, so a draw with no VBlank reads the final
+  look. Frames run only while a tween runs and repaint only that button. A `DrawableButton`'s icon image is a
+  child the owner tints itself (`setImages`), so it still swaps instantly with the state.
 - **Toolbar button** — `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`) is the top
   bar's button: a group-coloured chip, a multi-role glyph and a caption, painted by
   `AppLookAndFeel::drawToolbarButton` (free function `paintToolbarButton` outside any

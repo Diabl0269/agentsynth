@@ -629,6 +629,7 @@ add_executable(Tests
     UI/Layout/DisclosureChevronTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
+    UI/Layout/ButtonStateEaseTests.cpp
     UI/Layout/SharedChipControlsTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
     UI/Layout/TabStripKeysTests.cpp

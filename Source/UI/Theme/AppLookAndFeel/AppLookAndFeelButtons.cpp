@@ -1,8 +1,11 @@
 #include "AppLookAndFeel.h"
+#include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
 
 namespace synth::theme {
+
+using synth::ui::ButtonStateEase;
 
 // Concern: text buttons, drawable (toolbar) buttons, icon buttons, and toggle buttons.
 
@@ -13,11 +16,16 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
 
     auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
 
-    juce::Colour fill = backgroundColour;
-    if (shouldDrawButtonAsDown)
-        fill = fill.darker(0.2f);
-    else if (shouldDrawButtonAsHighlighted)
-        fill = fill.brighter(0.12f);
+    // Hover, press and toggled-on ease (ButtonStateEase). The off/on fills come from the button's own colours when
+    // `backgroundColour` is one of them (a plain TextButton); a caller that passes its own colour keeps it.
+    const auto offFill = button.findColour(juce::TextButton::buttonColourId);
+    const auto onFill = button.findColour(juce::TextButton::buttonOnColourId);
+    const bool ownsFill = backgroundColour == (button.getToggleState() ? onFill : offFill);
+    const auto amounts = ButtonStateEase::update(button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+    const juce::Colour fill = ButtonStateEase::blend(amounts, [&](bool on, bool hot, bool down) {
+        const auto base = ownsFill ? (on ? onFill : offFill) : backgroundColour;
+        return down ? base.darker(0.2f) : (hot ? base.brighter(0.12f) : base);
+    });
 
     const float dim = paintsDimmed(button) ? kDisabledControlAlpha : 1.0f;
     g.setColour(fill.withMultipliedAlpha(dim));
@@ -41,10 +49,10 @@ juce::Font AppLookAndFeel::getTextButtonFont(juce::TextButton&, int buttonHeight
 void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button, bool /*shouldDrawButtonAsHighlighted*/,
                                     bool /*shouldDrawButtonAsDown*/) {
     g.setFont(getTextButtonFont(button, button.getHeight()));
-    const auto colourId =
-        button.getToggleState() ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
+    const auto textOff = button.findColour(juce::TextButton::textColourOffId);
+    const auto textOn = button.findColour(juce::TextButton::textColourOnId);
     const float alpha = !button.isEnabled() ? 0.5f : (paintsDimmed(button) ? kDisabledControlAlpha : 1.0f);
-    g.setColour(button.findColour(colourId).withMultipliedAlpha(alpha));
+    g.setColour(ButtonStateEase::mix(textOff, textOn, ButtonStateEase::current(button).on).withMultipliedAlpha(alpha));
 
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
 }
@@ -63,7 +71,6 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
 
-    const bool isOn = button.getToggleState();
     const bool isEnabled = button.isEnabled();
     const bool isHot = shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown; // hover OR press
     const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
@@ -72,15 +79,17 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     // button: a light ~13-15% accent wash, with hover/press only nudging it a couple of points
     // stronger — never the heavy ~0.22-0.30-alpha fill this replaced. Off-state hover/press get a
     // soft neutral surface wash instead.
-    juce::Colour fill = juce::Colours::transparentBlack;
-    if (isEnabled) {
-        if (isOn)
-            fill = c.accent.withAlpha(shouldDrawButtonAsDown ? 0.20f : (shouldDrawButtonAsHighlighted ? 0.15f : 0.13f));
-        else if (shouldDrawButtonAsDown)
-            fill = c.surfaceHi.withAlpha(0.85f);
-        else if (shouldDrawButtonAsHighlighted)
-            fill = c.surface.withAlpha(0.6f);
-    }
+    // Hover, press and toggled-on ease (ButtonStateEase); the rungs below are what each state settles to.
+    const auto amounts = ButtonStateEase::update(button, isEnabled && isHot, isEnabled && shouldDrawButtonAsDown);
+    const juce::Colour fill = ButtonStateEase::blend(amounts, [&](bool on, bool hot, bool down) {
+        if (!isEnabled)
+            return juce::Colours::transparentBlack;
+        if (on)
+            return c.accent.withAlpha(down ? 0.20f : (hot ? 0.15f : 0.13f));
+        if (down)
+            return c.surfaceHi.withAlpha(0.85f);
+        return hot ? c.surface.withAlpha(0.6f) : juce::Colours::transparentBlack;
+    });
 
     if (!fill.isTransparent()) {
         g.setColour(fill);
@@ -88,9 +97,9 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     }
 
     // A hairline accent stroke at low alpha reinforces "toggled on" without outlining the whole
-    // pill heavily (the old 0.6-alpha ring read as a button, not a state).
-    if (isEnabled && isOn) {
-        g.setColour(c.accent.withAlpha(0.35f));
+    // pill heavily (the old 0.6-alpha ring read as a button, not a state). It fades with the toggle.
+    if (isEnabled && amounts.on > 0.0f) {
+        g.setColour(c.accent.withAlpha(0.35f * amounts.on));
         g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
     }
 
@@ -99,13 +108,11 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
     // when disabled. Computed here from theme tokens directly rather than read off the stock
     // DrawableButton::textColourId/textColourOnId ColourIds (those stay themed in applyTheme()
     // only as a fallback for any stock JUCE draw path that bypasses this LookAndFeel).
-    juce::Colour textColour = c.textMuted;
-    if (!isEnabled)
-        textColour = c.textDisabled;
-    else if (isOn)
-        textColour = c.accent;
-    else if (isHot)
-        textColour = c.textPrimary;
+    const juce::Colour textColour = ButtonStateEase::blend(amounts, [&](bool on, bool hot, bool) {
+        if (!isEnabled)
+            return c.textDisabled;
+        return on ? c.accent : (hot ? c.textPrimary : c.textMuted);
+    });
 
     // Label geometry: a fixed, readable size docked to the bottom of the strip with a small gap
     // above it — NOT LookAndFeel_V2's cropped-to-16px-then-25%-of-height formula, which is what
@@ -146,78 +153,105 @@ constexpr float kDangerPressAlpha = 0.28f;
 constexpr float kFramedHoverBrighten = 0.15f;
 } // namespace
 
-juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
-                                   bool down) {
+namespace {
+using IconStyle = synth::ui::IconButton::Style;
+
+// The glyph colour of each settled state: disabled, lit (the on-colour or accent), hot, then rest.
+juce::Colour glyphColourFor(const Theme& theme, const synth::ui::IconButton& button, bool on, bool hot) {
     const auto& c = theme.colors;
     if (!button.isEnabled())
         return c.textDisabled;
-    if (button.getToggleState())
+    if (on)
         return button.getOnTone() == synth::ui::IconButton::OnTone::Plain ? c.textPrimary
                                                                           : button.getOnColour().value_or(c.accent);
-    if (highlighted || down)
-        return button.getStyle() == synth::ui::IconButton::Style::Danger ? c.error : c.textPrimary;
+    if (hot)
+        return button.getStyle() == IconStyle::Danger ? c.error : c.textPrimary;
     return c.textMuted;
 }
 
-namespace {
-void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme, bool hot,
-                               bool down) {
-    using Style = synth::ui::IconButton::Style;
+// Each background layer is a colour per settled state, so hover, press and toggled-on ease (ButtonStateEase).
+juce::Colour framedFill(const Theme& theme, bool hot) {
+    return hot ? theme.colors.surface.brighter(kFramedHoverBrighten) : theme.colors.surface;
+}
+
+juce::Colour framedWash(const synth::ui::IconButton& button, bool on) {
+    const bool engaged = on && button.getOnColour().has_value();
+    return engaged ? button.getOnColour()->withAlpha(kOnWashAlpha) : juce::Colours::transparentBlack;
+}
+
+juce::Colour framedBorder(const Theme& theme, const synth::ui::IconButton& button, bool on) {
+    return on && button.getOnColour().has_value() ? *button.getOnColour() : theme.colors.border;
+}
+
+// The hover/press wash of the Bare, Round and Danger styles (transparent at rest).
+juce::Colour washColour(const Theme& theme, const synth::ui::IconButton& button, bool on, bool hot, bool down) {
     const auto& c = theme.colors;
+    switch (button.getStyle()) {
+    case IconStyle::Bare:
+        // Toggled on (with the accent tone) reads like a lit toolbar toggle: a light accent wash.
+        if (button.isEnabled() && on && button.getOnTone() == synth::ui::IconButton::OnTone::Accent &&
+            !button.getOnColour().has_value())
+            return c.accent.withAlpha(down ? kBareOnPressAlpha : (hot ? kBareOnHoverAlpha : kBareOnAlpha));
+        return hot ? c.textPrimary.withAlpha(down ? kBarePressAlpha : kBareHoverAlpha)
+                   : juce::Colours::transparentBlack;
+    case IconStyle::Round:
+        return hot ? c.accent.withAlpha(down ? kRoundPressAlpha : kRoundHoverAlpha) : juce::Colours::transparentBlack;
+    case IconStyle::Danger:
+        return hot ? c.error.withAlpha(down ? kDangerPressAlpha : kDangerHoverAlpha) : juce::Colours::transparentBlack;
+    case IconStyle::Framed:
+        break;
+    }
+    return juce::Colours::transparentBlack;
+}
+
+void paintIconButtonBackground(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme,
+                               const ButtonStateEase::Amounts& amounts) {
     const float radius = theme.metrics.cornerRadiusSmall;
     const auto full = button.getLocalBounds().toFloat();
 
-    switch (button.getStyle()) {
-    case Style::Framed: {
+    if (button.getStyle() == IconStyle::Framed) {
         const auto bounds = full.reduced(1.0f);
-        const bool engaged = button.getToggleState() && button.getOnColour().has_value();
-        g.setColour(hot ? c.surface.brighter(kFramedHoverBrighten) : c.surface);
+        g.setColour(ButtonStateEase::blend(amounts, [&](bool, bool hot, bool) { return framedFill(theme, hot); }));
         g.fillRoundedRectangle(bounds, radius);
-        if (engaged) {
-            g.setColour(button.getOnColour()->withAlpha(kOnWashAlpha));
+        const auto wash = ButtonStateEase::blend(amounts, [&](bool on, bool, bool) { return framedWash(button, on); });
+        if (!wash.isTransparent()) {
+            g.setColour(wash);
             g.fillRoundedRectangle(bounds, radius);
         }
-        g.setColour(engaged ? *button.getOnColour() : c.border);
+        g.setColour(
+            ButtonStateEase::blend(amounts, [&](bool on, bool, bool) { return framedBorder(theme, button, on); }));
         g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
-        break;
+        return;
     }
-    case Style::Bare:
-        // Toggled on (with the accent tone) reads like a lit toolbar toggle: a light accent wash.
-        if (button.isEnabled() && button.getToggleState() &&
-            button.getOnTone() == synth::ui::IconButton::OnTone::Accent && !button.getOnColour().has_value()) {
-            g.setColour(c.accent.withAlpha(down ? kBareOnPressAlpha : (hot ? kBareOnHoverAlpha : kBareOnAlpha)));
-            g.fillRoundedRectangle(full, radius);
-        } else if (hot) {
-            g.setColour(c.textPrimary.withAlpha(down ? kBarePressAlpha : kBareHoverAlpha));
-            g.fillRoundedRectangle(full, radius);
-        }
-        break;
-    case Style::Round:
-        if (hot) {
-            g.setColour(c.accent.withAlpha(down ? kRoundPressAlpha : kRoundHoverAlpha));
-            g.fillEllipse(full);
-        }
-        break;
-    case Style::Danger:
-        if (hot) {
-            g.setColour(c.error.withAlpha(down ? kDangerPressAlpha : kDangerHoverAlpha));
-            g.fillRoundedRectangle(full, radius);
-        }
-        break;
-    }
+    const auto wash = ButtonStateEase::blend(
+        amounts, [&](bool on, bool hot, bool down) { return washColour(theme, button, on, hot, down); });
+    if (wash.isTransparent())
+        return;
+    g.setColour(wash);
+    if (button.getStyle() == IconStyle::Round)
+        g.fillEllipse(full);
+    else
+        g.fillRoundedRectangle(full, radius);
 }
 } // namespace
+
+juce::Colour iconButtonGlyphColour(const Theme& theme, const synth::ui::IconButton& button, bool highlighted,
+                                   bool down) {
+    return glyphColourFor(theme, button, button.getToggleState(), highlighted || down);
+}
 
 void paintIconButton(juce::Graphics& g, const synth::ui::IconButton& button, const Theme& theme, bool highlighted,
                      bool down) {
     using Style = synth::ui::IconButton::Style;
     const bool hot = button.isEnabled() && (highlighted || down);
-    paintIconButtonBackground(g, button, theme, hot, down);
+    const auto amounts = ButtonStateEase::update(button, hot, button.isEnabled() && down);
+    paintIconButtonBackground(g, button, theme, amounts);
 
     const auto full = button.getLocalBounds().toFloat();
     const auto glyphArea = button.getStyle() == Style::Framed ? full.reduced(1.0f) : full;
-    synth::theme::paintGlyph(g, button.currentGlyph(), glyphArea,
-                             iconButtonGlyphColour(theme, button, highlighted, down));
+    synth::theme::paintGlyph(
+        g, button.currentGlyph(), glyphArea,
+        ButtonStateEase::blend(amounts, [&](bool on, bool h, bool) { return glyphColourFor(theme, button, on, h); }));
 
     // juce::Button::paint() hands paintButton() only isOver()/isDown(), never focus state, so the
     // ring is drawn here; Button repaints on focus changes itself.
@@ -279,15 +313,18 @@ void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& butt
 
     const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
     const float radius = bounds.getHeight() * 0.5f;
-    const bool on = button.getToggleState();
+    // Toggled-on and hover ease (ButtonStateEase).
+    const auto amounts = ButtonStateEase::update(button, shouldDrawButtonAsHighlighted, false);
     const auto tick = button.findColour(juce::ToggleButton::tickColourId);
-    g.setColour(on ? tick : c.surface);
+    const auto outline = button.findColour(juce::ToggleButton::tickDisabledColourId);
+    const auto textOff = button.findColour(juce::ToggleButton::textColourId);
+    g.setColour(ButtonStateEase::mix(c.surface, tick, amounts.on));
     g.fillRoundedRectangle(bounds, radius);
-    g.setColour(on ? tick : button.findColour(juce::ToggleButton::tickDisabledColourId));
+    g.setColour(ButtonStateEase::mix(outline, tick, amounts.on));
     g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
 
-    const auto text = on ? c.bg0 : button.findColour(juce::ToggleButton::textColourId);
-    g.setColour(text.withMultipliedAlpha(shouldDrawButtonAsHighlighted || on ? 1.0f : 0.9f));
+    const float textAlpha = juce::jmax(0.9f + 0.1f * amounts.hover, 0.9f + 0.1f * amounts.on);
+    g.setColour(ButtonStateEase::mix(textOff, c.bg0, amounts.on).withMultipliedAlpha(textAlpha));
     g.setFont(uiFont(kTogglePillFontHeight));
     g.drawFittedText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
 
@@ -315,15 +352,18 @@ void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& butt
         return;
     }
 
-    g.setColour(button.getToggleState() ? button.findColour(juce::ToggleButton::tickColourId) : c.surface);
+    // Toggled-on and hover ease (ButtonStateEase): the box fills and the tick fades in.
+    const auto amounts = ButtonStateEase::update(button, shouldDrawButtonAsHighlighted, false);
+    const auto tickColour = button.findColour(juce::ToggleButton::tickColourId);
+    g.setColour(ButtonStateEase::mix(c.surface, tickColour, amounts.on));
     g.fillRoundedRectangle(box, 4.0f);
 
-    g.setColour(button.getToggleState() ? button.findColour(juce::ToggleButton::tickColourId)
-                                        : button.findColour(juce::ToggleButton::tickDisabledColourId));
+    g.setColour(
+        ButtonStateEase::mix(button.findColour(juce::ToggleButton::tickDisabledColourId), tickColour, amounts.on));
     g.drawRoundedRectangle(box, 4.0f, theme.metrics.borderWidth);
 
-    if (button.getToggleState()) {
-        g.setColour(c.bg0);
+    if (amounts.on > 0.0f) {
+        g.setColour(c.bg0.withMultipliedAlpha(amounts.on));
         juce::Path tick;
         tick.startNewSubPath(box.getX() + box.getWidth() * 0.25f, box.getCentreY());
         tick.lineTo(box.getX() + box.getWidth() * 0.45f, box.getY() + box.getHeight() * 0.7f);
@@ -332,8 +372,8 @@ void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& butt
     }
 
     if (button.getButtonText().isNotEmpty()) {
-        g.setColour(button.findColour(juce::ToggleButton::textColourId)
-                        .withMultipliedAlpha(shouldDrawButtonAsHighlighted ? 1.0f : 0.9f));
+        g.setColour(
+            button.findColour(juce::ToggleButton::textColourId).withMultipliedAlpha(0.9f + 0.1f * amounts.hover));
         g.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f)));
         g.drawFittedText(button.getButtonText(), button.getLocalBounds().withTrimmedLeft((int)boxSize + 10),
                          juce::Justification::centredLeft, 1);
