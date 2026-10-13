@@ -15,7 +15,7 @@
 100 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 87 Source/Mixer/ChannelFlows/ChannelFlows.h
-24 Source/Mixer/MixerModel/MixerModel.h
+23 Source/Mixer/MixerModel/MixerModel.h
 49 Source/Mixer/TrackPresetManager.h
 45 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h

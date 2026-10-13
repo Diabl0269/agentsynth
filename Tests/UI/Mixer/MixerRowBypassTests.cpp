@@ -6,7 +6,7 @@
 #include "MixerHeaderTestRig.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerSendList.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
@@ -54,6 +54,8 @@ TEST(MixerRowBypassTest, EveryInsertAndSendRowHasANamedBypassButtonWhoseTooltipN
     auto& inserts = rig.firstColumn().getInsertList();
     ASSERT_GE(inserts.getRowCount(), 2);
     for (int row = 0; row < inserts.getRowCount(); ++row) {
+        if (row == inserts.getAddRowIndex())
+            continue; // "+ Insert" adds, it has nothing to bypass
         auto* button = inserts.getBypassButtonForTest(row);
         ASSERT_NE(button, nullptr) << "insert row " << row;
         EXPECT_TRUE(button->isVisible());
@@ -231,7 +233,7 @@ TEST(MixerRowBypassTest, TheMasterInsertRowsHaveBypassButtonsThatToggleTheirModu
     rig.panel().getMasterColumnForTest()->getInsertList().addModule("Limiter");
     rig.panel().rebuild();
     auto& inserts = rig.panel().getMasterColumnForTest()->getInsertList();
-    if (inserts.getRowCount() == 0)
+    if (inserts.getEntryCountForTest() == 0)
         GTEST_SKIP() << "this rig's Master has no chain terminator to splice an insert into";
 
     auto* button = inserts.getBypassButtonForTest(0);

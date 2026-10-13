@@ -9,20 +9,39 @@
 
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
 namespace synth {
 
-/** One module in a column's insert list, in signal order. */
+/** One row of a column's insert list, in signal order (docs/mixer/mixer.md#parallel-paths). A split chain lists
+ *  each split as a Split row followed by its paths' rows, one level deeper, path by path. */
 struct MixerInsertEntry {
+    enum class Kind { Module, Split };
+
+    /** Invalid for a Split row: it stands for the fork, not a node of its own. */
     juce::AudioProcessorGraph::NodeID nodeId;
+    /** A Split row carries the uuid of the node that fans out (the track source or an insert). */
     juce::String uuid;
     juce::String name;
     bool bypassed = false;
+    Kind kind = Kind::Module;
+    /** 0 on the chain itself, +1 inside each split. */
+    int depth = 0;
+    /** Which path of the enclosing split this row sits on (0-based); -1 at depth 0. */
+    int path = -1;
+    /** Split rows only: how many paths the split has. */
+    int pathCount = 0;
 
     bool operator==(const MixerInsertEntry&) const = default;
 };
+
+/** How many modules `inserts` lists (its Split rows are not modules). */
+inline int countInsertModules(const std::vector<MixerInsertEntry>& inserts) {
+    return (int)std::count_if(inserts.begin(), inserts.end(),
+                              [](const MixerInsertEntry& e) { return e.kind == MixerInsertEntry::Kind::Module; });
+}
 
 /** One of a source column's active send slots, in slot order (docs/mixer/sends-and-buses.md). The slot index is
  * the identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is read off the
@@ -91,6 +110,11 @@ struct MixerColumn {
      *  canvas" instead of add/reorder/remove. Meaningless when `inserts` is empty. */
     bool insertChainIsLinear = false;
 
+    /** True when the chain splits into parallel paths that all meet again before the strip
+     *  (docs/mixer/mixer.md#parallel-paths): `inserts` then holds Split rows, insertChainIsLinear stays false (so a
+     *  track delete keeps the modules, as for any branch), and the list stays editable row by row. */
+    bool insertChainHasSplits = false;
+
     /** This strip's active send slots, in slot order (docs/mixer/sends-and-buses.md). Empty for Direct/Master and for
      * any strip with no sends. */
     std::vector<MixerSendEntry> sends;
@@ -126,8 +150,8 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
 // Plain graph splices, NO UNDO of their own -- same contract as Source/Mixer/ChannelFlows's own
 // builders (docs/architecture/module-base.md#appundomanager): the caller wraps each in one
 // AppUndoManager::recordGraphAndMacroChange. Only ever call these on a column whose own
-// insertChainIsLinear is true; behaviour on a branching chain's member is undefined (the UI never
-// offers add/reorder/remove there in the first place).
+// insertChainIsLinear or insertChainHasSplits is true; behaviour on a branching chain's member is undefined (the UI
+// never offers add/reorder/remove there in the first place).
 //
 // spliceOutInsert bridges by matching `node`'s OWN input channel index to its OWN output channel
 // index -- true for every ordinary passthrough FX module (an input jack and the output jack
@@ -158,5 +182,20 @@ bool spliceInInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph:
  *  found it in that case -- see spliceOutInsert's own contract). */
 bool reorderInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
                    juce::AudioProcessorGraph::NodeID newPredecessor, juce::AudioProcessorGraph::NodeID newSuccessor);
+
+/** `node`'s one signal neighbour upstream (`upstream`) or downstream, counting a stereo pair as one; an invalid id
+ *  when it has none or several. */
+juce::AudioProcessorGraph::NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph,
+                                                      juce::AudioProcessorGraph::NodeID node, bool upstream);
+
+/** On a path of a split chain (docs/mixer/mixer.md#parallel-paths): moves `node` to sit just before `before`, its
+ *  neighbour on the same path, between `before` and `before`'s own single signal predecessor. False (nothing changed)
+ *  when `before` has no single predecessor. */
+bool moveInsertBefore(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                      juce::AudioProcessorGraph::NodeID before);
+
+/** The mirror of moveInsertBefore: moves `node` to sit just after `after`, between it and its single successor. */
+bool moveInsertAfter(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                     juce::AudioProcessorGraph::NodeID after);
 
 } // namespace synth

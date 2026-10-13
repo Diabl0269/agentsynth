@@ -352,9 +352,52 @@ strip — muting the macro mutes the whole channel. See
 
 A mixer column lists its channel's modules **in signal order**, read off the chain between the source
 and the strip. When that chain is a straight line, the column supports adding, reordering and removing
-modules directly in the mixer. When it branches — more than one path between source and strip, or a
-shared node feeding more than one channel — the column instead shows the module list read-only with
-an "Edit on canvas" link, rather than presenting a branching chain as if it were a reorderable list.
+modules directly in the mixer. When it splits into parallel paths that meet again before the strip, the
+column lists them as a split row (see [Parallel paths](#parallel-paths)) and stays editable. Any other
+branch (a path that leaves the chain, a shared node feeding more than one channel, paths that meet at
+different places) shows the module list read-only with an "Edit on canvas" link, rather than presenting a
+branching chain as if it were a reorderable list.
+
+### Parallel paths
+
+A chain may fan out (an oscillator into a delay and a reverb) and meet again at one node (an insert such
+as a VCA, or the strip itself). `buildInsertsForColumn` parses that series-parallel shape
+(`SplitChainParser` in `MixerModelInserts.cpp`): each fork becomes one **Split row** followed by its paths'
+rows one level deeper, path by path, top to bottom as the paths' first cards sit on the canvas (then by node
+id), so the order stays put when a module moves within a path. A path wired straight from
+the fork to the merge is a **dry path** with no rows; a split inside a path nests one level deeper. Key
+(sidechain) cables are not signal and change nothing. Neither is the voice wiring in front of an
+instrument: a cable into a Pitch or Gate jack (a Poly MIDI driving its oscillator and envelope) plays the
+voice rather than carrying its sound, and a MIDI-only branch that never reaches the strip (Track In into an
+ADSR that only drives a VCA's gain) is modulation, so an ordinary instrument track lists as a plain chain.
+`MixerColumn::insertChainHasSplits` marks such a
+column; `insertChainIsLinear` stays false, so deleting the track keeps the modules as for any branch.
+
+In the column a split is one row: a fold arrow, the split icon (its tooltip says "Split") and "N paths",
+then the row's bypass. It is **folded by default**; a click (or Right, or Return, with the row focused)
+opens the paths in place, each under a coloured rail, and Left folds it again (Left on a path row steps up
+to its split row). The fold animates, and the open state belongs to the split, keyed by the uuid of the
+node that fans out, so it survives the column's rebuild after any edit and the docked and detached mixers
+agree. Hovering the row shows every path's modules ("Split into 2 paths / Path 1: Delay 1 / Path 2: Reverb
+1"; a dry path reads "dry, no effects"). The split row's bypass bypasses every module under it (or turns
+them all back on when all are bypassed), as one undo step. Inside a path a module moves up or down only past
+its neighbour on the same path (`moveInsertBefore`/`moveInsertAfter`), and removing one bridges its path;
+the split row itself cannot be moved or removed.
+
+### Adding an insert
+
+Every editable list ends in a **"+ Insert"** row, and hovering the line between two rows that share a cable
+(or above the first row, after the track source) shows a **"+"** there. Either one, a row's "Add after", or
+a split row's "Add to path N" opens the effect picker: the shared searchable list (`ModMatrixPicker`) with
+the library's Filters, Modulation FX, Time FX and Dynamics groups, this session's last three picks first
+under "Recent". The pick is spliced into that cable (`spliceInInsert`), joins the macro of its upstream
+neighbour (its downstream one right after the track source), and its card lands right after the upstream
+neighbour's card on the canvas, the cards after it sliding aside as for a keyboard insert
+([layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others),
+`synth::insertModuleAfterNode`). Module, cables, macro and pushes are one undo step. A neighbour hidden in a
+collapsed macro gets the new node one spacing to its right without moving anything. A chain whose last
+top-level row is a split meets the strip on several cables, so it has no "+ Insert"; each path still takes
+one through "Add to path".
 
 **A bus has no source to walk from.** A bus column carries no feeding track, so
 `buildBusInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal
@@ -369,14 +412,13 @@ no external predecessor to splice against, and `reorderInsert`'s second step has
 own.
 
 **An empty insert list and the "Edit on canvas" link must not paint on the same row.** The link
-anchors at `jmax(1, entries_.size()) * kRowHeight` in both `paint()` and `mouseDown()`, matching
-`getPreferredHeight()`'s own maths; anchoring at `entries_.size() * kRowHeight` puts it at row 0 when
-the list is empty, which is exactly where the "(no inserts)" placeholder draws.
+anchors right under the rows, or under the "(no inserts)" placeholder when there are none, in `paint()`,
+`mouseDown()` and `getPreferredHeight()` alike.
 
 ## Master inserts
 
-**Master has an insert list like a strip's, off by default.** Right-click the Master column's list to add a
-Limiter, EQ, Compressor, Gate and the rest of the mixer's add menu; move and remove work the same way,
+**Master has an insert list like a strip's, off by default.** Its "+ Insert" row adds a Limiter, EQ,
+Compressor, Gate or any other effect from the picker; move and remove work the same way,
 and each gesture is one undo step. Nothing is added unless the user asks.
 
 **Post-fader, one list.** Master's inserts sit AFTER its fader — the chain is

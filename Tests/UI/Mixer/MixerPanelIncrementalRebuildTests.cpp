@@ -205,7 +205,8 @@ std::vector<juce::String> insertUuids(synth::ui::MixerColumnComponent& column) {
     std::vector<juce::String> out;
     auto& list = column.getInsertListForTest();
     for (int row = 0; row < list.getRowCount(); ++row)
-        out.push_back(list.getRowUuid(row));
+        if (row != list.getAddRowIndex())
+            out.push_back(list.getRowUuid(row));
     return out;
 }
 

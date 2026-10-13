@@ -72,6 +72,9 @@ MixerColumnComponent::MixerColumnComponent() {
         if (onMutated)
             onMutated();
     };
+    insertList_.onPreferredHeightChanged = [this] {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    };
     // A live "Remove" from the row menu frees the removed node's processor
     // synchronously (see MixerInsertList::onBeforeNodeRemoved's own comment), before the eventual
     // MixerPanelComponent::rebuild() this column's own onMutated triggers gets a chance to destroy
@@ -198,7 +201,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
         }
     }
     eqThumbnail_.setEqModule(firstEq, graph_, eqNodeId_);
-    refreshCollapsedSummaries((int)column.inserts.size(), (int)column.sends.size(), firstEq != nullptr);
+    refreshCollapsedSummaries(synth::countInsertModules(column.inserts), (int)column.sends.size(), firstEq != nullptr);
 
     // Accessible names -- "<name> fader"/"pan", e.g. "Lead 1 fader, -3.0 dB" (JUCE speaks
     // the minus sign as "minus"). setTitle() on `this` is what createAccessibilityHandler()'s

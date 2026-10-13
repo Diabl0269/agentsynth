@@ -13,6 +13,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/RecordTapModule.h"
 #include <algorithm>
+#include <optional>
 
 namespace synth {
 
@@ -210,6 +211,181 @@ void buildMasterInsertsForColumn(const MixerGraphView& view, MixerColumn& column
     else
         resolveEditOnCanvasTarget(view, chain, column);
 }
+// ---- Parallel paths (docs/mixer/mixer.md#parallel-paths) ----
+// A strip's chain may fan out into parallel paths that all meet again at one node (an insert, or the strip itself)
+// before the strip. That is a series-parallel shape the mixer can list row by row: each fork becomes a Split row
+// followed by its paths' rows one level deeper. Anything else (a path that leaves the reach, a merge fed from
+// outside the chain, paths meeting at different nodes) does not parse, and the caller keeps today's read-only list.
+
+// A chain link: a signal edge that does not land on a Pitch or Gate jack. Those play the voice rather than carry its
+// sound (an instrument's Poly MIDI feeds its oscillator's pitch and its envelope's gate), like the ModCV cables
+// isSignalEdge already leaves out.
+bool isChainEdge(const MixerGraphView& view, const Connection& c) {
+    if (!isSignalEdge(view.graph, view.cables, c))
+        return false;
+    if (c.source.isMIDI())
+        return true;
+    const auto pin = resolveThroughPorts(view.graph, view.cables, c.destination);
+    auto* module = dynamic_cast<ModuleBase*>(processorFor(view.graph, pin.nodeID));
+    if (module == nullptr)
+        return true;
+    const auto role = module->mapInputChannel(pin.channelIndex).role;
+    return role != PortRole::Pitch && role != PortRole::Gate;
+}
+
+int chainPredecessorCount(const MixerGraphView& view, NodeID node) {
+    std::vector<NodeID> sources;
+    for (const auto& c : view.cables.into(node))
+        if (isChainEdge(view, c))
+            if (std::find(sources.begin(), sources.end(), c.source.nodeID) == sources.end())
+                sources.push_back(c.source.nodeID);
+    return (int)sources.size();
+}
+
+// Distinct chain successors, top to bottom as their cards sit on the canvas (then by NodeID), so Path 1 is the upper
+// path there and the order (and so the column's equality) stays put when a module moves within a path.
+std::vector<NodeID> chainLinkSuccessors(const MixerGraphView& view, NodeID node) {
+    std::vector<NodeID> destinations;
+    for (const auto& c : view.cables.outOf(node))
+        if (isChainEdge(view, c))
+            if (std::find(destinations.begin(), destinations.end(), c.destination.nodeID) == destinations.end())
+                destinations.push_back(c.destination.nodeID);
+    auto y = [&](NodeID id) {
+        auto* n = view.graph.getNodeForId(id);
+        return n != nullptr ? (int)n->properties.getWithDefault("y", 0) : 0;
+    };
+    std::sort(destinations.begin(), destinations.end(),
+              [&](NodeID a, NodeID b) { return y(a) != y(b) ? y(a) < y(b) : a.uid < b.uid; });
+    return destinations;
+}
+
+class SplitChainParser {
+public:
+    SplitChainParser(const MixerGraphView& view, NodeID end)
+        : view_(view)
+        , end_(end) {}
+
+    /** Rows for the chain after `source`, or nullopt when it is not a clean series-parallel chain ending at `end`. */
+    std::optional<std::vector<MixerInsertEntry>> parse(NodeID source) {
+        visited_.push_back(source);
+        NodeID stop;
+        if (!continueFrom(source, 0, -1, stop) || stop != end_)
+            return std::nullopt;
+        return std::move(rows_);
+    }
+
+private:
+    static constexpr size_t kMaxRows = 64; // sane upper bound, as the flat walks use
+
+    bool isStop(NodeID node) const { return node == end_ || chainPredecessorCount(view_, node) > 1; }
+
+    // `node`'s signal successors, less the ones it only sends MIDI to that never reach the strip: an instrument
+    // track's Track In feeds its ADSR as well as its instrument, and that envelope ends in the VCA's Gain CV, which is
+    // modulation, not a second path of audio.
+    std::vector<NodeID> chainSuccessors(NodeID node) {
+        auto next = chainLinkSuccessors(view_, node);
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&](NodeID to) { return onlyMidiTo(node, to) && !reachesEnd(to); }),
+                   next.end());
+        return next;
+    }
+
+    bool onlyMidiTo(NodeID from, NodeID to) const {
+        for (const auto& c : view_.cables.outOf(from))
+            if (c.destination.nodeID == to && !c.source.isMIDI() && isChainEdge(view_, c))
+                return false;
+        return true;
+    }
+
+    bool reachesEnd(NodeID from) {
+        std::vector<NodeID> seen{from};
+        std::vector<NodeID> todo{from};
+        while (!todo.empty()) {
+            const auto node = todo.back();
+            todo.pop_back();
+            if (node == end_)
+                return true;
+            for (auto next : chainLinkSuccessors(view_, node))
+                if (std::find(seen.begin(), seen.end(), next) == seen.end()) {
+                    seen.push_back(next);
+                    todo.push_back(next);
+                }
+        }
+        return false;
+    }
+
+    bool pushModule(NodeID node, int depth, int path) {
+        if (std::find(visited_.begin(), visited_.end(), node) != visited_.end() || rows_.size() >= kMaxRows)
+            return false; // a cycle, or a runaway patch
+        visited_.push_back(node);
+        auto entry = entryFor(view_.graph, node);
+        entry.depth = depth;
+        entry.path = path;
+        rows_.push_back(entry);
+        return true;
+    }
+
+    // Walks on from `node` (already listed) to the first stop: the end, or a merge this run did not open. A fork on
+    // the way is parsed whole, and the walk carries on past its merge.
+    bool continueFrom(NodeID node, int depth, int path, NodeID& stop) {
+        for (;;) {
+            const auto next = chainSuccessors(node);
+            if (next.empty())
+                return false; // the reach ends before the strip
+            NodeID after;
+            if (next.size() == 1) {
+                after = next.front();
+                if (isStop(after)) {
+                    stop = after;
+                    return true;
+                }
+            } else {
+                if (!parseFork(node, next, depth, path, after))
+                    return false;
+                if (after == end_) {
+                    stop = after;
+                    return true;
+                }
+            }
+            if (!pushModule(after, depth, path))
+                return false;
+            node = after;
+        }
+    }
+
+    // One Split row, then each path's rows one level deeper. Every path must stop at the same node, fed by exactly
+    // these paths and nothing else.
+    bool parseFork(NodeID fork, const std::vector<NodeID>& starts, int depth, int path, NodeID& merge) {
+        MixerInsertEntry split;
+        split.kind = MixerInsertEntry::Kind::Split;
+        if (auto* module = dynamic_cast<ModuleBase*>(processorFor(view_.graph, fork)))
+            split.uuid = module->getNodeUuid();
+        split.name = juce::String((int)starts.size()) + " paths";
+        split.depth = depth;
+        split.path = path;
+        split.pathCount = (int)starts.size();
+        rows_.push_back(split);
+
+        for (int i = 0; i < (int)starts.size(); ++i) {
+            const auto start = starts[(size_t)i];
+            NodeID stop = start; // a path wired straight to the merge is a dry path with no rows
+            if (!isStop(start)) {
+                if (!pushModule(start, depth + 1, i) || !continueFrom(start, depth + 1, i, stop))
+                    return false;
+            }
+            if (i == 0)
+                merge = stop;
+            else if (stop != merge)
+                return false;
+        }
+        return chainPredecessorCount(view_, merge) == (int)starts.size();
+    }
+
+    const MixerGraphView& view_;
+    NodeID end_;
+    std::vector<NodeID> visited_;
+    std::vector<MixerInsertEntry> rows_;
+};
 } // namespace
 
 void buildInsertsForColumn(const MixerGraphView& view, const TimelineDoc& doc, MixerColumn& column) {
@@ -229,6 +405,17 @@ void buildInsertsForColumn(const MixerGraphView& view, const TimelineDoc& doc, M
     if (sourceId == NodeID{})
         return;
     column.sourceNodeId = sourceId;
+
+    // A chain that runs straight, or splits into parallel paths that meet again, before the strip lists row by row.
+    if (auto rows = SplitChainParser(view, column.nodeId).parse(sourceId)) {
+        const bool hasSplits = std::any_of(rows->begin(), rows->end(), [](const MixerInsertEntry& row) {
+            return row.kind == MixerInsertEntry::Kind::Split;
+        });
+        column.insertChainHasSplits = hasSplits;
+        column.insertChainIsLinear = !hasSplits;
+        column.inserts = std::move(*rows);
+        return;
+    }
 
     // Forward walk from the source along signal edges, collecting the chain up to (not including)
     // the strip. A node with more than one signal predecessor or successor within the reach is a
@@ -334,6 +521,38 @@ bool reorderInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID newPred
     if (!spliceOutInsert(graph, node))
         return false;
     return spliceInInsert(graph, newPredecessor, newSuccessor, node);
+}
+
+// `node`'s one signal neighbour on the given side, or an invalid id when it has none or several.
+NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph, NodeID node, bool upstream) {
+    const auto connections = graph.getConnections();
+    NodeID found;
+    for (const auto& c : connections) {
+        const auto& self = upstream ? c.destination : c.source;
+        const auto& other = upstream ? c.source : c.destination;
+        if (self.nodeID != node || !isSignalEdge(graph, connections, c) || other.nodeID == found)
+            continue;
+        if (found != NodeID{})
+            return {};
+        found = other.nodeID;
+    }
+    return found;
+}
+
+// The neighbour is read before `node` comes out: removing `node` (which sits on the far side of `before`/`after`)
+// never changes it.
+bool moveInsertBefore(juce::AudioProcessorGraph& graph, NodeID node, NodeID before) {
+    const auto predecessor = soleSignalNeighbour(graph, before, true);
+    if (predecessor == NodeID{} || predecessor == node)
+        return false;
+    return reorderInsert(graph, node, predecessor, before);
+}
+
+bool moveInsertAfter(juce::AudioProcessorGraph& graph, NodeID node, NodeID after) {
+    const auto successor = soleSignalNeighbour(graph, after, false);
+    if (successor == NodeID{} || successor == node)
+        return false;
+    return reorderInsert(graph, node, after, successor);
 }
 
 } // namespace synth

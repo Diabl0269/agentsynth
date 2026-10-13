@@ -6,7 +6,7 @@
 #include "Mixer/PeakMeterLatch.h"
 #include "MixerColumnHeader.h"
 #include "MixerFader.h"
-#include "MixerInsertList.h"
+#include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"

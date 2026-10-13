@@ -69,9 +69,9 @@ void MixerPanelComponent::exitRows() {
         setRowFocus(std::nullopt);
 }
 
-// Up and Down step rows, Left and Right change a focused send's level, Return opens, Delete removes and
-// Esc leaves. Arrow keys on an insert row are swallowed rather than walking columns, which would carry
-// the row focus to a different column. Every other key keeps its column-mode meaning.
+// Up and Down step rows, Left and Right change a focused send's level or fold and open an insert split, Return
+// opens, Delete removes and Esc leaves. Arrow keys on an insert row are swallowed rather than walking columns, which
+// would carry the row focus to a different column. Every other key keeps its column-mode meaning.
 bool MixerPanelComponent::handleRowKey(const juce::KeyPress& key) {
     const float step = key.getModifiers().isShiftDown() ? kFineLevelStepDb : kLevelStepDb;
     if (key.isKeyCode(juce::KeyPress::escapeKey)) {
@@ -82,10 +82,11 @@ bool MixerPanelComponent::handleRowKey(const juce::KeyPress& key) {
         return stepRow(-1);
     if (key.isKeyCode(juce::KeyPress::downKey))
         return stepRow(1);
+    const bool onInsert = rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Insert;
     if (key.isKeyCode(juce::KeyPress::leftKey))
-        return nudgeFocusedSend(-step);
+        return onInsert ? foldFocusedRow(false) : nudgeFocusedSend(-step);
     if (key.isKeyCode(juce::KeyPress::rightKey))
-        return nudgeFocusedSend(step);
+        return onInsert ? foldFocusedRow(true) : nudgeFocusedSend(step);
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return openFocusedRow();
     const auto mods = key.getModifiers();
@@ -119,6 +120,21 @@ bool MixerPanelComponent::nudgeFocusedSend(float deltaDb) {
     return true;
 }
 
+// Like a library section: Right opens a split row, Left folds it, and Left on a row inside a split's paths steps up
+// to that split row, so a second Left folds it.
+bool MixerPanelComponent::foldFocusedRow(bool open) {
+    auto* inserts = focusedInsertList();
+    if (inserts == nullptr || !rowFocus_.has_value())
+        return true;
+    const int row = rowFocus_->index;
+    if (inserts->isSplitRow(row))
+        inserts->setSplitOpen(row, open);
+    else if (const int parent = inserts->getParentSplitRow(row); !open && parent >= 0)
+        setRowFocus(MixerRowRef{MixerRowKind::Insert, parent});
+    refreshRowAccessibility();
+    return true;
+}
+
 // The same removal a click on a send's "x" or a menu's Remove makes: one undo step through the list,
 // which normally rebuilds the mixer and destroys that list, so nothing may touch it afterwards. A
 // branching insert chain is read-only and keeps its rows.
@@ -129,7 +145,7 @@ bool MixerPanelComponent::removeFocusedRow() {
     if (row.kind == MixerRowKind::Send) {
         if (auto* sends = focusedSendList())
             sends->removeRow(row.index);
-    } else if (auto* inserts = focusedInsertList(); inserts != nullptr && inserts->isLinear()) {
+    } else if (auto* inserts = focusedInsertList(); inserts != nullptr && inserts->isEditable()) {
         inserts->removeRow(row.index);
     }
     reconcileRowFocus();
@@ -155,11 +171,20 @@ bool MixerPanelComponent::toggleFocusedRowBypass() {
 }
 
 // An insert opens the way the EQ thumbnail's click does -- it selects the module's channel on the
-// canvas. A send has nothing to open.
+// canvas; a split row opens or folds its paths, and "+ Insert" opens the effect picker. A send has nothing to open.
 bool MixerPanelComponent::openFocusedRow() {
     if (rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Insert)
-        if (const auto* inserts = focusedInsertList())
-            selectOnCanvas(inserts->getRowUuid(rowFocus_->index));
+        if (auto* inserts = focusedInsertList()) {
+            const int row = rowFocus_->index;
+            if (row == inserts->getAddRowIndex()) {
+                inserts->activateAddRow();
+            } else if (inserts->isSplitRow(row)) {
+                inserts->setSplitOpen(row, !inserts->isSplitOpen(row));
+                refreshRowAccessibility();
+            } else {
+                selectOnCanvas(inserts->getRowUuid(row));
+            }
+        }
     return true;
 }
 

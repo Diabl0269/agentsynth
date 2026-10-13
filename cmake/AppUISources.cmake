@@ -221,8 +221,9 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerFaderSlider.cpp
     Source/UI/Mixer/MixerFader.h
     Source/UI/Mixer/MixerFader.cpp
-    Source/UI/Mixer/MixerInsertList.h
-    Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/MixerInsertList/MixerInsertList.h
+    Source/UI/Mixer/MixerInsertList/MixerInsertList.cpp
+    Source/UI/Mixer/MixerInsertList/MixerInsertListEdits.cpp
     Source/UI/Mixer/EqResponseCurve.h
     Source/UI/Mixer/MixerEqThumbnail.h
     Source/UI/Mixer/MixerEqThumbnail.cpp

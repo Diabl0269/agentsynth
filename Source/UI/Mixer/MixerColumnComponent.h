@@ -5,7 +5,7 @@
 #include "MixerColumnHeader.h"
 #include "MixerEqThumbnail.h"
 #include "MixerFader.h"
-#include "MixerInsertList.h"
+#include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"

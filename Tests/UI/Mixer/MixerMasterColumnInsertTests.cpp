@@ -15,7 +15,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Modules/MasterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeterScale.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"

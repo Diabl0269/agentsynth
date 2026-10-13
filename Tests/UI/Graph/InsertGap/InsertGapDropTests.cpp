@@ -186,6 +186,45 @@ TEST(InsertGapDrop, TheKeyboardInsertAfterTheLastCardMovesNothing) {
     EXPECT_GE(c.rect(added).getX(), c.rect(row[2]).getRight()) << "it lands after the card";
 }
 
+// The mixer's add (insertModuleAfterNode): the card lands right after its upstream neighbour's, the cards after it
+// make room, and the cables `wire` adds are in the same single undo step. No selection is involved.
+TEST(InsertGapDrop, TheMixerAddPlacesTheCardAfterItsNeighbourAndWiresItInOneStep) {
+    Canvas c;
+    const auto row = c.filterRow(4);
+    const auto before = c.allRects();
+    NodeID wiredNode;
+    const auto added =
+        synth::insertModuleAfterNode(c.editor, c.undo, c.editor.getMacros(), "VCA", row[1], [&](NodeID node) {
+            wiredNode = node;
+            return c.engine.getGraph().addConnection({{row[1], 0}, {node, 0}});
+        });
+    c.editor.finishCardGlideForTest();
+    ASSERT_NE(added.uid, 0u);
+    EXPECT_EQ(added, wiredNode);
+    EXPECT_EQ(c.rect(added).getPosition(), before.at(row[2].uid).getPosition()) << "it takes the next card's place";
+    expectRow(c, row, before, 2, Canvas::shiftFor("VCA"), "after the mixer add");
+
+    ASSERT_TRUE(c.undo.undo());
+    c.editor.finishCardGlideForTest();
+    EXPECT_EQ(c.card(added), nullptr);
+    EXPECT_TRUE(c.engine.getGraph().getConnections().empty()) << "the cable went with it";
+    expectRow(c, row, before, 99, 0, "after undo");
+    EXPECT_FALSE(c.undo.canUndo()) << "the module, the cable and the pushes were one step";
+}
+
+TEST(InsertGapDrop, AMixerAddWhoseWiringIsRefusedAddsAndMovesNothing) {
+    Canvas c;
+    const auto row = c.filterRow(3);
+    const auto before = c.allRects();
+    const auto added = synth::insertModuleAfterNode(c.editor, c.undo, c.editor.getMacros(), "VCA", row[0],
+                                                    [](NodeID) { return false; });
+    c.editor.finishCardGlideForTest();
+    EXPECT_EQ(added.uid, 0u);
+    EXPECT_EQ(c.engine.getGraph().getNumNodes(), 3);
+    expectRow(c, row, before, 99, 0, "after a refused add");
+    EXPECT_FALSE(c.gap().hasPending());
+}
+
 TEST(InsertGapDrop, TheKeyboardInsertNeedsExactlyOneSelectedCard) {
     Canvas c;
     const auto row = c.filterRow(3);

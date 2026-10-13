@@ -303,8 +303,8 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
-    // ToolRange, MixerSources and TogglePanel were appended after it later, so kCount is 46 now.
-    EXPECT_EQ((int)Icon::kCount, 46);
+    // ToolRange, MixerSources, TogglePanel and MixerSplit were appended after it later, so kCount is 47 now.
+    EXPECT_EQ((int)Icon::kCount, 47);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -359,6 +359,23 @@ TEST(IconLibraryTest, MixerSourcesIconEnumOrdinalAndBinaryData) {
         EXPECT_NE(d, nullptr) << "MixerSources icon returned null with assets present";
 #ifdef HAS_FONT_ASSETS
     EXPECT_GT(BinaryData::mixersources_svgSize, 0);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// MixerSplitIconEnumOrdinalAndBinaryData (the mixer insert list's split row)
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, MixerSplitIconEnumOrdinalAndBinaryData) {
+    // Appended immediately before kCount, after TogglePanel, so no existing ordinal moved.
+    EXPECT_EQ((int)Icon::MixerSplit, 46);
+    EXPECT_EQ((int)Icon::TogglePanel, 45);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::MixerSplit);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "MixerSplit icon returned null with assets present";
+#ifdef HAS_FONT_ASSETS
+    EXPECT_GT(BinaryData::mixersplit_svgSize, 0);
 #endif
 }
 

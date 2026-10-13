@@ -16,7 +16,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include <gtest/gtest.h>
 
 namespace {

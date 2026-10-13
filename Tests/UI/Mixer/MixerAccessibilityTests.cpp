@@ -17,7 +17,7 @@
 #include "UI/Mixer/MixerColumnHeader.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerFader.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeter.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"

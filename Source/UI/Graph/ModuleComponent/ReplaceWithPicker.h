@@ -18,6 +18,18 @@ namespace synth::ui {
 // the old nested submenu listed, grouped under the same category headers, then every scanned hosted plugin under
 // "Plugins". The module's own type (or the plugin it hosts) is left out.
 
+/** Every built-in module type under the library's category headers ("Sources", "Filters", "Time FX", ...): what
+ *  "Replace with..." lists, and the mixer's effect picker filters to its effect headers. */
+struct ModuleChoiceCategory {
+    struct Entry {
+        const char* name;
+        ModuleType type;
+    };
+    const char* header;
+    std::vector<Entry> modules;
+};
+const std::vector<ModuleChoiceCategory>& moduleChoiceCategories();
+
 struct ReplaceChoice {
     juce::String moduleType;                     // a built-in module's type name, when `plugin` is empty
     std::optional<synth::PluginIdentity> plugin; // set = replace with a hosted plugin
