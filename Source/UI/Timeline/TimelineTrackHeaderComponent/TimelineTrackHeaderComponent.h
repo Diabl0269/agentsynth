@@ -317,9 +317,17 @@ struct TrackHeaderHost {
         juce::String macroName;            // the innermost macro it sits in; empty on the top level
         std::vector<juce::String> targets; // what it already moves, "<module> <parameter>" each, graph order
         bool movesThisParameter = false;   // already cabled into the parameter being asked about
+        int sourceChannel = 0;             // the output a routing reads (an envelope has several)
+        bool isEnvelope = false;           // an envelope output rather than an LFO (change-source picker only)
     };
     /** Every LFO in the project, in graph order, described for the picker of (`nodeUuid`, `paramId`). */
     virtual std::vector<LfoChoice> getLfoChoices(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** Every LFO and envelope output in the project, described for the "Change source..." picker of (`nodeUuid`,
+     *  `paramId`); the "Add modulator..." picker stays on getLfoChoices. */
+    virtual std::vector<LfoChoice> getChangeSourceChoices(const juce::String& /*nodeUuid*/,
+                                                          const juce::String& /*paramId*/) {
         return {};
     }
     /** Cables the existing LFO `lfoUuid` into the parameter as ONE undo step (no new card; through macro ports
@@ -331,8 +339,10 @@ struct TrackHeaderHost {
     /** True when `modulator` can be re-pointed at another source with changeModulatorSource(); the lane's
      *  "Change source..." item shows only then. */
     virtual bool canChangeModulatorSource(const ModulatorInfo& /*modulator*/) { return false; }
-    /** Re-points the routing at the existing LFO `lfoUuid` as ONE undo step; false when nothing changed. */
-    virtual bool changeModulatorSource(const ModulatorInfo& /*modulator*/, const juce::String& /*lfoUuid*/) {
+    /** Re-points the routing at output `sourceChannel` of the existing LFO or envelope `sourceUuid` as ONE undo
+     *  step; false when nothing changed. */
+    virtual bool changeModulatorSource(const ModulatorInfo& /*modulator*/, const juce::String& /*sourceUuid*/,
+                                       int /*sourceChannel*/) {
         return false;
     }
     /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */

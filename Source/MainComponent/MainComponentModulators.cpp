@@ -11,6 +11,7 @@
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -65,6 +66,42 @@ juce::String destinationName(juce::AudioProcessorGraph& graph, const synth::ui::
                 return title + " " + t.name;
     return title;
 }
+// What the lane's "Change source..." can re-point a routing at: an LFO or an envelope, decided by the shared source
+// catalogue's grouping so a new modulator module needs no edit here. `channel` < 0 asks about the module as a whole.
+bool isLaneModulatorSource(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node, int channel = -1) {
+    for (const auto& item : synth::ui::enumerateModSources(graph))
+        if (item.node == node && (channel < 0 || item.channel == channel))
+            return item.group == synth::ui::ModSourceGroup::Lfos || item.group == synth::ui::ModSourceGroup::Envelopes;
+    return false;
+}
+
+// One picker entry for the source output (`node`, `channel`; channel < 0 = any output): where it lives (the innermost
+// macro it sits in), what it already moves (each routing's real destination, macro ports looked through) and whether
+// it already moves (`target`, `raw`).
+synth::ui::TrackHeaderHost::LfoChoice describeSource(AudioEngine& engine, const synth::MacroSet& macros,
+                                                     const synth::ui::ConnectionIndex& cables, const PortNodes& ports,
+                                                     juce::AudioProcessorGraph::Node* node, int channel,
+                                                     juce::AudioProcessorGraph::Node* target, int raw) {
+    auto& graph = engine.getGraph();
+    synth::ui::TrackHeaderHost::LfoChoice choice;
+    choice.uuid = uuidOf(node);
+    choice.name = synth::moduleTitle(*node);
+    choice.sourceChannel = std::max(channel, 0);
+    if (const auto* macro = macros.findByMember(choice.uuid))
+        choice.macroName = macro->name;
+    for (const auto& r : engine.getModulationRoutings()) {
+        if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
+            continue;
+        const auto real = resolveThroughPorts(cables, ports, r);
+        if (real.source.node != node->nodeID || (channel >= 0 && real.source.channel != channel))
+            continue;
+        if (target != nullptr && real.dest.node == target->nodeID && real.dest.channel == raw)
+            choice.movesThisParameter = true;
+        choice.targets.push_back(destinationName(graph, real.dest));
+    }
+    return choice;
+}
+
 // The routing a row stands for, looked up again in the live graph by its Attenuverter's uuid (a copy: the engine's
 // list is rebuilt by the edits that follow).
 std::optional<AudioEngine::ModulationRouting> findAttenuverterRouting(AudioEngine& engine,
@@ -167,21 +204,32 @@ std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getLfoChoices(
     for (auto* node : graph.getNodes()) {
         if (dynamic_cast<LFOModule*>(node->getProcessor()) == nullptr)
             continue;
-        synth::ui::TrackHeaderHost::LfoChoice choice;
-        choice.uuid = uuidOf(node);
-        choice.name = synth::moduleTitle(*node);
-        if (const auto* macro = graphEditor.getMacros().findByMember(choice.uuid))
-            choice.macroName = macro->name;
-        for (const auto& r : audioEngine.getModulationRoutings()) {
-            if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
-                continue;
-            const auto real = resolveThroughPorts(cables, ports, r);
-            if (real.source.node != node->nodeID)
-                continue;
-            if (target != nullptr && real.dest.node == target->nodeID && real.dest.channel == raw)
-                choice.movesThisParameter = true;
-            choice.targets.push_back(destinationName(graph, real.dest));
-        }
+        result.push_back(
+            describeSource(audioEngine, graphEditor.getMacros(), cables, ports, node, /*channel=*/-1, target, raw));
+    }
+    return result;
+}
+
+// Every LFO and envelope output in the project for the "Change source..." picker, in the source catalogue's order,
+// described as getLfoChoices does; a macro's port nodes are skipped (they are plumbing, not sources).
+std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getChangeSourceChoices(const juce::String& nodeUuid,
+                                                                                         const juce::String& paramId) {
+    std::vector<synth::ui::TrackHeaderHost::LfoChoice> result;
+    auto& graph = audioEngine.getGraph();
+    auto* target = findNodeByUuid(nodeUuid);
+    const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
+    const synth::ui::ConnectionIndex cables(graph);
+    const PortNodes ports(graph, graphEditor.getMacros());
+    for (const auto& item : synth::ui::enumerateModSources(graph)) {
+        if (item.group != synth::ui::ModSourceGroup::Lfos && item.group != synth::ui::ModSourceGroup::Envelopes)
+            continue;
+        auto* node = graph.getNodeForId(item.node);
+        if (node == nullptr || ports.contains(item.node))
+            continue;
+        auto choice =
+            describeSource(audioEngine, graphEditor.getMacros(), cables, ports, node, item.channel, target, raw);
+        choice.name = item.label();
+        choice.isEnvelope = item.group == synth::ui::ModSourceGroup::Envelopes;
         result.push_back(std::move(choice));
     }
     return result;
@@ -196,23 +244,27 @@ bool MainComponent::connectModulator(const juce::String& lfoUuid, const juce::St
            graphEditor.connectExistingLfoModulator(lfo->nodeID, target->nodeID, paramId);
 }
 
-// Only an LFO routed through an Attenuverter can be re-pointed: that Attenuverter is what the amount lane is keyed by,
-// and a hand-patched direct cable has neither.
+// Only an LFO or an envelope routed through an Attenuverter can be re-pointed: that Attenuverter is what the amount
+// lane is keyed by, and a hand-patched direct cable has neither.
 bool MainComponent::canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) {
-    return modulator.isLfo && modulator.attenuverterUuid.isNotEmpty() &&
-           findNodeByUuid(modulator.targetUuid) != nullptr && findNodeByUuid(modulator.sourceUuid) != nullptr;
+    auto* source = findNodeByUuid(modulator.sourceUuid);
+    return modulator.attenuverterUuid.isNotEmpty() && findNodeByUuid(modulator.targetUuid) != nullptr &&
+           source != nullptr && isLaneModulatorSource(audioEngine.getGraph(), source->nodeID);
 }
 
-// "Change source...": the new LFO is cabled in at the old routing's depth, the amount lane (keyed by the routing's
-// hidden Attenuverter) is re-keyed to the new routing's Attenuverter with its points untouched, and the old routing
-// is cut -- all in ONE graph + timeline undo step, with no confirm dialog. The old LFO stays on the canvas, whatever
-// else it drives (or nothing): nothing a person built is deleted by a re-point.
-bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) {
+// "Change source...": the new source (an LFO, or an envelope output) is cabled in at the old routing's depth, the
+// amount lane (keyed by the routing's hidden Attenuverter) is re-keyed to the new routing's Attenuverter with its
+// points untouched, and the old routing is cut -- all in ONE graph + timeline undo step, with no confirm dialog. The
+// old source stays on the canvas, whatever else it drives (or nothing): nothing a person built is deleted by a
+// re-point.
+bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
+                                          int sourceChannel) {
     auto* target = findNodeByUuid(modulator.targetUuid);
-    auto* lfo = findNodeByUuid(lfoUuid);
+    auto* source = findNodeByUuid(sourceUuid);
     const auto old = findAttenuverterRouting(audioEngine, modulator);
-    if (!canChangeModulatorSource(modulator) || target == nullptr || lfo == nullptr || !old.has_value() ||
-        lfoUuid == modulator.sourceUuid || dynamic_cast<LFOModule*>(lfo->getProcessor()) == nullptr)
+    if (!canChangeModulatorSource(modulator) || target == nullptr || source == nullptr || !old.has_value() ||
+        (sourceUuid == modulator.sourceUuid && sourceChannel == modulator.sourceChannel) ||
+        !isLaneModulatorSource(audioEngine.getGraph(), source->nodeID, sourceChannel))
         return false;
     auto& graph = audioEngine.getGraph();
     float depth = 0.5f;
@@ -225,7 +277,7 @@ bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modula
     const auto oldRouting = *old;
     bool changed = false;
     undoManager.recordGraphTimelineAndMacroChange(graph, timelineDoc, graphEditor.getMacros(), [&, this] {
-        const auto created = graphEditor.connectModulationSource(lfo->nodeID, /*sourceChannel=*/0, target->nodeID,
+        const auto created = graphEditor.connectModulationSource(source->nodeID, sourceChannel, target->nodeID,
                                                                  modulator.targetChannel, depth,
                                                                  /*recordUndo=*/false);
         if (created.uid == 0)

@@ -273,8 +273,12 @@ public:
         return addAutomationLane(track, parameter);
     }
     /** The row's "Change source..." host call (TrackHeaderHost is a private base). */
-    bool changeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) {
-        return changeModulatorSource(modulator, lfoUuid);
+    bool canChangeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator) {
+        return canChangeModulatorSource(modulator);
+    }
+    bool changeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
+                                      int sourceChannel = 0) {
+        return changeModulatorSource(modulator, sourceUuid, sourceChannel);
     }
     synth::ui::ToolbarButton& getFeedbackButtonForTest() noexcept { return feedbackButton; }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
@@ -533,10 +537,13 @@ private:
     bool createCustomLfoFromRange(synth::LaneId lane, double startBeat, double endBeat) override;
     std::vector<synth::ui::TrackHeaderHost::LfoChoice> getLfoChoices(const juce::String& nodeUuid,
                                                                      const juce::String& paramId) override;
+    std::vector<synth::ui::TrackHeaderHost::LfoChoice> getChangeSourceChoices(const juce::String& nodeUuid,
+                                                                              const juce::String& paramId) override;
     bool connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
                           const juce::String& paramId) override;
     bool canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) override;
-    bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& lfoUuid) override;
+    bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
+                               int sourceChannel) override;
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
     /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
