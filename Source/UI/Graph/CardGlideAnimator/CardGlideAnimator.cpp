@@ -90,6 +90,10 @@ juce::Rectangle<float> CardGlideAnimator::currentRect(const Item& item) const no
 // card is what made an undo of a many-track arrange stall for most of a second. It keeps an item without a snapshot,
 // so cables touching it still slide (offsetFor).
 bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale) {
+    // A canvas that is not on screen (a headless test, a hidden editor) has nothing to animate: hiding cards and
+    // snapshotting them there only leaves alpha-0 cards and a driver that never ticks.
+    if (!canAnimate())
+        return false;
     std::vector<const Entry*> changed;
     std::vector<juce::Rectangle<int>> fromRects;
     for (const auto& e : now) {

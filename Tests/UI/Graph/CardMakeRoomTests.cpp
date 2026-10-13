@@ -255,3 +255,18 @@ TEST(CardMakeRoom, TheScopeToggleMakesRoomAndGivesItBack) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_EQ(c.rect(neighbour), home);
 }
+
+// An editor that is not on screen has nothing to animate: making room lands the neighbours at once and leaves no
+// hidden (alpha 0) cards or running driver behind, which a teardown could otherwise trip over.
+TEST(CardMakeRoom, ANotShowingEditorMakesRoomWithoutHidingAnyCard) {
+    Scene s;
+    ASSERT_FALSE(s.c.editor.isShowing());
+    const auto home = s.c.rect(s.neighbour);
+
+    s.c.resizeBank(s.bank, kLarge);
+    s.c.editor.requestDeleteModule(s.bank);
+
+    EXPECT_EQ(s.c.rect(s.neighbour), home);
+    EXPECT_EQ(s.c.editor.getCardGlideForTest().armCount(), 0);
+    EXPECT_FLOAT_EQ(findComponent(s.c.editor, s.neighbour)->getAlpha(), 1.0f);
+}
