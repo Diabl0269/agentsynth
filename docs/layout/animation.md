@@ -693,14 +693,14 @@ helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never
   `setShown()` returns and `onFrame` is not called, so the caller's own layout after it is right either way. Tests
   force the animated path with `FadeVisibility::setAnimateOffScreenForTest` and step by hand with
   `stepAllForTest` (`Tests/UI/Layout/FadeVisibilityTests.cpp`).
-
+ What shows through a fade is only the theme's page colour: `MainComponent` is opaque and `syncWindowBackground` gives the window `bg0` on attach and every theme switch.
 Where it is used: the Welcome screen hiding and reopening; the AI chat's hosted-mode notice, Upgrade to Pro strip
 and downgrade notice, its Cancel button and thinking spinner (which keeps pulsing until it has faded out); the plan
 card's feedback comment row (on a rating) and details panel (Show details), which fade while the card grows or
 shrinks to fit; the account row (as a whole, and its Sign in / Signing in / email and Sign out controls cross-fade
 as the state changes); the plan badge; the bottom dock's tabs (Timeline, Mixer, MIDI Remote), which cross-fade as the leaving host fades
 out over the arriving one (the active tab lands at once; the leaving panel's own visible flag follows its host's fade); the
-piano roll opening and closing against the clip lanes (closing fades the emptied roll out as the lanes fade in); the
+piano roll opening and closing against the clip lanes (closing fades a `FadeOutPicture` of the roll as it was, since the roll empties itself on close); the
 routing pane's canvas node, Show on canvas link, MIDI destinations and mixer channel row, whose heights follow the fade
 so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; a new
 modulator row with its band in the lanes; and the mixer's sections closing and opening (the height slides in every column from the fade's `progress()`, see [the shared sections](../mixer/panel.md#shared-sections)), its Direct and Master columns being shown or hidden, a pinned zone, the empty hint, a column header's colour dot and sources badge, the "+ Send" row and the zones pane's Show all.

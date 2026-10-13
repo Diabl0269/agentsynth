@@ -15,6 +15,11 @@ void MainComponent::paint(juce::Graphics& g) {
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
 }
 
+void MainComponent::syncWindowBackground() {
+    if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
+        window->setBackgroundColour(lookAndFeel->getTheme().colors.bg0);
+}
+
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     for (const auto& spec : commandTable())
         commands.add(spec.id);

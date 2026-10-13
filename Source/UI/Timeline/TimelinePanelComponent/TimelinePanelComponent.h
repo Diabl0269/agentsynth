@@ -5,6 +5,7 @@
 #include "Transport/TransportNudge.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeOutPicture.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -226,6 +227,7 @@ public:
     void closePianoRoll();
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
+    synth::ui::FadeOutPicture& getRollLeavingForTest() noexcept { return rollLeaving_; }
     // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
     // resolveEditSurface()).
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
@@ -812,6 +814,7 @@ private:
     // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
     synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
     synth::ui::FadeVisibility rollFade_{&pianoRoll_};
+    synth::ui::FadeOutPicture rollLeaving_; // the roll as it was, fading away over the lanes (closePianoRoll)
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};

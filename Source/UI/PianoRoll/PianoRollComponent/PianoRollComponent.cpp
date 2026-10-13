@@ -251,6 +251,8 @@ void PianoRollComponent::requestClose() {
     // Self-contained: closes immediately (so isOpen() reflects it even with no owner listening —
     // a bare PianoRollComponent in a test) AND notifies the owner, which is what makes
     // TimelinePanelComponent swap the clip-lane area back in.
+    if (onAboutToClose)
+        onAboutToClose();
     closeRoll();
     if (onCloseRequested)
         onCloseRequested();

@@ -112,6 +112,10 @@ public:
     void timerCallback() override;
 
     void paint(juce::Graphics&) override;
+    void parentHierarchyChanged() override { syncWindowBackground(); }
+    /** Gives the window this sits in the theme's page colour, so nothing behind a fading or sliding pane is ever the
+     *  colour the window was built with. */
+    void syncWindowBackground();
     void resized() override;
 
     // ApplicationCommandTarget

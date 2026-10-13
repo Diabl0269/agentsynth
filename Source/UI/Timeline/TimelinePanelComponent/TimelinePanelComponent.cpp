@@ -136,7 +136,9 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // invisible — addChildComponent (not addAndMakeVisible) keeps it hidden until openPianoRoll()
     // shows it.
     addChildComponent(pianoRoll_);
+    addChildComponent(rollLeaving_); // above the roll, below the playhead overlay added last
     pianoRoll_.setComponentID("timelinePianoRoll");
+    pianoRoll_.onAboutToClose = [this] { rollLeaving_.capture(pianoRoll_); };
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
     // While the roll is open the ruler mirrors the roll's own mapping (installed in
     // openPianoRoll()), so every roll zoom/scroll must repaint it. The scale-assist panel opening/

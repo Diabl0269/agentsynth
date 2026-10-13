@@ -87,12 +87,80 @@ TEST(TimelineFadeMotionTest, OpeningAndClosingThePianoRollCrossFadesWithTheClipL
 
     f.panel.closePianoRoll();
     EXPECT_FALSE(f.panel.getPianoRoll().isOpen());
-    EXPECT_TRUE(f.panel.getPianoRoll().isVisible()) << "the roll fades out before it goes";
+    EXPECT_TRUE(f.panel.getRollLeavingForTest().isPlaying()) << "a picture of the roll fades out before it goes";
+    EXPECT_FALSE(f.panel.getPianoRoll().isVisible());
     EXPECT_TRUE(f.panel.getClipLaneArea().isVisible());
     EXPECT_EQ(f.panel.getClipLaneArea().getAlpha(), 0.0f);
     FadeVisibility::stepAllForTest(1.0f);
     EXPECT_FALSE(f.panel.getPianoRoll().isVisible());
     EXPECT_EQ(f.panel.getClipLaneArea().getAlpha(), 1.0f);
+}
+
+TEST(TimelineFadeMotionTest, LeavingTheClipWithEscapeFadesAPictureOfTheRollAsItWasOverTheLanes) {
+    FadeAnimateGuard guard;
+    automation_lanes_test::LanesPanel f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "Lead");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "C1");
+    ASSERT_TRUE(clip.isValid());
+    f.panel.openPianoRoll(clip);
+    FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_TRUE(f.panel.getPianoRoll().isOpen());
+    auto& leaving = f.panel.getRollLeavingForTest();
+    ASSERT_FALSE(leaving.isPlaying());
+
+    // The real gesture: Escape on the roll closes it itself (requestClose empties it before the panel hears of it).
+    ASSERT_TRUE(f.panel.getPianoRoll().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+
+    EXPECT_FALSE(f.panel.getPianoRoll().isOpen());
+    EXPECT_TRUE(leaving.isPlaying()) << "the roll is still seen, as it was, while it leaves";
+    EXPECT_FALSE(leaving.getBounds().isEmpty());
+    EXPECT_EQ(leaving.getAlpha(), 1.0f) << "it starts whole and fades out, the mirror of the roll fading in";
+    EXPECT_FALSE(f.panel.getPianoRoll().isVisible()) << "the emptied roll hides at once; the picture is what fades";
+    EXPECT_TRUE(f.panel.getClipLaneArea().isVisible());
+    EXPECT_EQ(f.panel.getClipLaneArea().getAlpha(), 0.0f) << "the lanes fade in underneath";
+
+    FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(leaving.getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(f.panel.getClipLaneArea().getAlpha(), 0.5f, 0.01f);
+    EXPECT_FALSE(leaving.isAccessible());
+    EXPECT_FALSE(leaving.getWantsKeyboardFocus());
+    EXPECT_FALSE(interceptsClicks(leaving));
+
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(leaving.isPlaying());
+    EXPECT_EQ(f.panel.getClipLaneArea().getAlpha(), 1.0f);
+}
+
+TEST(TimelineFadeMotionTest, LeavingTheClipUnderReduceMotionIsAShortFadeOfThePicture) {
+    FadeAnimateGuard guard(synth::ui::AnimationMode::reduced);
+    automation_lanes_test::LanesPanel f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "Lead");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "C1");
+    f.panel.openPianoRoll(clip);
+    FadeVisibility::stepAllForTest(1.0f);
+    f.panel.getPianoRoll().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+    EXPECT_TRUE(f.panel.getRollLeavingForTest().isPlaying());
+}
+
+TEST(TimelineFadeMotionTest, LeavingTheClipWithAnimationsOffOrOffScreenShowsNoPicture) {
+    {
+        FadeAnimateGuard off(synth::ui::AnimationMode::off);
+        automation_lanes_test::LanesPanel f;
+        const auto track = f.doc.addTrack(TrackKind::Midi, "Lead");
+        const auto clip = f.doc.addClip(track, 0.0, 8.0, "C1");
+        f.panel.openPianoRoll(clip);
+        f.panel.getPianoRoll().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+        EXPECT_FALSE(f.panel.getRollLeavingForTest().isPlaying());
+        EXPECT_FALSE(f.panel.getPianoRoll().isVisible());
+        EXPECT_TRUE(f.panel.getClipLaneArea().isVisible());
+    }
+    automation_lanes_test::LanesPanel f; // off screen, nothing forced
+    const auto track = f.doc.addTrack(TrackKind::Midi, "Lead");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "C1");
+    f.panel.openPianoRoll(clip);
+    f.panel.getPianoRoll().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+    EXPECT_FALSE(f.panel.getRollLeavingForTest().isPlaying());
+    EXPECT_FALSE(f.panel.getPianoRoll().isVisible());
 }
 
 TEST(TimelineFadeMotionTest, OffScreenThePianoRollSwapsAtOnce) {
