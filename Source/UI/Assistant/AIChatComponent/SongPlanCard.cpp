@@ -59,9 +59,19 @@ public:
         g.setColour(energy >= 3 ? c.iconInk : c.textPrimary);
         const juce::Font font(10.0f);
         g.setFont(font);
-        const bool fits = juce::GlyphArrangement::getStringWidth(font, name) + 6.0f <= (float)getWidth();
-        g.drawText(fits ? name : name.substring(0, 1), getLocalBounds(), juce::Justification::centred);
+        g.drawText(shownLabel(), getLocalBounds(), juce::Justification::centred);
         synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);
+    }
+
+    // The full name when it fits, else its first four, else three letters, else nothing (the tooltip and the
+    // accessible name carry the full name and bars). Never a single letter, which reads as noise.
+    juce::String shownLabel() const {
+        const juce::Font font(10.0f);
+        const float room = (float)getWidth() - 6.0f;
+        for (const auto& candidate : {name, name.substring(0, 4), name.substring(0, 3)})
+            if (candidate.length() >= 3 && juce::GlyphArrangement::getStringWidth(font, candidate) <= room)
+                return candidate;
+        return {};
     }
 
     void focusGained(FocusChangeType) override { repaint(); }
@@ -326,6 +336,9 @@ juce::String SongPlanCard::detailsText() const {
 
 juce::String SongPlanCard::buildButtonText() const { return buildButton.getButtonText(); }
 juce::Component* SongPlanCard::sectionSegment(int index) const { return strip->segments[(size_t)index].get(); }
+juce::String SongPlanCard::sectionSegmentLabelForTesting(int index) const {
+    return strip->segments[(size_t)index]->shownLabel();
+}
 int SongPlanCard::sectionSegmentCount() const { return (int)strip->segments.size(); }
 void SongPlanCard::chooseForTesting(int lengthIndex, int detailIndex) {
     if (lengthIndex != session.lengthIndex)

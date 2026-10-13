@@ -6,5 +6,7 @@ target_sources(Core PRIVATE
     Source/AI/SoundShapeChecks.cpp
     Source/AI/SongSteps/SongSteps.h
     Source/AI/SongSteps/SongSteps.cpp
+    Source/AI/SongSteps/SongDetailsText.h
+    Source/AI/SongSteps/SongDetailsText.cpp
     Source/AI/AIIntegrationService/AIIntegrationServiceSongSteps.cpp
 )

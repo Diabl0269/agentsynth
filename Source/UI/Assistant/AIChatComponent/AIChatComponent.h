@@ -95,8 +95,12 @@ public:
         return nullptr;
     }
     size_t getMessageCountForTesting() const { return messages.size(); }
+    juce::String getMessageTextForTesting(size_t index) const {
+        return index < messages.size() ? messages[index].text : juce::String();
+    }
     // The card of message `index`, as a component; null when that message has none showing.
     juce::Component* getSongCardForTesting(size_t index) const;
+    bool hasEditPlanCardForTesting(size_t index) const;
 
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.

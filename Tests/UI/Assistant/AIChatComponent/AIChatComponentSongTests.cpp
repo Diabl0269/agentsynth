@@ -220,6 +220,12 @@ TEST_F(AIChatComponentTest, BuildStreamsTheStepsCardThenAppliesTheEnvelopeAsTheS
     EXPECT_EQ(rig.chat->getLastSongSessionForTesting()->phase, synth::SongSession::Phase::built);
     ASSERT_NE(rig.buildCard(), nullptr);
     EXPECT_EQ(rig.buildCard()->headerText(), juce::String("Your song is ready"));
+    EXPECT_FALSE(rig.chat->hasEditPlanCardForTesting(rig.chat->getMessageCountForTesting() - 1))
+        << "the steps card is the only card of a song message";
+    EXPECT_TRUE(rig.buildCard()->detailsButtonShownForTesting());
+    EXPECT_TRUE(rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1).startsWith("Built \""))
+        << "the bubble text moved on from the plan line to the built line";
+    EXPECT_NE(rig.chat->getLastSongSessionForTesting()->detailsText, juce::String());
 }
 
 TEST_F(AIChatComponentTest, CancellingABuildClosesTheStreamAndTheCardSaysTheUsesCameBack) {
@@ -232,6 +238,8 @@ TEST_F(AIChatComponentTest, CancellingABuildClosesTheStreamAndTheCardSaysTheUses
     rig.chat->simulateCancelClick();
     SongRig::pump();
     EXPECT_EQ(rig.provider->cancelled, std::vector<uint64_t>{9});
+    EXPECT_EQ(rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1),
+              juce::String("The song was not built."));
     ASSERT_NE(rig.buildCard(), nullptr);
     EXPECT_EQ(rig.buildCard()->headerText(), juce::String("Build cancelled"));
     EXPECT_EQ(rig.chat->getLastSongSessionForTesting()->phase, synth::SongSession::Phase::failed);
@@ -252,12 +260,17 @@ TEST_F(AIChatComponentTest, AnErrorLineEndsTheBuildInTheCardNotInABubble) {
     EXPECT_EQ(rig.buildCard()->nowText(), juce::String("The build failed"));
 }
 
-TEST_F(AIChatComponentTest, AServiceWithoutTheSongRoutesFallsBackToProjectGenerateSilently) {
+TEST_F(AIChatComponentTest, AServiceWithoutTheSongRoutesFallsBackToProjectGenerateWithOneNoteSayingWhy) {
     SongRig rig;
     rig.provider->planStatus = 404;
     rig.send("dark drum and bass");
     EXPECT_EQ(rig.provider->capabilityCalls, std::vector<juce::String>{"project.generate"});
     EXPECT_EQ(rig.planCard(), nullptr);
+    bool noted = false;
+    for (size_t i = 0; i < rig.chat->getMessageCountForTesting(); ++i)
+        noted = noted || rig.chat->getMessageTextForTesting(i) ==
+                             "Song steps aren't available on this server, so I'm building it in one go.";
+    EXPECT_TRUE(noted);
     EXPECT_FALSE(rig.service.canPlanSongs());
     for (const auto& line : juce::StringArray::fromLines(rig.chat->getLastPlanPreviewForTesting()))
         EXPECT_FALSE(line.contains("Error")) << line;

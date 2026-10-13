@@ -234,6 +234,7 @@ add_executable(Tests
     AI/RemoteProvider/RemoteProviderCapabilityTests.cpp
     AI/RemoteProvider/RemoteProviderSongRouteTests.cpp
     AI/SongSteps/SongStepsProtocolTests.cpp
+    AI/SongSteps/SongDetailsTextTests.cpp
     AI/SongSteps/SongStepsServiceTests.cpp
     AI/SongSteps/SongStepsLiveTests.cpp
     Account/AuthClient/AuthClientDeviceAuthTests.cpp

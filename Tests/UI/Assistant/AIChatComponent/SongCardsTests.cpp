@@ -215,6 +215,60 @@ TEST(BuildStepsCard, CancelCallsBackAndEveryControlHasANameAndATooltip) {
                       << gap.path;
 }
 
+TEST(BuildStepsCard, ShowDetailsAppearsOnlyOnceBuiltAndOpensTheSongDetails) {
+    auto session = makeSession();
+    startBuild(session);
+    session.detailsText = "Drum kit: Drum Kit, 12 notes";
+    BuildStepsCard building(session, {});
+    building.setSize(280, building.getRequiredHeight(280));
+    EXPECT_FALSE(building.detailsButtonShownForTesting()) << "nothing to show while the build runs";
+
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    BuildStepsCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    EXPECT_TRUE(card.detailsButtonShownForTesting());
+    const int closed = card.getRequiredHeight(280);
+    card.toggleDetailsForTesting();
+    EXPECT_TRUE(card.detailsOpenForTesting());
+    EXPECT_EQ(card.detailsShownTextForTesting(), session.detailsText);
+    EXPECT_GT(card.getRequiredHeight(280), closed);
+    card.toggleDetailsForTesting();
+    EXPECT_EQ(card.getRequiredHeight(280), closed);
+}
+
+TEST(BuildStepsCard, ABuiltSongWithoutDetailsSaysSoAndThumbsReachTheChat) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    int lastRating = -1;
+    BuildStepsCard::Actions actions;
+    actions.onRate = [&](int rating, const juce::String&) { lastRating = rating; };
+    BuildStepsCard card(session, actions);
+    card.toggleDetailsForTesting();
+    EXPECT_EQ(card.detailsShownTextForTesting(), juce::String("No further details for this song."));
+    card.pressThumbForTesting(true);
+    EXPECT_EQ(lastRating, 1);
+    EXPECT_EQ(session.rating, 1);
+    card.pressThumbForTesting(false);
+    EXPECT_EQ(lastRating, 2);
+}
+
+TEST(BuildStepsCard, TheBuiltCardsControlsAllHaveANameAndATooltip) {
+    auto session = makeSession();
+    startBuild(session);
+    feed(session, R"({"type":"done","envelope":{"mode":"merge"},"summary":{"sections":3,"seconds":200}})");
+    session.phase = SongSession::Phase::built;
+    session.rating = 1;
+    session.detailsOpen = true;
+    BuildStepsCard card(session, {});
+    card.setSize(280, card.getRequiredHeight(280));
+    for (const auto& gap : synth::test::auditAccessibility(card))
+        ADD_FAILURE() << (gap.kind == synth::test::Gap::Kind::MissingName ? "missing name " : "missing tooltip ")
+                      << gap.path;
+}
+
 TEST(SongPlanCard, ShowsTheFactsAndThePriceInUses) {
     auto session = makeSession();
     session.usesLeft = 412;
@@ -228,6 +282,24 @@ TEST(SongPlanCard, ShowsTheFactsAndThePriceInUses) {
     EXPECT_EQ(tip->getTooltip(), juce::String::fromUTF8("Break \xC2\xB7 16 bars \xC2\xB7 pad and a slow lead"));
     EXPECT_TRUE(card.sectionSegment(2)->getWantsKeyboardFocus());
     EXPECT_EQ(session.lengthIndex, 0) << "1:50 opens on 2 min";
+}
+
+TEST(SongPlanCard, NoSectionChipShowsASingleLetterAndEachKeepsItsFullNameAndBars) {
+    for (const int width : {120, 200, 260, 280, 400}) {
+        auto session = makeSession();
+        SongPlanCard card(session, {});
+        card.setSize(width, card.getRequiredHeight(width));
+        for (int i = 0; i < card.sectionSegmentCount(); ++i) {
+            const auto label = card.sectionSegmentLabelForTesting(i);
+            EXPECT_NE(label.length(), 1) << "width " << width << " chip " << i;
+            EXPECT_FALSE(label.isNotEmpty() && label.length() < 3) << "width " << width << " chip " << i;
+            auto* segment = card.sectionSegment(i);
+            EXPECT_TRUE(segment->getTitle().contains("bars")) << "the accessible name carries the bar count";
+            auto* tip = dynamic_cast<juce::TooltipClient*>(segment);
+            ASSERT_NE(tip, nullptr);
+            EXPECT_TRUE(tip->getTooltip().contains("bars"));
+        }
+    }
 }
 
 TEST(SongPlanCard, ChangingLengthOrDetailAsksToReplanAndBuildCallsBack) {

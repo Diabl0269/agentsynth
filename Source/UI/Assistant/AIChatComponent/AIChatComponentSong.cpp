@@ -1,7 +1,13 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/SongSteps/SongDetailsText.h"
 #include "AIChatComponent.h"
 
 namespace synth {
+
+namespace {
+const juce::String kSongPlanLine = "Here is a plan for your song. Nothing is spent until you press Build.";
+const juce::String kSongNotBuiltLine = "The song was not built.";
+} // namespace
 
 // Concern: the hosted song plan and build (docs/ai/song-steps.md) -- when a message is a song request, the free plan,
 // the plan card's re-plan, Build with its streamed steps, and how each ending leaves the chat.
@@ -98,7 +104,11 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     if (!isWaitingForResponse)
         return;
     if (outcome.kind == Kind::unsupported) {
-        // A service without the song routes: the same text goes the way it always went, with no word about it.
+        // A service without the song routes: the same text goes the way it always went, after one line saying why
+        // there are no steps.
+        messages.push_back(
+            {"assistant", "Song steps aren't available on this server, so I'm building it in one go.", ""});
+        updateChatDisplay();
         dispatchRequest(text, true, true);
         return;
     }
@@ -126,7 +136,7 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
         old->fadeInPending = false;
     }
     refreshUsesLeft(*session);
-    messages.push_back({"assistant", "Here is a plan for your song. Nothing is spent until you press Build.", ""});
+    messages.push_back({"assistant", kSongPlanLine, ""});
     messages.back().responseMs = elapsed;
     messages.back().song = session;
     updateChatDisplay();
@@ -192,6 +202,7 @@ void AIChatComponent::buildSongAt(size_t index) {
     session->buildStartMs = juce::Time::getMillisecondCounter();
     session->buildEndMs = 0;
     session->fadeInPending = true;
+    messages[index].text = "Building your song.";
 
     if (onMessageSent)
         onMessageSent();
@@ -255,6 +266,7 @@ void AIChatComponent::handleSongFinished(size_t index, const std::shared_ptr<Son
         data.text = "Built \"" + session->reply.plan.title + "\".";
         data.responseMs = elapsed;
         data.planJson = juce::JSON::toString(outcome.done.envelope);
+        session->detailsText = songsteps::buildSongDetailsText(outcome.done.envelope, session->reply.plan.sections);
         data.planOk = true;
         data.planApplied = true;
         data.planPreviewLines = outcome.edit.previewLines;
@@ -266,11 +278,13 @@ void AIChatComponent::handleSongFinished(size_t index, const std::shared_ptr<Son
         break;
     }
     case Kind::quotaExceeded:
+        messages[index].text = kSongPlanLine;
         session->phase = SongSession::Phase::ready;
         session->notice = "You have no uses left this month.";
         messages.push_back({"assistant", outcome.message, "", false, /*showUpgradeAction=*/true});
         break;
     case Kind::expired:
+        messages[index].text = kSongPlanLine;
         session->phase = SongSession::Phase::ready;
         updateChatDisplay();
         replanSong(index, session->lengthIndex, session->detailIndex, {},
@@ -278,16 +292,19 @@ void AIChatComponent::handleSongFinished(size_t index, const std::shared_ptr<Son
         inputField.grabKeyboardFocus();
         return;
     case Kind::cancelled:
+        messages[index].text = kSongNotBuiltLine;
         session->phase = SongSession::Phase::failed;
         session->cancelled = true;
         session->model.markFailed("Cancelled", true);
         break;
     case Kind::rejected:
+        messages[index].text = kSongNotBuiltLine;
         session->phase = SongSession::Phase::failed;
         session->failureText = "The song was built but could not be applied to the project: " + outcome.message;
         session->model.markFailed(session->failureText, false);
         break;
     case Kind::failed:
+        messages[index].text = kSongNotBuiltLine;
         session->phase = SongSession::Phase::failed;
         session->failureText =
             outcome.message.isNotEmpty() ? outcome.message : juce::String("The build could not finish.");
@@ -307,6 +324,7 @@ void AIChatComponent::cancelSongBuild() {
     auto session = messages[index].song;
     session->phase = SongSession::Phase::failed;
     session->cancelled = true;
+    messages[index].text = kSongNotBuiltLine;
     session->buildEndMs = juce::Time::getMillisecondCounter();
     session->model.markFailed("Cancelled", true);
     cancelRequest();

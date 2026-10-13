@@ -35,7 +35,7 @@ Ollama never uses the song steps.
 ## Fallback
 
 A plan request answered with 404 (a service without the routes) sets `canPlanSongs()` false for that provider and the
-chat sends the same text through `sendProjectMessage`, with no error text. The check costs one free request per session.
+chat sends the same text through `sendProjectMessage`, after one assistant line ("Song steps aren't available on this server, so I'm building it in one go.") so the missing steps are explained. The check costs one free request per session.
 
 ## Errors and cancelling
 
@@ -54,5 +54,5 @@ chat sends the same text through `sendProjectMessage`, with no error text. The c
 Both are standalone components in `Source/UI/Assistant/AIChatComponent/` (design system: `SongPlanCard`,
 `BuildStepsCard`, `StepIcons`). The state they show lives in the message (`MessageData::song`), never in the card, because
 the chat rebuilds its bubbles on a redraw. Step icons (`StepIcons.h`) move only while their step runs; see
-[animation](../layout/animation.md#song-steps). The edit-plan card's rows carry the same kind icons, still before Apply,
+[animation](../layout/animation.md#song-steps). A song message has the build card as its **only** card (no edit-plan card): once built, the card adds "Show details" (`songsteps::buildSongDetailsText`, `SongDetailsText.h`: a line per track with its sound modules and note count, the sections with their bars, a line per automation lane; stored in `SongSession::detailsText`) and the thumbs feedback. Undo is the project's own (one step, as the card says). The edit-plan card's rows carry the same kind icons, still before Apply,
 animated once in order on Apply.

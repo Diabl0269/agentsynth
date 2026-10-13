@@ -1,5 +1,7 @@
 #include "BuildStepsCard.h"
 #include "AIChatComponent.h"
+#include "EditPlanDetailsText.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
@@ -18,6 +20,10 @@ constexpr float kHeightMs = 300.0f;
 constexpr float kRowBaseDelayMs = 60.0f;
 constexpr float kRowFadeMs = 200.0f;
 constexpr float kRowSlidePx = 4.0f;
+constexpr int kFeedbackRowHeight = 24;
+constexpr int kDetailsPanelHeight = 160;
+constexpr int kDetailsButtonWidth = 100;
+constexpr int kThumbWidth = 40;
 
 juce::String dot() { return juce::String::fromUTF8(" \xC2\xB7 "); }
 
@@ -184,10 +190,54 @@ BuildStepsCard::BuildStepsCard(SongSession& sessionIn, Actions actionsIn)
     };
     cancelFade_.onFrame = [this] { layoutChanged(); };
 
+    addChildComponent(detailsButton);
+    detailsButton.setTitle("Show details");
+    detailsButton.setTooltip("Show what was built, track by track");
+    detailsButton.onClick = [this] { setDetailsOpen(!session.detailsOpen, true); };
+
+    addChildComponent(thumbsUpButton);
+    thumbsUpButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
+    thumbsUpButton.setTitle("This song was good");
+    thumbsUpButton.setTooltip("This song was good");
+    thumbsUpButton.onClick = [this] { setRating(1); };
+    addChildComponent(thumbsDownButton);
+    thumbsDownButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8E"));
+    thumbsDownButton.setTitle("This song missed the mark");
+    thumbsDownButton.setTooltip("This song missed the mark");
+    thumbsDownButton.onClick = [this] { setRating(2); };
+
+    addChildComponent(commentField);
+    commentField.setText(session.ratingComment, juce::dontSendNotification);
+    commentField.setTitle("Feedback comment");
+    commentField.setTooltip("Optional: say why, then press Enter to send");
+    commentField.onReturnKey = [this] { notifyRate(); };
+    synth::ui::removeHiddenTabStops(commentField);
+    addChildComponent(commentSaveButton);
+    commentSaveButton.setButtonText("Send");
+    commentSaveButton.setTitle("Send feedback comment");
+    commentSaveButton.setTooltip("Send your feedback comment");
+    commentSaveButton.onClick = [this] { notifyRate(); };
+
+    addChildComponent(detailsDisplay);
+    detailsDisplay.setMultiLine(true);
+    detailsDisplay.setReadOnly(true);
+    detailsDisplay.setTitle("Song details");
+    detailsDisplay.setTooltip("What was built, track by track");
+    synth::ui::removeHiddenTabStops(detailsDisplay);
+
+    feedbackRowFade_.onFrame = [this] { layoutChanged(); };
+    commentFade_.onFrame = [this] { layoutChanged(); };
+    detailsFade_.onFrame = [this] { layoutChanged(); };
+
     syncRows();
     setListOpen(session.listOpen, false);
     progressShown = session.model.progress();
     refresh();
+    if (session.phase == SongSession::Phase::built) {
+        if (session.detailsOpen)
+            setDetailsOpen(true, false);
+        commentFade_.setShown(session.rating != 0);
+    }
 }
 
 BuildStepsCard::~BuildStepsCard() {
@@ -281,6 +331,8 @@ void BuildStepsCard::refresh() {
                          juce::dontSendNotification);
     toggleButton.setVisible(m.total() > 0);
     cancelFade_.setShown(building);
+    feedbackRowFade_.setShown(phase == SongSession::Phase::built);
+    styleFeedbackControls();
     setElapsedMs(session.elapsedMs(juce::Time::getMillisecondCounter()));
 
     const float target = m.progress();
@@ -331,6 +383,60 @@ void BuildStepsCard::setListOpen(bool open, bool animate) {
             openMs = to;
             layoutChanged();
         });
+}
+
+void BuildStepsCard::parentHierarchyChanged() {
+    SongCardBase::parentHierarchyChanged();
+    styleFeedbackControls();
+}
+
+void BuildStepsCard::styleFeedbackControls() {
+    const auto& c = colours();
+    thumbsUpButton.setColour(juce::TextButton::buttonColourId, session.rating == 1 ? c.success : c.surfaceHi);
+    thumbsDownButton.setColour(juce::TextButton::buttonColourId, session.rating == 2 ? c.error : c.surfaceHi);
+    commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", c.textMuted);
+    detailsDisplay.setColour(juce::TextEditor::backgroundColourId, c.bg0.withAlpha(0.6f));
+}
+
+void BuildStepsCard::setRating(int rating) {
+    session.rating = rating;
+    styleFeedbackControls();
+    commentFade_.setShown(rating != 0);
+    layoutChanged();
+    notifyRate();
+}
+
+void BuildStepsCard::notifyRate() {
+    if (actions.onRate)
+        actions.onRate(session.rating, commentField.getText());
+}
+
+// The details text is laid out the first time the panel opens, not when the card is built.
+void BuildStepsCard::setDetailsOpen(bool open, bool animate) {
+    session.detailsOpen = open;
+    if (open && !detailsFilled) {
+        detailsFilled = true;
+        detailsDisplay.setText(buildEditPlanDetailsText(session.detailsText.isNotEmpty()
+                                                            ? session.detailsText
+                                                            : juce::String("No further details for this song.")),
+                               juce::dontSendNotification);
+    }
+    detailsButton.setButtonText(open ? "Hide details" : "Show details");
+    detailsButton.setTitle(open ? "Hide details" : "Show details");
+    detailsButton.setTooltip(open ? "Hide the details of this song" : "Show what was built, track by track");
+    if (!animate) {
+        detailsFade_.setShown(open);
+        return;
+    }
+    detailsFade_.setShown(open);
+    layoutChanged();
+}
+
+int BuildStepsCard::feedbackHeight() const {
+    const float row = feedbackRowFade_.progress();
+    return juce::roundToInt((float)(kFeedbackRowHeight + kGap) * row) +
+           juce::roundToInt((float)(kFeedbackRowHeight + kGap) * commentFade_.progress() * row) +
+           juce::roundToInt((float)(kDetailsPanelHeight + kGap) * detailsFade_.progress() * row);
 }
 
 float BuildStepsCard::heightReveal() const {
@@ -394,11 +500,26 @@ int BuildStepsCard::layoutFor(int width, bool apply) {
     if (hasToggle)
         y += 20 + kGap;
 
+    // Details and thumbs: placed at full size, revealed from the top as the heights grow.
+    if (apply) {
+        auto row = juce::Rectangle<int>(kPadding, y, inner, kFeedbackRowHeight);
+        detailsButton.setBounds(row.removeFromLeft(kDetailsButtonWidth));
+        thumbsDownButton.setBounds(row.removeFromRight(kThumbWidth).reduced(2));
+        thumbsUpButton.setBounds(row.removeFromRight(kThumbWidth).reduced(2));
+        const int commentY = y + kFeedbackRowHeight + kGap;
+        auto commentRow = juce::Rectangle<int>(kPadding, commentY, inner, kFeedbackRowHeight);
+        commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
+        commentField.setBounds(commentRow.reduced(2));
+        const int slot = juce::roundToInt((float)(kFeedbackRowHeight + kGap) * commentFade_.progress());
+        detailsDisplay.setBounds(kPadding, commentY + slot, inner, kDetailsPanelHeight);
+    }
+    y += feedbackHeight();
+
     const int cancelH = juce::roundToInt((float)(28 + kGap) * cancelFade_.progress());
     if (apply)
         cancelButton.setBounds(kPadding, y, inner, 28);
     y += cancelH;
-    return (cancelH > 0 || hasToggle ? y - kGap : y) + kPadding;
+    return (cancelH > 0 || hasToggle || feedbackHeight() > 0 ? y - kGap : y) + kPadding;
 }
 
 void BuildStepsCard::paint(juce::Graphics& g) {

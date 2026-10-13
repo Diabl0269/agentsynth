@@ -29,6 +29,7 @@ public:
     juce::String buildButtonText() const;
     juce::Component* sectionSegment(int index) const;
     int sectionSegmentCount() const;
+    juce::String sectionSegmentLabelForTesting(int index) const;
     void chooseForTesting(int lengthIndex, int detailIndex);
     void pressBuildForTesting();
 

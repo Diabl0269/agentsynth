@@ -23,6 +23,12 @@ struct SongSession {
 
     songsteps::BuildModel model;
     bool listOpen = false;
+    // The built song described in plain words (SongDetailsText), kept once the build is done; "Show details" reads it.
+    juce::String detailsText;
+    bool detailsOpen = false;
+    // The thumbs on the built song: 0 none, 1 up, 2 down (AIChatComponent::PatchRatingUiState), and the comment.
+    int rating = 0;
+    juce::String ratingComment;
     bool cancelled = false;
     juce::String failureText;
     juce::uint32 buildStartMs = 0;
