@@ -391,6 +391,8 @@ void MainComponent::createWelcomeScreen() {
         welcomeFade_ =
             std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{welcomeScreen_.get()});
 
+        // Only fires in the dismissible mode (reopened over an open project): hide it, project untouched.
+        welcomeScreen_->onDismissRequested = [this] { hideWelcomeScreen(); };
         welcomeScreen_->onNewProject = [this] {
             // AppCommands::newPatch's own guard ("New Patch") runs first; newPatch() itself calls
             // hideWelcomeScreen() as the LAST step of its body, so a Cancel answer never touches it.
