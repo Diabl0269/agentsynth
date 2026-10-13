@@ -335,8 +335,7 @@ back), after any glide still running; a card dragged from the canvas settles int
 A keyboard insert glides the cards aside, then grows the module in. Cmd+Z glides the cards back and shrinks the module
 away; redo is the reverse. A drop, a second drag or an undo while cards still move carries on from the drawn rects.
 Under Reduce Motion the cards move at once and the module fades in (plain fade, no growing); with Animations Off, or
-off screen, everything lands at once. The hovered module's ghost slides to the gap, the cable it lands on splits in two,
-a deleted middle module's cables run together and card outlines follow the card's corners: [insert-motion.md](insert-motion.md).
+off screen, everything lands at once. Ghost slide, cable split and join, outline corners: [insert-motion.md](insert-motion.md).
 
 ### Macro fold
 
