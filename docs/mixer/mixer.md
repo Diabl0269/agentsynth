@@ -366,7 +366,11 @@ as a VCA, or the strip itself). `buildInsertsForColumn` parses that series-paral
 rows one level deeper, path by path, top to bottom as the paths' first cards sit on the canvas (then by node
 id), so the order stays put when a module moves within a path. A path wired straight from
 the fork to the merge is a **dry path** with no rows; a split inside a path nests one level deeper. Key
-(sidechain) cables are not signal and change nothing. `MixerColumn::insertChainHasSplits` marks such a
+(sidechain) cables are not signal and change nothing. Neither is the voice wiring in front of an
+instrument: a cable into a Pitch or Gate jack (a Poly MIDI driving its oscillator and envelope) plays the
+voice rather than carrying its sound, and a MIDI-only branch that never reaches the strip (Track In into an
+ADSR that only drives a VCA's gain) is modulation, so an ordinary instrument track lists as a plain chain.
+`MixerColumn::insertChainHasSplits` marks such a
 column; `insertChainIsLinear` stays false, so deleting the track keeps the modules as for any branch.
 
 In the column a split is one row: a fold arrow, the split icon (its tooltip says "Split") and "N paths",

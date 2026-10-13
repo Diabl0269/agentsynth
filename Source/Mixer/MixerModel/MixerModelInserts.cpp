@@ -217,12 +217,37 @@ void buildMasterInsertsForColumn(const MixerGraphView& view, MixerColumn& column
 // followed by its paths' rows one level deeper. Anything else (a path that leaves the reach, a merge fed from
 // outside the chain, paths meeting at different nodes) does not parse, and the caller keeps today's read-only list.
 
-// Distinct signal successors, top to bottom as their cards sit on the canvas (then by NodeID), so Path 1 is the upper
+// A chain link: a signal edge that does not land on a Pitch or Gate jack. Those play the voice rather than carry its
+// sound (an instrument's Poly MIDI feeds its oscillator's pitch and its envelope's gate), like the ModCV cables
+// isSignalEdge already leaves out.
+bool isChainEdge(const MixerGraphView& view, const Connection& c) {
+    if (!isSignalEdge(view.graph, view.cables, c))
+        return false;
+    if (c.source.isMIDI())
+        return true;
+    const auto pin = resolveThroughPorts(view.graph, view.cables, c.destination);
+    auto* module = dynamic_cast<ModuleBase*>(processorFor(view.graph, pin.nodeID));
+    if (module == nullptr)
+        return true;
+    const auto role = module->mapInputChannel(pin.channelIndex).role;
+    return role != PortRole::Pitch && role != PortRole::Gate;
+}
+
+int chainPredecessorCount(const MixerGraphView& view, NodeID node) {
+    std::vector<NodeID> sources;
+    for (const auto& c : view.cables.into(node))
+        if (isChainEdge(view, c))
+            if (std::find(sources.begin(), sources.end(), c.source.nodeID) == sources.end())
+                sources.push_back(c.source.nodeID);
+    return (int)sources.size();
+}
+
+// Distinct chain successors, top to bottom as their cards sit on the canvas (then by NodeID), so Path 1 is the upper
 // path there and the order (and so the column's equality) stays put when a module moves within a path.
-std::vector<NodeID> signalSuccessors(const MixerGraphView& view, NodeID node) {
+std::vector<NodeID> chainLinkSuccessors(const MixerGraphView& view, NodeID node) {
     std::vector<NodeID> destinations;
     for (const auto& c : view.cables.outOf(node))
-        if (isSignalEdge(view.graph, view.cables, c))
+        if (isChainEdge(view, c))
             if (std::find(destinations.begin(), destinations.end(), c.destination.nodeID) == destinations.end())
                 destinations.push_back(c.destination.nodeID);
     auto y = [&](NodeID id) {
@@ -252,7 +277,42 @@ public:
 private:
     static constexpr size_t kMaxRows = 64; // sane upper bound, as the flat walks use
 
-    bool isStop(NodeID node) const { return node == end_ || signalPredecessorCount(view_, node) > 1; }
+    bool isStop(NodeID node) const { return node == end_ || chainPredecessorCount(view_, node) > 1; }
+
+    // `node`'s signal successors, less the ones it only sends MIDI to that never reach the strip: an instrument
+    // track's Track In feeds its ADSR as well as its instrument, and that envelope ends in the VCA's Gain CV, which is
+    // modulation, not a second path of audio.
+    std::vector<NodeID> chainSuccessors(NodeID node) {
+        auto next = chainLinkSuccessors(view_, node);
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&](NodeID to) { return onlyMidiTo(node, to) && !reachesEnd(to); }),
+                   next.end());
+        return next;
+    }
+
+    bool onlyMidiTo(NodeID from, NodeID to) const {
+        for (const auto& c : view_.cables.outOf(from))
+            if (c.destination.nodeID == to && !c.source.isMIDI() && isChainEdge(view_, c))
+                return false;
+        return true;
+    }
+
+    bool reachesEnd(NodeID from) {
+        std::vector<NodeID> seen{from};
+        std::vector<NodeID> todo{from};
+        while (!todo.empty()) {
+            const auto node = todo.back();
+            todo.pop_back();
+            if (node == end_)
+                return true;
+            for (auto next : chainLinkSuccessors(view_, node))
+                if (std::find(seen.begin(), seen.end(), next) == seen.end()) {
+                    seen.push_back(next);
+                    todo.push_back(next);
+                }
+        }
+        return false;
+    }
 
     bool pushModule(NodeID node, int depth, int path) {
         if (std::find(visited_.begin(), visited_.end(), node) != visited_.end() || rows_.size() >= kMaxRows)
@@ -269,7 +329,7 @@ private:
     // the way is parsed whole, and the walk carries on past its merge.
     bool continueFrom(NodeID node, int depth, int path, NodeID& stop) {
         for (;;) {
-            const auto next = signalSuccessors(view_, node);
+            const auto next = chainSuccessors(node);
             if (next.empty())
                 return false; // the reach ends before the strip
             NodeID after;
@@ -318,7 +378,7 @@ private:
             else if (stop != merge)
                 return false;
         }
-        return signalPredecessorCount(view_, merge) == (int)starts.size();
+        return chainPredecessorCount(view_, merge) == (int)starts.size();
     }
 
     const MixerGraphView& view_;
@@ -346,16 +406,15 @@ void buildInsertsForColumn(const MixerGraphView& view, const TimelineDoc& doc, M
         return;
     column.sourceNodeId = sourceId;
 
-    // A chain that splits into parallel paths and meets again before the strip lists them row by row.
+    // A chain that runs straight, or splits into parallel paths that meet again, before the strip lists row by row.
     if (auto rows = SplitChainParser(view, column.nodeId).parse(sourceId)) {
         const bool hasSplits = std::any_of(rows->begin(), rows->end(), [](const MixerInsertEntry& row) {
             return row.kind == MixerInsertEntry::Kind::Split;
         });
-        if (hasSplits) {
-            column.insertChainHasSplits = true;
-            column.inserts = std::move(*rows);
-            return;
-        }
+        column.insertChainHasSplits = hasSplits;
+        column.insertChainIsLinear = !hasSplits;
+        column.inserts = std::move(*rows);
+        return;
     }
 
     // Forward walk from the source along signal edges, collecting the chain up to (not including)

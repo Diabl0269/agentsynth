@@ -200,3 +200,75 @@ TEST(MixerModelSplitInsertTests, ALinearChainIsUnchanged) {
     ASSERT_EQ(column.inserts.size(), 1u);
     expectRow(column.inserts[0], Kind::Module, "Delay", 0, -1);
 }
+
+// An instrument track: Track In sends MIDI to its Oscillator and to an ADSR whose envelope drives the VCA's Gain CV.
+// That envelope branch is modulation, not a second path of audio, so the chain lists (and edits) as a plain chain,
+// and an Oscillator split into Delay and Reverb in front of the VCA lists as a split.
+TEST(MixerModelSplitInsertTests, AnInstrumentTracksEnvelopeBranchIsNotAPathAndItsSplitsList) {
+    SplitRig rig;
+    // Re-point the track at a Track In feeding an Oscillator over MIDI.
+    juce::String trackInUuid;
+    auto* trackIn = addPlainNodeMMT(rig.graph, "Track In", trackInUuid);
+    auto* osc = rig.add("Oscillator");
+    ASSERT_NE(trackIn, nullptr);
+    rig.graph.addConnection({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+    rig.doc.setTrackBinding(rig.doc.getTracks()[0].id, trackInUuid);
+    auto* oscModule = dynamic_cast<ModuleBase*>(osc->getProcessor());
+    const auto env = synth::addEnvelopeAndVCAForRawInstrument(rig.graph, *trackIn, *osc,
+                                                              oscModule->rightAudioLegChannel(), {0, 0}, {0, 0});
+    ASSERT_NE(env.vca, nullptr);
+    connectStereoMMT(rig.graph, *env.vca, *rig.strip);
+
+    auto column = rig.column();
+    EXPECT_TRUE(column.insertChainIsLinear) << "the ADSR's MIDI branch is modulation, not a branch of audio";
+    EXPECT_FALSE(column.insertChainHasSplits);
+    ASSERT_EQ(column.inserts.size(), 2u);
+    expectRow(column.inserts[0], Kind::Module, "Oscillator", 0, -1);
+    expectRow(column.inserts[1], Kind::Module, "VCA", 0, -1);
+
+    // Oscillator -> {Delay | Reverb} -> VCA.
+    auto* delay = rig.add("Delay");
+    auto* reverb = rig.add("Reverb");
+    for (const auto& c : rig.graph.getConnections())
+        if (c.source.nodeID == osc->nodeID && c.destination.nodeID == env.vca->nodeID)
+            rig.graph.removeConnection(c);
+    connectStereoMMT(rig.graph, *osc, *delay);
+    connectStereoMMT(rig.graph, *osc, *reverb);
+    connectStereoMMT(rig.graph, *delay, *env.vca);
+    connectStereoMMT(rig.graph, *reverb, *env.vca);
+
+    column = rig.column();
+    EXPECT_TRUE(column.insertChainHasSplits);
+    ASSERT_EQ(column.inserts.size(), 5u);
+    expectRow(column.inserts[0], Kind::Module, "Oscillator", 0, -1);
+    expectRow(column.inserts[1], Kind::Split, "2 paths", 0, -1);
+    expectRow(column.inserts[2], Kind::Module, "Delay", 1, 0);
+    expectRow(column.inserts[3], Kind::Module, "Reverb", 1, 1);
+    expectRow(column.inserts[4], Kind::Module, "VCA", 0, -1);
+}
+
+// A poly voice (addPolyEnvelopeAndVCAForInstrument, as a library-made poly Oscillator gets): Track In feeds the
+// Oscillator and a Poly MIDI whose pitch fan drives the Oscillator and whose gate fan drives the ADSR. Those Pitch and
+// Gate cables play the voice rather than carry its sound, so the chain lists as a plain chain, not a read-only branch.
+TEST(MixerModelSplitInsertTests, APolyVoicesPitchAndGateCablesAreNotPaths) {
+    SplitRig rig;
+    juce::String trackInUuid;
+    auto* trackIn = addPlainNodeMMT(rig.graph, "Track In", trackInUuid);
+    auto* osc = rig.add("Oscillator");
+    ASSERT_NE(trackIn, nullptr);
+    rig.graph.addConnection({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+    rig.doc.setTrackBinding(rig.doc.getTracks()[0].id, trackInUuid);
+    synth::setProcessorPoly(osc->getProcessor(), true);
+    const auto voice = synth::addPolyEnvelopeAndVCAForInstrument(rig.graph, *trackIn, *osc, {0, 0}, {0, 0}, {0, 0});
+    ASSERT_NE(voice.vca, nullptr);
+    connectStereoMMT(rig.graph, *voice.vca, *rig.strip);
+
+    const auto column = rig.column();
+    EXPECT_TRUE(column.insertChainIsLinear) << "pitch and gate cables are not branches of audio";
+    EXPECT_FALSE(column.insertChainHasSplits);
+    ASSERT_EQ(column.inserts.size(), 2u);
+    expectRow(column.inserts[0], Kind::Module, "Oscillator", 0, -1);
+    expectRow(column.inserts[1], Kind::Module, "VCA", 0, -1);
+}
