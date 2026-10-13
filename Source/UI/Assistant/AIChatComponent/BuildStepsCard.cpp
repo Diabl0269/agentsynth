@@ -293,7 +293,10 @@ void BuildStepsCard::refresh() {
             icon.setColour(m.isFixing() ? c.warning : c.hueAmber);
             icon.setState(m.isFixing() ? StepIconState::fixing : StepIconState::running);
         } else {
-            nowLabel.setText("Getting ready", juce::dontSendNotification);
+            // No running step: either the step list hasn't arrived yet, or every step is done and the
+            // server is assembling the song.
+            nowLabel.setText(m.steps().empty() ? "Getting ready" : "Putting your song together",
+                             juce::dontSendNotification);
             icon.setKind(songsteps::StepKind::plan);
             icon.setColour(c.hueAmber);
             icon.setState(StepIconState::running);
