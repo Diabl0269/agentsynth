@@ -265,6 +265,7 @@ void MixerPanelComponent::rebuild() {
 
     auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
     applySavedBusOrder(snapshot);
+    snapshotShown_ = snapshot;
     trackColoursSeen_ = currentTrackColours(*doc_);
 
     // A strip column whose column did not change is kept as it is (MixerPanelColumnReuse.cpp): re-creating every
@@ -472,8 +473,17 @@ void MixerPanelComponent::unbindAllColumns() {
     columnsUnbound_ = true;
 }
 
-void MixerPanelComponent::rebuildIfUnbound() {
-    if (columnsUnbound_ || anyStripColumnUnbound())
+void MixerPanelComponent::rebuildIfStale() {
+    if (columnsUnbound_ || anyStripColumnUnbound()) {
+        rebuild();
+        return;
+    }
+    if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
+        return;
+    auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    applySavedBusOrder(snapshot);
+    if (snapshot.columns != snapshotShown_.columns || snapshot.hasDirect != snapshotShown_.hasDirect ||
+        snapshot.hasMaster != snapshotShown_.hasMaster)
         rebuild();
 }
 

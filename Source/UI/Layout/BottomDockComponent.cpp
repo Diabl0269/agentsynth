@@ -347,9 +347,9 @@ void BottomDockComponent::unbindMixerViewsFor(const std::vector<juce::AudioProce
     mixerMirror_.unbindIfOpenFor(doomed);
 }
 
-void BottomDockComponent::rebuildIfUnboundMixerViews() {
-    mixer_->rebuildIfUnbound();
-    mixerMirror_.rebuildIfUnboundIfOpen();
+void BottomDockComponent::rebuildIfStaleMixerViews() {
+    mixer_->rebuildIfStale();
+    mixerMirror_.rebuildIfStaleIfOpen();
 }
 
 void BottomDockComponent::refreshMeters() {

@@ -59,12 +59,11 @@ void MainComponent::addCanvasAndPanels() {
         // The other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
-        // deliberately never rebuilds the mixer. Left alone, every fader would sit on screen
-        // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
-        // against the settled graph, and is a no-op unless the columns are actually detached, so
-        // it does NOT turn every structural change into a full mixer rebuild. Covers the
-        // "both places" mirror view too, when one is open.
-        bottomDock.rebuildIfUnboundMixerViews();
+        // deliberately never rebuilds the mixer. This re-binds against the settled graph, and also
+        // catches a module added into a track's chain; it rebuilds only when the columns are
+        // detached or the mixer's snapshot changed, so an unrelated structural change costs one
+        // snapshot compare. Covers the "both places" mirror view too, when one is open.
+        bottomDock.rebuildIfStaleMixerViews();
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);

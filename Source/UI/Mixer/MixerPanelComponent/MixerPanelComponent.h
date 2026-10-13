@@ -228,17 +228,15 @@ public:
      *  them are unbound, and only those are rebuilt. */
     void unbindColumnsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
 
-    /** Rebuild ONLY if unbindAllColumns() has left the columns detached since the last
-     *  rebuild. The graph-replacing paths (undo/redo restore, New Patch, Load, AI apply) already
-     *  rebuild the mixer from their own after-hook, but the single-node removal commands --
-     *  GraphEditor::deleteSelection(), requestDeleteModule(), replaceModule() -- do not: the only
-     *  post-apply hook they reach is reconcileTimelineBindingsOnly(), which deliberately never
-     *  rebuilds the mixer. Without this, deleting ANY module from the canvas left every column on
-     *  screen but bound to nothing until an unrelated later change happened to rebuild. Wired to
-     *  GraphEditor::onGraphStructureChanged (MainComponent's own setup), which fires at the end of
-     *  updateComponents() on all three of those paths; it is a no-op whenever the columns are
-     *  already live, so it does not turn every structural change into a full mixer rebuild. */
-    void rebuildIfUnbound();
+    /** Rebuild ONLY when what is shown no longer matches the graph: the columns are detached (unbindAllColumns()
+     *  or unbindColumnsFor() since the last rebuild), or a fresh snapshot differs from the one the last rebuild
+     *  showed (a module patched into or out of a track's chain, a cable moved). Edits that rebuild nothing of
+     *  their own reach it: a single-node removal (deleteSelection(), requestDeleteModule(), replaceModule()),
+     *  whose only post-apply hook is reconcileTimelineBindingsOnly(), and a cable patched on the canvas, which
+     *  fires no component rebuild at all. Wired to GraphEditor::onGraphStructureChanged and to every recorded
+     *  edit (MainComponent's undo-manager broadcast). Unchanged graph: one snapshot build and compare, no
+     *  rebuild; and rebuild() itself keeps every column that did not change. */
+    void rebuildIfStale();
 
     /** Delete and undo motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows: call
      *  noteColumnsLeaving() before a change that may remove a track's column and finishColumnChange() once it and
@@ -367,9 +365,10 @@ private:
     void repaintDragBubbleStrip();
 
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
-     *  rebuildIfUnbound(). */
+     *  rebuildIfStale(). */
     bool columnsUnbound_ = false;
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
+    synth::MixerSnapshot snapshotShown_;         // what the last rebuild() laid out; rebuildIfStale() compares to it
 
     /** One entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so

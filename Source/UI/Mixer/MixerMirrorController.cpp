@@ -30,9 +30,9 @@ void MixerMirrorController::unbindIfOpenFor(const std::vector<juce::AudioProcess
         mirror_->unbindColumnsFor(doomed);
 }
 
-void MixerMirrorController::rebuildIfUnboundIfOpen() {
+void MixerMirrorController::rebuildIfStaleIfOpen() {
     if (mirror_)
-        mirror_->rebuildIfUnbound();
+        mirror_->rebuildIfStale();
 }
 
 void MixerMirrorController::rebuildIfOpen() {

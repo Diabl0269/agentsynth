@@ -13,6 +13,7 @@
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
+#include <set>
 
 namespace {
 
@@ -175,8 +176,88 @@ TEST(MixerPanelIncrementalRebuild, UnbindingEverythingRebuildsEveryColumn) {
     MixerRig rig;
     const int built = rig.mixer().getStripColumnsBuiltForTest();
     rig.mixer().unbindAllColumns();
-    rig.mixer().rebuildIfUnbound();
+    rig.mixer().rebuildIfStale();
     EXPECT_EQ(rig.mixer().getStripColumnsBuiltForTest(), built + 3) << "an unbound column is never kept";
     for (auto* column : rig.columns())
         EXPECT_TRUE(column->isFaderBoundForTest());
+}
+
+// A module patched into a track's chain on the canvas shows in that track's inserts at once. The patch is
+// a recorded graph edit made the way the canvas makes one (a cable edit rebuilds no components), so nothing but
+// the edit's own undo-manager broadcast reaches the mixer; before the fix the insert showed only after an
+// unrelated mixer action. Only the patched track's column is rebuilt, and an undo takes the insert away again.
+namespace {
+// The node directly feeding `column`'s strip: its last insert, or the chain's source when it has none.
+juce::AudioProcessorGraph::NodeID nodeFeedingStrip(const synth::MixerColumn& column) {
+    return column.inserts.empty() ? column.sourceNodeId : column.inserts.back().nodeId;
+}
+
+const synth::MixerColumn* snapshotColumn(MixerRig& rig, const synth::MixerSnapshot& snapshot, int index) {
+    const auto uuid = rig.columns().at((size_t)index)->getUuid();
+    for (const auto& column : snapshot.columns)
+        if (column.uuid == uuid)
+            return &column;
+    return nullptr;
+}
+
+std::vector<juce::String> insertUuids(synth::ui::MixerColumnComponent& column) {
+    std::vector<juce::String> out;
+    auto& list = column.getInsertListForTest();
+    for (int row = 0; row < list.getRowCount(); ++row)
+        out.push_back(list.getRowUuid(row));
+    return out;
+}
+
+void deliverBroadcasts() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
+} // namespace
+
+TEST(MixerPanelIncrementalRebuild, AModulePatchedIntoATrackOnTheCanvasShowsInItsInsertsAtOnce) {
+    MixerRig rig;
+    deliverBroadcasts();
+    const auto snapshot =
+        synth::buildMixerSnapshot(rig.graph(), rig.mc.getTimelineDoc(), rig.mc.getGraphEditor().getMacros());
+    const auto* column = snapshotColumn(rig, snapshot, 1);
+    ASSERT_NE(column, nullptr);
+    const auto feeder = nodeFeedingStrip(*column);
+    ASSERT_NE(feeder, juce::AudioProcessorGraph::NodeID{}) << "the track's chain has a node feeding its strip";
+    const auto stripId = column->nodeId;
+    const auto before = rig.columns();
+    const auto insertsBefore = insertUuids(*before[1]);
+
+    // Adding the card alone (not yet cabled) changes no chain: nothing is rebuilt.
+    std::set<juce::uint32> existing;
+    for (auto* node : rig.graph().getNodes())
+        existing.insert(node->nodeID.uid);
+    const int builtBeforeAdd = rig.mixer().getStripColumnsBuiltForTest();
+    rig.mc.getGraphEditor().addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+    deliverBroadcasts();
+    juce::AudioProcessorGraph::NodeID added;
+    for (auto* node : rig.graph().getNodes())
+        if (existing.count(node->nodeID.uid) == 0)
+            added = node->nodeID;
+    ASSERT_NE(added, juce::AudioProcessorGraph::NodeID{});
+    EXPECT_EQ(rig.mixer().getStripColumnsBuiltForTest(), builtBeforeAdd) << "an unconnected card rebuilds nothing";
+    EXPECT_EQ(rig.columns(), before);
+
+    // Cable it in between the chain and the strip: one recorded edit, no mixer call.
+    bool spliced = false;
+    rig.undo().recordStructuralChange(rig.graph(),
+                                      [&] { spliced = synth::spliceInInsert(rig.graph(), feeder, stripId, added); });
+    ASSERT_TRUE(spliced);
+    deliverBroadcasts();
+
+    const auto after = rig.columns();
+    ASSERT_EQ(after.size(), before.size());
+    auto expected = insertsBefore;
+    expected.push_back(rig.graph().getNodeForId(added)->properties["uuid"].toString());
+    EXPECT_EQ(insertUuids(*after[1]), expected) << "the patched module shows in the track's inserts";
+    EXPECT_EQ(rig.mixer().getStripColumnsBuiltForTest(), builtBeforeAdd + 1) << "only that track's column is rebuilt";
+    EXPECT_EQ(after[0], before[0]);
+    EXPECT_EQ(after[2], before[2]);
+
+    ASSERT_TRUE(rig.undo().undo());
+    deliverBroadcasts();
+    EXPECT_EQ(insertUuids(*rig.columns().at(1)), insertsBefore) << "undoing the cable takes the insert away";
+    for (auto* shown : rig.columns())
+        EXPECT_TRUE(shown->isFaderBoundForTest());
 }
