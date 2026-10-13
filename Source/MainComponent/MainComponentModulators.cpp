@@ -352,7 +352,19 @@ void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modul
                     timelineDoc.removeLane(lane->id);
             });
     };
-    const synth::ui::ConnectionIndex cables(graph); // the loop below edits the graph only to return at once
+    if (const auto routing = findModulatorRouting(modulator))
+        remove(*routing);
+}
+
+// The live routing a row stands for (a copy: the engine's list is rebuilt by the edits that follow), found by its
+// real source and parameter with macro ports looked through, or by its Attenuverter's uuid for a chain.
+std::optional<AudioEngine::ModulationRouting>
+MainComponent::findModulatorRouting(const synth::ui::ModulatorInfo& modulator) {
+    auto* target = findNodeByUuid(modulator.targetUuid);
+    if (target == nullptr)
+        return std::nullopt;
+    auto& graph = audioEngine.getGraph();
+    const synth::ui::ConnectionIndex cables(graph);
     const PortNodes ports(graph, graphEditor.getMacros());
     for (const auto& r : audioEngine.getModulationRoutings()) {
         const auto real = resolveThroughPorts(cables, ports, r);
@@ -365,11 +377,10 @@ void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modul
                                 r.kind != AudioEngine::RoutingKind::AttenuverterChain &&
                                 real.source.channel == modulator.sourceChannel &&
                                 uuidOf(graph.getNodeForId(real.source.node)) == modulator.sourceUuid;
-        if (sameChain || sameDirect) {
-            remove(r);
-            return;
-        }
+        if (sameChain || sameDirect)
+            return r;
     }
+    return std::nullopt;
 }
 
 // The modulator rows of a parameter sit under its automation lane, so showing the modulator is showing that lane:

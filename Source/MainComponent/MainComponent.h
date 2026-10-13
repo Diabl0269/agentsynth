@@ -4,6 +4,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/ModulationRoutingTypes.h"
 #include "AudioEngine/NodeUuidCache.h"
 #include "Branding.h"
 #include "MainComponentCollectArchiveSeams.h"
@@ -431,6 +432,8 @@ private:
                              const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams);
 
     using InstrumentChainBuild = synth::maincomponent::InstrumentChainBuild;
+    using LaneEnd = synth::maincomponent::LaneEnd;
+    using CarryMode = synth::maincomponent::CarryMode;
     bool createTrackInForInstrumentChain(const juce::String& trackName, InstrumentChainBuild& build);
     bool buildInstrumentInserts(const std::vector<synth::InstrumentTrackInsert>& inserts, InstrumentChainBuild& build);
     /** Applies the op's envelope params to the ADSR the envelope stage built; a no-op without both. */
@@ -545,6 +548,13 @@ private:
     bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
                                int sourceChannel) override;
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
+    // A lane's modulators following it through Change parameter / Duplicate (MainComponentLaneSubtree.cpp).
+    bool retargetLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
+    synth::LaneId duplicateLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
+    void carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack, CarryMode mode);
+    bool moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to);
+    bool copyModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to, synth::TrackId amountTrack);
+    std::optional<ModulationRouting> findModulatorRouting(const synth::ui::ModulatorInfo& modulator);
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
     /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
      *  modulator rows sit (the lane is made, as "Automate" does, when the parameter has none yet). */
