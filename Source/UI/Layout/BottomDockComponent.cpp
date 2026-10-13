@@ -246,6 +246,10 @@ void BottomDockComponent::setOnMoveTrack(std::function<void(synth::TrackId, int)
     mixer_->onMoveTrack = std::move(callback);
 }
 
+void BottomDockComponent::setOnDuplicateTrack(std::function<void(synth::TrackId)> callback) {
+    mixer_->onDuplicateTrack = std::move(callback);
+}
+
 void BottomDockComponent::setOnBuildTrackColourPicker(
     std::function<std::unique_ptr<synth::ui::ColourPickerPopup>(synth::TrackId)> callback) {
     mixer_->buildTrackColourPicker = std::move(callback);

@@ -227,7 +227,7 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
     const juce::String copyName = source->name + " copy";
 
     synth::TrackId copy;
-    timelinePanel.armTrackDuplicateGlide(trackId);
+    const TrackGrowInScope growIn(*this);
     bool pushed = false;
     {
         const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
@@ -241,7 +241,6 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
         timelinePanel.focusTrackRow(copy); // the copy is what the user will want to act on next
         statusBar.showMessage("Duplicated track: " + copyName);
     } else {
-        timelinePanel.armTrackDuplicateGlide({});
         statusBar.showMessage("Could not duplicate the track");
     }
 }

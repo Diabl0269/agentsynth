@@ -166,6 +166,8 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         performTrackEdit([this, id, newIndex] { timelineDoc.moveTrack(id, newIndex); });
         bottomDock.rebuildMixer();
     });
+    // A strip's right-click "Duplicate Track" is the timeline row's action (Cmd+D), copy and mixer channel together.
+    bottomDock.setOnDuplicateTrack([this](synth::TrackId id) { duplicateTrack(id); });
 
     // A mixer column's colour dot opens the SAME picker the track's Timeline swatch does (preview with no undo, one
     // undo step on commit, the track's channel macro following), so a pick recolours the track everywhere. The

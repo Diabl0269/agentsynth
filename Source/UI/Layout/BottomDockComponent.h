@@ -84,6 +84,8 @@ public:
     /** MainComponent wires this to performTrackEdit(moveTrack) plus a mixer rebuild -- fired when a mixer
      *  track column is dropped in a new place. */
     void setOnMoveTrack(std::function<void(synth::TrackId, int newIndex)> callback);
+    /** The mixer strip menu's "Duplicate Track" (MainComponent::duplicateTrack). */
+    void setOnDuplicateTrack(std::function<void(synth::TrackId)> callback);
     /** MainComponent wires this to the track colour picker its Timeline swatch opens -- fired by a mixer column's
      *  colour dot, so one pick recolours the track, its macro and both views. */
     void

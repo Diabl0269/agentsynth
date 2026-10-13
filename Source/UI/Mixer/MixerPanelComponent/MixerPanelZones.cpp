@@ -203,6 +203,19 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::op
         if (safe != nullptr)
             safe->pinChannel(channelId, synth::MixerZone::Scrolling);
     });
+    // A strip fed by exactly one track can be duplicated from here (the timeline row's action); a bus, a strip shared
+    // by several tracks, Direct and Master have no single track to copy.
+    const auto duplicable = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& entry) {
+        return entry.channelId == channelId && entry.kind == ColumnEntry::Kind::Strip &&
+               entry.feedingTracks.size() == 1;
+    });
+    if (duplicable != columnEntries_.end() && onDuplicateTrack) {
+        menu.addSeparator();
+        menu.addItem("Duplicate Track", [safe, track = duplicable->feedingTracks.front()] {
+            if (safe != nullptr && safe->onDuplicateTrack)
+                safe->onDuplicateTrack(track);
+        });
+    }
     if (showZoneMenuHook_) {
         showZoneMenuHook_(menu);
         return;

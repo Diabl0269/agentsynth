@@ -229,13 +229,10 @@ path); nothing else needs to know.
   `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
   drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
   any other rebuild lands at once.
-- **A duplicated track's row.** Cmd+D / "Duplicate Track" arms `TimelinePanelComponent::armTrackDuplicateGlide`; the
-  rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
-  `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
-  removes the row like deleting a track does: it shrinks away and the rows below close the gap.
-- **Off-screen.** Same check as the forward move: the timeline glide runs only
-  while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
-  forces it.
+- **An added or duplicated track's row** grows in through the delete motion's mirror ([delete and undo animation](#delete-and-undo-animation));
+  undoing it shrinks the row away and the rows below close the gap.
+- **Off-screen.** The timeline glide runs only while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so
+  headless tests land at once unless a test forces it.
 
 ### Controls swapping in place
 
@@ -286,7 +283,10 @@ every surface that animates a delete:
   accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
   Add Track or Duplicate Track, and the redo that brings it back), and when a track is deleted: its own channel is deleted
   with it, so its column shrinks away in step with the row (exit 180 ms, then the gap), and Cmd+Z makes room, grows it
-  back and fades the outline beside the row. A change that moves a column without adding or removing one lands at once.
+  back and fades the outline beside the row. Adding or duplicating a track (Cmd+D, the row menu, the strip menu's
+  "Duplicate Track") runs it forward, no outline: rows and columns after make room, then the new ones grow out of
+  nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` / `armColumnInsertMotion`). A change that moves a
+  column without adding or removing one lands at once.
   The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
   pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
   its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the
