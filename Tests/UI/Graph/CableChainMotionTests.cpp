@@ -145,6 +145,7 @@ struct Wired {
         }
         c.editor.finishCardGlideForTest();
         c.editor.getCableRetractForTest().setForceMotionForTest(true);
+        c.editor.getCardGlideForTest().setForceAnimateForTest(true); // not on screen: a glide only arms when forced
     }
     const CableRetractAnimator& retract() { return c.editor.getCableRetractForTest(); }
     std::vector<VisibleCable> cablesBetween(NodeID a, NodeID b) {
