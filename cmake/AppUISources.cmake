@@ -135,6 +135,10 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderParameterPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesCustomLfo.cpp

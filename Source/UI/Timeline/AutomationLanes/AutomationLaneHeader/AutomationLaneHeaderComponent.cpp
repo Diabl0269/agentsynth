@@ -13,7 +13,8 @@ namespace {
 constexpr int kPadding = 4;
 constexpr int kComboWidth = 62;
 constexpr float kStripeAlpha = 0.45f;
-constexpr float kNameFontSize = 11.0f;
+constexpr int kMarkerGap = 2; // between the marker and the name button, whose own padding makes the rest
+constexpr int kNameButtonHeight = 20;
 constexpr float kModuleFontSize = 9.5f;
 
 struct LaneHeaderColours {
@@ -36,10 +37,16 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     , host_(host)
     , undo_(undo) {
     setComponentID("automationLaneHeader");
-    // The row is a keyboard stop of its own (Up/Down walk the track list through it); a click does not move focus off
-    // the clips, whose Cmd+X/C/V the app routes by where real focus sits.
+    // The row is a keyboard stop of its own (Up/Down walk the track list through it). A press does not grab focus (it
+    // may become a reorder drag); a plain click on the row, not on a control, takes it on release (see mouseUp).
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
+
+    addAndMakeVisible(marker_);
+    marker_.setTooltip("Automation lane: drawn changes over time");
+    marker_.addMouseListener(this, false);
+    addAndMakeVisible(nameButton_);
+    nameButton_.onClick = [this] { openChangeParameterPicker(); };
 
     addAndMakeVisible(recordMode_);
     recordMode_.setComponentID("automationLaneRecordMode");
@@ -73,15 +80,17 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     moduleName_ = labels.module;
     setTitle(parameterName_ + " automation lane");
     setDescription(moduleName_);
+    nameButton_.setName(parameterName_);
+    nameButton_.setActionText("Change parameter of " + parameterName_, "Pick a different parameter");
     readout_.setParameterName(parameterName_);
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
 
     recordMode_.setSelectedId(lane->recordMode + 1, juce::dontSendNotification);
     recordMode_.setTitle(parameterName_ + " record mode");
     recordMode_.setTooltip(parameterName_ + " record mode");
-    setTooltip("Click the name to change what " + parameterName_ +
-               " controls; right-click, Shift+F10 or Return for the lane menu");
+    setTooltip(parameterName_ + " lane: right-click, Shift+F10 or Return for the lane menu. Drag to reorder");
     applyRecordModeColour();
+    resized(); // the name button is as wide as the name
     repaint();
 }
 
@@ -122,7 +131,14 @@ void AutomationLaneHeaderComponent::resized() {
     auto bottom = bounds;
     readout_.setBounds(top.removeFromRight(kReadoutWidth));
     recordMode_.setBounds(bottom.removeFromRight(kComboWidth).reduced(0, 1));
-    nameArea_ = top.getUnion(bottom.withTrimmedRight(kPadding));
+    marker_.setBounds(
+        top.removeFromLeft(LaneMarkerIcon::kSize).withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
+    top.removeFromLeft(kMarkerGap);
+    const auto button = top.withWidth(juce::jmin(nameButton_.getPreferredWidth(), top.getWidth()));
+    nameArea_ = button.withSizeKeepingCentre(button.getWidth(), juce::jmin(button.getHeight(), kNameButtonHeight));
+    nameButton_.setBounds(nameArea_);
+    noteArea_ = bottom.withTrimmedLeft(LaneMarkerIcon::kSize + kMarkerGap + LaneNameButton::kPadding)
+                    .withTrimmedRight(kPadding);
 }
 
 void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
@@ -133,14 +149,9 @@ void AutomationLaneHeaderComponent::paint(juce::Graphics& g) {
     g.setColour(trackColour_.withAlpha(kStripeAlpha));
     g.fillRect(kIndent, 0, kStripeWidth, getHeight());
 
-    auto names = nameArea_;
-    const auto topLine = names.removeFromTop(names.getHeight() / 2);
-    g.setColour(colours.text);
-    g.setFont(juce::Font(juce::FontOptions(kNameFontSize, juce::Font::bold)));
-    g.drawText(parameterName_, topLine, juce::Justification::centredLeft, true);
     g.setColour(colours.textMuted);
     g.setFont(juce::Font(juce::FontOptions(kModuleFontSize)));
-    g.drawText(moduleName_, names, juce::Justification::centredLeft, true);
+    g.drawText(moduleName_, noteArea_, juce::Justification::centredLeft, true);
 }
 
 // The combo's own focus outline comes from the look-and-feel; the shared accent ring goes over it so

@@ -203,6 +203,31 @@ void paintSidePane(juce::Graphics& g, juce::Rectangle<float> area, bool open) {
     else
         g.fillRect(strip.getRight() - 0.6f, glyph.getY() + 1.0f, 1.2f, glyph.getHeight() - 2.0f);
 }
+
+// The lane header markers are drawn on a 14 x 14 grid and scaled to the area's shorter side.
+void paintLaneMarker(juce::Graphics& g, juce::Rectangle<float> area, bool mod) {
+    const auto square = centredSquare(area);
+    const float scale = square.getWidth() / 14.0f;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(square.getX() + x * scale, square.getY() + y * scale);
+    };
+    const juce::PathStrokeType stroke(1.8f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    juce::Path path;
+    if (mod) {
+        path.startNewSubPath(at(1, 7));
+        path.cubicTo(at(3, 1), at(5, 1), at(7, 7));
+        path.cubicTo(at(9, 13), at(11, 13), at(13, 7));
+        g.strokePath(path, stroke);
+        return;
+    }
+    path.startNewSubPath(at(1, 11));
+    path.lineTo(at(5, 4));
+    path.lineTo(at(9, 8));
+    path.lineTo(at(13, 2));
+    g.strokePath(path, stroke);
+    for (const auto dot : {at(5, 4), at(9, 8)})
+        g.fillEllipse(juce::Rectangle<float>(3.2f * scale, 3.2f * scale).withCentre(dot));
+}
 } // namespace
 
 void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
@@ -263,6 +288,12 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
     case Glyph::ShapeRandom:
     case Glyph::ShapeCustom:
         paintShape(g, glyph, area);
+        break;
+    case Glyph::LaneAutomation:
+        paintLaneMarker(g, area, false);
+        break;
+    case Glyph::LaneMod:
+        paintLaneMarker(g, area, true);
         break;
     }
 }

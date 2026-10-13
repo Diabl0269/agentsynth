@@ -165,6 +165,8 @@ MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, j
             info.sourceTitle = synth::moduleTitle(*source);
             info.sourceChannel = real.source.channel;
             info.isLfo = dynamic_cast<LFOModule*>(source->getProcessor()) != nullptr;
+            if (const auto* module = dynamic_cast<ModuleBase*>(source->getProcessor()))
+                info.isEnvelope = module->getModulationCategory() == ModulationCategory::Envelope;
             if (r.kind == AudioEngine::RoutingKind::AttenuverterChain)
                 info.attenuverterUuid = uuidOf(graph.getNodeForId(r.attenuverterNodeID));
             info.targetUuid = nodeUuid;
@@ -261,10 +263,36 @@ bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modula
                                           int sourceChannel) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     auto* source = findNodeByUuid(sourceUuid);
-    const auto old = findAttenuverterRouting(audioEngine, modulator);
-    if (!canChangeModulatorSource(modulator) || target == nullptr || source == nullptr || !old.has_value() ||
+    if (target == nullptr || source == nullptr ||
         (sourceUuid == modulator.sourceUuid && sourceChannel == modulator.sourceChannel) ||
         !isLaneModulatorSource(audioEngine.getGraph(), source->nodeID, sourceChannel))
+        return false;
+    return repointModulator(modulator, [this, source, sourceChannel, target, &modulator](float depth) {
+        return graphEditor.connectModulationSource(source->nodeID, sourceChannel, target->nodeID,
+                                                   modulator.targetChannel, depth, /*recordUndo=*/false);
+    });
+}
+
+// "Change source" -> "New LFO" / "New envelope": the same re-point, with the new source module created beside the
+// target card and cabled in -- create, cable, amount-lane re-key and cut of the old routing are ONE undo step.
+bool MainComponent::changeModulatorSourceToNew(const synth::ui::ModulatorInfo& modulator, const juce::String& typeName,
+                                               int sourceChannel) {
+    auto* target = findNodeByUuid(modulator.targetUuid);
+    if (target == nullptr || typeName.isEmpty())
+        return false;
+    return repointModulator(modulator, [this, &typeName, sourceChannel, target, &modulator](float depth) {
+        return graphEditor.addModulationSourceModule(typeName, sourceChannel, target->nodeID, modulator.targetChannel,
+                                                     depth, /*recordUndo=*/false);
+    });
+}
+
+// The shared recipe: `makeRouting(depth)` cables the new source into the old routing's CV jack at the old depth and
+// returns the new routing's Attenuverter (invalid = nothing happened); the amount lane (keyed by the routing's hidden
+// Attenuverter) is re-keyed to it with its points untouched, and the old routing is cut.
+bool MainComponent::repointModulator(const synth::ui::ModulatorInfo& modulator,
+                                     const std::function<juce::AudioProcessorGraph::NodeID(float)>& makeRouting) {
+    const auto old = findAttenuverterRouting(audioEngine, modulator);
+    if (!canChangeModulatorSource(modulator) || !old.has_value())
         return false;
     auto& graph = audioEngine.getGraph();
     float depth = 0.5f;
@@ -277,9 +305,7 @@ bool MainComponent::changeModulatorSource(const synth::ui::ModulatorInfo& modula
     const auto oldRouting = *old;
     bool changed = false;
     undoManager.recordGraphTimelineAndMacroChange(graph, timelineDoc, graphEditor.getMacros(), [&, this] {
-        const auto created = graphEditor.connectModulationSource(source->nodeID, sourceChannel, target->nodeID,
-                                                                 modulator.targetChannel, depth,
-                                                                 /*recordUndo=*/false);
+        const auto created = makeRouting(depth);
         if (created.uid == 0)
             return;
         if (hasLane)

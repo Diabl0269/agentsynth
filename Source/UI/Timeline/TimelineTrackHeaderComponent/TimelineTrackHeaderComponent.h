@@ -352,6 +352,13 @@ struct TrackHeaderHost {
                                        int /*sourceChannel*/) {
         return false;
     }
+    /** Creates a new module of factory type `typeName` beside the routing's target card (read from its output
+     *  `sourceChannel`) and re-points the routing at it, the amount lane kept, as ONE undo step; false when nothing
+     *  changed. */
+    virtual bool changeModulatorSourceToNew(const ModulatorInfo& /*modulator*/, const juce::String& /*typeName*/,
+                                            int /*sourceChannel*/) {
+        return false;
+    }
     /** True when dragging `modulator`'s row onto the lane `destLane` can move it there: the lane's parameter has a CV
      *  jack and the jack does not already have this source. Asked on every drag event for the drop indicator. */
     virtual bool canMoveModulatorToLane(const ModulatorInfo& /*modulator*/, synth::LaneId /*destLane*/) {

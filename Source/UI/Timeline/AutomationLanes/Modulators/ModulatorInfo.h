@@ -15,6 +15,7 @@ struct ModulatorInfo {
     juce::String sourceTitle;      // its card title
     int sourceChannel = 0;         // raw output channel of the source
     bool isLfo = false;            // an LFO gets the full row; anything else is read-only
+    bool isEnvelope = false;       // an envelope: only the lane header's marker tooltip tells it from other sources
     juce::String attenuverterUuid; // the hidden depth node; empty for a direct cable (no depth control)
     juce::String targetUuid;       // the lane's node
     juce::String paramId;          // the lane's parameter

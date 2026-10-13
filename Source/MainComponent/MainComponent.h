@@ -282,6 +282,10 @@ public:
                                       int sourceChannel = 0) {
         return changeModulatorSource(modulator, sourceUuid, sourceChannel);
     }
+    bool changeModulatorSourceToNewForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& typeName,
+                                           int sourceChannel = 0) {
+        return changeModulatorSourceToNew(modulator, typeName, sourceChannel);
+    }
     synth::ui::ToolbarButton& getFeedbackButtonForTest() noexcept { return feedbackButton; }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
@@ -548,6 +552,10 @@ private:
     bool canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) override;
     bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
                                int sourceChannel) override;
+    bool changeModulatorSourceToNew(const synth::ui::ModulatorInfo& modulator, const juce::String& typeName,
+                                    int sourceChannel) override;
+    bool repointModulator(const synth::ui::ModulatorInfo& modulator,
+                          const std::function<juce::AudioProcessorGraph::NodeID(float)>& makeRouting);
     void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
     // A lane's modulators following it through Change parameter / Duplicate (MainComponentLaneSubtree.cpp).
     bool retargetLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;

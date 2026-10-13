@@ -14,14 +14,13 @@ namespace synth::ui {
 
 namespace {
 constexpr int kPadding = 4;
-constexpr int kTagWidth = 22;
 constexpr int kShapeIconWidth = 22;
 constexpr int kSyncWidth = 48;
 constexpr int kGap = 2;
 constexpr int kAmountTextWidth = 34; // "-100%"
 constexpr int kRateTextWidth = 42;   // "20.0 Hz"
-constexpr float kTagFontSize = 8.5f;
-constexpr float kTitleFontSize = 10.0f;
+constexpr int kMarkerGap = 2;        // between the marker and the name button, whose own padding makes the rest
+constexpr int kNameButtonHeight = 20;
 constexpr float kValueFontSize = 9.0f;
 
 struct RowColours {
@@ -53,9 +52,14 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     , host_(host)
     , parameterName_(parameterName) {
     setComponentID("modulatorRow");
-    // The row is a keyboard stop of its own, like a lane header (Up/Down walk the track list through it).
+    // The row is a keyboard stop of its own, like a lane header (Up/Down walk the track list through it). A press does
+    // not grab focus (it may become a drag); a plain click on the row, not on a control, takes it on release.
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(false);
+    addAndMakeVisible(marker_);
+    marker_.addMouseListener(this, false);
+    addAndMakeVisible(nameButton_);
+    nameButton_.onClick = [this] { openChangeSourcePicker(); };
     if (info_.isLfo)
         initLfoControls();
     // The arrow is a Tab stop and toggles on Return/Space or a click; a right-click on it is the row's menu.
@@ -131,9 +135,16 @@ void ModulatorRow::applyNames() {
         if (auto* tip = dynamic_cast<juce::SettableTooltipClient*>(&c))
             tip->setTooltip(text);
     };
-    setTitle(who);
+    setTitle(info_.sourceTitle + " mod lane on " + parameterName_);
     setTooltip("Right-click, Shift+F10 or Return for the " + who +
                " modulator menu. Drag to reorder or move to another lane");
+    const auto kind = info_.isLfo ? juce::String("an LFO") : info_.isEnvelope ? "an envelope" : "a modulator";
+    marker_.setTooltip("Mod lane: " + kind + " moves this parameter");
+    nameButton_.setName(info_.sourceTitle);
+    const bool canChange = host_ != nullptr && host_->canChangeModulatorSource(info_);
+    nameButton_.setActionText("Change source of " + info_.sourceTitle + " on " + parameterName_,
+                              canChange ? "Pick a different source" : "This source cannot be swapped here");
+    nameButton_.setEnabled(canChange);
     name(shape_, who + " shape");
     name(syncRate_, who + " sync rate");
     name(rateHz_, who + " rate");
@@ -184,15 +195,18 @@ void ModulatorRow::applyCompact() {
 }
 
 void ModulatorRow::resized() {
-    auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kPadding).withTrimmedRight(kPadding);
+    auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kStripeWidth + kPadding).withTrimmedRight(kPadding);
     const int lineHeight = titleLineHeight_ > 0 ? titleLineHeight_ : bounds.getHeight() / 3;
     auto title = bounds.removeFromTop(lineHeight);
     auto middle = bounds.removeFromTop(lineHeight);
     bounds.setHeight(juce::jmax(bounds.getHeight(), lineHeight)); // while the row tweens, the last line is clipped
-    const auto arrow = title.removeFromLeft(TrackFoldArrow::kSize);
+    // The fold arrow sits in the gutter left of the stripe, so the marker and the name line up with a lane header's.
+    const juce::Rectangle<int> arrow(0, title.getY(), kIndent, title.getHeight());
     foldArrow_.setBounds(arrow.withSizeKeepingCentre(juce::jmin(arrow.getWidth(), TrackFoldArrow::kSize),
                                                      juce::jmin(arrow.getHeight(), TrackFoldArrow::kSize)));
-    tagArea_ = title.removeFromLeft(kTagWidth);
+    marker_.setBounds(title.removeFromLeft(LaneMarkerIcon::kSize)
+                          .withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
+    title.removeFromLeft(kMarkerGap);
     compactAmountArea_ = {};
     if (compact_) {
         if (amount_.has_value())
@@ -204,7 +218,9 @@ void ModulatorRow::resized() {
     } else {
         layoutAmount(middle);
     }
-    titleArea_ = title.withTrimmedLeft(kPadding);
+    const auto button = title.withWidth(juce::jmin(nameButton_.getPreferredWidth(), title.getWidth()));
+    nameButton_.setBounds(
+        button.withSizeKeepingCentre(button.getWidth(), juce::jmin(button.getHeight(), kNameButtonHeight)));
 }
 
 // Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
@@ -259,15 +275,9 @@ void ModulatorRow::paint(juce::Graphics& g) {
     g.setColour(colours.border);
     g.drawHorizontalLine(getHeight() - 1, (float)kIndent, (float)getWidth());
     const auto accent = readableTrackColour();
-    g.setColour(accent.withAlpha(0.6f));
-    g.fillRect(kIndent, 0, 2, getHeight());
+    g.setColour(accent.withAlpha(0.45f));
+    g.fillRect(kIndent, 0, kStripeWidth, getHeight());
 
-    g.setColour(accent);
-    g.setFont(juce::Font(juce::FontOptions(kTagFontSize, juce::Font::bold)));
-    g.drawText(info_.isLfo ? "LFO" : "CV", tagArea_, juce::Justification::centredLeft, false);
-    g.setColour(colours.text);
-    g.setFont(juce::Font(juce::FontOptions(kTitleFontSize)));
-    g.drawText(info_.sourceTitle, titleArea_, juce::Justification::centredLeft, true);
     if (compact_ && amount_.has_value() && !compactAmountArea_.isEmpty()) {
         g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
         g.setColour(accent);
@@ -295,7 +305,8 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
     const auto text = coloursFor(*this).text;
     paintSliderValue(g, rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
-        if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_) // the arrow paints its own ring
+        if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_ && child != &nameButton_ &&
+            child != &marker_) // the arrow and the name button paint their own ring
             synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
 }
 

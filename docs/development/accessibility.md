@@ -93,7 +93,9 @@ note) calls `paintFocusRingAlways`, which draws the same ring without the focus 
 
 A control that is only painted (no child component), such as the piano roll's header chips, gets a
 transparent child button over it: it is the Tab stop and carries the name, role and tooltip, while
-the parent keeps handling the pointer (`PianoRollHeaderChip`).
+the parent keeps handling the pointer (`PianoRollHeaderChip`). A timeline lane header's name is the same
+idea with a painted button (`LaneNameButton`): mouse-inert, so a drag from the name still reorders the lane, with the
+header firing its `onClick` on a click and the button taking Return and Space itself.
 
 `AppLookAndFeel` already draws the ring for buttons, combo boxes, text editors, toggles, rotary
 knobs and sliders, so a stock control needs nothing. A custom-painted control calls

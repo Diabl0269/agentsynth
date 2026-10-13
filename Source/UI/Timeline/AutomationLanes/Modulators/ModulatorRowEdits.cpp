@@ -68,14 +68,8 @@ void ModulatorRow::refreshValues() {
 juce::PopupMenu ModulatorRow::buildMenu() const {
     juce::PopupMenu menu;
     menu.addItem(kShowOnCanvasMenuId, "Show on canvas");
-    if (host_ != nullptr && host_->canChangeModulatorSource(info_)) {
-        const auto sources = host_->getChangeSourceChoices(info_.targetUuid, info_.paramId);
-        const bool another = std::any_of(sources.begin(), sources.end(), [this](const TrackHeaderHost::LfoChoice& s) {
-            return !(s.uuid == info_.sourceUuid && s.sourceChannel == info_.sourceChannel) && !s.movesThisParameter;
-        });
-        menu.addItem(kChangeSourceMenuId, "Change source..." + (another ? juce::String() : " (no other source)"),
-                     another);
-    }
+    if (host_ != nullptr && host_->canChangeModulatorSource(info_))
+        menu.addItem(kChangeSourceMenuId, "Change source...");
     menu.addSeparator();
     menu.addItem(kRemoveMenuId, "Remove modulator");
     return menu;
@@ -106,13 +100,14 @@ void ModulatorRow::openChangeSourcePicker() {
     const auto name = parameterName_.isNotEmpty() ? parameterName_ : info.paramId;
     const auto choices = collectChangeSourceChoices(host->getChangeSourceChoices(info.targetUuid, info.paramId),
                                                     info.sourceUuid, info.sourceChannel, name);
-    if (choices.lfos.empty())
-        return;
     auto picker = buildAddModulatorPicker(choices, name, [host, info](const AddModulatorPick& pick) {
-        if (!pick.isNew)
+        if (pick.isNew)
+            host->changeModulatorSourceToNew(info, pick.newTypeName, pick.sourceChannel);
+        else
             host->changeModulatorSource(info, pick.lfoUuid, pick.sourceChannel);
     });
     picker->setAccessibleNames("Change source of " + info.sourceTitle + " on " + name, "Search modulators for " + name);
+    picker->setSearchPlaceholder("Search or create a source");
     if (auto& hook = test_hooks::changeSourcePickerHookForTest()) {
         hook(std::move(picker));
         return;
@@ -143,6 +138,8 @@ void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
     if (!e.mods.isLeftButtonDown())
         return;
     pressed_ = true;
+    dragged_ = false;
+    pressedOnName_ = nameButton_.getBounds().contains(e.getEventRelativeTo(this).getPosition());
     if (onDragPress)
         onDragPress(e.getScreenPosition().y);
 }
@@ -151,17 +148,47 @@ void ModulatorRow::mouseDown(const juce::MouseEvent& e) {
 // is the start of a drag that reorders the row or moves it to another lane; the owner tells a drag from a click once
 // the pointer has travelled past the drag threshold.
 void ModulatorRow::mouseDrag(const juce::MouseEvent& e) {
-    if (pressed_ && onDragMove)
-        followDragCursor(*this, onDragMove(e.getScreenPosition().y));
+    if (!pressed_ || !onDragMove)
+        return;
+    const bool dragging = onDragMove(e.getScreenPosition().y);
+    dragged_ = dragged_ || dragging;
+    followDragCursor(*this, dragging);
 }
 
-void ModulatorRow::mouseUp(const juce::MouseEvent&) {
+// A press that never became a drag is a click: on the name button it opens the Change source picker, anywhere else on
+// the row it gives the row keyboard focus.
+void ModulatorRow::mouseUp(const juce::MouseEvent& e) {
     if (!pressed_)
         return;
     pressed_ = false;
     endDragCursor(*this);
+    const bool click = !dragged_;
+    const bool onName = pressedOnName_ && nameButton_.getBounds().contains(e.getEventRelativeTo(this).getPosition());
+    const bool wasName = pressedOnName_;
+    pressedOnName_ = false;
+    dragged_ = false;
+    if (click && !wasName) {
+        ++clickFocusRequests_;
+        grabKeyboardFocus();
+    }
     if (onDragRelease)
         onDragRelease(); // a move to another lane can retire this row: nothing here touches it afterwards
+    if (click && onName && nameButton_.isEnabled() && nameButton_.onClick)
+        nameButton_.onClick(); // a click is no drop, so the row is still here
+}
+
+// The name button takes no mouse events, so the row tells it when the pointer is over it.
+void ModulatorRow::mouseMove(const juce::MouseEvent& e) {
+    nameButton_.setHovered(nameButton_.isEnabled() &&
+                           nameButton_.getBounds().contains(e.getEventRelativeTo(this).getPosition()));
+}
+
+void ModulatorRow::mouseExit(const juce::MouseEvent&) { nameButton_.setHovered(false); }
+
+juce::String ModulatorRow::getTooltip() {
+    if (nameButton_.getBounds().contains(getMouseXYRelative()))
+        return nameButton_.getTooltip();
+    return juce::SettableTooltipClient::getTooltip();
 }
 
 void ModulatorRow::setLift(float lift) {

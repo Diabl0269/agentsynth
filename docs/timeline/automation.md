@@ -39,8 +39,13 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 `AutomationLaneHeaderComponent` (`Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/`), indented
 16 px under the track with the track's colour as a 4 px stripe at 45% alpha:
 
-- the parameter name (11 px semibold) over the module name (9.5 px, muted), from
-  `TrackHeaderHost::getParameterDisplayName` / `getNodeDisplayName` with the old picker's fallbacks
+- a 14 px **marker icon** (`LaneMarkerIcon`, `Source/UI/Timeline/AutomationLanes/LaneHeaderParts/`): points on a line in
+  the accent colour (`Glyph::LaneAutomation`), tooltip "Automation lane: drawn changes over time". It is display only
+  (not a Tab stop, hidden from screen readers; the header's name "Cutoff automation lane" carries the meaning) and its
+  tooltip is an ordinary info tooltip, so Preferences > "Show info tooltips" off silences it. It hands its mouse events
+  to the header, so a press on it still drags the lane;
+- the parameter name (11 px semibold, a real button, below) over the module name (9.5 px, muted, indented to sit under
+  the name), from `TrackHeaderHost::getParameterDisplayName` / `getNodeDisplayName` with the old picker's fallbacks
   (the raw `paramId`; the uuid's first 8 characters);
 - a value readout (mono 10 px, muted): the lane's curve at the playhead beat, evaluated on the
   message thread with `AutomationKernel::evaluate` over the doc's breakpoints (never through
@@ -67,8 +72,15 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
   **Delete lane** (`TimelineDoc::removeLane`), each one undo step. There is no "..." button: a
   right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)), Shift+F10 and Return on the focused
   row open it, and the header's tooltip says so (the space the button took goes to the value readout);
-- a click on the parameter name opens the Change parameter picker (the name is a hit region with a pointing-hand
-  cursor, not a separate control: the keyboard route is the menu item).
+- **A click on the header** anywhere that is not a control (the marker and the value readout count as the header) gives
+  the row keyboard focus on release (accent ring; Up/Down, Return and Cmd+Alt+Up/Down then work as for any focused
+  header) and opens no picker or menu; a press that became a reorder drag focuses nothing.
+- the **name button** (`LaneNameButton`, a `juce::Button`): a Tab stop with the shared accent ring, a border in the accent
+  colour while the pointer is over it, named "Change parameter of Cutoff", tooltip "Pick a different parameter". A click
+  on it (on release, so a press may still become a drag) and Return or Space on it open the Change parameter picker, with
+  its search field. The button takes no mouse events of its own: the header handles the press (so the drag still starts
+  on the name) and tells the button when it is hovered; the header's `getTooltip` answers the button's tip over the
+  name. The pointing-hand cursor stays.
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
@@ -153,7 +165,7 @@ Test hooks: `setAddAutomationPickerHookForTest` (receives the picker instead of 
 Grab a lane header and drag it up or down: the lanes of that track slide aside and the lane lands in the slot it was
 dropped on (`TimelineAutomationLanes::beginLaneDrag` and friends, `TimelineAutomationLanesReorder.cpp`). It is the track
 list's gesture (the shared `ReorderDragSession`, see [animation](../layout/animation.md#reorder-drag)): a 4 px threshold, so a
-click on the parameter name still opens the Change parameter picker (it now fires on release), the lifted header
+click on the parameter name still opens the Change parameter picker (it fires on release), the lifted header
 drawn raised, 160 ms make-room and 140 ms settle, Esc gives everything back, and the animation lands at once when the
 panel is not on screen. A lane never leaves its own track: the block is clamped to that track's lanes.
 
@@ -181,7 +193,9 @@ Where the arrows navigate: only when focus is on the row itself (a lane header o
 arrow is left alone. On a modulator row Left folds it to its title line and Right opens it (as a tree view does), and
 Cmd+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its
 lane's modulators, from the row, any of its controls or its band; see [Modulators](#modulators). Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
-it holds focus. Tab from the timeline then goes to the routing pane and the scale pane
+it holds focus (a click on the header takes focus, see [the lane header](#the-lane-header)); a modulator row is named
+"<Source> mod lane on <Parameter>" and shows the same ring. The name on each is a Tab stop of its own (Return or Space opens
+its picker). Tab from the timeline then goes to the routing pane and the scale pane
 ([focus regions](../control/focus-regions.md)). The panel's stop list is `TimelinePanelLaneKeyboard.cpp`.
 
 ## Right-click anywhere on a lane
@@ -278,14 +292,23 @@ Test hook: `synth::ui::test_hooks::addModulatorPickerHookForTest` (receives the 
 indented 28 px (one step further in than a lane header), three lines in the header column (title; shape and
 rate; sync and amount):
 
-- an `LFO` tag and a left stripe in the owning track's colour (`laneColourFor`, pushed to a readable contrast
-  on the row's surface with `readableOn`), the LFO card's title and, at the right end of that line, a small picture
+- a 4 px left stripe in the owning track's colour at 45% alpha (`laneColourFor`, pushed to a readable contrast on the
+  row's surface with `readableOn`), a 14 px **marker icon** (a violet wave, `Glyph::LaneMod`; tooltip "Mod lane: an LFO
+  moves this parameter", "...an envelope..." for an envelope source, "...a modulator..." for any other; an info tooltip
+  like the lane header's, display only, hidden from screen readers), the source card's title as a **name button** and,
+  at the right end of that line, a small picture
   of the LFO's shape (`ModulatorShapeIcon`: sine, triangle, sawtooth, square, a staircase for sample and hold, and a
   curve with dots for custom; the glyphs are `Glyph::ShapeSine` .. `ShapeCustom`). The picture is display only, named
   and tooltipped "Sine shape" and so on, and cross-fades over 160 ms when the shape changes (at once while the row
   is not showing). The row has no "..." button: its menu, **Show on canvas** (select the card and centre the canvas on
   it), **Change source...** and **Remove modulator**, opens on a right-click anywhere on the row (the picture included), Shift+F10 and
-  Return on the focused row. A **Sync** toggle sits on the third line;
+  Return on the focused row. A **Sync** toggle sits on the third line. The row is inset like a lane header
+  (`ModulatorRow::kIndent` = 16, the stripe, then the same 4 px padding), so its marker and name line up with the lane's
+  above it, on the normal surface; the fold arrow sits in the gutter left of the stripe. The name button is named
+  "Change source of LFO 1 on Cutoff", tooltip "Pick a different source", and a click on it or Return/Space opens the Change
+  source picker (below); it is disabled, with the tooltip "This source cannot be swapped here", when the host cannot
+  re-point the routing. A click on the row anywhere else that is not a control focuses the row on release (a drag from
+  anywhere, the name included, still reorders or moves it and focuses nothing). The row is named "LFO 1 mod lane on Cutoff";
 - the **shape** (Sine/Triangle/Sawtooth/Square/S&H/Custom) and the **rate** (a 1/1..1/32 combo while synced,
   a Hz bar while free-running);
 - an **Amount** label and a signed readout in the track's colour ("+72%", "-30%" with a real minus sign,
@@ -345,8 +368,8 @@ slots (`DropIndicator`).
 - The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
   another lane". Not done: no auto-scroll while dragging, and the lane the row leaves does not close its gap until the drop.
 
-Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: a `CV` tag,
-its card title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
+Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: the marker, its card
+title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
 (Show on canvas, Change source..., Remove modulator), and Change source... is offered for an envelope routed through
 an Attenuverter just as for an LFO. A direct cable with no
 attenuverter has no amount: no readout, and its band is a decoration.
@@ -370,9 +393,17 @@ is off (the person asked for the removal), all in the one undo step.
 `MainComponent`) points the routing at a different LFO or envelope and keeps the drawn [amount lane](#amount-lane). The host says
 yes only for an LFO or an envelope (decided by the mod-source catalogue's group) routed through an Attenuverter (the
 amount lane is keyed by that Attenuverter; a hand-patched direct cable has neither). The item opens a picker
-(`TrackHeaderHost::getChangeSourceChoices`: every LFO and envelope output, macro ports skipped) without "New LFO" and
-without the current source (same card and same output; a source that already moves the parameter is listed greyed
-out); with no other source it is disabled and says "(no other source)". "Add modulator..." stays LFO-only. On a pick
+(`TrackHeaderHost::getChangeSourceChoices`: every LFO and envelope output, macro ports skipped) under the group headers
+"LFOs" and "Envelopes", the current source (same card and same output) ticked and disabled rather than hidden, a source
+that already moves the parameter listed greyed out, and last a "New" group with **New LFO** and **New envelope** (a
+green plus before the text, a "New" tag at the right; `ModMatrixPicker::Item::ticked` / `isNew`). The search placeholder is
+"Search or create a source"; the New rows stay in the list, last, whatever is typed (Return picks the best existing
+match, Down reaches New). The item is always enabled. "Add modulator..." stays LFO-only. A New pick calls
+`TrackHeaderHost::changeModulatorSourceToNew(info, typeName, channel)` (type and channel from `newModuleSources()`:
+"LFO" and "ADSR"): `MainComponent::repointModulator` is the recipe below with the source made by
+`GraphEditor::addModulationSourceModule(..., recordUndo=false)` beside the target card, so create + cable + amount-lane
+re-key + cut of the old routing are still ONE undo step. The row's name and colour change by the routing's key changing:
+the old row fades out and the new one fades in (the usual new-routing fade). On a pick
 (the chosen output's channel comes from the catalogue, `LfoChoice::sourceChannel`), ONE
 `recordGraphTimelineAndMacroChange` step cables the new source in at the old routing's
 depth (`GraphEditor::connectModulationSource` with `recordUndo=false`, macro ports crossed as for "Add modulator..."),
@@ -923,7 +954,7 @@ or its editor: the first stroke creating the lane in one undo step, the knob dra
 double-click, editing and erasing the last point, the bipolar picture, names and the accessible value) and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with
-sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's choices for LFO and envelope rows, the real re-key, the source channel and the one undo step); the **Change parameter / Duplicate carrying modulators** is in `AutomationLanesCarryTests.cpp` (both routings and their amount lanes moving or copied, the original untouched, one undo step each, a parameter with no CV jack, and a pick reaching the host call); the
+sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; **Change source...** is in `AutomationLanesChangeSourceTests.cpp` (item shown/hidden by the host, the picker's groups, ticked current source and New rows for LFO and envelope rows, the real re-key, the source channel and the one undo step); the lane headers' markers, name buttons, click-to-focus, Info tooltips setting, mod row alignment and New LFO / New envelope against a real `MainComponent` are in `AutomationLanesLaneHeaderTests.cpp`; the **Change parameter / Duplicate carrying modulators** is in `AutomationLanesCarryTests.cpp` (both routings and their amount lanes moving or copied, the original untouched, one undo step each, a parameter with no CV jack, and a pick reaching the host call); the
 applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
 `LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
 partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from

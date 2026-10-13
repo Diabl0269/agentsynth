@@ -186,7 +186,7 @@ NodeID GraphEditor::connectModulationSource(NodeID sourceId, int sourceChannel, 
 // mints macro ports across a boundary), so the macro join, when the target sits in a macro, runs after the cable and
 // the crossing plan sees it as interior.
 NodeID GraphEditor::addModulationSourceModule(const juce::String& typeName, int sourceChannel, NodeID targetId,
-                                              int destChannel, float depth) {
+                                              int destChannel, float depth, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
     auto* target = graph.getNodeForId(targetId);
     if (target == nullptr || destChannel < 0 || isSingletonIOModule(typeName))
@@ -217,7 +217,7 @@ NodeID GraphEditor::addModulationSourceModule(const juce::String& typeName, int 
         reflowOutputDock();
         updateComponents();
     };
-    if (undoManager != nullptr)
+    if (recordUndo && undoManager != nullptr)
         undoManager->recordGraphAndMacroChange(graph, macros, mutation);
     else
         mutation();

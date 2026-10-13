@@ -4,6 +4,8 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
+#include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -21,8 +23,10 @@ struct TrackHeaderHost;
 // in the track's colour, the parameter and module names, the curve's value at the playhead (or the
 // selected point's value, see setSelectedPointValue), the
 // lane's record mode and a menu (add a modulator, change the parameter, duplicate, move to another track, delete).
-// The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10);
-// a click on the parameter name opens the change-parameter picker. Holds no lane state of its own;
+// The same menu opens at the pointer on a right-click anywhere on the header and from the keyboard (Shift+F10).
+// A click anywhere on the header that is not a control gives it keyboard focus (Up/Down walk the rows from there); the
+// parameter name is a button of its own that opens the change-parameter picker, and a marker icon before it says
+// this is an automation lane. Holds no lane state of its own;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
 // returns (the owning panel prunes it on the doc notification).
@@ -80,8 +84,14 @@ public:
     void openChangeParameterPicker();
     /** Opens the picker for a copy of this lane directly below it; the copy exists only once a parameter is picked. */
     void openDuplicatePicker();
-    /** The parameter name's hit area, in this component's coordinates. */
+    /** The parameter name button's area, in this component's coordinates. */
     juce::Rectangle<int> getNameAreaForTest() const noexcept { return nameArea_; }
+    /** How many plain clicks asked this row for keyboard focus (a headless test has no native focus to read). */
+    int getClickFocusRequestsForTest() const noexcept { return clickFocusRequests_; }
+    LaneNameButton& getNameButton() noexcept { return nameButton_; }
+    LaneMarkerIcon& getMarkerIcon() noexcept { return marker_; }
+    /** Where the module note sits under the name, in this component's coordinates. */
+    juce::Rectangle<int> getNoteAreaForTest() const noexcept { return noteArea_; }
 
     /** The Range tool's selection when it sits on this lane and has width, as {start, end} beats; the pool answers. May
      * be null (no range ever). */
@@ -104,6 +114,10 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    /** The name button's tip while the pointer is over the name, else the row's own. */
+    juce::String getTooltip() override;
     bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
     /** Keys for the header row itself: Return opens the lane menu, Up/Down ask the owner to move keyboard focus
      *  to the previous/next row; the record-mode combo keeps its own Up/Down. */
@@ -138,10 +152,14 @@ private:
     LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 
-    juce::Rectangle<int> nameArea_;
+    LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Automation};
+    LaneNameButton nameButton_;
+    juce::Rectangle<int> nameArea_; // the name button's bounds: the press that opens the parameter picker
+    juce::Rectangle<int> noteArea_; // the module's name under the lane's
     float lift_ = 0.0f;
     bool pressed_ = false;       // a left press is down on the header
-    bool pressedOnName_ = false; // ...and landed on the parameter name
+    bool pressedOnName_ = false; // ...and landed on the parameter name button
+    int clickFocusRequests_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneHeaderComponent)
 };
