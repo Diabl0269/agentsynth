@@ -73,7 +73,7 @@ public:
      *  scroll/selection state from nothing) -- idempotent, a no-op when already closed. */
     void close();
 
-    /** unbindAllColumns()/rebuildIfUnbound() MUST reach mirror_ whenever it exists -- Source/UI/CLAUDE.md's
+    /** unbindAllColumns()/rebuildIfStale() MUST reach mirror_ whenever it exists -- Source/UI/CLAUDE.md's
      *  "unbind before a graph-replacing mutation frees the nodes a column is bound to" invariant
      *  applies to every live MixerPanelComponent, not only the docked one. A no-op while closed:
      *  mirror_ is never left holding a stale binding across a close() (rebuild()/unbindAllColumns()
@@ -81,7 +81,7 @@ public:
      *  below). */
     void unbindIfOpen();
     void unbindIfOpenFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
-    void rebuildIfUnboundIfOpen();
+    void rebuildIfStaleIfOpen();
     /** BottomDockComponent::rebuildMixer()'s own extension point -- called unconditionally from
      *  there (mirror_ may not exist yet; the null check makes that free). */
     void rebuildIfOpen();

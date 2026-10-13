@@ -106,8 +106,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
             notifyDocumentTitleChanged();
         }
         // Every recorded edit lands here, including a cable patched on the canvas, which rebuilds no
-        // components and so never reaches onGraphStructureChanged: a lane's modulator rows follow it.
+        // components and so never reaches onGraphStructureChanged: a lane's modulator rows follow it,
+        // and so do the mixer's inserts (a module patched into a track's chain shows at once).
         timelinePanel.refreshModulators();
+        bottomDock.rebuildIfStaleMixerViews();
         return;
     }
 

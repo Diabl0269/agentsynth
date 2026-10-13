@@ -136,9 +136,9 @@ public:
     void unbindAllMixerViews();
     /** unbindAllMixerViews() for a restore that frees only `doomed` (MixerPanelComponent::unbindColumnsFor). */
     void unbindMixerViewsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
-    /** Sibling of unbindAllMixerViews() for MixerPanelComponent::rebuildIfUnbound()'s own
-     *  contract (MainComponent wires this to GraphEditor::onGraphStructureChanged). */
-    void rebuildIfUnboundMixerViews();
+    /** Sibling of unbindAllMixerViews() for MixerPanelComponent::rebuildIfStale()'s own
+     *  contract (MainComponent wires this to GraphEditor::onGraphStructureChanged and to every recorded edit). */
+    void rebuildIfStaleMixerViews();
 
     /** Mirrors rebuildMixer() above -- see its call site's own comment. */
     void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }

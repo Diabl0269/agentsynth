@@ -316,7 +316,7 @@ TEST(BottomDockMixerMirrorTests, PanLawLabelIsIdenticalInBothViewsAfterAChangeIn
 
 // A regression pin, not a new mechanism -- undo of a mute is a graph-snapshot
 // restore (AppUndoManager::pushSnapshotFromCapture), which already reaches BOTH views through the
-// pre-existing unbind-before/rebuild-after hooks (unbindAllMixerViews()/rebuildIfUnboundMixerViews(),
+// pre-existing unbind-before/rebuild-after hooks (unbindAllMixerViews()/rebuildIfStaleMixerViews(),
 // wired to GraphEditor::onBeforeDetachAllModuleComponents/onGraphStructureChanged) that
 // already extends to the mirror -- see MixerPanelUndoUnbindTests.cpp for the same
 // undo-triggers-unbind-then-rebuild contract on the single-view case.

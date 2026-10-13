@@ -281,7 +281,7 @@ rebuilds it (e.g. `MixerMasterColumn::setColumn()`, called on every mixer rebuil
 the engine's current law for exactly this reason — a rebuild must never leave the label stale either).
 
 **Every mixer-view-wide seam reaches the mirror too, when one is open**:
-`BottomDockComponent::unbindAllMixerViews()`/`rebuildIfUnboundMixerViews()` (Source/UI/CLAUDE.md's
+`BottomDockComponent::unbindAllMixerViews()`/`rebuildIfStaleMixerViews()` (Source/UI/CLAUDE.md's
 mixer-unbind invariant — MainComponent wires these, not `getMixerPanel()` directly, to
 `GraphEditor::onBeforeDetachAllModuleComponents`/`onGraphStructureChanged`), `rebuildMixer()`,
 `refreshMeters()`, and the theme re-skin pass (`refreshMixerMirrorWindowTheme()`). A fresh mirror
@@ -508,6 +508,14 @@ grow with the number of channels. Rules that keep a kept column right:
 
 `MixerPanelIncrementalRebuildTests.cpp` counts the columns built (`getStripColumnsBuiltForTest()`): none for a knob
 undo, one for a duplicate, none for its undo.
+
+**Canvas edits refresh the mixer at once (FRO737).** A cable patched on the canvas rebuilds no components, and a module
+added or deleted reaches only `GraphEditor::onGraphStructureChanged`, whose catch-all never ran a full mixer rebuild, so
+an insert patched between an oscillator and a VCA used to show only after an unrelated mixer action. Both now call
+`rebuildIfStale()` (through `BottomDockComponent::rebuildIfStaleMixerViews()`, so the mirror follows): from
+`onGraphStructureChanged` and from the undo manager's broadcast, which every recorded edit, undo and redo sends. It
+rebuilds when the columns are unbound or a fresh snapshot differs from the one the last `rebuild()` laid out
+(`snapshotShown_`), and otherwise costs one snapshot build and compare.
 
 A column that leaves the scrolling group (the undo of Add Track or Duplicate Track) also shrinks away toward its centre
 and the columns after it close up, and the redo that brings it back makes room, grows it back and fades an outline around
