@@ -1,6 +1,8 @@
 #include "AIChatComponent.h"
 #include "AIChatComponentEditPlanCard.h"
 #include "Branding.h"
+#include "BuildStepsCard.h"
+#include "SongPlanCard.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Layout/UIAnimation.h"
@@ -16,7 +18,7 @@ namespace synth {
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<bool()> applyPlan, std::function<void()> onUpgrade,
-                  EditPlanCard::RateCallback onRate, std::function<void(bool)> onFoldChanged)
+                  EditPlanCard::RateCallback onRate, std::function<void(bool)> onFoldChanged, SongHooks songHooks = {})
         : onFoldChangedCallback(std::move(onFoldChanged)) {
         role = data.role;
         text = data.text;
@@ -24,7 +26,8 @@ public:
 
         // The bubble itself is the list item and speaks the whole message (see
         // createAccessibilityHandler), so the label inside would only repeat it.
-        setTitle(synth::ui::describeChatMessageForAccessibility(role, text, data.planOk && data.planJson.isNotEmpty()));
+        setTitle(synth::ui::describeChatMessageForAccessibility(
+            role, text, data.planOk && data.planJson.isNotEmpty() && !data.song));
         addAndMakeVisible(textLabel);
         textLabel.setAccessible(false);
         textLabel.setText(text, juce::dontSendNotification);
@@ -47,8 +50,12 @@ public:
         addChildComponent(foldLink);
 
         // One card per answer that carries a plan, whatever it holds (a patch, timeline ops, or
-        // both); a refused plan still gets its card, showing why, with no Apply.
-        if (data.planJson.isNotEmpty()) {
+        // both); a refused plan still gets its card, showing why, with no Apply. A song message
+        // has its song card instead: the built song is already applied, and that card carries the
+        // details and the thumbs the edit-plan card would.
+        if (data.song)
+            createSongCard(data.song, std::move(songHooks), std::move(onRate));
+        else if (data.planJson.isNotEmpty()) {
             planCard = std::make_unique<EditPlanCard>(data, std::move(applyPlan), std::move(onRate));
             addAndMakeVisible(*planCard);
         }
@@ -130,6 +137,11 @@ public:
             b.removeFromBottom(kRoleContentGap);
         }
 
+        if (songCard) {
+            songCard->setBounds(b.removeFromBottom(songCard->getRequiredHeight(b.getWidth())));
+            b.removeFromBottom(kRoleContentGap);
+        }
+
         if (upgradeButton) {
             upgradeButton->setBounds(b.removeFromBottom(kUpgradeButtonHeight));
             b.removeFromBottom(kRoleContentGap);
@@ -156,6 +168,9 @@ public:
         if (planCard)
             height += kRoleContentGap + planCard->getRequiredHeight(contentWidth);
 
+        if (songCard)
+            height += kRoleContentGap + songCard->getRequiredHeight(contentWidth);
+
         if (upgradeButton) {
             height += kRoleContentGap + kUpgradeButtonHeight;
         }
@@ -163,10 +178,53 @@ public:
         return juce::jmax(40, height);
     }
 
+    // The song card of this message, whichever the session's phase calls for; re-read from the session by
+    // refreshSong().
+    SongCardBase* getSongCard() const { return songCard; }
+    bool showsPlanCard() const { return songPlanCard != nullptr; }
+
+    // Brings the card up to date with its session. A change of phase that swaps the card (plan to build) is a rebuild
+    // of the whole list, done by the caller; this only refreshes the card showing.
+    void refreshSong() {
+        if (songPlanCard)
+            songPlanCard->refresh();
+        if (buildCard)
+            buildCard->refresh();
+    }
+
+    // Whether this bubble shows an edit-plan card (test hook).
+    bool hasEditPlanCard() const { return planCard != nullptr; }
+
     // Whether the text is longer than the fold, at this bubble width (test hook).
     bool isFoldable(int width) { return measureText(width - kOuterPadding * 2).foldable; }
 
 private:
+    void createSongCard(const std::shared_ptr<SongSession>& session, SongHooks hooks,
+                        EditPlanCard::RateCallback onRate) {
+        const auto phase = session->phase;
+        const bool planning = phase == SongSession::Phase::ready || phase == SongSession::Phase::replanning ||
+                              phase == SongSession::Phase::dismissed;
+        if (planning) {
+            SongPlanCard::Actions actions{hooks.onBuild, hooks.onReplan, hooks.onCancelPlan};
+            songPlanCard = std::make_unique<SongPlanCard>(*session, std::move(actions));
+            songCard = songPlanCard.get();
+        } else {
+            BuildStepsCard::Actions actions;
+            actions.onCancel = hooks.onCancelBuild;
+            actions.onListToggled = [session](bool open) { session->listOpen = open; };
+            actions.onRate = [session, onRate = std::move(onRate)](int rating, const juce::String& comment) {
+                session->rating = rating;
+                session->ratingComment = comment;
+                if (onRate)
+                    onRate(static_cast<PatchRatingUiState>(rating), comment);
+            };
+            buildCard = std::make_unique<BuildStepsCard>(*session, std::move(actions));
+            songCard = buildCard.get();
+        }
+        songCard->onLayoutChanged = [this] { relayoutList(); };
+        addAndMakeVisible(*songCard);
+    }
+
     // A message longer than this many lines is folded behind "Show more".
     static constexpr int kFoldLines = 6;
     static constexpr int kFoldLinkHeight = 20;
@@ -253,6 +311,9 @@ private:
     int responseMs = -1;
     juce::Label textLabel;
     std::unique_ptr<EditPlanCard> planCard;
+    std::unique_ptr<SongPlanCard> songPlanCard;
+    std::unique_ptr<BuildStepsCard> buildCard;
+    SongCardBase* songCard = nullptr;
     std::unique_ptr<juce::TextButton> upgradeButton;
 
     std::function<void(bool)> onFoldChangedCallback;
@@ -453,6 +514,8 @@ void AIChatComponent::updateChatDisplay() {
 
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto& data = messages[i];
+        if (data.song)
+            refreshUsesLeft(*data.song);
         auto* bubble = new MessageBubble(
             data, [this, i] { return applyEditPlan(i); }, [this] { openUpgradePage(); },
             [this, i](PatchRatingUiState newRating, const juce::String& comment) {
@@ -512,11 +575,12 @@ void AIChatComponent::updateChatDisplay() {
             [this, i](bool unfolded) {
                 if (i < messages.size())
                     messages[i].textUnfolded = unfolded;
-            });
+            },
+            makeSongHooks(i));
         messageList.addAndMakeVisible(bubble);
     }
 
-    if (isWaitingForResponse) {
+    if (isWaitingForResponse && songBuildIndex < 0) {
         waitingStatusLabel = new juce::Label();
         messageList.addAndMakeVisible(waitingStatusLabel);
         waitingStatusLabel->setColour(juce::Label::textColourId, juce::Colours::grey);
@@ -525,6 +589,57 @@ void AIChatComponent::updateChatDisplay() {
 
     resized();
     scrollToBottom();
+}
+
+AIChatComponent::SongHooks AIChatComponent::makeSongHooks(size_t i) {
+    SongHooks hooks;
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+    // The card is deleted by the redraw these trigger, so each runs on the next message-loop turn.
+    auto later = [safeThis](std::function<void(AIChatComponent&)> action) {
+        juce::MessageManager::callAsync([safeThis, action] {
+            if (auto* self = safeThis.getComponent())
+                action(*self);
+        });
+    };
+    hooks.onBuild = [later, i] { later([i](AIChatComponent& c) { c.buildSongAt(i); }); };
+    hooks.onCancelPlan = [later, i] { later([i](AIChatComponent& c) { c.dismissSong(i); }); };
+    hooks.onCancelBuild = [later] { later([](AIChatComponent& c) { c.cancelSongBuild(); }); };
+    hooks.onReplan = [later, i](int length, int detail) {
+        later([i, length, detail](AIChatComponent& c) { c.replanSong(i, length, detail, {}, {}); });
+    };
+    return hooks;
+}
+
+bool AIChatComponent::refreshSongBubble(size_t index) {
+    if (index >= messages.size() || !messages[index].song)
+        return false;
+    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    if (bubble == nullptr)
+        return false;
+    const auto phase = messages[index].song->phase;
+    const bool planning = phase == SongSession::Phase::ready || phase == SongSession::Phase::replanning ||
+                          phase == SongSession::Phase::dismissed;
+    // The card showing is of the other kind (the phase moved on): rebuild the list so the right one takes its place.
+    if (bubble->getSongCard() == nullptr || bubble->showsPlanCard() != planning) {
+        updateChatDisplay();
+        return true;
+    }
+    refreshUsesLeft(*messages[index].song);
+    bubble->refreshSong();
+    resized();
+    return true;
+}
+
+bool AIChatComponent::hasEditPlanCardForTesting(size_t index) const {
+    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    return bubble != nullptr && bubble->hasEditPlanCard();
+}
+
+juce::Component* AIChatComponent::getSongCardForTesting(size_t index) const {
+    if (index >= messages.size())
+        return nullptr;
+    auto* bubble = dynamic_cast<MessageBubble*>(messageList.getChildComponent((int)index));
+    return bubble != nullptr ? bubble->getSongCard() : nullptr;
 }
 
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }

@@ -104,6 +104,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/ai/providers.md`](ai/providers.md) — the provider registry, which provider a launch gets, hosted-mode disclosure
 - [`docs/ai/ollama-provider.md`](ai/ollama-provider.md) — OllamaProvider: fail-fast, the worker-thread contract, request cancellation
 - [`docs/ai/remote-provider.md`](ai/remote-provider.md) — RemoteProvider: wire contract, error-kind mapping, capability requests and one plan over two transports
+- [`docs/ai/song-steps.md`](ai/song-steps.md) — hosted whole songs: the free plan, the streamed build, the plan and build cards, the 404 fallback
 - [`docs/ai/structured-output.md`](ai/structured-output.md) — schema generation, the vendored envelope codegen, grammar-compiler pitfalls
 - [`docs/ai/accounts.md`](ai/accounts.md) — sign-in surface, rotation-before-use, device id and trial, quota UI and PlanBadge
 - [`docs/ai/history.md`](ai/history.md) — server-side and local conversation history, retention, the history panel

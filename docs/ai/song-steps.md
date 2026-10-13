@@ -1,0 +1,58 @@
+# Song steps (hosted whole songs)
+
+A whole song asked of the hosted service takes two requests instead of one `project.generate`: a **free, priced
+plan**, then a **build streamed step by step** that ends in the same edit plan the chat already applies. The server
+side (routes, token, prices) is the hosted service's own song steps doc; this page is the app's half.
+
+## The flow
+
+1. `AIIntegrationService::planSong` posts `/v1/song/plan` (`RemoteProvider::sendRouteRequest`): the prompt, the chosen
+   Length (`short`/`medium`/`long`) and Detail (`light`/`full`/`rich`), and, when re-planning, `previousPlan` (the plan
+   object kept verbatim from the earlier reply). The reply is a plan, its price in uses and a signed token. Nothing is spent.
+2. The chat shows a **song plan card** (`SongPlanCard`): title, `3:20 · 174 BPM · 7 sections`, a section strip (a
+   focusable, tooltipped block per section, wide in proportion to its bars), instrument chips, the special line, Length
+   and Detail choices, `Build song · N uses`, uses left, Cancel and a Details disclosure. Changing Length or Detail
+   re-plans (still free) and the price updates. Typing a message while a plan is pending re-plans with that text as
+   the change request.
+3. **Build** calls `AIIntegrationService::buildSong`: `/v1/song/build` streams NDJSON lines (`steps`, `step`, `ping`,
+   `done`, `error`). `RemoteProvider::streamRouteRequest` reads them on its worker thread, cuts them with
+   `songsteps::LineSplitter` (bytes, so a read that splits a line or a character is harmless) and posts each to the
+   message thread in order. A malformed or unknown line is skipped, never fatal.
+4. `songsteps::BuildModel` turns the events into what the card shows; the **build card** (`BuildStepsCard`) is a view of it.
+5. On `done` the service runs `previewProjectEdit` and `applyProjectEdit` on the envelope: one undo step, exactly like an
+   edit plan. A refused envelope is reported in the chat and the plan card stays out of it. The chat history gets the
+   user's words and a one-line answer, so later edits have the context.
+
+## When the chat uses it
+
+`AIChatComponent::shouldPlanSong` (pure, tested) decides. The song path is used when the provider is hosted, a
+timeline is wired in, the service has not answered a plan with 404, **and** the message looks like a whole-song
+request: a song word (song, tune, beat, instrumental, full or whole track, "from scratch") or a genre/style name with no
+edit verb and no module type in it, or any message while a plan card is waiting to be built. Edits to an existing project
+("add a filter to the lead", "make the bass wobble") never match and keep the single `project.generate` request.
+Ollama never uses the song steps.
+
+## Fallback
+
+A plan request answered with 404 (a service without the routes) sets `canPlanSongs()` false for that provider and the
+chat sends the same text through `sendProjectMessage`, after one assistant line ("Song steps aren't available on this server, so I'm building it in one go.") so the missing steps are explained. The check costs one free request per session.
+
+## Errors and cancelling
+
+- `PLAN_EXPIRED` (the token lasts 30 minutes): the chat plans again from the same plan, nothing was charged, the card
+  says so and the user presses Build again.
+- `QUOTA_EXCEEDED` (429): the existing quota bubble with the Upgrade button.
+- An `error` line, or a stream that ends without `done`: the card shows what failed and that the uses came back (the
+  server refunds a failed or dropped build).
+- Cancel (the card's button, the input row's Cancel, Escape) closes the stream; the server aborts the remaining calls
+  and refunds. The card says so.
+- A streamed build uses its own 11 minute ceiling rather than the one-answer timeout (`requestTimeoutMs`), and holds the
+  provider's single worker thread for the whole build; the chat input is read-only meanwhile.
+
+## The cards
+
+Both are standalone components in `Source/UI/Assistant/AIChatComponent/` (design system: `SongPlanCard`,
+`BuildStepsCard`, `StepIcons`). The state they show lives in the message (`MessageData::song`), never in the card, because
+the chat rebuilds its bubbles on a redraw. Step icons (`StepIcons.h`) move only while their step runs; see
+[animation](../layout/animation.md#song-steps). A song message has the build card as its **only** card (no edit-plan card): once built, the card adds "Show details" (`songsteps::buildSongDetailsText`, `SongDetailsText.h`: a line per track with its sound modules and note count, the sections with their bars, a line per automation lane; stored in `SongSession::detailsText`) and the thumbs feedback. Undo is the project's own (one step, as the card says). The edit-plan card's rows carry the same kind icons, still before Apply,
+animated once in order on Apply.

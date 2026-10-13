@@ -14,6 +14,7 @@ AIIntegrationService::~AIIntegrationService() {}
 
 void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) {
     provider = std::move(newProvider);
+    songRoutesMissing = false; // a different provider may serve the song routes
 
     // Re-push contract (mirrors AIChatComponent::refreshModels(), see
     // docs/ai/chat-component.md#model-discovery-ordering-contract): a caller may have called

@@ -50,12 +50,21 @@ public:
         std::function<HttpResult(const juce::String& url, const juce::StringPairArray& requestHeaders,
                                  const juce::String& jsonBody, int timeoutMs, const std::atomic<bool>& cancelled)>;
 
+    /** Performs one streamed HTTP POST: like HttpPerformer, but the body of a 2xx response is handed to `onBody` chunk
+        by chunk as it arrives (the returned result's body then stays empty); a non-2xx body is returned whole. */
+    using StreamPerformer =
+        std::function<HttpResult(const juce::String& url, const juce::StringPairArray& requestHeaders,
+                                 const juce::String& jsonBody, int timeoutMs, const std::atomic<bool>& cancelled,
+                                 const std::function<void(const char*, std::size_t)>& onBody)>;
+
     RemoteProvider(const juce::String& host = "http://localhost:8787");
 
     // Test-specific constructor to inject a fake HTTP transport (no real sockets). `deviceId`
     // defaults to empty (X-Device-Id header omitted) so existing 2-arg call sites keep compiling
-    // and never touch the real per-install DeviceIdStore file.
-    RemoteProvider(const juce::String& host, HttpPerformer performer, juce::String deviceId = "");
+    // and never touch the real per-install DeviceIdStore file. Without a `streamPerformer`, a streamed request runs
+    // through `performer` and hands its whole body over as one chunk.
+    RemoteProvider(const juce::String& host, HttpPerformer performer, juce::String deviceId = "",
+                   StreamPerformer streamPerformer = {});
 
     ~RemoteProvider() override;
 
@@ -94,6 +103,14 @@ public:
         goes through the same cancel(). */
     RequestId sendCapabilityRequest(const juce::String& capability, const juce::var& body,
                                     CompletionCallback callback) override;
+
+    /** Posts `body` (plus productName) to `route` and delivers the response's `data` JSON; see AIProvider. */
+    RequestId sendRouteRequest(const juce::String& route, const juce::var& body, CompletionCallback callback) override;
+
+    /** Streams the response of `route` line by line on the worker thread, each line posted to the message thread in
+        order; cancel() closes the connection. See AIProvider::streamRouteRequest(). */
+    RequestId streamRouteRequest(const juce::String& route, const juce::var& body, StreamLineCallback onLine,
+                                 CompletionCallback onFinished) override;
 
     /** Abandons a queued or in-flight request. See OllamaProvider::cancel() for the full contract
         this mirrors: exactly-once callback, no-op on an unknown/completed id, and a queued request
@@ -140,6 +157,7 @@ private:
     // omitted) for the test constructor, mirroring authToken's default-empty/opt-in shape.
     juce::String deviceId;
     HttpPerformer performHttp;
+    StreamPerformer performStream;
     bool isTestMode = false;
 
     /** Per-request cancellation state, shared between the queue entry, the registry and the
@@ -180,6 +198,11 @@ private:
         // comment for why a string crosses the thread boundary rather than a juce::var.
         juce::String capability;
         juce::String capabilityBodyJson;
+
+        // A service route outside /v1/capability/ ("/v1/song/plan"), with its final body in capabilityBodyJson. When
+        // `onLine` is set the response is streamed: each line goes to it and the callback fires once at the end.
+        juce::String route;
+        StreamLineCallback onLine;
     };
 
     // Monotonically increasing; only ever accessed from sendPrompt() callers, so a plain
@@ -207,6 +230,23 @@ private:
     void run() override;
     void processRequest(const Request& req);
 
+    /** The finished transfer's failure as a typed error, or kind None when `result` is a 2xx. */
+    struct Failure {
+        AIErrorKind kind = AIErrorKind::None;
+        juce::String message;
+        int retryAfterSeconds = 0;
+        int httpStatus = 0;
+        juce::String code;
+    };
+    Failure classifyFailure(const HttpResult& result) const;
+    void processStream(const Request& req, const juce::String& url, const juce::StringPairArray& headers,
+                       const juce::String& jsonBody);
+
+    /** The final body of a route request: the caller's object plus productName, serialized on the calling thread. */
+    static juce::String routeBodyJson(const juce::var& body);
+    RequestId enqueueRoute(const juce::String& route, const juce::var& body, CompletionCallback callback,
+                           StreamLineCallback onLine);
+
     /** Shared enqueue path for sendPrompt()/sendCapabilityRequest(): assigns id/state under the
         queue lock, applies the caller's pre-computed validation verdict (`validationMessage`
         empty = valid), registers the request and wakes/starts the worker, or delivers the
@@ -233,7 +273,7 @@ private:
     /** Single delivery channel for every error. Same `forceSynchronous` contract as
         deliverResult(). */
     void deliverError(const Request& req, AIErrorKind kind, const juce::String& message, int retryAfterSeconds,
-                      bool forceSynchronous);
+                      bool forceSynchronous, int httpStatus = 0, const juce::String& code = {});
 
     /** Claims the sole right to deliver `req`, and deregisters it. Returns false if someone else
         got there first, in which case the caller must not invoke the callback. */

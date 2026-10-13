@@ -168,6 +168,17 @@ request shapes, the structured body, the 64-target cap, empty-timeline explicitn
 `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp` (the chat's routing on both
 transports and the one-card flow).
 
+## Service routes and streamed responses
+
+`sendRouteRequest` posts to a route outside `/v1/capability/` (the song plan) and answers with the response's `data`;
+`streamRouteRequest` reads the response as lines (NDJSON) on the worker thread, posts each to the message thread in order
+and finishes once. The body adds `productName` like a capability's. Failures go through the same status mapping
+(`classifyFailure`) and the typed error also carries the HTTP status and the server's `error.code`. A stream has its own
+11 minute ceiling instead of the request timeout and holds the single worker for its whole length. cancel() closes the
+connection (libcurl's progress callback, or the WinHTTP watchdog); lines still queued for the message thread are dropped.
+The transport seam is `StreamPerformer`; a provider built with only an `HttpPerformer` streams through it as one chunk.
+Details: [song steps](song-steps.md).
+
 ## Transport seam and platform support
 
 `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels `OllamaProvider::InputStreamFactory`:

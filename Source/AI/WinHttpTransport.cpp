@@ -140,7 +140,8 @@ void readStatusAndHeaders(HINTERNET request, WinHttpResult& result) {
 }
 
 /** Reads the whole response body. Returns the Win32 error of the failing read, or 0 on success. */
-DWORD readBody(HINTERNET request, const std::atomic<bool>& cancelled, std::string& out) {
+DWORD readBody(HINTERNET request, const std::atomic<bool>& cancelled, std::string& out,
+               const std::function<void(const char*, std::size_t)>* streamTo) {
     std::string chunk(kReadChunkBytes, '\0');
     for (;;) {
         if (cancelled.load())
@@ -150,7 +151,10 @@ DWORD readBody(HINTERNET request, const std::atomic<bool>& cancelled, std::strin
             return GetLastError();
         if (read == 0)
             return 0;
-        out.append(chunk.data(), read);
+        if (streamTo != nullptr)
+            (*streamTo)(chunk.data(), read);
+        else
+            out.append(chunk.data(), read);
     }
 }
 
@@ -167,21 +171,23 @@ HINTERNET openSession() {
 
 /** Fills the result from a request that has been sent: the response, or why it did not arrive. */
 void finishRequest(HINTERNET request, const std::atomic<bool>& cancelled, DWORD sendError, WinHttpResult& result,
-                   std::string& bodyBytes, DWORD& error) {
+                   std::string& bodyBytes, DWORD& error, const std::function<void(const char*, std::size_t)>& onBody) {
     error = sendError;
     if (error == 0 && !WinHttpReceiveResponse(request, nullptr))
         error = GetLastError();
     if (error != 0)
         return;
     readStatusAndHeaders(request, result);
-    error = readBody(request, cancelled, bodyBytes);
+    const bool streamIt = onBody && result.httpStatus >= 200 && result.httpStatus < 300;
+    error = readBody(request, cancelled, bodyBytes, streamIt ? &onBody : nullptr);
 }
 
 } // namespace
 
 WinHttpResult performWinHttpRequest(const juce::String& method, const juce::String& url,
                                     const juce::StringPairArray& requestHeaders, const juce::String& body,
-                                    int timeoutMs, const std::atomic<bool>& cancelled) {
+                                    int timeoutMs, const std::atomic<bool>& cancelled,
+                                    const std::function<void(const char* data, std::size_t size)>& onBody) {
     if (cancelled.load())
         return failure("Request aborted (cancelled).");
 
@@ -239,7 +245,7 @@ WinHttpResult performWinHttpRequest(const juce::String& method, const juce::Stri
                                headerBlock.empty() ? 0 : static_cast<DWORD>(-1),
                                bodyLength > 0 ? const_cast<char*>(body.toRawUTF8()) : WINHTTP_NO_REQUEST_DATA,
                                bodyLength, bodyLength, 0) != FALSE;
-        finishRequest(request, cancelled, sent ? 0 : GetLastError(), result, bodyBytes, error);
+        finishRequest(request, cancelled, sent ? 0 : GetLastError(), result, bodyBytes, error, onBody);
         abortReason = watchdog.reason();
     } // watchdog joined: from here on only this thread touches requestHandle
 
