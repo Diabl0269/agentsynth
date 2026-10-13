@@ -48,6 +48,7 @@ struct MixerRig {
     MixerRig() {
         mc.setSize(1400, 900);
         mc.getAudioEngine().suspendDeviceCallback();
+        mixer().setVisible(true); // a hidden mixer defers its rebuilds; these tests look at the shown one
         mc.newPatchForTest();
         for (int i = 0; i < 3; ++i)
             mc.simulateAddAudioTrackClick();
@@ -260,4 +261,38 @@ TEST(MixerPanelIncrementalRebuild, AModulePatchedIntoATrackOnTheCanvasShowsInIts
     EXPECT_EQ(insertUuids(*rig.columns().at(1)), insertsBefore) << "undoing the cable takes the insert away";
     for (auto* shown : rig.columns())
         EXPECT_TRUE(shown->isFaderBoundForTest());
+}
+
+// A hidden mixer does no work (docs/layout/rendering.md, "A closed panel does no work"): rebuildIfStale() only notes
+// that a check is due, and the panel catches up once, when it is shown again. A shown panel rebuilds at once.
+TEST(MixerPanelIncrementalRebuild, AHiddenMixerSkipsTheStaleCheckAndCatchesUpWhenShown) {
+    MixerRig rig;
+    const auto before = rig.columns().size();
+    const auto first = rig.mc.getTimelineDoc().getTracks().front().id;
+
+    // Shown: the change is laid out as soon as the check runs.
+    ((synth::ui::TrackHeaderHost&)rig.mc).duplicateTrack(first);
+    rig.mixer().rebuildIfStale();
+    ASSERT_EQ(rig.columns().size(), before + 1);
+    EXPECT_EQ(rig.shownColumns(), rig.freshColumns());
+
+    rig.mixer().setVisible(false);
+    const int rebuilds = rig.mixer().getRebuildCountForTest();
+    const int built = rig.mixer().getStripColumnsBuiltForTest();
+    ((synth::ui::TrackHeaderHost&)rig.mc).duplicateTrack(first);
+    deliverBroadcasts();
+    rig.mixer().rebuildIfStale();
+    EXPECT_EQ(rig.mixer().getRebuildCountForTest(), rebuilds) << "hidden: nothing is built";
+    EXPECT_EQ(rig.mixer().getStripColumnsBuiltForTest(), built);
+    EXPECT_EQ(rig.columns().size(), before + 1) << "still showing the last layout";
+
+    rig.mixer().setVisible(true);
+    EXPECT_EQ(rig.mixer().getRebuildCountForTest(), rebuilds + 1) << "shown again: one catch-up rebuild";
+    EXPECT_EQ(rig.columns().size(), before + 2);
+    EXPECT_EQ(rig.shownColumns(), rig.freshColumns());
+
+    // Nothing was missed, so showing it again later does no work.
+    rig.mixer().setVisible(false);
+    rig.mixer().setVisible(true);
+    EXPECT_EQ(rig.mixer().getRebuildCountForTest(), rebuilds + 1);
 }

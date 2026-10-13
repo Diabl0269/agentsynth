@@ -193,3 +193,16 @@ juce::Point<int> GraphEditor::estimateModuleSizeForType(const juce::String& type
 juce::var GraphEditor::resolveSnippetPayload(const juce::String& name) const {
     return snippetProvider ? snippetProvider(name) : juce::var();
 }
+
+void GraphEditor::holdStructureNotify(bool begin) {
+    if (begin) {
+        ++structureNotify_.first;
+        return;
+    }
+    jassert(structureNotify_.first > 0);
+    if (--structureNotify_.first == 0 && structureNotify_.second) {
+        structureNotify_.second = false;
+        if (onGraphStructureChanged)
+            onGraphStructureChanged();
+    }
+}

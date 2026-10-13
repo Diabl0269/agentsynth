@@ -150,6 +150,12 @@ one shot. Three members, each scoped to exactly one direction of one operation, 
   `macroPortsThatBecomeObsoleteOnRemove` and the edge filters of both crossing-plan builders. A modulation
   re-routed by a drag out takes the grouping shape LFO to attenuverter to inlet to knob.
 
+  Every node and cable change the splicing makes is issued with `UpdateKind::none` inside a
+  `synth::GraphRebuildScope`, and each membership change (`applyMacroMembershipChange`,
+  `addSelectionToMacro`, `removeSelectionFromMacro`, grouping and ungrouping) opens one around all of it, so
+  the audio graph is rebuilt once per crossing, not once per re-routed cable
+  ([graph-queries.md](../architecture/graph-queries.md#one-audio-graph-rebuild-per-edit)).
+
 `buildMacroPortCrossingPlan`'s own `memberUids.size() < 2` early return was removed: the incremental
 callers legitimately need a crossing plan for a one-member "inside" set — removing one of a macro's
 two ordinary members leaves exactly one remaining member whose newly external cable still needs a port

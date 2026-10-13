@@ -42,6 +42,19 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   `graph_editor_paint::CardMapScope` (`GraphEditorPaintMemo.h`) so `MacroGroupController::macroHullBounds` reads one
   map for every border. `GraphEditor::updateComponents` matches cards to processors through sets built once.
 
+## One audio-graph rebuild per edit
+
+`juce::AudioProcessorGraph` rebuilds its whole render sequence after every node or cable change made with the default
+`UpdateKind::sync`, so an edit that makes many such changes costs (changes x graph size). An edit that changes the
+topology more than once therefore issues every change with `UpdateKind::none` inside one `synth::GraphRebuildScope`
+(`Source/AI/AIStateMapper/GraphRebuildBatch.h`), which rebuilds once when it ends, or once at the end of the outermost
+scope or `GraphRebuildBatch` around it. The macro port splicing a membership change does (a module dragged into or out
+of a macro, grouped, ungrouped; `MacroGroupControllerPortSplice.cpp`, `MacroGroupControllerPorts.cpp`,
+`MacroGroupControllerProgrammaticRouting.cpp`) and `GraphEditor::removeNodesNow` (a module, macro or track deleted)
+work this way. Before, dragging a module into a macro on the Load test project took about 7 s, and deleting a track or a
+macro about 0.3 s. `MacroDragMembership.CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExactlyOncePerGesture` holds
+it as a rebuild count.
+
 ## What still grows with the project
 
 The undo step no longer does. `AppUndoManager` captures through `synth::GraphSnapshotCache`, which re-writes only the
@@ -81,3 +94,10 @@ redo, and a knob edit recorded the way a card knob records it and its undo. `PRO
 project, so `PROFILE_PROJECT=<bundle> PROFILE_DUPLICATE=1 PROFILE_CHECKPOINTS=1` measures one size quickly, and
 `PROFILE_SPIN_CHECKPOINT=<s>` loops undo/redo, then knob edit/undo, for that long at each checkpoint to attach
 `sample <pid> 10` to.
+
+`Tests/App/MacroEditProfileTests.cpp` measures the other edits on a temporary copy of the same project:
+`DISABLED_LoadTestMacroDragProfile` drags a macro's busiest member out of it and back in through the real mouse
+callbacks (each drag tick, the drop, and the longest message-loop stall after it), and `DISABLED_LoadTestEditProfile`
+times adding and deleting a module, deleting a macro, folding and unfolding every macro, resizing the window, and
+duplicating and deleting a track, each with its undo. `PROFILE_ON_SCREEN=1 PROFILE_AUDIO=1` runs them in a real window
+with the audio device running, as in the app.

@@ -80,6 +80,7 @@ public:
     void lookAndFeelChanged() override;
     void timerCallback() override;
     void updateComponents() override; // also GraphCanvasHost::updateComponents()
+    void holdStructureNotify(bool begin) override;
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
 
@@ -960,13 +961,13 @@ private:
     void recordUnfinishedLiveMembershipChange();
     juce::String currentOwnerOfDraggedModule() const;
     void revertLiveMembership();
-
     // ---- Cable memo (perf) ----
     std::vector<VisibleCable> rebuildVisibleCables();
     std::vector<VisibleCable> cablesCache;
     bool cablesCacheValid = false;
-    bool updatingComponents = false; // guards updateComponents() against re-entry
-    int cableRebuildCount = 0;       // test seam, see docs/layout/animation.md#the-paint-count-pattern
+    std::pair<int, bool> structureNotify_{0, false}; // {hold depth, notification deferred}
+    bool updatingComponents = false;                 // guards updateComponents() against re-entry
+    int cableRebuildCount = 0;                       // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
     std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
     friend class graph_editor_paint::CanvasMemo;

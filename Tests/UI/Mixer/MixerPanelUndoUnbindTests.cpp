@@ -83,6 +83,7 @@ juce::AudioProcessorGraph::Node* findChannelStripNode(juce::AudioProcessorGraph&
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverTouchesFreedParameters) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
 
@@ -123,6 +124,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverT
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocument) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -159,6 +161,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocume
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -205,6 +208,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesTheStripsNode) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -236,6 +240,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesT
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStripsNode) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -280,6 +285,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStri
 TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDeleted) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();

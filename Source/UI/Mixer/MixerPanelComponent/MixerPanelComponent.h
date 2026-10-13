@@ -238,6 +238,15 @@ public:
      *  rebuild; and rebuild() itself keeps every column that did not change. */
     void rebuildIfStale();
 
+    /** Catches up on the rebuildIfStale() calls skipped while this panel was hidden (docs/layout/rendering.md, "A
+     *  closed panel does no work"). */
+    void visibilityChanged() override;
+    /** rebuild() now when shown; when hidden, only remembers to rebuild once shown. For the callers that rebuild on
+     *  every graph change rather than on a known mixer edit. */
+    void rebuildWhenShown();
+    /** How many times rebuild() has laid the columns out. */
+    int getRebuildCountForTest() const noexcept { return rebuildCount_; }
+
     /** Delete and undo motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows: call
      *  noteColumnsLeaving() before a change that may remove a track's column and finishColumnChange() once it and
      *  its rebuilds have landed. The columns after a removed one close the gap; a column an undo brings back is made
@@ -367,8 +376,14 @@ private:
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
      *  rebuildIfStale(). */
     bool columnsUnbound_ = false;
+    /** A rebuildIfStale() came in while the panel was hidden and did nothing; visibilityChanged() runs it. */
+    bool staleCheckPending_ = false;
+    bool rebuildPending_ = false;                // a rebuildWhenShown() came in while hidden
+    int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
-    synth::MixerSnapshot snapshotShown_;         // what the last rebuild() laid out; rebuildIfStale() compares to it
+    /** rebuild() with the snapshot already built (and its saved bus order applied) by the caller. */
+    void rebuildFrom(synth::MixerSnapshot snapshot);
+    synth::MixerSnapshot snapshotShown_; // what the last rebuild() laid out; rebuildIfStale() compares to it
 
     /** One entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so

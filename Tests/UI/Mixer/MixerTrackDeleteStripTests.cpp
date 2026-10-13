@@ -57,6 +57,7 @@ struct Rig {
 
     explicit Rig(bool animate = false) {
         mc.setSize(1400, 900);
+        mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
         mc.getAudioEngine().suspendDeviceCallback();
         mc.newPatchForTest();
         for (int i = 0; i < 3; ++i)

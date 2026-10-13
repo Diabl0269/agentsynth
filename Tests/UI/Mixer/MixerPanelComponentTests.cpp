@@ -47,6 +47,7 @@ private:
 TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusMaster) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();
@@ -65,6 +66,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -90,6 +92,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestLightTheme) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -113,6 +116,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestLightTheme) {
 TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
 
@@ -150,6 +154,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
 TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
 
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
@@ -183,6 +188,7 @@ TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists
 TEST(MixerPanelComponentTests, ColumnHeaderShowsLinkedTrackColourAndFollowsColourEdits) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();

@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "CanvasAccessibilityClip.h"
 #include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
@@ -473,8 +474,12 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
 // module just moves to that descendant. `leaveId` is only a sanity gate: the walk starts from the
 // module's real owner.
 namespace {
-void applyMacroMembershipChange(synth::MacroSet& macros, MacroGroupController& controller, const juce::String& uuid,
-                                const juce::String& leaveId, const juce::String& joinId) {
+void applyMacroMembershipChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                MacroGroupController& controller, const juce::String& uuid, const juce::String& leaveId,
+                                const juce::String& joinId) {
+    if (leaveId.isEmpty() && joinId.isEmpty())
+        return; // nothing to change: no scope, so no pointless rebuild (the drop after a live crossing)
+    const synth::GraphRebuildScope rebuildScope{graph}; // one render-sequence rebuild for the whole membership walk
     if (leaveId.isNotEmpty()) {
         for (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->id != joinId;
              owner = macros.findByMember(uuid)) {
@@ -562,7 +567,8 @@ void GraphEditor::applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedN
     const auto hullsBefore = snapshotPaintedHulls();
     const auto cablesBefore = rebuildVisibleCables();
     macroController_.setMakeRoomDeferred(true);
-    applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), leaveId, joinId);
+    applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_,
+                               macroController_.nodeUuidFor(draggedNodeId), leaveId, joinId);
     macroController_.setMakeRoomDeferred(false);
     liveMembershipAway_ = currentOwnerOfDraggedModule() != liveMembershipPressOwner_;
     macroController_.clearFrozenDragHulls();
@@ -599,8 +605,8 @@ void GraphEditor::revertLiveMembership() {
     const auto hullsBefore = snapshotPaintedHulls();
     const auto cablesBefore = rebuildVisibleCables();
     macroController_.setMakeRoomDeferred(true);
-    applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), current,
-                               liveMembershipPressOwner_);
+    applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_,
+                               macroController_.nodeUuidFor(draggedNodeId), current, liveMembershipPressOwner_);
     macroController_.setMakeRoomDeferred(false);
     liveMembershipAway_ = false;
     macroController_.clearFrozenDragHulls();
@@ -768,7 +774,7 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
 
     auto doFinalize = [this, module, leaveId, joinId, uuid, movedLive] {
         finalizeModuleDrag(module);
-        applyMacroMembershipChange(macros, macroController_, uuid, leaveId, joinId);
+        applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_, uuid, leaveId, joinId);
         // The joined border grew around the card where it was dragged; it settles here, so its neighbours make
         // room for where it really is.
         if (movedLive) {

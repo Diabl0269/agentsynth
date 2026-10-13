@@ -12,6 +12,7 @@
 #include "MacroSelectionUnits.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "Mixer/MasterSplice.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -95,6 +96,7 @@ bool isDockUuid(GraphCanvasHost& host, const juce::String& uuid) {
 // container: loose modules become its direct members, whole macros its children. So "nest whole
 // macros" and "group modules inside an open macro" are the same operation.
 juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts) {
+    const synth::GraphRebuildScope rebuildScope{host_.graph()};
     auto ids = host_.getSelection().getSelected();
     ids.erase(std::remove_if(ids.begin(), ids.end(),
                              [this](juce::AudioProcessorGraph::NodeID id) {
@@ -231,6 +233,7 @@ AddPlan planAdd(const MacroGroupController& controller, const synth::MacroSet& m
 // macro join it directly, whole macros beside it nest under it.
 void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
                                                const std::vector<juce::String>& requestedUuids, bool recordUndo) {
+    const synth::GraphRebuildScope rebuildScope{host_.graph()};
     std::vector<juce::String> memberUuids;
     for (const auto& uuid : requestedUuids)
         if (!isDockUuid(host_, uuid))
@@ -307,6 +310,7 @@ void moveMemberUpOneLevel(synth::MacroSet& macros, const juce::String& macroId, 
 
 void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
                                                     const std::vector<juce::String>& memberUuids, bool recordUndo) {
+    const synth::GraphRebuildScope rebuildScope{host_.graph()};
     const auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || memberUuids.empty())
         return;
@@ -402,6 +406,7 @@ std::set<juce::String> ungroupTargets(const synth::MacroSet& macros, const std::
 } // namespace
 
 void MacroGroupController::ungroupSelection() {
+    const synth::GraphRebuildScope rebuildScope{host_.graph()};
     std::set<juce::String> selectedUuids;
     for (auto id : host_.getSelection().getSelected())
         if (const auto uuid = nodeUuidFor(id); uuid.isNotEmpty())
@@ -489,8 +494,11 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
     const auto foldBefore = snapshotFoldState();
     auto doToggleAll = [this, touchedMacroIds, targetCollapsed] {
         batchingFolds_ = true;
-        for (const auto& macroId : touchedMacroIds)
-            applyMacroCollapsed(macroId, targetCollapsed);
+        {
+            GraphCanvasHost::StructureNotifyHold hold(host_); // a fold changes no structure: notify once
+            for (const auto& macroId : touchedMacroIds)
+                applyMacroCollapsed(macroId, targetCollapsed);
+        }
         batchingFolds_ = false;
     };
 

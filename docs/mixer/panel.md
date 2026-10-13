@@ -492,6 +492,11 @@ instead, which fires `onBeforeDetachModuleComponentsFor(doomed)`; `MainComponent
 
 ### A rebuild keeps the columns that did not change
 
+A hidden panel (its tab not showing) does no rebuild work: `rebuildIfStale()` and `rebuildWhenShown()` (what
+`BottomDockComponent::rebuildMixer()` calls) only record that a stale check or a rebuild is due, and
+`visibilityChanged()` runs the one that is due when the panel shows again. A detached panel stays visible, so it is never
+held back. `rebuildIfStale()` hands the snapshot it compared to the rebuild instead of building it twice.
+
 `MixerPanelComponent::rebuild()` builds a fresh snapshot but re-creates only the strip columns it has to
 (`MixerPanelColumnReuse.cpp`): a column is **kept** when it is still bound and everything it was built from is equal
 -- its `synth::MixerColumn` and sources line (`MixerColumnComponent::showsColumn`, every field compared) and what the

@@ -100,7 +100,14 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   (`ModDotController::recountIfRoutingsChanged`) and each card's `syncModDotButtons` only looks its knobs up. Each card
   resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
 - **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix
-  (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up.
+  (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up. The docked mixer works the same way: while its tab
+  is not showing, `MixerPanelComponent::rebuildIfStale` and `rebuildWhenShown` only note that a check or a rebuild is
+  due, and `visibilityChanged` runs it once when the panel shows again
+  ([panel.md](../mixer/panel.md#a-rebuild-keeps-the-columns-that-did-not-change)). Rebuilding the hidden mixer after
+  every edit stalled a macro drag on the Load test project for over a second.
+- **A fold renders pictures only of cards that will be seen.** Unfolding every macro at once renders a member's
+  picture for the fly-out only when its card lands inside the visible canvas (`MacroGroupControllerFold.cpp`); the
+  others unfold without one.
 - **A scrolled list paints only what is in view.** The timeline's clip lanes are laid out for every track and scrolled
   by offset, so `TimelineClipLaneArea::paintClip` culls each clip against the area being painted, in both directions;
   drawing every track's notes made a timeline scroll frame cost in proportion to the project.

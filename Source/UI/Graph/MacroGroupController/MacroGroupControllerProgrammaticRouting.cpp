@@ -8,6 +8,7 @@
 
 #include "MacroGroupController.h"
 
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "MacroNesting.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
@@ -136,6 +137,7 @@ bool MacroGroupController::applyProgrammaticConnectionChange(bool autoCreatePort
 // on the source's macro and then an inlet on the target's, wired port to port, in either order.
 void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection> fresh, MacroPortShape stereoShape) {
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
     // Innermost boundaries first: a cable into a child macro from outside its parent gets the child's port, then
     // the parent sees that port as the crossing and mints its own (a chain, external -> parent -> child -> member).
     std::vector<juce::String> macroIds;
@@ -178,7 +180,7 @@ void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection>
 
         const auto beforeSplice = connectionSet(graph);
         for (const auto& conn : dropped)
-            graph.removeConnection(conn);
+            graph.removeConnection(conn, juce::AudioProcessorGraph::UpdateKind::none);
         spliceMacroPorts(macroId, plan);
         const auto afterSplice = connectionSet(graph);
         for (const auto& gone : minus(beforeSplice, afterSplice))

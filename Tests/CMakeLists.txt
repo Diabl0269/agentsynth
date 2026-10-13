@@ -255,6 +255,7 @@ add_executable(Tests
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
     App/ManyTracksProfileTests.cpp
+    App/MacroEditProfileTests.cpp
     App/EditRefreshWorkTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp

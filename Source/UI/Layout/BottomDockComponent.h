@@ -111,7 +111,7 @@ public:
     /** Re-runs the mixer panel's snapshot + column rebuild -- call after every graph/timeline/
      *  macro change (MainComponent's existing reconcile funnel is the natural place). Also
      *  rebuilds the "both places" mirror view when one is open, so a mirror never shows a stale
-     *  column set. */
+     *  column set. A hidden docked mixer only remembers to rebuild and does it when shown. */
     void rebuildMixer();
     /** Cheap in-place re-tint of every mixer column from the current track colours (docked view and, if open, the
      *  mirror) -- called on every TimelineDoc notification; a no-op unless a track colour changed. */

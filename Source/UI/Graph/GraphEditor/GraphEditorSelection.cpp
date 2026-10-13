@@ -4,6 +4,7 @@
 // selection, and selection group-drag. GraphEditor is declared in GraphEditor.h; sibling
 // GraphEditor*.cpp files in this directory hold the rest of the class.
 
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
@@ -161,6 +162,9 @@ void GraphEditor::noteCardExits(const std::vector<juce::AudioProcessorGraph::Nod
 void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain,
                                  bool narrowDetach) {
     auto& graph = audioEngine.getGraph();
+    // One render-sequence rebuild for the whole delete, its heals and port sweeps: a sync rebuild per removed node made
+    // deleting a track or a macro cost (nodes x graph size).
+    const synth::GraphRebuildScope rebuildScope{graph};
     noteCardExits(ids); // a no-op outside a CardGlideAnimator::Scope, and for a card already pictured
     modMatrix.clearRows();
     const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // Capture BEFORE removal
@@ -191,7 +195,7 @@ void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::No
     else
         fireBeforeDetachAllModuleComponents();
     for (auto id : ids)
-        graph.removeNode(id);
+        graph.removeNode(id, juce::AudioProcessorGraph::UpdateKind::none);
     // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh
     // cable to is no longer orphaned by the time they run.
     healDeletedChain(healSplices);

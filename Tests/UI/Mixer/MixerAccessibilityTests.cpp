@@ -82,6 +82,7 @@ TEST(MixerAccessibilityTest, PanTextFromValueFunctionFormatsAsPercentLeftRight) 
 TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -107,6 +108,7 @@ TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
 TEST(MixerAccessibilityTest, HeaderDescribesLinkedAndReceivesBadgesInWords) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();
@@ -148,6 +150,7 @@ TEST(MixerAccessibilityTest, HeaderDescribesLinkedAndReceivesBadgesInWords) {
 TEST(MixerAccessibilityTest, MuteSoloButtonsMirrorToggleState) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -216,6 +219,7 @@ TEST(MixerAccessibilityTest, MasterColumnHasOwnAccessibleTitle) {
 TEST(MixerAccessibilityTest, PanAccessibilityValueStaysFormattedAfterBinding) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -254,6 +258,7 @@ TEST(MixerAccessibilityTest, InsertListRowsExposeNameAndBypassedStateAsRealAxChi
 TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -277,6 +282,7 @@ TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
 TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -344,6 +350,7 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
 
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
 
     auto& mixerHost = mc.getBottomDock().getMixerHost();
     mixerHost.setDetached(true);
