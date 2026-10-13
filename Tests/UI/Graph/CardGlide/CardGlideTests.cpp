@@ -24,6 +24,7 @@ struct Canvas {
     Canvas() {
         undo.setGraphEditor(&editor);
         editor.setSize(3200, 2400);
+        editor.getCardGlideForTest().setForceAnimateForTest(true); // not on screen: the glide is what is under test
     }
 
     MacroGroupController& ctl() { return editor.getMacroController(); }

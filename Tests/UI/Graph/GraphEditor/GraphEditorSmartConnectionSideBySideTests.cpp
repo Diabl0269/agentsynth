@@ -246,6 +246,7 @@ TEST_F(GraphEditorTest, SideBySideSnappedLibraryDropSettlesFromWhereTheCursorAim
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
+    editor.getCardGlide().setForceAnimateForTest(true); // not on screen: the glide is what is under test
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false);
     makeWiredChain(engine, editor);

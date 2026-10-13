@@ -24,6 +24,7 @@ struct Canvas {
     Canvas() {
         undo.setGraphEditor(&editor);
         editor.setSize(3200, 2400);
+        editor.getCardGlideForTest().setForceAnimateForTest(true); // not on screen: the glide is what is under test
         ids = {addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1500, 900),
                addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 1400),
                addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 200),

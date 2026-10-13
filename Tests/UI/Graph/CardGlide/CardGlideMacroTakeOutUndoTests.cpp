@@ -25,6 +25,7 @@ struct TakeOut {
     TakeOut() {
         undo.setGraphEditor(&editor);
         editor.setSize(3200, 1200);
+        editor.getCardGlideForTest().setForceAnimateForTest(true); // not on screen: the glide is what is under test
         a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
         b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 300);
         auto outside = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
