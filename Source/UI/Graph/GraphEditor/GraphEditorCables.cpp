@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -646,6 +647,16 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         const juce::Colour colour =
             editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
+        // The cable two halves are still running onto (a deleted module's neighbours rejoining) appears when they
+        // arrive.
+        if (editor.cableRetract_.isHidden(cable.id))
+            continue;
+        // Half of a cable that just split around a new module: drawn running from the old cable's ends to its own.
+        if (editor.cableRetract_.isMorphing(cable.id)) {
+            const auto half = editor.cableRetract_.morphed(cable);
+            strokeWire(half.p1, half.p2, colour, isModulation, 0.0f, 2.0f, false);
+            continue;
+        }
         // A cable growing back (undo, redo) is real already: this pass skips it and its growing wire is drawn instead.
         if (editor.cableRetract_.isGrowing(cable.id)) {
             const auto growing = editor.cableRetract_.grown(cable);
@@ -704,6 +715,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     for (const auto& ghost : editor.cableRetract_.ghosts())
         strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
                    ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);
+    for (const auto& half : editor.cableRetract_.joinHalves())
+        strokeWire(half.p1, half.p2, editor.colourForCable(half), half.kind != GraphEditor::VisibleCable::Kind::Direct,
+                   0.0f, 2.0f, false);
     // ---- End cables ----
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
@@ -779,7 +793,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
-        auto ghostF = editor.getDragDropController().getGhostSlide().drawn(); // slides to where it is aimed
+        // On the card body, with the card's corner radius, so the ghost's corners are the corners the card will have.
+        auto ghostF = synth::ui::cardBodyRect(
+            editor.getDragDropController().getGhostSlide().drawn()); // slides to where it is aimed
 
         // Fill: accent colour at ~18% alpha
         g.setColour(accentColour.withAlpha(0.18f));
@@ -929,8 +945,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // Settles from a slightly oversized ring down onto the card, fading out as it lands —
         // "flash-or-settle" per the ticket, not a static outline held for the tween's whole
         // duration.
-        auto ring = bounds.toFloat().expanded(6.0f * (1.0f - t));
+        const float cardRadius = synth::theme::themeOf(*this).metrics.cornerRadius;
+        auto ring = synth::ui::cardBodyRect(bounds.toFloat()).expanded(6.0f * (1.0f - t));
         g.setColour(accentColour.withAlpha(0.55f * (1.0f - t)));
-        g.drawRoundedRectangle(ring, 10.0f, 2.0f);
+        g.drawRoundedRectangle(ring, cardRadius + 6.0f * (1.0f - t), 2.0f);
     }
 }

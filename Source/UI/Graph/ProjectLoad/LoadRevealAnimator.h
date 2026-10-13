@@ -46,6 +46,8 @@ public:
         /** zoom x display scale: what a card's raster is pinned at while it pops. */
         std::function<float()> rasterScale;
         std::function<juce::Colour()> outlineColour;
+        /** The theme's card corner radius: the placeholder outline follows the card's corners. Unset: 10. */
+        std::function<float()> cornerRadius;
         std::function<void(const juce::String&)> reportStatus;
         juce::VBlankAnimatorUpdater* updater = nullptr;
     };

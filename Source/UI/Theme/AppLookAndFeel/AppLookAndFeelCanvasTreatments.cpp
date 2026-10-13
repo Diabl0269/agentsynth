@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Layout/CableCurve.h"
 
 namespace synth::theme {
@@ -28,7 +29,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     const auto& tr = theme.treatment;
 
     const float radius = m.cornerRadius;
-    auto body = bounds.reduced(2.0f);
+    auto body = synth::ui::cardBodyRect(bounds);
 
     // Soft drop shadow. We intentionally AVOID juce::DropShadow here: its per-paint gaussian
     // blur re-rasterizes every time a (buffered) card is re-rendered at a new zoom scale, which

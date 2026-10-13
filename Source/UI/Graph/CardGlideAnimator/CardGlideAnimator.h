@@ -74,6 +74,8 @@ public:
         std::function<bool()> canAnimate;
         /** The theme's accent, for the outline around a card an undo brought back. */
         std::function<juce::Colour()> accent;
+        /** The theme's card corner radius, for that outline to follow the card's own corners. Unset: 10. */
+        std::function<float()> cornerRadius;
         /** Lent on to the macro fold (MacroFoldAnimator.h): a copy of the cables drawn now, a module category's
          *  colour, and the canvas' wire look for a cable the fold draws itself. */
         std::function<std::vector<graph_editor_types::VisibleCable>()> visibleCables;

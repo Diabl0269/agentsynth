@@ -424,6 +424,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         macroController_.applyDeleteReflow(reflow);
     };
 
+    const auto cablesBefore = snapshotCablesForRetract();
     CardGlideAnimator::Scope glideScope(cardGlide_); // shrinks away (noteCardExits)
     noteCardExits({nodeId});
     // recordUndo=false: a bigger gesture (removing a timeline modulator) already holds the undo record.
@@ -431,6 +432,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, 
         undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
     else
         doDelete();
+    morphCablesSince(cablesBefore); // the neighbours the delete healed run together into one cable
     repaint();
 }
 

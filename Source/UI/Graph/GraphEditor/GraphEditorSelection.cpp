@@ -234,6 +234,7 @@ void GraphEditor::deleteSelection() {
     // autoDeleteOrphanedMacroPort sweeps them after.
     auto doDelete = [this, ids] { removeNodesNow(ids, /*healChain=*/true, /*narrowDetach=*/false); };
 
+    const auto cablesBefore = snapshotCablesForRetract();
     CardGlideAnimator::Scope glideScope(cardGlide_); // each card shrinks away, see noteCardExits
     noteCardExits(ids);
 
@@ -242,6 +243,7 @@ void GraphEditor::deleteSelection() {
     else
         doDelete();
 
+    morphCablesSince(cablesBefore); // the neighbours the delete healed run together into one cable
     repaint();
 }
 

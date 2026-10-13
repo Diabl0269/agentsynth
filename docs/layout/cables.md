@@ -92,6 +92,12 @@ growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`)
   already, so the normal cable pass skips its id and the growing wire is drawn instead (no flow dots or knob until
   it lands). More than 16 cables in one step skip the grow (a mass undo shows them at once). Undoing the mod dot
   panel's remove button grows the cable back this way.
+- **Chains.** A change that turns one cable into two (a module inserted on a cable) or two into one (the middle of a
+  chain deleted and healed) is neither a retract nor a grow: `Options::morphChains` matches the cables on the jacks
+  they share, and the new halves run out of the old cable, or the old halves run onto the new one, instead
+  ([split and join](insert-motion.md#cables-around-an-inserted-or-deleted-module)). `GraphEditor::morphCablesSince` arms
+  only that (the insert and the delete call it); `retractCablesGoneSince` (undo, redo, disconnects) also detects it.
+  A cable that fits neither shape keeps its retract or grow.
 - **Reduce Motion** is an 80 ms alpha fade, out or in, with no geometry change. **Animations: Off** shows the result
   at once.
 - Each frame repaints only the area the moving wires were and are drawn in (`CableRetractAnimator::paintArea`).

@@ -248,6 +248,8 @@ public:
     std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract() override;
     void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before,
                                 bool growAdded = false) override;
+    void
+    morphCablesSince(const std::vector<graph_editor_types::VisibleCable>& before); // an insert's split, a delete's join
     /** The expanded macro borders as drawn now; hand it to glideHullsFrom() after a change that may move them. */
     MacroHullGlide::Hulls snapshotPaintedHulls() const;
     /** Glides every border that moved since `before` (a snapshotPaintedHulls()) to its live bounds. */
@@ -688,10 +690,9 @@ public:
     void finishHullGlideForTest();
     bool isHullGlideLiveForTest() const noexcept { return hullGlide_.isLive(); }
     // ---- Cable-retract test seams (CableRetractAnimator.h) ----
-    const CableRetractAnimator& getCableRetractForTest() const noexcept { return cableRetract_; }
+    CableRetractAnimator& getCableRetractForTest() noexcept { return cableRetract_; }
     void advanceCableRetractForTest(float t);
     void finishCableRetractForTest();
-
     /** The visible canvas frame rect (canvas coordinates, animated) and its retarget hook (the canvas frame). */
     juce::Rectangle<float> getCanvasFrameRect() const { return canvasFrame_.current(); }
     void refreshCanvasFrame(CanvasFrame::Mode mode);
@@ -703,10 +704,8 @@ public:
 
     // ---- Card-glide test seams (CardGlideAnimator.h) ----
     CardGlideAnimator& getCardGlideForTest() noexcept { return cardGlide_; }
-    /** Advances the glide to `t` (0..1) with no VBlank. */
-    void advanceCardGlideForTest(float t);
-    /** Lands the glide, restoring every hidden card. */
-    void finishCardGlideForTest();
+    void advanceCardGlideForTest(float t); // to `t` (0..1) with no VBlank
+    void finishCardGlideForTest();         // lands the glide, restoring every hidden card
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
 

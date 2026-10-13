@@ -434,6 +434,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroCableAnchors.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
+    Source/UI/Graph/CardOutline.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorGhosts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorBorders.cpp
