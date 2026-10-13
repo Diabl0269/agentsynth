@@ -362,6 +362,16 @@ set(APPUI_SOURCES
     Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.h
     Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentSong.cpp
+    Source/UI/Assistant/AIChatComponent/SongCardBase.h
+    Source/UI/Assistant/AIChatComponent/SongCardBase.cpp
+    Source/UI/Assistant/AIChatComponent/SongPlanCard.h
+    Source/UI/Assistant/AIChatComponent/SongPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/BuildStepsCard.h
+    Source/UI/Assistant/AIChatComponent/BuildStepsCard.cpp
+    Source/UI/Assistant/AIChatComponent/SongSession.h
+    Source/UI/Assistant/AIChatComponent/StepIcons.h
+    Source/UI/Assistant/AIChatComponent/StepIcons.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp

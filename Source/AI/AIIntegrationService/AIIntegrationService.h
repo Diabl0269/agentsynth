@@ -2,6 +2,7 @@
 
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/SongSteps/SongSteps.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -147,6 +148,51 @@ public:
 
     /** Asks for an edit plan: hosted `project.generate`, or the local model with the same fields. */
     AIProvider::RequestId sendProjectMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+
+    // -- Song steps (AIIntegrationServiceSongSteps.cpp, docs/ai/song-steps.md)
+    // ------------------------------------------ A whole song asked of the hosted service: a free, priced plan first,
+    // then a build streamed step by step that ends in the same edit plan sendProjectMessage() returns. Only a hosted
+    // provider whose service has the routes offers it; everything else keeps the single project.generate request.
+
+    /** What a plan request came back with: a plan to show, "the service has no song routes" (the caller falls back to
+     *  sendProjectMessage()), or a failure to word for the user. */
+    struct SongPlanOutcome {
+        enum class Kind { plan, unsupported, failed };
+        Kind kind = Kind::failed;
+        songsteps::PlanReply reply;
+        AIProvider::AIError error;
+    };
+    using SongPlanCallback = std::function<void(const SongPlanOutcome&)>;
+
+    /** True while a hosted provider is installed and has not answered a plan request with "no such route" (404). */
+    bool canPlanSongs() const { return provider != nullptr && provider->isHosted() && !songRoutesMissing; }
+
+    /** Asks for a priced plan (free). `length` is "short", "medium" or "long" and `detail` "light", "full" or "rich",
+     *  each empty to let the prompt decide; `previousPlan` (the plan object of an earlier reply, or void) makes `text`
+     *  a change request to that plan. The callback fires once, on the message thread. A 404 sets canPlanSongs() false
+     *  for this provider and answers `unsupported`. */
+    AIProvider::RequestId planSong(const juce::String& text, const juce::String& length, const juce::String& detail,
+                                   const juce::var& previousPlan, SongPlanCallback callback);
+
+    struct SongBuildOutcome {
+        enum class Kind { applied, rejected, failed, cancelled, expired, quotaExceeded };
+        Kind kind = Kind::failed;
+        juce::String message;        // failed, rejected, expired and quotaExceeded: the reason, in words for the user
+        bool refunded = false;       // failed: the server gave the uses back
+        ProjectEditResult edit;      // applied: what the one undo step did
+        songsteps::StreamEvent done; // applied and rejected: the final event (notes, summary)
+    };
+    struct SongBuildCallbacks {
+        std::function<void(const songsteps::StreamEvent&)> onEvent; // every event of the stream, in order
+        std::function<void(const SongBuildOutcome&)> onFinished;    // exactly once
+    };
+
+    /** Spends the plan's price and builds it: streams the steps to `callbacks.onEvent`, and on the final `done`
+     * previews and applies its edit plan as one undo step. `requestText` is the user's own words, kept in the chat
+     * history with a one-line answer so later edits have the context. cancelRequest() on the returned id closes the
+     * stream; the server gives the uses back. */
+    AIProvider::RequestId buildSong(const juce::String& requestText, const songsteps::PlanReply& reply,
+                                    SongBuildCallbacks callbacks);
 
     /** The `project.generate` request body for `text`; public so tests reproduce the real request. */
     juce::var buildProjectRequestBody(const juce::String& text) const;
@@ -296,6 +342,7 @@ private:
     juce::String currentAuthToken;
     juce::String currentConversationId;
     int currentRequestTimeoutMs = 240000;
+    bool songRoutesMissing = false; // the hosted service answered a plan request with 404
     juce::String lastPatchError;
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;

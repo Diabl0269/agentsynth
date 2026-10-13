@@ -34,6 +34,17 @@ AIChatComponent::EditPlanCard::EditPlanCard(const MessageData& data, std::functi
     previewLabel.setTitle(planOk ? "What this plan changes" : "Why this plan cannot apply");
     previewLabel.setDescription(preview);
 
+    if (planOk) {
+        for (const auto& line : previewLines) {
+            auto icon = std::make_unique<synth::ui::StepIconView>();
+            icon->setKind(kindForPlanLine(line));
+            // Still until Apply, which plays each once in order and settles it into a check.
+            icon->setState(data.planApplied ? synth::ui::StepIconState::done : synth::ui::StepIconState::still);
+            addAndMakeVisible(*icon);
+            rowIcons.push_back(std::move(icon));
+        }
+    }
+
     notesLine = buildNotesLine(data.planNotes, data.planSkippedCount);
     if (notesLine.isNotEmpty()) {
         const juce::String all = data.planNotes.joinIntoString("\n");
@@ -139,6 +150,10 @@ void AIChatComponent::EditPlanCard::applyThemeColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
     headerLabel.setColour(juce::Label::textColourId, planOk ? colours.accent2 : colours.warning);
     previewLabel.setColour(juce::Label::textColourId, colours.textPrimary);
+    for (auto& icon : rowIcons) {
+        icon->setColour(colours.accent);
+        icon->setDoneColour(colours.success);
+    }
     notesLabel.setColour(juce::Label::textColourId, colours.textMuted);
     commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", colours.textMuted);
     if (applyButton) {
@@ -165,13 +180,40 @@ void AIChatComponent::EditPlanCard::showApplied() {
     applyButton->setTooltip("This plan was applied; undo with Cmd+Z");
     applyButton->setEnabled(false);
     applyThemeColours();
+    // Each change plays its icon once, in order, and settles into a check.
+    for (size_t i = 0; i < rowIcons.size(); ++i)
+        rowIcons[i]->playThenSettle((int)i * 180);
 }
 
 int AIChatComponent::EditPlanCard::previewHeight(int width) const {
     int height = 0;
     for (const auto& line : previewLines)
-        height += AIChatComponent::computeWrappedTextHeight(previewLabel.getFont(), line, juce::jmax(40, width));
+        height += AIChatComponent::computeWrappedTextHeight(previewLabel.getFont(), line,
+                                                            juce::jmax(40, width - textInset()));
     return juce::jmax(16, height);
+}
+
+songsteps::StepKind AIChatComponent::EditPlanCard::kindForPlanLine(const juce::String& line) {
+    using songsteps::StepKind;
+    struct Word {
+        const char* text;
+        StepKind kind;
+    };
+    static const Word words[] = {
+        {"track", StepKind::track},           {"note", StepKind::pattern},          {"clip", StepKind::pattern},
+        {"tempo", StepKind::sections},        {"marker", StepKind::sections},       {"lane", StepKind::automation},
+        {"automation", StepKind::automation}, {"module", StepKind::module},         {"connection", StepKind::connect},
+        {"cable", StepKind::connect},         {"modulation", StepKind::modulation}, {"parameter", StepKind::settings}};
+    int best = line.length();
+    StepKind kind = StepKind::module;
+    for (const auto& word : words) {
+        const int at = line.indexOfIgnoreCase(word.text);
+        if (at >= 0 && at < best) {
+            best = at;
+            kind = word.kind;
+        }
+    }
+    return kind;
 }
 
 juce::String AIChatComponent::EditPlanCard::buildNotesLine(const juce::StringArray& notes, int skippedCount) {
@@ -197,7 +239,15 @@ void AIChatComponent::EditPlanCard::resized() {
     auto b = getLocalBounds().reduced(kPadding);
     headerLabel.setBounds(b.removeFromTop(kHeaderHeight));
     b.removeFromTop(kRowGap);
-    previewLabel.setBounds(b.removeFromTop(previewHeight(b.getWidth())));
+    auto previewArea = b.removeFromTop(previewHeight(b.getWidth()));
+    // Each icon sits at the top of its sentence, which wraps at the narrower text width.
+    int rowY = previewArea.getY();
+    for (size_t i = 0; i < rowIcons.size(); ++i) {
+        rowIcons[i]->setBounds(previewArea.getX(), rowY, kIconSize, kIconSize);
+        rowY += AIChatComponent::computeWrappedTextHeight(previewLabel.getFont(), previewLines[(int)i],
+                                                          juce::jmax(40, previewArea.getWidth() - textInset()));
+    }
+    previewLabel.setBounds(previewArea.withTrimmedLeft(textInset()));
     if (notesLine.isNotEmpty()) {
         b.removeFromTop(kRowGap / 2);
         notesLabel.setBounds(b.removeFromTop(notesHeight(b.getWidth()) - kRowGap / 2));

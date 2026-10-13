@@ -7,6 +7,7 @@
 #include "AI/PatchDiff.h"
 #include "AI/PatchFeedbackStore.h"
 #include "ChatMessageViewport.h"
+#include "SongSession.h"
 #include "UI/Assistant/AccountRow.h"
 #include "UI/Assistant/EntitlementWatcher.h"
 #include "UI/Assistant/PlanBadge.h"
@@ -80,6 +81,22 @@ public:
     // is normally AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a synthetic
     // registry without touching the real module factory.
     static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
+    // Whether a message asks for a whole new song (the hosted song plan and steps, docs/ai/song-steps.md) rather than
+    // an edit: a song word, or a genre name with no edit verb and no module type. Pure, like the check above.
+    static bool shouldPlanSong(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
+    // Testing hooks for the song cards: the session of the newest message that has one (null when none), and the
+    // message count.
+    std::shared_ptr<SongSession> getLastSongSessionForTesting() const {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+            if (it->song)
+                return it->song;
+        return nullptr;
+    }
+    size_t getMessageCountForTesting() const { return messages.size(); }
+    // The card of message `index`, as a component; null when that message has none showing.
+    juce::Component* getSongCardForTesting(size_t index) const;
 
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
@@ -475,9 +492,42 @@ private:
 
         // Long message unfolded by the reader; kept across rebuilds, never saved to history.
         bool textUnfolded = false;
+
+        // The song plan and build this message shows (AIChatComponentSong.cpp); session-scoped like the rating state,
+        // so a restored conversation shows the applied edit-plan card only.
+        std::shared_ptr<SongSession> song;
     };
     static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
     std::vector<MessageData> messages;
+
+    // -- Song steps (AIChatComponentSong.cpp)
+    // -------------------------------------------------------------------------- Sends `text` as a hosted song plan;
+    // the user bubble and waiting state are already set up by the caller.
+    void startSongPlan(const juce::String& text, size_t pendingPlanIndex);
+    void handleSongPlan(const juce::String& text, size_t pendingPlanIndex,
+                        const AIIntegrationService::SongPlanOutcome& outcome);
+    void replanSong(size_t index, int lengthIndex, int detailIndex, const juce::String& changeText,
+                    const juce::String& noticeAfter);
+    void buildSongAt(size_t index);
+    void handleSongEvent(const std::shared_ptr<SongSession>& session, const songsteps::StreamEvent& event);
+    void handleSongFinished(size_t index, const std::shared_ptr<SongSession>& session,
+                            const AIIntegrationService::SongBuildOutcome& outcome);
+    void dismissSong(size_t index);
+    void cancelSongBuild();
+    // Index of the newest message whose song card is waiting to be built; -1 when none.
+    int pendingSongPlanIndex() const;
+    bool refreshSongBubble(size_t index);
+    // What the song cards ask of the chat, bound to one message's index (makeSongHooks, beside MessageBubble). Each
+    // runs on a later message-loop turn, because the redraw it causes deletes the card that called it.
+    struct SongHooks {
+        std::function<void()> onBuild, onCancelPlan, onCancelBuild;
+        std::function<void(int lengthIndex, int detailIndex)> onReplan;
+    };
+    SongHooks makeSongHooks(size_t i);
+    void refreshUsesLeft(SongSession& session) const;
+    void dispatchRequest(const juce::String& text, bool projectPlan, bool editRequest);
+    // The song build in flight (an index into messages), or -1; its card replaces the waiting label and the timeout.
+    int songBuildIndex = -1;
 
     // The answer to a sent message, on the message thread: one bubble, plus the edit-plan card when
     // the answer carries a plan. `wantsPlan` says the request asked for structured output, so a

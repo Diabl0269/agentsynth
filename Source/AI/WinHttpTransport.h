@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <juce_core/juce_core.h>
 
 namespace synth {
@@ -28,6 +29,8 @@ struct WinHttpResult {
  * WHOLE request, not each step. `cancelled` is observed while the request is blocked in the
  * network (not only between reads), so setting it aborts promptly with transportFailed and the
  * message "Request aborted (cancelled).". Redirects are not followed, like the curl performers.
+ * `onBody`, when set, receives the body of a 2xx response chunk by chunk as it arrives (instead of the result's
+ * `body`, which then stays empty), for a streamed response; a non-2xx body is still collected whole.
  * Call from any thread; each call owns its own handles.
  *
  * Declared on every platform so callers need no #ifdef of their own beyond the call site, but
@@ -35,6 +38,7 @@ struct WinHttpResult {
  */
 WinHttpResult performWinHttpRequest(const juce::String& method, const juce::String& url,
                                     const juce::StringPairArray& requestHeaders, const juce::String& body,
-                                    int timeoutMs, const std::atomic<bool>& cancelled);
+                                    int timeoutMs, const std::atomic<bool>& cancelled,
+                                    const std::function<void(const char* data, std::size_t size)>& onBody = {});
 
 } // namespace synth

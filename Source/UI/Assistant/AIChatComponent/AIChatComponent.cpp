@@ -287,6 +287,13 @@ void AIChatComponent::timerCallback() {
     if (!isWaitingForResponse)
         return;
 
+    // A song build shows its own card and clock and runs as long as the server keeps it alive (its pings); the
+    // one-answer timeout below does not apply to it.
+    if (songBuildIndex >= 0) {
+        refreshSongBubble((size_t)songBuildIndex);
+        return;
+    }
+
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     if (elapsed < requestTimeoutMs) {
         refreshWaitingStatusLabel();
@@ -322,6 +329,10 @@ bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void AIChatComponent::handleUserCancel() {
+    if (songBuildIndex >= 0) {
+        cancelSongBuild();
+        return;
+    }
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     cancelRequest();
     messages.push_back({"assistant", "Cancelled.", ""});
@@ -338,6 +349,7 @@ void AIChatComponent::cancelRequest() {
     // cancel the same id twice.
     const auto cancelling = activeRequestId;
     activeRequestId = {};
+    songBuildIndex = -1;
     if (cancelling.value != 0)
         aiService.cancelRequest(cancelling);
 

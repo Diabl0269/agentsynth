@@ -89,7 +89,6 @@ void AIChatComponent::sendButtonClicked() {
     // timeline (tests, a host without one) the request is the patch request it has always been.
     const bool editRequest = shouldUseStructuredOutput(text, AIStateMapper::moduleFactoryTypeNames());
     const bool projectPlan = aiService.hasTimelineContext() && (editRequest || aiService.isCurrentProviderHosted());
-    const bool wantsPlan = projectPlan || editRequest;
 
     // A message is going out to the assistant (usage statistics count requests, never their text).
     if (onMessageSent)
@@ -123,6 +122,19 @@ void AIChatComponent::sendButtonClicked() {
     if (accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot()))
         aiService.setConversationId({});
 
+    // A hosted song request (or a change to a plan still waiting to be built) goes through the free plan first; the
+    // rest, and a service without the song routes, use the single project request.
+    const int pendingPlan = pendingSongPlanIndex();
+    if (aiService.hasTimelineContext() && aiService.canPlanSongs() &&
+        (pendingPlan >= 0 || shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames()))) {
+        startSongPlan(text, pendingPlan >= 0 ? (size_t)pendingPlan : (size_t)-1);
+        return;
+    }
+    dispatchRequest(text, projectPlan, editRequest);
+}
+
+void AIChatComponent::dispatchRequest(const juce::String& text, bool projectPlan, bool editRequest) {
+    const bool wantsPlan = projectPlan || editRequest;
     AIProvider::CompletionCallback completion = [this, wantsPlan](const AIProvider::AIResponse& aiResponse) {
         juce::Component::SafePointer<AIChatComponent> safeThis(this);
         juce::MessageManager::callAsync([safeThis, aiResponse, wantsPlan]() {

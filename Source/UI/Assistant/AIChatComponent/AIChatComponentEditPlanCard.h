@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AIChatComponent.h"
+#include "StepIcons.h"
 
 namespace synth {
 
@@ -29,6 +30,14 @@ public:
     static juce::String buildNotesLine(const juce::StringArray& notes, int skippedCount);
     void parentHierarchyChanged() override { applyThemeColours(); }
 
+    // The kind of change a preview sentence describes (its icon): the kind named earliest in the sentence, a module
+    // when none is named. Static and pure so a test can pin the table.
+    static songsteps::StepKind kindForPlanLine(const juce::String& line);
+    // The icon of preview row `i`; null for a refused plan, which has no rows.
+    synth::ui::StepIconView* rowIcon(int i) const {
+        return i < (int)rowIcons.size() ? rowIcons[(size_t)i].get() : nullptr;
+    }
+
     // `width` must be the width this card is laid out at (MessageBubble passes its content width);
     // the preview text is measured wrapped at that width, so the two must agree.
     int getRequiredHeight(int width) const;
@@ -54,6 +63,8 @@ private:
     static constexpr int kDetailsButtonWidth = 110;
     static constexpr int kApplyButtonWidth = 88;
     static constexpr int kDetailsHeight = 240;
+    static constexpr int kIconSize = 18;
+    static constexpr int kIconGap = 6;
 
     const bool planOk;
     bool applied = false;
@@ -68,6 +79,8 @@ private:
 
     juce::Label headerLabel;
     juce::Label previewLabel;
+    std::vector<std::unique_ptr<synth::ui::StepIconView>> rowIcons; // one per preview line, none for a refused plan
+    int textInset() const { return rowIcons.empty() ? 0 : kIconSize + kIconGap; }
     juce::Label notesLabel;
     juce::TextButton detailsButton;
     std::unique_ptr<juce::TextButton> applyButton;

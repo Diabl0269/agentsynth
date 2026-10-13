@@ -5,12 +5,12 @@
 # Never add a NEW header here -- relocate its comments beside their out-of-line definitions
 # instead. Adding a member with its own short one-line caller-facing contract in the header
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
-30 Source/AI/AIIntegrationService/AIIntegrationService.h
-24 Source/AI/AIProvider.h
+19 Source/AI/AIIntegrationService/AIIntegrationService.h
+15 Source/AI/AIProvider.h
 87 Source/AI/AIStateMapper/AIStateMapper.h
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
-25 Source/AI/RemoteProvider.h
+11 Source/AI/RemoteProvider.h
 91 Source/AppUndoManager.h
 100 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
@@ -36,7 +36,7 @@
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
 27 Source/Transport/OfflineTransportDriver.h
-31 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
+13 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 31 Source/UI/Chrome/StatusBarComponent.h
 117 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 33 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h

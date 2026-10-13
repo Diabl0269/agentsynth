@@ -73,6 +73,15 @@ rating or apply.
 
 Tests: `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp`.
 
+## Song cards
+
+A whole-song request on a hosted provider shows a plan card and then a live build card instead of one edit-plan card;
+the flow, the routing rule (`shouldPlanSong`) and the 404 fallback are in [song steps](song-steps.md). The state of both
+cards is `MessageData::song` (a `SongSession`), because the bubbles are rebuilt on every redraw. While a build runs the
+chat is waiting (Cancel, Escape, read-only input) but shows the build card instead of the thinking line and the one-answer
+timeout does not apply; `songBuildIndex` names the message. Both cards are laid out by `SongCardBase::layoutFor`, the one
+geometry the bubble measures and places from.
+
 ## Response timing marker
 
 Assistant bubbles that end an in-flight wait — a successful reply, a provider error, a cancel, or

@@ -232,6 +232,10 @@ add_executable(Tests
     AI/RawHeaderParserTests.cpp
     AI/WinHttpTransportTests.cpp
     AI/RemoteProvider/RemoteProviderCapabilityTests.cpp
+    AI/RemoteProvider/RemoteProviderSongRouteTests.cpp
+    AI/SongSteps/SongStepsProtocolTests.cpp
+    AI/SongSteps/SongStepsServiceTests.cpp
+    AI/SongSteps/SongStepsLiveTests.cpp
     Account/AuthClient/AuthClientDeviceAuthTests.cpp
     Account/AuthClient/AuthClientAccountTests.cpp
     Account/AuthClient/AuthClientConversationsTests.cpp
@@ -339,6 +343,8 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatComponentFoldTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentUpgradeTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentWaitingTests.cpp
+    UI/Assistant/AIChatComponent/SongCardsTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentSongTests.cpp
     UI/Assistant/EntitlementWatcherTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp

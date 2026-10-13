@@ -903,17 +903,34 @@ strings.
 | **Port connections panel** | A click on a jack opens the same panel window as the mod dot (`ModDotPanelFrame`: grows out of the jack 200 ms, shrinks back 140 ms, plain 80 ms fade under Reduce Motion, instant with Animations off). A removed connection's row shrinks toward its centre (180 ms) and then the rows below close the gap (200 ms), Cmd+Z opens the gap, grows the row back and fades a 1 px accent outline (400 ms): the shared `ExitEnterTimeline` through `ExitEnterRowSlots`, the same code as the mod dot's source rows; "Disconnect all" shrinks every row together and its footer closes with the gap phase; the panel's height follows frame by frame; a connection that appears while the panel is open grows in the same way as an undo; lands at once when not on screen. Row hover is a 100 ms fade. The canvas highlight of a hovered row's cable is a state change (no tween); the cable retract/grow is [the cable's own](cables.md#retracting-removed-cables). **Add connection:** the list and the search page cross-fade (outgoing alpha 1 to 0, incoming 0 to 1) while the panel's height settles to the new page's, 160 ms `easeOutCubic` going in and 110 ms `easeInCubic` coming back (an 80 ms plain fade with the height changing at once under Reduce Motion, instant when not on screen or with Animations off); a pick's new cable grows out of its source jack (the cable grow-back) as the panel swaps back and the new row grows into the list; a hovered row's preview cable is a state change (no tween); see [port connections panel](cables.md#port-connections-panel) | `PortConnectionsPanel` (`PortConnectionsPanelPages.cpp`), `PortConnectionRow`, `PortTargetSearchPage`, `PortPanelController` |
 | **Velocity strip show/hide** | The grid gives up `round(p * full)` px at the bottom while the strip keeps its full height and rises from the roll's bottom edge (clipped, never squashed); 200 ms (`kScalePanelAnimMs`) `easeInOutCubic`, same as the scale panel, retargets from the current progress, lands at once when not on screen or on a persisted restore | `PianoRollComponent` / `VelocityLaneSlide` |
 
+## Song steps
+
+The hosted song cards ([song steps](../ai/song-steps.md)) move like this; everything lands at once when the card is not
+on screen or Animations is Off, and under Reduce Motion the icons sit still in their running colour and the list opens
+without animating.
+
+| What | Motion | Where |
+|---|---|---|
+| A card appearing (plan card, build card) | fades in over 160 ms (80 ms reduced), once, when its phase starts | `SongCardBase` |
+| Plan card controls and notices | `FadeVisibility` (160 ms in, 110 ms out); the card's height follows the fade | `SongPlanCard` |
+| Step icon, while its step runs | one 1.6 s linear cycle on a driver that restarts itself, in its own way per kind (a line draws, a row slides in, notes drift and fade, blocks slide, a curve draws, a knob pulses, a cable draws, sliders glide, a wave scrolls, a warning blinks, meter bars rise); finished, it is a still check | `StepIconView`, `paintStepIcon` |
+| Edit-plan row icons | still before Apply; on Apply each plays one cycle in order (180 ms apart) and settles into a check | `EditPlanCard` |
+| Progress bar | tweens to the new fraction over 200 ms (`easeOutCubic`) | `BuildStepsCard` |
+| "Show all steps" | one timeline `openMs`, played forwards to open and backwards to close, retargeting from where it is: the height opens over 300 ms (`easeOutCubic`), then each row fades in and slides down 4 px, about 35 ms (at most 150 ms in all) after the one before, 200 ms each | `BuildStepsCard` |
+| Fold chevron | `ChevronTurn`, 160 ms | `BuildStepsCard` |
+
 ## The time-bounded animation rule
 
 **All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops
 at `t = 1.0`.
 
-There are exactly **two** permitted exceptions, and both are bounded by an *activity* rather than by
+There are exactly **three** permitted exceptions, and all are bounded by an *activity* rather than by
 a duration:
 
 | Exception | Runs while | Confined to | Stops |
 |---|---|---|---|
 | AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8x8 component | on completion or cancel |
+| A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
 | Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING | a strip a few px wide, spanning the panel's ruler and lanes | on stop or pause, with one final strip |
 
 `zoomSettleAnim` is **not** a third exception: it is a normal time-bounded `AnimationDriver` that
