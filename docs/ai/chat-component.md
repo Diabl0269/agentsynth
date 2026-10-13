@@ -29,6 +29,11 @@ There is one input and no mode selector. `sendButtonClicked()` routes by what th
 - With no timeline (tests, a host without one) the request is the patch request it always was:
   `sendMessage(text, cb, useStructuredOutput)`.
 
+While a project is opening (`ProjectLoadPipeline::onBusyChanged`, wired in `MainComponent` to
+`AIChatComponent::setProjectLoading`) Send is disabled with the tooltip "Available once the project has finished
+loading", and Enter in the input does not send either (the typed text stays). It comes back, with its normal tooltip,
+once the project has fully loaded; a finished load never re-enables Send behind a request still in flight.
+
 Every route shares the waiting state: the spinner, Cancel, the "AI is thinking..." line and the
 timeout watchdog start before the request goes out. A hosted plan takes 20 to 30 seconds (27 s
 measured on gpt-oss-20b), well inside the 4-minute default.

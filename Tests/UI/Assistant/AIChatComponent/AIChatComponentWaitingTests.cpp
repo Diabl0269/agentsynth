@@ -128,3 +128,52 @@ TEST(AIChatWaitingFadeTest, CancelHidesAtOnceWhenAnimationsAreOff) {
             EXPECT_FLOAT_EQ(b->getAlpha(), 1.0f);
         }
 }
+
+namespace {
+juce::TextButton* findSend(synth::AIChatComponent& chat) {
+    for (auto* child : chat.getChildren())
+        if (auto* button = dynamic_cast<juce::TextButton*>(child);
+            button != nullptr && button->getButtonText() == "Send")
+            return button;
+    return nullptr;
+}
+} // namespace
+
+TEST(AIChatProjectLoadingTest, SendWaitsForAProjectToFinishLoading) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<DeferredPromptProvider>());
+    juce::ApplicationProperties props;
+    configureProps(props);
+    synth::AIChatComponent chat(service, props);
+    chat.setSize(400, 600);
+    auto* send = findSend(chat);
+    auto* input = findInput(chat);
+    ASSERT_NE(send, nullptr);
+    ASSERT_NE(input, nullptr);
+    const auto normalTip = send->getTooltip();
+    ASSERT_TRUE(send->isEnabled());
+
+    int sent = 0;
+    chat.onMessageSent = [&] { ++sent; };
+    chat.setProjectLoading(true);
+    EXPECT_FALSE(send->isEnabled());
+    EXPECT_EQ(send->getTooltip(), "Available once the project has finished loading");
+    EXPECT_FALSE(send->getButtonText().isEmpty()) << "keeps its title for screen readers";
+    input->setText("hello");
+    chat.triggerSend(); // what Enter in the input does
+    EXPECT_EQ(sent, 0);
+    EXPECT_EQ(input->getText(), "hello") << "the typed message is kept";
+    EXPECT_FALSE(chat.isWaiting());
+
+    chat.setProjectLoading(false);
+    EXPECT_TRUE(send->isEnabled());
+    EXPECT_EQ(send->getTooltip(), normalTip);
+    chat.triggerSend();
+    EXPECT_EQ(sent, 1);
+    EXPECT_TRUE(chat.isWaiting());
+    EXPECT_FALSE(send->isEnabled()) << "disabled while the request is out";
+    chat.setProjectLoading(true);
+    chat.setProjectLoading(false);
+    EXPECT_FALSE(send->isEnabled()) << "a finished load does not re-enable Send behind a request in flight";
+}

@@ -376,3 +376,47 @@ TEST_F(ProjectLoadPipelineTest, KnobArrowKeysWaitForTheLoadAndTurnAfterIt) {
     EXPECT_TRUE(knob->keyPressed(up));
     EXPECT_NE(knob->getValue(), before);
 }
+
+TEST_F(ProjectLoadPipelineTest, BusyIsTrueFromTheOpenUntilTheRevealHasLanded) {
+    const auto bundle = saveProject(true);
+    Opener o;
+    std::vector<bool> seen;
+    o.pipeline().onBusyChanged = [&](bool busy) { seen.push_back(busy); };
+    o.pipeline().assetLoads().holdDecodesForTest(true);
+    ASSERT_TRUE(o.mc.openProjectForTest(bundle));
+    ASSERT_EQ(seen.size(), 1u);
+    EXPECT_TRUE(seen[0]) << "busy as the open begins";
+
+    o.pipeline().assetLoads().finishAllForTest();
+    EXPECT_FALSE(o.pipeline().isLoading());
+    EXPECT_EQ(seen.size(), 1u) << "assets in, but the reveal is still playing";
+    o.reveal().applyAtMs(o.reveal().endMs());
+    ASSERT_EQ(seen.size(), 2u);
+    EXPECT_FALSE(seen[1]) << "free again once everything has landed";
+    o.pipeline().pollForTest();
+    EXPECT_EQ(seen.size(), 2u) << "never twice";
+}
+
+TEST_F(ProjectLoadPipelineTest, BusyEndsWhenAnOpenIsReleasedByAFailedBuildOrAnotherOpen) {
+    const auto slow = saveProject(true);
+    const auto fast = saveProject(false);
+    Opener o;
+    std::vector<bool> seen;
+    o.pipeline().onBusyChanged = [&](bool busy) { seen.push_back(busy); };
+    o.pipeline().beginLoad();
+    ASSERT_EQ(seen.size(), 1u);
+    o.pipeline().graphBuilt(false);
+    ASSERT_EQ(seen.size(), 2u);
+    EXPECT_FALSE(seen[1]);
+
+    seen.clear();
+    o.pipeline().assetLoads().holdDecodesForTest(true);
+    ASSERT_TRUE(o.mc.openProjectForTest(slow));
+    o.pipeline().assetLoads().holdDecodesForTest(false);
+    ASSERT_TRUE(o.mc.openProjectForTest(fast));
+    o.reveal().applyAtMs(o.reveal().endMs());
+    ASSERT_FALSE(seen.empty());
+    EXPECT_FALSE(seen.back());
+    for (size_t i = 1; i < seen.size(); ++i)
+        EXPECT_NE(seen[i], seen[i - 1]) << "no duplicates";
+}

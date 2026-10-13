@@ -24,7 +24,7 @@ juce::String outermostMacro(const synth::MacroSet& macros, juce::String macroId)
 
 } // namespace
 
-void LoadRevealAnimator::buildGroups(const std::set<uint32_t>& pendingNodes) {
+void LoadRevealAnimator::buildGroups(const std::set<uint32_t>& pendingNodes, double syncLoadMs) {
     groups_.clear();
     groupOfNode_.clear();
     groupOfHull_.clear();
@@ -109,7 +109,7 @@ void LoadRevealAnimator::buildGroups(const std::set<uint32_t>& pendingNodes) {
     std::vector<bool> pending;
     for (const auto& group : groups_)
         pending.push_back(group.pendingNodes > 0);
-    timeline_.start(motion_, groupLevels, pending);
+    timeline_.start(motion_, groupLevels, pending, syncLoadMs);
     if (hooks_.cables)
         for (const auto& cable : hooks_.cables())
             cableGroups_.emplace_back(groupOfNode(cable.id.srcUid), groupOfNode(cable.id.dstUid));

@@ -364,7 +364,7 @@ void AIChatComponent::cancelRequest() {
 
     // Restore normal input state.
     cancelFade_.setShown(false);
-    sendButton.setEnabled(true);
+    sendButton.setEnabled(!projectLoading_);
     inputField.setReadOnly(false);
     waitingStatusLabel = nullptr;
     setWaiting(false);

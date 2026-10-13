@@ -75,7 +75,21 @@ bool AIChatComponent::shouldUseStructuredOutput(const juce::String& text, const 
     return false;
 }
 
+static const char* const kSendTooltip = "Send message to AI  (Enter)";
+static const char* const kSendLoadingTooltip = "Available once the project has finished loading";
+
+void AIChatComponent::setProjectLoading(bool loading) {
+    if (projectLoading_ == loading)
+        return;
+    projectLoading_ = loading;
+    // A request in flight keeps Send disabled either way; its reply re-enables it (unless a load is running again).
+    sendButton.setEnabled(!loading && !isWaitingForResponse);
+    sendButton.setTooltip(loading ? kSendLoadingTooltip : kSendTooltip);
+}
+
 void AIChatComponent::sendButtonClicked() {
+    if (projectLoading_)
+        return; // Enter in the input reaches here too: nothing goes out while a project loads
     auto text = inputField.getText().trim();
     if (text.isEmpty())
         return;
