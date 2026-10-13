@@ -816,6 +816,10 @@ void MainComponent::showWelcomeScreen() {
     if (recentProjects.pruneMissing() > 0)
         saveRecentProjects();
     welcomeScreen_->setRecentProjects(recentProjects.getEntries());
+    // Reopened while hidden means a project is open underneath: show it over that project, closable. The launch
+    // screen (still on show) has nothing to return to and stays as it is.
+    if (isWelcomeScreenHidden())
+        welcomeScreen_->setDismissible(true);
     welcomeScreen_->toFront(false);
     welcomeFade_->setShown(true);
     welcomeScreen_->focusFirstControl();

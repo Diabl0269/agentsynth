@@ -452,6 +452,7 @@ TEST(AccessibilityCoverageTest, WelcomeScreen) {
     welcome.setSize(900, 700);
     welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
     welcome.setUsageStatsPromptShown(true); // the usage statistics card, with its Share / No thanks / link
+    welcome.setDismissible(true);           // the close button of the reopened screen
     EXPECT_TRUE(matchesBaseline("WelcomeScreen", auditAccessibility(welcome)));
 }
 

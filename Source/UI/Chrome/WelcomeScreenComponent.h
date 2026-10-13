@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Chrome/UsageStatsPromptComponent.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -24,9 +25,15 @@ namespace synth::ui {
 // not on screen land at once. The card height always includes the panel's current slot, so getCardBounds() and
 // resized() stay in step through the collapse.
 //
-// Keyboard: Tab and Shift+Tab visit the three start buttons, the recent projects, Contribute and
-// What's New, top to bottom, and wrap inside the overlay (it is a keyboard focus container). There
-// is no Escape action: the screen has no cancel, only a choice of how to start.
+// Two modes. Launch (the default): an opaque screen with no way out, since there is nothing to return to; the
+// owner picks how to start. Dismissible (setDismissible(true), used when it is reopened over an open project):
+// the project stays visible under a dimmed scrim, a close button sits in the card's top-right corner, and
+// Escape, that button or a click outside the card report onDismissRequested, which the owner answers by hiding
+// the overlay, leaving the project untouched.
+//
+// Keyboard: Tab and Shift+Tab visit the close button (dismissible only), the three start buttons, the recent
+// projects, Contribute and What's New, top to bottom, and wrap inside the overlay (it is a keyboard focus
+// container). Escape dismisses only in the dismissible mode.
 //
 // Pure UI: every action is reported through a callback and MainComponent decides what actually
 // happens (including running it through guardUnsavedChanges) — this class knows nothing about
@@ -37,6 +44,13 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+
+    /** true: project visible under a scrim, close button shown, Escape / close button / click outside the card
+     *  call onDismissRequested. false (the launch default): opaque, nothing dismisses it. */
+    void setDismissible(bool dismissible);
+    bool isDismissible() const noexcept { return dismissible_; }
 
     // Most-recent-first, already pruned of anything that no longer exists on disk (see
     // RecentProjects::pruneMissing) — this class shows whatever it's handed with no filtering of
@@ -53,6 +67,7 @@ public:
     // so a keyboard user who reopens it can press Space or Tab straight away.
     void focusFirstControl() { newProjectButton.grabKeyboardFocus(); }
 
+    std::function<void()> onDismissRequested; // dismissible mode only; the owner hides the overlay
     std::function<void()> onNewProject;
     std::function<void()> onOpenDefaultProject;
     std::function<void()> onOpenExistingProject;
@@ -74,6 +89,8 @@ public:
     // Direct accessors rather than getComponentID()+findChildWithID (mirrors
     // FeedbackSettingsTabTests.cpp's getSendButtonForTest() idiom) — simpler than a component-ID
     // lookup when the caller already has the concrete type.
+    juce::Button& getCloseButtonForTest() { return closeButton_; }
+    juce::Rectangle<int> getCardBoundsForTest() const { return getCardBounds(); }
     juce::Button& getNewProjectButtonForTest() { return newProjectButton; }
     juce::Button& getOpenDefaultButtonForTest() { return openDefaultButton; }
     juce::Button& getOpenExistingButtonForTest() { return openExistingButton; }
@@ -109,6 +126,10 @@ private:
     float promptFraction_ = 0.0f; // 1 = fully open, 0 = gone; the card's layout reads only this
     juce::VBlankAnimatorUpdater vblank_{this};
     synth::ui::AnimationDriver promptAnim_;
+
+    bool dismissible_ = false;
+    synth::ui::IconButton closeButton_{"Close welcome screen", synth::theme::Glyph::Close,
+                                       synth::ui::IconButton::Style::Round};
 
     juce::TextButton newProjectButton{"New empty project"};
     juce::TextButton openDefaultButton{"Open our default project"};

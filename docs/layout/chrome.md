@@ -385,10 +385,19 @@ It always shows at launch in the standalone app (never in the
 plugin) and there is no opt-out; a legacy `showWelcomeScreenAtLaunch` value in an old settings file
 is ignored. Help > Show Welcome Screen reopens it.
 
+**Reopened over a project.** Help > Show Welcome Screen while the launch screen is gone puts the overlay back in its
+*dismissible* mode (`WelcomeScreenComponent::setDismissible(true)`, set by `MainComponent::showWelcomeScreen()`): it is no
+longer opaque, so the open project shows through a dimmed scrim (black at 60%) around the card, and a close button (the
+shared `IconButton`, `Glyph::Close`, named "Close welcome screen", tooltip "Close (Esc)") sits in the card's top-right
+corner. Escape, that button (a Tab stop; Space/Return press it, accent focus ring from the look-and-feel) or a click on the
+scrim outside the card calls `onDismissRequested`, which `MainComponent` answers with `hideWelcomeScreen()`: the usual fade
+out, and the project, its dirty state and its undo history are untouched. The launch screen (nothing to return to) stays
+opaque with no close button and no Escape or click-outside action. Tests: `Tests/UI/Chrome/WelcomeScreenDismissTests.cpp`.
+
 Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle through its buttons
-(New, Open default, Open existing, the recents, Contribute, What's New) instead of escaping to the
+(the close button when dismissible, New, Open default, Open existing, the recents, Contribute, What's New) instead of escaping to the
 toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
-no Escape action: there is no cancel, only a choice of how to start.
+Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
 
 Between the Recent Projects list and the footer the card carries a low-key contribute line and a
 "Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to

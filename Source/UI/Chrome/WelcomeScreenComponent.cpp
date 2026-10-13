@@ -35,6 +35,17 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
             onUsageStatsLearnMoreRequested();
     };
 
+    closeButton_.setTitle("Close welcome screen");
+    closeButton_.setDescription("Returns to the open project");
+    closeButton_.setTooltip("Close (Esc)");
+    closeButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    closeButton_.setWantsKeyboardFocus(true); // a Tab stop; Space and Return press it
+    closeButton_.onClick = [this] {
+        if (onDismissRequested)
+            onDismissRequested();
+    };
+    addChildComponent(closeButton_); // shown only while dismissible
+
     newProjectButton.setTooltip("Start with an empty project");
     addAndMakeVisible(newProjectButton);
     newProjectButton.onClick = [this] {
@@ -94,6 +105,31 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     addAndMakeVisible(versionLabel);
 
     rebuildRecentProjectButtons();
+}
+
+void WelcomeScreenComponent::setDismissible(bool dismissible) {
+    if (dismissible_ == dismissible)
+        return;
+    dismissible_ = dismissible;
+    // Opaque only while it hides the project; a scrim must let the project under it paint.
+    setOpaque(!dismissible);
+    closeButton_.setVisible(dismissible);
+    repaint();
+}
+
+bool WelcomeScreenComponent::keyPressed(const juce::KeyPress& key) {
+    if (dismissible_ && key == juce::KeyPress::escapeKey) {
+        if (onDismissRequested)
+            onDismissRequested();
+        return true;
+    }
+    return false;
+}
+
+void WelcomeScreenComponent::mouseDown(const juce::MouseEvent& e) {
+    // A click on the scrim, outside the card. Clicks on the card's own children never reach here.
+    if (dismissible_ && !getCardBounds().contains(e.getPosition()) && onDismissRequested)
+        onDismissRequested();
 }
 
 int WelcomeScreenComponent::promptSlotHeight() const {
@@ -224,7 +260,10 @@ juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
 }
 
 void WelcomeScreenComponent::paint(juce::Graphics& g) {
-    g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+    if (dismissible_)
+        g.fillAll(juce::Colours::black.withAlpha(0.6f)); // the open project shows dimmed beneath the card
+    else
+        g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 
     auto card = getCardBounds();
     g.setColour(findColour(juce::ComboBox::backgroundColourId));
@@ -235,6 +274,7 @@ void WelcomeScreenComponent::paint(juce::Graphics& g) {
 
 void WelcomeScreenComponent::resized() {
     auto card = getCardBounds();
+    closeButton_.setBounds(juce::Rectangle<int>(28, 28).withRightX(card.getRight() - 10).withY(card.getY() + 10));
     auto area = card.reduced(28, 20);
 
     titleLabel.setBounds(area.removeFromTop(34));
