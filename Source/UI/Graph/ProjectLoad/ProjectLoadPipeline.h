@@ -33,6 +33,11 @@ public:
                         std::function<void(bool, const std::function<void()>&)> blockDetached = {});
     ~ProjectLoadPipeline() override;
 
+    /** Fired with true when an on-screen open begins and with false once it is fully done (the reveal has landed and
+     *  nothing is pending, or the open was released), once each; controls that must not act on a half-loaded
+     *  project (the assistant's Send) follow it. */
+    std::function<void(bool)> onBusyChanged;
+
     /** Message thread, first thing in a project open. On screen: ends any open still running, closes the audio gate
      *  and returns the deferral the load opens a DeferredAssetLoads::Scope on. Off screen: nullptr, nothing changes. */
     synth::DeferredAssetLoads* beginLoad();
@@ -64,6 +69,7 @@ private:
     void assetInstalled(const void* owner);
     void refresh();
     void setBlocking(bool blocking);
+    void setBusy(bool busy);
     double nowMs() const;
 
     GraphEditor& editor_;
@@ -85,6 +91,7 @@ private:
     static constexpr double kRevealWatchdogMs = 2000.0;
     bool interactive_ = false;
     bool loading_ = false;
+    bool busy_ = false; // what onBusyChanged last said
     bool slow_ = false;
     bool forceInteractive_ = false;
 };

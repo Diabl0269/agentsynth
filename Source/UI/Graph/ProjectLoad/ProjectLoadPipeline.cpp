@@ -65,6 +65,7 @@ synth::DeferredAssetLoads* ProjectLoadPipeline::beginLoad() {
     loading_ = true;
     slow_ = false;
     startMs_ = nowMs();
+    setBusy(true);
     engine_.setLoadGateOpen(false);
     return &loads_;
 }
@@ -81,6 +82,7 @@ void ProjectLoadPipeline::cancelCurrent() {
     setBlocking(false);
     stageLine_->update({}, 0.0f, false);
     engine_.setLoadGateOpen(true);
+    setBusy(false);
 }
 
 // The pending items are the decodes still in flight and every hosted plugin still instantiating, each on the node
@@ -109,13 +111,14 @@ void ProjectLoadPipeline::graphBuilt(bool ok) {
         }
     slow_ = !pending.empty();
     doneMs_ = nowMs();
+    const double syncLoadMs = doneMs_ - startMs_;
 
     const auto motion = animationsOff()          ? lr::Motion::off
                         : prefersReducedMotion() ? lr::Motion::reduced
                                                  : lr::Motion::full;
     auto& reveal = editor_.getLoadReveal();
     reveal.onLanded = [this] { refresh(); };
-    reveal.start(motion, pending, editor_.isShowing());
+    reveal.start(motion, pending, editor_.isShowing(), syncLoadMs);
     setBlocking(slow_);
     refresh();
     if (loading_ || !engine_.isLoadGateOpen())
@@ -167,7 +170,16 @@ void ProjectLoadPipeline::refresh() {
     if (!loading_ && !editor_.getLoadReveal().isLive()) {
         engine_.setLoadGateOpen(true);
         stopTimer();
+        setBusy(false);
     }
+}
+
+void ProjectLoadPipeline::setBusy(bool busy) {
+    if (busy_ == busy)
+        return;
+    busy_ = busy;
+    if (onBusyChanged)
+        onBusyChanged(busy);
 }
 
 void ProjectLoadPipeline::setBlocking(bool blocking) {

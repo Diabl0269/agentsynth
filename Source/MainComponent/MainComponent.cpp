@@ -247,6 +247,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         [this](bool blocked, const std::function<void()>& onRefused) {
             bottomDock.setDetachedEditsBlocked(blocked, onRefused);
         });
+    projectLoad_->onBusyChanged = [this](bool busy) { aiChatComponent.setProjectLoading(busy); };
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
     // ordered step here because it is standalone-only and never a top-level call site.

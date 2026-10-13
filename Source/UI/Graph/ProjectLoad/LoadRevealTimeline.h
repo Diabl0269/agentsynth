@@ -8,12 +8,15 @@
 
 namespace synth::ui::load_reveal {
 
-constexpr double kPopMs = 160.0;            ///< A card grows in (growScale, the 8% bounce).
-constexpr double kCableMs = 120.0;          ///< A cable draws out from its source once both ends have appeared.
-constexpr double kWaveSpanMs = 120.0;       ///< The last wave level starts no later than this after the first.
-constexpr double kMaxLevelStepMs = 40.0;    ///< Between two wave levels when there are few.
-constexpr double kReducedFadeMs = 80.0;     ///< Reduce Motion: the canvas fades in as a whole.
-constexpr double kStageLineDelayMs = 400.0; ///< A slow load says what it is waiting for after this long.
+constexpr double kPopMs = 160.0;              ///< A card grows in (growScale, the 8% bounce).
+constexpr double kCableMs = 120.0;            ///< A cable draws out from its source once both ends have appeared.
+constexpr double kWaveSpanMs = 120.0;         ///< The last wave level starts no later than this after the first.
+constexpr double kMaxLevelStepMs = 40.0;      ///< Between two wave levels when there are few.
+constexpr double kFastLoadMs = 200.0;         ///< A synchronous open up to this long reveals exactly as it always did.
+constexpr double kMaxWaveSpanMs = 900.0;      ///< However slow the open, the wave never stretches past this.
+constexpr double kMaxStretchedStepMs = 100.0; ///< Between two levels of a stretched wave.
+constexpr double kReducedFadeMs = 80.0;       ///< Reduce Motion: the canvas fades in as a whole.
+constexpr double kStageLineDelayMs = 400.0;   ///< A slow load says what it is waiting for after this long.
 
 enum class Motion { full, reduced, off };
 
@@ -22,8 +25,11 @@ enum class Motion { full, reduced, off };
  *  start on, and a cable as soon as both ends are. */
 class Timeline {
 public:
-    /** `levels[g]` is group g's wave level; a `pending` group waits for markReady. */
-    void start(Motion motion, const std::vector<int>& levels, const std::vector<bool>& pending);
+    /** `levels[g]` is group g's wave level; a `pending` group waits for markReady. `syncLoadMs` is how long the
+     *  synchronous part of the open took: up to kFastLoadMs the wave spans kWaveSpanMs, above it the span grows by
+     *  the excess (capped at kMaxWaveSpanMs) so a big patch that froze the app grows in visibly. */
+    void start(Motion motion, const std::vector<int>& levels, const std::vector<bool>& pending,
+               double syncLoadMs = 0.0);
     /** A pending group's assets are in at `nowMs`: it pops then, or at its wave slot if that is later. */
     void markReady(int group, double nowMs);
 

@@ -37,11 +37,12 @@ double LoadRevealAnimator::clockMs() const { return juce::Time::getMillisecondCo
 // Every card is hidden by the first frame, before the canvas paints again, so nothing shows at full size first. A
 // card's raster is pinned at its real scale for the pop: it is painted for the first time while scaled down, and a
 // raster taken then would stay soft (ZoomFrozenCachedImage::pinScale).
-void LoadRevealAnimator::start(lr::Motion motion, const std::set<uint32_t>& pendingNodes, bool drive) {
+void LoadRevealAnimator::start(lr::Motion motion, const std::set<uint32_t>& pendingNodes, bool drive,
+                               double syncLoadMs) {
     finish();
     motion_ = motion;
     drive_ = drive;
-    buildGroups(pendingNodes);
+    buildGroups(pendingNodes, syncLoadMs);
     outlines_ = !pendingNodes_.empty();
     live_ = true;
     nowMs_ = 0.0;

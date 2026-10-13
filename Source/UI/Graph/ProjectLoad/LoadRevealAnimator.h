@@ -60,7 +60,8 @@ public:
 
     /** Hides every card and starts the wave. `pendingNodes` are still loading assets: their groups stay outlined until
      *  setNodeReady. `drive` false: no VBlank reaches the canvas, frames come only from applyAtMs (tests). */
-    void start(synth::ui::load_reveal::Motion motion, const std::set<uint32_t>& pendingNodes, bool drive);
+    void start(synth::ui::load_reveal::Motion motion, const std::set<uint32_t>& pendingNodes, bool drive,
+               double syncLoadMs = 0.0);
     /** A pending node's assets are in; its group pops once all of its pending nodes are. */
     void setNodeReady(uint32_t nodeUid);
     /** Lands everything at once and restores every card. Safe at any time, also from inside a frame. */
@@ -125,7 +126,7 @@ private:
         float applied = -1.0f; // the pop progress last applied to its cards
     };
 
-    void buildGroups(const std::set<uint32_t>& pendingNodes);
+    void buildGroups(const std::set<uint32_t>& pendingNodes, double syncLoadMs);
     void applyGroup(Group& group, float progress);
     juce::Rectangle<int> groupArea(const Group& group) const;
     juce::Rectangle<int> cableArea(double fromMs, double toMs) const;

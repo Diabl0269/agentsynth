@@ -57,6 +57,9 @@ public:
     void refreshModels();
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
+    /** A project is opening: Send is disabled (and says why) and Enter does not send until it has finished loading. */
+    void setProjectLoading(bool loading);
+    bool isProjectLoading() const noexcept { return projectLoading_; }
 
     // Testing hooks: the edit-plan card of the most recent assistant message. The preview is its
     // body text, one line per phase, or the reason a rejected plan cannot apply ("" with no plan);
@@ -364,6 +367,7 @@ private:
     juce::Component messageList;
     juce::TextEditor inputField;
     juce::TextButton sendButton;
+    bool projectLoading_ = false;  // set while a project opens; Send stays disabled
     juce::TextButton cancelButton; // Visible ONLY while waiting
     juce::TextButton newChatButton;
     juce::TextButton historyButton; // opens the history list/restore/clear popup

@@ -83,3 +83,49 @@ TEST(LoadRevealTimeline, AnUnknownEndHasAlwaysAppeared) {
     EXPECT_EQ(t.cableProgress(-1, -1, 0.0), 1.0f) << "a cable the reveal does not know is simply there";
     EXPECT_EQ(t.cableProgress(-1, 0, 0.0), 0.0f) << "one known end still waits for it";
 }
+
+namespace {
+std::vector<double> slotsOf(double syncLoadMs, int depth) {
+    std::vector<int> levels;
+    for (int i = 0; i <= depth; ++i)
+        levels.push_back(i);
+    lr::Timeline t;
+    t.start(lr::Motion::full, levels, {}, syncLoadMs);
+    std::vector<double> starts;
+    for (int g = 0; g <= depth; ++g)
+        starts.push_back(t.appearedMs(g) - lr::kPopMs);
+    return starts;
+}
+} // namespace
+
+TEST(LoadRevealTimeline, AFastOpenRevealsExactlyAsItAlwaysDid) {
+    for (int depth : {1, 3, 40}) {
+        const auto base = slotsOf(0.0, depth);
+        EXPECT_EQ(slotsOf(150.0, depth), base);
+        EXPECT_EQ(slotsOf(lr::kFastLoadMs, depth), base);
+        EXPECT_LE(base.back(), lr::kWaveSpanMs + 1e-6);
+    }
+}
+
+TEST(LoadRevealTimeline, ASlowOpenSpreadsTheWaveInProportionToTheLoad) {
+    // 600 ms: span = 120 + 400 = 520 ms, step capped at 40 * 520 / 120 -> min(100, 173) = 100 ms.
+    const auto slow = slotsOf(600.0, 10);
+    EXPECT_GT(slow.back(), lr::kWaveSpanMs);
+    EXPECT_NEAR(slow.back(), 520.0, 1e-6);
+    const auto few = slotsOf(600.0, 2);
+    EXPECT_NEAR(few.back(), 200.0, 1e-6) << "few levels step at most 100 ms";
+}
+
+TEST(LoadRevealTimeline, TheWaveNeverStretchesPastTheCap) {
+    const auto huge = slotsOf(5000.0, 40);
+    EXPECT_NEAR(huge.back(), lr::kMaxWaveSpanMs, 1e-6);
+    const auto fewHuge = slotsOf(5000.0, 3);
+    EXPECT_LE(fewHuge.back(), lr::kMaxWaveSpanMs + 1e-6);
+}
+
+TEST(LoadRevealTimeline, ReducedMotionIgnoresTheLoadTime) {
+    lr::Timeline t;
+    t.start(lr::Motion::reduced, {0, 1, 2}, {}, 5000.0);
+    EXPECT_EQ(t.levelStepMs(), 0.0);
+    EXPECT_EQ(t.appearedMs(2), 0.0);
+}

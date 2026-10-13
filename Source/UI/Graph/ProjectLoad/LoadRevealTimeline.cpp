@@ -11,14 +11,20 @@ namespace {
 constexpr double kNever = 1.0e12;
 }
 
-// The step between levels shrinks with the depth of the patch so the last level always starts within kWaveSpanMs:
-// with the pop and the last cable after it, a load where everything is ready lands within about 400 ms.
-void Timeline::start(Motion motion, const std::vector<int>& levels, const std::vector<bool>& pending) {
+// The step between levels shrinks with the depth of the patch so the last level always starts within the span
+// (kWaveSpanMs; longer after a slow synchronous open): a fast load where everything is ready lands within about 400 ms.
+void Timeline::start(Motion motion, const std::vector<int>& levels, const std::vector<bool>& pending,
+                     double syncLoadMs) {
     motion_ = motion;
     int deepest = 0;
     for (int level : levels)
         deepest = std::max(deepest, level);
-    step_ = motion == Motion::full && deepest > 0 ? std::min(kMaxLevelStepMs, kWaveSpanMs / deepest) : 0.0;
+    const double span =
+        syncLoadMs <= kFastLoadMs ? kWaveSpanMs : std::min(kMaxWaveSpanMs, kWaveSpanMs + (syncLoadMs - kFastLoadMs));
+    const double maxStep = syncLoadMs <= kFastLoadMs
+                               ? kMaxLevelStepMs
+                               : std::min(kMaxStretchedStepMs, kMaxLevelStepMs * span / kWaveSpanMs);
+    step_ = motion == Motion::full && deepest > 0 ? std::min(maxStep, span / deepest) : 0.0;
     slot_.assign(levels.size(), 0.0);
     start_.assign(levels.size(), -1.0);
     for (size_t g = 0; g < levels.size(); ++g) {

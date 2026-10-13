@@ -180,8 +180,8 @@ void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::No
     for (auto id : ids)
         if (const auto* owner = macroController_.macroForNode(id))
             shrunkMacros.insert(owner->id);
-    // graph.removeNode() below frees each node's processor
-    // synchronously, same as a full graph-replacing restore -- but nothing here reaches
+    // graph.removeNode() below can free each node's processor at once (at the latest when the
+    // scope's one rebuild drops the old render sequence), like a graph-replacing restore -- but nothing here reaches
     // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
     // reconcileTimelineBindingsOnly(), installed on onGraphStructureChanged, deliberately does
     // not rebuild the mixer -- see its own comment). A mixer column bound to one of these

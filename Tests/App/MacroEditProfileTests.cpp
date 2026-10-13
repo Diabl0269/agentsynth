@@ -285,3 +285,35 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestEditProfile) {
     timedEdit(*mc, "delete track", [&] { host.deleteTrack(first); });
     timedEdit(*mc, "undo delete track", [&] { undo.undo(); });
 }
+
+// Opening the project as the app does: the open call, the first full paint, and the longest stall while the load
+// reveal plays. PROFILE_ON_SCREEN=1 PROFILE_AUDIO=1 for the on-screen path.
+TEST_F(ChannelFlowTest, DISABLED_LoadTestOpenProfile) {
+    const char* path = std::getenv("PROFILE_PROJECT");
+    const auto original = path != nullptr ? juce::File(path)
+                                          : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                                .getChildFile("AgentSynth/Load test.agsproj");
+    const auto copy =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    ASSERT_TRUE(original.copyDirectoryTo(copy));
+    const struct RemoveCopy {
+        juce::File dir;
+        ~RemoveCopy() { dir.deleteRecursively(); }
+    } removeCopy{copy};
+    for (int run = 0; run < 3; ++run) {
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        mc.setSize(1600, 1000);
+        if (std::getenv("PROFILE_AUDIO") == nullptr)
+            mc.getAudioEngine().suspendDeviceCallback();
+        if (std::getenv("PROFILE_ON_SCREEN") != nullptr)
+            mc.addToDesktop(juce::ComponentPeer::windowHasTitleBar), mc.setVisible(true);
+        benchWorstStallMs(200);
+        const double t0 = benchNowMs();
+        ASSERT_TRUE(mc.openProjectForTest(copy));
+        const double open = benchNowMs() - t0;
+        const double paint = benchPaintMs(mc);
+        const double stall = benchWorstStallMs(1500);
+        std::printf("[open] #%d open=%.1f paint=%.1f stall=%.1f\n", run + 1, open, paint, stall);
+        std::fflush(stdout);
+    }
+}
