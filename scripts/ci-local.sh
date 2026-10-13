@@ -254,7 +254,15 @@ fi
 cmake -S . "${cmake_args[@]}"
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"
-JOBS="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+# Cap at a quarter of the cores (min 2): several worktrees build at once, and a full-core
+# --parallel per build once drove the load average past 150. CI_LOCAL_JOBS=<n> overrides.
+CORES="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+JOBS=$((CORES / 4))
+if [ "$JOBS" -lt 2 ]; then JOBS=2; fi
+case "${CI_LOCAL_JOBS:-}" in
+    ''|*[!0-9]*|0) ;;
+    *) JOBS="$CI_LOCAL_JOBS" ;;
+esac
 # --parallel (not the native `-- -jN`) works across every generator CMake might pick here --
 # Ninja, Unix Makefiles, and on Windows/macOS potentially Visual Studio or Xcode, none of which
 # understand a raw `-jN` passed through to the native tool.
