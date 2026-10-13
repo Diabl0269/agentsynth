@@ -66,8 +66,8 @@ void MacroFoldAnimator::paintDashedBorder(juce::Graphics& g, juce::Rectangle<flo
 float MacroFoldAnimator::handover(const Live& live) const noexcept {
     if (!live.plan.collapsing || reduced_)
         return 0.0f;
-    return smooth(
-        static_cast<float>((localMs(live) - (live.timeline.modulesEndMs() - mf::kHandoverMs)) / mf::kHandoverMs));
+    return smooth(static_cast<float>((localMs(live) - (live.timeline.modulesEndMs() - live.timeline.handoverMs())) /
+                                     live.timeline.handoverMs()));
 }
 
 const MacroFoldAnimator::Live* MacroFoldAnimator::liveFor(const juce::String& macroId) const noexcept {
@@ -87,7 +87,7 @@ float MacroFoldAnimator::nestedAlpha(const Live& live, size_t index) const noexc
         return 1.0f;
     if (live.plan.collapsing)
         return nested->plan.collapsing ? handover(*nested) : 1.0f;
-    return 1.0f - smooth(static_cast<float>(localMs(*nested) / mf::kHandoverMs));
+    return 1.0f - smooth(static_cast<float>(localMs(*nested) / nested->timeline.handoverMs()));
 }
 
 juce::Rectangle<float> MacroFoldAnimator::moduleRect(const Live& live, size_t index) const noexcept {
@@ -347,6 +347,7 @@ bool MacroFoldAnimator::arm(std::vector<Plan> plans) {
         live.timeline.count = static_cast<int>(plan.modules.size());
         live.timeline.collapsing = plan.collapsing;
         live.timeline.withCables = !plan.cables.empty();
+        live.timeline.scale = plan.timeScale;
         live.landed.assign(plan.modules.size(), 0);
         total_ = std::max(total_, reduced_ ? mf::kFadeMs : plan.delayMs + live.timeline.totalMs());
         live.plan = std::move(plan);

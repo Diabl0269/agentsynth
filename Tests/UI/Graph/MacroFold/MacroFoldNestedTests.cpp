@@ -106,7 +106,7 @@ TEST(MacroFoldNested, CollapsingTheParentFoldsTheOpenChildFirstThenFliesItsCardI
     EXPECT_LE(child->second - child->first, mf::kTotalMs + 1e-9);
     EXPECT_LE(parent->second - parent->first, mf::kTotalMs + 1e-9);
     EXPECT_DOUBLE_EQ(n.fold().totalMs(), parent->second);
-    EXPECT_LE(n.fold().totalMs(), 2 * mf::kTotalMs + 1e-9);
+    EXPECT_LE(n.fold().totalMs(), mf::kTotalMs + 1e-9) << "two levels share one total, not one each";
 
     const auto childCard = n.fold().nestedRectFor(n.f.childId);
     ASSERT_FALSE(childCard.isEmpty());

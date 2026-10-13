@@ -393,7 +393,7 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   - *Expanding the parent:* the reverse. The child's box flies out to its card; an open child then unfolds out of it
     (its border is not drawn until then), and its picture fades as its modules start. A folded child's real card shows
     the moment its box lands, and it stays folded.
-  - *Timing:* each level keeps the 320 ms cap, so a two-level collapse is done by 640 ms (three levels 960 ms); an
+  - *Timing:* the levels share the one 320 ms cap (each runs on a clock 1/N as long, `Timeline::scale`), however deep; an
     expand adds the 160 ms cable draw-out after the last landing. A cable from a child's module to one of its
     parent's belongs to the child's plan: folding, it fades with the child's own cables; unfolding, it waits for the
     child's module.

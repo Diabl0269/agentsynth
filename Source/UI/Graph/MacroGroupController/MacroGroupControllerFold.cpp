@@ -152,6 +152,7 @@ public:
 
     std::vector<Fold::Plan> collapse(const juce::String& macroId, const Fold::Before& before) {
         auto* card = controller_.getMacroCard(macroId);
+        timeScale_ = 1.0 / openLevels(macroId);
         if (card != nullptr)
             collapsePlan(macroId, before, card->getBounds(), card, 0);
         assignCables(snapshot_.cables, /*bothEnds=*/true);
@@ -160,12 +161,25 @@ public:
 
     std::vector<Fold::Plan> expand(const juce::String& macroId, const Fold::Before& before,
                                    const std::vector<Fold::VisibleCable>& cables) {
+        timeScale_ = 1.0 / openLevels(macroId);
         expandPlan(macroId, before.card, &before.modules, 0.0, 0);
         assignCables(cables, /*bothEnds=*/false);
         return std::move(plans_);
     }
 
 private:
+    // The levels of the nest that fold: this macro and the open macros nested in it, to any depth. They share one
+    // total (Timeline::scale), so a deep nest folds as fast as a flat macro.
+    int openLevels(const juce::String& macroId) const {
+        int deepest = 0;
+        for (const auto& p : controller_.macroMemberPreviews(macroId)) {
+            const auto* child = p.isMacro() ? host_.getMacros().find(p.macroId) : nullptr;
+            if (child != nullptr && !child->collapsed)
+                deepest = std::max(deepest, openLevels(p.macroId));
+        }
+        return deepest + 1;
+    }
+
     const Fold::Before* beforeOf(const juce::String& macroId) const {
         const auto it = snapshot_.byMacro.find(macroId);
         return it == snapshot_.byMacro.end() ? nullptr : &it->second;
@@ -188,6 +202,7 @@ private:
             plan.hull = before.hull;
             plan.card = cardRect;
             plan.cardComp = cardComp;
+            plan.timeScale = timeScale_;
         }
         const auto previews = controller_.macroMemberPreviews(macroId);
         const auto boxes = boxesOnCard(*card, cardRect.getPosition(), previews);
@@ -212,7 +227,8 @@ private:
         auto& plan = plans_[index];
         plan.modules = std::move(modules);
         plan.delayMs = delay;
-        return delay + synth::ui::macro_fold::Timeline{static_cast<int>(plan.modules.size()), true}.modulesEndMs();
+        return delay + synth::ui::macro_fold::Timeline{static_cast<int>(plan.modules.size()), true, false, timeScale_}
+                           .modulesEndMs();
     }
 
     // `beforeUnits`: the boxes the units leave from (the closed card captured before the change); null for a nested
@@ -280,13 +296,15 @@ private:
             plan.hull = controller_.macroHullBounds(macroId);
             plan.card = cardRect;
             plan.delayMs = delay;
+            plan.timeScale = timeScale_;
             plan.modules = std::move(modules);
             for (const auto& port : macro->ports)
                 if (auto* widget = host_.moduleComponentFor(controller_.resolveMemberNodeId(port.nodeUuid)))
                     plan.ports.push_back(widget);
         }
         // Each open nested macro unfolds once its box has landed on the card it unfolds from.
-        const synth::ui::macro_fold::Timeline timeline{static_cast<int>(plans_[index].modules.size()), false};
+        const synth::ui::macro_fold::Timeline timeline{static_cast<int>(plans_[index].modules.size()), false, false,
+                                                       timeScale_};
         for (const auto& nestedId : nestedOpen) {
             const auto& units = plans_[index].modules;
             const auto it = std::find_if(units.begin(), units.end(),
@@ -320,6 +338,7 @@ private:
     GraphCanvasHost& host_;
     const Controller::FoldSnapshot& snapshot_;
     std::vector<Fold::Plan> plans_;
+    double timeScale_ = 1.0;
     std::map<uint32_t, std::pair<size_t, int>> ownerOf_; // node uid -> (plan, nesting depth)
 };
 
