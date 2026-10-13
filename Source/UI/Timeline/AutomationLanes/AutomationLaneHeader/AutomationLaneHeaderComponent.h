@@ -35,7 +35,6 @@ struct TrackHeaderHost;
 class AutomationLaneHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
-    , public juce::KeyListener
     , public KeyboardContextMenuProvider {
 public:
     static constexpr int kIndent = 16;       // px the row is inset from the track header's left edge
@@ -72,9 +71,6 @@ public:
     void resized() override;
     void moved() override;
 
-    /** The record-mode model behind the Read / Write chip: it holds the mode and its names but is never shown (the
-     *  chip opens a menu with the same choices). */
-    juce::ComboBox& getRecordModeCombo() noexcept { return recordMode_; }
     /** The control chips, the "+" button and edit mode. */
     LaneControlStrip& getControlStrip() noexcept { return strip_; }
 
@@ -114,8 +110,8 @@ public:
     std::function<void(int screenY)> onDragPress;
     std::function<void(int screenY)> onDragMove;
     std::function<bool()> onDragRelease;
-    /** Offered every key that reaches the record-mode combo or the "..." button first (the combo would take
-     *  Up/Down itself); true when the pool used it (Move Lane Up/Down). May be null. */
+    /** Offered every key that reaches the row (a chip's unused keys bubble here) first; true when the pool used it
+     *  (Move Lane Up/Down). May be null. */
     std::function<bool(const juce::KeyPress&)> onLaneKey;
     /** 0..1 strength of the lifted look while this lane is reorder-dragged; repaints only on a change. */
     void setLift(float lift);
@@ -127,9 +123,8 @@ public:
     void mouseExit(const juce::MouseEvent& e) override;
     /** The name button's tip while the pointer is over the name, else the row's own. */
     juce::String getTooltip() override;
-    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
     /** Keys for the header row itself: Return opens the lane menu, Up/Down ask the owner to move keyboard focus
-     *  to the previous/next row; the record-mode combo keeps its own Up/Down. */
+     *  to the previous/next row. */
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
     void focusLost(juce::Component::FocusChangeType cause) override;
@@ -146,7 +141,6 @@ private:
     void addModulatorItem(juce::PopupMenu& menu) const;
     void addCreateCustomLfoItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
-    void applyRecordModeColour();
     // The control chips (AutomationLaneHeaderControls.cpp).
     LaneControlStrip::Actions controlActions();
     void performControl(LaneControl control, juce::Component& anchor);
@@ -167,7 +161,6 @@ private:
     juce::String moduleName_;
     juce::String valueText_;
     juce::Colour trackColour_{juce::Colours::grey};
-    juce::ComboBox recordMode_;
     LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 

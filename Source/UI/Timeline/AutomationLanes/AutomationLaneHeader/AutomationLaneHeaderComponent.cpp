@@ -51,21 +51,6 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     addAndMakeVisible(nameButton_);
     nameButton_.onClick = [this] { openChangeParameterPicker(); };
 
-    // The combo is the record-mode model: it carries the five modes and the lane's accessible mode name, and the Read /
-    // Write chip applies the same choices. It is a child (so the menu walk from it still finds this header) but never
-    // shown.
-    addChildComponent(recordMode_);
-    recordMode_.setComponentID("automationLaneRecordMode");
-    recordMode_.addItem("Off", 1);
-    recordMode_.addItem("Read", 2);
-    recordMode_.addItem("Touch", 3);
-    recordMode_.addItem("Latch", 4);
-    recordMode_.addItem("Write", 5);
-    // Tab reaches it; a click does not move focus off the clips, whose Cmd+X/C/V the app routes by
-    // where real focus sits.
-    recordMode_.setMouseClickGrabsKeyboardFocus(false);
-    recordMode_.onChange = [this] { applyRecordModeChoice(recordMode_.getSelectedId()); };
-
     addAndMakeVisible(strip_);
     strip_.onPreferredWidthChanged = [this] { resized(); };
     strip_.onEditLookChanged = [this] { repaint(); };
@@ -74,8 +59,6 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
     addAndMakeVisible(readout_);
     // The readout takes mouse clicks (for its tooltip), so a right-click on it is forwarded here to open the menu.
     readout_.addMouseListener(this, false);
-    // Up/Down on the combo would change its selection, so the lane keys are offered before the combo sees them.
-    recordMode_.addKeyListener(this);
 
     refreshFromDoc();
 }
@@ -96,26 +79,10 @@ void AutomationLaneHeaderComponent::refreshFromDoc() {
     readout_.setParameterName(parameterName_);
     trackColour_ = laneColourFor(doc_, laneId_, coloursFor(*this).textMuted);
 
-    recordMode_.setSelectedId(lane->recordMode + 1, juce::dontSendNotification);
     strip_.refresh();
-    recordMode_.setTitle(parameterName_ + " record mode");
-    recordMode_.setTooltip(parameterName_ + " record mode");
     setTooltip(parameterName_ + " lane: right-click, Shift+F10 or Return for the lane menu. Drag to reorder");
-    applyRecordModeColour();
     resized(); // the name button is as wide as the name
     repaint();
-}
-
-// Write is the one mode that overwrites the lane while the transport records, so it reads in the
-// error colour as a standing warning.
-void AutomationLaneHeaderComponent::applyRecordModeColour() {
-    juce::Colour text = coloursFor(*this).text;
-    if (recordMode_.getSelectedId() == static_cast<int>(synth::LaneRecordMode::Write) + 1) {
-        text = juce::Colour(0xffE5484D);
-        if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-            text = lf->getTheme().colors.error;
-    }
-    recordMode_.setColour(juce::ComboBox::textColourId, text);
 }
 
 // Driven from the panel's existing transport poll, never a timer of its own; the text comparison

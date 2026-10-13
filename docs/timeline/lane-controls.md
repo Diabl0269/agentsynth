@@ -31,7 +31,7 @@ owner gives it `Actions` (run a control, can it act now, what the tooltip adds) 
   follows its header while the list scrolls (`TimelineAutomationLanes::placeBodies`).
 - **Edit controls** (one lane in the timeline at a time; entering it ends any other): the header gets an accent outline,
   "+" becomes a pressed pencil ("Editing controls: press Esc or Done to finish") and a 34 px **tray** slides down under the
-  header (280 ms, easeInOutCubic) with the controls the header does not show, dimmed, and a **Done** button. The tray plus a
+  header (280 ms, easeInOutCubic) with the controls the header does not show, dimmed, and a **Done** button. When the hidden chips and Done do not fit one row the tray gets another 34 px row (chips never overlap) and the rows below move by its real height. The tray plus a
   2 px gap are part of the lane's block (`TimelineAutomationLanes::modulatorOffset`), so every row below moves down with
   it. Click, Return or Space on a chip shows it (at the end) or hides it; dragging a chip from the header onto the tray
   hides it, from the tray onto the header shows it at the drop point (neighbours slide apart while it hovers), and

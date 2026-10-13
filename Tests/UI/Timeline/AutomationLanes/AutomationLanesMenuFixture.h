@@ -83,6 +83,17 @@ struct MenuCapture {
     }
 };
 
+// Opens the header's Read / Write chip menu and applies the item named `modeText` ("Off", "Read", "Touch", "Latch",
+// "Write") the way the menu's result is applied.
+inline void pickRecordMode(synth::ui::AutomationLaneHeaderComponent& header, const juce::String& modeText) {
+    MenuCapture capture;
+    auto& chip = *header.getControlStrip().chipFor(synth::ui::LaneControl::ReadWrite);
+    automation_lanes_test::clickButton(chip);
+    const auto* item = automation_lanes_test::findMenuItem(capture.menu, modeText);
+    ASSERT_NE(item, nullptr);
+    header.applyMenuChoice(item->itemID);
+}
+
 // Keeps the picker a lane header would have launched; always cleared on exit.
 struct PickerCapture {
     std::unique_ptr<synth::ui::ModMatrixPicker> picker;

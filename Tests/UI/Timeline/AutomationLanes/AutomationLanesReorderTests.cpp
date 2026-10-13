@@ -190,21 +190,20 @@ TEST(AutomationLanesReorderTest, CmdAltDownAndUpOnTheFocusedHeaderMoveTheLaneOne
     const juce::KeyPress down(juce::KeyPress::downKey, commandAlt, 0);
     const juce::KeyPress up(juce::KeyPress::upKey, commandAlt, 0);
     auto& header = f.header(f.cutoff);
-    const auto title = header.getRecordModeCombo().getTitle();
+    const auto title = header.getTitle();
 
-    // Through the key listener the record-mode combo consults before its own Up/Down handling.
-    EXPECT_TRUE(header.keyPressed(down, &header.getRecordModeCombo()));
+    // A key a control chip does not use bubbles to the row.
+    EXPECT_TRUE(header.keyPressed(down));
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.res, f.cutoff, f.detune}));
     EXPECT_EQ(f.onScreenOrder(f.bass), f.order(f.bass));
-    EXPECT_EQ(header.getRecordModeCombo().getTitle(), title) << "the lane keeps its accessible name";
+    EXPECT_EQ(header.getTitle(), title) << "the lane keeps its accessible name";
     EXPECT_EQ(f.panel.laneHeaderForTest(f.cutoff), &header) << "the same header, not a rebuilt one";
 
     ASSERT_TRUE(f.undo.undo());
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.cutoff, f.res, f.detune})) << "one step";
     EXPECT_FALSE(f.undo.canUndo());
 
-    EXPECT_TRUE(header.keyPressed(up, &header.getRecordModeCombo()))
-        << "consumed at the top, so the combo never sees it";
+    EXPECT_TRUE(header.keyPressed(up)) << "consumed at the top";
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.cutoff, f.res, f.detune}));
     EXPECT_FALSE(f.undo.canUndo()) << "nothing moved, nothing recorded";
 }
@@ -229,13 +228,11 @@ TEST(AutomationLanesReorderTest, ARebindOfMoveLaneUpIsHonoured) {
     manager.setBinding("timelineMoveLaneUp", juce::KeyPress('k', juce::ModifierKeys::altModifier, 0));
     auto& header = f.header(f.res);
 
-    EXPECT_TRUE(
-        header.keyPressed(juce::KeyPress('k', juce::ModifierKeys::altModifier, 0), &header.getRecordModeCombo()));
+    EXPECT_TRUE(header.keyPressed(juce::KeyPress('k', juce::ModifierKeys::altModifier, 0)));
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.res, f.cutoff, f.detune}));
     EXPECT_FALSE(header.keyPressed(
         juce::KeyPress(juce::KeyPress::upKey,
-                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0),
-        &header.getRecordModeCombo()))
+                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0)))
         << "the old key is free once it is rebound";
     f.panel.setShortcutManager(nullptr);
 }

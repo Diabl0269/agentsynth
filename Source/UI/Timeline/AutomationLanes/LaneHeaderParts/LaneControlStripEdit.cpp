@@ -40,7 +40,8 @@ void LaneControlTray::resized() {
 // Drawn at its full height whatever the slide has revealed: the bounds clip it.
 void LaneControlTray::paint(juce::Graphics& g) {
     const auto& colours = synth::theme::themeOf(*this).colors;
-    const auto shape = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(), (float)LaneControlStrip::kTrayHeight);
+    const auto shape = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(),
+                                              (float)(strip_.trayRows() * LaneControlStrip::kTrayHeight));
     juce::Path path;
     path.addRoundedRectangle(shape.getX(), shape.getY(), shape.getWidth(), shape.getHeight(), 6.0f, 6.0f, false, false,
                              true, true);
@@ -148,25 +149,53 @@ void LaneControlStrip::layoutTrayChips() {
         if (chip->getParentComponent() == tray_.get() && !(dragging_ && chip == pressed_))
             inTray.push_back(chip);
     }
-    const auto area = tray_->chipArea();
-    const float p = inTray.empty()
-                        ? 0.0f
-                        : std::min((float)LaneControlTray::kPitch,
-                                   (float)(area.getWidth() - chipSize_) / (float)std::max<size_t>(inTray.size(), 1));
-    const int y = (kTrayHeight - chipSize_) / 2;
-    for (size_t i = 0; i < inTray.size(); ++i)
-        inTray[i]->setBounds(area.getX() + (int)std::lround(p * (float)i), y, chipSize_, chipSize_);
+    const int perFirst = trayChipsPerRow(true);
+    const int perOther = trayChipsPerRow(false);
+    const int inset = (kTrayHeight - chipSize_) / 2;
+    for (int i = 0; i < (int)inTray.size(); ++i) {
+        const int row = i < perFirst ? 0 : 1 + (i - perFirst) / perOther;
+        const int col = i < perFirst ? i : (i - perFirst) % perOther;
+        inTray[(size_t)i]->setBounds(LaneControlTray::kPad + col * LaneControlTray::kPitch, row * kTrayHeight + inset,
+                                     chipSize_, chipSize_);
+    }
+    if (const int rows = trayRows(); rows != laidRows_) { // the tray grows or shrinks with the hidden count
+        laidRows_ = rows;
+        placeTray(ownerBounds_);
+        if (onTrayExtentChanged)
+            onTrayExtentChanged();
+    }
+}
+
+// How many chips one tray row holds: the first row also holds Done.
+int LaneControlStrip::trayChipsPerRow(bool firstRow) const {
+    const int width = ownerBounds_.getWidth() - 2 * LaneControlTray::kPad -
+                      (firstRow ? LaneControlTray::kPad + LaneControlTray::kDoneWidth : 0);
+    return juce::jmax(1, (width + LaneControlTray::kPitch - chipSize_) / LaneControlTray::kPitch);
+}
+
+// One 34 px row, and another for each time the hidden chips (and Done) no longer fit the rows so far.
+int LaneControlStrip::trayRows() const {
+    const int hidden = (int)laneControlCatalogue(kind_).size() - (int)shown_.size();
+    const int first = trayChipsPerRow(true);
+    if (ownerBounds_.getWidth() <= 0 || hidden <= first)
+        return 1;
+    const int other = trayChipsPerRow(false);
+    return 1 + (hidden - first + other - 1) / other;
 }
 
 int LaneControlStrip::trayExtent() const {
-    return (int)std::lround((double)(kTrayHeight + kTrayGap) * (double)trayOpen_);
+    return (int)std::lround((double)(trayRows() * kTrayHeight + kTrayGap) * (double)trayOpen_);
 }
 
 void LaneControlStrip::placeTray(juce::Rectangle<int> ownerBounds) {
+    const bool widthChanged = ownerBounds.getWidth() != ownerBounds_.getWidth();
     ownerBounds_ = ownerBounds;
     if (tray_ == nullptr)
         return;
-    const int height = (int)std::lround((double)kTrayHeight * (double)trayOpen_);
+    if (widthChanged && (editing_ || trayOpen_ > 0.0f))
+        layoutTrayChips(); // the rows depend on the width
+    laidRows_ = trayRows();
+    const int height = (int)std::lround((double)(laidRows_ * kTrayHeight) * (double)trayOpen_);
     tray_->setBounds(ownerBounds.getX(), ownerBounds.getBottom() - 1, ownerBounds.getWidth(), height);
     tray_->setVisible(height > 0);
     tray_->toFront(false);

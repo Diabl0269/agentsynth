@@ -18,6 +18,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AutomationLanes/AutomationLanesMenuFixture.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/AutomationKernel.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -413,17 +414,17 @@ TEST(TimelinePanelAutomationLanesTest, RecordModeComboWritesTheDocAsOneUndoStep)
     ASSERT_NE(header, nullptr);
 
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read)) << "default";
-    EXPECT_EQ(header->getRecordModeCombo().getSelectedId(), static_cast<int>(synth::LaneRecordMode::Read) + 1);
+    auto& readWrite = *header->getControlStrip().chipFor(synth::ui::LaneControl::ReadWrite);
+    EXPECT_TRUE(readWrite.getTooltip().endsWith("(Read)"));
 
-    // The combo's own change notification, as a pick from its menu delivers it.
-    header->getRecordModeCombo().setSelectedId(4, juce::sendNotificationSync); // Latch
+    // A pick from the Read / Write chip's menu.
+    lane_menu_test::pickRecordMode(*header, "Latch");
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read));
     EXPECT_EQ(panel.laneHeaderForTest(laneId), header) << "the header survives an edit that keeps its lane";
-    EXPECT_EQ(header->getRecordModeCombo().getSelectedId(), static_cast<int>(synth::LaneRecordMode::Read) + 1)
-        << "the combo follows the undo";
+    EXPECT_TRUE(readWrite.getTooltip().endsWith("(Read)")) << "the chip follows the undo";
 }
 
 TEST(TimelinePanelAutomationLanesTest, EachTracksFoldArrowFoldsOnlyThatTrack) {

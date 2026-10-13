@@ -14,7 +14,6 @@ namespace synth::ui {
 
 void AutomationLaneHeaderComponent::applyRecordModeChoice(int comboId) {
     setLaneRecordModeUndoable(doc_, undo_, laneId_, comboId - 1);
-    applyRecordModeColour();
 }
 
 // The move targets are captured here, as the menu is built, so a click resolves against the tracks
@@ -207,10 +206,6 @@ juce::String AutomationLaneHeaderComponent::getTooltip() {
     if (nameArea_.contains(getMouseXYRelative()))
         return nameButton_.getTooltip();
     return juce::SettableTooltipClient::getTooltip();
-}
-
-bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key, juce::Component*) {
-    return onLaneKey && onLaneKey(key);
 }
 
 // Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane

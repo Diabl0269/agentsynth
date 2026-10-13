@@ -143,12 +143,11 @@ TEST(AutomationLanesKeyboardTest, ModulatorRowsAreStopsDirectlyUnderTheirLane) {
 TEST(AutomationLanesKeyboardTest, MoveLaneStillMovesTheLaneAndModifiedArrowsAreNotSteps) {
     KeyboardPanel f;
     auto& header = f.header(f.cutoff);
-    auto& combo = header.getRecordModeCombo();
     const juce::ModifierKeys commandAlt(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
     ASSERT_EQ(f.doc.getTrack(f.bass)->lanes.front().id, f.cutoff);
 
-    EXPECT_TRUE(header.keyPressed(juce::KeyPress(juce::KeyPress::downKey, commandAlt, 0), &combo))
-        << "Cmd+Alt+Down is the move-lane key, even from the record-mode combo";
+    EXPECT_TRUE(header.keyPressed(juce::KeyPress(juce::KeyPress::downKey, commandAlt, 0)))
+        << "Cmd+Alt+Down is the move-lane key, as it bubbles from a control chip";
     EXPECT_EQ(f.doc.getTrack(f.bass)->lanes.front().id, f.res) << "the lane moved down one slot";
     EXPECT_EQ(f.stop(), nullptr) << "and focus did not step";
 
@@ -157,14 +156,14 @@ TEST(AutomationLanesKeyboardTest, MoveLaneStillMovesTheLaneAndModifiedArrowsAreN
     EXPECT_EQ(f.stop(), nullptr);
 }
 
-TEST(AutomationLanesKeyboardTest, TheRecordModeComboKeepsItsOwnUpAndDown) {
+TEST(AutomationLanesKeyboardTest, AControlChipHandsUpAndDownToTheRowWhichStepsTheLaneStop) {
     KeyboardPanel f;
     auto& header = f.header(f.cutoff);
-    auto& combo = header.getRecordModeCombo();
-    // Focus on the combo: the header's key listener must leave a bare Up/Down to the combo (it changes the mode with
-    // them), so the lane stop does not move; only focus on the row itself steps.
-    EXPECT_FALSE(header.keyPressed(downKey(), &combo));
-    EXPECT_FALSE(header.keyPressed(upKey(), &combo));
+    auto* chip = header.getControlStrip().chipFor(synth::ui::LaneControl::ReadWrite);
+    ASSERT_NE(chip, nullptr);
+    // A chip uses neither arrow, so JUCE bubbles them to the row, which steps; the chip itself changes no stop.
+    EXPECT_FALSE(chip->keyPressed(downKey()));
+    EXPECT_FALSE(chip->keyPressed(upKey()));
     EXPECT_EQ(f.stop(), nullptr);
     EXPECT_TRUE(header.keyPressed(downKey())) << "on the row itself Down steps";
     EXPECT_EQ(f.stop(), &f.header(f.res));

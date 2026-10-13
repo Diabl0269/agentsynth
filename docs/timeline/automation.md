@@ -66,8 +66,7 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 - a strip of **control chips** on the bottom line, ending in a "+" button ([below](#the-control-chips)). The record mode
   is its Read / Write chip: a menu of Off/Read/Touch/Latch/Write (ids = `LaneRecordMode` + 1, Write's chip in the error
   colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a pick IS a user gesture, unlike
-  `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call. The `recordMode_` combo stays in the header as the
-  mode's model (it is a hidden child and is never shown);
+  `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call.;
 - a lane menu: **Add modulator...** ([below](#modulators)), **Change parameter...** and **Duplicate**
   ([below](#change-parameter-and-duplicate)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and

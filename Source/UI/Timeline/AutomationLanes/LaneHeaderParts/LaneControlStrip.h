@@ -88,6 +88,8 @@ public:
     float editAmount() const noexcept { return trayOpen_; }
     /** The height the tray adds under the owner, px (the tray and the gap), mid-animation too. */
     int trayExtent() const;
+    /** How many 34 px rows the tray has: more when the hidden chips and Done do not fit one. */
+    int trayRows() const;
     /** Places the tray under `ownerBounds` (in the owner's parent coordinates). Call after the owner is placed. */
     void placeTray(juce::Rectangle<int> ownerBounds);
     LaneControlTray* getTray() noexcept { return tray_.get(); }
@@ -137,6 +139,7 @@ private:
     // Edit mode (LaneControlStripEdit.cpp).
     void placeEditChips();
     void layoutTrayChips();
+    int trayChipsPerRow(bool firstRow) const;
     void applyTrayOpen(float open);
     void animateTray(bool open);
     void landTray();
@@ -184,6 +187,7 @@ private:
     float trayFrom_ = 0.0f;
     float trayTo_ = 0.0f;
     bool animateNextLayout_ = false;
+    int laidRows_ = 1;
     std::unique_ptr<LaneControlChip> ghost_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LaneControlStrip)

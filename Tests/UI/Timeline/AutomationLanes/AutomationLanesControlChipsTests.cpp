@@ -600,3 +600,33 @@ TEST(AutomationLanesControlChipsTest, AModLaneEditModeMakesRoomUnderTheRowAndSho
     strip.exitEdit();
     EXPECT_EQ(f.header(f.lane2).getY(), before);
 }
+
+TEST(AutomationLanesControlChipsTest, TheTrayWrapsToAnotherRowInsteadOfOverlappingChips) {
+    ChipPanel f;
+    auto& strip = f.strip(f.lane);
+    strip.enterEdit();
+    ASSERT_EQ(strip.trayRows(), 1) << "six hidden chips and Done fit one row";
+    const int before = f.header(f.lane2).getY();
+
+    strip.toggleControl(LaneControl::ReadWrite);
+    strip.toggleControl(LaneControl::AddMod); // every control hidden
+    auto* tray = strip.getTray();
+    ASSERT_EQ(strip.trayRows(), 2);
+    EXPECT_EQ(tray->getHeight(), 2 * synth::ui::LaneControlStrip::kTrayHeight);
+    EXPECT_EQ(f.header(f.lane2).getY(), before + 34) << "the rows below move by the second row";
+    juce::Array<juce::Rectangle<int>> boxes;
+    for (const auto control : synth::ui::laneControlCatalogue(LaneControlKind::Automation)) {
+        const auto bounds = strip.chipFor(control)->getBounds();
+        EXPECT_EQ(strip.chipFor(control)->getParentComponent(), tray);
+        EXPECT_TRUE(tray->getLocalBounds().contains(bounds)) << "fully inside the tray";
+        EXPECT_FALSE(bounds.intersects(tray->getDoneButton().getBounds()));
+        for (const auto& other : boxes)
+            EXPECT_FALSE(bounds.intersects(other)) << "chips never overlap";
+        boxes.add(bounds);
+    }
+
+    strip.toggleControl(LaneControl::ReadWrite);
+    strip.toggleControl(LaneControl::AddMod); // six hidden again: back to one row
+    EXPECT_EQ(strip.trayRows(), 1);
+    EXPECT_EQ(f.header(f.lane2).getY(), before);
+}
