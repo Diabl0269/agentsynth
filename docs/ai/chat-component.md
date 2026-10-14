@@ -14,6 +14,7 @@ The class is split by concern across that directory:
 | `AIChatComponentSending.cpp` | Routing a request, reading its answer, previewing the plan once |
 | `AIChatComponentProvider.cpp` | Model and provider selection |
 | `AIChatComponentHistory.cpp` | Local and cloud conversation history, the upsell and downgrade strips |
+| `AIChatComponentExport.cpp` | Export chat: the per-turn record and the JSON file it writes |
 
 ## One answer, one card
 
@@ -199,9 +200,38 @@ step)"; Show details, the thumbs and the comment field are named and tipped too.
 
 Tab order is the input, Send (or Cancel, in the same slot), the message list, then the cards inside
 it in message order (`setExplicitFocusOrder` 1 to 4 on the input row and the list; the rest of the
-chrome follows by position). The input box, Send, Cancel, New Chat, History and the model picker all
+chrome follows by position). The input box, Send, Cancel, New Chat, History, Export chat and the model picker all
 carry a screen-reader name and a tooltip, checked by the `AIChat` surface of the accessibility
 coverage test ([`docs/development/accessibility.md`](../development/accessibility.md)).
+
+## Exporting a chat
+
+**Export chat** sits in the top row beside New Chat and History. It opens a save dialog (default name
+`agent-synth-chat-<yyyy-mm-dd-hhmm>.json`) and writes the open conversation as a JSON file you can inspect or attach to
+a bug report. It is a Tab stop with the accent focus ring, named "Export chat", and disabled, with a tooltip saying to send
+a message first, while the conversation has no message.
+
+The chat keeps, per live turn, the raw data it already receives, in memory only (`ChatTranscript`, `Source/AI/ChatTranscript.h`):
+the song plan reply, every build stream event, the final envelope or the model's text, the apply result and its notes, and
+the project summary sent with an edit or patch request. A conversation restored from history has no such record, so its turns
+export with the request and the response (or the stored edit plan) only, and no `plan`, `steps` or `events`. New Chat and a
+restore start a fresh record.
+
+```json
+{ "format": "agentsynth-chat", "version": 1, "exportedAt": "<ISO 8601>", "app": { "version": "..." },
+  "provider": { "kind": "remote" | "ollama", "model": "..." },
+  "turns": [ { "at": "<ISO 8601>", "request": "...", "kind": "song" | "edit" | "patch" | "chat",
+               "plan": {}, "steps": [ { "id": "", "kind": "", "label": "" } ], "events": [ {} ],
+               "envelope": {}, "response": "...", "context": {},
+               "applied": { "ok": true, "error": "...", "notes": [ "..." ] } } ] }
+```
+
+`plan`, `steps` and `events` are only on song turns (`events` is every build stream event, in order); `envelope` is the final
+edit plan or patch as received, and `response` the raw answer text when there is no envelope; `context` is the project summary
+the request carried (edit and patch turns); `at` is left out for a restored turn. `applied.ok` is false for a plan that was
+not applied (with `error` saying why, "Not applied yet." until the card's Apply succeeds), a failed, cancelled or timed-out
+request, and a build that could not finish; a text answer counts as ok. The serializer is the pure
+`ChatTranscript::toJson`, unit-tested in `Tests/AI/ChatTranscriptTests.cpp`.
 
 ## Panel visibility persistence
 

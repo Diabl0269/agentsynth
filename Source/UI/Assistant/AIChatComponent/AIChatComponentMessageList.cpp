@@ -352,6 +352,8 @@ void AIChatComponent::resized() {
     newChatButton.setBounds(topArea.removeFromLeft(100));
     topArea.removeFromLeft(kChromeGap);
     historyButton.setBounds(topArea.removeFromLeft(80));
+    topArea.removeFromLeft(kChromeGap);
+    exportButton.setBounds(topArea.removeFromLeft(100));
 
     // Account row: reserved directly above the model-picker row, inside the bottom chrome.
     // Zero height (and invisible) when no AccountService is attached, so every panel/test that
@@ -587,6 +589,7 @@ void AIChatComponent::updateChatDisplay() {
         refreshWaitingStatusLabel();
     }
 
+    updateExportButton();
     resized();
     scrollToBottom();
 }

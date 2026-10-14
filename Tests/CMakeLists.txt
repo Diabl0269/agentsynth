@@ -235,6 +235,7 @@ add_executable(Tests
     AI/WinHttpTransportTests.cpp
     AI/RemoteProvider/RemoteProviderCapabilityTests.cpp
     AI/RemoteProvider/RemoteProviderSongRouteTests.cpp
+    AI/ChatTranscriptTests.cpp
     AI/SongSteps/SongStepsProtocolTests.cpp
     AI/SongSteps/SongDetailsTextTests.cpp
     AI/SongSteps/SongStepsServiceTests.cpp
@@ -345,6 +346,7 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp
     UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
+    UI/Assistant/AIChatComponent/AIChatComponentExportTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentFoldTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentUpgradeTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentWaitingTests.cpp

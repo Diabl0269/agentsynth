@@ -139,8 +139,13 @@ void AIChatComponent::sendButtonClicked() {
     // A hosted song request (or a change to a plan still waiting to be built) goes through the free plan first; the
     // rest, and a service without the song routes, use the single project request.
     const int pendingPlan = pendingSongPlanIndex();
-    if (aiService.hasTimelineContext() && aiService.canPlanSongs() &&
-        (pendingPlan >= 0 || shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames()))) {
+    const bool songRequest = aiService.hasTimelineContext() && aiService.canPlanSongs() &&
+                             (pendingPlan >= 0 || shouldPlanSong(text, AIStateMapper::moduleFactoryTypeNames()));
+    beginTurn(text, songRequest   ? ChatTurn::Kind::song
+                    : projectPlan ? ChatTurn::Kind::edit
+                    : editRequest ? ChatTurn::Kind::patch
+                                  : ChatTurn::Kind::chat);
+    if (songRequest) {
         startSongPlan(text, pendingPlan >= 0 ? (size_t)pendingPlan : (size_t)-1);
         return;
     }
@@ -189,6 +194,9 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
     if (accountServicePtr != nullptr)
         accountServicePtr->refreshEntitlement();
 
+    const size_t turn = activeTurn_;
+    activeTurn_ = kNoTurn;
+
     if (aiResponse.success) {
         // Parsed once: the plan's root goes to the preview here and its JSON to the card's Apply.
         juce::String prose;
@@ -201,6 +209,8 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         // plan, no provider), which is exactly what keeps the later rating-sync check a no-op.
         messages.back().serverMessageId = aiResponse.messageId;
         attachPlanPreview(messages.back(), plan);
+        messages.back().turnIndex = turn == kNoTurn ? -1 : (int)turn;
+        recordAnswer(turn, aiResponse.content, plan, messages.back());
 
         // Local-first — every session writes here regardless of plan, right after the assistant
         // turn lands and `messages` reflects the full exchange. Not in the service's own callback:
@@ -211,12 +221,14 @@ void AIChatComponent::handleResponse(const AIProvider::AIResponse& aiResponse, b
         // The server's message is already a complete, user-facing sentence — no "Error: " prefix,
         // same precedent as TrialExhausted/ServiceCapacityExceeded. showUpgradeAction=true adds the
         // Upgrade-to-Pro button (see MessageBubble).
+        recordFailure(turn, aiResponse.error.message);
         messages.push_back({"assistant", aiResponse.error.message, "", false, /*showUpgradeAction=*/true});
         messages.back().responseMs = elapsed;
     } else {
         // Some provider messages already start with "Error: " (RemoteProvider's HTTP failures);
         // prefixing those again read "Error: Error: ..." in the bubble.
         const auto& text = aiResponse.error.message;
+        recordFailure(turn, text);
         messages.push_back({"assistant", text.startsWith("Error: ") ? text : "Error: " + text, ""});
         messages.back().responseMs = elapsed;
     }

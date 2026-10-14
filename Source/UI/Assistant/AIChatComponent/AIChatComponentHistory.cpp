@@ -56,6 +56,7 @@ void AIChatComponent::updateDowngradeStrip() {
 
 void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs) {
     messages.clear();
+    transcript.clear();
     for (const auto& pair : roleContentPairs) {
         const auto& role = pair.first;
         const auto& content = pair.second;

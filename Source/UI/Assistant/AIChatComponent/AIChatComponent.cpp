@@ -107,6 +107,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     newChatButton.onClick = [this]() {
         aiService.clearHistory();
         messages.clear();
+        transcript.clear();
         // A fresh conversation gets a fresh local-history id — the outgoing conversation's file is
         // left alone (its own save() already captured everything up to this point).
         currentLocalConversationId.clear();
@@ -119,6 +120,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         aiService.setConversationId({});
         updateChatDisplay();
     };
+
+    setUpExportButton();
 
     // Opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
     // set by updateUpsellStrip() below (it varies by plan, so setting a static default here would
@@ -302,6 +305,7 @@ void AIChatComponent::timerCallback() {
 
     // Request has timed out.
     cancelRequest();
+    recordFailure(activeTurn_, "The request timed out.");
     messages.push_back(
         {"assistant", "Error: Request timed out after " + juce::String(requestTimeoutMs / 60000) + " minutes.", ""});
     messages.back().responseMs = elapsed;
@@ -335,6 +339,7 @@ void AIChatComponent::handleUserCancel() {
     }
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     cancelRequest();
+    recordFailure(activeTurn_, "Cancelled.");
     messages.push_back({"assistant", "Cancelled.", ""});
     messages.back().responseMs = elapsed;
     updateChatDisplay();
