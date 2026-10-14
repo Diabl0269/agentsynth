@@ -101,7 +101,7 @@ TEST(MixerZonesTests, PinRightAndUnpinFromTheMenuOnlyOfferUnpinForAPinnedColumn)
             items.emplace_back(it.getItem().text, it.getItem().isEnabled);
     });
     r.panel->showChannelMenuForTest(id);
-    ASSERT_EQ(items.size(), 3u);
+    ASSERT_GE(items.size(), 3u);
     EXPECT_EQ(items[0].first, "Pin left");
     EXPECT_EQ(items[1].first, "Pin right");
     EXPECT_EQ(items[2].first, "Unpin");
@@ -115,6 +115,45 @@ TEST(MixerZonesTests, PinRightAndUnpinFromTheMenuOnlyOfferUnpinForAPinnedColumn)
     r.hookMenuToPick("Unpin");
     r.panel->showChannelMenuForTest(id);
     EXPECT_EQ(r.panel->getViewDoc().getZone(id), MixerZone::Scrolling);
+}
+
+TEST(MixerZonesTests, ATrackStripMenuOffersDuplicateTrackAndItDuplicatesTheTrackThroughTheRealPath) {
+    MixerZonesRig r(2);
+    const auto id = r.stripId(0);
+    const auto before = r.trackOrder();
+    ASSERT_EQ(before.size(), 2u);
+
+    bool offered = false;
+    r.panel->setShowZoneMenuHookForTest([&](juce::PopupMenu& menu) {
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            offered = offered || (it.getItem().text == "Duplicate Track" && it.getItem().isEnabled);
+    });
+    r.panel->showChannelMenuForTest(id);
+    EXPECT_TRUE(offered);
+
+    // Right-click on the strip's header, then pick the item: the same action as the timeline row's menu.
+    auto& header = r.panel->getStripColumnForTest(0)->getHeaderForTest();
+    r.hookMenuToPick("Duplicate Track");
+    header.mouseUp(makeClickEvent(header, {5.0f, 5.0f}, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+
+    const auto after = r.trackOrder();
+    ASSERT_EQ(after.size(), 3u) << "a copy of the track was made";
+    EXPECT_EQ(after[0], before[0]);
+    EXPECT_EQ(after[2], before[1]) << "the copy sits right below its source, like the timeline's duplicate";
+}
+
+TEST(MixerZonesTests, DirectAndMasterMenusHaveNoDuplicateTrack) {
+    MixerZonesRig r(1);
+    bool offered = false;
+    r.panel->setShowZoneMenuHookForTest([&](juce::PopupMenu& menu) {
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            offered = offered || it.getItem().text == "Duplicate Track";
+    });
+    r.panel->showChannelMenuForTest(synth::MixerViewDoc::kMasterId);
+    r.panel->showChannelMenuForTest(synth::MixerViewDoc::kDirectId);
+    EXPECT_FALSE(offered);
 }
 
 TEST(MixerZonesTests, DraggingARowToAnotherGroupPinsTheChannel) {

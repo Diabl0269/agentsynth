@@ -307,6 +307,7 @@ void MainComponent::addTrackFromPreset(const juce::String& presetName, synth::Tr
     const juce::String prefix =
         kind == synth::TrackPresetKind::Instrument ? juce::String("Instrument") : juce::String("Audio");
     juce::String trackName;
+    const TrackGrowInScope growIn(*this);
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, &preset, kind, prefix, &trackName] { trackName = insertTrackFromPresetVar(preset, kind, prefix); });

@@ -131,7 +131,7 @@ and the key share one function), never a second copy of the menu:
 |-------------|-------------|
 | Timeline track header row (or its name label / chip) | The track's menu (Make Channel, Save Track as Preset, Delete Track), at the row |
 | Timeline clip lane | The selected clip's menu (the first one when several are selected), at the clip; "Split at pointer" acts at the clip's middle |
-| Mixer panel | The focused column's header menu (Pin left / Pin right / Unpin), at the column. Nothing with no column focused |
+| Mixer panel | The focused column's header menu (Pin left / Pin right / Unpin, and Duplicate Track on a track's strip), at the column. Nothing with no column focused |
 | Graph canvas | The selected card's menu when exactly one module is selected, at the card; otherwise the canvas menu at the middle of the view. Nothing while focus is in the Mod Matrix |
 | Module library | The keyboard-focused row's menu, at the row. Only snippet rows have one (Delete Snippet) |
 | MIDI Remote panel | The selected controller's menu (Rename, Export, Delete, feedback output), at its row in the Controllers list |

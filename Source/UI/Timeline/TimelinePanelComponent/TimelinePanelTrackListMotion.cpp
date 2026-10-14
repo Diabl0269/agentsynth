@@ -1,7 +1,7 @@
-// Concern: TimelinePanelComponent's delete and undo motion of the track rows -- the picture taken before a removal,
-// which rows a rebuild added or removed, and the overlay (ExitEnterListMotion) that shrinks a removed row away, closes
-// the gap, and on undo opens the gap, grows the row back and fades an outline around it. The header and its whole lane
-// line are one picture, so they move as one row. docs/layout/animation.md "Delete and undo animation".
+// Concern: TimelinePanelComponent's delete, add and undo motion of the track rows -- the picture taken before a
+// removal, which rows a rebuild added or removed, and the overlay (ExitEnterListMotion) that shrinks a removed row
+// away, closes the gap, and on undo opens the gap, grows the row back and fades an outline around it. The header and
+// its whole lane line are one picture, so they move as one row. docs/layout/animation.md "Delete and undo animation".
 #include "AppUndoManager.h"
 #include "TimelinePanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -50,12 +50,13 @@ void TimelinePanelComponent::noteTracksLeaving() {
 }
 
 // Called by the rebuild when the set of tracks changed: which rows went and which came back. Only a delete (a picture
-// is waiting) or an undo/redo is animated; a track added any other way lands at once.
+// is waiting), an undo/redo, or an add or duplicate (armTrackInsertMotion) is animated; a track added any other way
+// lands at once.
 void TimelinePanelComponent::noteTrackSetChange(const std::vector<synth::Track>& tracks) {
     trackListMotion_.finishNow();
     trackRowsAdded_.clear();
     trackRowsRemoved_.clear();
-    if (!pendingTrackPicture_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
+    if (!pendingTrackPicture_ && !trackInsertArmed_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
         return;
     for (const auto& track : tracks) {
         const bool had = std::any_of(trackHeaderList_.headers.begin(), trackHeaderList_.headers.end(),
@@ -76,6 +77,7 @@ void TimelinePanelComponent::finishTrackListChange() {
     auto pending = std::exchange(pendingTrackPicture_, std::nullopt);
     const auto added = std::exchange(trackRowsAdded_, {});
     const auto removed = std::exchange(trackRowsRemoved_, {});
+    trackInsertArmed_ = false;
     if (doc_ == nullptr || !canAnimateTrackGlide() || pianoRoll_.isOpen() || added.empty() == removed.empty())
         return; // nothing came or went, or both did (lands at once)
 

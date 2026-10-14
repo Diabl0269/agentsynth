@@ -68,7 +68,7 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
         return;
     }
     std::vector<synth::TrackId> copies;
-    timelinePanel.armTrackDuplicateGlide(after);
+    const TrackGrowInScope growIn(*this);
     bool pushed = false;
     {
         const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
@@ -101,7 +101,6 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
         timelinePanel.selectTracks(copies, copies.back());
         statusBar.showMessage(verb + " " + juce::String(static_cast<int>(copies.size())) + " tracks");
     } else {
-        timelinePanel.armTrackDuplicateGlide({});
         statusBar.showMessage("Could not duplicate the tracks");
     }
 }

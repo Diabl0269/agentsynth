@@ -46,6 +46,17 @@ juce::String uniqueTrackName(const synth::TimelineDoc& doc, const juce::String& 
 
 } // namespace
 
+MainComponent::TrackGrowInScope::TrackGrowInScope(MainComponent& owner)
+    : owner_(owner) {
+    owner_.timelinePanel.armTrackInsertMotion();
+    owner_.bottomDock.getMixerPanel().armColumnInsertMotion();
+}
+
+MainComponent::TrackGrowInScope::~TrackGrowInScope() {
+    owner_.timelinePanel.finishTrackListChange();
+    owner_.bottomDock.getMixerPanel().finishColumnChange();
+}
+
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
     if (!mutation)
         return;
@@ -55,6 +66,7 @@ void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
 }
 
 void MainComponent::addMidiTrack() {
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
 
     // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
@@ -84,6 +96,7 @@ std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::n
 }
 
 void MainComponent::addAudioTrack() {
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
@@ -232,6 +245,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
         return;
     }
 
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
     // A hosted plugin's track is named after the plugin ("Diva", then "Diva 2"); every other instrument keeps
     // "<prefix> <N>".

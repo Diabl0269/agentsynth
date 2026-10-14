@@ -16,6 +16,8 @@
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
+#include <algorithm>
+
 std::set<juce::String> MacroGroupController::selectionFoldTargets(bool& anyExpanded) const {
     std::set<juce::String> targets;
     anyExpanded = false;
@@ -26,6 +28,18 @@ std::set<juce::String> MacroGroupController::selectionFoldTargets(bool& anyExpan
         if (const auto* m = macro_toggle::targetFor(host_.getMacros(), uuid)) {
             targets.insert(m->id);
             anyExpanded = anyExpanded || !m->collapsed;
+        }
+    }
+    // Folding the outer macro is all a collapse of a nest takes: a macro nested in another target keeps its own flag,
+    // so the outer one opens with every inner macro as it was left (a toggle that folded them too would open only
+    // the outer card, leaving the inner macros folded).
+    if (anyExpanded) {
+        const auto& macros = host_.getMacros();
+        for (auto it = targets.begin(); it != targets.end();) {
+            const auto ancestors = macros.ancestorChain(*it);
+            const bool nestedInTarget = std::any_of(ancestors.begin(), ancestors.end(),
+                                                    [&targets](const juce::String& a) { return targets.count(a) > 0; });
+            it = nestedInTarget ? targets.erase(it) : std::next(it);
         }
     }
     return targets;

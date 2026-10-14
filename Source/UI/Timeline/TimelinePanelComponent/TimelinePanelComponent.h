@@ -5,6 +5,7 @@
 #include "Transport/TransportNudge.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeOutPicture.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -226,6 +227,7 @@ public:
     void closePianoRoll();
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
+    synth::ui::FadeOutPicture& getRollLeavingForTest() noexcept { return rollLeaving_; }
     // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
     // resolveEditSurface()).
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
@@ -515,12 +517,14 @@ public:
      */
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
-    void armTrackDuplicateGlide(synth::TrackId source) noexcept { duplicateGlideSource_ = source; }
     /** Delete and undo motion (TimelinePanelTrackListMotion.cpp). Call noteTracksLeaving() before a change that may
      *  remove tracks (a delete, or an undo/redo that drops one) and finishTrackListChange() once the change and every
      *  re-sync it caused have landed: a removed row shrinks away and the rows below close the gap; a row an undo
-     *  brings back is made room for, grows back and gets a fading outline. Both are no-ops off screen. */
+     *  brings back is made room for, grows back and gets a fading outline. Both are no-ops off screen.
+     *  armTrackInsertMotion() before an add or a duplicate makes the new row grow in the same way (the rows below make
+     *  room first); the arm lasts until the next finishTrackListChange(). */
     void noteTracksLeaving();
+    void armTrackInsertMotion() noexcept { trackInsertArmed_ = true; }
     void finishTrackListChange();
     synth::ui::ExitEnterListMotion& getTrackListMotionForTest() noexcept { return trackListMotion_; }
     void focusTrackRow(synth::TrackId id);
@@ -677,8 +681,6 @@ private:
         float height = 0.0f;
     };
     std::vector<GlideRow> rowsToGlideAfterUndo() const;
-    std::vector<GlideRow> rowsToGlideAfterDuplicate();
-    synth::TrackId duplicateGlideSource_;
     bool canAnimateTrackGlide() const { return isShowing() || trackGlideForcedForTest_; }
     bool trackGlideForcedForTest_ = false;
     void glideTrackRowsFrom(const std::vector<GlideRow>& old);
@@ -700,6 +702,7 @@ private:
     void noteTrackSetChange(const std::vector<synth::Track>& tracks);
     std::optional<TrackListPicture> pendingTrackPicture_;
     std::vector<juce::String> trackRowsAdded_, trackRowsRemoved_;
+    bool trackInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new rows grow in
     synth::ui::ExitEnterListMotion trackListMotion_{*this};
 
     ReorderDragAnimator trackReorder_;
@@ -811,6 +814,7 @@ private:
     // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
     synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
     synth::ui::FadeVisibility rollFade_{&pianoRoll_};
+    synth::ui::FadeOutPicture rollLeaving_; // the roll as it was, fading away over the lanes (closePianoRoll)
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};

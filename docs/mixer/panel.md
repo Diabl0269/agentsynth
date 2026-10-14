@@ -357,7 +357,7 @@ which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 ### Per window keyboard focus
 
 Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on the
-focused column opens the same Pin left / Pin right / Unpin menu a right-click on its header does, placed at
+focused column opens the same menu a right-click on its header does (Pin left / Pin right / Unpin, plus Duplicate Track on a strip fed by exactly one track), placed at
 the column. `MixerPanelComponent` is the provider because it is the single focusable leaf; both paths call
 `showChannelMenu`.
 
@@ -522,7 +522,8 @@ an insert patched between an oscillator and a VCA used to show only after an unr
 rebuilds when the columns are unbound or a fresh snapshot differs from the one the last `rebuild()` laid out
 (`snapshotShown_`), and otherwise costs one snapshot build and compare.
 
-A column that leaves the scrolling group (the undo of Add Track or Duplicate Track) also shrinks away toward its centre
+A column that arrives with an added or duplicated track grows in the same way, forward (`armColumnInsertMotion`, set by
+`MainComponent::TrackGrowInScope`). A column that leaves the scrolling group (the undo of Add Track or Duplicate Track) also shrinks away toward its centre
 and the columns after it close up, and the redo that brings it back makes room, grows it back and fades an outline around
 it: `MixerPanelColumnMotion.cpp` pictures the scrolling group before the change (`noteColumnsLeaving`) and plays the
 picture over the finished rebuild (`finishColumnChange`). A deleted track's own channel leaves the same way, in step
@@ -634,7 +635,8 @@ the project's `MixerViewDoc` on its behalf (`MixerPanelViewEdits.cpp`).
 dragging its row from one group to another (the shared vertical `ReorderDragAnimator`: the dragged row
 follows the pointer, neighbours and group headings make room, Esc cancels, the drop only assigns the
 group; a row can't be dropped above the "Left zone" heading, which always stays first) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
-ticked; Unpin is offered only for a pinned column). Order inside a group is always the mixer's own
+ticked; Unpin is offered only for a pinned column). A strip fed by exactly one track also gets **Duplicate Track** there, the same
+action as the timeline row's menu and Cmd+D (the menu opens from the keyboard with the focused column's context-menu key). Order inside a group is always the mixer's own
 (track order). Dropping a **track** row elsewhere in its own group reorders the channel exactly like
 dragging its column header: its track moves in the timeline (`MixerPanelComponent::moveChannelWithinZone`,
 through `onMoveTrack`, one undo step). A **bus** row (or a track-less strip) dropped among the buses

@@ -211,6 +211,7 @@ void MainComponent::setControllerProfileTestDirectory(const juce::File& dir) {
 // ---- Shared post-construction body ----
 // Shared initialisation body called from both constructors after appProperties is set up.
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
+    setOpaque(true); // paint() fills every pixel with the theme's page colour; nothing behind it may show through
     synth::ui::TextFieldKeys::install(); // Cmd+Backspace clears to line start in every text field
     // Overlay the meter-colours override (if any) onto the AppLookAndFeel's already- theme-derived
     // cache — every ctor above already ran lookAndFeel->applyTheme() before calling this, so the

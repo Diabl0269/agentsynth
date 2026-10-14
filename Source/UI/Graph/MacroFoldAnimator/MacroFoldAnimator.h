@@ -65,6 +65,8 @@ public:
         /** When this macro starts, after the fold began: a nested macro folds before its parent's flight, and unfolds
          *  once its box has flown out of the parent. A nested plan has no `cardComp`: its card is its box. */
         double delayMs = 0.0;
+        /** Nested macros fold together: every level of a tree of N runs on a clock 1/N as long (Timeline::scale). */
+        double timeScale = 1.0;
     };
 
     /** What is captured before a collapse or expand changes the canvas, to be turned into a Plan once it has: for an

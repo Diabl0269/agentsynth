@@ -112,6 +112,10 @@ public:
     void timerCallback() override;
 
     void paint(juce::Graphics&) override;
+    void parentHierarchyChanged() override { syncWindowBackground(); }
+    /** Gives the window this sits in the theme's page colour, so nothing behind a fading or sliding pane is ever the
+     *  colour the window was built with. */
+    void syncWindowBackground();
     void resized() override;
 
     // ApplicationCommandTarget
@@ -447,6 +451,18 @@ private:
                                      bool poly, InstrumentChainBuild& build);
     void buildInstrumentEnvelopeChain(InstrumentChainBuild& build);
     bool buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build);
+    /** Around an add or a duplicate: the timeline row and the mixer strip it brings grow in, and settle when the scope
+     *  ends -- declare it before the undo step and let it end after the caller's reconcile. */
+    class TrackGrowInScope {
+    public:
+        explicit TrackGrowInScope(MainComponent& owner);
+        ~TrackGrowInScope();
+        TrackGrowInScope(const TrackGrowInScope&) = delete;
+        TrackGrowInScope& operator=(const TrackGrowInScope&) = delete;
+
+    private:
+        MainComponent& owner_;
+    };
     /** duplicateTrack's graph + timeline work (MainComponentTrackDuplicate.cpp); the caller owns the undo step. */
     synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName);
     /** Shared insert path; opens NO undo transaction of its own -- the caller must. */

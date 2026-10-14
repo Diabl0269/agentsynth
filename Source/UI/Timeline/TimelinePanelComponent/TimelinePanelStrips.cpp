@@ -151,10 +151,17 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     playhead_.repaint();
 }
 
+// Leaving mirrors entering: the roll cross-fades away over the lanes as it was, not as the empty roll closeRoll()
+// leaves behind -- a picture of it is taken first (by the roll's onAboutToClose when the roll closes itself, here when
+// the panel closes it) and fades; the emptied roll itself hides at once.
 void TimelinePanelComponent::closePianoRoll() {
+    if (pianoRoll_.isOpen())
+        rollLeaving_.capture(pianoRoll_);
     pianoRoll_.closeRoll();
-    // The (now empty) roll fades out as the clip lanes fade back in.
-    rollFade_.setShown(false);
+    if (rollLeaving_.play())
+        rollFade_.snapTo(false);
+    else
+        rollFade_.setShown(false); // the (now empty) roll fades out as the clip lanes fade back in
     clipLaneFade_.setShown(true);
     clipLaneArea_.grabKeyboardFocus();
     resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above

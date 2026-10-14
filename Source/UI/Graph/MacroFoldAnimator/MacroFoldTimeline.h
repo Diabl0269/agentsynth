@@ -11,8 +11,10 @@
 //
 // Module i starts `i * stagger` after the animation begins and flies for `kFlightMs`; the stagger shrinks for a big
 // macro so the last module still lands by `kTotalMs`. Expanding is the exact reverse: the module that left last comes
-// out first. The border is drawn as `outlineRect`: the card-to-border blend UNIONED with every module's current rect,
-// so no frame ever shows a module outside it.
+// out first. Nested macros fold TOGETHER, not one after the other: a tree of N levels runs every level on a clock
+// `scale = 1 / N` as long, so the whole nest is done by `kTotalMs` like a flat macro. The border is drawn as
+// `outlineRect`: the card-to-border blend UNIONED with every module's current rect, so no frame ever shows a module
+// outside it.
 namespace synth::ui::macro_fold {
 
 constexpr double kTotalMs = 320.0;   // the last module has landed by here
@@ -26,24 +28,29 @@ struct Timeline {
     int count = 0;
     bool collapsing = true;
     bool withCables = false; // expand only: cables draw out after the last landing
+    double scale = 1.0;      // (0, 1]: the share of kTotalMs this level gets when macros are nested in it
 
+    double flightMs() const noexcept { return kFlightMs * scale; }
+    double handoverMs() const noexcept { return kHandoverMs * scale; }
     double staggerMs() const noexcept {
-        return count > 1 ? std::min(kStaggerMs, (kTotalMs - kFlightMs) / static_cast<double>(count - 1)) : 0.0;
+        return count > 1
+                   ? std::min(kStaggerMs * scale, (kTotalMs * scale - flightMs()) / static_cast<double>(count - 1))
+                   : 0.0;
     }
     /** Where module `index` (its place in the macro's member order) sits in the order the modules leave or arrive. */
     int order(int index) const noexcept { return collapsing ? index : count - 1 - index; }
     double startMs(int index) const noexcept { return static_cast<double>(order(index)) * staggerMs(); }
-    double landMs(int index) const noexcept { return startMs(index) + kFlightMs; }
+    double landMs(int index) const noexcept { return startMs(index) + flightMs(); }
     /** When the last module lands (never past kTotalMs). */
     double modulesEndMs() const noexcept {
-        return count > 0 ? static_cast<double>(count - 1) * staggerMs() + kFlightMs : 0.0;
+        return count > 0 ? static_cast<double>(count - 1) * staggerMs() + flightMs() : 0.0;
     }
     /** When everything has settled: an expand's last cable finishes kCableMs after the last landing. */
     double totalMs() const noexcept { return modulesEndMs() + (!collapsing && withCables ? kCableMs : 0.0); }
 
     /** Module `index`'s linear flight progress at `ms`, 0..1. */
     float flight(int index, double ms) const noexcept {
-        return static_cast<float>(std::clamp((ms - startMs(index)) / kFlightMs, 0.0, 1.0));
+        return static_cast<float>(std::clamp((ms - startMs(index)) / flightMs(), 0.0, 1.0));
     }
     /** Eased position along the way from the start rect to the end rect: it accelerates into the box when folding and
      *  lands with the 8% bounce when unfolding. May pass 1 briefly. */

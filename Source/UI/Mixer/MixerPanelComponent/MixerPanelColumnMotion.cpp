@@ -1,7 +1,7 @@
-// Concern: MixerPanelComponent's delete and undo motion of the strip columns -- the picture taken before a removal,
-// which channels a rebuild added or removed, and the overlay (ExitEnterListMotion, horizontal) that shrinks a removed
-// column away, closes the gap, and on undo opens the gap, grows the column back and fades an outline around it. Only
-// the scrolling group moves; a pinned zone lands at once. docs/layout/animation.md "Delete and undo animation".
+// Concern: MixerPanelComponent's delete, add and undo motion of the strip columns -- the picture taken before a
+// removal, which channels a rebuild added or removed, and the overlay (ExitEnterListMotion, horizontal) that shrinks a
+// removed column away, closes the gap, and on undo opens the gap, grows the column back and fades an outline around it.
+// Only the scrolling group moves; a pinned zone lands at once. docs/layout/animation.md "Delete and undo animation".
 #include "AppUndoManager.h"
 #include "MixerPanelComponent.h"
 #include "MixerPanelInternal.h"
@@ -45,13 +45,14 @@ void MixerPanelComponent::noteColumnsLeaving() {
 }
 
 // Called by rebuild(): which strip and bus columns it had to build new and which it let go. Only a delete (a picture is
-// waiting) or an undo/redo is animated; a column added any other way lands at once.
+// waiting), an undo/redo, or an add or duplicate (armColumnInsertMotion) is animated; a column added any other way
+// lands at once.
 void MixerPanelComponent::noteColumnSetChange(const std::vector<juce::String>& added,
                                               const std::vector<juce::String>& removed) {
     if (added.empty() && removed.empty())
         return;
     columnMotion_.finishNow();
-    if (!pendingColumnPicture_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
+    if (!pendingColumnPicture_ && !columnInsertArmed_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
         return;
     for (const auto& key : added)
         addUnique(columnsAdded_, key);
@@ -63,6 +64,7 @@ void MixerPanelComponent::finishColumnChange() {
     auto pending = std::exchange(pendingColumnPicture_, std::nullopt);
     auto added = std::exchange(columnsAdded_, {});
     auto removed = std::exchange(columnsRemoved_, {});
+    columnInsertArmed_ = false;
     if (!canAnimateColumnMotion() || viewport_.getBounds().isEmpty())
         return;
 

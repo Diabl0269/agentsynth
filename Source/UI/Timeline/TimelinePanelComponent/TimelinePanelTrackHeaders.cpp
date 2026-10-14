@@ -410,8 +410,6 @@ void TimelinePanelComponent::syncTrackHeaders() {
             : synth::TrackId();
 
     auto reorderedRows = rowsToGlideAfterUndo();
-    if (reorderedRows.empty())
-        reorderedRows = rowsToGlideAfterDuplicate();
     // A row whose track is still there is kept (its state, keyboard focus included, goes with it) and only re-read:
     // re-creating every row made a duplicate, a delete or an undo of either cost a new row per track.
     std::map<std::int64_t, std::unique_ptr<TimelineTrackHeaderComponent>> previous;
@@ -551,7 +549,6 @@ void TimelinePanelComponent::applyTrackSelectionToHeaders() {
 }
 
 void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary) {
-    duplicateGlideSource_ = {};
     focusTrackKeepingSelection(primary);
     trackSelection_.selectAll(ids);
     applyTrackSelectionToHeaders();
@@ -601,9 +598,8 @@ void TimelinePanelComponent::toggleFocusedTrackSelection() {
     applyTrackSelectionToHeaders();
 }
 
-// Moves keyboard focus to `id`'s row and scrolls it into view; also disarms armTrackDuplicateGlide.
+// Moves keyboard focus to `id`'s row and scrolls it into view.
 void TimelinePanelComponent::focusTrackRow(synth::TrackId id) {
-    duplicateGlideSource_ = {};
     setFocusedTrack(id);
     if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
         trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();

@@ -292,6 +292,8 @@ public:
     // Fired when the roll asks to be closed (back button, Escape, or the edited clip disappearing)
     // — not fired by a direct closeRoll() call. See PianoRollComponent.cpp (refreshFromDoc).
     std::function<void()> onCloseRequested;
+    // Fired just before requestClose() empties the roll, so the owner can picture it as it was.
+    std::function<void()> onAboutToClose;
 
     // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
     std::function<void()> onSnapToggled;

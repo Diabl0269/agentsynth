@@ -222,6 +222,57 @@ TEST(TimelineTrackDeleteMotion, ATrackAddedAnyOtherWayLandsAtOnce) {
     EXPECT_FALSE(f.motion().isRunning());
 }
 
+TEST(TimelineTrackDeleteMotion, AnArmedAddMakesRoomThenGrowsTheNewRowIn) {
+    ReducedMotionGuard guard(false);
+    Fixture f;
+    f.panel.forceTrackGlideForTest(true);
+    const int rowH = f.rowHeight();
+    const int top = f.headerY(0);
+
+    f.panel.armTrackInsertMotion();
+    const auto d = f.doc.addTrack(TrackKind::Midi, "D");
+    f.panel.finishTrackListChange();
+
+    ASSERT_TRUE(f.motion().isRunning());
+    EXPECT_EQ(f.panel.getTrackHeaderCount(), 4) << "the model changed at once";
+    EXPECT_TRUE(f.motion().timeline().hasEnter);
+    EXPECT_FALSE(f.motion().timeline().hasExit);
+
+    f.motion().applyAtMs(ExitEnterTimeline::kGrowMs * 0.5); // appended last: no gap to wait for
+    const auto growing = f.motion().drawnRectFor(keyOf(d));
+    ASSERT_TRUE(growing.has_value());
+    EXPECT_LT(growing->getHeight(), static_cast<float>(rowH)) << "it grows out of nothing";
+
+    f.motion().applyAtMs(f.motion().timeline().totalMs());
+    EXPECT_FLOAT_EQ(f.motion().drawnRectFor(keyOf(d))->getY(), static_cast<float>(top + 3 * rowH));
+    EXPECT_FLOAT_EQ(f.motion().drawnRectFor(keyOf(d))->getHeight(), static_cast<float>(rowH));
+}
+
+TEST(TimelineTrackDeleteMotion, TheAddArmIsOneShotAndNeverLeaksIntoALaterAdd) {
+    ReducedMotionGuard guard(false);
+    Fixture f;
+    f.panel.armTrackInsertMotion();
+    f.doc.addTrack(TrackKind::Midi, "D"); // off screen: lands at once, and the arm is used up
+    f.panel.finishTrackListChange();
+    EXPECT_FALSE(f.motion().isRunning());
+
+    f.panel.forceTrackGlideForTest(true);
+    f.doc.addTrack(TrackKind::Midi, "E");
+    f.panel.finishTrackListChange();
+    EXPECT_FALSE(f.motion().isRunning()) << "an add nobody armed still lands at once";
+}
+
+TEST(TimelineTrackDeleteMotion, UnderReduceMotionAnArmedAddFadesTheRowInPlace) {
+    ReducedMotionGuard guard(true);
+    Fixture f;
+    f.panel.forceTrackGlideForTest(true);
+    f.panel.armTrackInsertMotion();
+    f.doc.addTrack(TrackKind::Midi, "D");
+    f.panel.finishTrackListChange();
+    ASSERT_TRUE(f.motion().isRunning());
+    EXPECT_TRUE(f.motion().isReducedMotion());
+}
+
 TEST(TimelineTrackDeleteMotion, ANewDeleteLandsTheOneStillPlaying) {
     ReducedMotionGuard guard(false);
     Fixture f;

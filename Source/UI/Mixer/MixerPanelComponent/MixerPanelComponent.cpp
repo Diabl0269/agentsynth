@@ -147,6 +147,7 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     onArmTrack = other.onArmTrack;
     buildTrackColourPicker = other.buildTrackColourPicker;
     onMoveTrack = other.onMoveTrack;
+    onDuplicateTrack = other.onDuplicateTrack;
     onPublishMidiRemoteAssignments = other.onPublishMidiRemoteAssignments;
     onSoloMidiLearnRequested = other.onSoloMidiLearnRequested;
     onSoloMidiForgetRequested = other.onSoloMidiForgetRequested;

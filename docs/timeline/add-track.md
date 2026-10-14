@@ -267,10 +267,11 @@ the reconcile pass:
    shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The copy is named "<name> copy",
    takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
 
-Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row emerges
-from its source's slot while the rows below glide down one slot (140 ms through the same `ReorderDragAnimator` an undo
-uses, armed by `armTrackDuplicateGlide`); under Reduce Motion, or off-screen, it lands at once. At `kMaxTracks` nothing
-happens and the status bar says so.
+Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row and the
+copy's mixer strip grow in (the rows below and the columns after make room first), the mirror of the delete motion, armed
+by `MainComponent::TrackGrowInScope`; adding a track from "+ Track" does the same. Under Reduce Motion it is a plain
+fade, and off-screen it lands at once. A mixer strip's right-click menu also offers "Duplicate Track" (the same action, for
+a strip fed by exactly one track). At `kMaxTracks` nothing happens and the status bar says so.
 
 Tests: `Tests/App/MainComponent/MainComponentDuplicateTrackTests.cpp` (the real key through the row; new ids, remapped
 cables, Master routing, clips, notes, lane; one undo and redo),

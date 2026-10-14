@@ -178,6 +178,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
     if (auto* top = getTopLevelComponent())
         top->sendLookAndFeelChange();
+    syncWindowBackground();
     // A detached Timeline/Mixer/MIDI Remote window is its OWN top-level Component -- the
     // sendLookAndFeelChange() above never reaches it, so without this a theme switch made while a
     // panel is detached left its background/header icon on whichever theme was active when it was

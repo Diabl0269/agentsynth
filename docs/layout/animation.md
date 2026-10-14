@@ -229,13 +229,10 @@ path); nothing else needs to know.
   `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
   drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
   any other rebuild lands at once.
-- **A duplicated track's row.** Cmd+D / "Duplicate Track" arms `TimelinePanelComponent::armTrackDuplicateGlide`; the
-  rebuild then starts the new row on its source's slot and glides it, and the rows below, to their places through the same
-  `glideTrackRowsFrom` (140 ms). It lands at once under Reduce Motion (`prefersReducedMotion()`) or off-screen. Undoing it
-  removes the row like deleting a track does: it shrinks away and the rows below close the gap.
-- **Off-screen.** Same check as the forward move: the timeline glide runs only
-  while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
-  forces it.
+- **An added or duplicated track's row** grows in through the delete motion's mirror ([delete and undo animation](#delete-and-undo-animation));
+  undoing it shrinks the row away and the rows below close the gap.
+- **Off-screen.** The timeline glide runs only while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so
+  headless tests land at once unless a test forces it.
 
 ### Controls swapping in place
 
@@ -286,7 +283,10 @@ every surface that animates a delete:
   accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
   Add Track or Duplicate Track, and the redo that brings it back), and when a track is deleted: its own channel is deleted
   with it, so its column shrinks away in step with the row (exit 180 ms, then the gap), and Cmd+Z makes room, grows it
-  back and fades the outline beside the row. A change that moves a column without adding or removing one lands at once.
+  back and fades the outline beside the row. Adding or duplicating a track (Cmd+D, the row menu, the strip menu's
+  "Duplicate Track") runs it forward, no outline: rows and columns after make room, then the new ones grow out of
+  nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` / `armColumnInsertMotion`). A change that moves a
+  column without adding or removing one lands at once.
   The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
   pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
   its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the
@@ -393,7 +393,7 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   - *Expanding the parent:* the reverse. The child's box flies out to its card; an open child then unfolds out of it
     (its border is not drawn until then), and its picture fades as its modules start. A folded child's real card shows
     the moment its box lands, and it stays folded.
-  - *Timing:* each level keeps the 320 ms cap, so a two-level collapse is done by 640 ms (three levels 960 ms); an
+  - *Timing:* the levels share the one 320 ms cap (each runs on a clock 1/N as long, `Timeline::scale`), however deep; an
     expand adds the 160 ms cable draw-out after the last landing. A cable from a child's module to one of its
     parent's belongs to the child's plan: folding, it fades with the child's own cables; unfolding, it waits for the
     child's module.
@@ -693,14 +693,14 @@ helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never
   `setShown()` returns and `onFrame` is not called, so the caller's own layout after it is right either way. Tests
   force the animated path with `FadeVisibility::setAnimateOffScreenForTest` and step by hand with
   `stepAllForTest` (`Tests/UI/Layout/FadeVisibilityTests.cpp`).
-
+ What shows through a fade is only the theme's page colour: `MainComponent` is opaque and `syncWindowBackground` gives the window `bg0` on attach and every theme switch.
 Where it is used: the Welcome screen hiding and reopening; the AI chat's hosted-mode notice, Upgrade to Pro strip
 and downgrade notice, its Cancel button and thinking spinner (which keeps pulsing until it has faded out); the plan
 card's feedback comment row (on a rating) and details panel (Show details), which fade while the card grows or
 shrinks to fit; the account row (as a whole, and its Sign in / Signing in / email and Sign out controls cross-fade
 as the state changes); the plan badge; the bottom dock's tabs (Timeline, Mixer, MIDI Remote), which cross-fade as the leaving host fades
 out over the arriving one (the active tab lands at once; the leaving panel's own visible flag follows its host's fade); the
-piano roll opening and closing against the clip lanes (closing fades the emptied roll out as the lanes fade in); the
+piano roll opening and closing against the clip lanes (closing fades a `FadeOutPicture` of the roll as it was, since the roll empties itself on close); the
 routing pane's canvas node, Show on canvas link, MIDI destinations and mixer channel row, whose heights follow the fade
 so the sections below slide; a track header's channel chip and fold arrow, whose widths follow the fade; a new
 modulator row with its band in the lanes; and the mixer's sections closing and opening (the height slides in every column from the fade's `progress()`, see [the shared sections](../mixer/panel.md#shared-sections)), its Direct and Master columns being shown or hidden, a pinned zone, the empty hint, a column header's colour dot and sources badge, the "+ Send" row and the zones pane's Show all.

@@ -651,3 +651,29 @@ TEST(BottomDockComponentTests, APressBelowTheThresholdNeverLiftsOrReordersTabs) 
     EXPECT_EQ(f.dock().getTabOrderForTest(), untouched);
     EXPECT_FALSE(settings->containsKey("bottomDockTabOrder"));
 }
+
+TEST(BottomDockComponentTests, TheWindowBehindThePanesTakesTheThemesPageColourNotTheColourItWasBuiltWith) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    EXPECT_TRUE(mc.isOpaque()) << "MainComponent paints every pixel, so nothing behind it may be painted first";
+
+    // A window built with a light colour (the stock default), like the app's before its theme is restored.
+    juce::ResizableWindow window("host", juce::Colours::white, false);
+    window.setContentNonOwned(&mc, true);
+    EXPECT_NE(window.getBackgroundColour(), juce::Colours::white) << "attaching syncs the window to the theme";
+
+    // A theme switch moves it along (a light theme here, so it cannot match the dark default by chance).
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lf;
+    ASSERT_TRUE(themes.setActiveTheme("daylight"));
+    lf.applyTheme(themes.getActiveTheme());
+    MainComponent themed(themes, lf, std::make_unique<MockProviderMDCT>());
+    juce::ResizableWindow window2("host2", juce::Colours::white, false);
+    window2.setContentNonOwned(&themed, true);
+    EXPECT_EQ(window2.getBackgroundColour(), lf.getTheme().colors.bg0);
+    themes.setActiveTheme("obsidian");
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100); // the broadcast is asynchronous
+    EXPECT_EQ(lf.getTheme().id, juce::String("obsidian"));
+    EXPECT_EQ(window2.getBackgroundColour(), lf.getTheme().colors.bg0) << "a switch re-colours the window";
+}

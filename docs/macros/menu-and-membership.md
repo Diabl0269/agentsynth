@@ -465,7 +465,12 @@ editing commands below handle nesting. A patch with no nesting behaves exactly a
   the outermost collapsed macro above it, so the toggle expands the card the user sees, not an inner
   macro they cannot. Collapsing a parent never changes its children's own collapsed flags: an open child folds into
   the parent's card first, and expanding the parent brings each child back open or folded as it was
-  ([Macro fold](../layout/animation.md#macro-fold)).
+  ([Macro fold](../layout/animation.md#macro-fold)). The toggle follows the same rule: when it folds a selection
+  that touches a macro and macros nested in it, only the outermost ones fold, so the next toggle opens the whole
+  nest with each inner macro open or folded as it was before. The flag lives on each macro (saved with the
+  project), so nothing extra is remembered.
+- **Nested folds share one duration:** a nest of N open levels folds or unfolds in the time of one flat macro
+  (every level runs on a clock 1/N as long, `Timeline::scale`), not one macro's time per level.
 - **Remove from Macro** moves a module up ONE level, into its macro's parent; from a top-level macro it
   leaves entirely, as before. A macro left with no direct members and no children dissolves.
 - **Cmd drag** (see [the hull border section](#cmd-drag-across-a-hull-border)): the join candidate is the

@@ -196,6 +196,10 @@ public:
      *  one undo step -- and rebuilds the mixer; never a direct TimelineDoc write. */
     std::function<void(synth::TrackId, int newIndex)> onMoveTrack;
 
+    /** The strip menu's "Duplicate Track": the same action as the timeline row's menu and Cmd+D. BottomDockComponent
+     *  wires this to MainComponent::duplicateTrack. */
+    std::function<void(synth::TrackId)> onDuplicateTrack;
+
     /** The ShortcutManager the M/S/R keys resolve their rebindable bindings against
      *  ("timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/"timelineArmFocusedTrack" -- the
      *  SAME action ids the Timeline track header row already binds, deliberately: a new id would
@@ -252,6 +256,9 @@ public:
      *  its rebuilds have landed. The columns after a removed one close the gap; a column an undo brings back is made
      *  room for, grows back and gets a fading outline. Only the scrolling group moves; no-ops off screen. */
     void noteColumnsLeaving();
+    /** Before an add or duplicate: the column that arrives grows in (the columns after it make room first). The arm
+     *  lasts until the next finishColumnChange(). */
+    void armColumnInsertMotion() noexcept { columnInsertArmed_ = true; }
     void finishColumnChange();
     /** Test seam: animate even though the panel is not showing. */
     void forceColumnMotionForTest(bool on) noexcept { columnMotionForced_ = on; }
@@ -618,6 +625,7 @@ private:
     void noteColumnSetChange(const std::vector<juce::String>& added, const std::vector<juce::String>& removed);
     std::optional<ColumnPicture> pendingColumnPicture_;
     std::vector<juce::String> columnsAdded_, columnsRemoved_;
+    bool columnInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new columns grow in
     bool columnMotionForced_ = false;
     synth::ui::ExitEnterListMotion columnMotion_{*this};
 

@@ -2,7 +2,7 @@
 // comes back (an undo or redo) is made room for, grows back and gets a fading outline around it
 // (MixerPanelColumnMotion.cpp). Drives a real off-screen MainComponent: Duplicate Track from the timeline row's menu
 // makes a middle column that Cmd+Z removes and Cmd+Shift+Z brings back, and the panels' ExitEnterListMotion is
-// stepped by hand.
+// stepped by hand. Adding and duplicating a track grow the same column and row in.
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
@@ -95,7 +95,7 @@ TEST(MixerPanelColumnMotion, UndoingADuplicateShrinksItsColumnThenTheColumnsAfte
     Rig rig(true);
     rig.duplicateFirstTrack();
     ASSERT_EQ(rig.columns().size(), 4u);
-    EXPECT_FALSE(rig.motion().isRunning()) << "a column added any other way lands at once";
+    EXPECT_TRUE(rig.motion().isRunning()) << "the duplicate's own column grows in (its own test below)";
     rig.motion().finishNow();
     const auto before = rig.columns();
     const auto copy = before[1]->getUuid();
@@ -163,6 +163,82 @@ TEST(MixerPanelColumnMotion, RedoMakesRoomGrowsTheColumnBackAndOutlinesIt) {
 
     rig.motion().applyAtMs(rig.motion().timeline().totalMs());
     EXPECT_FLOAT_EQ(rig.motion().outlineAlphaFor(copy), 0.0f);
+}
+
+TEST(MixerPanelColumnMotion, DuplicatingATrackMakesRoomThenGrowsItsColumnAndItsRowIn) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    const auto first = rig.columns()[0]->getUuid();
+    const float pitch = rig.panelX(*rig.columns()[1]) - rig.panelX(*rig.columns()[0]);
+    const auto secondOld = rig.columns()[1]->getUuid();
+    const float secondOldX = rig.panelX(*rig.columns()[1]);
+
+    rig.duplicateFirstTrack();
+
+    ASSERT_EQ(rig.columns().size(), 4u);
+    const auto copy = rig.columns()[1]->getUuid();
+    ASSERT_NE(copy, secondOld);
+    ASSERT_NE(copy, first);
+    ASSERT_TRUE(rig.motion().isRunning());
+    EXPECT_TRUE(rig.motion().timeline().hasEnter);
+    EXPECT_FALSE(rig.motion().timeline().hasExit);
+    EXPECT_FALSE(rig.motion().drawnRectFor(copy).has_value()) << "the gap opens first";
+    EXPECT_FLOAT_EQ(rig.motion().drawnRectFor(secondOld)->getX(), secondOldX)
+        << "the column after it has not moved yet";
+
+    rig.motion().applyAtMs(ExitEnterTimeline::kGapMs);
+    EXPECT_FLOAT_EQ(rig.motion().drawnRectFor(secondOld)->getX(), secondOldX + pitch) << "it made room";
+    EXPECT_FALSE(rig.motion().drawnRectFor(copy).has_value());
+
+    rig.motion().applyAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs * 0.5);
+    ASSERT_TRUE(rig.motion().drawnRectFor(copy).has_value());
+    EXPECT_LT(rig.motion().drawnRectFor(copy)->getWidth(), pitch) << "the copy grows out of nothing";
+
+    // The copy's row on the timeline grows in the same way.
+    auto& rows = rig.mc.getTimelinePanel().getTrackListMotionForTest();
+    EXPECT_TRUE(rows.isRunning());
+    EXPECT_TRUE(rows.timeline().hasEnter);
+    EXPECT_FALSE(rows.timeline().hasExit);
+}
+
+TEST(MixerPanelColumnMotion, AddingATrackGrowsItsColumnAndRowInAndAnUndoStillShrinksThemAway) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+
+    rig.mc.simulateAddAudioTrackClick();
+
+    ASSERT_EQ(rig.columns().size(), 4u);
+    ASSERT_TRUE(rig.motion().isRunning());
+    EXPECT_TRUE(rig.motion().timeline().hasEnter);
+    EXPECT_FALSE(rig.motion().timeline().hasExit);
+    EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().timeline().hasEnter);
+
+    rig.motion().finishNow();
+    rig.mc.getTimelinePanel().getTrackListMotionForTest().finishNow();
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    EXPECT_TRUE(rig.motion().timeline().hasExit);
+}
+
+TEST(MixerPanelColumnMotion, AddingAMidiTrackGrowsItsRowIn) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.mc.simulateAddMidiTrackClick();
+    EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().isRunning());
+    EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().timeline().hasEnter);
+}
+
+TEST(MixerPanelColumnMotion, OffScreenAnAddedOrDuplicatedTrackLandsAtOnceAndNothingStaysArmed) {
+    ReducedMotionGuard guard(false);
+    Rig rig(false);
+    rig.mc.simulateAddAudioTrackClick();
+    rig.duplicateFirstTrack();
+    EXPECT_FALSE(rig.motion().isRunning());
+    EXPECT_FALSE(rig.mc.getTimelinePanel().getTrackListMotionForTest().isRunning());
+
+    rig.mixer().forceColumnMotionForTest(true);
+    rig.mc.getTimelinePanel().forceTrackGlideForTest(true);
+    rig.mixer().rebuild();
+    EXPECT_FALSE(rig.motion().isRunning()) << "a rebuild nobody armed lands at once";
 }
 
 TEST(MixerPanelColumnMotion, ReduceMotionFadesTheColumnInPlace) {

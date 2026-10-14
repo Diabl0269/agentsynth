@@ -1,13 +1,12 @@
 // TimelineTrackDuplicateTests.cpp
 //
 // Duplicating a track from its header row: Cmd+D (the rebindable "timelineDuplicateFocusedTrack") driven through
-// the row's real keyPressed(), the right-click menu's "Duplicate Track" entry, and the row glide a duplicate arms.
+// the row's real keyPressed(), and the right-click menu's "Duplicate Track" entry.
 // What the host does with the request is MainComponentDuplicateTrackTests.cpp's concern; here the host is a stub
 // that records the call.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
@@ -63,10 +62,6 @@ const juce::PopupMenu::Item* findItem(const juce::PopupMenu& menu, const juce::S
             return &it.getItem();
     return nullptr;
 }
-
-struct ReducedMotionGuard {
-    ~ReducedMotionGuard() { synth::ui::setReducedMotionForTest(std::nullopt); }
-};
 
 } // namespace
 
@@ -142,46 +137,4 @@ TEST(TimelineTrackDuplicateTest, TheAutomationSectionMenuHasNoDuplicateEntry) {
     auto* header = f.panel.getTrackHeaderAt(0);
     ASSERT_NE(header, nullptr);
     EXPECT_EQ(findItem(header->buildContextMenu(), "Duplicate Track"), nullptr);
-}
-
-TEST(TimelineTrackDuplicateTest, TheCopyGrowsOutOfItsSourceRowWhenTheRowsCanGlide) {
-    ReducedMotionGuard guard;
-    synth::ui::setReducedMotionForTest(false);
-    Fixture f;
-    f.panel.forceTrackGlideForTest(true);
-    const auto a = f.doc.addTrack(TrackKind::Midi, "A");
-    f.doc.addTrack(TrackKind::Midi, "B");
-    ASSERT_FALSE(f.panel.isTrackReorderActiveForTest());
-
-    f.panel.armTrackDuplicateGlide(a);
-    ASSERT_TRUE(f.doc.duplicateTrack(a, "A copy", 0xff123456, {}).isValid());
-
-    EXPECT_TRUE(f.panel.isTrackReorderActiveForTest()) << "the rows below glide down and the new row emerges";
-    ASSERT_EQ(f.panel.getTrackHeaderCount(), 3);
-}
-
-TEST(TimelineTrackDuplicateTest, UnderReduceMotionTheCopyLandsAtOnce) {
-    ReducedMotionGuard guard;
-    synth::ui::setReducedMotionForTest(true);
-    Fixture f;
-    f.panel.forceTrackGlideForTest(true);
-    const auto a = f.doc.addTrack(TrackKind::Midi, "A");
-    f.doc.addTrack(TrackKind::Midi, "B");
-
-    f.panel.armTrackDuplicateGlide(a);
-    ASSERT_TRUE(f.doc.duplicateTrack(a, "A copy", 0xff123456, {}).isValid());
-
-    EXPECT_FALSE(f.panel.isTrackReorderActiveForTest());
-    EXPECT_EQ(f.panel.getTrackHeaderCount(), 3);
-}
-
-TEST(TimelineTrackDuplicateTest, WithoutAnArmTheRebuildNeverGlides) {
-    ReducedMotionGuard guard;
-    synth::ui::setReducedMotionForTest(false);
-    Fixture f;
-    f.panel.forceTrackGlideForTest(true);
-    const auto a = f.doc.addTrack(TrackKind::Midi, "A");
-
-    ASSERT_TRUE(f.doc.duplicateTrack(a, "A copy", 0xff123456, {}).isValid());
-    EXPECT_FALSE(f.panel.isTrackReorderActiveForTest());
 }

@@ -26,6 +26,7 @@ add_executable(Tests
     UI/Graph/MacroFold/MacroFoldTests.cpp
     UI/Graph/MacroFold/MacroFoldPackTests.cpp
     UI/Graph/MacroFold/MacroFoldNestedTests.cpp
+    UI/Graph/MacroFold/MacroFoldDeepNestTests.cpp
     UI/Graph/CableRetractTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
@@ -629,6 +630,7 @@ add_executable(Tests
     UI/Layout/DisclosureChevronTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
+    UI/Layout/ButtonStateEaseTests.cpp
     UI/Layout/SharedChipControlsTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
     UI/Layout/TabStripKeysTests.cpp
