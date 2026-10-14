@@ -31,7 +31,8 @@ size_t AIChatComponent::beginTurn(const juce::String& text, ChatTurn::Kind kind)
     turn.error = "No answer yet.";
     if (kind == ChatTurn::Kind::edit) {
         turn.context = aiService.buildProjectRequestBody(text);
-        turn.context.getDynamicObject()->removeProperty("userPrompt"); // already the turn's "request"
+        if (auto* body = turn.context.getDynamicObject())
+            body->removeProperty("userPrompt"); // already the turn's "request"
     } else if (kind == ChatTurn::Kind::patch) {
         turn.context = juce::JSON::parse(aiService.getPatchContext());
     }
