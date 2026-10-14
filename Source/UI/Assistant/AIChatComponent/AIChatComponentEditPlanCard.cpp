@@ -319,6 +319,7 @@ bool AIChatComponent::applyEditPlan(size_t index) {
         return false;
     const auto result = aiService.applyProjectEdit(juce::JSON::parse(messages[index].planJson));
     juce::Logger::writeToLog("Edit plan apply: " + (result.ok ? juce::String("applied") : result.message));
+    recordApplied(messages[index], result);
     if (result.ok) {
         messages[index].planApplied = true;
         saveCurrentConversationLocally();

@@ -106,6 +106,12 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     if (outcome.kind == Kind::unsupported) {
         // A service without the song routes: the same text goes the way it always went, after one line saying why
         // there are no steps.
+        // The request goes the project.generate way, so the turn is recorded as an edit with its context.
+        transcript.updateTurn(activeTurn_, [this, &text](ChatTurn& turn) {
+            turn.kind = ChatTurn::Kind::edit;
+            turn.context = aiService.buildProjectRequestBody(text);
+            turn.context.getDynamicObject()->removeProperty("userPrompt");
+        });
         messages.push_back(
             {"assistant", "Song steps aren't available on this server, so I'm building it in one go.", ""});
         updateChatDisplay();
@@ -126,6 +132,9 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     auto session = std::make_shared<SongSession>();
     session->requestText = text;
     session->adoptPlan(outcome.reply, true);
+    session->turnIndex = activeTurn_ == kNoTurn ? -1 : (int)activeTurn_;
+    activeTurn_ = kNoTurn;
+    recordSongPlan(session, outcome.reply);
     if (pendingPlanIndex < messages.size() && messages[pendingPlanIndex].song) {
         const auto& old = messages[pendingPlanIndex].song;
         session->requestText = old->requestText;
@@ -139,6 +148,7 @@ void AIChatComponent::handleSongPlan(const juce::String& text, size_t pendingPla
     messages.push_back({"assistant", kSongPlanLine, ""});
     messages.back().responseMs = elapsed;
     messages.back().song = session;
+    messages.back().turnIndex = session->turnIndex;
     updateChatDisplay();
     inputField.grabKeyboardFocus();
 }
@@ -166,6 +176,7 @@ void AIChatComponent::replanSong(size_t index, int lengthIndex, int detailIndex,
                 return;
             if (o.kind == AIIntegrationService::SongPlanOutcome::Kind::plan) {
                 session->adoptPlan(o.reply, false);
+                self->recordSongPlan(session, o.reply);
                 session->notice = noticeAfter;
             } else {
                 session->lengthIndex = oldLength;
@@ -236,6 +247,7 @@ void AIChatComponent::handleSongEvent(const std::shared_ptr<SongSession>& sessio
                                       const songsteps::StreamEvent& event) {
     if (session->phase != SongSession::Phase::building)
         return;
+    recordSongEvent(*session, event);
     // The done and error events end the build in handleSongFinished; the model of the steps only follows the others.
     if (event.type == songsteps::EventType::done || event.type == songsteps::EventType::error)
         return;
@@ -253,6 +265,7 @@ void AIChatComponent::handleSongFinished(size_t index, const std::shared_ptr<Son
         return;
     session->buildEndMs = juce::Time::getMillisecondCounter();
     const int elapsed = (int)(session->buildEndMs - session->buildStartMs);
+    recordSongOutcome(*session, outcome);
     activeRequestId = {};
     cancelRequest();
     if (accountServicePtr != nullptr)
@@ -324,6 +337,8 @@ void AIChatComponent::cancelSongBuild() {
     auto session = messages[index].song;
     session->phase = SongSession::Phase::failed;
     session->cancelled = true;
+    transcript.updateTurn(session->turnIndex < 0 ? kNoTurn : (size_t)session->turnIndex,
+                          [](ChatTurn& turn) { turn.error = "Cancelled."; });
     messages[index].text = kSongNotBuiltLine;
     session->buildEndMs = juce::Time::getMillisecondCounter();
     session->model.markFailed("Cancelled", true);

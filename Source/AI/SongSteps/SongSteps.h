@@ -88,6 +88,7 @@ enum class EventType { steps, step, ping, done, error };
 
 struct StreamEvent {
     EventType type = EventType::ping;
+    juce::var raw;               // the line as received, parsed (the chat export keeps it)
     std::vector<StepInfo> steps; // steps
     juce::String stepId;         // step
     StepStatus status = StepStatus::running;

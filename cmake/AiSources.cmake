@@ -4,6 +4,8 @@
 target_sources(Core PRIVATE
     Source/AI/SoundShapeChecks.h
     Source/AI/SoundShapeChecks.cpp
+    Source/AI/ChatTranscript.h
+    Source/AI/ChatTranscript.cpp
     Source/AI/SongSteps/SongSteps.h
     Source/AI/SongSteps/SongSteps.cpp
     Source/AI/SongSteps/SongDetailsText.h

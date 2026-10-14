@@ -394,6 +394,7 @@ set(APPUI_SOURCES
     Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentExport.cpp
     Source/UI/Assistant/AIChatComponent/ChatMessageViewport.h
     Source/UI/Assistant/ChatMessageAccessibilityText.h
     Source/UI/Assistant/AccountRow.cpp

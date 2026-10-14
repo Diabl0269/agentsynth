@@ -2,6 +2,7 @@
 
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
+#include "AI/ChatTranscript.h"
 #include "AI/ConversationHistorySource.h"
 #include "AI/LocalHistoryStore.h"
 #include "AI/PatchDiff.h"
@@ -228,6 +229,12 @@ public:
     bool lastHistoryPopupWasCloudForTesting() const { return lastHistoryPopupWasCloud; }
     const std::vector<LocalConversationSummary>& lastHistoryListForTesting() const { return lastHistoryList; }
 
+    // Testing hooks for Export chat: the button, the document it would write, and writing it to `file` without a
+    // dialog.
+    juce::TextButton& getExportButtonForTesting() { return exportButton; }
+    juce::var buildChatExportForTesting() const { return buildChatExport(); }
+    bool writeChatExportForTesting(const juce::File& file) const { return writeChatExport(file); }
+
     // Testing hook: historyButton's tooltip, which carries the upsell strip's explanatory text
     // whenever !isProPlan(snapshot) — see updateUpsellStrip()'s doc comment. Not const: JUCE's
     // Button::getTooltip() (via SettableTooltipClient) isn't a const member function.
@@ -371,6 +378,7 @@ private:
     juce::TextButton cancelButton; // Visible ONLY while waiting
     juce::TextButton newChatButton;
     juce::TextButton historyButton; // opens the history list/restore/clear popup
+    juce::TextButton exportButton;  // saves the conversation as a JSON file (AIChatComponentExport.cpp)
     juce::ComboBox modelPicker;
 
     // Privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
@@ -504,9 +512,33 @@ private:
         // The song plan and build this message shows (AIChatComponentSong.cpp); session-scoped like the rating state,
         // so a restored conversation shows the applied edit-plan card only.
         std::shared_ptr<SongSession> song;
+
+        // The ChatTranscript turn this message belongs to; -1 for a message restored from history or added by the chat.
+        int turnIndex = -1;
     };
     static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
     std::vector<MessageData> messages;
+
+    // -- Export chat (AIChatComponentExport.cpp)
+    static constexpr size_t kNoTurn = (size_t)-1;
+    ChatTranscript transcript;    // the raw data of this conversation's live turns, in memory only
+    size_t activeTurn_ = kNoTurn; // the turn whose answer is awaited
+    std::unique_ptr<juce::FileChooser> exportChooser;
+    // Starts a transcript turn for the user message just added; becomes activeTurn_.
+    size_t beginTurn(const juce::String& text, ChatTurn::Kind kind);
+    void recordAnswer(size_t turn, const juce::String& content, const juce::var& plan, const MessageData& answer);
+    void recordFailure(size_t turn, const juce::String& message);
+    void recordApplied(const MessageData& data, const ProjectEditResult& result);
+    void recordSongPlan(const std::shared_ptr<SongSession>& session, const songsteps::PlanReply& reply);
+    void recordSongEvent(const SongSession& session, const songsteps::StreamEvent& event);
+    void recordSongOutcome(const SongSession& session, const AIIntegrationService::SongBuildOutcome& outcome);
+    std::vector<ChatTurn> collectExportTurns() const;
+    juce::var buildChatExport() const;
+    bool writeChatExport(const juce::File& file) const;
+    void exportChatClicked();
+    void setUpExportButton();
+    // Export is disabled, with a tooltip saying why, while the conversation has no message.
+    void updateExportButton();
 
     // -- Song steps (AIChatComponentSong.cpp)
     // -------------------------------------------------------------------------- Sends `text` as a hosted song plan;

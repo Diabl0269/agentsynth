@@ -147,6 +147,7 @@ std::optional<StreamEvent> parseStreamLine(const juce::String& line) {
         return std::nullopt;
     const auto type = stringOf(json, "type");
     StreamEvent event;
+    event.raw = json;
     if (type == "ping") {
         event.type = EventType::ping;
     } else if (type == "steps") {
