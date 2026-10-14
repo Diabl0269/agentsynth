@@ -278,3 +278,30 @@ TEST(ReverbPreDelay, ThePreDelayJackIsKnobBoundAndShiftsTheOnset) {
     const int cvOnset = firstWetSample(render(modulated, 14, 0.04f, 6)[0], burstAt);
     EXPECT_EQ(cvOnset - baseLate, 441) << "+0.04 on the jack is 10 ms of pre-delay";
 }
+
+// A pre-delay of 10, 20 or 40 ms at 44.1 kHz puts the tap a hair behind the write head once per lap
+// of the ring; wrapping that position as a float rounded it to the ring's size, one past the end, and
+// the garbage read there turned whole songs into full-scale noise. A sentinel after the ring catches it.
+TEST(ReverbPreDelay, TheTapNeverReadsPastTheEndOfTheRing) {
+    const double sampleRate = 44100.0;
+    const int ringSize = (int)(0.25 * sampleRate) + 4; // ReverbModule's ring: 250 ms plus 4
+    std::vector<float> ring((size_t)ringSize + 1, 0.0f);
+    ring[(size_t)ringSize] = 1.0e30f;
+
+    for (int tenthMs = 0; tenthMs <= 2500; ++tenthMs) {
+        const float delaySamples = (float)tenthMs * 0.1f * 0.001f * (float)sampleRate; // as renderChunk computes it
+        for (int writePos = 0; writePos < ringSize; ++writePos)
+            ASSERT_EQ(ReverbModule::readPreDelayed(ring.data(), ringSize, writePos, delaySamples), 0.0f)
+                << "pre-delay " << tenthMs / 10.0 << " ms, write position " << writePos;
+    }
+}
+
+TEST(ReverbPreDelay, TheTapInterpolatesBetweenTheTwoSamplesAroundIt) {
+    std::vector<float> ring(100);
+    for (int i = 0; i < 100; ++i)
+        ring[(size_t)i] = (float)i;
+    EXPECT_FLOAT_EQ(ReverbModule::readPreDelayed(ring.data(), 100, 50, 10.25f), 39.75f);
+    EXPECT_FLOAT_EQ(ReverbModule::readPreDelayed(ring.data(), 100, 50, 10.0f), 40.0f);
+    // Across the wrap: 3 behind position 1 is 98, a quarter of the way on to 97.
+    EXPECT_FLOAT_EQ(ReverbModule::readPreDelayed(ring.data(), 100, 1, 3.25f), 97.75f);
+}

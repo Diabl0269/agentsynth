@@ -153,7 +153,7 @@ private:
                 ring[writePos] = in;
                 dryScratch.getWritePointer(ch)[i] = in;
                 if (delaySamples > 0.0f)
-                    data[i] = readRing(ring, ringSize, (float)writePos - delaySamples);
+                    data[i] = readPreDelayed(ring, ringSize, writePos, delaySamples);
             }
             writePos = (writePos + 1) % ringSize;
         }
@@ -171,14 +171,21 @@ private:
         }
     }
 
-    static float readRing(const float* ring, int ringSize, float pos) {
-        if (pos < 0.0f)
-            pos += (float)ringSize;
-        const int p0 = (int)pos;
-        const float frac = pos - (float)p0;
-        return ring[p0] * (1.0f - frac) + ring[(p0 + 1) % ringSize] * frac;
+public:
+    /** The pre-delay tap, `delaySamples` behind `writePos`, interpolated. Wraps on integer indices: a float
+     *  position a hair below 0 plus ringSize rounds to ringSize, a read past the end that fed garbage into the tail. */
+    static float readPreDelayed(const float* ring, int ringSize, int writePos, float delaySamples) {
+        const float delay = juce::jlimit(0.0f, (float)(ringSize - 2), delaySamples);
+        const int whole = (int)delay;
+        const float frac = delay - (float)whole;
+        int newer = writePos - whole;
+        if (newer < 0)
+            newer += ringSize;
+        const int older = newer > 0 ? newer - 1 : ringSize - 1;
+        return ring[newer] * (1.0f - frac) + ring[older] * frac;
     }
 
+private:
     double sr = 44100.0;
     juce::AudioBuffer<float> preDelayLine; // 250 ms of history per leg, written every sample
     juce::AudioBuffer<float> dryScratch;   // the undelayed input of the current chunk
