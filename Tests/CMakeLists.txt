@@ -151,6 +151,7 @@ add_executable(Tests
     Mixer/MasterDualIOTests.cpp
     Mixer/MasterSafetyLimiterTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
+    Mixer/ChannelFlow/ChannelFlowNoiseTrackTests.cpp
     Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
     Mixer/ChannelFlow/PolyVoiceGraphTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp

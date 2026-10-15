@@ -8,7 +8,9 @@ side (routes, token, prices) is the hosted service's own song steps doc; this pa
 
 1. `AIIntegrationService::planSong` posts `/v1/song/plan` (`RemoteProvider::sendRouteRequest`): the prompt, the chosen
    Length (`short`/`medium`/`long`) and Detail (`light`/`full`/`rich`), and, when re-planning, `previousPlan` (the plan
-   object kept verbatim from the earlier reply). The reply is a plan, its price in uses and a signed token. Nothing is spent.
+   object kept verbatim from the earlier reply). Both requests (plan and build) also carry `instruments`, the names in
+   `TimelineOps::kAuthorableInstrumentTypes` (so Noise, Pluck and Mallet are offered only to apps that can build them;
+   an older app sends nothing and the service keeps its old list). The reply is a plan, its price in uses and a signed token. Nothing is spent.
 2. The chat shows a **song plan card** (`SongPlanCard`): title, `3:20 · 174 BPM · 7 sections`, a section strip (a
    focusable, tooltipped block per section, wide in proportion to its bars), instrument chips, the special line, Length
    and Detail choices, `Build song · N uses`, uses left, Cancel and a Details disclosure. Changing Length or Detail

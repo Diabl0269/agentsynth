@@ -11,6 +11,14 @@ namespace {
 
 constexpr int kStepsVersion = 1;
 
+// The instrument names this app can build, so the service offers only those; an app that sends none keeps the old list.
+juce::var buildableInstruments() {
+    juce::Array<juce::var> names;
+    for (const char* type : TimelineOps::kAuthorableInstrumentTypes)
+        names.add(juce::String(type));
+    return names;
+}
+
 juce::String describeBuildFailure(const AIProvider::AIError& error) {
     const auto& text = error.message;
     return text.startsWith("Error: ") ? text.substring(7) : text;
@@ -35,6 +43,7 @@ AIProvider::RequestId AIIntegrationService::planSong(const juce::String& text, c
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
     body->setProperty("userPrompt", text);
     body->setProperty("stepsVersion", kStepsVersion);
+    body->setProperty("instruments", buildableInstruments());
     if (length.isNotEmpty())
         body->setProperty("length", length);
     if (detail.isNotEmpty())
@@ -82,6 +91,7 @@ AIProvider::RequestId AIIntegrationService::buildSong(const juce::String& reques
 
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
     body->setProperty("stepsVersion", kStepsVersion);
+    body->setProperty("instruments", buildableInstruments());
     body->setProperty("plan", reply.plan.raw);
     body->setProperty("token", reply.token);
 
