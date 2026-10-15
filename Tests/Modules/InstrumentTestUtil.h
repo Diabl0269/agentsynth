@@ -68,10 +68,11 @@ inline double magnitudeAt(const std::vector<float>& s, double fromSec, double to
     const auto a = static_cast<std::size_t>(fromSec * rate);
     const auto b = std::min(s.size(), static_cast<std::size_t>(toSec * rate));
     const auto n = static_cast<double>(b - a);
-    const std::complex<double> step = std::polar(1.0, -2.0 * M_PI * hz / rate);
+    const std::complex<double> step = std::polar(1.0, -2.0 * juce::MathConstants<double>::pi * hz / rate);
     std::complex<double> phasor = 1.0, sum = 0.0;
     for (std::size_t i = a; i < b; ++i) {
-        const double window = 0.5 * (1.0 - std::cos(2.0 * M_PI * static_cast<double>(i - a) / n));
+        const double window =
+            0.5 * (1.0 - std::cos(2.0 * juce::MathConstants<double>::pi * static_cast<double>(i - a) / n));
         sum += s[i] * window * phasor;
         phasor *= step;
     }
