@@ -60,6 +60,13 @@ from the incoming MIDI note (or A4/440 Hz if none is connected) offset by `octav
 
 The same registry is exported as JSON by `AIStateMapper::getModuleCatalogJson()` (`Source/AI/AIStateMapper/AIStateMapperCatalog.cpp`; version 1: per authorable module `audioIn`, `audioOut`, optional `category` and `params` of `{id, kind: float|choice|bool|int, min, max, default, choices, modulatable}` (`modulatable` is set when a modulation may name the parameter as `destParam`), plus `instrumentTracks` with the `addInstrumentTrack` instruments and the ADSR envelope's params). `AIEvalHarness --dump-module-catalog FILE` writes it; the hosted AI server vendors the output so it sees the real parameter ids. Tests: `Tests/AI/AIStateMapper/AIStateMapperCatalogTests.cpp`.
 
+### An LFO's rate: Hz unless the patch says otherwise
+
+The LFO starts in Sync mode (`mode` true, rate from `rateSync`), where `rateHz` is ignored. Models
+usually write only `{"rateHz": 5}`, so on the untrusted (model) path an LFO whose params set `rateHz`
+and neither `mode` nor `rateSync` is switched to Hz mode. An explicit `mode` or `rateSync` is kept, and
+trusted JSON (snapshots, presets) is applied exactly as written.
+
 ## Per-node `state`
 
 An optional object of **non-parameter** module state, round-tripped through
@@ -72,8 +79,21 @@ module is free to read this as a filename, so accepting it from model output tur
 suggestion into an arbitrary file read. `Sampler` nodes stay fully authorable by the model; the
 node is simply created with no sample loaded.
 
-Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited to emit
-one.
+**The one exception: an `LFO` node's Custom curve.** A module opts in through
+`ModuleBase::setUntrustedExtraState()`, which the untrusted path calls instead of `setExtraState()`;
+only `LFOModule` overrides it. Its `state` is the drawn curve,
+`{"version": 1, "points": [{"x": 0, "y": 1, "bend": 0}, {"x": 0.3, "y": 0.2, "bend": -0.5}, {"x": 1, "y": 0, "bend": 0}]}`
+(x, y in 0..1, bend in -1..1, at most 64 points), and `LfoCustomWave::fromVar` clamps every value, sorts
+the points, pins the first to x = 0 and the last to x = 1, and turns anything malformed into the default
+triangle. It is pure data, so it cannot name a file. The curve plays when the node's `shape` is `Custom`;
+with `retrig` on it restarts on every note, so a model can give each note its own shape, such as a pitch
+swoop on a bird call. Every other module's `state` stays trusted-only. Tests:
+`Tests/AI/LfoCurveTrustTests.cpp`.
+
+Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
+properties are a union across module types, so it cannot say "only on an LFO"), so a constrained
+decoder is never invited to emit one; a caller that knows the curve format, such as the hosted song
+builder, sends it explicitly.
 
 A `Hosted Plugin` node's `state` also carries the optional key `"cardLayout"` (the per-instance
 knob layout, see [`../control/plugin-card-layout.md`](../control/plugin-card-layout.md)): trusted-only
