@@ -584,18 +584,32 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
             }
         }
     }
+
+    // A model that gives an LFO a rate in Hz but no mode means Hz: the LFO starts in Sync, where
+    // rateHz is ignored, so a 10 Hz pulse or 5 Hz vibrato would play as a slow 1/4-note wobble.
+    // Our own snapshots always carry "mode", so this only ever applies to model output.
+    const auto& props = paramsObj->getProperties();
+    if (!trusted && props.contains("rateHz") && !props.contains("mode") && !props.contains("rateSync"))
+        for (auto* param : processor->getParameters())
+            if (auto* mode = dynamic_cast<juce::AudioParameterBool*>(param); mode != nullptr && mode->paramID == "mode")
+                setNormalised(mode, 0.0f);
 }
 
 void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                                bool trusted) {
     // Untrusted (model-authored) JSON never reaches setExtraState: a module may read this as a
     // filename (SamplerModule does), so honouring it for remote output would let a patch suggestion
-    // name an arbitrary file for the app to open. Our own snapshots and presets are trusted.
-    if (!trusted)
-        return;
+    // name an arbitrary file for the app to open. Our own snapshots and presets are trusted. The only
+    // exception is a module that opts in through setUntrustedExtraState with pure, clamped data (the
+    // LFO's Custom curve); every other module's override is the default no-op.
     auto* mb = dynamic_cast<ModuleBase*>(processor);
     if (mb == nullptr)
         return;
+    if (!trusted) {
+        if (nodeObj->hasProperty("state"))
+            mb->setUntrustedExtraState(nodeObj->getProperty("state"));
+        return;
+    }
     if (nodeObj->hasProperty("state"))
         mb->setExtraState(nodeObj->getProperty("state"));
     // "cardView" is presentation only and cannot name a file, but it stays trusted-only too: a provider has no

@@ -859,6 +859,10 @@ public:
     // Return a void var when there is nothing to persist, so untouched modules add no JSON noise.
     virtual juce::var getExtraState() const { return {}; }
     virtual void setExtraState(const juce::var& state) { juce::ignoreUnused(state); }
+    // The one exception, opt-in per module: a "state" from untrusted model output reaches this
+    // instead of setExtraState. Override it only when the state is pure data (no file, path or
+    // other resource name) and parsing it clamps every value, e.g. the LFO's drawn Custom curve.
+    virtual void setUntrustedExtraState(const juce::var& state) { juce::ignoreUnused(state); }
 
     // Which optional panels this module's card has open (scope / response / spectrum). Message thread
     // only; never read by audio. Saved as the node's "cardView" key and, like "state", restored on the

@@ -376,6 +376,10 @@ public:
      *  default wave via setCustomWave(fromVar({})) -- fromVar's own rules give that outcome for
      *  any non-object var, so this needs no special case. */
     void setExtraState(const juce::var& state) override { setCustomWave(synth::LfoCustomWave::fromVar(state)); }
+    /** The curve is only points (fromVar clamps x/y/bend and caps the count at kMaxPoints; garbage
+     *  becomes the default wave), so AI-authored patches may set it too: with Retrig on it is a
+     *  per-note shape such as a pitch swoop (docs/ai/patch-safety.md). */
+    void setUntrustedExtraState(const juce::var& state) override { setExtraState(state); }
 
 private:
     /** The LFO rate in Hz for this block: the Rate knob (plus its CV) in Hz mode, the tempo
