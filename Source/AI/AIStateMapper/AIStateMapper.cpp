@@ -209,6 +209,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Sampler";
         case ModuleType::DrumKit:
             return "Drum Kit";
+        case ModuleType::Pluck:
+            return "Pluck";
+        case ModuleType::Mallet:
+            return "Mallet";
         case ModuleType::Wavetable:
             return "Wavetable";
         case ModuleType::SampleHold:
@@ -856,10 +860,10 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator",    "Noise",         "Sampler",        "Drum Kit", "Wavetable", "Filter",
-                "VCA",           "Distortion",    "Delay",          "Reverb",   "Amp Env",   "Filter Env",
-                "Chorus",        "Phaser",        "Compressor",     "Flanger",  "Limiter",   "Bitcrusher",
-                "Pitch Shifter", "Parametric EQ", "Ring Modulator", "Gate"};
+                "Oscillator", "Noise",      "Sampler",       "Drum Kit",      "Pluck",          "Mallet",
+                "Wavetable",  "Filter",     "VCA",           "Distortion",    "Delay",          "Reverb",
+                "Amp Env",    "Filter Env", "Chorus",        "Phaser",        "Compressor",     "Flanger",
+                "Limiter",    "Bitcrusher", "Pitch Shifter", "Parametric EQ", "Ring Modulator", "Gate"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
@@ -888,8 +892,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         // Types that accept MIDI input
         // Sampler is here because a note-on retriggers it and transposes it against rootNote — the
         // same reason Oscillator is.
-        static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sampler",        "Drum Kit",
-                                                                  "Sequencer",  "Poly Sequencer", "Poly MIDI"};
+        static const std::set<juce::String> midiAcceptingTypes = {
+            "Oscillator", "Sampler", "Drum Kit", "Pluck", "Mallet", "Sequencer", "Poly Sequencer", "Poly MIDI"};
 
         // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
         std::set<juce::AudioProcessorGraph::NodeID> midiSources;

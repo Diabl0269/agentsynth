@@ -95,6 +95,10 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addInstrumentTrack("Sampler", false);
     else if (menuId == kAddInstrumentDrumKitMenuId)
         trackHeaderHost_->addInstrumentTrack("Drum Kit", false);
+    else if (menuId == kAddInstrumentPluckMenuId)
+        trackHeaderHost_->addInstrumentTrack("Pluck", false);
+    else if (menuId == kAddInstrumentMalletMenuId)
+        trackHeaderHost_->addInstrumentTrack("Mallet", false);
     else if (menuId == kAddInstrumentOscillatorPolyMenuId)
         trackHeaderHost_->addInstrumentTrack("Oscillator", true);
     else if (menuId == kAddInstrumentWavetablePolyMenuId)
@@ -197,6 +201,8 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     instrumentMenu.addItem(kAddInstrumentWavetableMenuId, "Wavetable");
     instrumentMenu.addItem(kAddInstrumentSamplerMenuId, "Sampler");
     instrumentMenu.addItem(kAddInstrumentDrumKitMenuId, "Drum Kit");
+    instrumentMenu.addItem(kAddInstrumentPluckMenuId, "Pluck");
+    instrumentMenu.addItem(kAddInstrumentMalletMenuId, "Mallet");
     // Poly variants below a separator — Sampler has no "poly" parameter, so it has
     // no poly entry.
     instrumentMenu.addSeparator();

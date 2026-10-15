@@ -268,6 +268,8 @@ TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
                                            "Noise",
                                            "Sampler",
                                            "Drum Kit",
+                                           "Pluck",
+                                           "Mallet",
                                            "Filter",
                                            "ADSR",
                                            "VCA",

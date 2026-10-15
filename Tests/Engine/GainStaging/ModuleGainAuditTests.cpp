@@ -30,11 +30,13 @@
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
+#include "Modules/Mallet/MalletModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/MathModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/NoiseModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/Pluck/PluckModule.h"
 #include "Modules/VCAModule.h"
 #include "Modules/VoiceMixerModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -538,6 +540,8 @@ TEST(SourceModulePeakTest, OscillatorWavetableNoiseStayWithinUnityAtDefaultAndMa
         {"Oscillator", [] { return std::make_unique<OscillatorModule>(); }},
         {"Wavetable", [] { return std::make_unique<WavetableOscillatorModule>(); }},
         {"Noise", [] { return std::make_unique<NoiseModule>(); }},
+        {"Pluck", [] { return std::make_unique<PluckModule>(); }},
+        {"Mallet", [] { return std::make_unique<MalletModule>(); }},
     };
 
     for (const auto& s : sources) {

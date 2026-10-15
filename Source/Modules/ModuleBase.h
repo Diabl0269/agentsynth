@@ -71,6 +71,10 @@ enum class ModuleType {
     SampleHold,
     EnvelopeFollower,
     Comparator,
+    // Instruments added after the first release. Types are saved by NAME (the module factory), never by
+    // number, so inserting here renumbers nothing that is persisted.
+    Pluck,
+    Mallet,
     // The device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
     // paired with the "Audio Output" node, which is still a juce::AudioGraphIOProcessor.
     AudioInput,
@@ -136,6 +140,8 @@ inline bool isMidiInstrumentType(ModuleType type) noexcept {
     case ModuleType::Wavetable:
     case ModuleType::Sampler:
     case ModuleType::DrumKit:
+    case ModuleType::Pluck:
+    case ModuleType::Mallet:
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
         return true;

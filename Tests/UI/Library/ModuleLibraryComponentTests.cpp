@@ -15,7 +15,8 @@
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
     const char* known[] = {"Oscillator",    "Wavetable",
                            "Noise",         "Sampler",
-                           "Drum Kit",      "LFO",
+                           "Drum Kit",      "Pluck",
+                           "Mallet",        "LFO",
                            "Sequencer",     "Poly Sequencer",
                            "MidiKeyboard",  "Poly MIDI",
                            "External MIDI", "ADSR",
@@ -38,7 +39,8 @@ TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnDistinctStrings) {
     const char* known[] = {"Oscillator",    "Wavetable",
                            "Noise",         "Sampler",
-                           "Drum Kit",      "LFO",
+                           "Drum Kit",      "Pluck",
+                           "Mallet",        "LFO",
                            "Sequencer",     "Poly Sequencer",
                            "MidiKeyboard",  "Poly MIDI",
                            "External MIDI", "ADSR",

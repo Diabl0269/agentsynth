@@ -49,6 +49,8 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
     case ModuleType::Wavetable:  // same fallback as Oscillator
     case ModuleType::Sampler:    // note-on retriggers + transposes playback
     case ModuleType::DrumKit:    // each note-on strikes a drum
+    case ModuleType::Pluck:      // each note-on plucks a string, each note-off damps it
+    case ModuleType::Mallet:     // each note-on strikes a bar, each note-off damps it
     case ModuleType::ADSR:       // note-on/off drives the gate fallback
     case ModuleType::PolyMidi:   // converts note-on/off into poly Pitch/Gate CV
     case ModuleType::LFO:        // note-on retriggers the phase
@@ -157,6 +159,8 @@ TEST(ModuleMidiFlagsTest, EveryFactoryModuleMatchesItsExpectedMidiFlags) {
         ModuleType::MacroControl,  ModuleType::SampleHold,   ModuleType::EnvelopeFollower,
         ModuleType::Comparator,    ModuleType::AudioInput,   ModuleType::HostedPlugin,
     };
+    requiredTypes.insert(ModuleType::Pluck);
+    requiredTypes.insert(ModuleType::Mallet);
     requiredTypes.insert(ModuleType::TimelineMidiSource);
     requiredTypes.insert(ModuleType::RecordTap);
     requiredTypes.insert(ModuleType::TimelineAudioSource);

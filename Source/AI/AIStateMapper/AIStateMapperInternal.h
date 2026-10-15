@@ -37,12 +37,14 @@
 #include "../../Modules/MacroMidiInletModule.h"
 #include "../../Modules/MacroMidiOutletModule.h"
 #include "../../Modules/MacroOutletModule.h"
+#include "../../Modules/Mallet/MalletModule.h"
 #include "../../Modules/MasterModule.h"
 #include "../../Modules/MathModule.h"
 #include "../../Modules/MidiKeyboardModule.h"
 #include "../../Modules/ModuleBase.h"
 #include "../../Modules/NoiseModule.h"
 #include "../../Modules/OscillatorModule.h"
+#include "../../Modules/Pluck/PluckModule.h"
 #include "../../Modules/PolyMidiModule.h"
 #include "../../Modules/PolySequencerModule.h"
 #include "../../Modules/RecordTapModule.h"
@@ -114,6 +116,8 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         {"Comparator", []() { return std::make_unique<ComparatorModule>(); }},
         {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
         {"Drum Kit", []() { return std::make_unique<DrumKitModule>(); }},
+        {"Pluck", []() { return std::make_unique<PluckModule>(); }},
+        {"Mallet", []() { return std::make_unique<MalletModule>(); }},
         {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
         {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
         // A third-party VST3/AU plugin as a module. In the factory so our own saves reload it (the

@@ -1,0 +1,37 @@
+type Mallet size 280x381
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,341 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 6 combo id="" at 40,111 200x24 visible=1 title="Material" tip="Material" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 40,93 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Tune" at 0,0 0x0 visible=0 title="Tune" tip="Tune" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Fine" at 0,0 0x0 visible=0 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Decay" at 12,275 64x58 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Damping" at 76,275 64x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 76,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Brightness" at 140,275 64x58 visible=1 title="Brightness" tip="Brightness" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 140,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Hardness" at 0,0 0x0 visible=0 title="Hardness" tip="Hardness" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Resonator" at 0,0 0x0 visible=0 title="Resonator" tip="Resonator" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Tremolo" at 0,0 0x0 visible=0 title="Tremolo" tip="Tremolo" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Release" at 204,275 64x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 204,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Velocity brightness" at 0,0 0x0 visible=0 title="Velocity brightness" tip="Velocity brightness" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="Level" at 12,159 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 29 label id="" at 12,141 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 component id="cardTabStrip" at 12,225 256x24 visible=1 title="Control tabs" tip="Pages of this card's controls: Left and Right switch between them" focusOrder=0 wantsFocus=1
+  child 31 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 32 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 33 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  out 0 270, 58
+  out 1 270, 78

@@ -38,6 +38,8 @@ int arrangeRoleRank(ModuleType t) {
     case ModuleType::Noise:
     case ModuleType::Sampler:
     case ModuleType::DrumKit:
+    case ModuleType::Pluck:
+    case ModuleType::Mallet:
     case ModuleType::Wavetable:
         return 0;
     case ModuleType::Filter:

@@ -78,7 +78,8 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
                 continue;
 
             const juce::String name = node->getProcessor()->getName();
-            if (name == "Oscillator" || name == "Noise" || name == "Wavetable" || name == "Drum Kit") {
+            if (name == "Oscillator" || name == "Noise" || name == "Wavetable" || name == "Drum Kit" ||
+                name == "Pluck" || name == "Mallet") {
                 result.sourceReachesOutput = true;
                 break;
             }

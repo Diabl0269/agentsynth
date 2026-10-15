@@ -15,6 +15,8 @@ const std::vector<ModuleChoiceCategory>& moduleChoiceCategories() {
           {"Noise", ModuleType::Noise},
           {"Sampler", ModuleType::Sampler},
           {"Drum Kit", ModuleType::DrumKit},
+          {"Pluck", ModuleType::Pluck},
+          {"Mallet", ModuleType::Mallet},
           {"LFO", ModuleType::LFO}}},
         {"Sequencing",
          {{"Sequencer", ModuleType::Sequencer},
