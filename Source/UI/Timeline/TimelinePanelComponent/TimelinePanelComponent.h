@@ -433,6 +433,8 @@ public:
     static constexpr int kAddInstrumentWavetableMenuId = 5;
     static constexpr int kAddInstrumentSamplerMenuId = 6;
     static constexpr int kAddInstrumentDrumKitMenuId = 12; // no poly entry either: a kit has no poly parameter
+    static constexpr int kAddInstrumentPluckMenuId = 13;   // Pluck and Mallet run eight voices of their own,
+    static constexpr int kAddInstrumentMalletMenuId = 14;  // so neither has a poly entry
     // Poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
     // parameter, so it has no poly entry (nor does the Drum Kit).
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;

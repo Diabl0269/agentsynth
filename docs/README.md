@@ -16,6 +16,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## Modules
 
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
+- [`docs/modules/pluck-mallet.md`](modules/pluck-mallet.md) — the Pluck (extended Karplus-Strong string) and Mallet (modal struck bar) instruments: parameters, algorithms, formulas
 - [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)
 - [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
 - [`docs/modules/poly-channel-layout.md`](modules/poly-channel-layout.md) — the raw channel table for every poly-capable module

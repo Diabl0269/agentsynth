@@ -43,6 +43,10 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // No CV jacks at all: every setting is read when a drum is struck, so there is no continuous input
     // for a modulation cable to reach.
     "Drum Kit",
+    // The same: Pluck and Mallet have no inputs, and every setting is read when a note starts (or is a live
+    // level), so there is no continuous input for a modulation cable to reach.
+    "Pluck",
+    "Mallet",
     // Port widgets / graph plumbing with no ModuleComponent knobs at all.
     "Macros",
     "Macro In",

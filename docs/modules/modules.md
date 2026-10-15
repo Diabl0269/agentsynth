@@ -20,7 +20,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 > | `ModuleBase::StereoAudio` | Modules | Why |
 > |---|---|---|
 > | `Auto` (default) | every FX, Voice Mixer, Ring Modulator | shape says stereo; toggle ships **collapsed** |
-> | `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler, Drum Kit | a second leg the shape cannot see (own `kRightBase` block, or a ch0/ch1 pair alongside more outputs); ships **split** |
+> | `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler, Drum Kit, Pluck, Mallet | a second leg the shape cannot see (own `kRightBase` block, or a ch0/ch1 pair alongside more outputs); ships **split** |
 > | `None` | Comparator, Rec Tap | shape matches by accident. Comparator's ch0/ch1 are Signal + Threshold CV in and Gate + inverted Gate out — no audio output at all. Rec Tap is a hidden recording tap whose two channels are the take's capture pair, wired by the record flow and never patched. |
 >
 > This replaced a per-module `addDualIOParameter()` call, which is a thing you can forget: the Ring
@@ -280,6 +280,9 @@ Any other note is silent. Velocity scales the level linearly and brightens the f
 - **Headroom**: a single full-velocity hit peaks between -6 and -12 dBFS at the defaults; a pile-up of simultaneous drums is rounded softly above 0.9 so it never reaches full scale.
 - **Bypass / mute**: both clear the output (pure-source exception) as two branches, and either one cuts every drum still ringing.
 - **AI**: `addInstrumentTrack` accepts `"instrument": "Drum Kit"` (no `poly`, no `envelope`); `instrumentParams` may set any parameter above. `evaluatePatch` counts it as a sound source like an Oscillator, since a note makes it sound. Not telemetry-counted yet (the counters live in the shared contracts).
+
+## Pluck and Mallet Modules
+Two more MIDI instruments with eight voices of their own, built like the Drum Kit (pure sources, mono-summed stereo out, no external envelope). **Pluck** is a plucked string (guitar-like, harp, koto); **Mallet** is a struck bar (marimba, vibraphone, xylophone, glockenspiel, bell). Parameters, algorithms and formulas: [`pluck-mallet.md`](pluck-mallet.md).
 
 ## Filter Module
 - **Types**: 7 filter types — `LPF24`, `LPF12`, `HPF24`, `HPF12`, `BPF24`, `BPF12`, `Notch`.

@@ -119,6 +119,10 @@ const std::vector<ModuleConfig>& moduleConfigs() {
         // ---- sources -------------------------------------------------------------------------
         {/*factoryName*/ "Oscillator", false, "", 0, {}, true},
         {/*factoryName*/ "Wavetable", false, "", 0, {}, true},
+        // Pluck and Mallet read everything but Level (and Body / Tremolo, smoothed) when a note starts, so the held
+        // note the sweep fires is a fine test of the live ones.
+        {/*factoryName*/ "Pluck", false, "", 0, {}, true},
+        {/*factoryName*/ "Mallet", false, "", 0, {}, true},
         {/*factoryName*/ "Noise",
          false,
          "",

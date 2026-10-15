@@ -63,7 +63,7 @@ TEST(AIStateMapperCatalogTest, FilterHasAChoiceParamWithChoices) {
 
 TEST(AIStateMapperCatalogTest, CoversEffectsLfoAndDrumKit) {
     const auto modules = parseCatalog().getProperty("modules", {});
-    for (const char* type : {"LFO", "Reverb", "Chorus", "Delay", "Drum Kit"}) {
+    for (const char* type : {"LFO", "Reverb", "Chorus", "Delay", "Drum Kit", "Pluck", "Mallet"}) {
         const auto entry = modules.getProperty(type, {});
         ASSERT_TRUE(entry.isObject()) << type;
         const auto* params = entry.getProperty("params", {}).getArray();
@@ -81,10 +81,13 @@ TEST(AIStateMapperCatalogTest, DescribesInstrumentTracksAndTheirEnvelope) {
     const auto tracks = parseCatalog().getProperty("instrumentTracks", {});
     auto* instruments = tracks.getProperty("instruments", {}).getDynamicObject();
     ASSERT_NE(instruments, nullptr);
-    for (const char* type : {"Oscillator", "Wavetable", "Sampler", "Drum Kit"})
+    for (const char* type : {"Oscillator", "Wavetable", "Sampler", "Drum Kit", "Pluck", "Mallet"})
         EXPECT_TRUE(instruments->hasProperty(type)) << type;
     EXPECT_TRUE((bool)instruments->getProperty("Oscillator").getProperty("hasEnvelope", false));
-    EXPECT_FALSE((bool)instruments->getProperty("Drum Kit").getProperty("hasEnvelope", true));
+    for (const char* type : {"Drum Kit", "Pluck", "Mallet"}) {
+        EXPECT_FALSE((bool)instruments->getProperty(type).getProperty("hasEnvelope", true)) << type;
+        EXPECT_FALSE((bool)instruments->getProperty(type).getProperty("poly", true)) << type;
+    }
 
     const auto envelope = tracks.getProperty("envelope", {});
     EXPECT_TRUE(findParam(envelope, "sustain").isObject());

@@ -21,6 +21,10 @@ juce::String ModuleLibraryComponent::descriptionFor(const juce::String& moduleNa
     if (moduleName.equalsIgnoreCase("Drum Kit"))
         return "Synthesized drums on one MIDI track: kick, snare, clap, hats, toms and cymbals. Each note plays a "
                "drum.";
+    if (moduleName.equalsIgnoreCase("Pluck"))
+        return "Plucked string: guitar-like, harp, koto. Eight voices on one MIDI track; no envelope needed.";
+    if (moduleName.equalsIgnoreCase("Mallet"))
+        return "Struck bar: marimba, vibraphone, bells. Eight voices on one MIDI track; no envelope needed.";
     if (moduleName.equalsIgnoreCase("LFO"))
         return "Low-frequency oscillator for slow cyclic modulation.";
     if (moduleName.equalsIgnoreCase("Sequencer"))
@@ -382,6 +386,8 @@ void ModuleLibraryComponent::rebuildEntries() {
             "Noise",
             "Sampler",
             "Drum Kit",
+            "Pluck",
+            "Mallet",
             "LFO",
         }},
         {"Sequencing", {

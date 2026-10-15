@@ -1,5 +1,5 @@
-// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, Drum Kit, LFO
-// and Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
+// DefaultCardLayoutsSources.cpp -- the code-default card layouts of Oscillator, Noise, Sampler, Drum Kit, Pluck,
+// Mallet, LFO and Wavetable. Each type registers with defaults.add(type, layout, revision, dimRules), built with the
 // cardlayout:: helpers (DefaultCardLayoutsFamilies.h); a type left out draws the automatic layout.
 // No view is placed in any of these: the Sampler's waveform and load row, the Wavetable's display, Table
 // selector and load row, and the LFO's custom-wave editor are card chrome (ModuleComponent) that already
@@ -87,6 +87,37 @@ CardLayout drumKitLayout() {
     return layout;
 }
 
+// Level stays above three tabs: the string (how long and how bright it rings), the pick (how it is
+// struck), and the tuning with the body of the instrument.
+CardLayout pluckLayout() {
+    CardLayout layout;
+    layout.sections = {
+        section("output", std::nullopt, {param("level")}, 1),
+        tab("string", "String", {param("decay"), param("release"), param("brightness"), param("stiffness")},
+            kQuadColumns),
+        tab("pick", "Pick", {param("pickPosition"), param("pickHardness"), param("velBright")}),
+        tab("tune", "Tune", {param("tune"), param("fine"), param("body"), param("decayTrack")}, kQuadColumns),
+        footer({}),
+    };
+    return layout;
+}
+
+// The material picks the bar; Level stays above three tabs: the bar (decay, damping, tone), the mallet
+// (contact, tube, tremolo), and the tuning.
+CardLayout malletLayout() {
+    CardLayout layout;
+    layout.sections = {
+        section("material", std::nullopt, {param("material")}),
+        section("output", std::nullopt, {param("level")}, 1),
+        tab("bar", "Bar", {param("decay"), param("damping"), param("brightness"), param("release")}, kQuadColumns),
+        tab("mallet", "Mallet", {param("hardness"), param("velBright"), param("resonator"), param("tremolo")},
+            kQuadColumns),
+        tab("tune", "Tune", {param("tune"), param("fine")}),
+        footer({}),
+    };
+    return layout;
+}
+
 // Shape stays a combo: six values (Sawtooth, Triangle) do not fit one 256 px switch.
 // Rate is the one control the LFO is about: Hz and the tempo division share its cell, swapped by Sync.
 // The custom-wave editor stays card chrome and opens under the body while the shape is Custom.
@@ -133,6 +164,8 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kRevision);
     defaults.add("Drum Kit", drumKitLayout(), kRevision);
+    defaults.add("Pluck", pluckLayout(), kRevision);
+    defaults.add("Mallet", malletLayout(), kRevision);
     defaults.add("LFO", lfoLayout(), kRevision);
     defaults.add("Wavetable", wavetableLayout(), kRevision);
 }

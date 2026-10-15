@@ -106,9 +106,9 @@ struct TimelineOps {
     static constexpr int kMaxInstrumentInserts = 8;
 
     /** The instrument types `addInstrumentTrack` accepts -- the "+ Track -> Instrument" menu's own. */
-    static const std::array<const char*, 4> kAuthorableInstrumentTypes;
+    static const std::array<const char*, 6> kAuthorableInstrumentTypes;
 
-    /** True for Sampler and Drum Kit: no ADSR/VCA is built for it, and no poly mode. */
+    /** True for Sampler, Drum Kit, Pluck and Mallet: no ADSR/VCA is built for it, and no poly mode. */
     static bool instrumentOwnsItsEnvelope(const juce::String& instrument);
 
     /**
