@@ -115,7 +115,7 @@ juce::var instrumentTracksEntry() {
             continue;
         juce::DynamicObject::Ptr entry = new juce::DynamicObject();
         entry->setProperty("module", juce::String(type));
-        entry->setProperty("poly", hasParameter(*processor, "poly"));
+        entry->setProperty("poly", TimelineOps::instrumentSupportsPolyTrack(type) && hasParameter(*processor, "poly"));
         entry->setProperty("hasEnvelope", !TimelineOps::instrumentOwnsItsEnvelope(type));
         instruments->setProperty(type, juce::var(entry.get()));
     }

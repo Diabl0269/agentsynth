@@ -16,6 +16,7 @@
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Timeline/TimelineOps.h"
 #include "Timeline/UniqueTrackName.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
@@ -463,14 +464,16 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     timelineDoc.setTrackColour(build.trackId, synth::ui::trackPaletteColour(index).getARGB());
 
     // Track In -> instrument, MIDI. Unambiguous by construction: this instrument was just
-    // created for this track alone.
-    graph.addConnection({{build.trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-                         {build.instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+    // created for this track alone. Skipped for an instrument that takes no MIDI (Noise): it sounds
+    // continuously, and the ADSR + VCA ahead of the channel, gated by Track In's MIDI, shape it.
+    if (build.instrumentNode->getProcessor()->acceptsMidi())
+        graph.addConnection({{build.trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {build.instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
 
     build.chainSource = build.instrumentNode;
     build.sourceRightChannel = 1;
     if (auto* instrumentModule = dynamic_cast<ModuleBase*>(build.instrumentNode->getProcessor()))
-        build.sourceRightChannel = instrumentModule->rightAudioLegChannel();
+        build.sourceRightChannel = std::max(0, instrumentModule->rightAudioLegChannel()); // mono source: L feeds both
     build.chainSourceType = build.instrumentModuleType;
     build.chainSourcePosition =
         juce::Point<int>(static_cast<int>(build.chainSource->properties.getWithDefault("x", 0)),
@@ -484,8 +487,13 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
 // chain source where step 2 left it.
 void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     auto& graph = audioEngine.getGraph();
-    const bool isOscOrWavetable =
-        build.instrumentModuleType == "Oscillator" || build.instrumentModuleType == "Wavetable";
+    const bool isOscOrWavetable = synth::TimelineOps::instrumentSupportsPolyTrack(build.instrumentModuleType);
+    // An authorable instrument that does not shape its own amplitude (Oscillator, Wavetable, Noise) gets an
+    // ADSR + VCA. A hosted plugin is not in that list: it has its own envelope.
+    const bool needsRawEnvelope = std::any_of(synth::TimelineOps::kAuthorableInstrumentTypes.begin(),
+                                              synth::TimelineOps::kAuthorableInstrumentTypes.end(),
+                                              [&](const char* type) { return build.instrumentModuleType == type; }) &&
+                                  !synth::TimelineOps::instrumentOwnsItsEnvelope(build.instrumentModuleType);
     const bool instrumentIsPoly = synth::isProcessorPoly(build.instrumentNode->getProcessor());
     const int instrumentX = static_cast<int>(build.instrumentNode->properties.getWithDefault("x", 0));
 
@@ -542,7 +550,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
     // own comment for why). Sampler already has its own one-shot playback envelope and
     // is out of scope. Never reached for a poly Oscillator/Wavetable (handled above).
-    if (isOscOrWavetable) {
+    if (needsRawEnvelope) {
         const int adsrX =
             build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;

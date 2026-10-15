@@ -12,6 +12,21 @@
 
 namespace synth {
 
+const std::array<const char*, 7> TimelineOps::kAuthorableInstrumentTypes = {
+    "Oscillator", "Wavetable", "Sampler", "Drum Kit", "Pluck", "Mallet", "Noise"};
+
+// True for Oscillator and Wavetable, the only authorable instruments a track builds polyphonic. Noise has a
+// `poly` parameter of its own, but a Noise track is always mono.
+bool TimelineOps::instrumentSupportsPolyTrack(const juce::String& instrument) {
+    return instrument == "Oscillator" || instrument == "Wavetable";
+}
+
+// These four shape their own amplitude (a one-shot envelope, or a decay per drum, string or bar), so none needs
+// the ADSR + VCA the add-track flow gives a raw Oscillator or Wavetable; none has a poly parameter either.
+bool TimelineOps::instrumentOwnsItsEnvelope(const juce::String& instrument) {
+    return instrument == "Sampler" || instrument == "Drum Kit" || instrument == "Pluck" || instrument == "Mallet";
+}
+
 namespace {
 
 // Present-but-wrong is rejected; absent is fine. Same shape as TimelineOps.cpp's readInt, which
@@ -202,9 +217,9 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (!polyVar.isVoid() && !polyVar.isBool())
         return "has a non-boolean \"poly\".";
     out.poly = polyVar.isBool() && static_cast<bool>(polyVar);
-    // The menu offers no poly Sampler or Drum Kit (neither has a poly parameter), so the preview would
-    // describe a track the build cannot make.
-    if (out.poly && TimelineOps::instrumentOwnsItsEnvelope(out.instrument))
+    // The menu offers no poly Sampler or Drum Kit (neither has a poly parameter) and a Noise track is always
+    // mono, so the preview would describe a track the build cannot make.
+    if (out.poly && !TimelineOps::instrumentSupportsPolyTrack(out.instrument))
         return "asks for a poly " + out.instrument + ". Only \"Oscillator\" and \"Wavetable\" have a poly mode.";
 
     // An in-response node reference: inert here, resolved by AIIntegrationService's edit plan

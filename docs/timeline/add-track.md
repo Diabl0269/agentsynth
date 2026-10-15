@@ -15,7 +15,7 @@ field has focus, so typing filters at once (all words, any order); Up/Down move,
 moved, Escape closes. The rows sit under these headers:
 
 - **Tracks**: MIDI Track / Audio Track
-- **Instrument Tracks**: Oscillator / Wavetable / Sampler / Drum Kit / Pluck / Mallet and the poly variants (the Sampler, Drum Kit, Pluck and Mallet have no poly entry)
+- **Instrument Tracks**: Oscillator / Wavetable / Sampler / Drum Kit / Pluck / Mallet / Noise and the poly variants (only the Oscillator and Wavetable have a poly entry; a Noise track is always mono)
 - **Plugins**: the scanned instrument plugins (a greyed "Scanning for plugins..." or "No instrument plugins found" row when there are none)
 - one header per saved track preset kind (**Audio Track from Preset**, **Instrument Track from Preset**, **Bus from Preset**)
 - **More**: Insert Track Preset from File..., Add Marker, Create Channels (greyed, with the reason, when every track already has a channel)
@@ -28,7 +28,7 @@ header, and the preset kinds and plugins carry extra search words ("plugin instr
 
 Menu ids are `TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` /
 `kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` / `kAddInstrumentSamplerMenuId`
-/ `kAddMarkerMenuId`. The MIDI and Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
+/ `kAddInstrumentNoiseMenuId` / `kAddMarkerMenuId`. The MIDI and Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
 `addAudioTrack()`); each Instrument entry calls `addInstrumentTrack(instrumentModuleType)`
 with its module type string.
 
@@ -195,7 +195,7 @@ factory default chain — see [`docs/mixer/mixer.md`](../mixer/mixer.md#an-instr
 full design.
 
 The picker offers exactly the audio-producing MIDI instruments (**Oscillator**, **Wavetable**,
-**Sampler**, **Drum Kit**, **Pluck**, **Mallet**), deliberately not every module the MIDI entry's own auto-wire search recognises as
+**Sampler**, **Drum Kit**, **Pluck**, **Mallet**, **Noise**), deliberately not every module the MIDI entry's own auto-wire search recognises as
 "MIDI-driven": Poly MIDI outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them
 audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
 `MainComponent::addInstrumentTrack`):
@@ -206,14 +206,18 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    and builds the channel automatically. See [`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)'s table note.
 2. Create the `Track In` node (same factory, uuid and placement idiom as the MIDI entry), then the
    chosen instrument to its right, and wire `Track In -> instrument` on the MIDI channel — always
-   unambiguous, since the instrument was just created for this track alone.
+   unambiguous, since the instrument was just created for this track alone. **The cable is drawn only
+   when the instrument's `acceptsMidi()` is true.** The Noise module returns false (a pure generator), so
+   a Noise track has no MIDI cable into it; the ADSR of step 4 is still gated by `Track In -> ADSR` on the
+   MIDI channel, so each note opens the envelope and the noise is heard only while notes play.
 3. A poly instrument's raw ch0-7 (up to 8 simultaneous voices) cannot feed
    `buildDefaultAudioChannel` directly, which wants one stereo pair, so
    `synth::addVoiceMixerForPolyInstrument` (Core, `ChannelFlows.h`) sums them into a Voice Mixer
    first when the instrument's own `poly` parameter is on ([`docs/mixer/mixer.md`](../mixer/mixer.md#mono-and-stereo)). A
    factory-created instrument defaults to poly OFF, so this is a no-op on the golden path.
-4. For an **Oscillator** or **Wavetable** instrument ([`docs/mixer/mixer.md`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument)): neither has an
-   envelope of its own, so a held or released note drones forever.
+4. For an **Oscillator**, **Wavetable** or **Noise** instrument ([`docs/mixer/mixer.md`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument)): none has an
+   envelope of its own, so a held or released note (or, for Noise, no note at all) sounds forever.
+   Noise is mono (its single output feeds both VCA legs) and is always built with `poly` off.
    `synth::addEnvelopeAndVCAForRawInstrument` inserts an ADSR (gated by the same Track In MIDI as
    the instrument, forced non-poly) driving a VCA (also forced non-poly) ahead of the rest of the
    chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, **Drum Kit**, **Pluck** and **Mallet**, which
@@ -225,7 +229,7 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    `ModuleBase::rightAudioLegChannel()` — or `VCAModule::kRightBase`, once step 4 has run — as
    `buildDefaultAudioChannel`'s `sourceRightChannel` parameter instead of the ch1 default.
 6. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], [ADSR+VCA
-   if Oscillator/Wavetable], Gate, EQ, Compressor, Strip}` into ONE collapsed macro named after the
+   if Oscillator/Wavetable/Noise], Gate, EQ, Compressor, Strip}` into ONE collapsed macro named after the
    track, the same way the Audio entry's macro is built — Master stays outside it, for the same
    reason.
 7. Bind the track to the `Track In` node's uuid and give it the palette colour for its index.

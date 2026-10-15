@@ -186,6 +186,21 @@ TEST_F(TimelineOpsInstrumentTrackTest, RejectsBadFields) {
                    "non-integer \"instrumentId\"");
 }
 
+// Noise joins the authorable list, but the validation is not relaxed: an unknown instrument is still
+// refused and the error names Noise among the allowed ones. A Noise track is always mono.
+TEST_F(TimelineOpsInstrumentTrackTest, NoiseIsAuthorableAndAnUnknownInstrumentIsStillRejected) {
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Theremin"}])",
+                   "asks for instrument \"Theremin\". The instruments are");
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Theremin"}])", "\"Noise\"");
+    expectRejected(R"([{"op": "addInstrumentTrack", "name": "Wind", "instrument": "Noise", "poly": true}])",
+                   "poly Noise");
+
+    const auto result =
+        validate(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Wind", "instrument": "Noise"}])"));
+    EXPECT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(result.previewText.contains("Noise with envelope and channel strip")) << result.previewText;
+}
+
 TEST_F(TimelineOpsInstrumentTrackTest, RejectsADuplicateTrackName) {
     // Already in the doc, of any kind...
     doc.addTrack(TrackKind::Automation, "Bass");
@@ -481,6 +496,7 @@ TEST(TimelineOpsInstrumentTypesTest, AuthorableInstrumentTypesAreAuthorableMidiI
         ASSERT_NE(processor, nullptr);
         auto* module = dynamic_cast<ModuleBase*>(processor.get());
         ASSERT_NE(module, nullptr);
-        EXPECT_TRUE(isMidiInstrumentType(module->getModuleType()));
+        // Noise is the one authorable instrument that takes no MIDI: the build gates its ADSR instead.
+        EXPECT_TRUE(isMidiInstrumentType(module->getModuleType()) || !module->acceptsMidi());
     }
 }

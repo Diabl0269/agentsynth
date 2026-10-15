@@ -220,6 +220,7 @@ Built-in tables are immutable and shared, so they need no synchronisation. A fil
 - Because every publish reclaims one retired slot before filling the pending slot, the retired slot is always empty when the audio thread needs it.
 
 ## Noise Module
+- **Instrument track**: an authorable `addInstrumentTrack` / "+ Track -> Instrument" instrument. It takes no MIDI (`acceptsMidi()` is false), so the track builds Track In -> ADSR -> VCA without a MIDI cable into Noise ([add-track](../timeline/add-track.md#adding-an-instrument-track)).
 - **Noise Types**: White, Pink, Brown.
 - **Features**: 
     - DJ-style `Color` filter (-1 to 1) for smooth low-pass (<0) and high-pass (>0) sweeps.

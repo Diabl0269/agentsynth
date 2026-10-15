@@ -118,6 +118,9 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     EXPECT_EQ(provider->lastPlanBody["detail"].toString(), juce::String("full"));
     EXPECT_EQ((int)provider->lastPlanBody["stepsVersion"], 1);
     EXPECT_FALSE(provider->lastPlanBody.hasProperty("previousPlan"));
+    // The instruments this app can build, so the service offers only those.
+    ASSERT_TRUE(provider->lastPlanBody["instruments"].isArray());
+    EXPECT_TRUE(provider->lastPlanBody["instruments"].getArray()->contains(juce::var("Noise")));
 
     provider->lines = {R"({"type":"steps","steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"}]})",
                        R"({"type":"step","id":"track:Kit","status":"running"})",
@@ -132,6 +135,8 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     EXPECT_EQ(events.size(), 5u) << "the malformed line is dropped, the rest are forwarded in order";
     EXPECT_EQ(events.back().type, songsteps::EventType::done);
     EXPECT_EQ(provider->routes[1], juce::String("/v1/song/build"));
+    ASSERT_TRUE(provider->lastBuildBody["instruments"].isArray());
+    EXPECT_TRUE(provider->lastBuildBody["instruments"].getArray()->contains(juce::var("Noise")));
     EXPECT_EQ(provider->lastBuildBody["token"].toString(), juce::String("tok"));
     EXPECT_EQ(provider->lastBuildBody["plan"]["title"].toString(), juce::String("Dark drum and bass"));
     EXPECT_EQ(graph->getNumNodes(), 2) << "the envelope went through the ordinary apply path";

@@ -81,9 +81,12 @@ TEST(AIStateMapperCatalogTest, DescribesInstrumentTracksAndTheirEnvelope) {
     const auto tracks = parseCatalog().getProperty("instrumentTracks", {});
     auto* instruments = tracks.getProperty("instruments", {}).getDynamicObject();
     ASSERT_NE(instruments, nullptr);
-    for (const char* type : {"Oscillator", "Wavetable", "Sampler", "Drum Kit", "Pluck", "Mallet"})
+    for (const char* type : {"Oscillator", "Wavetable", "Sampler", "Drum Kit", "Pluck", "Mallet", "Noise"})
         EXPECT_TRUE(instruments->hasProperty(type)) << type;
     EXPECT_TRUE((bool)instruments->getProperty("Oscillator").getProperty("hasEnvelope", false));
+    // Noise gets the ADSR + VCA like a raw Oscillator, but a Noise track is always mono.
+    EXPECT_TRUE((bool)instruments->getProperty("Noise").getProperty("hasEnvelope", false));
+    EXPECT_FALSE((bool)instruments->getProperty("Noise").getProperty("poly", true));
     for (const char* type : {"Drum Kit", "Pluck", "Mallet"}) {
         EXPECT_FALSE((bool)instruments->getProperty(type).getProperty("hasEnvelope", true)) << type;
         EXPECT_FALSE((bool)instruments->getProperty(type).getProperty("poly", true)) << type;
