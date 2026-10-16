@@ -3,6 +3,7 @@
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -412,6 +413,11 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
             return Port{sliders[si]->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
     }
 
+    // The Filter's morph map shows its Morph X / Y sliders in place of those knobs: a drop on one lands on it.
+    if (filterCustom_ != nullptr)
+        if (const auto channel = filterCustom_->channelAt(localPoint))
+            return Port{filterCustom_->stripBoundsFor(*channel), *channel, /*isInput*/ true, /*isMidi*/ false};
+
     if (thresholdControl != nullptr && thresholdControl->getSlider() != nullptr &&
         thresholdControl->getBounds().contains(localPoint)) {
         for (const auto& t : targets) {
@@ -471,6 +477,9 @@ float ModuleComponent::knobLandingRadiusOffset() const {
 }
 
 std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int destChannel) const {
+    if (filterCustom_ != nullptr)
+        if (const auto anchor = filterCustom_->anchorFor(destChannel))
+            return anchor;
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return std::nullopt;
@@ -571,6 +580,8 @@ bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
     if (modDropTargetChannel == channelIndex)
         return false;
     modDropTargetChannel = channelIndex;
+    if (filterCustom_ != nullptr)
+        filterCustom_->setDropChannel(channelIndex);
     repaint();
     return true;
 }

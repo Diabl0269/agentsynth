@@ -23,10 +23,10 @@ type Filter size 280x477
   child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 knob id="Morph Y" at 0,0 0x0 visible=0 title="Morph Y" tip="Morph Y" focusOrder=0 wantsFocus=1
   child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 knob id="Shift" at 0,0 0x0 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
-  child 25 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 knob id="Depth" at 0,0 0x0 visible=0 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
-  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Shift" at 12,179 85x80 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 12,161 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Depth" at 12,277 85x58 visible=0 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 12,259 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 28 knob id="Level" at 97,371 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 29 label id="" at 97,353 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 label id="cardSectionHeader" at 12,335 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
@@ -36,6 +36,9 @@ type Filter size 280x477
   child 34 component id="" at 4,92 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
   child 35 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
   child 36 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 37 component id="" at 0,0 0x0 visible=0 title="Morph map" tip="" focusOrder=0 wantsFocus=1
+  child 38 textButton id="" at 0,0 0x0 visible=0 title="Edit shapes" tip="Edit shapes: open the shape editor window" focusOrder=0 wantsFocus=1
+  child 39 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show Morph Map: the map of shapes and the morph cursor under the response view" focusOrder=0 wantsFocus=1
   in 0 10, 58
   in 1 10, 78
   in 2 29, 235
@@ -45,7 +48,7 @@ type Filter size 280x477
   in 6 37, 408
   in 7 10, 118
   in 8 10, 118
-  in 9 10, 118
-  in 10 10, 118
+  in 9 29, 235
+  in 10 37, 314
   out 0 270, 58
   out 1 270, 78

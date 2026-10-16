@@ -12,19 +12,25 @@ using namespace cardlayout;
 
 // The Filter's Show Response and Show Spectrum panels are card chrome (ModuleComponentCardView.cpp), and
 // with a footer they are pills in it; Poly joins it on its own. Key Track never dims: the card knows no
-// cable, so it cannot tell an unplugged Pitch input. The Custom type's morph, shift and depth knobs show only
-// while Custom is the type.
+// cable, so it cannot tell an unplugged Pitch input. In the Custom type Cutoff and Resonance (which it
+// ignores) swap in place for Shift and Depth, so the tone row keeps its size and Drive stays; the morph
+// knobs sit in their own section, which the card hides while its morph map stands in for them.
 CardSection customSection() {
-    auto custom = section("custom", "Custom", {param("morphX"), param("morphY"), param("shift"), param("depth")});
+    auto custom = section("custom", "Custom", {param("morphX"), param("morphY")});
     custom.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
     return custom;
 }
 
 CardLayout filterLayout() {
+    const juce::StringArray ladderTypes{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"};
     CardLayout layout;
     layout.sections = {
         section("type", std::nullopt, {param("filterType")}),
-        section("tone", std::nullopt, {param("cutoff", CardWidget::KnobLarge), param("resonance"), param("drive")}),
+        section("tone", std::nullopt,
+                {showWhen(param("cutoff", CardWidget::KnobLarge), "filterType", ladderTypes),
+                 showWhen(param("shift", CardWidget::KnobLarge), "filterType", {"Custom"}),
+                 showWhen(param("resonance"), "filterType", ladderTypes),
+                 showWhen(param("depth"), "filterType", {"Custom"}), param("drive")}),
         section("modulation", "Modulation", {param("keyTrack"), param("outputLevel")}),
         customSection(),
         footer({}),
@@ -76,7 +82,7 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 2);
+    defaults.add("Filter", filterLayout(), 3);
     defaults.add("Compressor", compressorLayout(), 1);
     defaults.add("Limiter", limiterLayout(), 1);
     defaults.add("Gate", gateLayout(), 1);

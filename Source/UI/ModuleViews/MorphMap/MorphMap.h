@@ -18,8 +18,10 @@ namespace synth::ui {
  *  (Shift for a bigger step), Return on a dot edits it, Delete removes it, F2 renames it, Shift+F10 opens its
  *  menu; Escape returns focus to the map. Every key step is one gesture bracket, like a drag.
  *
- *  Cables: a cable dropped on the bottom edge drives Morph X, on the left or right edge Morph Y
- *  (`edgeAt`, `setDropHighlight`, `edgeAnchor`).
+ *  Sliders: a thin Morph X slider hugs the bottom edge and a Morph Y slider the left edge, each with its thumb at
+ *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same
+ *  callbacks, one coordinate at a time) and the landing widgets of the card's Morph X / Morph Y cables
+ *  (`stripAt`, `stripAnchor`, `setDropHighlight`). Their Tab stops follow the cursor's; the arrows move them.
  */
 class MorphMap
     : public juce::Component
@@ -32,12 +34,11 @@ public:
         float y = 0.5f;
     };
     enum class Gesture { Dot, Cursor };
-    enum class Edge { None, Bottom, Left, Right };
+    enum class Axis { None, X, Y };
 
     static constexpr float kStep = 0.02f;
     static constexpr float kBigStep = 0.1f;
-    static constexpr int kPad = 12;
-    static constexpr int kEdgeBand = 10;
+    static constexpr int kStripThickness = 10;
 
     MorphMap();
     ~MorphMap() override;
@@ -81,18 +82,21 @@ public:
     juce::Point<float> toMap(juce::Point<float> pixels) const;
     juce::Point<float> getDotCentre(int index) const;
     juce::Point<float> getCursorCentre() const;
-    /** The edge band under `point` (this component's coordinates), for a cable in flight. */
-    Edge edgeAt(juce::Point<int> point) const;
-    /** Where a cable lands on `edge`, this component's coordinates (the middle of that edge). */
-    juce::Point<float> edgeAnchor(Edge edge) const;
-    /** Lights `edge` as the pending drop target; Edge::None clears it. Returns true when it changed. */
-    bool setDropHighlight(Edge edge);
+    /** The slider strip of `axis` (this component's coordinates); empty for Axis::None. */
+    juce::Rectangle<float> getStripBounds(Axis axis) const;
+    /** The slider under `point` (this component's coordinates), for a cable in flight or a press. */
+    Axis stripAt(juce::Point<float> point) const;
+    /** Where a cable lands on the slider of `axis`: just outside the strip, at its middle. */
+    juce::Point<float> stripAnchor(Axis axis) const;
+    /** Lights the slider of `axis` as the pending drop target; Axis::None clears it. Returns true when it changed. */
+    bool setDropHighlight(Axis axis);
 
     // ---------- inspection ----------
     /** The text a tooltip shows with the pointer at `point`. */
     juce::String tooltipAt(juce::Point<int> point) const;
     juce::Component* getDotStop(int index) const;
     juce::Component* getCursorStop() const;
+    juce::Component* getStripStop(Axis axis) const;
     bool isRenaming() const noexcept { return renameEditor_ != nullptr; }
     int getNumDots() const noexcept { return (int)dots_.size(); }
 
@@ -117,7 +121,7 @@ public:
 
 private:
     class Stop;
-    enum class Drag { None, Dot, Cursor, Empty };
+    enum class Drag { None, Dot, Cursor, Strip, Empty };
 
     int dotAt(juce::Point<float> point) const;
     bool cursorAt(juce::Point<float> point) const;
@@ -128,6 +132,8 @@ private:
     bool stepStop(Stop& stop, float dx, float dy);
     void moveDot(int index, juce::Point<float> to);
     void moveCursor(juce::Point<float> to);
+    void moveToStrip(Axis axis, juce::Point<float> pixels);
+    void paintStrips(juce::Graphics& g) const;
     void endRename(bool commit);
     void select(int index);
     void takeFocus(juce::Component& target);
@@ -137,15 +143,17 @@ private:
     bool cursorVisible_ = true;
     bool showLabels_ = false;
     int selected_ = -1;
-    Edge dropEdge_ = Edge::None;
+    Axis dropAxis_ = Axis::None;
 
     Drag drag_ = Drag::None;
     int dragIndex_ = -1;
+    Axis dragAxis_ = Axis::None;
     bool dragMoved_ = false;
     bool gestureOpen_ = false;
 
     std::vector<std::unique_ptr<Stop>> dotStops_;
     std::unique_ptr<Stop> cursorStop_;
+    std::unique_ptr<Stop> stripStops_[2]; // X, Y
     std::unique_ptr<juce::TextEditor> renameEditor_;
     int renameIndex_ = -1;
 

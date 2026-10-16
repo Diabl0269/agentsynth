@@ -72,7 +72,8 @@ bool ruleDims(const std::vector<CardBodyPlan::DimRule>& rules, int item, juce::A
 CardBodyPlan::ConditionChange CardBodyPlan::evaluateConditions(juce::AudioProcessor& module) {
     ConditionChange change;
     for (auto& section : sections) {
-        const bool visible = !section.visibleWhen.has_value() || cardConditionHolds(*section.visibleWhen, module);
+        const bool visible = !section.codeHidden &&
+                             (!section.visibleWhen.has_value() || cardConditionHolds(*section.visibleWhen, module));
         change.sections |= assign(section.visible, visible);
     }
     for (int i = 0; i < (int)items.size(); ++i) {
@@ -240,6 +241,17 @@ void CardBody::parameterValueChanged(int, float) { triggerAsyncUpdate(); }
 void CardBody::parameterGestureChanged(int, bool) {}
 
 void CardBody::handleAsyncUpdate() { refreshConditions(); }
+
+// The card hides or restores a section by id (the Filter's morph knobs while its morph map stands in for them).
+// The section goes through the same fade as a condition flipping.
+void CardBody::setSectionHidden(const juce::String& sectionId, bool hidden) {
+    for (auto& section : plan_.sections)
+        if (section.id == sectionId && section.codeHidden != hidden) {
+            section.codeHidden = hidden;
+            refreshConditions();
+            return;
+        }
+}
 
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card
 // goes through the same resize path as any other growth (make room, and give it back on a shrink).

@@ -33,6 +33,8 @@ public:
     ShapeDrawRange getDrawRange() const override;
     juce::String getWindowTitle() const override;
     float getReferenceLevel() const override;
+    /** The name the window title carries; the card refreshes it before opening. */
+    void setModuleName(juce::String name) { moduleName_ = std::move(name); }
 
 private:
     FilterModule& module_;

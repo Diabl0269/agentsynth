@@ -19,6 +19,10 @@ juce::Component* MorphMap::getDotStop(int index) const {
 
 juce::Component* MorphMap::getCursorStop() const { return cursorStop_.get(); }
 
+juce::Component* MorphMap::getStripStop(Axis axis) const {
+    return axis == Axis::X ? stripStops_[0].get() : axis == Axis::Y ? stripStops_[1].get() : nullptr;
+}
+
 /** The names carry the values ("Morph cursor, X 0.40, Y 0.62"): the stop is a plain focusable element, so its
     title is what a screen reader speaks when focus lands on it and after each key step. */
 void MorphMap::refreshStopNames() {
@@ -32,12 +36,20 @@ void MorphMap::refreshStopNames() {
     cursorStop_->setTitle("Morph cursor, " + coordinateText(cursor_.x, cursor_.y));
     cursorStop_->setDescription("Where the shapes are blended");
     cursorStop_->setTooltip("Morph cursor - drag to blend shapes");
+    stripStops_[0]->setTitle("Morph X, " + juce::String(cursor_.x, 2));
+    stripStops_[0]->setDescription("Slider for the cursor's horizontal position");
+    stripStops_[0]->setTooltip("Morph X - drag to move the cursor sideways, or drop a cable to modulate it");
+    stripStops_[1]->setTitle("Morph Y, " + juce::String(cursor_.y, 2));
+    stripStops_[1]->setDescription("Slider for the cursor's vertical position");
+    stripStops_[1]->setTooltip("Morph Y - drag to move the cursor up and down, or drop a cable to modulate it");
 }
 
 juce::String MorphMap::tooltipAt(juce::Point<int> point) const {
     const auto p = point.toFloat();
     if (cursorAt(p))
         return cursorStop_->getTooltip();
+    if (const Axis strip = stripAt(p); strip != Axis::None && cursorVisible_)
+        return stripStops_[strip == Axis::X ? 0 : 1]->getTooltip();
     if (const int dot = dotAt(p); dot >= 0)
         return dotStops_[(size_t)dot]->getTooltip();
     return "Morph map: click empty space to add a shape that copies the current blend";
@@ -61,7 +73,7 @@ bool MorphMap::keyPressed(const juce::KeyPress& key) {
 
 /** One key step is one gesture bracket (one undo step), reported through the same callbacks a drag uses. */
 bool MorphMap::stepStop(Stop& stop, float dx, float dy) {
-    const bool cursor = stop.isCursor();
+    const bool cursor = stop.isCursor() || stop.isStrip();
     const juce::Point<float> from =
         cursor ? cursor_ : juce::Point<float>{dots_[(size_t)stop.getIndex()].x, dots_[(size_t)stop.getIndex()].y};
     const juce::Point<float> to{juce::jlimit(0.0f, 1.0f, from.x + dx), juce::jlimit(0.0f, 1.0f, from.y + dy)};
@@ -85,6 +97,13 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
         return false;
     const float step = mods.isShiftDown() ? kBigStep : kStep;
     const int code = key.getKeyCode();
+    if (stop.isStrip()) { // a slider moves along its own axis; the keys that point along it, either pair
+        const float along = (code == juce::KeyPress::rightKey || code == juce::KeyPress::downKey) ? step
+                            : (code == juce::KeyPress::leftKey || code == juce::KeyPress::upKey)  ? -step
+                                                                                                  : 0.0f;
+        if (along != 0.0f)
+            return stepStop(stop, stop.axis() == Axis::X ? along : 0.0f, stop.axis() == Axis::Y ? along : 0.0f);
+    }
     if (code == juce::KeyPress::leftKey)
         return stepStop(stop, -step, 0.0f);
     if (code == juce::KeyPress::rightKey)
@@ -97,7 +116,7 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
         grabKeyboardFocus();
         return true;
     }
-    if (stop.isCursor())
+    if (stop.isCursor() || stop.isStrip())
         return false;
 
     const int index = stop.getIndex();

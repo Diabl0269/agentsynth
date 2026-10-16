@@ -204,7 +204,7 @@ TEST(MorphMap, ArrowsStopAtTheMapEdge) {
     EXPECT_FLOAT_EQ(rig.filter->getCurrentMorphX(), 0.0f);
 }
 
-TEST(MorphMap, TabVisitsTheMapThenEachDotThenTheCursor) {
+TEST(MorphMap, TabVisitsTheMapThenEachDotThenTheCursorThenTheSliders) {
     MapRig rig;
     juce::Component host;
     host.setSize(300, 200);
@@ -212,12 +212,14 @@ TEST(MorphMap, TabVisitsTheMapThenEachDotThenTheCursor) {
     rig.map.setBounds(host.getLocalBounds());
 
     const auto walk = synth::test::walkTabOrder(host);
-    ASSERT_EQ(walk.forward.size(), 5u);
+    ASSERT_EQ(walk.forward.size(), 7u);
     EXPECT_EQ(walk.forward[0], &rig.map);
     EXPECT_EQ(walk.forward[1], rig.map.getDotStop(0));
     EXPECT_EQ(walk.forward[2], rig.map.getDotStop(1));
     EXPECT_EQ(walk.forward[3], rig.map.getDotStop(2));
     EXPECT_EQ(walk.forward[4], rig.map.getCursorStop());
+    EXPECT_EQ(walk.forward[5], rig.map.getStripStop(MorphMap::Axis::X));
+    EXPECT_EQ(walk.forward[6], rig.map.getStripStop(MorphMap::Axis::Y));
     EXPECT_EQ(walk.backward.size(), walk.forward.size());
 }
 
@@ -240,17 +242,89 @@ TEST(MorphMap, StopsAreNamedWithTheirValuesAndTooltipped) {
     }
 }
 
-TEST(MorphMap, EdgeBandsTakeCablesBottomForXAndSidesForY) {
+TEST(MorphMap, SlidersHugTheBottomAndLeftEdgesAndTheRightEdgeStaysFree) {
     MapRig rig;
-    const int w = rig.map.getWidth(), h = rig.map.getHeight();
-    EXPECT_EQ(rig.map.edgeAt({w / 2, h - 3}), MorphMap::Edge::Bottom);
-    EXPECT_EQ(rig.map.edgeAt({3, h / 2}), MorphMap::Edge::Left);
-    EXPECT_EQ(rig.map.edgeAt({w - 3, h / 2}), MorphMap::Edge::Right);
-    EXPECT_EQ(rig.map.edgeAt({w / 2, h / 2}), MorphMap::Edge::None);
-    EXPECT_EQ(rig.map.edgeAt({-5, h / 2}), MorphMap::Edge::None) << "outside the map is not an edge";
-    EXPECT_EQ(rig.map.edgeAnchor(MorphMap::Edge::Bottom).y, (float)h);
-    EXPECT_TRUE(rig.map.setDropHighlight(MorphMap::Edge::Left));
-    EXPECT_FALSE(rig.map.setDropHighlight(MorphMap::Edge::Left));
+    const auto x = rig.map.getStripBounds(MorphMap::Axis::X);
+    const auto y = rig.map.getStripBounds(MorphMap::Axis::Y);
+    const auto plot = rig.map.getPlotArea();
+    EXPECT_GE(x.getY(), plot.getBottom());
+    EXPECT_LE(x.getHeight(), 10.0f);
+    EXPECT_LE(y.getRight(), plot.getX());
+    EXPECT_LE(y.getWidth(), 10.0f);
+    // Symmetric about the middle, so a future right-hand slider fits without moving the map.
+    EXPECT_NEAR(plot.getX(), (float)rig.map.getWidth() - plot.getRight(), 0.01f);
+    EXPECT_EQ(rig.map.stripAt(x.getCentre()), MorphMap::Axis::X);
+    EXPECT_EQ(rig.map.stripAt(y.getCentre()), MorphMap::Axis::Y);
+    EXPECT_EQ(rig.map.stripAt({(float)rig.map.getWidth() - 4.0f, (float)rig.map.getHeight() * 0.5f}),
+              MorphMap::Axis::None);
+    EXPECT_EQ(rig.map.stripAt(plot.getCentre()), MorphMap::Axis::None);
+    EXPECT_GT(rig.map.stripAnchor(MorphMap::Axis::X).y, x.getBottom() - 1.0f);
+    EXPECT_LT(rig.map.stripAnchor(MorphMap::Axis::Y).x, y.getX() + 1.0f);
+    EXPECT_EQ(rig.map.getStripBounds(MorphMap::Axis::None), juce::Rectangle<float>());
+    EXPECT_TRUE(rig.map.setDropHighlight(MorphMap::Axis::Y));
+    EXPECT_FALSE(rig.map.setDropHighlight(MorphMap::Axis::Y));
+}
+
+TEST(MorphMap, DraggingTheMorphXSliderSetsOnlyMorphXInOneHostGestureAndUndoStep) {
+    MapRig rig;
+    int begins = 0, ends = 0;
+    struct Listener : juce::AudioProcessorParameter::Listener {
+        int* begins;
+        int* ends;
+        void parameterValueChanged(int, float) override {}
+        void parameterGestureChanged(int, bool starting) override { ++*(starting ? begins : ends); }
+    } listener;
+    listener.begins = &begins;
+    listener.ends = &ends;
+    auto* morphX = findParameterByID(rig.filter, "morphX");
+    morphX->addListener(&listener);
+    const int serial = rig.undo.getEditSerial();
+    const auto strip = rig.map.getStripBounds(MorphMap::Axis::X);
+    const auto from = juce::Point<float>(strip.getX() + strip.getWidth() * 0.5f, strip.getCentreY());
+    const auto to = juce::Point<float>(strip.getX() + strip.getWidth() * 0.9f, strip.getCentreY());
+
+    drag(rig.map, from, to);
+    morphX->removeListener(&listener);
+
+    EXPECT_NEAR(rig.filter->getCurrentMorphX(), 0.9f, 0.02f);
+    EXPECT_NEAR(rig.filter->getCurrentMorphY(), 0.5f, 1e-5);
+    EXPECT_EQ(begins, 1);
+    EXPECT_EQ(ends, 1);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+}
+
+TEST(MorphMap, ClickingTheMorphYSliderJumpsTheCursorThereAndAddsNoShape) {
+    MapRig rig;
+    const auto strip = rig.map.getStripBounds(MorphMap::Axis::Y);
+    click(rig.map, {strip.getCentreX(), strip.getY() + strip.getHeight() * 0.25f});
+    EXPECT_NEAR(rig.filter->getCurrentMorphY(), 0.25f, 0.02f);
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 3u);
+}
+
+TEST(MorphMap, SliderStopsTakeArrowKeysAndAreNamedWithTheirValue) {
+    MapRig rig;
+    auto* x = rig.map.getStripStop(MorphMap::Axis::X);
+    auto* y = rig.map.getStripStop(MorphMap::Axis::Y);
+    ASSERT_NE(x, nullptr);
+    EXPECT_EQ(x->getTitle(), "Morph X, 0.50");
+    EXPECT_EQ(y->getTitle(), "Morph Y, 0.50");
+
+    const int serial = rig.undo.getEditSerial();
+    EXPECT_TRUE(x->keyPressed(key(juce::KeyPress::rightKey)));
+    EXPECT_NEAR(rig.filter->getCurrentMorphX(), 0.5f + MorphMap::kStep, 1e-4);
+    EXPECT_EQ(rig.filter->getCurrentMorphY(), 0.5f);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+    EXPECT_TRUE(y->keyPressed(key(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier)));
+    EXPECT_NEAR(rig.filter->getCurrentMorphY(), 0.5f + MorphMap::kBigStep, 1e-4);
+    EXPECT_TRUE(x->keyPressed(key(juce::KeyPress::leftKey)));
+    EXPECT_EQ(x->getTitle(), "Morph X, 0.50");
+    for (auto* c : {x, y}) {
+        auto* tip = dynamic_cast<juce::SettableTooltipClient*>(c);
+        ASSERT_NE(tip, nullptr);
+        EXPECT_FALSE(tip->getTooltip().isEmpty());
+    }
+    EXPECT_TRUE(
+        rig.map.tooltipAt(rig.map.getStripBounds(MorphMap::Axis::X).getCentre().roundToInt()).startsWith("Morph X"));
 }
 
 TEST(MorphMap, ShapeColoursComeFromTheThemeAndDifferByIndex) {

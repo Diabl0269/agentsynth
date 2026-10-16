@@ -586,6 +586,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentFilterCard.cpp
+    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h
+    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp

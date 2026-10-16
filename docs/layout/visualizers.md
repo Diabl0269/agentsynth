@@ -401,5 +401,8 @@ then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` ch
 focus ring over the painted dots, the `PianoRollHeaderChip` idea); the arrows move the focused dot or cursor (Shift for a
 bigger step), Return edits a dot, Delete removes it, F2 renames it, Shift+F10 opens its menu, Escape returns to the map.
 These keys belong to the focused control, so they are documented here and not rebindable actions
-([accessibility](../development/accessibility.md#the-rule)). A cable dropped on the bottom edge drives Morph X, on the
-left or right edge Morph Y (`edgeAt`, `edgeAnchor`, `setDropHighlight`).
+([accessibility](../development/accessibility.md#the-rule)). Thin sliders hug the bottom edge (Morph X) and the left edge
+(Morph Y), 10 px thick with the thumb at the cursor; a press, drag or arrow key sets that one coordinate, through the
+cursor's callbacks. The right edge is left empty (the plot is symmetric left and right) for a future third axis. A cable
+dropped on a slider drives that parameter (`stripAt`, `stripAnchor`, `setDropHighlight`). Tab order: the map, each
+dot, the cursor, the X slider, the Y slider.

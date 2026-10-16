@@ -20,6 +20,18 @@ juce::DynamicObject* firstNode(const juce::var& json) {
 
 } // namespace
 
+TEST(CardViewStateTest, MorphMapChoiceRoundTripsAndUnsetSavesNothing) {
+    CardViewState state;
+    state.showMorphMap = false;
+    EXPECT_FALSE(state.isDefault());
+    EXPECT_EQ(CardViewState::fromVar(juce::JSON::parse(juce::JSON::toString(state.toVar()))).showMorphMap,
+              std::optional<bool>(false));
+    state.showMorphMap = true;
+    EXPECT_EQ(CardViewState::fromVar(juce::JSON::parse(juce::JSON::toString(state.toVar()))).showMorphMap,
+              std::optional<bool>(true));
+    EXPECT_FALSE(CardViewState::fromVar(juce::JSON::parse("{\"morphMap\": 3}")).showMorphMap.has_value());
+}
+
 TEST(CardViewStateTest, DefaultSavesNothing) {
     EXPECT_TRUE(CardViewState{}.isDefault());
     EXPECT_TRUE(CardViewState{}.toVar().isVoid());

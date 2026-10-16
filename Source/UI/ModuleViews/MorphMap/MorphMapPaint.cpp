@@ -57,24 +57,32 @@ void MorphMap::paint(juce::Graphics& g) {
         g.drawEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f, 2.0f);
     }
 
-    if (dropEdge_ != Edge::None) {
-        g.setColour(colors.modWire);
-        const auto b = getLocalBounds().toFloat();
-        constexpr float kLit = 3.0f;
-        switch (dropEdge_) {
-        case Edge::Bottom:
-            g.fillRoundedRectangle(b.getX() + kPad, b.getBottom() - kLit - 1.0f, b.getWidth() - 2.0f * kPad, kLit,
-                                   1.5f);
-            break;
-        case Edge::Left:
-            g.fillRoundedRectangle(b.getX() + 1.0f, b.getY() + kPad, kLit, b.getHeight() - 2.0f * kPad, 1.5f);
-            break;
-        case Edge::Right:
-            g.fillRoundedRectangle(b.getRight() - kLit - 1.0f, b.getY() + kPad, kLit, b.getHeight() - 2.0f * kPad,
-                                   1.5f);
-            break;
-        case Edge::None:
-            break;
+    if (cursorVisible_)
+        paintStrips(g);
+}
+
+/** Thin sliders: a track, the accent fill from the start to the value, a thumb at the cursor, and an outline in the
+    wire colour while a cable is about to land on it. */
+void MorphMap::paintStrips(juce::Graphics& g) const {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    for (const Axis axis : {Axis::X, Axis::Y}) {
+        const auto strip = getStripBounds(axis);
+        const float value = axis == Axis::X ? cursor_.x : cursor_.y;
+        g.setColour(colors.border.withAlpha(0.8f));
+        g.fillRoundedRectangle(strip, 3.0f);
+        g.setColour(colors.accent);
+        if (axis == Axis::X)
+            g.fillRoundedRectangle(strip.withWidth(juce::jmax(6.0f, strip.getWidth() * value)), 3.0f);
+        else
+            g.fillRoundedRectangle(strip.withHeight(juce::jmax(6.0f, strip.getHeight() * value)), 3.0f);
+        const auto thumb = axis == Axis::X
+                               ? juce::Point<float>(strip.getX() + strip.getWidth() * value, strip.getCentreY())
+                               : juce::Point<float>(strip.getCentreX(), strip.getY() + strip.getHeight() * value);
+        g.setColour(colors.textPrimary);
+        g.fillEllipse(thumb.x - 5.0f, thumb.y - 5.0f, 10.0f, 10.0f);
+        if (dropAxis_ == axis) {
+            g.setColour(colors.modWire);
+            g.drawRoundedRectangle(strip.expanded(2.0f), 4.0f, 2.0f);
         }
     }
 }

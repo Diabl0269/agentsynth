@@ -5,6 +5,7 @@
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
+#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ExternalMidiModule.h"
@@ -185,6 +186,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         createEnvelopeCardControls();
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
+    createFilterCustomCard();
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout
     applyControlAccessibility(); // last: names every control the steps above built
@@ -205,6 +207,9 @@ void ModuleComponent::detachFromProcessor() {
 
     // The panels' fades hold a VBlank updater on their first panel, so they go before the panels do.
     scopeFade_.reset();
+    if (filterCustom_ != nullptr)
+        filterCustom_->detach();
+    filterCustom_.reset();
     responseFade_.reset();
     lfoFade_.reset();
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
@@ -450,6 +455,8 @@ void ModuleComponent::timerCallback() {
             syncLfoCurveFromModule();
     }
     updateLfoWavePlayhead();
+    if (filterCustom_ != nullptr)
+        filterCustom_->poll();
 
     // Gate repaint: only invalidate the buffered image when something has
     // visually changed.  Idle modules (no signal, no modulation) produce no

@@ -1,5 +1,6 @@
 // ShapeEditorTests.cpp -- the Filter shape editor window's content: selection, the curve editor driven through real
 // mouse events, the buttons, Start from, the lane draw shapes, undo and Escape.
+#include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
@@ -271,4 +272,38 @@ TEST(ShapeEditor, TheWindowHookReceivesTheEditorOnTheRequestedShape) {
     EXPECT_EQ(window, nullptr);
     ASSERT_NE(received, nullptr);
     EXPECT_EQ(received->getSelected(), 2);
+}
+
+TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    const auto walk = synth::test::walkTabOrder(editor);
+    std::vector<std::string> names;
+    for (auto* c : walk.forward)
+        names.push_back(c->getTitle().toStdString());
+    const std::vector<std::string> expected{"Morph map",
+                                            "ah, X 0.20, Y 0.25",
+                                            "ee, X 0.80, Y 0.25",
+                                            "oo, X 0.50, Y 0.80",
+                                            "Morph cursor, X 0.50, Y 0.50",
+                                            "Morph X, 0.50",
+                                            "Morph Y, 0.50",
+                                            "ah shape",
+                                            "ee shape",
+                                            "oo shape",
+                                            "Shape curve",
+                                            "Add shape",
+                                            "Duplicate",
+                                            "Delete",
+                                            "Rename",
+                                            "Start from",
+                                            "Draw",
+                                            "Done"};
+    EXPECT_EQ(names, expected);
+    EXPECT_EQ(walk.backward.size(), walk.forward.size());
+    for (auto* c : walk.forward) {
+        auto* tip = dynamic_cast<juce::TooltipClient*>(c);
+        ASSERT_NE(tip, nullptr) << c->getTitle();
+        EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
+    }
 }

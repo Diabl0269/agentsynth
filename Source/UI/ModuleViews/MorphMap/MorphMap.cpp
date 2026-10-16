@@ -8,6 +8,12 @@ namespace synth::ui {
 
 namespace {
 constexpr float kHitRadius = 10.0f;
+constexpr float kStripGap = 6.0f;
+// Room each side of the plot: the left slider, the right edge kept free for a third axis, a margin above, and the
+// bottom slider with its gap. The map is symmetric left and right so a right-hand slider can join without moving it.
+constexpr float kSideInset = 22.0f;
+constexpr float kTopInset = 10.0f;
+constexpr float kBottomInset = 22.0f;
 constexpr float kMapMin = 0.0f;
 constexpr float kMapMax = 1.0f;
 } // namespace
@@ -19,14 +25,25 @@ MorphMap::MorphMap() {
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
+    for (int a = 0; a < 2; ++a) {
+        stripStops_[a] = std::make_unique<Stop>(*this, -2 - a);
+        stripStops_[a]->setExplicitFocusOrder(1001 + a);
+        addAndMakeVisible(*stripStops_[a]);
+    }
     refreshStopNames();
 }
 
 MorphMap::~MorphMap() = default;
 
-/** The plot is inset by kPad so a dot or the cursor at 0 or 1 is not clipped and the edge bands a cable lands
-    on stay outside the plot. */
-juce::Rectangle<float> MorphMap::getPlotArea() const { return getLocalBounds().toFloat().reduced((float)kPad); }
+/** The plot is inset so a dot or the cursor at 0 or 1 is not clipped and the sliders sit outside it. */
+juce::Rectangle<float> MorphMap::getPlotArea() const {
+    return getLocalBounds()
+        .toFloat()
+        .withTrimmedLeft(kSideInset)
+        .withTrimmedRight(kSideInset)
+        .withTrimmedTop(kTopInset)
+        .withTrimmedBottom(kBottomInset);
+}
 
 juce::Point<float> MorphMap::toPixels(float x, float y) const {
     const auto plot = getPlotArea();
@@ -90,6 +107,8 @@ void MorphMap::setCursor(float x, float y) {
 void MorphMap::setCursorVisible(bool visible) {
     cursorVisible_ = visible;
     cursorStop_->setVisible(visible);
+    for (auto& stop : stripStops_)
+        stop->setVisible(visible);
     repaint();
 }
 
@@ -123,6 +142,8 @@ void MorphMap::layoutStops() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
         dotStops_[(size_t)i]->setCentrePosition(getDotCentre(i).roundToInt());
     cursorStop_->setCentrePosition(getCursorCentre().roundToInt());
+    stripStops_[0]->setBounds(getStripBounds(Axis::X).expanded(2.0f).toNearestInt());
+    stripStops_[1]->setBounds(getStripBounds(Axis::Y).expanded(2.0f).toNearestInt());
 }
 
 void MorphMap::resized() {
@@ -134,40 +155,37 @@ void MorphMap::resized() {
 // Cables
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The bottom band drives X, the left and right bands drive Y; a corner belongs to the bottom. Only the strip
-    outside the plot counts, so a click inside the map never reads as a cable drop. */
-MorphMap::Edge MorphMap::edgeAt(juce::Point<int> point) const {
-    const auto bounds = getLocalBounds();
-    if (!bounds.contains(point))
-        return Edge::None;
-    if (point.y >= bounds.getBottom() - kEdgeBand)
-        return Edge::Bottom;
-    if (point.x < bounds.getX() + kEdgeBand)
-        return Edge::Left;
-    if (point.x >= bounds.getRight() - kEdgeBand)
-        return Edge::Right;
-    return Edge::None;
+juce::Rectangle<float> MorphMap::getStripBounds(Axis axis) const {
+    const auto plot = getPlotArea();
+    constexpr float kT = (float)kStripThickness;
+    if (axis == Axis::X)
+        return {plot.getX(), plot.getBottom() + kStripGap, plot.getWidth(), kT};
+    if (axis == Axis::Y)
+        return {plot.getX() - kStripGap - kT, plot.getY(), kT, plot.getHeight()};
+    return {};
 }
 
-juce::Point<float> MorphMap::edgeAnchor(Edge edge) const {
-    const auto b = getLocalBounds().toFloat();
-    switch (edge) {
-    case Edge::Bottom:
-        return {b.getCentreX(), b.getBottom()};
-    case Edge::Left:
-        return {b.getX(), b.getCentreY()};
-    case Edge::Right:
-        return {b.getRight(), b.getCentreY()};
-    case Edge::None:
-        break;
-    }
-    return b.getCentre();
+MorphMap::Axis MorphMap::stripAt(juce::Point<float> point) const {
+    if (getStripBounds(Axis::X).expanded(2.0f).contains(point))
+        return Axis::X;
+    if (getStripBounds(Axis::Y).expanded(2.0f).contains(point))
+        return Axis::Y;
+    return Axis::None;
 }
 
-bool MorphMap::setDropHighlight(Edge edge) {
-    if (dropEdge_ == edge)
+juce::Point<float> MorphMap::stripAnchor(Axis axis) const {
+    const auto strip = getStripBounds(axis);
+    if (axis == Axis::X)
+        return {strip.getCentreX(), strip.getBottom() + 3.0f};
+    if (axis == Axis::Y)
+        return {strip.getX() - 3.0f, strip.getCentreY()};
+    return getLocalBounds().toFloat().getCentre();
+}
+
+bool MorphMap::setDropHighlight(Axis axis) {
+    if (dropAxis_ == axis)
         return false;
-    dropEdge_ = edge;
+    dropAxis_ = axis;
     repaint();
     return true;
 }
@@ -209,7 +227,16 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
         }
         return;
     }
-    if (onCursor) {
+    if (const Axis strip = stripAt(e.position); strip != Axis::None && cursorVisible_) {
+        drag_ = Drag::Strip;
+        dragAxis_ = strip;
+        takeFocus(*stripStops_[strip == Axis::X ? 0 : 1]);
+        gestureOpen_ = true;
+        dragMoved_ = true;
+        if (onGestureStart)
+            onGestureStart(Gesture::Cursor);
+        moveToStrip(strip, e.position);
+    } else if (onCursor) {
         drag_ = Drag::Cursor;
         takeFocus(*cursorStop_);
     } else if (dot >= 0) {
@@ -224,6 +251,10 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
 }
 
 void MorphMap::mouseDrag(const juce::MouseEvent& e) {
+    if (drag_ == Drag::Strip) {
+        moveToStrip(dragAxis_, e.position);
+        return;
+    }
     if (drag_ != Drag::Dot && drag_ != Drag::Cursor)
         return;
     const auto to = toMap(e.position);
@@ -275,6 +306,12 @@ void MorphMap::moveDot(int index, juce::Point<float> to) {
     repaint();
     if (onDotMoved)
         onDotMoved(index, to.x, to.y);
+}
+
+/** A press or drag on a slider sets that one coordinate of the cursor from the pointer along the strip. */
+void MorphMap::moveToStrip(Axis axis, juce::Point<float> pixels) {
+    const auto mapped = toMap(pixels);
+    moveCursor(axis == Axis::X ? juce::Point<float>{mapped.x, cursor_.y} : juce::Point<float>{cursor_.x, mapped.y});
 }
 
 void MorphMap::moveCursor(juce::Point<float> to) {
