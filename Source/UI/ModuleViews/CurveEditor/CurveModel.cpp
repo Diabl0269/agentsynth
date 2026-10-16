@@ -146,6 +146,8 @@ bool CurveModel::canRemovePoint(int index) const {
 }
 
 int CurveModel::addPoint(double x, float y) {
+    if (getNumNodes() >= kMaxNodes)
+        return -1;
     auto it = std::upper_bound(entries_.begin(), entries_.end(), x,
                                [](double value, const NodeEntry& e) { return value < e.node.x; });
     const int insertAt = (int)(it - entries_.begin());

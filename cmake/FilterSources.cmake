@@ -10,4 +10,6 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/PartitionedConvolver.cpp
     Source/Modules/Filter/CustomFilterEngine.h
     Source/Modules/Filter/CustomFilterEngine.cpp
+    Source/Modules/Filter/CustomFilterBlend.h
+    Source/Modules/Filter/CustomFilterBlend.cpp
 )

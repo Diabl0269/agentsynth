@@ -329,11 +329,18 @@ public:
     float getModulatedResonance() const { return modulatedResonance.load(std::memory_order_relaxed); }
     float getCurrentDrive() const { return *driveParam; }
     int getCurrentFilterType() const { return filterTypeParam->getIndex(); }
+    /** The Custom controls as set on their knobs (no CV): morph cursor, shift in semitones, depth. */
+    float getCurrentMorphX() const { return morphXParam->get(); }
+    float getCurrentMorphY() const { return morphYParam->get(); }
+    float getCurrentShift() const { return shiftParam->get(); }
+    float getCurrentDepth() const { return depthParam->get(); }
     double getLastSampleRate() const { return lastSampleRate; }
 
     /** Message thread only: the Custom type's drawn shapes. */
     const synth::CustomFilterShapes& getCustomShapes() const { return customEngine.getShapes(); }
     void setCustomShapes(const synth::CustomFilterShapes& shapes) { customEngine.setShapes(shapes); }
+    /** Changes whenever the shape list is replaced, whoever replaced it. */
+    int getCustomShapesGeneration() const { return customEngine.getShapesGeneration(); }
     /** Custom kernels designed so far (tests and diagnostics). */
     int getCustomDesignCount() const { return customEngine.getDesignCount(); }
 

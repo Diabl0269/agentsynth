@@ -39,6 +39,7 @@ add_executable(Tests
     Modules/Filter/AllocationCounter.cpp
     Modules/Filter/PartitionedConvolverTests.cpp
     Modules/Filter/CustomFilterEngineTests.cpp
+    Modules/Filter/CustomFilterBlendTests.cpp
     Modules/Filter/FilterCustomModuleTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
@@ -528,6 +529,8 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
+    UI/ModuleViews/ShapeEditor/ShapeEditorTests.cpp
+    UI/ModuleViews/ShapeEditor/MorphMapTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Layout/FadeVisibilityTests.cpp
     UI/Layout/ReducedMotionTests.cpp

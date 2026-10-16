@@ -8,8 +8,9 @@ FIR kernel designed from user-drawn magnitude shapes. The rest of the Filter is 
 
 Code: `Source/Modules/Filter/` — `CustomFilterShapes` (data model), `CustomFilterKernelDesigner`
 (minimum-phase design), `PartitionedConvolver` (convolution), `CustomFilterEngine` (handoff, blend,
-redesign policy). `FilterModule::processCustomMode` wires it in. The card has no editor for shapes yet;
-they reach the module through its extra state (`setCustomShapes` / `setExtraState`).
+redesign policy), `CustomFilterBlend` (the blend as numbers). `FilterModule::processCustomMode` wires it in. Shapes
+reach the module through its extra state (`setCustomShapes` / `setExtraState`) and are edited in the
+[shape editor window](#shape-editor-window).
 
 ## Shapes
 
@@ -127,3 +128,40 @@ characters, and at most 64 shapes are read. Model-authored patches reach the nar
 `CustomFilterShapes::fromUntrustedVar` instead (via `setUntrustedExtraState`): curve points, at most 3 map
 values per shape, a name cut to 24 characters of `[A-Za-z0-9 -]`, at most 16 shapes, every other key
 ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`).
+
+## Shape editor window
+
+The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
+<module name>" that grows out of the card's centre and shrinks back into it
+([animation](../layout/animation.md#popup-windows)); Esc or Done closes it. Left a large
+[morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
+editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
+blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always
+stays), **Rename**, **Start from** and **Draw**. The bottom bar keeps an empty slot for per-note settings.
+
+- **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
+  (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
+  64 points.
+- **Start from** stamps the vowel (ah, ee, oo) or animal (wolf, crow, frog) curve onto the selected shape. Its
+  name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
+  vowels, which are the same curves.
+- **Draw** opens the automation lane's own shape flyout (`DrawShapeFlyout`) and applies the pick to the curve through
+  `LaneShapeGenerator`'s points, so a sine here is a lane's sine: Free changes nothing, Line joins the first and last
+  levels, Sine, Triangle, Saw and Square repeat three times between -18 and +6 dB (a hold becomes a vertical step).
+- **Live and undoable.** Every curve change goes to the module at once (the engine renders a new table; the audio
+  thread picks it up at the next block), and each drag, button or menu pick is one undo step recorded as the module's
+  extra state. The window follows changes made elsewhere (undo, the card's map) by polling
+  `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
+- **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
+  the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's. The LFO's custom
+  wave can plug in with its own adapter later.
+
+## Morph map
+
+One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
+drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), click
+empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
+points), double-click a dot (or press Return on it) to open the editor on it, right-click a dot for Edit, Duplicate,
+Rename and Delete. Delete on a focused dot removes it; the last shape never goes. Tooltips: "<name> - drag to move,
+double-click to edit", "Morph cursor - drag to blend shapes". Keys and focus order are in
+[visualizers.md](../layout/visualizers.md#morphmap).

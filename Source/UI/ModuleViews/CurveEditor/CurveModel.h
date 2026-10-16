@@ -108,9 +108,12 @@ public:
     /** Free mode only: refused (returns false) outside Free mode. */
     bool canRemovePoint(int index) const;
 
+    /** The most nodes a curve holds, the same cap LfoCustomWave::sanitise applies when the points are saved. */
+    static constexpr int kMaxNodes = 64;
+
     /** Free mode only: inserts at the sorted position for `x` (new segment bend/bendable are
      *  copied from the segment being split, so both halves start identical). Returns the new
-     *  node's index. */
+     *  node's index, or -1 (nothing added) when the curve already has kMaxNodes nodes. */
     int addPoint(double x, float y);
 
     /** Free mode only: refuses a pinned node (`!xMovable`) or dropping below 2 nodes. */

@@ -22,6 +22,26 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
                                      const ThemeColours& colours) const {
     const float h = (float)getHeight();
 
+    // guides_ set (the Filter shape editor): exactly its labelled lines, wherever the caller put them.
+    if (guides_.has_value()) {
+        g.setFont(juce::Font(9.0f));
+        for (const auto& guide : guides_->x) {
+            const int x = (int)geometry.xForTime(guide.position);
+            g.setColour(guide.emphasised ? colours.grid.withAlpha(0.7f) : colours.grid);
+            g.drawVerticalLine(x, 0.0f, h);
+            g.setColour(colours.mutedText);
+            g.drawText(guide.label, x + 2, (int)h - 12, 48, 11, juce::Justification::left, false);
+        }
+        for (const auto& guide : guides_->y) {
+            const int y = (int)geometry.yForLevel((float)guide.position);
+            g.setColour(guide.emphasised ? colours.grid.withAlpha(0.7f) : colours.grid);
+            g.drawHorizontalLine(y, 0.0f, (float)getWidth());
+            g.setColour(colours.mutedText);
+            g.drawText(guide.label, 3, y - 12, 56, 11, juce::Justification::left, false);
+        }
+        return;
+    }
+
     // grid_ set (the LFO card): a fixed xDivisions x yDivisions grid, in place of the nice-tick
     // time grid every other caller (the envelope card) still gets below.
     if (grid_.has_value()) {

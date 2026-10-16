@@ -806,8 +806,8 @@ a fade-in that ends early (`alphaInFraction`), and a **scale**: a native window 
 child `body` component that holds everything the window draws, and `PopupMotion` scales that child about `bodyPivot`
 (`inStartScale` to 1 on the way in, 1 to `outEndScale` on the way out) in the same tween that drives the window's
 opacity. It is buffered to an image while scaled (the panel's shadow is a blur). Reduce Motion never scales. The
-defaults scale nothing. The mod dot's panel is the one user (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
-200 ms with the fade done at 120 ms, out to 0.5 over 140 ms, no window slide). Leaving never overshoots.
+defaults scale nothing. Two windows use it: the mod dot's panel (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
+200 ms with the fade done at 120 ms, out to 0.5 over 140 ms, no window slide) and the Filter shape editor window, which grows out of its card's centre (`openShapeEditorWindow`: 0.82 to 1 over 220 ms, back to 0.9 over 150 ms). Leaving never overshoots.
 
 ## Popup reveal
 

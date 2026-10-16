@@ -54,6 +54,7 @@ std::unique_ptr<CustomFilterEngine::ShapeTable> CustomFilterEngine::renderTable(
 void CustomFilterEngine::setShapes(const CustomFilterShapes& shapes) {
     shapes_ = shapes;
     shapes_.sanitise();
+    shapesGeneration_.fetch_add(1, std::memory_order_relaxed);
     auto table = renderTable(shapes_);
     freeRetiredTables();
     delete pending_.exchange(table.release(), std::memory_order_acq_rel);
