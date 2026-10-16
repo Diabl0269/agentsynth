@@ -284,7 +284,9 @@ TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow)
     float lastAlpha = 1.0f;
     bool monotonic = true;
     ASSERT_TRUE(pumpUntil([&] {
-        monotonic = monotonic && m.frame->getAlpha() <= lastAlpha + 1e-4f;
+        // The wait above stops at alpha 0.999, so on a slow runner the intro can still be running at the press
+        // and the dismiss settles it to 1.0 first: allow that last step, not a real re-show.
+        monotonic = monotonic && m.frame->getAlpha() <= lastAlpha + 2e-3f;
         lastAlpha = m.frame->getAlpha();
         return m.closed >= 1;
     }));

@@ -30,6 +30,7 @@ struct TimelineOpsResult {
 struct InstrumentTrackInsert {
     juce::String type;
     juce::var params; // an object, or void for none
+    juce::var state;  // an object, or void for none; Filter only (its Custom shapes), applied untrusted
 };
 
 /** The uuid of every node an `addInstrumentTrack` build created that an op can address. */

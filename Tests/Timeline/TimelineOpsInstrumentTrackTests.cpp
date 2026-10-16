@@ -286,6 +286,24 @@ TEST_F(TimelineOpsInstrumentTrackTest, HostReceivesTheValidatedInserts) {
     }
 }
 
+TEST_F(TimelineOpsInstrumentTrackTest, FilterInsertCarriesItsStateToTheHost) {
+    const auto applied = apply(envelopeOf(R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+        "inserts": [{"type": "Filter", "params": {"filterType": "Custom"},
+                     "state": {"shapes": [{"name": "dark", "position": [0.1, 0.2]}]}}, {"type": "Filter"}]}])"));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    ASSERT_EQ(host.lastInserts.size(), 2u);
+    ASSERT_NE(host.lastInserts[0].state.getDynamicObject(), nullptr);
+    EXPECT_TRUE(host.lastInserts[0].state.hasProperty("shapes"));
+    EXPECT_TRUE(host.lastInserts[1].state.isVoid()) << "a Filter insert without state is unchanged";
+}
+
+TEST_F(TimelineOpsInstrumentTrackTest, StateOnAnythingButAFilterInsertIsRejected) {
+    const juce::String head =
+        R"([{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "inserts": )";
+    expectRejected(head + R"([{"type": "Distortion", "state": {"shapes": []}}]}])", "only a Filter insert accepts");
+    expectRejected(head + R"([{"type": "Filter", "state": 3}]}])", "\"state\" that is not an object");
+}
+
 // =============================================================================
 // 3b. The track's own envelope
 // =============================================================================

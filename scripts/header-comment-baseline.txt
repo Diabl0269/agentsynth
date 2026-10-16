@@ -7,7 +7,7 @@
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
 19 Source/AI/AIIntegrationService/AIIntegrationService.h
 15 Source/AI/AIProvider.h
-87 Source/AI/AIStateMapper/AIStateMapper.h
+86 Source/AI/AIStateMapper/AIStateMapper.h
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 11 Source/AI/RemoteProvider.h
@@ -32,7 +32,7 @@
 33 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
 117 Source/Timeline/TimelineDoc/TimelineDoc.h
-22 Source/Timeline/TimelineOps.h
+21 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
 27 Source/Transport/OfflineTransportDriver.h

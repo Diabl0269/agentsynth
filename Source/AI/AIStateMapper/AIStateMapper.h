@@ -285,6 +285,8 @@ public:
     /** Applies `paramsObj` to a processor not yet in a graph, untrusted (in-[0,1] values rescale). */
     static void applyUntrustedParams(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj);
 
+    static void applyUntrustedState(juce::AudioProcessor* processor, const juce::var& state);
+
     /**
      * @brief The factory key graphToJSON writes for a live processor.
      *

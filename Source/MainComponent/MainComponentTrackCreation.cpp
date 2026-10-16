@@ -364,6 +364,7 @@ bool MainComponent::buildInstrumentInserts(const std::vector<synth::InstrumentTr
         newModuleHook()(*processor, insert.type);
         if (auto* paramsObj = insert.params.getDynamicObject())
             synth::AIStateMapper::applyUntrustedParams(processor.get(), paramsObj);
+        synth::AIStateMapper::applyUntrustedState(processor.get(), insert.state);
 
         auto nodePtr = graph.addNode(std::move(processor));
         if (nodePtr == nullptr)
