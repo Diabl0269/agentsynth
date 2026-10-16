@@ -62,19 +62,20 @@ void expectReachable(const Built& built, const juce::String& paramId) {
 
 } // namespace
 
-TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultAtRevisionOneWithNoDimRules) {
+TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        EXPECT_EQ(entry->defaultRevision, 1) << type;
+        // The Filter is at revision 2: its Custom section was added after the first design.
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 2 : 1) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())
                 EXPECT_FALSE(section.title->containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZ ")) << "sentence case";
     }
     EXPECT_EQ(sectionOrder(*defaults.find("Filter")),
-              (std::vector<juce::String>{"type", "tone", "modulation", "footer"}));
+              (std::vector<juce::String>{"type", "tone", "modulation", "custom", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Compressor")),
               (std::vector<juce::String>{"meter", "levels", "dynamics", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Limiter")), (std::vector<juce::String>{"meter", "levels", "timing"}));
@@ -236,4 +237,16 @@ TEST(FilterDynamicsDefaultLayout, TheEstimateEqualsTheRealCardForEveryTypeInTheF
         ASSERT_TRUE(estimate.has_value());
         EXPECT_EQ(*estimate, juce::Point<int>(built.card->getWidth(), built.card->getHeight()));
     }
+}
+
+TEST(FilterDynamicsDefaultLayout, TheFilterCustomKnobsShowOnlyWhileCustomIsTheType) {
+    const auto* entry = synth::DefaultCardLayouts::builtIn().find("Filter");
+    ASSERT_NE(entry, nullptr);
+    const auto& custom = entry->layout.sections[3];
+    ASSERT_EQ(custom.id, "custom");
+    ASSERT_TRUE(custom.visibleWhen.has_value());
+    EXPECT_EQ(custom.visibleWhen->param, "filterType");
+    EXPECT_EQ(custom.visibleWhen->is, juce::StringArray({"Custom"}));
+    EXPECT_EQ(custom.visibleWhen->effect, synth::CardConditionEffect::Show);
+    EXPECT_EQ(custom.items.size(), 4u) << "Morph X, Morph Y, Shift, Depth";
 }

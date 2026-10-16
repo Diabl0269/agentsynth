@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -165,6 +166,30 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
     return false;
 }
 
+// Card sections a choice shows only in one mode (the Filter's Custom knobs, shown while filterType is
+// "Custom"): the sweep runs once per listed choice as well as at the default, and a knob that exists
+// but is hidden in the current mode is checked in the pass where its mode is on instead.
+const std::map<juce::String, std::pair<juce::String, juce::String>> kModeChoices = {
+    {"Filter", {"filterType", "Custom"}},
+};
+
+void setChoiceByName(ModuleBase& mb, const juce::String& paramId, const juce::String& choiceName) {
+    for (auto* p : mb.getParameters())
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p); c != nullptr && c->paramID == paramId)
+            *c = c->choices.indexOf(choiceName);
+}
+
+bool knobHiddenInThisMode(const ModuleBase& mb, ModuleComponent& card, const ModulationTarget& target) {
+    const auto* param = mb.parameterForModTarget(target);
+    if (param == nullptr)
+        return false;
+    for (auto* child : card.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            if (slider->getComponentID() == param->getName(100))
+                return !slider->isVisible();
+    return false;
+}
+
 bool hasPolyParameter(const ModuleBase& mb) {
     for (auto* p : mb.getParameters())
         if (auto* boolParam = dynamic_cast<const juce::AudioParameterBool*>(p))
@@ -197,34 +222,44 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
         AudioEngine engine;
         GraphEditor editor(engine);
 
-        for (const bool poly : voiceModes) {
-            SCOPED_TRACE((typeName + (poly ? " (poly)" : " (mono)")).toStdString());
-            setPolyIfPresent(*mb, poly);
+        std::vector<juce::String> choiceModes = {{}};
+        if (const auto mode = kModeChoices.find(typeName); mode != kModeChoices.end())
+            choiceModes.push_back(mode->second.second);
 
-            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        for (const auto& choiceMode : choiceModes)
+            for (const bool poly : voiceModes) {
+                SCOPED_TRACE((typeName + (poly ? " (poly)" : " (mono)") + choiceMode).toStdString());
+                setPolyIfPresent(*mb, poly);
+                if (choiceMode.isNotEmpty())
+                    setChoiceByName(*mb, kModeChoices.at(typeName).first, choiceMode);
 
-            // (a) every declared target must resolve to a bound, visible knob -- except the
-            // documented no-generic-knob-by-design exceptions above.
-            for (const auto& target : mb->getModulationTargets()) {
-                if (targetHasNoGenericKnobByDesign(*mb, target))
-                    continue;
-                SCOPED_TRACE(target.name.toStdString());
-                EXPECT_GE(card.sliderIndexForModTarget(target), 0)
-                    << "jack \"" << target.name << "\" (channel " << target.channelIndex
-                    << ") has no bound knob -- a dropped cable would find nothing to ring";
+                ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+
+                // (a) every declared target must resolve to a bound, visible knob -- except the
+                // documented no-generic-knob-by-design exceptions above.
+                for (const auto& target : mb->getModulationTargets()) {
+                    if (targetHasNoGenericKnobByDesign(*mb, target))
+                        continue;
+                    if (choiceMode.isEmpty() && kModeChoices.count(typeName) > 0 &&
+                        knobHiddenInThisMode(*mb, card, target))
+                        continue;
+                    SCOPED_TRACE(target.name.toStdString());
+                    EXPECT_GE(card.sliderIndexForModTarget(target), 0)
+                        << "jack \"" << target.name << "\" (channel " << target.channelIndex
+                        << ") has no bound knob -- a dropped cable would find nothing to ring";
+                }
+
+                // (b) every continuous-parameter knob must be reachable from SOME target.
+                std::set<juce::String> targetedParamNames;
+                for (const auto& target : mb->getModulationTargets())
+                    if (const auto* param = mb->parameterForModTarget(target))
+                        targetedParamNames.insert(param->getName(100));
+
+                for (const auto& knobParamName : continuousKnobParamNames(*mb, card)) {
+                    EXPECT_TRUE(targetedParamNames.count(knobParamName) > 0)
+                        << "knob \"" << knobParamName << "\" has a continuous parameter but no CV jack "
+                        << "targets it -- it refuses a dropped modulation cable";
+                }
             }
-
-            // (b) every continuous-parameter knob must be reachable from SOME target.
-            std::set<juce::String> targetedParamNames;
-            for (const auto& target : mb->getModulationTargets())
-                if (const auto* param = mb->parameterForModTarget(target))
-                    targetedParamNames.insert(param->getName(100));
-
-            for (const auto& knobParamName : continuousKnobParamNames(*mb, card)) {
-                EXPECT_TRUE(targetedParamNames.count(knobParamName) > 0)
-                    << "knob \"" << knobParamName << "\" has a continuous parameter but no CV jack "
-                    << "targets it -- it refuses a dropped modulation cable";
-            }
-        }
     }
 }

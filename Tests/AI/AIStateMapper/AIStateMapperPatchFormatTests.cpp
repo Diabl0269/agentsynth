@@ -143,7 +143,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                      "snareDecay, snareLevel, snareTune, tomDecay, tomLevel, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
-        {"Filter", "bypassed, cutoff, drive, dualIO, filterType, keyTrack, muted, outputLevel, poly, resonance"},
+        {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, morphX, morphY, muted, outputLevel, "
+                   "poly, resonance, shift"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
                        "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},

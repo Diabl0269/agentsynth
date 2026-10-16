@@ -46,6 +46,8 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
     for (const auto& target : targets) {
         if (module.mapInputChannel(target.channelIndex).visibleJackIndex != jack)
             continue;
+        if (target.knobOnly)
+            return true; // never a gutter row (ModuleComponent::drawnInputJackIndices)
         for (const auto& sameChannel : targets)
             if (sameChannel.channelIndex == target.channelIndex)
                 return targetHasShownKnob(plan, module, sameChannel);

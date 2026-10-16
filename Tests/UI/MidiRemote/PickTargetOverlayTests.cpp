@@ -16,6 +16,7 @@
 #include "UI/Graph/PickTargetOverlay/GraphPickCandidates.h"
 #include "UI/Graph/PickTargetOverlay/PickTargetOverlay.h"
 #include "UI/Timeline/TimelineTransportBar.h"
+#include <algorithm>
 
 using synth::midi::PickTarget;
 using synth::ui::PickTargetOverlay;
@@ -97,6 +98,17 @@ TEST_F(MidiRemotePickTargetTest, OutlinesAppearOnRegisteredControlsOnlyAcrossCan
     synth::ui::collectGraphPickCandidates(*graphEditor_, expected);
     bar_.collectPickCandidates(expected);
     ASSERT_GT(expected.size(), 4u) << "the Filter card's controls plus the four transport buttons";
+    // A control its card hides in the current mode (the Filter's Custom knobs) is registered but gets no
+    // outline: the overlay outlines only what is on screen.
+    expected.erase(std::remove_if(expected.begin(), expected.end(),
+                                  [](const synth::ui::PickCandidate& c) {
+                                      for (auto* p = c.component.getComponent(); p != nullptr;
+                                           p = p->getParentComponent())
+                                          if (!p->isVisible())
+                                              return true;
+                                      return false;
+                                  }),
+                   expected.end());
     EXPECT_EQ(overlay().getOutlineCountForTest(), static_cast<int>(expected.size()));
 
     bool sawCutoff = false;

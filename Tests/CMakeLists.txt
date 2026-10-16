@@ -36,6 +36,10 @@ add_executable(Tests
     Modules/FilterTests.cpp
     Modules/LadderCoefficientSetterTests.cpp
     Modules/FilterKeyTrackTests.cpp
+    Modules/Filter/AllocationCounter.cpp
+    Modules/Filter/PartitionedConvolverTests.cpp
+    Modules/Filter/CustomFilterEngineTests.cpp
+    Modules/Filter/FilterCustomModuleTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
@@ -211,6 +215,7 @@ add_executable(Tests
     AI/AIStateMapper/AIStateMapperSnapshotsTests.cpp
     AI/CardLayoutTrustTests.cpp
     AI/LfoCurveTrustTests.cpp
+    AI/FilterCustomShapesTrustTests.cpp
     UI/Graph/CardBody/ModuleCardLayoutResolverTests.cpp
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperCatalogTests.cpp

@@ -24,6 +24,7 @@ struct ModulationTarget {
     juce::String name;
     int channelIndex;
     juce::String paramId;
+    bool knobOnly = false; // never drawn as a gutter jack: reached only through its knob, even while that is hidden
 };
 
 enum class ModulationCategory { Envelope, LFO, Oscillator, Sequencer, Filter, FX, Other };
