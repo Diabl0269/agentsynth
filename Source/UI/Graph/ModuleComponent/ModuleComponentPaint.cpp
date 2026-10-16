@@ -14,6 +14,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 #include <limits>
 
 using namespace detail;
@@ -549,8 +550,15 @@ std::vector<int> ModuleComponent::drawnInputJackIndices() const {
     else
         visible = module->getTotalNumInputChannels(); // no ModuleBase (e.g. Audio Input/Output) -- never knob-bound
     drawn.reserve(visible);
+    // A knob-only target's jack (ModulationTarget::knobOnly, e.g. the Filter's Custom CV) never takes a
+    // row, even while its knob is hidden: a card whose mode hides those knobs keeps its old jack column.
+    std::vector<int> knobOnly;
+    if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        for (const auto& target : mb->getModulationTargets())
+            if (target.knobOnly)
+                knobOnly.push_back(mb->mapInputChannel(target.channelIndex).visibleJackIndex);
     for (int i = 0; i < visible; ++i)
-        if (!isInputJackKnobBound(i))
+        if (!isInputJackKnobBound(i) && std::find(knobOnly.begin(), knobOnly.end(), i) == knobOnly.end())
             drawn.push_back(i);
     if (activeJackLayoutPass != 0) {
         drawnJacksMemo_ = drawn;

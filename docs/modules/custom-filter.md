@@ -40,12 +40,15 @@ every poly voice shares one kernel, so there is no per-voice pitch to follow.
 ## CV jacks
 
 Morph X CV = ch28 (`kMorphXCVChannel`), Morph Y CV = ch29, Shift CV = ch30, Depth CV = ch31, each the
-**same channel in both voice modes**, after Key Track in the visible jack order. Shift and Depth have
-jacks too because every continuous knob on a card must accept a modulation cable. They cannot follow
+**same channel in both voice modes**, after Key Track in the jack order. Shift and Depth have CV too
+because every continuous knob on a card must accept a modulation cable. All four are **knob-only**
+targets (`ModulationTarget::knobOnly`): they never draw a gutter jack, in any filter type, so a cable
+reaches them only by being dropped on the Custom knob and lands on its ring. A Filter of any other type
+keeps exactly its old jack column and card height. They cannot follow
 Cutoff's mono/poly pair: the mono CV block (ch1-3) has the poly voice fan directly above it and the poly block
 (ch8-10) has Audio R, so neither can grow without renumbering saved channels; Key Track set the
 precedent of one appended shared channel. CV moves the knob in its normalised range
-(`ModuleBase::modulateNormalised`). The Filter now declares 32 channels in and out, and its card is taller by the four jack rows.
+(`ModuleBase::modulateNormalised`). The Filter now declares 32 channels in and out.
 
 ## Blend and kernel design
 

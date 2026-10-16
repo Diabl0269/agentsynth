@@ -185,24 +185,25 @@ public:
             buffer.clear(ch, 0, numSamples);
     }
 
+    /** The Custom type's four targets are knob-only: no gutter row, a cable lands on the knob's ring. */
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
             return {{"Cutoff", 8, "cutoff"},
                     {"Resonance", 9, "resonance"},
                     {"Drive", 10, "drive"},
                     {"Key Track", kKeyTrackCVChannel, "keyTrack"},
-                    {"Morph X", kMorphXCVChannel, "morphX"},
-                    {"Morph Y", kMorphYCVChannel, "morphY"},
-                    {"Shift", kShiftCVChannel, "shift"},
-                    {"Depth", kDepthCVChannel, "depth"}};
+                    {"Morph X", kMorphXCVChannel, "morphX", true},
+                    {"Morph Y", kMorphYCVChannel, "morphY", true},
+                    {"Shift", kShiftCVChannel, "shift", true},
+                    {"Depth", kDepthCVChannel, "depth", true}};
         return {{"Cutoff", 1, "cutoff"},
                 {"Resonance", 2, "resonance"},
                 {"Drive", 3, "drive"},
                 {"Key Track", kKeyTrackCVChannel, "keyTrack"},
-                {"Morph X", kMorphXCVChannel, "morphX"},
-                {"Morph Y", kMorphYCVChannel, "morphY"},
-                {"Shift", kShiftCVChannel, "shift"},
-                {"Depth", kDepthCVChannel, "depth"}};
+                {"Morph X", kMorphXCVChannel, "morphX", true},
+                {"Morph Y", kMorphYCVChannel, "morphY", true},
+                {"Shift", kShiftCVChannel, "shift", true},
+                {"Depth", kDepthCVChannel, "depth", true}};
     }
     /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
         jack order is presentation only — connections persist by raw channel index, so the CV jacks
