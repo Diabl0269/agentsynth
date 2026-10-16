@@ -12,6 +12,7 @@
 #include "Modules/PolyMidiModule.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include <bit>
+#include <memory>
 #include <set>
 
 namespace {
@@ -108,7 +109,19 @@ struct ChainRig {
     void clickPill(NodeID id) {
         auto* button = pill(id);
         ASSERT_NE(button, nullptr);
+        // Button::triggerClick only POSTS the click; a fixed 20 ms pump is not enough on a loaded CI runner (messages
+        // queued by earlier tests run first), so pump until the click has actually been delivered.
+        auto delivered = std::make_shared<bool>(false);
+        button->onClick = [delivered, original = button->onClick] {
+            *delivered = true;
+            if (original)
+                original();
+        };
         button->triggerClick();
+        const auto deadline = juce::Time::getMillisecondCounter() + 5000;
+        while (!*delivered && juce::Time::getMillisecondCounter() < deadline)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        ASSERT_TRUE(*delivered) << "the Poly pill click was never delivered";
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 };
