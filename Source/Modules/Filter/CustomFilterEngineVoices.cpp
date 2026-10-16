@@ -117,8 +117,8 @@ void CustomFilterEngine::processPerVoice(float* const* channels, int numChannels
 
 /** Picks at most `budget` voices to redesign this block: a note that just started first (so Smoothness 0 lands in
     the note's first block), then voices whose shapes, Shift or Depth changed, then the ones whose cursor is
-    furthest from the cursor their kernel was designed for. A silent voice waits, and a skipped voice keeps
-    gliding: it only takes a coarser step when its turn comes. */
+    furthest from the cursor their kernel was designed for. A voice that has been silent long enough to be idle
+    waits, and a skipped voice keeps gliding: it only takes a coarser step when its turn comes. */
 void CustomFilterEngine::designVoices(const Controls& controls, int numVoices, int numChannels, int numSamples,
                                       int budget) noexcept {
     std::array<float, kMaxVoices> priority{};
@@ -133,8 +133,11 @@ void CustomFilterEngine::designVoices(const Controls& controls, int numVoices, i
                             std::abs(controls.depth - d.depth) > kDepthEpsilon;
         if (!redraw && dist <= kMorphEpsilon)
             continue;
-        const bool urgent = cursors_.noteStarted(v);
-        if (!urgent && voiceIsIdle(v, numChannels))
+        // A pitch can step on a silent voice (nothing to hear yet), so only a sounding note jumps the queue, and a
+        // voice sounding this block is never idle whatever its history says.
+        const bool audible = cursors_.isAudible(v);
+        const bool urgent = cursors_.noteStarted(v) && audible;
+        if (!audible && voiceIsIdle(v, numChannels))
             continue;
         priority[(size_t)v] = (urgent ? kUrgentPriority : 0.0f) + (redraw ? kRedrawPriority : 0.0f) + dist;
     }

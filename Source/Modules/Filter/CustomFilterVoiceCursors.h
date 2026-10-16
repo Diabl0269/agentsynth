@@ -47,6 +47,8 @@ public:
     bool isEngaged(int v) const noexcept { return voices_[(size_t)v].engaged; }
     /** True when voice `v` started a note in the last update(). */
     bool noteStarted(int v) const noexcept { return voices_[(size_t)v].noteStarted; }
+    /** True when voice `v`'s input carried sound in the last update(). */
+    bool isAudible(int v) const noexcept { return voices_[(size_t)v].wasAudible; }
     /** Voice `v`'s cursor after the last update(). */
     float getX(int v) const noexcept { return voices_[(size_t)v].x; }
     float getY(int v) const noexcept { return voices_[(size_t)v].y; }

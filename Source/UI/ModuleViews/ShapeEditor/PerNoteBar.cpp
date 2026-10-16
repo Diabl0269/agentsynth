@@ -90,7 +90,6 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
 
 PerNoteBar::~PerNoteBar() = default;
 
-/** A key-row change from a refresh (undo, a preset) lands at once on the first layout and fades after it. */
 void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
     const auto p = adapter_.getPerNote();
     mode_.setSelectedIndex((int)p.mode, juce::dontSendNotification);
@@ -101,10 +100,12 @@ void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
         names.add(s.name.isEmpty() ? juce::String("unnamed") : s.name);
     keys_.setKeys(p.keys, names);
     showKeyRow(p.mode == Mode::ByHand);
+    refreshed_ = true;
 }
 
+/** The first refresh shows what the window opens on, so it lands at once; later changes fade. */
 void PerNoteBar::showKeyRow(bool shown) {
-    if (!laidOut_)
+    if (!laidOut_ || !refreshed_)
         keyRowFade_->snapTo(shown);
     else
         keyRowFade_->setShown(shown);

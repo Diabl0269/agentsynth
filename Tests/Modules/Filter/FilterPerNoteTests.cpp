@@ -7,6 +7,7 @@
 #include "AllocationCounter.h"
 #include "CustomFilterTestHelpers.h"
 #include "Modules/FilterModule.h"
+#include "Modules/PolyMidiModule.h"
 #include <gtest/gtest.h>
 
 using namespace synth;
@@ -312,4 +313,71 @@ TEST(FilterPerNote, ProjectsWithoutPerNoteLoadAsOffAndNewerVersionsFallBack) {
     EXPECT_EQ(garbage.smoothness, 1.0f);
     EXPECT_EQ(garbage.keys[61], 1);
     EXPECT_EQ(garbage.keys[60], CustomFilterPerNote::kUnassigned);
+}
+
+TEST(FilterPerNote, AFirstNoteRisingFromPitchZeroCountsOnceWithItsFinalPitch) {
+    CustomFilterVoiceCursors cursors;
+    cursors.prepare(kTestSampleRate);
+    const float x[] = {0.9f, 0.1f, 0.5f}, y[] = {0.2f, 0.2f, 0.2f};
+    const int order[] = {1, 2, 0};
+    const CustomFilterVoiceCursors::ShapeMap map{3, x, y, order};
+    CustomFilterVoiceCursors::Settings settings;
+    settings.mode = Mode::ByPitch;
+    const float target = hzOf(96);
+    int starts = 0;
+    // Block 1: the note arrives mid-block, its pitch rising from 0 and its sound starting. Block 2: still gliding.
+    // Then held.
+    const CustomFilterVoiceCursors::VoiceInput blocks[] = {{0.0f, target * 0.4f, true},
+                                                           {target * 0.4f, target * 0.99f, true},
+                                                           {target, target, true},
+                                                           {target, target, true}};
+    for (const auto& in : blocks) {
+        cursors.update(&in, 1, kBlock, settings, map, 0.5f, 0.5f);
+        starts += cursors.noteStarted(0) ? 1 : 0;
+    }
+    EXPECT_EQ(starts, 1);
+    EXPECT_EQ(cursors.getShape(0), kHighShape) << "spotted with its settled pitch, not the shared cursor";
+}
+
+// The whole chain the feature rests on: Poly MIDI's real pitch and gate outputs, gate times a sine as each voice's
+// audio, into the Filter's voice and Pitch channels.
+TEST(FilterPerNote, PolyMidiNotesEachStartExactlyOneNoteOnTheFilter) {
+    PolyMidiModule midiIn;
+    midiIn.prepareToPlay(kTestSampleRate, kBlock);
+    Rig rig(perNote(Mode::ByPitch));
+    juce::AudioBuffer<float> poly(16, kBlock);
+    std::array<int, kVoices> starts{};
+    struct Event {
+        int block, note;
+        bool on;
+    };
+    const Event events[] = {{1, 36, true}, {6, 96, true}, {12, 36, false}, {16, 66, true}, {22, 96, false}};
+    for (int b = 0; b < 30; ++b) {
+        juce::MidiBuffer midi;
+        for (const auto& e : events)
+            if (e.block == b)
+                midi.addEvent(e.on ? juce::MidiMessage::noteOn(1, e.note, 0.8f) : juce::MidiMessage::noteOff(1, e.note),
+                              200);
+        poly.clear();
+        midiIn.processBlock(poly, midi);
+        rig.buf.clear();
+        for (int v = 0; v < kVoices; ++v)
+            for (int i = 0; i < kBlock; ++i) {
+                rig.buf.setSample(kPitchCh + v, i, poly.getSample(v, i));
+                const float x = poly.getSample(8 + v, i) * 0.5f * std::sin(0.031f * (float)(b * kBlock + i));
+                rig.buf.setSample(v, i, x);
+                rig.buf.setSample(11 + v, i, x);
+            }
+        rig.m.processBlock(rig.buf, rig.midi);
+        for (int v = 0; v < kVoices; ++v)
+            starts[(size_t)v] += rig.m.getCustomVoiceCursors().noteStarted(v) ? 1 : 0;
+    }
+    int total = 0;
+    for (int v = 0; v < kVoices; ++v)
+        total += starts[(size_t)v];
+    EXPECT_EQ(total, 3) << "three note-ons, three notes";
+    EXPECT_EQ(starts[0], 2) << "C2, then (after its release) F#4 on the same free voice";
+    EXPECT_EQ(starts[1], 1);
+    EXPECT_EQ(rig.m.getCustomVoiceCursors().getShape(0), kMidShape);
+    EXPECT_EQ(rig.m.getCustomVoiceCursors().getShape(1), kHighShape);
 }

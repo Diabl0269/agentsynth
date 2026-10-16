@@ -54,6 +54,7 @@ private:
     std::unique_ptr<FadeVisibility> keyRowFade_;
     bool dragging_ = false;
     bool laidOut_ = false;
+    bool refreshed_ = false;
     juce::Rectangle<int> labelArea_, hardArea_, smoothArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PerNoteBar)

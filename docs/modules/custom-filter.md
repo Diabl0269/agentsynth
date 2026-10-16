@@ -141,7 +141,8 @@ every voice on the shared kernel at once.
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
 than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below
 about -80 dBFS on both legs). An audio return with a pitch still moving waits for the pitch to settle, so a
-Poly MIDI note, whose pitch glides for 5 ms while its sound starts, counts once and with its final pitch. With no
+Poly MIDI note, whose pitch glides for 5 ms while its sound starts (from 0 on a voice's first note), counts once
+and with its final pitch. With no
 Pitch cable, only the audio return counts (By hand and By pitch then have no note and use the shared cursor). A
 repeat of the same note on the same voice, into a Filter whose input never falls silent (an oscillator straight
 into the Filter, the VCA after it), is not seen as a new note.
@@ -149,8 +150,8 @@ into the Filter, the VCA after it), is not seen as a new note.
 **Kernels on the audio thread, budgeted.** Every voice's cursor moves every block (cheap); kernels follow within
 a budget of about one design per 128 samples, never fewer than two per block nor more than eight
 (`CustomFilterEngine::voiceDesignBudget`): a note that just started first (so Smoothness 0 is heard in the note's
-first block), then voices whose shapes, Shift or Depth changed, then the voice whose cursor is furthest from its
-kernel's. A silent voice waits; a skipped voice keeps gliding and takes a coarser step when its turn comes; a
+first block; a pitch that steps on a silent voice does not count), then voices whose shapes, Shift or Depth
+changed, then the voice whose cursor is furthest from its kernel's. A voice silent long enough to be idle waits; a skipped voice keeps gliding and takes a coarser step when its turn comes; a
 chord of more notes than the budget settles over a few blocks. Each design crossfades in over its block like any
 kernel change. A worker thread was not used: a note's kernel must be live in the block that spotted it, and an
 offline render must not depend on thread timing. Measured (Release, Apple Silicon, 44.1 kHz, 512-sample blocks,
@@ -183,7 +184,8 @@ so an older build still reads the shapes and ignores it):
 `mode` is `off`, `byHand`, `byPitch` or `random`; `keys` lists `[note, shape index]` for assigned notes only. A
 project without `"perNote"` loads as Off; a newer `version`, an unknown mode or a malformed object gives the
 defaults (smoothness clamped to 0..1, key entries outside 0..127 or with a shape outside 0..63 dropped), and the
-shapes beside it still load. A key whose shape was later deleted follows the shared cursor.
+shapes beside it still load. Keys store shape indices, so after a shape is deleted each key reads whichever shape now
+has its index, and a key whose index no longer exists follows the shared cursor.
 
 `CustomFilterShapes::fromVar` never fails: a missing/newer version or a non-array `shapes` gives the
 defaults, an empty list gives the defaults, a shape with an unreadable curve keeps its slot with a flat

@@ -47,8 +47,11 @@ bool CustomFilterVoiceCursors::detectNote(Voice& v, const VoiceInput& in, int& n
         v.pendingOnset = true;
     v.wasAudible = in.audible;
 
-    const bool hasPitch = in.pitchStartHz > 0.0f && in.pitchEndHz > 0.0f;
-    const bool stable = hasPitch && std::abs(semitonesBetween(in.pitchEndHz, in.pitchStartHz)) < kStableSemitones;
+    // A voice's first note rises from a pitch of 0 (Poly MIDI glides its pitch up from rest), so a block that
+    // starts at 0 and ends on a pitch has one but is not yet settled.
+    const bool hasPitch = in.pitchEndHz > 0.0f;
+    const bool stable = hasPitch && in.pitchStartHz > 0.0f &&
+                        std::abs(semitonesBetween(in.pitchEndHz, in.pitchStartHz)) < kStableSemitones;
     const bool moved =
         stable && (v.noteHz <= 0.0f || std::abs(semitonesBetween(in.pitchEndHz, v.noteHz)) > kNewNoteSemitones);
     const bool fire = moved || (v.pendingOnset && (stable || !hasPitch));
