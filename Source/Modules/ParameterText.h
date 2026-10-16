@@ -2,6 +2,7 @@
 // box and to a screen reader -- and how typed text reads back.
 #pragma once
 
+#include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace synth {
@@ -61,6 +62,33 @@ inline juce::AudioParameterFloatAttributes degreesAttributes() {
         .withLabel("deg")
         .withStringFromValueFunction([](float v, int) { return degreesToText(v); })
         .withValueFromStringFunction([](const juce::String& t) { return degreesFromText(t); });
+}
+
+/** "0.0 st", "-12.0 st": one decimal, and a value that rounds to zero never prints as "-0.0". */
+inline juce::String semitonesToText(float v) {
+    const float r = std::round(v * 10.0f) / 10.0f;
+    return juce::String(r == 0.0f ? 0.0f : r, 1) + " st";
+}
+
+/** Reads "-12.0 st", "-12st" and a bare "-12" back as semitones. */
+inline float semitonesFromText(const juce::String& text) {
+    return text.trim().upToFirstOccurrenceOf("st", false, true).getFloatValue();
+}
+
+/** Parameter attributes that format and parse a pitch shift in semitones. */
+inline juce::AudioParameterFloatAttributes semitonesAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("st")
+        .withStringFromValueFunction([](float v, int) { return semitonesToText(v); })
+        .withValueFromStringFunction([](const juce::String& t) { return semitonesFromText(t); });
+}
+
+/** A 0..N multiplier shown as a percent: 1.0 reads "100%", 0.5 reads "50%". */
+inline juce::AudioParameterFloatAttributes multiplierPercentAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("%")
+        .withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; })
+        .withValueFromStringFunction([](const juce::String& t) { return percentFromText(t) / 100.0f; });
 }
 
 } // namespace synth

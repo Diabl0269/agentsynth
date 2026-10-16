@@ -82,10 +82,12 @@ public:
         // shapes, a pitch shift of the whole response, and a multiplier on its dB.
         addParameter(morphXParam = new juce::AudioParameterFloat("morphX", "Morph X", 0.0f, 1.0f, 0.5f));
         addParameter(morphYParam = new juce::AudioParameterFloat("morphY", "Morph Y", 0.0f, 1.0f, 0.5f));
-        addParameter(shiftParam = new juce::AudioParameterFloat(
-                         "shift", "Shift", juce::NormalisableRange<float>(-48.0f, 48.0f, 0.01f), 0.0f,
-                         juce::AudioParameterFloatAttributes().withLabel("st")));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 2.0f, 1.0f));
+        addParameter(shiftParam = new juce::AudioParameterFloat("shift", "Shift",
+                                                                juce::NormalisableRange<float>(-48.0f, 48.0f, 0.01f),
+                                                                0.0f, synth::semitonesAttributes()));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 2.0f),
+                                                       1.0f, synth::multiplierPercentAttributes()));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.

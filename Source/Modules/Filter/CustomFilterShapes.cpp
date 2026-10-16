@@ -90,9 +90,9 @@ LfoCustomWave CustomFilterShapes::presetCurve(Preset preset) {
         return curveFromHzDb({{20.0f, -30.0f},
                               {270.0f, 2.0f},
                               {700.0f, -20.0f},
+                              {1400.0f, -16.0f},
                               {2300.0f, 0.0f},
-                              {2600.0f, -8.0f},
-                              {3000.0f, -2.0f},
+                              {3400.0f, -10.0f},
                               {5000.0f, -22.0f},
                               {20000.0f, -40.0f}});
     case Preset::Oo:

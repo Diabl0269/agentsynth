@@ -5,6 +5,7 @@
 // Raw channels are written as literals on purpose (they are part of the saved-patch contract):
 // Morph X CV = ch28, Morph Y CV = ch29, in both voice modes.
 #include "CustomFilterTestHelpers.h"
+#include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/FilterModule.h"
 #include <gtest/gtest.h>
 
@@ -248,5 +249,31 @@ TEST(FilterCustom, PolyVoicesAndRightLegShareTheKernel) {
         EXPECT_FLOAT_EQ(buf.getSample(5, i), buf.getSample(0, i));
         EXPECT_FLOAT_EQ(buf.getSample(FilterModule::kRightBase + 5, i), buf.getSample(0, i));
         EXPECT_EQ(buf.getSample(3, i), 0.0f) << "a silent voice stays silent";
+    }
+}
+
+TEST(FilterCustomModuleText, ShiftAndDepthShowUnitsAndRoundTrip) {
+    FilterModule m;
+    auto* shift = param(m, "shift");
+    auto* depth = param(m, "depth");
+    ASSERT_NE(shift, nullptr);
+    ASSERT_NE(depth, nullptr);
+    EXPECT_EQ(shift->getText(shift->convertTo0to1(0.0f), 0), "0.0 st");
+    EXPECT_EQ(shift->getText(shift->convertTo0to1(-0.004f), 0), "0.0 st") << "never negative zero";
+    EXPECT_EQ(shift->getText(shift->convertTo0to1(-12.0f), 0), "-12.0 st");
+    EXPECT_NEAR(shift->convertFrom0to1(shift->getValueForText("-12.0 st")), -12.0f, 1e-3f);
+    EXPECT_EQ(depth->getText(depth->convertTo0to1(1.0f), 0), "100%");
+    EXPECT_NEAR(depth->convertFrom0to1(depth->getValueForText("100%")), 1.0f, 1e-3f);
+    EXPECT_NEAR(depth->convertFrom0to1(depth->getValueForText("50")), 0.5f, 1e-3f);
+}
+
+TEST(FilterCustomShapePresets, NoTwoPointsNearlyOverlap) {
+    // x is log frequency over 10 octaves, so 0.02 is about a fifth of an octave.
+    for (int i = 0; i < CustomFilterShapes::kNumPresets; ++i) {
+        const auto preset = static_cast<CustomFilterShapes::Preset>(i);
+        const auto curve = CustomFilterShapes::presetCurve(preset);
+        for (size_t p = 1; p < curve.points.size(); ++p)
+            EXPECT_GE(curve.points[p].x - curve.points[p - 1].x, 0.02f)
+                << CustomFilterShapes::presetName(preset) << " point " << p;
     }
 }
