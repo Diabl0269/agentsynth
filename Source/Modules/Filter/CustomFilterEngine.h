@@ -1,10 +1,13 @@
-// CustomFilterEngine.h -- the Filter's Custom type end to end: owns the shape list (message
-// thread), hands rendered shape tables to the audio thread lock-free, blends them at the morph
-// cursor, redesigns the minimum-phase kernel when the controls move, and convolves.
+// CustomFilterEngine.h -- the Filter's Custom type end to end: owns the shape list and the per-note
+// settings (message thread), hands both to the audio thread lock-free, blends the shapes at the
+// morph cursor (one shared cursor, or one per poly voice), redesigns the minimum-phase kernels when
+// the controls move, and convolves.
 #pragma once
 
 #include "CustomFilterKernelDesigner.h"
+#include "CustomFilterPerNote.h"
 #include "CustomFilterShapes.h"
+#include "CustomFilterVoiceCursors.h"
 #include "PartitionedConvolver.h"
 #include <array>
 #include <atomic>
@@ -28,9 +31,14 @@ public:
         int count = 0;
         std::vector<float> db; // count * kGridSize
         std::vector<float> x, y;
+        std::vector<int> orderByX; // shape indices, left to right on the map (ties by index)
     };
 
+    using VoiceInput = CustomFilterVoiceCursors::VoiceInput;
+
     static constexpr int kMaxChannels = PartitionedConvolver::kMaxChannels;
+    /** Channel c of process() belongs to poly voice c % kMaxVoices (both legs of a voice share its cursor). */
+    static constexpr int kMaxVoices = CustomFilterVoiceCursors::kMaxVoices;
     static constexpr int kGridSize = CustomFilterKernelDesigner::kGridSize;
 
     CustomFilterEngine();
@@ -46,13 +54,25 @@ public:
      *  editor window). */
     int getShapesGeneration() const noexcept { return shapesGeneration_.load(std::memory_order_relaxed); }
 
+    /** Message thread only. Stores and publishes the per-note settings; bumps getShapesGeneration(). */
+    void setPerNote(const CustomFilterPerNote& perNote);
+    /** Message thread only. */
+    const CustomFilterPerNote& getPerNote() const noexcept { return perNote_; }
+
     /** Allocates every audio buffer. Call from prepareToPlay, never concurrently with process(). */
     void prepare(double sampleRate);
     /** Audio thread. Clears the convolution history (a mode or voice-count change). */
     void resetState() noexcept;
     /** Audio thread. Convolves each non-null `channels[c]` (c < kMaxChannels) in place with the
-     *  kernel for `controls`, redesigning it first when needed. No allocation, locks or system calls. */
-    void process(float* const* channels, int numChannels, int numSamples, const Controls& controls) noexcept;
+     *  kernel for `controls`, redesigning it first when needed. No allocation, locks or system calls.
+     *  `voices` (one per poly voice, `numVoices` <= kMaxVoices) turns on the per-note mode when it is not
+     *  Off: each voice then gets its own cursor and kernel; null (mono) keeps the one shared kernel. */
+    void process(float* const* channels, int numChannels, int numSamples, const Controls& controls,
+                 const VoiceInput* voices = nullptr, int numVoices = 0) noexcept;
+    /** Most voice kernels designed in one block of `numSamples` (the shared kernel counts against it). */
+    static int voiceDesignBudget(int numSamples) noexcept;
+    /** Audio thread / tests: voice `v`'s cursor (the shared one while it has had no note). */
+    const CustomFilterVoiceCursors& getVoiceCursors() const noexcept { return cursors_; }
 
     /** Kernels designed since construction (audio thread writes; any thread may read). */
     int getDesignCount() const noexcept { return designCount_.load(std::memory_order_relaxed); }
@@ -63,10 +83,24 @@ public:
     static std::unique_ptr<ShapeTable> renderTable(const CustomFilterShapes& shapes);
 
 private:
+    // A control has moved when it changed by more than these since its kernel was designed.
+    static constexpr float kMorphEpsilon = 1.0e-4f;
+    static constexpr float kShiftEpsilon = 1.0e-3f; // semitones
+    static constexpr float kDepthEpsilon = 1.0e-4f;
+
     bool needsDesign(const Controls& c) const noexcept;
     void design(const Controls& c, int fadeSamples) noexcept;
+    void designKernel(const Controls& c) noexcept;
     void adoptPendingTable() noexcept;
     void freeRetiredTables() noexcept;
+    CustomFilterVoiceCursors::Settings readPerNoteSettings() noexcept;
+    void processPerVoice(float* const* channels, int numChannels, int numSamples, const Controls& controls,
+                         const VoiceInput* voices, int numVoices, const CustomFilterVoiceCursors::Settings& s) noexcept;
+    void engageVoices(int numVoices, int numChannels) noexcept;
+    void designVoices(const Controls& controls, int numVoices, int numChannels, int numSamples, int budget) noexcept;
+    bool voiceIsIdle(int v, int numChannels) const noexcept;
+    bool groupZeroIsHeard(int numChannels) const noexcept;
+    void leavePerVoice() noexcept;
 
     CustomFilterShapes shapes_; // message thread only
 
@@ -86,6 +120,23 @@ private:
     bool tableChanged_ = false;
     std::atomic<int> designCount_{0};
     std::atomic<int> shapesGeneration_{0};
+
+    // Per-note settings: see CustomFilterEngine.cpp (setPerNote / readPerNoteSettings).
+    CustomFilterPerNote perNote_; // message thread only
+    std::atomic<int> perNoteMode_{0};
+    std::atomic<float> perNoteSmoothness_{CustomFilterPerNote::kDefaultSmoothness};
+    juce::SpinLock keysLock_;
+    std::array<int8_t, CustomFilterPerNote::kNumKeys> pendingKeys_ = CustomFilterPerNote::makeUnassignedKeys();
+    bool keysPending_ = false; // under keysLock_
+    std::array<int8_t, CustomFilterPerNote::kNumKeys> audioKeys_ =
+        CustomFilterPerNote::makeUnassignedKeys(); // audio thread
+
+    // Per-voice kernels (audio thread): voice v convolves through convolver group v + 1 once it has had a note.
+    CustomFilterVoiceCursors cursors_;
+    std::array<bool, kMaxVoices> voiceOnOwnGroup_{};
+    std::array<bool, kMaxVoices> voiceTableDirty_{};
+    std::array<Controls, kMaxVoices> voiceDesigned_{};
+    bool perVoiceActive_ = false;
 };
 
 } // namespace synth

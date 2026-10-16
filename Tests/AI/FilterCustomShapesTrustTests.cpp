@@ -2,7 +2,8 @@
 //
 // Model-authored patches may set a Filter's Custom shape list through FilterModule::setUntrustedExtraState:
 // only bounded numbers (curve points, up to three map coordinates) and a short whitelisted name get
-// through; everything else in the JSON is ignored. See docs/ai/patch-format.md#per-node-state and
+// through; of the per-note settings only the mode and a clamped smoothness; everything else in the JSON
+// (the By hand key map included) is ignored. See docs/ai/patch-format.md#per-node-state and
 // docs/ai/patch-safety.md.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -78,6 +79,15 @@ CustomFilterShapes untrustedShapes(const juce::var& state) {
     auto* filter = filterOf(graph);
     EXPECT_NE(filter, nullptr);
     return filter != nullptr ? filter->getCustomShapes() : CustomFilterShapes{};
+}
+
+/** Applies `state` to a fresh Filter on the untrusted path and returns its per-note settings. */
+synth::CustomFilterPerNote untrustedPerNote(const juce::var& state) {
+    juce::AudioProcessorGraph graph;
+    EXPECT_TRUE(AIStateMapper::applyJSONToGraph(patchWith("Filter", state), graph, true, false));
+    auto* filter = filterOf(graph);
+    EXPECT_NE(filter, nullptr);
+    return filter != nullptr ? filter->getCustomPerNote() : synth::CustomFilterPerNote{};
 }
 
 } // namespace
@@ -234,4 +244,33 @@ TEST(FilterCustomShapesTrustTest, AnUntrustedSamplerStateStillLoadsNoFile) {
     for (auto* node : graph.getNodes())
         if (auto* sampler = dynamic_cast<SamplerModule*>(node->getProcessor()))
             EXPECT_TRUE(sampler->getSampleFilePath().isEmpty());
+}
+
+TEST(FilterCustomShapesTrustTest, AnUntrustedPatchSetsThePerNoteModeAndSmoothnessOnly) {
+    auto state = twoShapes();
+    state.getDynamicObject()->setProperty(
+        "perNote", juce::JSON::parse(R"({"mode":"byPitch","smoothness":7.5,"keys":[[60,1],[61,0]],"file":"/x"})"));
+    const auto perNote = untrustedPerNote(state);
+    EXPECT_EQ(perNote.mode, synth::CustomFilterPerNote::Mode::ByPitch);
+    EXPECT_EQ(perNote.smoothness, 1.0f) << "clamped";
+    EXPECT_EQ(perNote.keys, synth::CustomFilterPerNote::makeUnassignedKeys()) << "the key map is never read";
+
+    auto onlyPerNote = juce::JSON::parse(R"({"perNote":{"mode":"random","smoothness":-1}})");
+    const auto noShapes = untrustedPerNote(onlyPerNote);
+    EXPECT_EQ(noShapes.mode, synth::CustomFilterPerNote::Mode::Random) << "applies without a shape list";
+    EXPECT_EQ(noShapes.smoothness, 0.0f);
+}
+
+TEST(FilterCustomShapesTrustTest, AnUntrustedPerNoteKeepsTheKeyMapAndRejectsUnknownModes) {
+    FilterModule filter;
+    synth::CustomFilterPerNote mine;
+    mine.mode = synth::CustomFilterPerNote::Mode::ByHand;
+    mine.keys[60] = 2;
+    filter.setCustomPerNote(mine);
+    filter.setUntrustedExtraState(juce::JSON::parse(R"({"perNote":{"mode":"BYHAND","smoothness":"0.5","keys":[]}})"));
+    EXPECT_EQ(filter.getCustomPerNote(), mine) << "nothing usable: unchanged";
+    filter.setUntrustedExtraState(juce::JSON::parse(R"({"perNote":{"smoothness":0.4,"keys":[[60,0]]}})"));
+    EXPECT_EQ(filter.getCustomPerNote().mode, synth::CustomFilterPerNote::Mode::ByHand);
+    EXPECT_FLOAT_EQ(filter.getCustomPerNote().smoothness, 0.4f);
+    EXPECT_EQ(filter.getCustomPerNote().keys[60], 2) << "the user's key map stays";
 }

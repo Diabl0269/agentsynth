@@ -1,14 +1,13 @@
 // CustomFilterEngine.cpp -- shape handoff, morph blend, redesign policy and convolution for the
-// Filter's Custom type.
+// Filter's Custom type, shared-cursor path. The per-voice path is CustomFilterEngineVoices.cpp.
 #include "CustomFilterEngine.h"
+#include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace synth {
 
 namespace {
-constexpr float kMorphEpsilon = 1.0e-4f;
-constexpr float kShiftEpsilon = 1.0e-3f; // semitones
-constexpr float kDepthEpsilon = 1.0e-4f;
 constexpr float kMinDistance = 0.02f;
 constexpr float kDistancePower = 2.5f;
 } // namespace
@@ -37,6 +36,10 @@ std::unique_ptr<CustomFilterEngine::ShapeTable> CustomFilterEngine::renderTable(
         table->x.push_back(shape.position.size() > 0 ? shape.position[0] : 0.5f);
         table->y.push_back(shape.position.size() > 1 ? shape.position[1] : 0.5f);
     }
+    table->orderByX.resize((size_t)table->count);
+    std::iota(table->orderByX.begin(), table->orderByX.end(), 0);
+    std::stable_sort(table->orderByX.begin(), table->orderByX.end(),
+                     [&](int a, int b) { return table->x[(size_t)a] < table->x[(size_t)b]; });
     return table;
 }
 
@@ -79,18 +82,27 @@ void CustomFilterEngine::adoptPendingTable() noexcept {
     }
     current_ = incoming;
     tableChanged_ = true;
+    voiceTableDirty_.fill(true);
 }
 
 void CustomFilterEngine::prepare(double sampleRate) {
     designer_.prepare(sampleRate);
-    convolver_.prepare(CustomFilterKernelDesigner::kKernelLength, kMaxChannels);
+    convolver_.prepare(CustomFilterKernelDesigner::kKernelLength, kMaxChannels, 1 + kMaxVoices);
+    cursors_.prepare(sampleRate);
+    voiceOnOwnGroup_.fill(false);
+    perVoiceActive_ = false;
     blendedDb_.assign((size_t)kGridSize, 0.0f);
     weights_.assign((size_t)CustomFilterShapes::kMaxShapes, 0.0f);
     kernel_.assign((size_t)CustomFilterKernelDesigner::kKernelLength, 0.0f);
     tableChanged_ = true; // a new sample rate moves every bin: the next block redesigns
+    voiceTableDirty_.fill(true);
 }
 
-void CustomFilterEngine::resetState() noexcept { convolver_.reset(); }
+/** A mode or voice-count change also drops every voice back onto the shared kernel. */
+void CustomFilterEngine::resetState() noexcept {
+    convolver_.reset();
+    leavePerVoice();
+}
 
 /** w_i = 1 / max(d_i, kMinDistance)^kDistancePower, normalised. The distance floor keeps a cursor
     sitting on a shape finite while still letting that shape dominate (~1e4 : 1 against a shape a
@@ -116,8 +128,8 @@ bool CustomFilterEngine::needsDesign(const Controls& c) const noexcept {
 }
 
 /** Blends the shapes' dB curves (never their kernels: a sum of minimum-phase kernels is neither
-    minimum phase nor the blended magnitude), designs one kernel and hands it to the convolver. */
-void CustomFilterEngine::design(const Controls& c, int fadeSamples) noexcept {
+    minimum phase nor the blended magnitude) and designs one kernel into kernel_. */
+void CustomFilterEngine::designKernel(const Controls& c) noexcept {
     const ShapeTable& table = *current_;
     blendWeights(table, c.morphX, c.morphY, weights_.data());
     std::fill(blendedDb_.begin(), blendedDb_.end(), 0.0f);
@@ -125,7 +137,12 @@ void CustomFilterEngine::design(const Controls& c, int fadeSamples) noexcept {
         juce::FloatVectorOperations::addWithMultiply(blendedDb_.data(), table.db.data() + s * kGridSize,
                                                      weights_[(size_t)s], kGridSize);
     designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, kernel_.data());
-    convolver_.setKernel(kernel_.data(), fadeSamples);
+}
+
+/** The shared kernel (convolver group 0). */
+void CustomFilterEngine::design(const Controls& c, int fadeSamples) noexcept {
+    designKernel(c);
+    convolver_.setKernel(0, kernel_.data(), fadeSamples);
     designed_ = c;
     tableChanged_ = false;
     designCount_.fetch_add(1, std::memory_order_relaxed);
@@ -134,13 +151,20 @@ void CustomFilterEngine::design(const Controls& c, int fadeSamples) noexcept {
 /** A redesign waits while the previous kernel is still fading in (only possible with blocks
     shorter than the convolver's minimum fade); `designed_` is not updated, so the next block picks
     the change up. The fade spans this block, so a swap is block-aligned and complete by its end. */
-void CustomFilterEngine::process(float* const* channels, int numChannels, int numSamples,
-                                 const Controls& controls) noexcept {
+void CustomFilterEngine::process(float* const* channels, int numChannels, int numSamples, const Controls& controls,
+                                 const VoiceInput* voices, int numVoices) noexcept {
     if (!designer_.isPrepared() || numSamples <= 0)
         return;
     adoptPendingTable();
     if (current_ == nullptr)
         return;
+    const auto settings = readPerNoteSettings();
+    if (voices != nullptr && numVoices > 0 && settings.mode != CustomFilterPerNote::Mode::Off) {
+        processPerVoice(channels, numChannels, numSamples, controls, voices, numVoices, settings);
+        return;
+    }
+    if (perVoiceActive_)
+        leavePerVoice();
     if (needsDesign(controls) && !convolver_.isCrossfading())
         design(controls, numSamples);
     convolver_.process(channels, numChannels, numSamples);

@@ -238,12 +238,17 @@ TEST(ShapeEditor, EscapeAndDoneClose) {
     EXPECT_FALSE(editor.keyPressed(key('x')));
 }
 
-TEST(ShapeEditor, TheBottomBarKeepsASlotForPerNoteSettings) {
+TEST(ShapeEditor, TheBottomBarHoldsThePerNoteSettingsBesideDone) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
-    EXPECT_FALSE(editor.getBottomBarSlot().getBounds().isEmpty());
-    EXPECT_TRUE(editor.getLocalBounds().contains(editor.getBottomBarSlot().getBounds()));
-    EXPECT_FALSE(editor.getBottomBarSlot().getBounds().intersects(editor.getDoneButton().getBounds()));
+    auto* bar = editor.getPerNoteBar();
+    ASSERT_NE(bar, nullptr);
+    EXPECT_FALSE(bar->getBounds().isEmpty());
+    EXPECT_TRUE(editor.getLocalBounds().contains(bar->getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getDoneButton().getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getCurveEditor().getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getMap().getBounds()));
+    EXPECT_EQ(editor.getHeight(), ShapeListEditor::kPerNoteHeight);
 }
 
 TEST(ShapeEditor, AnEditMadeElsewhereReachesTheWindowOnRefresh) {
@@ -298,6 +303,8 @@ TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
                                             "Rename",
                                             "Start from",
                                             "Draw",
+                                            "Notes move the cursor",
+                                            "Smoothness",
                                             "Done"};
     EXPECT_EQ(names, expected);
     EXPECT_EQ(walk.backward.size(), walk.forward.size());

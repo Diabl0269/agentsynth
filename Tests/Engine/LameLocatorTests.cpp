@@ -6,9 +6,11 @@
 #include <gtest/gtest.h>
 
 namespace {
+// A random name per directory: the CI test shards run in parallel on one machine, and a shared base name let two
+// shards pick the same "nonexistent" child, so one shard's empty directory could hold the other's fake lame.
 struct ScratchDir {
     juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getNonexistentChildFile("agentsynth_lame_locator", "", false);
+                         .getChildFile("agentsynth_lame_locator_" + juce::Uuid().toString());
     ScratchDir() { dir.createDirectory(); }
     ~ScratchDir() { dir.deleteRecursively(); }
 };

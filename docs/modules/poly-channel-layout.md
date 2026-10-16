@@ -77,7 +77,7 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
 | **Filter (poly)** | ch10 | In | Shared Drive CV |
 | **Filter (poly)** | ch11-18 | In/Out | Per-voice audio — `Audio R` (`kRightBase`), own ladder per voice |
-| **Filter (poly)** | ch19-26 | In | Per-voice `Pitch` (Hz) for Key Track (`kPitchBase`); one jack, eight wide |
+| **Filter (poly)** | ch19-26 | In | Per-voice `Pitch` (Hz) for Key Track and the Custom type's per-note modes (`kPitchBase`); one jack, eight wide |
 | **Filter (poly/mono)** | ch27 | In | Key Track CV (same channel both modes) |
 | **Filter (poly/mono)** | ch28 | In | Morph X CV, Custom type (`kMorphXCVChannel`, same channel both modes) |
 | **Filter (poly/mono)** | ch29 | In | Morph Y CV, Custom type (`kMorphYCVChannel`, same channel both modes) |

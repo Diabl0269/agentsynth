@@ -345,21 +345,40 @@ public:
     int getCustomShapesGeneration() const { return customEngine.getShapesGeneration(); }
     /** Custom kernels designed so far (tests and diagnostics). */
     int getCustomDesignCount() const { return customEngine.getDesignCount(); }
+    /** Message thread only: whether (and how) each poly note gets its own place on the morph map. Setting it
+        bumps getCustomShapesGeneration(). */
+    const synth::CustomFilterPerNote& getCustomPerNote() const { return customEngine.getPerNote(); }
+    void setCustomPerNote(const synth::CustomFilterPerNote& perNote) { customEngine.setPerNote(perNote); }
+    /** Audio thread / tests: the per-voice cursors of the per-note modes. */
+    const synth::CustomFilterVoiceCursors& getCustomVoiceCursors() const { return customEngine.getVoiceCursors(); }
 
-    /** The Custom shapes, or nothing while they are the defaults. Model output uses setUntrustedExtraState. */
+    /** The Custom shapes plus "perNote" (when it is not the default), or nothing while both are the defaults. Model
+        output uses setUntrustedExtraState. */
     juce::var getExtraState() const override {
         const auto& shapes = customEngine.getShapes();
-        return shapes.isDefault() ? juce::var() : shapes.toVar();
+        const auto& perNote = customEngine.getPerNote();
+        if (shapes.isDefault() && perNote.isDefault())
+            return {};
+        juce::var state = shapes.toVar();
+        if (!perNote.isDefault())
+            if (auto* obj = state.getDynamicObject())
+                obj->setProperty("perNote", perNote.toVar());
+        return state;
     }
     void setExtraState(const juce::var& state) override {
         customEngine.setShapes(synth::CustomFilterShapes::fromVar(state));
+        customEngine.setPerNote(synth::CustomFilterPerNote::fromVar(state.getProperty("perNote", {})));
     }
     /** The shape list is pure bounded data (curve points, map coordinates, a short whitelisted name), so
-     *  model-authored patches may set it too; anything unusable leaves the current shapes alone. */
+     *  model-authored patches may set it too; anything unusable leaves the current shapes alone. Of "perNote"
+     *  only the mode and the smoothness are read, never the key map. */
     void setUntrustedExtraState(const juce::var& state) override {
         synth::CustomFilterShapes parsed;
         if (synth::CustomFilterShapes::fromUntrustedVar(state, parsed))
             customEngine.setShapes(parsed);
+        auto perNote = customEngine.getPerNote();
+        if (synth::CustomFilterPerNote::fromUntrustedVar(state.getProperty("perNote", {}), perNote))
+            customEngine.setPerNote(perNote);
     }
     /** Host-state blobs written before "Custom" was appended decode over the old choice count. */
     int legacyChoiceCount(const juce::String& paramId) const override {
@@ -579,11 +598,11 @@ private:
         }
     }
 
-    /** Custom type: every audio channel of both legs through one shared kernel. Morph X/Y, Shift and
-        Depth (and their CV) are read once per block; Key Track adds a shift by the Pitch input in
-        mono only (all poly voices share one kernel, so there is no per-voice pitch to follow).
-        Cutoff, Resonance and Drive are ignored. History is cleared on entering the mode or changing
-        the voice count, so a stale tail from an earlier stint never plays. */
+    /** Custom type: every audio channel of both legs through one shared kernel, or in poly with a per-note mode
+        on, one kernel per voice (both legs of a voice share it). Morph X/Y, Shift and Depth (and their CV) are
+        read once per block; Key Track adds a shift by the Pitch input in mono only. Cutoff, Resonance and Drive
+        are ignored. History is cleared on entering the mode or changing the voice count, so a stale tail from an
+        earlier stint never plays. */
     void processCustomMode(juce::AudioBuffer<float>& buffer, int numSamples) {
         const bool poly = polyParam->get();
         if (!customWasActive || poly != customWasPoly)
@@ -608,7 +627,26 @@ private:
             for (int v = 0; v < voices; ++v)
                 if (const int ch = legBaseChannel(leg) + v; ch < buffer.getNumChannels())
                     channels[(size_t)(leg * kNumVoices + v)] = buffer.getWritePointer(ch);
-        customEngine.process(channels.data(), (int)channels.size(), numSamples, c);
+        if (poly)
+            readVoiceInputs(buffer, numSamples);
+        customEngine.process(channels.data(), (int)channels.size(), numSamples, c, poly ? voiceInputs.data() : nullptr,
+                             poly ? kNumVoices : 0);
+    }
+
+    /** What the per-note modes need from each voice before filtering: its Pitch at the block's first and last
+        sample, and whether either leg carries sound (above about -80 dBFS). The Filter has no gate, so these are
+        how it spots a note (CustomFilterVoiceCursors::detectNote). */
+    void readVoiceInputs(const juce::AudioBuffer<float>& buffer, int numSamples) {
+        for (int v = 0; v < kNumVoices; ++v) {
+            auto& in = voiceInputs[(size_t)v];
+            const int pitchCh = kPitchBase + v;
+            in.pitchStartHz = pitchCh < buffer.getNumChannels() ? buffer.getReadPointer(pitchCh)[0] : 0.0f;
+            in.pitchEndHz = blockEndPitch(buffer, v);
+            in.audible = false;
+            for (int leg = 0; leg < kLegCount && !in.audible; ++leg)
+                if (const int ch = legBaseChannel(leg) + v; ch < buffer.getNumChannels())
+                    in.audible = buffer.getMagnitude(ch, 0, numSamples) > kVoiceAudibleLevel;
+        }
     }
 
     /** Cutoff after Key Track: `f` times (pitch / middle C) ^ keyTrack, i.e. `keyTrack` octaves of
@@ -676,6 +714,8 @@ private:
     juce::AudioParameterFloat* shiftParam = nullptr;
     juce::AudioParameterFloat* depthParam = nullptr;
     synth::CustomFilterEngine customEngine;
+    std::array<synth::CustomFilterEngine::VoiceInput, kNumVoices> voiceInputs{}; // audio thread
+    static constexpr float kVoiceAudibleLevel = 1.0e-4f;
     bool customWasActive = false; // audio thread
     bool customWasPoly = false;   // audio thread
     std::atomic<float> modulatedCutoff{440.0f};

@@ -129,6 +129,11 @@ ShapeDrawRange FilterShapesAdapter::getDrawRange() const {
     return {CustomFilterShapes::dbToY(-18.0f), CustomFilterShapes::dbToY(6.0f), 3};
 }
 
+CustomFilterPerNote FilterShapesAdapter::getPerNote() const { return module_.getCustomPerNote(); }
+
+/** The settings are part of the module's extra state, so beginEdit/endEdit record them like a shape edit. */
+void FilterShapesAdapter::setPerNote(const CustomFilterPerNote& perNote) { module_.setCustomPerNote(perNote); }
+
 juce::String FilterShapesAdapter::getWindowTitle() const { return "Filter shapes: " + moduleName_; }
 
 float FilterShapesAdapter::getReferenceLevel() const { return CustomFilterShapes::dbToY(0.0f); }

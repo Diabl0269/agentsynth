@@ -412,10 +412,14 @@ TEST(AccessibilityCoverageTest, EQWindow) {
 }
 
 // The Filter's shape editor window: the large morph map with its dots, cursor and sliders, the shape chips, the curve
-// editor and every button. All of it is on screen at once, so the audit reaches every stop.
+// editor, every button and the per-note settings, on By hand so the key strip, its keys and the octave buttons are
+// on screen too. All of it is on screen at once, so the audit reaches every stop.
 TEST(AccessibilityCoverageTest, ShapeEditorWindow) {
     AudioEngine audioEngine;
     auto* filter = new FilterModule();
+    synth::CustomFilterPerNote byHand;
+    byHand.mode = synth::CustomFilterPerNote::Mode::ByHand;
+    filter->setCustomPerNote(byHand);
     auto node = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
     AppUndoManager undo;
     auto adapter = std::make_shared<synth::ui::FilterShapesAdapter>(*filter, &undo, audioEngine.getGraph(),

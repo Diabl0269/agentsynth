@@ -206,17 +206,28 @@ TEST(CustomFilterEngine, KernelSwapHasNoDiscontinuity) {
 }
 
 // Rough CPU cost, printed rather than asserted (run with --gtest_also_run_disabled_tests, ideally
-// on a Release build): mono vs 8 voices x 2 legs, with a still and a moving cursor.
+// on a Release build): mono vs 8 voices x 2 legs, with a still and a moving cursor, and 8 voices on
+// their own moving cursors (per-note Random, a new note per voice every 20 blocks, Smoothness 1).
 TEST(CustomFilterEngine, DISABLED_CpuCost) {
     constexpr int kBlock = 512, kBlocks = 400;
+    enum class Run { Still, Moving, PerVoice };
     for (int channels : {1, 16}) {
-        for (bool moving : {false, true}) {
+        for (Run run : {Run::Still, Run::Moving, Run::PerVoice}) {
+            if (channels == 1 && run == Run::PerVoice)
+                continue;
             CustomFilterEngine engine;
+            if (run == Run::PerVoice) {
+                CustomFilterPerNote p;
+                p.mode = CustomFilterPerNote::Mode::Random;
+                p.smoothness = 1.0f;
+                engine.setPerNote(p);
+            }
             engine.prepare(kTestSampleRate);
             std::vector<std::vector<float>> bufs((size_t)channels, std::vector<float>(kBlock));
             std::vector<float*> ptrs;
             for (auto& b : bufs)
                 ptrs.push_back(b.data());
+            std::array<CustomFilterEngine::VoiceInput, 8> voices{};
             juce::Random rng(5);
             const auto start = juce::Time::getHighResolutionTicks();
             for (int blk = 0; blk < kBlocks; ++blk) {
@@ -224,14 +235,20 @@ TEST(CustomFilterEngine, DISABLED_CpuCost) {
                     for (auto& x : b)
                         x = rng.nextFloat() - 0.5f;
                 CustomFilterEngine::Controls c;
-                if (moving)
+                if (run == Run::Moving)
                     c.morphX = 0.5f + 0.4f * std::sin(0.1f * (float)blk);
-                engine.process(ptrs.data(), channels, kBlock, c);
+                for (int v = 0; v < 8; ++v) {
+                    const float hz = 110.0f * std::pow(2.0f, (float)(((blk + 3 * v) / 20 + v) % 24) / 12.0f);
+                    voices[(size_t)v] = {hz, hz, true};
+                }
+                engine.process(ptrs.data(), channels, kBlock, c, run == Run::PerVoice ? voices.data() : nullptr,
+                               run == Run::PerVoice ? 8 : 0);
             }
             const double secs = juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start);
             const double audioSecs = (double)kBlocks * kBlock / kTestSampleRate;
-            std::printf("[cpu] %2d ch, %s cursor: %.2f %% of one core (%d designs)\n", channels,
-                        moving ? "moving" : "still ", 100.0 * secs / audioSecs, engine.getDesignCount());
+            const char* label = run == Run::Still ? "still    " : run == Run::Moving ? "moving   " : "per-voice";
+            std::printf("[cpu] %2d ch, %s cursor: %.2f %% of one core (%d designs)\n", channels, label,
+                        100.0 * secs / audioSecs, engine.getDesignCount());
         }
     }
 }
