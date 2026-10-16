@@ -87,9 +87,13 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
             closeHostingWindow(*this);
     };
 
-    bottomSlot_.setInterceptsMouseClicks(false, false);
-    bottomSlot_.setTitle("Per-note settings");
-    addAndMakeVisible(bottomSlot_);
+    if (adapter_->hasPerNote()) {
+        perNote_ = std::make_unique<PerNoteBar>(*adapter_);
+        perNote_->setExplicitFocusOrder(order - 1);
+        doneButton_.setExplicitFocusOrder(order);
+        perNote_->onEdited = [this] { lastGeneration_ = adapter_->getGeneration(); };
+        addAndMakeVisible(*perNote_);
+    }
 
     controller_.onSelect = [this](int index) { setSelected(index); };
     controller_.onEdit = [this](int index) { setSelected(index); };
@@ -103,7 +107,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     shapes_ = adapter_->getShapes();
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
     lastGeneration_ = adapter_->getGeneration();
-    setSize(kWidth, kHeight);
+    setSize(kWidth, perNote_ != nullptr ? kPerNoteHeight : kHeight);
     syncAll();
     startTimerHz(kPollHz);
 }
@@ -135,6 +139,8 @@ void ShapeListEditor::syncAll() {
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected_);
     chips_->setShapes(shapes_);
     controller_.refresh();
+    if (perNote_ != nullptr)
+        perNote_->refresh(shapes_);
     setSelected(selected_);
     resized();
 }
@@ -247,11 +253,13 @@ void ShapeListEditor::paint(juce::Graphics& g) { g.fillAll(synth::theme::themeOf
 
 void ShapeListEditor::resized() {
     auto area = getLocalBounds().reduced(kMargin);
-    auto bottom = area.removeFromBottom(kBottomBarHeight);
+    auto bottom = area.removeFromBottom(perNote_ != nullptr ? PerNoteBar::kHeight : kBottomBarHeight);
     area.removeFromBottom(kGap);
-    doneButton_.setBounds(bottom.removeFromRight(96).withSizeKeepingCentre(96, kButtonHeight));
+    doneButton_.setBounds(
+        bottom.removeFromRight(96).removeFromTop(kBottomBarHeight).withSizeKeepingCentre(96, kButtonHeight));
     bottom.removeFromRight(kGap);
-    bottomSlot_.setBounds(bottom);
+    if (perNote_ != nullptr)
+        perNote_->setBounds(bottom);
 
     auto left = area.removeFromLeft(kMapSize);
     map_.setBounds(left.removeFromTop(juce::jmin(left.getHeight(), kMapSize)));

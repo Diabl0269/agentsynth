@@ -678,6 +678,10 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/ShapeMapController.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.h
     Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.cpp
+    Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.h
+    Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.cpp
+    Source/UI/ModuleViews/ShapeEditor/PerNoteBar.h
+    Source/UI/ModuleViews/ShapeEditor/PerNoteBar.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.h
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorInternal.h
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.cpp

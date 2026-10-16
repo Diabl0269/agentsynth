@@ -23,30 +23,31 @@ static_assert((1 << kFftOrder) == 2 * PartitionedConvolver::kPartitionSize);
 constexpr float kSilence = 1.0e-9f;
 } // namespace
 
-void PartitionedConvolver::prepare(int kernelLength, int numChannels) {
+void PartitionedConvolver::prepare(int kernelLength, int numChannels, int numGroups) {
     kernelLength_ = juce::jmax(P, kernelLength);
     numPartitions_ = juce::jmax(1, (kernelLength_ - P + P - 1) / P);
     numBins_ = P + 1;
     numChannels_ = juce::jlimit(1, kMaxChannels, numChannels);
+    numGroups_ = juce::jlimit(1, kMaxGroups, numGroups);
     fft_ = std::make_unique<juce::dsp::FFT>(kFftOrder);
     fftWork_.assign((size_t)(4 * P), 0.0f);
     accum_.assign((size_t)numBins_, Complex{});
     scratchOld_.assign((size_t)P, 0.0f);
     scratchNew_.assign((size_t)P, 0.0f);
-    for (auto& slot : slots_) {
-        slot.headReversed.assign((size_t)P, 0.0f);
-        slot.spectra.assign((size_t)(numPartitions_ * numBins_), Complex{});
-    }
+    groups_.assign((size_t)numGroups_, KernelGroup{});
+    for (auto& group : groups_)
+        for (auto& slot : group.slots) {
+            slot.headReversed.assign((size_t)P, 0.0f);
+            slot.spectra.assign((size_t)(numPartitions_ * numBins_), Complex{});
+        }
     channels_.resize((size_t)numChannels_);
     for (auto& s : channels_) {
         s.history.assign((size_t)(2 * P), 0.0f);
         s.fdl.assign((size_t)(numPartitions_ * numBins_), Complex{});
         for (auto& t : s.tail)
             t.assign((size_t)P, 0.0f);
+        s.group = 0;
     }
-    active_ = 0;
-    hasKernel_ = false;
-    fading_ = false;
     reset();
 }
 
@@ -64,12 +65,14 @@ void PartitionedConvolver::reset() noexcept {
     }
 }
 
-/** Writes the kernel into the slot that is not live. With no live kernel yet it simply becomes
-    live (there is nothing to fade from). Otherwise each channel's tail for the in-progress
-    sub-block is recomputed lazily for the new slot on its next process() call. */
-void PartitionedConvolver::setKernel(const float* kernel, int fadeSamples) noexcept {
-    const int slotIndex = hasKernel_ ? 1 - active_ : active_;
-    KernelSlot& slot = slots_[slotIndex];
+/** Writes the kernel into the group's slot that is not live. With no live kernel yet it simply
+    becomes live (there is nothing to fade from). Otherwise the tail for the in-progress sub-block of
+    each channel on this group is recomputed lazily for the new slot on its next process() call;
+    channels on other groups are untouched. */
+void PartitionedConvolver::setKernel(int groupIndex, const float* kernel, int fadeSamples) noexcept {
+    KernelGroup& group = groups_[(size_t)groupIndex];
+    const int slotIndex = group.hasKernel ? 1 - group.active : group.active;
+    KernelSlot& slot = group.slots[slotIndex];
     for (int t = 0; t < P; ++t)
         slot.headReversed[(size_t)t] = t < kernelLength_ ? kernel[P - 1 - t] : 0.0f;
 
@@ -85,31 +88,90 @@ void PartitionedConvolver::setKernel(const float* kernel, int fadeSamples) noexc
         std::copy(bins, bins + numBins_, slot.spectra.begin() + (ptrdiff_t)(m * numBins_));
     }
 
-    for (auto& s : channels_)
-        s.tailValid[slotIndex] = false;
+    invalidateTails(groupIndex, slotIndex);
 
-    if (!hasKernel_) {
-        hasKernel_ = true;
+    if (!group.hasKernel) {
+        group.hasKernel = true;
         return;
     }
-    fading_ = true;
-    fadePos_ = 0;
-    fadeLength_ = juce::jmax(fadeSamples, P);
+    group.fading = true;
+    group.fadePos = 0;
+    group.fadeLength = juce::jmax(fadeSamples, P);
 }
 
+void PartitionedConvolver::setKernel(const float* kernel, int fadeSamples) noexcept {
+    setKernel(0, kernel, fadeSamples);
+}
+
+bool PartitionedConvolver::isCrossfading(int group) const noexcept {
+    return group >= 0 && group < numGroups_ && groups_[(size_t)group].fading;
+}
+
+bool PartitionedConvolver::hasKernel(int group) const noexcept {
+    return group >= 0 && group < numGroups_ && groups_[(size_t)group].hasKernel;
+}
+
+void PartitionedConvolver::invalidateTails(int group, int slot) noexcept {
+    for (auto& s : channels_)
+        if (s.group == group)
+            s.tailValid[slot] = false;
+}
+
+/** Copies the source's live slot (head and spectra, a few tens of kilobytes) over the destination's live
+    slot and cancels any fade there, so a channel moved onto `to` hears exactly what it heard on `from`.
+    A fade still running on `from` is not carried over: the copy is the kernel it fades away from. */
+void PartitionedConvolver::copyLiveKernel(int from, int to) noexcept {
+    if (from == to || from < 0 || to < 0 || from >= numGroups_ || to >= numGroups_)
+        return;
+    const KernelGroup& src = groups_[(size_t)from];
+    KernelGroup& dst = groups_[(size_t)to];
+    const KernelSlot& in = src.slots[src.active];
+    KernelSlot& out = dst.slots[dst.active];
+    std::copy(in.headReversed.begin(), in.headReversed.end(), out.headReversed.begin());
+    std::copy(in.spectra.begin(), in.spectra.end(), out.spectra.begin());
+    dst.hasKernel = src.hasKernel;
+    dst.fading = false;
+    invalidateTails(to, 0);
+    invalidateTails(to, 1);
+}
+
+/** The delay line holds input spectra only, so a channel can change kernels between any two samples: its
+    tails are recomputed from the new group's kernels on the next process() call. */
+void PartitionedConvolver::setChannelGroup(int channel, int group) noexcept {
+    if (channel < 0 || channel >= numChannels_ || group < 0 || group >= numGroups_)
+        return;
+    ChannelState& s = channels_[(size_t)channel];
+    if (s.group == group)
+        return;
+    s.group = group;
+    s.tailValid[0] = s.tailValid[1] = false;
+}
+
+int PartitionedConvolver::getChannelGroup(int channel) const noexcept {
+    return channel >= 0 && channel < numChannels_ ? channels_[(size_t)channel].group : 0;
+}
+
+bool PartitionedConvolver::isChannelIdle(int channel) const noexcept {
+    return channel >= 0 && channel < numChannels_ && channels_[(size_t)channel].silentRun >= kernelLength_ + 2 * P;
+}
+
+/** Each group's fade advances once per call, after every channel on it has used this block's fade
+    positions, so all channels of a group (both legs of a voice) cross over sample-aligned. */
 void PartitionedConvolver::process(float* const* channels, int numChannels, int numSamples) noexcept {
-    if (!hasKernel_ || numSamples <= 0)
+    if (numSamples <= 0)
         return;
     const int n = juce::jmin(numChannels, numChannels_);
     for (int c = 0; c < n; ++c)
-        if (channels[c] != nullptr)
+        if (channels[c] != nullptr && groups_[(size_t)channels_[(size_t)c].group].hasKernel)
             processChannel(channels_[(size_t)c], channels[c], numSamples);
 
-    if (fading_) {
-        fadePos_ += numSamples;
-        if (fadePos_ >= fadeLength_) {
-            fading_ = false;
-            active_ = 1 - active_;
+    for (auto& group : groups_) {
+        if (!group.fading)
+            continue;
+        group.fadePos += numSamples;
+        if (group.fadePos >= group.fadeLength) {
+            group.fading = false;
+            group.active = 1 - group.active;
         }
     }
 }
@@ -131,15 +193,17 @@ void PartitionedConvolver::processChannel(ChannelState& s, float* data, int numS
     }
     s.silentRun = silent ? s.silentRun + numSamples : 0;
 
-    const int oldSlot = active_;
-    const int newSlot = 1 - active_;
+    const KernelGroup& group = groups_[(size_t)s.group];
+    const bool fading = group.fading;
+    const int oldSlot = group.active;
+    const int newSlot = 1 - group.active;
     if (!s.tailValid[oldSlot])
         computeTail(s, oldSlot);
-    if (fading_ && !s.tailValid[newSlot])
+    if (fading && !s.tailValid[newSlot])
         computeTail(s, newSlot);
 
-    const float* headOld = slots_[oldSlot].headReversed.data();
-    const float* headNew = slots_[newSlot].headReversed.data();
+    const float* headOld = group.slots[oldSlot].headReversed.data();
+    const float* headNew = group.slots[newSlot].headReversed.data();
     float* hist = s.history.data();
     float* yOld = scratchOld_.data();
     float* yNew = scratchNew_.data();
@@ -153,12 +217,12 @@ void PartitionedConvolver::processChannel(ChannelState& s, float* data, int numS
         std::copy(s.tail[oldSlot].begin() + s.pos, s.tail[oldSlot].begin() + s.pos + chunk, yOld);
         for (int t = 0; t < P; ++t)
             juce::FloatVectorOperations::addWithMultiply(yOld, hist + s.pos + 1 + t, headOld[t], chunk);
-        if (fading_) {
+        if (fading) {
             std::copy(s.tail[newSlot].begin() + s.pos, s.tail[newSlot].begin() + s.pos + chunk, yNew);
             for (int t = 0; t < P; ++t)
                 juce::FloatVectorOperations::addWithMultiply(yNew, hist + s.pos + 1 + t, headNew[t], chunk);
             for (int k = 0; k < chunk; ++k) {
-                const float g = juce::jmin(1.0f, (float)(fadePos_ + i + k + 1) / (float)fadeLength_);
+                const float g = juce::jmin(1.0f, (float)(group.fadePos + i + k + 1) / (float)group.fadeLength);
                 data[i + k] = yOld[k] + (yNew[k] - yOld[k]) * g;
             }
         } else {
@@ -185,16 +249,17 @@ void PartitionedConvolver::finishSubBlock(ChannelState& s) noexcept {
     std::copy(s.history.begin() + P, s.history.end(), s.history.begin());
     s.pos = 0;
 
-    computeTail(s, active_);
-    if (fading_)
-        computeTail(s, 1 - active_);
+    const KernelGroup& group = groups_[(size_t)s.group];
+    computeTail(s, group.active);
+    if (group.fading)
+        computeTail(s, 1 - group.active);
     else
-        s.tailValid[1 - active_] = false;
+        s.tailValid[1 - group.active] = false;
 }
 
 void PartitionedConvolver::computeTail(ChannelState& s, int slot) noexcept {
     std::fill(accum_.begin(), accum_.end(), Complex{});
-    const Complex* spectra = slots_[slot].spectra.data();
+    const Complex* spectra = groups_[(size_t)s.group].slots[slot].spectra.data();
     for (int m = 0; m < numPartitions_; ++m) {
         const int fdlIndex = (s.fdlHead - m + numPartitions_) % numPartitions_;
         const Complex* x = s.fdl.data() + fdlIndex * numBins_;

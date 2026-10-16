@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PerNoteBar.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -14,20 +15,21 @@ namespace synth::ui {
 
 /** The content of the shape editor window: a large morph map on the left; on the right a row of shape chips, the
  *  curve editor for the selected shape and the buttons that act on it (Add shape, Duplicate, Delete, Rename,
- *  Start from, Draw); Done in the bottom bar, which also leaves a slot for per-note settings.
+ *  Start from, Draw); the bottom bar holds the per-note settings (when the adapter has them) and Done.
  *
  *  It edits whatever the `ShapeListAdapter` holds, so it is not tied to the Filter. Edits are heard live (every
  *  change goes to the adapter at once) and each gesture or button is one undo step.
  *
- *  Keyboard: Tab visits the map and its dots and cursor, the chips, the curve editor, the buttons and Done, in that
- *  order. Escape closes the window (`onDone`, else the hosting window).
+ *  Keyboard: Tab visits the map and its dots and cursor, the chips, the curve editor, the buttons, the per-note
+ *  controls and Done, in that order. Escape closes the window (`onDone`, else the hosting window).
  */
 class ShapeListEditor
     : public juce::Component
     , private juce::Timer {
 public:
     static constexpr int kWidth = 880;
-    static constexpr int kHeight = 560;
+    static constexpr int kHeight = 560; // without per-note settings
+    static constexpr int kPerNoteHeight = kHeight + PerNoteBar::kHeight - PerNoteBar::kRowHeight; // with them
 
     /** `selected` is clamped into the list. */
     ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int selected);
@@ -61,8 +63,8 @@ public:
     juce::TextButton& getDrawButton() noexcept { return drawButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Component* getChip(int index) const;
-    /** An empty area in the bottom bar reserved for per-note settings. */
-    juce::Component& getBottomBarSlot() noexcept { return bottomSlot_; }
+    /** The per-note settings in the bottom bar; null when the adapter has none. */
+    PerNoteBar* getPerNoteBar() noexcept { return perNote_.get(); }
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
 
@@ -101,7 +103,7 @@ private:
     juce::TextButton startFromButton_{"Start from"};
     juce::TextButton drawButton_{"Draw"};
     juce::TextButton doneButton_{"Done"};
-    juce::Component bottomSlot_;
+    std::unique_ptr<PerNoteBar> perNote_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeListEditor)
 };

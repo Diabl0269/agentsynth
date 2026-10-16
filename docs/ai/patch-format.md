@@ -107,6 +107,18 @@ most 3 values, each clamped to 0..1) and `name`, reduced to at most 24 character
 space and `-` (anything else is dropped). At most 16 shapes are read. Any other key is ignored, and a
 state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift and
 Depth through ordinary `params` (`morphX`, `morphY`, `shift`, `depth`) with `filterType` set to Custom.
+
+The same `state` may carry the per-note settings, which make each note of a poly Filter sit at its own place on
+the map ([custom-filter.md](../modules/custom-filter.md#per-note-cursors)):
+
+```json
+{"perNote": {"mode": "byPitch", "smoothness": 0.3}}
+```
+
+Only `mode` (exactly one of `off`, `byHand`, `byPitch`, `random`; anything else is ignored) and `smoothness`
+(a number, clamped to 0..1: 0 jumps at each note, 1 glides for 500 ms) are read; each applies on its own, with or
+without a `shapes` list. The By hand key map (`keys`) and every other key are ignored, so a model can pick By
+hand but never which key goes where.
 Every other module's `state` stays trusted-only. A Filter insert of an `addInstrumentTrack` op may carry the same
 `state` (see [timeline-ops.md](timeline-ops.md)); it goes through `AIStateMapper::applyUntrustedState`, the same
 untrusted door. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.

@@ -3,6 +3,7 @@
 // ShapeListAdapter.h -- what the shape list editor and the morph map need from whatever owns the shapes: read and
 // write the list, bracket one undoable edit, and describe the axes. The Filter's Custom shapes are the first
 // implementation (FilterShapesAdapter); another shape list (the LFO's custom wave) plugs in the same way.
+#include "Modules/Filter/CustomFilterPerNote.h"
 #include "Modules/Lfo/LfoCustomWave.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -62,6 +63,12 @@ public:
     virtual std::vector<ShapeStartFrom> getStartFrom() const { return {}; }
     virtual ShapeDrawRange getDrawRange() const { return {}; }
     virtual juce::String getWindowTitle() const = 0;
+
+    /** Per-note settings ("Notes move the cursor"). An adapter without them shows no per-note controls. */
+    virtual bool hasPerNote() const { return false; }
+    virtual CustomFilterPerNote getPerNote() const { return {}; }
+    /** Applies the settings live. Like setShapes, not an undo step by itself: bracket with beginEdit/endEdit. */
+    virtual void setPerNote(const CustomFilterPerNote&) {}
     /** The curve y that is "no change" (a reference line the fill runs down to). */
     virtual float getReferenceLevel() const { return 0.5f; }
 };

@@ -32,6 +32,9 @@ public:
     std::vector<ShapeStartFrom> getStartFrom() const override;
     ShapeDrawRange getDrawRange() const override;
     juce::String getWindowTitle() const override;
+    bool hasPerNote() const override { return true; }
+    CustomFilterPerNote getPerNote() const override;
+    void setPerNote(const CustomFilterPerNote& perNote) override;
     float getReferenceLevel() const override;
     /** The name the window title carries; the card refreshes it before opening. */
     void setModuleName(juce::String name) { moduleName_ = std::move(name); }

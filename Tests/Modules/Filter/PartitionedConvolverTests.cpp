@@ -147,3 +147,70 @@ TEST(PartitionedConvolver, ProcessAndSwapDoNotAllocate) {
     }
     EXPECT_EQ(scope.count(), 0);
 }
+
+TEST(PartitionedConvolver, ChannelGroupsReadTheirOwnKernels) {
+    const auto x = randomSignal(3000, 21);
+    const auto h0 = randomSignal(700, 22, 0.1f);
+    const auto h1 = randomSignal(700, 23, 0.1f);
+    PartitionedConvolver conv;
+    conv.prepare(700, 2, 3);
+    conv.setKernel(0, h0.data(), 0);
+    conv.setKernel(2, h1.data(), 0);
+    conv.setChannelGroup(1, 2);
+    EXPECT_EQ(conv.getChannelGroup(0), 0);
+    EXPECT_EQ(conv.getChannelGroup(1), 2);
+    auto a = x, b = x;
+    for (size_t start = 0; start < x.size(); start += 300) {
+        float* ch[2] = {a.data() + start, b.data() + start};
+        conv.process(ch, 2, 300);
+    }
+    const auto ya = directConvolve(x, h0), yb = directConvolve(x, h1);
+    for (size_t n = 0; n < x.size(); ++n) {
+        ASSERT_NEAR(a[n], ya[n], 1e-4f) << n;
+        ASSERT_NEAR(b[n], yb[n], 1e-4f) << n;
+    }
+}
+
+TEST(PartitionedConvolver, MovingAChannelOntoACopiedGroupIsSeamless) {
+    const auto x = randomSignal(4000, 31);
+    const auto h = randomSignal(500, 32, 0.1f);
+    PartitionedConvolver conv;
+    conv.prepare(500, 1, 2);
+    conv.setKernel(h.data(), 0);
+    auto y = x;
+    for (size_t start = 0; start < x.size(); start += 250) {
+        if (start == 2000) { // mid-stream and mid sub-block (2000 is not a multiple of 64)
+            conv.copyLiveKernel(0, 1);
+            conv.setChannelGroup(0, 1);
+            EXPECT_FALSE(conv.isCrossfading(1));
+        }
+        float* ch[1] = {y.data() + start};
+        conv.process(ch, 1, 250);
+    }
+    const auto ref = directConvolve(x, h);
+    for (size_t n = 0; n < x.size(); ++n)
+        ASSERT_NEAR(y[n], ref[n], 1e-4f) << n;
+}
+
+TEST(PartitionedConvolver, AGroupSwapLeavesOtherGroupsAlone) {
+    const auto x = randomSignal(2048, 41);
+    const auto h = randomSignal(300, 42, 0.1f);
+    const auto other = randomSignal(300, 43, 0.1f);
+    PartitionedConvolver conv;
+    conv.prepare(300, 2, 2);
+    conv.setKernel(0, h.data(), 0);
+    conv.setKernel(1, h.data(), 0);
+    conv.setChannelGroup(1, 1);
+    auto a = x, b = x;
+    for (size_t start = 0; start < x.size(); start += 256) {
+        if (start == 1024)
+            conv.setKernel(1, other.data(), 256);
+        EXPECT_FALSE(conv.isCrossfading(0));
+        float* ch[2] = {a.data() + start, b.data() + start};
+        conv.process(ch, 2, 256);
+    }
+    const auto ref = directConvolve(x, h);
+    for (size_t n = 0; n < x.size(); ++n)
+        ASSERT_NEAR(a[n], ref[n], 1e-4f) << "group 0 never fades: " << n;
+    EXPECT_GT(std::abs(b[2000] - ref[2000]), 1e-4f) << "group 1 took the new kernel";
+}

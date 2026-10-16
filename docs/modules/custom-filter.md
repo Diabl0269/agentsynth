@@ -8,7 +8,9 @@ FIR kernel designed from user-drawn magnitude shapes. The rest of the Filter is 
 
 Code: `Source/Modules/Filter/` — `CustomFilterShapes` (data model), `CustomFilterKernelDesigner`
 (minimum-phase design), `PartitionedConvolver` (convolution), `CustomFilterEngine` (handoff, blend,
-redesign policy), `CustomFilterBlend` (the blend as numbers). `FilterModule::processCustomMode` wires it in. Shapes
+redesign policy; its per-voice path in `CustomFilterEngineVoices.cpp`), `CustomFilterBlend` (the blend as
+numbers), `CustomFilterPerNote` (per-note settings) and `CustomFilterVoiceCursors` (per-voice note spotting and
+glide). `FilterModule::processCustomMode` wires it in. Shapes
 reach the module through its extra state (`setCustomShapes` / `setExtraState`) and are edited in the
 [shape editor window](#shape-editor-window).
 
@@ -34,7 +36,8 @@ reach the module through its extra state (`setCustomShapes` / `setExtraState`) a
 
 All four are added after Key Track (Level and Mute stay last) and each has a CV jack. Cutoff and Resonance are
 ignored in Custom; the [card](#card) swaps them in place for Shift and Depth. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
-every poly voice shares one kernel, so there is no per-voice pitch to follow.
+in poly the voices share one kernel unless a [per-note mode](#per-note-cursors) is on, and Key Track does not
+follow a voice's pitch there either.
 
 ## CV jacks
 
@@ -88,8 +91,13 @@ allocation.
   split into 64-tap partitions, uniform-partitioned overlap-save with 128-point FFTs. Partition m
   starts at tap 64 + 64m, so its share of an output sub-block depends only on input sub-blocks that are
   already complete.
-- **One kernel, many channels**: both legs × up to 8 voices (16 channels) share the kernel; each
-  channel keeps its own history and frequency-domain delay line.
+- **Kernel groups**: both legs × up to 8 voices (16 channels), each with its own history and frequency-domain
+  delay line, read one of nine kernels: group 0 is the shared kernel every channel starts on, groups 1-8 belong
+  to the poly voices in a [per-note mode](#per-note-cursors) (both legs of voice v read group v + 1). Each group
+  swaps and crossfades on its own. With every channel on group 0 (mono, poly with per-note Off) the arithmetic is
+  the old single-kernel path plus one index lookup per channel (`CustomFilterEngine.DISABLED_CpuCost` measures
+  the same cost as before). A channel can move to another group between any two samples, because the delay line
+  holds input spectra only; the group it moves onto starts as a copy of the shared kernel, so the move is silent.
 - **Synchronous, block-aligned swap**: a new kernel goes into the second kernel slot and the output
   crossfades linearly from old to new across the block it arrives in (at least 64 samples; a redesign
   waits while a fade is still running). The delay line holds input spectra only, so the new kernel is
@@ -110,15 +118,72 @@ which the message thread drains (frees) on its next publish and in the destructo
 or freed on the audio thread (`CustomFilterEngine.ShapeEditsReachTheAudioThreadWithoutAllocatingThere`,
 `CustomFilterEngine.MovingCursorNeverAllocatesOnTheAudioThread`).
 
+## Per-note cursors
+
+In poly, each note can sit at its own place on the morph map instead of every voice sharing the Morph X/Y cursor.
+The setting is **Notes move the cursor** in the [shape editor window](#shape-editor-window)'s bottom bar
+(`CustomFilterPerNote`, saved in the extra state):
+
+- **Off** (default): one shared cursor, exactly the single-kernel path above. Mono always works this way.
+- **By hand**: a key map gives each MIDI note a shape (or none). A note with no shape follows the shared cursor.
+- **By pitch**: notes from C2 (36) to C7 (96) are split into as many equal bands as there are shapes, lowest band
+  on the leftmost shape (shapes ordered by map x); notes outside the range clamp to the ends.
+- **Random**: each new note draws a shape, never the one the voice had (when there is another), from a
+  fixed-seed generator, so two renders of the same notes match.
+
+**Smoothness** (Hard to Smooth, 0..1) is the glide time: a new note moves the voice's cursor from where it was to
+its shape in `smoothness × 500 ms`, linearly; 0 lands in the note's first block. The target is read every block,
+so moving a shape (or Morph X/Y, for a note with no shape) moves held notes with it. A voice that has had no note
+yet stays on the shared kernel, so turning a mode on changes nothing until notes arrive; switching back to Off puts
+every voice on the shared kernel at once.
+
+**How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26)
+and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
+than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below
+about -80 dBFS on both legs). An audio return with a pitch still moving waits for the pitch to settle, so a
+Poly MIDI note, whose pitch glides for 5 ms while its sound starts, counts once and with its final pitch. With no
+Pitch cable, only the audio return counts (By hand and By pitch then have no note and use the shared cursor). A
+repeat of the same note on the same voice, into a Filter whose input never falls silent (an oscillator straight
+into the Filter, the VCA after it), is not seen as a new note.
+
+**Kernels on the audio thread, budgeted.** Every voice's cursor moves every block (cheap); kernels follow within
+a budget of about one design per 128 samples, never fewer than two per block nor more than eight
+(`CustomFilterEngine::voiceDesignBudget`): a note that just started first (so Smoothness 0 is heard in the note's
+first block), then voices whose shapes, Shift or Depth changed, then the voice whose cursor is furthest from its
+kernel's. A silent voice waits; a skipped voice keeps gliding and takes a coarser step when its turn comes; a
+chord of more notes than the budget settles over a few blocks. Each design crossfades in over its block like any
+kernel change. A worker thread was not used: a note's kernel must be live in the block that spotted it, and an
+offline render must not depend on thread timing. Measured (Release, Apple Silicon, 44.1 kHz, 512-sample blocks,
+`DISABLED_CpuCost`): one design is about 65 µs; 8 voices × 2 legs with a still shared cursor cost 2.7% of one
+core, with a moving shared cursor 5.9%, and with all 8 voices on their own moving cursors (a new note per voice
+every 20 blocks, Smoothness 1, the budget used every block) 6.3%. Nothing is allocated on the audio thread
+(`FilterPerNote.EightMovingVoicesNeverAllocateOnTheAudioThread`).
+
+**Handoff.** Mode and smoothness cross to the audio thread as relaxed atomics; the 128-entry key map crosses the
+way the LFO's custom table does, a pending copy under a `SpinLock` that the audio thread only try-locks.
+
 ## Saved state
 
-`FilterModule::getExtraState()` returns nothing while the shapes are the defaults, so projects that never
-use Custom save exactly as before. Otherwise:
+`FilterModule::getExtraState()` returns nothing while the shapes and the per-note settings are both the
+defaults, so projects that never use Custom save exactly as before. Otherwise:
 
 ```json
 {"version": 1, "shapes": [{"name": "ah", "position": [0.2, 0.25],
   "curve": {"version": 1, "points": [{"x": 0, "y": 0.3, "bend": 0}, {"x": 1, "y": 0.13, "bend": 0}]}}]}
 ```
+
+Per-note settings other than the defaults add a `"perNote"` object beside `"shapes"` (the outer `version` stays 1,
+so an older build still reads the shapes and ignores it):
+
+```json
+{"version": 1, "shapes": [...], "perNote": {"version": 1, "mode": "byHand", "smoothness": 0.25,
+  "keys": [[60, 1], [62, 0]]}}
+```
+
+`mode` is `off`, `byHand`, `byPitch` or `random`; `keys` lists `[note, shape index]` for assigned notes only. A
+project without `"perNote"` loads as Off; a newer `version`, an unknown mode or a malformed object gives the
+defaults (smoothness clamped to 0..1, key entries outside 0..127 or with a shape outside 0..63 dropped), and the
+shapes beside it still load. A key whose shape was later deleted follows the shared cursor.
 
 `CustomFilterShapes::fromVar` never fails: a missing/newer version or a non-array `shapes` gives the
 defaults, an empty list gives the defaults, a shape with an unreadable curve keeps its slot with a flat
@@ -126,7 +191,8 @@ defaults, an empty list gives the defaults, a shape with an unreadable curve kee
 characters, and at most 64 shapes are read. Model-authored patches reach the narrower
 `CustomFilterShapes::fromUntrustedVar` instead (via `setUntrustedExtraState`): curve points, at most 3 map
 values per shape, a name cut to 24 characters of `[A-Za-z0-9 -]`, at most 16 shapes, every other key
-ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`).
+ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`). Of `"perNote"` the
+untrusted path reads only `mode` and `smoothness`, never the key map ([patch format](../ai/patch-format.md)).
 
 ## Shape editor window
 
@@ -136,7 +202,21 @@ The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is
 [morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
 editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
 blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always
-stays), **Rename**, **Start from** and **Draw**. The bottom bar keeps an empty slot for per-note settings.
+stays), **Rename**, **Start from** and **Draw**. The bottom bar holds the [per-note settings](#per-note-cursors)
+beside **Done** (`PerNoteBar`, shown when the adapter has them): **Notes move the cursor** (a segmented switch: Off,
+By hand, By pitch, Random), **Smoothness** (a slider from Hard to Smooth; its value reads "Hard" or "125 ms
+glide") and, under them, for By hand only, the key strip (`NoteKeyStrip`): an octave and a half of keys (C to F)
+with **<** / **>** buttons for the octave. Each key wears the colour dot of its shape; clicking a key cycles it
+through no shape, then each shape in turn. The key row keeps its slot and fades in and out
+([FadeVisibility](../layout/animation.md#fading-things-in-and-out)), so nothing moves. Every click, key step and
+slider drag is one undo step (the settings are part of the module's extra state).
+
+- **Keys and names.** Tab order after Draw: Notes move the cursor (Left/Right/Home/End pick a mode), Smoothness
+  (Left/Right step 5 ms of glide), Octave down, the key strip, Octave up, Done. The key strip is one Tab stop:
+  Left/Right move the focused key (and shift the octave past either end), Space or Return cycles it, Delete or
+  Backspace clears it, Page Up/Down shift the octave; the focused key draws the focus ring. To a screen reader it
+  is a group named "Key map" holding one button per key, titled "C4: ah" or "C4: no shape"; each control has a
+  tooltip naming what it does.
 
 - **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
   (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
