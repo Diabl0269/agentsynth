@@ -107,7 +107,9 @@ most 3 values, each clamped to 0..1) and `name`, reduced to at most 24 character
 space and `-` (anything else is dropped). At most 16 shapes are read. Any other key is ignored, and a
 state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift and
 Depth through ordinary `params` (`morphX`, `morphY`, `shift`, `depth`) with `filterType` set to Custom.
-Every other module's `state` stays trusted-only. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.
+Every other module's `state` stays trusted-only. A Filter insert of an `addInstrumentTrack` op may carry the same
+`state` (see [timeline-ops.md](timeline-ops.md)); it goes through `AIStateMapper::applyUntrustedState`, the same
+untrusted door. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.
 
 Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
 properties are a union across module types, so it cannot say "only on an LFO"), so a constrained

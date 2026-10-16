@@ -114,6 +114,34 @@ TEST(FilterCustomShapesTrustTest, OutOfRangeValuesAreClamped) {
     }
 }
 
+// A timelineOps Filter insert hands its "state" over through applyUntrustedState, outside any patch.
+TEST(FilterCustomShapesTrustTest, AnInsertStateSetsAndClampsTheShapes) {
+    auto filter = AIStateMapper::createModule("Filter");
+    auto* module = dynamic_cast<FilterModule*>(filter.get());
+    ASSERT_NE(module, nullptr);
+    AIStateMapper::applyUntrustedState(filter.get(), twoShapes());
+    ASSERT_EQ(module->getCustomShapes().shapes.size(), 2u);
+    EXPECT_EQ(module->getCustomShapes().shapes[1].name, "high");
+
+    AIStateMapper::applyUntrustedState(
+        filter.get(), shapeList({shape("wild", {-5.0, 9.0}, curve({point(-3.0, 7.0, 9.0), point(4.0, -2.0)}))}));
+    ASSERT_EQ(module->getCustomShapes().shapes.size(), 1u);
+    EXPECT_EQ(module->getCustomShapes().shapes[0].position[0], 0.0f);
+    EXPECT_EQ(module->getCustomShapes().shapes[0].position[1], 1.0f);
+    for (const auto& p : module->getCustomShapes().shapes[0].curve.points) {
+        EXPECT_GE(p.y, 0.0f);
+        EXPECT_LE(p.y, 1.0f);
+        EXPECT_GE(p.bend, -1.0f);
+        EXPECT_LE(p.bend, 1.0f);
+    }
+}
+
+TEST(FilterCustomShapesTrustTest, NoInsertStateLeavesAFreshFilterAtItsDefaults) {
+    auto filter = AIStateMapper::createModule("Filter");
+    AIStateMapper::applyUntrustedState(filter.get(), juce::var());
+    EXPECT_TRUE(dynamic_cast<FilterModule*>(filter.get())->getCustomShapes().isDefault());
+}
+
 TEST(FilterCustomShapesTrustTest, PointsShapesAndMapValuesAreCapped) {
     juce::Array<juce::var> points;
     for (int i = 0; i < 200; ++i)

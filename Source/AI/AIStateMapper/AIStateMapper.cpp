@@ -526,6 +526,16 @@ void AIStateMapper::applyUntrustedParams(juce::AudioProcessor* processor, const 
         applyParamsToProcessor(processor, paramsObj, /*trusted=*/false);
 }
 
+// The same door for a model-authored "state" blob outside a patch (a timelineOps insert): it reaches
+// ModuleBase::setUntrustedExtraState exactly as a patch node's "state" does, and a module without one ignores it.
+void AIStateMapper::applyUntrustedState(juce::AudioProcessor* processor, const juce::var& state) {
+    if (processor == nullptr || state.isVoid())
+        return;
+    auto holder = std::make_unique<juce::DynamicObject>();
+    holder->setProperty("state", state);
+    applyExtraStateToProcessor(processor, holder.get(), /*trusted=*/false);
+}
+
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                            bool trusted, bool skipUnchanged) {
     // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost

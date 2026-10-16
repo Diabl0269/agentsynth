@@ -70,8 +70,9 @@ juce::String readInsert(int index, const juce::var& insertVar, InstrumentTrackIn
         return at + "is not an object.";
     for (int i = 0; i < insertObj->getProperties().size(); ++i) {
         const juce::String key = insertObj->getProperties().getName(i).toString();
-        if (key != "type" && key != "id" && key != "params")
-            return at + "has an unknown field \"" + key + "\". An insert accepts only \"type\", \"id\" and \"params\".";
+        if (key != "type" && key != "id" && key != "params" && key != "state")
+            return at + "has an unknown field \"" + key +
+                   "\". An insert accepts only \"type\", \"id\", \"params\" and, on a Filter, \"state\".";
     }
 
     const juce::var typeVar = insertObj->getProperty("type");
@@ -107,6 +108,15 @@ juce::String readInsert(int index, const juce::var& insertVar, InstrumentTrackIn
             return at + "has a \"params\" that is not an object.";
         if (const auto result = AIStateMapper::validateNodeParams(probe.get(), paramsObj); !result.ok)
             return at + "(" + out.type + "): " + result.message;
+    }
+
+    // Only the Filter's Custom shapes ride along; values are clamped by its untrusted setter when applied.
+    out.state = insertObj->getProperty("state");
+    if (insertObj->hasProperty("state")) {
+        if (out.type != "Filter")
+            return at + "has a \"state\", which only a Filter insert accepts.";
+        if (out.state.getDynamicObject() == nullptr)
+            return at + "has a \"state\" that is not an object.";
     }
     return {};
 }
