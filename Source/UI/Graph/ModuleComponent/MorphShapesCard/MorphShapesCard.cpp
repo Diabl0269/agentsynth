@@ -1,5 +1,6 @@
-// FilterCustomCard.cpp -- the Filter card's Custom section: what shows when, the layout, and the editor window.
-#include "FilterCustomCard.h"
+// MorphShapesCard.cpp -- a card's morph-map section: what shows when, the layout, the cables and the editor window.
+#include "MorphShapesCard.h"
+#include "Modules/Shapes/MorphShapes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include <cmath>
@@ -16,10 +17,13 @@ int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
 }
 } // namespace
 
-FilterCustomCard::FilterCustomCard(Host host, FilterModule& module, std::shared_ptr<FilterShapesAdapter> adapter)
+MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<ModuleShapesAdapter> adapter,
+                                 int morphXChannel, int morphYChannel)
     : host_(std::move(host))
     , module_(module)
-    , adapter_(std::move(adapter)) {
+    , adapter_(std::move(adapter))
+    , morphXChannel_(morphXChannel)
+    , morphYChannel_(morphYChannel) {
     controller_ = std::make_unique<ShapeMapController>(map_, *adapter_);
     controller_->onEdit = [this](int index) { openEditor(index); };
     controller_->onChanged = [this] {
@@ -34,7 +38,7 @@ FilterCustomCard::FilterCustomCard(Host host, FilterModule& module, std::shared_
     editButton_.setTooltip("Edit shapes: open the shape editor window");
     editButton_.setTitle("Edit shapes");
     editButton_.onClick = [this] { openEditor(nearestShapeToCursor()); };
-    toggle_.setTooltip("Show Morph Map: the map of shapes and the morph cursor under the response view");
+    toggle_.setTooltip("Show Morph Map: the map of shapes and the morph cursor " + host_.mapPlace);
     toggle_.onClick = [this] {
         const bool show = toggle_.getToggleState();
         host_.rememberView([show](synth::CardViewState& state) { state.showMorphMap = show; });
@@ -57,9 +61,9 @@ FilterCustomCard::FilterCustomCard(Host host, FilterModule& module, std::shared_
     lastGeneration_ = adapter_->getGeneration();
 }
 
-FilterCustomCard::~FilterCustomCard() { detach(); }
+MorphShapesCard::~MorphShapesCard() { detach(); }
 
-void FilterCustomCard::detach() {
+void MorphShapesCard::detach() {
     if (window_ != nullptr)
         delete window_.getComponent();
     window_ = nullptr;
@@ -67,19 +71,17 @@ void FilterCustomCard::detach() {
     mapFade_.reset();
 }
 
-bool FilterCustomCard::customActive() const { return module_.getCurrentFilterType() == FilterModule::kCustomTypeIndex; }
-
 /** The remembered choice, else shown from two shapes up (one shape has nothing to arrange). */
-bool FilterCustomCard::mapWanted() const {
+bool MorphShapesCard::mapWanted() const {
     const auto state = module_.getCardViewState();
-    return state.showMorphMap.value_or(module_.getCustomShapes().shapes.size() >= 2);
+    return state.showMorphMap.value_or(getNumShapes() >= 2);
 }
 
 /** In Custom the button and the pill are there and the map follows the choice; its sliders stand in for the Morph X
     and Y knobs, which are hidden while it shows and back when it is hidden, so the module's CV targets always have a
     landing widget. */
-void FilterCustomCard::sync() {
-    const bool custom = customActive();
+void MorphShapesCard::sync() {
+    const bool custom = host_.customActive();
     lastCustom_ = custom;
     const bool wanted = mapWanted();
     toggle_.setToggleState(wanted, juce::dontSendNotification);
@@ -88,10 +90,10 @@ void FilterCustomCard::sync() {
     host_.hideMorphKnobs(custom && wanted);
 }
 
-void FilterCustomCard::poll() {
+void MorphShapesCard::poll() {
     // The type (combo, automation, undo, a preset) is read here rather than from the parameter callback, which may
     // arrive on the audio thread.
-    if (const bool custom = customActive(); custom != lastCustom_) {
+    if (const bool custom = host_.customActive(); custom != lastCustom_) {
         lastCustom_ = custom;
         sync();
     }
@@ -100,12 +102,13 @@ void FilterCustomCard::poll() {
         controller_->refresh();
         sync();
     }
-    if (std::abs(map_.getCursor().x - module_.getCurrentMorphX()) > kCursorEpsilon ||
-        std::abs(map_.getCursor().y - module_.getCurrentMorphY()) > kCursorEpsilon)
-        map_.setCursor(module_.getCurrentMorphX(), module_.getCurrentMorphY());
+    const auto cursor = adapter_->getCursor();
+    if (std::abs(map_.getCursor().x - cursor.x) > kCursorEpsilon ||
+        std::abs(map_.getCursor().y - cursor.y) > kCursorEpsilon)
+        map_.setCursor(cursor.x, cursor.y);
 }
 
-int FilterCustomCard::layout(int y, int x, int width, bool apply) {
+int MorphShapesCard::layout(int y, int x, int width, bool apply) {
     if (!editButton_.isVisible())
         return y;
     const bool settling = *host_.settling;
@@ -125,68 +128,60 @@ int FilterCustomCard::layout(int y, int x, int width, bool apply) {
 }
 
 /** One window per card; asking again selects the shape in the open one. The adapter's title follows a rename. */
-void FilterCustomCard::openEditor(int shapeIndex) {
+juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
     if (window_ != nullptr) {
         window_->toFront(true);
         if (auto* editor = dynamic_cast<ShapeListEditor*>(window_->getContentComponent()))
             editor->setSelected(shapeIndex);
-        return;
+        return window_.getComponent();
     }
     adapter_->setModuleName(host_.title());
     window_ = openShapeEditorWindow(adapter_, shapeIndex, host_.card);
+    return window_.getComponent();
 }
 
-int FilterCustomCard::nearestShapeToCursor() const {
-    const auto& shapes = module_.getCustomShapes().shapes;
-    int best = 0;
-    float bestDistance = 1.0e9f;
-    for (int i = 0; i < (int)shapes.size(); ++i) {
-        const auto& p = shapes[(size_t)i].position;
-        const float dx = (p.size() > 0 ? p[0] : 0.5f) - module_.getCurrentMorphX();
-        const float dy = (p.size() > 1 ? p[1] : 0.5f) - module_.getCurrentMorphY();
-        if (const float d = dx * dx + dy * dy; d < bestDistance) {
-            bestDistance = d;
-            best = i;
-        }
-    }
-    return best;
+int MorphShapesCard::getNumShapes() const { return (int)adapter_->getShapes().size(); }
+
+int MorphShapesCard::nearestShapeToCursor() const {
+    const auto cursor = adapter_->getCursor();
+    return synth::morph::nearestShapeIndex(adapter_->getShapes(), cursor.x, cursor.y);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // Cables
 // ---------------------------------------------------------------------------------------------------------------
 
-bool FilterCustomCard::isMapShown() const { return mapFade_.isShown() && map_.isVisible(); }
+bool MorphShapesCard::isMapShown() const { return mapFade_.isShown() && map_.isVisible(); }
 
-std::optional<int> FilterCustomCard::channelAt(juce::Point<int> cardPoint) const {
+std::optional<int> MorphShapesCard::channelAt(juce::Point<int> cardPoint) const {
     if (!isMapShown())
         return std::nullopt;
     const auto axis = map_.stripAt((cardPoint - map_.getPosition()).toFloat());
     if (axis == MorphMap::Axis::X)
-        return FilterModule::kMorphXCVChannel;
+        return morphXChannel_;
     if (axis == MorphMap::Axis::Y)
-        return FilterModule::kMorphYCVChannel;
+        return morphYChannel_;
     return std::nullopt;
 }
 
-static MorphMap::Axis axisForChannel(int channel) {
-    return channel == FilterModule::kMorphXCVChannel   ? MorphMap::Axis::X
-           : channel == FilterModule::kMorphYCVChannel ? MorphMap::Axis::Y
-                                                       : MorphMap::Axis::None;
+MorphMap::Axis MorphShapesCard::axisForChannel(int channel) const {
+    return channel == morphXChannel_   ? MorphMap::Axis::X
+           : channel == morphYChannel_ ? MorphMap::Axis::Y
+                                       : MorphMap::Axis::None;
 }
 
-std::optional<juce::Point<float>> FilterCustomCard::anchorFor(int channel) const {
+std::optional<juce::Point<float>> MorphShapesCard::anchorFor(int channel) const {
     const auto axis = axisForChannel(channel);
     if (axis == MorphMap::Axis::None || !isMapShown())
         return std::nullopt;
     return map_.getPosition().toFloat() + map_.stripAnchor(axis);
 }
 
-juce::Rectangle<int> FilterCustomCard::stripBoundsFor(int channel) const {
+juce::Rectangle<int> MorphShapesCard::stripBoundsFor(int channel) const {
     return map_.getStripBounds(axisForChannel(channel)).toNearestInt() + map_.getPosition();
 }
 
-void FilterCustomCard::setDropChannel(int channel) {
+void MorphShapesCard::setDropChannel(int channel) {
     map_.setDropHighlight(isMapShown() ? axisForChannel(channel) : MorphMap::Axis::None);
 }
 

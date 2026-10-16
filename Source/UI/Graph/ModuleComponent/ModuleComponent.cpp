@@ -5,7 +5,6 @@
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
-#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ExternalMidiModule.h"
@@ -13,6 +12,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/PolySequencerModule.h"
 #include "Modules/SequencerModule.h"
+#include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -186,7 +186,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         createEnvelopeCardControls();
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
-    createFilterCustomCard();
+    createMorphShapesCard();
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout
     applyControlAccessibility(); // last: names every control the steps above built
@@ -207,14 +207,11 @@ void ModuleComponent::detachFromProcessor() {
 
     // The panels' fades hold a VBlank updater on their first panel, so they go before the panels do.
     scopeFade_.reset();
-    if (filterCustom_ != nullptr)
-        filterCustom_->detach();
-    filterCustom_.reset();
+    if (morphCard_ != nullptr)
+        morphCard_->detach();
+    morphCard_.reset();
     responseFade_.reset();
     lfoFade_.reset();
-    if (lfoShapesWindow_ != nullptr)
-        delete lfoShapesWindow_.getComponent();
-    lfoShapesWindow_ = nullptr;
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
@@ -458,8 +455,8 @@ void ModuleComponent::timerCallback() {
             syncLfoCurveFromModule();
     }
     updateLfoWavePlayhead();
-    if (filterCustom_ != nullptr)
-        filterCustom_->poll();
+    if (morphCard_ != nullptr)
+        morphCard_->poll();
 
     // Gate repaint: only invalidate the buffered image when something has
     // visually changed.  Idle modules (no signal, no modulation) produce no

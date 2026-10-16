@@ -2,9 +2,9 @@
 // Spectrum): what a click on each toggle does, remembering the choice on the module, and reopening the
 // panels when a card is built. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units.
-#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 using namespace detail;
@@ -94,8 +94,8 @@ void ModuleComponent::restoreCardView() {
         freqResponseToggle->setToggleState(true, juce::dontSendNotification);
         setResponseShown(true);
     }
-    if (filterCustom_ != nullptr)
-        filterCustom_->sync();
+    if (morphCard_ != nullptr)
+        morphCard_->sync();
     if (state.showSpectrum.has_value() && spectrumToggle != nullptr) {
         const bool spectrumOn = *state.showSpectrum && (eqCurveComponent != nullptr || state.showResponse);
         spectrumToggle->setToggleState(spectrumOn, juce::dontSendNotification);

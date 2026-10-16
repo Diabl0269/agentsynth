@@ -390,7 +390,7 @@ to 0 (either mode).
 
 ## MorphMap
 
-`Source/UI/ModuleViews/MorphMap/`. The Filter Custom type's morph map: one dot per shape (its colour from
+`Source/UI/ModuleViews/MorphMap/`. The morph map of the Filter's Custom type and the LFO's Custom shape: one dot per shape (its colour from
 `morphShapeColour`, by shape index, from theme tokens) and a dark cursor dot on a square map whose coordinates run
 0..1 (x to the right, y downwards). It edits nothing itself and reports through callbacks; `ShapeMapController`
 (`Source/UI/ModuleViews/ShapeEditor/`) turns them into shape-list edits with their undo steps, so the module card's map

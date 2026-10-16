@@ -30,9 +30,12 @@ type LFO size 280x391
   child 28 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 29 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
   child 30 component id="" at 0,0 0x0 visible=0 title="LFO custom wave" tip="Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points and bend handles, double-click to add or remove a point" focusOrder=0 wantsFocus=1
-  child 31 combo id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=1
+  child 31 combo id="" at 0,0 0x0 visible=0 title="LFO custom wave grid" tip="Grid: the snap grid of the custom wave editor" focusOrder=0 wantsFocus=1
   child 32 textButton id="" at 0,0 0x0 visible=0 title="Shapes" tip="Shapes" focusOrder=0 wantsFocus=1
   child 33 textButton id="" at 0,0 0x0 visible=0 title="Tools" tip="Tools" focusOrder=0 wantsFocus=1
+  child 34 component id="" at 0,0 0x0 visible=0 title="Morph map" tip="" focusOrder=0 wantsFocus=1
+  child 35 textButton id="" at 0,0 0x0 visible=0 title="Edit shapes" tip="Edit shapes: open the shape editor window" focusOrder=0 wantsFocus=1
+  child 36 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show Morph Map: the map of shapes and the morph cursor under the curve editor" focusOrder=0 wantsFocus=1
   in 0 114, 243
   in 1 154, 322
   in 2 218, 322

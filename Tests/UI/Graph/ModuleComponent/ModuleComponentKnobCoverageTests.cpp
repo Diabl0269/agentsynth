@@ -18,8 +18,8 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -249,9 +249,8 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
                     SCOPED_TRACE(target.name.toStdString());
                     // The Filter's morph map shows slider strips in place of the Morph X / Y knobs: they land the
                     // cable.
-                    const bool landsOnMapSlider =
-                        card.getFilterCustomCard() != nullptr &&
-                        card.getFilterCustomCard()->anchorFor(target.channelIndex).has_value();
+                    const bool landsOnMapSlider = card.getMorphCard() != nullptr &&
+                                                  card.getMorphCard()->anchorFor(target.channelIndex).has_value();
                     EXPECT_TRUE(card.sliderIndexForModTarget(target) >= 0 || landsOnMapSlider)
                         << "jack \"" << target.name << "\" (channel " << target.channelIndex
                         << ") has no bound knob -- a dropped cable would find nothing to ring";

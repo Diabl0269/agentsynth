@@ -586,9 +586,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentFilterCard.cpp
-    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h
-    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMorphCard.cpp
+    Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h
+    Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp
@@ -685,6 +685,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.h
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorInternal.h
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.cpp
+    Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.cpp
     Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h
     Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.cpp
     Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h

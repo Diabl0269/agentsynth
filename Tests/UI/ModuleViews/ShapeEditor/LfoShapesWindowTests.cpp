@@ -3,6 +3,7 @@
 #include "../../Graph/ModuleComponent/ModuleComponentTestFixture.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -57,9 +58,9 @@ TEST_F(ModuleComponentTest, TheCardOpensTheShapesWindowForAnLfoWithItsTitleAndOn
 TEST_F(ModuleComponentTest, NoShapesWindowOpensForAModuleThatIsNotAnLfo) {
     AudioEngine engine;
     GraphEditor editor{engine};
-    auto* filter = new FilterModule();
-    auto node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
-    ModuleComponent card(filter, node->nodeID, editor, nullptr);
+    auto* gain = new AttenuverterModule();
+    auto node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(gain));
+    ModuleComponent card(gain, node->nodeID, editor, nullptr);
     EXPECT_EQ(card.openShapesWindow(0), nullptr);
 }
 

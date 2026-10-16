@@ -34,7 +34,7 @@ namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
-class FilterCustomCard;      // Forward declaration — see FilterCustomCard/FilterCustomCard.h
+class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -249,7 +249,7 @@ public:
     /** Null for a card whose widgets are not built by a card body. */
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
-    synth::ui::FilterCustomCard* getFilterCustomCard() const noexcept { return filterCustom_.get(); }
+    synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
 
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
@@ -586,7 +586,7 @@ private:
     // the panels they fade, so they go first.
     synth::CardBlockFade scopeFade_;
     synth::CardBlockFade responseFade_;
-    std::unique_ptr<synth::ui::FilterCustomCard> filterCustom_; // Filter only: the Custom type's map and button
+    std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
     bool settlingFootprint_ = false; // measuring at the final footprint (CardBlockFade::setShown)
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
@@ -626,7 +626,7 @@ private:
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
-    juce::Component::SafePointer<juce::DialogWindow> lfoShapesWindow_; // the shape list editor, while open
+    int lfoEditedShape_ = 0;            // the shape the curve editor shows: the one nearest the morph cursor
 
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
@@ -744,7 +744,7 @@ private:
     void setResponseShown(bool show);
     void setSpectrumShown(bool show);
     void restoreCardView();
-    void createFilterCustomCard(); // ModuleComponentFilterCard.cpp
+    void createMorphShapesCard(); // ModuleComponentMorphCard.cpp
     int blockHeight(const synth::CardBlockFade& block, int full) const;
     void fadeBlock(synth::CardBlockFade& block, bool show);
     void attachBlockFade(synth::CardBlockFade& block, std::vector<juce::Component*> targets);
@@ -847,7 +847,7 @@ public:
     void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step
     void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
     void setLfoGridDivisions(int n);          // 0: grid Off (no snap); else {n, min(n, 8)}, snap on
-    /** Opens (or raises) this LFO's shape list editor on `shapeIndex`; null for a non-LFO or when a test hook took it.
+    /** Opens (or raises) this card's shape list editor on `shapeIndex`; null without one or when a test hook took it.
      */
     juce::DialogWindow* openShapesWindow(int shapeIndex = 0);
 

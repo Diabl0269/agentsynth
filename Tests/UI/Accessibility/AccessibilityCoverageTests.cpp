@@ -35,6 +35,8 @@
 #include "UI/Graph/ModDot/ModDotPopover.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -428,29 +430,41 @@ TEST(AccessibilityCoverageTest, ShapeEditorWindow) {
     EXPECT_TRUE(matchesBaseline("ShapeEditorWindow", auditAccessibility(editor)));
 }
 
-// A Filter card on the Custom type with its morph map showing: the Edit shapes button, the Show Morph Map pill, the
-// map's stops and the swapped-in Shift and Depth knobs.
-TEST(AccessibilityCoverageTest, FilterCustomCard) {
+// A Filter card on the Custom type and an LFO card on the Custom shape, each with its morph map showing: the Edit
+// shapes button, the Show Morph Map pill, the map's stops and the swapped-in knobs. Both share the one surface.
+TEST(AccessibilityCoverageTest, MorphShapesCard) {
     AudioEngine audioEngine;
     GraphEditor editor(audioEngine);
     editor.setSize(1200, 1200);
     auto* filter = new FilterModule();
     *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(filter, "filterType")) =
         FilterModule::kCustomTypeIndex;
-    auto node = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
-    node->properties.set("x", 40);
-    node->properties.set("y", 40);
+    auto* lfo = new LFOModule();
+    synth::LfoCustomShapes shapes = synth::LfoCustomShapes::defaultShapes();
+    shapes.shapes.push_back(
+        {"Second", synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::Square), {0.9f, 0.9f}});
+    lfo->setCustomShapes(shapes);
+    *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(lfo, "shape")) = LFOModule::kCustomShapeIndex;
+    auto filterNode = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
+    auto lfoNode = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(lfo));
+    filterNode->properties.set("x", 40);
+    filterNode->properties.set("y", 40);
+    lfoNode->properties.set("x", 640);
+    lfoNode->properties.set("y", 40);
     editor.updateComponents();
     sizeModuleComponents(editor);
     std::vector<Gap> gaps;
     int cards = 0;
     for (auto* card : editor.getModuleComponents())
-        if (card != nullptr && card->getNodeId() == node->nodeID) {
+        if (card != nullptr && (card->getNodeId() == filterNode->nodeID || card->getNodeId() == lfoNode->nodeID)) {
             ++cards;
-            gaps = auditAccessibility(*card);
+            card->timerCallback(); // the LFO reads its shape on the gated tick
+            const auto cardGaps = auditAccessibility(*card);
+            gaps.insert(gaps.end(), cardGaps.begin(), cardGaps.end());
+            EXPECT_TRUE(card->getMorphCard() != nullptr && card->getMorphCard()->getMap().isVisible());
         }
-    ASSERT_EQ(cards, 1);
-    EXPECT_TRUE(matchesBaseline("FilterCustomCard", gaps));
+    ASSERT_EQ(cards, 2);
+    EXPECT_TRUE(matchesBaseline("MorphShapesCard", gaps));
 }
 
 // Every module view built on its own, so the audit reaches the focusable editors (the EQ curve, the curve

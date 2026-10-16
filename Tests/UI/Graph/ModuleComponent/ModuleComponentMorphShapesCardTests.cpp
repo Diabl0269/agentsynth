@@ -1,4 +1,4 @@
-// ModuleComponentFilterCustomCard tests: the Filter card's Custom section -- what shows in each type, the morph map
+// ModuleComponentMorphShapesCard tests: the Filter card's Custom section -- what shows in each type, the morph map
 // and its sliders driven by real mouse events, the Show Morph Map pill and its remembered choice, where a cable for
 // Morph X / Y lands, the editor window opening, the response view and the fades through the shared animation path.
 #include "../../Layout/FadeVisibilityTestGuard.h"
@@ -6,8 +6,8 @@
 #include "ModuleComponentTestFixture.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 
 using namespace synth::ui;
@@ -41,7 +41,7 @@ struct CardRig {
         if (card != nullptr)
             card->timerCallback(); // the card reads the type on its gated tick
     }
-    FilterCustomCard& custom() { return *card->getFilterCustomCard(); }
+    MorphShapesCard& custom() { return *card->getMorphCard(); }
     MorphMap& map() { return custom().getMap(); }
     juce::Slider* knob(const juce::String& name) {
         for (auto* child : card->getChildren())
@@ -132,7 +132,7 @@ TEST_F(ModuleComponentTest, ShowMorphMapToggleSwapsTheMapForTheKnobsAndIsRemembe
 
     toggle.setToggleState(false, juce::sendNotificationSync);
     ModuleComponent rebuilt(rig.filter, rig.node->nodeID, rig.editor, &rig.undo);
-    EXPECT_FALSE(rebuilt.getFilterCustomCard()->getMap().isVisible()) << "a rebuilt card keeps the choice";
+    EXPECT_FALSE(rebuilt.getMorphCard()->getMap().isVisible()) << "a rebuilt card keeps the choice";
 }
 
 TEST_F(ModuleComponentTest, MorphMapPillIsInTheFooterOnlyInCustom) {

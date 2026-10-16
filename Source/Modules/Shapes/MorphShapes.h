@@ -32,6 +32,25 @@ constexpr int kMaxUntrustedMapValues = 3;
  *  whole map-width away). Writes `count` weights summing to 1. Allocation-free. */
 void blendWeights(const float* xs, const float* ys, int count, float x, float y, float* out) noexcept;
 
+/** The index of the shape whose position is closest to (x, y): the one that dominates the blend there. `Shapes` is any
+ *  list of records with a `position` (morph::Shape, the editor's ShapeItem). 0 for an empty list; a missing coordinate
+ *  counts as the map centre. */
+template <class Shapes>
+int nearestShapeIndex(const Shapes& shapes, float x, float y) noexcept {
+    int best = 0;
+    float bestDistance = 1.0e9f;
+    for (int i = 0; i < (int)shapes.size(); ++i) {
+        const auto& p = shapes[(size_t)i].position;
+        const float dx = (p.size() > 0 ? p[0] : 0.5f) - x;
+        const float dy = (p.size() > 1 ? p[1] : 0.5f) - y;
+        if (const float d = dx * dx + dy * dy; d < bestDistance) {
+            bestDistance = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
 /** A finite int or double. */
 bool isFiniteNumber(const juce::var& v);
 

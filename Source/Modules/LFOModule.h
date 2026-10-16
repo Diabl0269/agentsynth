@@ -364,6 +364,13 @@ public:
         list.shapes.front().curve = wave;
         shapes_.setShapes(list);
     }
+    /** Replaces the curve of shape `index` (clamped into the list) and keeps the rest: the card's small curve editor
+     *  works on the shape nearest the cursor. */
+    void setCustomShapeCurve(int index, const synth::LfoCustomWave& wave) {
+        auto list = shapes_.getShapes();
+        list.shapes[(size_t)juce::jlimit(0, (int)list.shapes.size() - 1, index)].curve = wave;
+        shapes_.setShapes(list);
+    }
     /** The first shape's wave. */
     const synth::LfoCustomWave& getCustomWave() const noexcept { return shapes_.getShapes().shapes.front().curve; }
     /** The Custom wave's shapes on the morph map. */

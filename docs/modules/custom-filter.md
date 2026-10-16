@@ -250,8 +250,8 @@ slider drag is one undo step (the settings are part of the module's extra state)
   extra state. The window follows changes made elsewhere (undo, the card's map) by polling
   `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
 - **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
-  the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's. The LFO's custom
-  wave can plug in with its own adapter later.
+  the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's and
+  `LfoShapesAdapter` the LFO's. Both share `ModuleShapesAdapter` (the undo bracket and the morph cursor's parameters).
 
 ## Morph map
 
@@ -266,7 +266,7 @@ double-click to edit", "Morph cursor - drag to blend shapes". Two sliders huggin
 ## Card
 
 With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`, revision 3; the logic is
-`FilterCustomCard`, `Source/UI/Graph/ModuleComponent/FilterCustomCard/`):
+`MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape):
 
 - **Tone row.** Cutoff and Resonance (ignored here) swap in place for Shift and Depth, the same cells, with the
   swap-in-place motion of any condition; Drive stays. Every other type has exactly its old card.
@@ -284,7 +284,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   shows (`CardBody::setSectionHidden`) and shows it again when the map is hidden, so the module's CV targets always have
   a landing widget. A cable dropped on a slider drives that parameter and lands on the slider; with the map hidden it
   lands on the knob's ring as before (`ModuleComponent::getModTargetPortForPoint` / `getModTargetKnobAnchor` ask
-  `FilterCustomCard` first).
+  `MorphShapesCard` first).
 - **Motion.** The map and the Edit shapes row fade and take their height with the shared `CardBlockFade`; the Morph
   knobs fade through the card body's conditional-section fade and the Cutoff / Resonance swap through its swap motion;
   the card's height eases and the neighbours make room once per direction. Reduce Motion is the short plain fade and

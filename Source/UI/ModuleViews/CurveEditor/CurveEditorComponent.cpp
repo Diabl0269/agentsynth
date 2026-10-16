@@ -332,7 +332,7 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     if (hit.kind == CurveHitKind::Node)
         removeNode(hit.index);
-    else
+    else if (!(onEmptyDoubleClick && onEmptyDoubleClick(e)))
         addPointAt(e.position, e.mods.isShiftDown());
 }
 
