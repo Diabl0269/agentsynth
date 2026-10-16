@@ -337,13 +337,20 @@ public:
     /** Custom kernels designed so far (tests and diagnostics). */
     int getCustomDesignCount() const { return customEngine.getDesignCount(); }
 
-    /** The Custom shapes, or nothing while they are the defaults. Trusted path only. */
+    /** The Custom shapes, or nothing while they are the defaults. Model output uses setUntrustedExtraState. */
     juce::var getExtraState() const override {
         const auto& shapes = customEngine.getShapes();
         return shapes.isDefault() ? juce::var() : shapes.toVar();
     }
     void setExtraState(const juce::var& state) override {
         customEngine.setShapes(synth::CustomFilterShapes::fromVar(state));
+    }
+    /** The shape list is pure bounded data (curve points, map coordinates, a short whitelisted name), so
+     *  model-authored patches may set it too; anything unusable leaves the current shapes alone. */
+    void setUntrustedExtraState(const juce::var& state) override {
+        synth::CustomFilterShapes parsed;
+        if (synth::CustomFilterShapes::fromUntrustedVar(state, parsed))
+            customEngine.setShapes(parsed);
     }
     /** Host-state blobs written before "Custom" was appended decode over the old choice count. */
     int legacyChoiceCount(const juce::String& paramId) const override {

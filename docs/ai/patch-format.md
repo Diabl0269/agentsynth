@@ -87,8 +87,27 @@ only `LFOModule` overrides it. Its `state` is the drawn curve,
 the points, pins the first to x = 0 and the last to x = 1, and turns anything malformed into the default
 triangle. It is pure data, so it cannot name a file. The curve plays when the node's `shape` is `Custom`;
 with `retrig` on it restarts on every note, so a model can give each note its own shape, such as a pitch
-swoop on a bird call. Every other module's `state` stays trusted-only. Tests:
-`Tests/AI/LfoCurveTrustTests.cpp`.
+swoop on a bird call. Tests: `Tests/AI/LfoCurveTrustTests.cpp`.
+
+**The second exception: a `Filter` node's Custom shapes.** `FilterModule` overrides
+`setUntrustedExtraState()` too. Its `state` is the shape list the Custom filter type morphs between:
+
+```json
+{"shapes": [
+  {"name": "dark", "position": [0.1, 0.2],
+   "curve": {"points": [{"x": 0, "y": 0.8, "bend": 0}, {"x": 0.4, "y": 0.5, "bend": 0}, {"x": 1, "y": 0.1, "bend": 0}]}},
+  {"name": "bright", "position": [0.9, 0.7],
+   "curve": {"points": [{"x": 0, "y": 0.2, "bend": 0}, {"x": 0.6, "y": 0.8, "bend": 0}, {"x": 1, "y": 0.8, "bend": 0}]}}
+]}
+```
+
+Per shape only these are read: `curve.points` (x, y in 0..1, bend in -1..1, at most 64 points; x is log
+frequency from 20 Hz to 20 kHz, y maps linearly from -48 dB to +12 dB so 0.8 is 0 dB), `position` (at
+most 3 values, each clamped to 0..1) and `name`, reduced to at most 24 characters of letters, digits,
+space and `-` (anything else is dropped). At most 16 shapes are read. Any other key is ignored, and a
+state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift and
+Depth through ordinary `params` (`morphX`, `morphY`, `shift`, `depth`) with `filterType` set to Custom.
+Every other module's `state` stays trusted-only. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.
 
 Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
 properties are a union across module types, so it cannot say "only on an LFO"), so a constrained

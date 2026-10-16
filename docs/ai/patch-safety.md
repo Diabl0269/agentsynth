@@ -56,10 +56,11 @@ inlet and outlet jacks (`Macro In`, `Macro Out`, `Macro MIDI In`, `Macro MIDI Ou
 membership is keyed by a uuid a provider cannot supply; and the mixer's `Channel Strip` and
 `Master`, which the app builds around rather than the model writing directly.
 
-**Node `state` stays trusted-only, with one opt-in.** Model output never reaches a module's
-`setExtraState()` (a `Sampler` reads its state as a file path). The single exception is the `LFO`'s
-drawn Custom curve, which reaches `setUntrustedExtraState()` instead: it is only a bounded list of
-clamped points, so it cannot name a file or resource. A new module may opt in the same way only when
+**Node `state` stays trusted-only, with two opt-ins.** Model output never reaches a module's
+`setExtraState()` (a `Sampler` reads its state as a file path). The exceptions are the `LFO`'s drawn
+Custom curve and the `Filter`'s Custom shapes, which reach `setUntrustedExtraState()` instead: each is
+only bounded numbers (clamped points; for the Filter also at most 16 shapes, 3 map values each, and a
+name cut to 24 characters of letters, digits, space and `-`), so it cannot name a file or resource. A new module may opt in the same way only when
 its state is pure, clamped data; see [patch format](patch-format.md#per-node-state).
 
 **The deny set is enforced by the validator, not just by the schema.**

@@ -148,6 +148,47 @@ CustomFilterShapes CustomFilterShapes::fromVar(const juce::var& v) {
     return out;
 }
 
+bool CustomFilterShapes::fromUntrustedVar(const juce::var& v, CustomFilterShapes& out) {
+    const auto* obj = v.getDynamicObject();
+    if (obj == nullptr)
+        return false;
+    const juce::var list = obj->getProperty("shapes");
+    if (!list.isArray())
+        return false;
+
+    CustomFilterShapes parsed;
+    for (const auto& sv : *list.getArray()) {
+        const auto* so = sv.getDynamicObject();
+        if (so == nullptr)
+            continue;
+        CustomFilterShape shape;
+        shape.name = so->getProperty("name")
+                         .toString()
+                         .retainCharacters("abcdefghijklmnopqrstuvwxyz"
+                                           "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                           "0123456789 -")
+                         .trim()
+                         .substring(0, kMaxUntrustedNameLength);
+        const juce::var curve = so->getProperty("curve");
+        shape.curve = hasReadableCurve(curve) ? LfoCustomWave::fromVar(curve) : flatCurve();
+        const juce::var pos = so->getProperty("position");
+        if (pos.isArray())
+            for (const auto& c : *pos.getArray()) {
+                if ((int)shape.position.size() >= kMaxUntrustedMapValues)
+                    break;
+                shape.position.push_back(isFiniteNumber(c) ? (float)(double)c : 0.5f);
+            }
+        parsed.shapes.push_back(std::move(shape));
+        if ((int)parsed.shapes.size() >= kMaxUntrustedShapes)
+            break;
+    }
+    if (parsed.shapes.empty())
+        return false;
+    parsed.sanitise();
+    out = std::move(parsed);
+    return true;
+}
+
 /** Rules: no shapes -> defaults; more than kMaxShapes -> truncated; each position padded with 0.5
     up to kMapDimensions and every coordinate (including extra dimensions) clamped to [0, 1], a
     non-finite one centred; names trimmed and capped at kMaxNameLength; each curve sanitised by

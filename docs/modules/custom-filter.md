@@ -123,5 +123,7 @@ use Custom save exactly as before. Otherwise:
 `CustomFilterShapes::fromVar` never fails: a missing/newer version or a non-array `shapes` gives the
 defaults, an empty list gives the defaults, a shape with an unreadable curve keeps its slot with a flat
 0 dB curve, positions are padded to two coordinates and clamped to 0..1, names are capped at 64
-characters, and at most 64 shapes are read. The state is applied on the trusted path only; the AI path
-does not read it.
+characters, and at most 64 shapes are read. Model-authored patches reach the narrower
+`CustomFilterShapes::fromUntrustedVar` instead (via `setUntrustedExtraState`): curve points, at most 3 map
+values per shape, a name cut to 24 characters of `[A-Za-z0-9 -]`, at most 16 shapes, every other key
+ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`).

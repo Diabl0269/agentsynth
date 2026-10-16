@@ -1,7 +1,7 @@
 // CustomFilterShapes.h -- pure data model for the Filter's Custom type: a list of drawn magnitude
 // curves ("shapes"), each placed on a morph map, plus its versioned JSON round-trip
-// (FilterModule::getExtraState/setExtraState, trusted path only). Message-thread data; the audio
-// thread only ever sees the immutable tables CustomFilterEngine renders from it.
+// (FilterModule::getExtraState/setExtraState; model output goes through fromUntrustedVar). Message-thread data; the
+// audio thread only ever sees the immutable tables CustomFilterEngine renders from it.
 #pragma once
 
 #include "Modules/Lfo/LfoCustomWave.h"
@@ -27,6 +27,9 @@ struct CustomFilterShapes {
     static constexpr int kMapDimensions = 2; // coordinates the audio path reads
     static constexpr int kMaxShapes = 64;    // parse cap only; the format itself has no count
     static constexpr int kMaxNameLength = 64;
+    static constexpr int kMaxUntrustedShapes = 16;     // model-authored patches
+    static constexpr int kMaxUntrustedNameLength = 24; // [A-Za-z0-9 space -] only
+    static constexpr int kMaxUntrustedMapValues = 3;
     static constexpr float kMinHz = 20.0f;
     static constexpr float kMaxHz = 20000.0f;
     static constexpr float kMinDb = -48.0f;
@@ -46,6 +49,11 @@ struct CustomFilterShapes {
     juce::var toVar() const;
     /** Never fails: garbage resolves to `defaultShapes()`, a bad curve to `flatCurve()`. */
     static CustomFilterShapes fromVar(const juce::var&);
+    /** The model-output reader: keeps only each shape's curve points, up to kMaxUntrustedMapValues map
+     *  coordinates (clamped to 0..1) and a name reduced to kMaxUntrustedNameLength characters of
+     *  [A-Za-z0-9 space -]; at most kMaxUntrustedShapes shapes. Every other key is ignored. Returns false
+     *  and leaves `out` untouched when there is no usable shape list. */
+    static bool fromUntrustedVar(const juce::var&, CustomFilterShapes& out);
     /** Clamps every value into range, caps counts and lengths, keeps at least one shape. */
     void sanitise();
 

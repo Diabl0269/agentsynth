@@ -215,6 +215,7 @@ add_executable(Tests
     AI/AIStateMapper/AIStateMapperSnapshotsTests.cpp
     AI/CardLayoutTrustTests.cpp
     AI/LfoCurveTrustTests.cpp
+    AI/FilterCustomShapesTrustTests.cpp
     UI/Graph/CardBody/ModuleCardLayoutResolverTests.cpp
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperCatalogTests.cpp
