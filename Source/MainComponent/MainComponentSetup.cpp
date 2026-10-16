@@ -281,6 +281,12 @@ void MainComponent::wireGraphEditorCallbacks() {
                 tracks.push_back({track.bindingUuid, track.name});
         return tracks;
     };
+    // A Poly click moves state no doc notification reports; the track headers' Mono | Poly switch re-reads it.
+    graphEditor.getPolyChain().onVoiceGraphChanged = [this] {
+        for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+            if (auto* header = timelinePanel.getTrackHeaderAt(i))
+                header->refreshFromDoc();
+    };
     graphEditor.getPolyChain().showToast = [this](const juce::String& message, const juce::String& actionLabel,
                                                   std::function<void()> action, const juce::String& actionTooltip) {
         toast_->show(message, actionLabel, std::move(action), actionTooltip);

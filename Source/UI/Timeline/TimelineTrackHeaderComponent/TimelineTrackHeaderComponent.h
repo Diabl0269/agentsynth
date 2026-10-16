@@ -16,6 +16,7 @@
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TrackChannelLinkSurface.h"
+#include "UI/Timeline/TrackPolySwitch.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -467,6 +468,15 @@ struct TrackHeaderHost {
      *  simply has no channel behaviour, and every existing implementer keeps compiling. */
     virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
 
+    /** The Mono/Poly switch (docs/timeline/tracks.md#the-monopoly-switch): whether the voice graph that starts at
+     *  `track`'s source is mono, poly or half and half; `none` (the default) when it has nothing poly-capable, which
+     *  hides the switch. */
+    virtual TrackPolyState getTrackPolyState(synth::TrackId /*track*/) { return TrackPolyState::none; }
+
+    /** The switch was pressed: sets the whole voice graph of `track` to `poly`, as ONE undo step (the same flow as
+     *  a card's Poly pill, including the question when other tracks' modules would change). Inert by default. */
+    virtual void setTrackPoly(synth::TrackId /*track*/, bool /*poly*/) {}
+
     /** True while the host is certain to re-read every header before anything is painted (a full reconcile follows
      *  the current edit), so a doc change in the middle of the edit need not refresh the rows itself. */
     virtual bool everyHeaderRefreshFollows() const { return false; }
@@ -734,6 +744,7 @@ public:
     ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
     TrackShowModuleButton& getShowModuleButton() noexcept { return showModuleButton_; }
+    TrackPolySwitch& getPolySwitch() noexcept { return polySwitch_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
@@ -939,6 +950,8 @@ private:
     synth::ui::FadeVisibility foldArrowFade_{&foldArrow_};
     synth::ui::FadeVisibility bindingChipFade_{&bindingChip_};
     synth::ui::FadeVisibility channelChipFade_{&channelChip_};
+    TrackPolySwitch polySwitch_;
+    synth::ui::FadeVisibility polySwitchFade_{&polySwitch_};
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;

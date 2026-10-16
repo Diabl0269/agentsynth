@@ -28,12 +28,37 @@ PolyChainController::~PolyChainController() { *alive_ = false; }
 
 // The click. The plan is made now only to know whether to ask; the change re-plans nothing -- it applies the node set
 // the user chose, and a node that vanished while the question was open is simply skipped by applyPolyVoiceGraph.
-void PolyChainController::polyPillClicked(NodeID clicked, bool poly) {
+void PolyChainController::polyPillClicked(NodeID clicked, bool poly) { switchVoiceGraph(clicked, poly, true); }
+
+void PolyChainController::trackPolyClicked(NodeID trackSource, bool poly) {
+    switchVoiceGraph(trackSource, poly, false);
+}
+
+TrackPolyState PolyChainController::trackPolyState(NodeID trackSource) const {
     auto& graph = editor_.getAudioEngine().getGraph();
     const auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
-    auto plan = synth::planPolyVoiceGraph(graph, clicked, tracks);
-    if (plan.thisTrackNodes.empty())
-        plan.thisTrackNodes.push_back(clicked);
+    const auto plan = synth::planPolyVoiceGraph(graph, trackSource, tracks);
+    int poly = 0;
+    int mono = 0;
+    for (const auto id : plan.thisTrackNodes) {
+        auto* node = graph.getNodeForId(id);
+        if (node == nullptr || !synth::hasPolyParameter(node->getProcessor()))
+            continue;
+        ++(synth::isProcessorPoly(node->getProcessor()) ? poly : mono);
+    }
+    if (poly == 0 && mono == 0)
+        return TrackPolyState::none;
+    return mono == 0 ? TrackPolyState::poly : poly == 0 ? TrackPolyState::mono : TrackPolyState::mixed;
+}
+
+// `includeStart`: the clicked module is switched even when the plan leaves it out (a pill's own module). A track's
+// source node has no poly parameter, so it is not.
+void PolyChainController::switchVoiceGraph(NodeID start, bool poly, bool includeStart) {
+    auto& graph = editor_.getAudioEngine().getGraph();
+    const auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
+    auto plan = synth::planPolyVoiceGraph(graph, start, tracks);
+    if (includeStart && plan.thisTrackNodes.empty())
+        plan.thisTrackNodes.push_back(start);
 
     if (plan.otherTrackNodes.empty()) {
         commit(plan.thisTrackNodes, poly);
@@ -104,6 +129,8 @@ void PolyChainController::commit(const std::vector<NodeID>& nodes, bool poly) {
     else
         change();
     announce(changed, poly, undo != nullptr ? undo->getEditSerial() : 0);
+    if (onVoiceGraphChanged)
+        onVoiceGraphChanged();
 }
 
 // Only a change that reached beyond the clicked module is worth a message: the pill itself already shows the click.

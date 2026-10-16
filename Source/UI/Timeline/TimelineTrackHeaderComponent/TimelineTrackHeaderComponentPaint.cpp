@@ -133,6 +133,11 @@ void TimelineTrackHeaderComponent::resized() {
             bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(bottomRow.getWidth() / 2) * p)));
         bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
     }
+    if (const float p = polySwitchFade_.progress(); p > 0.0f) { // Mono | Poly sits left of the channel chip
+        const int width = juce::roundToInt(static_cast<float>(TrackPolySwitch::kWidth) * p);
+        polySwitch_.setBounds(bottomRow.removeFromRight(width).withSizeKeepingCentre(width, 20));
+        bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
+    }
     bindingChip_.setBounds(bottomRow);
 }
 

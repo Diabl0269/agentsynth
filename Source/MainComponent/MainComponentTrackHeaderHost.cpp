@@ -15,6 +15,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include <map>
 #include <set>
 
@@ -417,3 +418,22 @@ void MainComponent::ensureInstrumentPluginsScanned() { maybeStartEagerPluginScan
 juce::ApplicationProperties* MainComponent::getAppProperties() { return &appProperties; }
 
 synth::ui::TrackChannelLinkSurface* MainComponent::getChannelLinkSurface() { return &trackChannelLink_; }
+
+// The Mono/Poly switch on a track header: the voice graph that starts at the track's source node, switched by the
+// same controller (question, ONE undo step, toast) a card's Poly pill uses.
+synth::ui::TrackPolyState MainComponent::getTrackPolyState(synth::TrackId forTrack) {
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return synth::ui::TrackPolyState::none;
+    auto* source = findNodeByUuid(track->bindingUuid);
+    return source != nullptr ? graphEditor.getPolyChain().trackPolyState(source->nodeID)
+                             : synth::ui::TrackPolyState::none;
+}
+
+void MainComponent::setTrackPoly(synth::TrackId forTrack, bool poly) {
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return;
+    if (auto* source = findNodeByUuid(track->bindingUuid))
+        graphEditor.getPolyChain().trackPolyClicked(source->nodeID, poly);
+}

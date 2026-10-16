@@ -273,6 +273,7 @@ add_executable(Tests
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentFreshUndoTests.cpp
     App/MainComponent/MainComponentDuplicateTrackTests.cpp
+    App/MainComponent/MainComponentTrackPolySwitchTests.cpp
     App/MainComponent/MainComponentShowTrackModuleTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp

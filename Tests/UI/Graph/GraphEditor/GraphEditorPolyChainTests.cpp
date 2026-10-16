@@ -446,3 +446,54 @@ TEST_F(GraphEditorTest, ProgrammaticPolySetsNeverPropagate) {
     EXPECT_FALSE(rig.isPoly(i.filter));
     EXPECT_EQ(rig.toasts.size(), 1u);
 }
+
+// The track header's Mono | Poly switch drives the same flow from the track's source node.
+TEST_F(GraphEditorTest, TheTrackSwitchReadsNoneMonoMixedAndPolyFromTheVoiceGraph) {
+    ChainRig rig;
+    const auto lonely = rig.add("Midi Input");
+    EXPECT_EQ(rig.editor.getPolyChain().trackPolyState(lonely), synth::ui::TrackPolyState::none);
+
+    const auto i = buildInstrument(rig);
+    auto& chain = rig.editor.getPolyChain();
+    EXPECT_EQ(chain.trackPolyState(i.source), synth::ui::TrackPolyState::mono);
+    rig.setPoly(i.osc, true);
+    EXPECT_EQ(chain.trackPolyState(i.source), synth::ui::TrackPolyState::mixed);
+    for (const auto id : {i.filter, i.adsr, i.vca})
+        rig.setPoly(id, true);
+    EXPECT_EQ(chain.trackPolyState(i.source), synth::ui::TrackPolyState::poly);
+}
+
+TEST_F(GraphEditorTest, TheTrackSwitchMakesTheWholeChainPolyAsOneUndoStepAndAChordSoundsOnSeveralVoices) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    int changed = 0;
+    rig.editor.getPolyChain().onVoiceGraphChanged = [&] { ++changed; };
+
+    rig.editor.getPolyChain().trackPolyClicked(i.source, true);
+
+    for (const auto id : {i.osc, i.filter, i.adsr, i.vca})
+        EXPECT_TRUE(rig.isPoly(id));
+    EXPECT_EQ(rig.polyMidis().size(), 1u);
+    EXPECT_EQ(rig.editor.getPolyChain().trackPolyState(i.source), synth::ui::TrackPolyState::poly);
+    EXPECT_EQ(changed, 1);
+    EXPECT_GT(playChord(rig, {60, 64, 67}), 0.0f);
+    EXPECT_EQ(heldVoices(rig), 3);
+
+    rig.undo.undo();
+    for (const auto id : {i.osc, i.filter, i.adsr, i.vca})
+        EXPECT_FALSE(rig.isPoly(id)) << "one undo step puts the whole chain back";
+    EXPECT_TRUE(rig.polyMidis().empty());
+}
+
+TEST_F(GraphEditorTest, TheTrackSwitchSetsAMixedChainToMonoAndLeavesTheSourceAlone) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    rig.setPoly(i.osc, true);
+    rig.setPoly(i.vca, true);
+
+    rig.editor.getPolyChain().trackPolyClicked(i.source, false);
+
+    for (const auto id : {i.osc, i.filter, i.adsr, i.vca})
+        EXPECT_FALSE(rig.isPoly(id));
+    EXPECT_EQ(rig.editor.getPolyChain().trackPolyState(i.source), synth::ui::TrackPolyState::mono);
+}

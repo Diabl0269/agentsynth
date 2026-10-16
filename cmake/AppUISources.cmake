@@ -127,6 +127,9 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
+    Source/UI/Timeline/TrackPolyState.h
+    Source/UI/Timeline/TrackPolySwitch.h
+    Source/UI/Timeline/TrackPolySwitch.cpp
     Source/UI/Timeline/TrackShowModuleButton.h
     Source/UI/Timeline/TrackShowModuleButton.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
