@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mixer/ChannelFlows/PolyVoiceGraph.h"
+#include "UI/Timeline/TrackPolyState.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
@@ -53,6 +54,18 @@ public:
      *  it follows the parameter, so a cancelled question leaves it as it was. */
     void polyPillClicked(juce::AudioProcessorGraph::NodeID clicked, bool poly);
 
+    /** The track-header switch (docs/timeline/tracks.md#the-monopoly-switch): the Poly state of the voice graph that
+     *  starts at a track's source node. `none` when it holds no poly-capable module, `mixed` when only some are poly.
+     */
+    TrackPolyState trackPolyState(juce::AudioProcessorGraph::NodeID trackSource) const;
+
+    /** The header switch was clicked: the same plan, question and ONE undo step as polyPillClicked, started from the
+     *  track's source node (which has no pill of its own, so nothing falls back to it). */
+    void trackPolyClicked(juce::AudioProcessorGraph::NodeID trackSource, bool poly);
+
+    /** Called after a click changed the voice graph, so surfaces that show its state (the track headers) re-read it. */
+    std::function<void()> onVoiceGraphChanged;
+
     /** A cable is about to join `source` and `destination`: a poly-capable module with no cable yet joins the poly
      *  state of a poly-ON poly-capable (or Poly MIDI) module on the other end. Inside the cable's own undo step. */
     void joinConnectedModules(juce::AudioProcessorGraph::NodeID source, juce::AudioProcessorGraph::NodeID destination);
@@ -73,6 +86,7 @@ public:
     };
 
 private:
+    void switchVoiceGraph(juce::AudioProcessorGraph::NodeID start, bool poly, bool includeStart);
     void ask(const synth::PolyVoiceGraphPlan& plan, std::function<void(PolyChainChoice)> answer);
     void commit(const std::vector<juce::AudioProcessorGraph::NodeID>& nodes, bool poly);
     void announce(int changed, bool poly, int editSerialAfter);

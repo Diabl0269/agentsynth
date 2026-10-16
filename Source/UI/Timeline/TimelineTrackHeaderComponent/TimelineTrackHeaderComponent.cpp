@@ -112,7 +112,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
     initHeightHandle();
     // The chips and the arrow fade as the track gains or loses them; their widths follow the fade so the row slides.
-    for (auto* fade : {&foldArrowFade_, &channelChipFade_})
+    for (auto* fade : {&foldArrowFade_, &channelChipFade_, &polySwitchFade_})
         fade->onFrame = [this] { resized(); };
 
     // Ctrl+E's pointer and Tab twin. Its tooltip names the binding, so refreshFromDoc rebuilds it.
@@ -133,6 +133,13 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     channelChip_.onClick = [this] {
         if (auto* link = linkSurface())
             link->revealChannelForTrack(trackId_);
+    };
+
+    // Mono | Poly: shown only for a track whose voice graph has something poly-capable (refreshFromDoc).
+    addChildComponent(polySwitch_);
+    polySwitch_.onSwitch = [this](bool poly) {
+        if (host_ != nullptr)
+            host_->setTrackPoly(trackId_, poly);
     };
 
     openMidiDestinationsPickerHook_ = [this] { openMidiDestinationsPicker(); };
@@ -280,6 +287,15 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
                                           "' channel, shared with other tracks. Click to find it.");
     }
 
+    const auto polyState =
+        host_ != nullptr && !isSectionHeader() ? host_->getTrackPolyState(trackId_) : TrackPolyState::none;
+    if (polyState != TrackPolyState::none)
+        polySwitch_.setState(polyState, t->name);
+    if (polySwitchFade_.isShown() != (polyState != TrackPolyState::none)) {
+        polySwitchFade_.setShown(polyState != TrackPolyState::none);
+        resized(); // the switch shares the bottom row with the binding chip
+    }
+
     // Every track has the arrow (open, an empty track shows just "+ Add automation..."); the Unassigned
     // section only while it holds lanes.
     foldArrowFade_.setShown(!isSectionHeader() || !t->lanes.empty());
@@ -291,9 +307,9 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     if (isSectionHeader()) {
         bindingChipFade_.setShown(false);
         for (juce::Component* hidden :
-             {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&muteButton_),
-              static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_),
-              static_cast<juce::Component*>(&showModuleButton_)})
+             {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&polySwitch_),
+              static_cast<juce::Component*>(&muteButton_), static_cast<juce::Component*>(&soloButton_),
+              static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&showModuleButton_)})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");

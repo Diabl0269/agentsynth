@@ -319,6 +319,8 @@ rather than raw channel numbers.
 
 ### The Poly toggle
 
+(The same switch is on each instrument track's header: [the Mono/Poly switch](../timeline/tracks.md#the-monopoly-switch).)
+
 A user click on the **Poly** pill (or Space on it) of an Oscillator, Wavetable, Noise, Filter, ADSR or VCA
 switches the whole **voice graph** of that module, not the one card. `PolyChainController`
 (`Source/UI/Graph/PolyChain/`) does it as ONE undo step:
