@@ -15,7 +15,7 @@ constexpr double kSr = 44100.0;
 constexpr int kBlock = 512;
 constexpr int kPitchCh = 19;
 constexpr int kKeyTrackCVCh = 27;
-constexpr int kChannels = 28;
+constexpr int kChannels = 32;
 constexpr float kMiddleC = 261.63f;
 
 void setFloat(FilterModule& m, const juce::String& id, float v) {
@@ -264,7 +264,8 @@ TEST(FilterKeyTrack, PitchAndKeyTrackJacksFollowDrive) {
     FilterModule f;
     EXPECT_EQ(f.getTotalNumInputChannels(), kChannels);
     EXPECT_EQ(f.getTotalNumOutputChannels(), kChannels);
-    ASSERT_EQ(f.getVisibleInputPortCount(), 7); // Audio L, Audio R, Cutoff, Resonance, Drive, Pitch, Key Track
+    // Audio L, Audio R, Cutoff, Resonance, Drive, Pitch, Key Track, then the Custom type's four CV jacks
+    ASSERT_EQ(f.getVisibleInputPortCount(), 11);
     EXPECT_EQ(f.getInputPortLabel(4), "Drive");
     EXPECT_EQ(f.getInputPortLabel(5), "Pitch");
     EXPECT_EQ(f.getInputPortLabel(6), "Key Track");
@@ -309,7 +310,7 @@ TEST(FilterKeyTrack, KeyTrackIsAModulationTargetInBothVoiceModes) {
     for (const bool poly : {false, true}) {
         setBool(f, "poly", poly);
         const auto targets = f.getModulationTargets();
-        ASSERT_EQ(targets.size(), 4u);
+        ASSERT_EQ(targets.size(), 8u); // Key Track, then the Custom type's four
         EXPECT_EQ(targets[3].name, "Key Track");
         EXPECT_EQ(targets[3].channelIndex, kKeyTrackCVCh);
         ASSERT_NE(f.parameterForModTarget(targets[3]), nullptr);

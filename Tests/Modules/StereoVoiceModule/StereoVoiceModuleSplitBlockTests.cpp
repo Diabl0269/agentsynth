@@ -33,7 +33,7 @@ TEST(SplitBlockDualIO, CollapsingRestoresThePreStereoJackLayout) {
     // calling it a jack-layout toggle rather than a mono/stereo switch.
     FilterModule filter;
     setBoolParam(filter, "dualIO", false);
-    EXPECT_EQ(filter.getVisibleInputPortCount(), 6); // Audio, Cutoff, Resonance, Drive, Pitch, Key Track
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 10); // Audio, Cutoff, Resonance, Drive, Pitch, Key Track, Custom x4
     EXPECT_EQ(filter.getVisibleOutputPortCount(), 1);
     EXPECT_EQ(filter.getInputPortLabel(0), "Audio");
     EXPECT_EQ(filter.getInputPortLabel(1), "Cutoff");
@@ -83,7 +83,7 @@ TEST(SplitBlockDualIO, CollapsingDoesNotDisturbTheCVChannelMap) {
         FilterModule filter;
         setBoolParam(filter, "dualIO", dual);
         auto targets = filter.getModulationTargets();
-        ASSERT_EQ(targets.size(), 4u);
+        ASSERT_EQ(targets.size(), 8u);
         EXPECT_EQ(targets[0].channelIndex, 1) << "Cutoff, dual=" << dual;
         EXPECT_EQ(targets[1].channelIndex, 2);
         EXPECT_EQ(targets[2].channelIndex, 3);
@@ -113,16 +113,16 @@ TEST(SplitBlockDualIO, FlippingTheParameterFlipsTheVisibleJacks) {
     ASSERT_NE(dual, nullptr);
 
     ASSERT_TRUE(filter.isDualIO());
-    ASSERT_EQ(filter.getVisibleInputPortCount(), 7);
+    ASSERT_EQ(filter.getVisibleInputPortCount(), 11);
 
     dual->setValueNotifyingHost(0.0f);
     EXPECT_FALSE(filter.isDualIO());
-    EXPECT_EQ(filter.getVisibleInputPortCount(), 6) << "collapsing must actually drop a jack";
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 10) << "collapsing must actually drop a jack";
     EXPECT_EQ(filter.getVisibleOutputPortCount(), 1);
 
     dual->setValueNotifyingHost(1.0f);
     EXPECT_TRUE(filter.isDualIO());
-    EXPECT_EQ(filter.getVisibleInputPortCount(), 7) << "and re-expanding must bring it back";
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 11) << "and re-expanding must bring it back";
     EXPECT_EQ(filter.getVisibleOutputPortCount(), 2);
 }
 

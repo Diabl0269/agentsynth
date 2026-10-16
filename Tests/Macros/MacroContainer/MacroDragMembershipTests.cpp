@@ -285,8 +285,12 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
         << "sanity: B is still a member after the along-row move";
 
     // PERPENDICULAR to the row: exits just past the hull's own bottom edge -- bounded by half the
-    // row's height plus the hull margin, regardless of how far apart A and C are horizontally.
-    const int perpendicularDrop = hullExcludingB.getBottom() - compB->getBounds().getCentreY() + 5;
+    // row's height plus the hull margin, regardless of how far apart A and C are horizontally. The
+    // leave test reads the border frozen at press, which still holds B's own card, so when B is the
+    // tallest card in the row the border to cross is the full hull's, not the excluding one's.
+    const int border =
+        std::max(hullExcludingB.getBottom(), editor.getMacroController().macroHullBounds(macroId).getBottom());
+    const int perpendicularDrop = border - compB->getBounds().getCentreY() + 5;
     dragBodyBy(*compB, {0, perpendicularDrop}, kCmdClick, [&] {
         EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "moving the middle member PAST the hull's bottom edge must arm the LEAVE candidate";

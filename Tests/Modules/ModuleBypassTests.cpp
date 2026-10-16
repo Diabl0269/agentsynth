@@ -77,9 +77,9 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
     // Create a buffer with the right number of input channels
     int numChannels = filter.getTotalNumInputChannels();
     // 8 voice audio + 3 shared CV + the 8-wide Audio R block added in #219 + the 8-wide Pitch block
-    // and the Key Track CV above it.
+    // and the Key Track CV above it, then the Custom type's four CV channels.
     EXPECT_EQ(numChannels, FilterModule::kNumChannels);
-    EXPECT_EQ(numChannels, 28);
+    EXPECT_EQ(numChannels, 32);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     // juce::AudioBuffer's constructor does NOT zero its memory, and FilterModule reads channels 1-3

@@ -16,6 +16,7 @@
 #include "UI/Graph/PickTargetOverlay/GraphPickCandidates.h"
 #include "UI/Graph/PickTargetOverlay/PickTargetOverlay.h"
 #include "UI/Timeline/TimelineTransportBar.h"
+#include <algorithm>
 
 using synth::midi::PickTarget;
 using synth::ui::PickTargetOverlay;
@@ -36,13 +37,13 @@ class MidiRemotePickTargetTest : public MidiRemotePanelLiveRefreshTest {
 protected:
     void SetUp() override {
         MidiRemotePanelLiveRefreshTest::SetUp();
-        host_.setSize(1200, 1300);
+        host_.setSize(1200, 1500);
         host_.setVisible(true);
         host_.addAndMakeVisible(*graphEditor_);
-        graphEditor_->setBounds(0, 0, 1200, 1100); // tall enough for the Filter card's default spot
+        graphEditor_->setBounds(0, 0, 1200, 1300); // tall enough for the Filter card's default spot
         graphEditor_->updateComponents();
         host_.addAndMakeVisible(bar_);
-        bar_.setBounds(0, 1150, 1200, 100);
+        bar_.setBounds(0, 1350, 1200, 100);
         bar_.resized();
 
         controller_->setPickOverlayHost(&host_);
@@ -97,6 +98,17 @@ TEST_F(MidiRemotePickTargetTest, OutlinesAppearOnRegisteredControlsOnlyAcrossCan
     synth::ui::collectGraphPickCandidates(*graphEditor_, expected);
     bar_.collectPickCandidates(expected);
     ASSERT_GT(expected.size(), 4u) << "the Filter card's controls plus the four transport buttons";
+    // A control its card hides in the current mode (the Filter's Custom knobs) is registered but gets no
+    // outline: the overlay outlines only what is on screen.
+    expected.erase(std::remove_if(expected.begin(), expected.end(),
+                                  [](const synth::ui::PickCandidate& c) {
+                                      for (auto* p = c.component.getComponent(); p != nullptr;
+                                           p = p->getParentComponent())
+                                          if (!p->isVisible())
+                                              return true;
+                                      return false;
+                                  }),
+                   expected.end());
     EXPECT_EQ(overlay().getOutlineCountForTest(), static_cast<int>(expected.size()));
 
     bool sawCutoff = false;

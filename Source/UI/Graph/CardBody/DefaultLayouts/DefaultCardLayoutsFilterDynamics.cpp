@@ -12,13 +12,21 @@ using namespace cardlayout;
 
 // The Filter's Show Response and Show Spectrum panels are card chrome (ModuleComponentCardView.cpp), and
 // with a footer they are pills in it; Poly joins it on its own. Key Track never dims: the card knows no
-// cable, so it cannot tell an unplugged Pitch input.
+// cable, so it cannot tell an unplugged Pitch input. The Custom type's morph, shift and depth knobs show only
+// while Custom is the type.
+CardSection customSection() {
+    auto custom = section("custom", "Custom", {param("morphX"), param("morphY"), param("shift"), param("depth")});
+    custom.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
+    return custom;
+}
+
 CardLayout filterLayout() {
     CardLayout layout;
     layout.sections = {
         section("type", std::nullopt, {param("filterType")}),
         section("tone", std::nullopt, {param("cutoff", CardWidget::KnobLarge), param("resonance"), param("drive")}),
         section("modulation", "Modulation", {param("keyTrack"), param("outputLevel")}),
+        customSection(),
         footer({}),
     };
     return layout;
@@ -68,7 +76,7 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 1);
+    defaults.add("Filter", filterLayout(), 2);
     defaults.add("Compressor", compressorLayout(), 1);
     defaults.add("Limiter", limiterLayout(), 1);
     defaults.add("Gate", gateLayout(), 1);

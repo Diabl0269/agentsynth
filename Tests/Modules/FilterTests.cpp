@@ -94,7 +94,7 @@ TEST_F(FilterTest, MultiParamModulation) {
 TEST_F(FilterTest, FilterTypeParameterExists) {
     auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
     ASSERT_NE(typeParam, nullptr);
-    EXPECT_EQ(typeParam->choices.size(), 7);
+    EXPECT_EQ(typeParam->choices.size(), 8); // the seven ladder/notch types, then Custom
 }
 
 TEST_F(FilterTest, AllFilterTypesProcessWithoutCrash) {

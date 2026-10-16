@@ -77,7 +77,7 @@ TEST(OnCardScope, ApplyToOffersThisModuleAndAllOfTheTypeWithANoteOfHowManyCardsC
 TEST(OnCardScope, ChoosingAllWritesTheTypeDefaultClearsThisOverrideAndEveryLaterWriteFollows) {
     OnCardRig rig;
     const auto first = rig.add(std::make_unique<FilterModule>(), 0, 0);
-    const auto second = rig.add(std::make_unique<FilterModule>(), 0, 600);
+    const auto second = rig.add(std::make_unique<FilterModule>(), 0, 800); // below the first card and its strip
     // This module starts with a layout of its own (Level as a fader), which choosing All clears.
     ASSERT_TRUE(synth::setCardLayoutOverride(
         rig.canvas.engine.getGraph(), nullptr, first,

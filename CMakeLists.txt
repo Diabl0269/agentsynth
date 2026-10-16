@@ -399,7 +399,6 @@ add_library(Core STATIC
     Source/Modules/Oscillator/OscillatorModulePoly.cpp
     Source/Modules/Oscillator/PitchGlide.h
     Source/Modules/ADSRModule.h
-    Source/Modules/FilterModule.h
     Source/Modules/FrequencyText.h
     Source/Modules/ParameterText.h
     Source/Modules/VCAModule.h
@@ -575,6 +574,7 @@ include(cmake/ProjectLoadSources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/PluckMalletSources.cmake)
+include(cmake/FilterSources.cmake)
 # Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
 # licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
 # deliberately deferred: it would mean vendoring clap-juce-extensions or the CLAP headers, i.e. exactly the new
