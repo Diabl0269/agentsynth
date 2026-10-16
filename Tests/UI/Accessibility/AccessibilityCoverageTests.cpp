@@ -43,8 +43,11 @@
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/SampleWaveformComponent.h"
 #include "UI/ModuleViews/ScopeComponent.h"
+#include "UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
@@ -406,6 +409,44 @@ TEST(AccessibilityCoverageTest, EQWindow) {
     ParametricEQModule eq;
     EQWindow window(eq);
     EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
+}
+
+// The Filter's shape editor window: the large morph map with its dots, cursor and sliders, the shape chips, the curve
+// editor and every button. All of it is on screen at once, so the audit reaches every stop.
+TEST(AccessibilityCoverageTest, ShapeEditorWindow) {
+    AudioEngine audioEngine;
+    auto* filter = new FilterModule();
+    auto node = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
+    AppUndoManager undo;
+    auto adapter = std::make_shared<synth::ui::FilterShapesAdapter>(*filter, &undo, audioEngine.getGraph(),
+                                                                    node->nodeID, "Filter");
+    synth::ui::ShapeListEditor editor(adapter, 0);
+    EXPECT_TRUE(matchesBaseline("ShapeEditorWindow", auditAccessibility(editor)));
+}
+
+// A Filter card on the Custom type with its morph map showing: the Edit shapes button, the Show Morph Map pill, the
+// map's stops and the swapped-in Shift and Depth knobs.
+TEST(AccessibilityCoverageTest, FilterCustomCard) {
+    AudioEngine audioEngine;
+    GraphEditor editor(audioEngine);
+    editor.setSize(1200, 1200);
+    auto* filter = new FilterModule();
+    *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(filter, "filterType")) =
+        FilterModule::kCustomTypeIndex;
+    auto node = audioEngine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
+    node->properties.set("x", 40);
+    node->properties.set("y", 40);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    std::vector<Gap> gaps;
+    int cards = 0;
+    for (auto* card : editor.getModuleComponents())
+        if (card != nullptr && card->getNodeId() == node->nodeID) {
+            ++cards;
+            gaps = auditAccessibility(*card);
+        }
+    ASSERT_EQ(cards, 1);
+    EXPECT_TRUE(matchesBaseline("FilterCustomCard", gaps));
 }
 
 // Every module view built on its own, so the audit reaches the focusable editors (the EQ curve, the curve
