@@ -34,6 +34,7 @@ namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
+class FilterCustomCard;      // Forward declaration — see FilterCustomCard/FilterCustomCard.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -248,6 +249,7 @@ public:
     /** Null for a card whose widgets are not built by a card body. */
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
+    synth::ui::FilterCustomCard* getFilterCustomCard() const noexcept { return filterCustom_.get(); }
 
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
@@ -584,6 +586,7 @@ private:
     // the panels they fade, so they go first.
     synth::CardBlockFade scopeFade_;
     synth::CardBlockFade responseFade_;
+    std::unique_ptr<synth::ui::FilterCustomCard> filterCustom_; // Filter only: the Custom type's map and button
     bool settlingFootprint_ = false; // measuring at the final footprint (CardBlockFade::setShown)
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
@@ -740,6 +743,7 @@ private:
     void setResponseShown(bool show);
     void setSpectrumShown(bool show);
     void restoreCardView();
+    void createFilterCustomCard(); // ModuleComponentFilterCard.cpp
     int blockHeight(const synth::CardBlockFade& block, int full) const;
     void fadeBlock(synth::CardBlockFade& block, bool show);
     void attachBlockFade(synth::CardBlockFade& block, std::vector<juce::Component*> targets);

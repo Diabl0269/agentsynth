@@ -586,6 +586,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentFilterCard.cpp
+    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h
+    Source/UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp
@@ -662,6 +665,26 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.h
+    Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMap.h
+    Source/UI/ModuleViews/MorphMap/MorphMapInternal.h
+    Source/UI/ModuleViews/MorphMap/MorphMapPalette.h
+    Source/UI/ModuleViews/MorphMap/MorphMap.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapKeyboard.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeMapController.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeMapController.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorInternal.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.cpp
+    Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp
     Source/UI/ModuleViews/WavetableDisplayComponent.h
     Source/UI/ModuleViews/TriggerMeterComponent.h
     Source/UI/ModuleViews/ThresholdControlComponent.h

@@ -42,6 +42,9 @@ public:
     void setShapes(const CustomFilterShapes& shapes);
     /** Message thread only. */
     const CustomFilterShapes& getShapes() const noexcept { return shapes_; }
+    /** Bumped by every setShapes(); a view polls it to learn the list changed under it (undo, a preset, the
+     *  editor window). */
+    int getShapesGeneration() const noexcept { return shapesGeneration_.load(std::memory_order_relaxed); }
 
     /** Allocates every audio buffer. Call from prepareToPlay, never concurrently with process(). */
     void prepare(double sampleRate);
@@ -82,6 +85,7 @@ private:
     Controls designed_{};
     bool tableChanged_ = false;
     std::atomic<int> designCount_{0};
+    std::atomic<int> shapesGeneration_{0};
 };
 
 } // namespace synth

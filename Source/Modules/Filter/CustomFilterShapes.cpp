@@ -53,41 +53,97 @@ LfoCustomWave CustomFilterShapes::flatCurve() {
     return w;
 }
 
-/** Formant-style curves: peaks near 0 dB at each vowel's first three formants over a floor that
-    falls away at both ends. Peaks stay at or below +2 dB so the default never adds gain. */
+/** The named starting shapes: three vowels as formant-style curves (peaks near 0 dB at each vowel's first
+    formants over a floor that falls away at both ends) and three animal calls. Peaks stay at or below
+    +2 dB so stamping one never adds gain. */
+const char* CustomFilterShapes::presetName(Preset preset) {
+    switch (preset) {
+    case Preset::Ah:
+        return "ah";
+    case Preset::Ee:
+        return "ee";
+    case Preset::Oo:
+        return "oo";
+    case Preset::Wolf:
+        return "wolf";
+    case Preset::Crow:
+        return "crow";
+    case Preset::Frog:
+        return "frog";
+    }
+    return "ah";
+}
+
+LfoCustomWave CustomFilterShapes::presetCurve(Preset preset) {
+    switch (preset) {
+    case Preset::Ah:
+        return curveFromHzDb({{20.0f, -30.0f},
+                              {400.0f, -14.0f},
+                              {800.0f, 2.0f},
+                              {950.0f, -6.0f},
+                              {1150.0f, 0.0f},
+                              {1800.0f, -16.0f},
+                              {2900.0f, -6.0f},
+                              {5000.0f, -24.0f},
+                              {20000.0f, -40.0f}});
+    case Preset::Ee:
+        return curveFromHzDb({{20.0f, -30.0f},
+                              {270.0f, 2.0f},
+                              {700.0f, -20.0f},
+                              {1400.0f, -16.0f},
+                              {2300.0f, 0.0f},
+                              {3400.0f, -10.0f},
+                              {5000.0f, -22.0f},
+                              {20000.0f, -40.0f}});
+    case Preset::Oo:
+        return curveFromHzDb({{20.0f, -30.0f},
+                              {300.0f, 2.0f},
+                              {550.0f, -10.0f},
+                              {870.0f, -2.0f},
+                              {1500.0f, -22.0f},
+                              {2250.0f, -12.0f},
+                              {4000.0f, -30.0f},
+                              {20000.0f, -44.0f}});
+    case Preset::Wolf: // a howl: strong low-mid formants, little above 3 kHz
+        return curveFromHzDb({{20.0f, -36.0f},
+                              {150.0f, -20.0f},
+                              {450.0f, 2.0f},
+                              {600.0f, -8.0f},
+                              {900.0f, 0.0f},
+                              {1400.0f, -18.0f},
+                              {3000.0f, -30.0f},
+                              {20000.0f, -48.0f}});
+    case Preset::Crow: // a caw: harsh and nasal, broad energy from 700 Hz to 4 kHz
+        return curveFromHzDb({{20.0f, -40.0f},
+                              {300.0f, -22.0f},
+                              {700.0f, -6.0f},
+                              {1100.0f, 0.0f},
+                              {1700.0f, -4.0f},
+                              {2600.0f, 0.0f},
+                              {3800.0f, -8.0f},
+                              {6000.0f, -22.0f},
+                              {20000.0f, -40.0f}});
+    case Preset::Frog: // a ribbit: a low throat resonance and a narrow nasal peak
+        return curveFromHzDb({{20.0f, -30.0f},
+                              {120.0f, -12.0f},
+                              {220.0f, 2.0f},
+                              {350.0f, -14.0f},
+                              {1000.0f, -10.0f},
+                              {1250.0f, 0.0f},
+                              {1500.0f, -12.0f},
+                              {3500.0f, -30.0f},
+                              {20000.0f, -44.0f}});
+    }
+    return flatCurve();
+}
+
+/** ah, ee and oo at three corners of the map; the curves are the presets, so stamping a vowel and
+    starting a Filter agree. */
 CustomFilterShapes CustomFilterShapes::defaultShapes() {
     CustomFilterShapes s;
-    s.shapes.push_back({"ah",
-                        curveFromHzDb({{20.0f, -30.0f},
-                                       {400.0f, -14.0f},
-                                       {800.0f, 2.0f},
-                                       {950.0f, -6.0f},
-                                       {1150.0f, 0.0f},
-                                       {1800.0f, -16.0f},
-                                       {2900.0f, -6.0f},
-                                       {5000.0f, -24.0f},
-                                       {20000.0f, -40.0f}}),
-                        {0.2f, 0.25f}});
-    s.shapes.push_back({"ee",
-                        curveFromHzDb({{20.0f, -30.0f},
-                                       {270.0f, 2.0f},
-                                       {700.0f, -20.0f},
-                                       {2300.0f, 0.0f},
-                                       {2600.0f, -8.0f},
-                                       {3000.0f, -2.0f},
-                                       {5000.0f, -22.0f},
-                                       {20000.0f, -40.0f}}),
-                        {0.8f, 0.25f}});
-    s.shapes.push_back({"oo",
-                        curveFromHzDb({{20.0f, -30.0f},
-                                       {300.0f, 2.0f},
-                                       {550.0f, -10.0f},
-                                       {870.0f, -2.0f},
-                                       {1500.0f, -22.0f},
-                                       {2250.0f, -12.0f},
-                                       {4000.0f, -30.0f},
-                                       {20000.0f, -44.0f}}),
-                        {0.5f, 0.8f}});
+    s.shapes.push_back({presetName(Preset::Ah), presetCurve(Preset::Ah), {0.2f, 0.25f}});
+    s.shapes.push_back({presetName(Preset::Ee), presetCurve(Preset::Ee), {0.8f, 0.25f}});
+    s.shapes.push_back({presetName(Preset::Oo), presetCurve(Preset::Oo), {0.5f, 0.8f}});
     return s;
 }
 

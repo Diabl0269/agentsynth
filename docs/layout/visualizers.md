@@ -352,6 +352,14 @@ Five display and interaction rules:
 - **`setFillBaselineLevel(float)`** (default 0): `paintCurve` fills down (or up) to this level
   instead of always 0. The LFO card sets 0.5 for a bipolar wave (fill from the zero line) and 0 for
   unipolar.
+- **`setAxisGuides(std::optional<AxisGuides>)`** draws exactly the given labelled lines (`AxisGuide{position,
+  label, emphasised}`, x in model units, y as a level in 0..1) in place of the even grid, for an axis that is not
+  linear: the Filter shape editor labels 100, 1k and 10k on its log frequency axis and draws 0 dB (y = 0.8) bright.
+- **`CurveModel::kMaxNodes`** (64, the same cap `LfoCustomWave::sanitise` applies when the points are saved):
+  `CurveModel::addPoint` returns -1 and adds nothing at the cap, and `addPointAt` returns -1 without opening a
+  gesture, so a full curve neither grows past what it can save nor leaves an empty undo step.
+- **`CurveWaveConversion.h`** (`curveModelFromWave`, `waveFromCurveModel`): the Free-mode `CurveModel` <->
+  `synth::LfoCustomWave` mapping the LFO card and the Filter shape editor share (end points pinned in x, y over 0..1).
 - **`CurveModel::playheadForX(double x)`**: the first segment with `x <=` its end node's `x` and a
   non-zero duration (the same convention `CurveEditorGeometry::segmentForTime` already used for
   drawing/hit-testing — a boundary value still belongs to the segment ENDING there, not the one
@@ -379,3 +387,22 @@ records the target with no gesture opened yet, since a plain click that never be
 otherwise push an empty undo step; `mouseDrag` opens the gesture on its first call; `mouseUp` closes
 it. Double-click adds (Free mode, empty space), removes (Free mode, a node), or resets a bend handle
 to 0 (either mode).
+
+## MorphMap
+
+`Source/UI/ModuleViews/MorphMap/`. The Filter Custom type's morph map: one dot per shape (its colour from
+`morphShapeColour`, by shape index, from theme tokens) and a dark cursor dot on a square map whose coordinates run
+0..1 (x to the right, y downwards). It edits nothing itself and reports through callbacks; `ShapeMapController`
+(`Source/UI/ModuleViews/ShapeEditor/`) turns them into shape-list edits with their undo steps, so the module card's map
+and the shape editor window's map behave identically. The behaviour is in
+[`custom-filter.md`](../modules/custom-filter.md#morph-map). Pointer: drag a dot or the cursor, click empty space to
+add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete. Keyboard: the map,
+then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` children carrying the name, tooltip and
+focus ring over the painted dots, the `PianoRollHeaderChip` idea); the arrows move the focused dot or cursor (Shift for a
+bigger step), Return edits a dot, Delete removes it, F2 renames it, Shift+F10 opens its menu, Escape returns to the map.
+These keys belong to the focused control, so they are documented here and not rebindable actions
+([accessibility](../development/accessibility.md#the-rule)). Thin sliders hug the bottom edge (Morph X) and the left edge
+(Morph Y), 10 px thick with the thumb at the cursor; a press, drag or arrow key sets that one coordinate, through the
+cursor's callbacks. The right edge is left empty (the plot is symmetric left and right) for a future third axis. A cable
+dropped on a slider drives that parameter (`stripAt`, `stripAnchor`, `setDropHighlight`). Tab order: the map, each
+dot, the cursor, the X slider, the Y slider.

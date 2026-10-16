@@ -155,6 +155,21 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   Escape, so each text field calls `bubbleEscapeToParents` and Escape travels up as it would from any
   other control. Return presses the dialog's default button where it has one (Export, Open in Browser).
 
+## The Filter's morph map and shape editor
+
+Both the Filter card (Custom type) and the shape editor window use `MorphMap`; the audit covers them as the
+`FilterCustomCard` and `ShapeEditorWindow` surfaces (no baseline gaps). The map is a Tab stop with the soft region
+outline, and each dot, the cursor and the two edge sliders is a transparent, mouse-inert stop over the painted thing
+(the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. Names carry
+values and are re-set on every change ("ah, X 0.20, Y 0.25", "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"); tooltips
+read "<name> - drag to move, double-click to edit", "Morph cursor - drag to blend shapes". Keys, all inside the
+focused stop and therefore not rebindable actions (the native-control exception in [the rule](#the-rule)): the arrows
+move the focused dot, cursor or slider (Shift for a bigger step; one key press is one undo step), Return on a dot edits
+it, Delete or Backspace removes it (the last shape stays), F2 renames it, the open-context-menu key opens its menu
+(`KeyboardContextMenuProvider`), Escape returns focus to the map. In the window Tab continues through the shape chips
+(named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
+window with the shared fade (`closeHostingWindow`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
+
 ## Verifying for real
 
 The test proves names exist, not that they read well or that Tab reaches them. Run the app, Tab

@@ -38,6 +38,8 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"MacroAutoPortPromptDialog", 0, 0},
     {"EQWindow", 0, 0},
     {"ModuleViews", 0, 0},
+    {"ShapeEditorWindow", 0, 0},
+    {"FilterCustomCard", 0, 0},
     {"WelcomeScreen", 0, 0},
     {"ColourPickerPopup", 0, 0},
     {"ModuleLibraryHelpPopup", 0, 0},

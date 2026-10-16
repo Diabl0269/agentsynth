@@ -59,6 +59,8 @@ public:
     // ---- Conditions ------------------------------------------------------------------------------
     /** True for a swap-group member out of view only because a sibling is shown in its cell. */
     bool isSwappedOut(const juce::Component& widget) const;
+    /** Hides (or restores) the section with this id regardless of its condition; unknown ids are ignored. */
+    void setSectionHidden(const juce::String& sectionId, bool hidden);
     /** Re-reads every condition now; on a change, re-lays out the card (and makes room if it grew). */
     void refreshConditions();
     /** Adds the dimmed hint to dimmed controls' tooltip and description; call once the card has named

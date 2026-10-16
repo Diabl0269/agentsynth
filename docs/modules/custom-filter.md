@@ -8,8 +8,9 @@ FIR kernel designed from user-drawn magnitude shapes. The rest of the Filter is 
 
 Code: `Source/Modules/Filter/` — `CustomFilterShapes` (data model), `CustomFilterKernelDesigner`
 (minimum-phase design), `PartitionedConvolver` (convolution), `CustomFilterEngine` (handoff, blend,
-redesign policy). `FilterModule::processCustomMode` wires it in. The card has no editor for shapes yet;
-they reach the module through its extra state (`setCustomShapes` / `setExtraState`).
+redesign policy), `CustomFilterBlend` (the blend as numbers). `FilterModule::processCustomMode` wires it in. Shapes
+reach the module through its extra state (`setCustomShapes` / `setExtraState`) and are edited in the
+[shape editor window](#shape-editor-window).
 
 ## Shapes
 
@@ -31,10 +32,8 @@ they reach the module through its extra state (`setCustomShapes` / `setExtraStat
 | `shift` | −48..+48 st | 0 | Moves the whole response along frequency: bin f reads the curve at f / 2^(shift/12) |
 | `depth` | 0–2 | 1 | Multiplies every dB value; 0 is flat (0 dB), 2 doubles every boost and cut |
 
-All four are added after Key Track (Level and Mute stay last) and each has a CV jack. On the card they
-are a "Custom" section shown only while Custom is the type (`DefaultCardLayoutsFilterDynamics.cpp`,
-revision 2); a full shape editor is not built yet. Cutoff, Resonance and Drive are ignored in
-Custom. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
+All four are added after Key Track (Level and Mute stay last) and each has a CV jack. Cutoff and Resonance are
+ignored in Custom; the [card](#card) swaps them in place for Shift and Depth. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
 every poly voice shares one kernel, so there is no per-voice pitch to follow.
 
 ## CV jacks
@@ -43,7 +42,8 @@ Morph X CV = ch28 (`kMorphXCVChannel`), Morph Y CV = ch29, Shift CV = ch30, Dept
 **same channel in both voice modes**, after Key Track in the jack order. Shift and Depth have CV too
 because every continuous knob on a card must accept a modulation cable. All four are **knob-only**
 targets (`ModulationTarget::knobOnly`): they never draw a gutter jack, in any filter type, so a cable
-reaches them only by being dropped on the Custom knob and lands on its ring. A Filter of any other type
+reaches Shift and Depth only by being dropped on their knob (it lands on the ring), and Morph X and Y on the
+[morph map's slider](#card) while the map shows, else on their knob. A Filter of any other type
 keeps exactly its old jack column and card height. They cannot follow
 Cutoff's mono/poly pair: the mono CV block (ch1-3) has the poly voice fan directly above it and the poly block
 (ch8-10) has Audio R, so neither can grow without renumbering saved channels; Key Track set the
@@ -127,3 +127,69 @@ characters, and at most 64 shapes are read. Model-authored patches reach the nar
 `CustomFilterShapes::fromUntrustedVar` instead (via `setUntrustedExtraState`): curve points, at most 3 map
 values per shape, a name cut to 24 characters of `[A-Za-z0-9 -]`, at most 16 shapes, every other key
 ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`).
+
+## Shape editor window
+
+The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
+<module name>" that grows out of the card's centre and shrinks back into it
+([animation](../layout/animation.md#popup-windows)); Esc or Done closes it. Left a large
+[morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
+editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
+blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always
+stays), **Rename**, **Start from** and **Draw**. The bottom bar keeps an empty slot for per-note settings.
+
+- **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
+  (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
+  64 points.
+- **Start from** stamps the vowel (ah, ee, oo) or animal (wolf, crow, frog) curve onto the selected shape. Its
+  name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
+  vowels, which are the same curves.
+- **Draw** opens the automation lane's own shape flyout (`DrawShapeFlyout`) and applies the pick to the curve through
+  `LaneShapeGenerator`'s points, so a sine here is a lane's sine: Free changes nothing, Line joins the first and last
+  levels, Sine, Triangle, Saw and Square repeat three times between -18 and +6 dB (a hold becomes a vertical step).
+- **Live and undoable.** Every curve change goes to the module at once (the engine renders a new table; the audio
+  thread picks it up at the next block), and each drag, button or menu pick is one undo step recorded as the module's
+  extra state. The window follows changes made elsewhere (undo, the card's map) by polling
+  `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
+- **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
+  the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's. The LFO's custom
+  wave can plug in with its own adapter later.
+
+## Morph map
+
+One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
+drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), click
+empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
+points), double-click a dot (or press Return on it) to open the editor on it, right-click a dot for Edit, Duplicate,
+Rename and Delete. Delete on a focused dot removes it; the last shape never goes. Tooltips: "<name> - drag to move,
+double-click to edit", "Morph cursor - drag to blend shapes". Two sliders hugging the map set Morph X and Y alone. Keys and focus order are in
+[visualizers.md](../layout/visualizers.md#morphmap).
+
+## Card
+
+With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`, revision 3; the logic is
+`FilterCustomCard`, `Source/UI/Graph/ModuleComponent/FilterCustomCard/`):
+
+- **Tone row.** Cutoff and Resonance (ignored here) swap in place for Shift and Depth, the same cells, with the
+  swap-in-place motion of any condition; Drive stays. Every other type has exactly its old card.
+- **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift and Depth
+  applied (`customfilter::responseGridDb`, the numbers the kernel is designed from) and follows the cursor, the shapes
+  and the knobs; no cutoff marker. Double-clicking it opens the shape editor on the shape nearest the cursor.
+- **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
+  shape nearest the cursor.
+- **Morph map** (252 x 150, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
+  hugging it; the right edge is left free. The slider thumbs sit at the cursor; a drag, a click or the arrow keys set
+  that one parameter (one host gesture and one undo step). **Show Morph Map** is a footer pill, shown only in Custom;
+  the choice is remembered on the module (`CardViewState::showMorphMap`, saved as `"cardView"."morphMap"`); with no
+  choice the map shows from two shapes up and is hidden with one.
+- **Morph X / Y knobs and the map.** The two knobs are the Custom section; the card hides that section while the map
+  shows (`CardBody::setSectionHidden`) and shows it again when the map is hidden, so the module's CV targets always have
+  a landing widget. A cable dropped on a slider drives that parameter and lands on the slider; with the map hidden it
+  lands on the knob's ring as before (`ModuleComponent::getModTargetPortForPoint` / `getModTargetKnobAnchor` ask
+  `FilterCustomCard` first).
+- **Motion.** The map and the Edit shapes row fade and take their height with the shared `CardBlockFade`; the Morph
+  knobs fade through the card body's conditional-section fade and the Cutoff / Resonance swap through its swap motion;
+  the card's height eases and the neighbours make room once per direction. Reduce Motion is the short plain fade and
+  Animations: Off lands at once ([animation](../layout/animation.md#fading-things-in-and-out)).
+- **Keys.** Tab visits the map, each dot, the cursor, then the X and Y sliders; keys are in
+  [visualizers.md](../layout/visualizers.md#morphmap).

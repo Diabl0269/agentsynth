@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FrequencyGrid.h"
+#include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/FilterModule.h"
 #include "Modules/VisualBuffer.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -86,11 +87,17 @@ public:
         float drive = filterModule.getCurrentDrive();
         int filterType = filterModule.getCurrentFilterType();
 
-        if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType) {
+        const bool custom = filterType == FilterModule::kCustomTypeIndex;
+        const CustomState customNow{filterModule.getCurrentMorphX(), filterModule.getCurrentMorphY(),
+                                    filterModule.getCurrentShift(), filterModule.getCurrentDepth(),
+                                    filterModule.getCustomShapesGeneration()};
+        if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType ||
+            (custom && !(customNow == lastCustom))) {
             lastCutoff = cutoff;
             lastResonance = resonance;
             lastDrive = drive;
             lastFilterType = filterType;
+            lastCustom = customNow;
             recomputeMagnitudes();
             repaint();
         }
@@ -140,6 +147,15 @@ public:
             repaint();
         }
     }
+
+    /** Custom type only: a double-click on the view (the card opens the shape editor on the nearest shape). */
+    std::function<void()> onCustomDoubleClick;
+    void mouseDoubleClick(const juce::MouseEvent&) override {
+        if (lastFilterType == FilterModule::kCustomTypeIndex && onCustomDoubleClick)
+            onCustomDoubleClick();
+    }
+    /** The plotted dB at curve point `index` (of 1024), for tests. */
+    float getMagnitudeDbForTest(int index) const { return magnitudes[(size_t)index]; }
 
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
@@ -305,10 +321,12 @@ public:
             g.strokePath(specPath, juce::PathStrokeType(1.0f));
         }
 
-        // Cutoff frequency marker
-        float cutoffX = freqToX(lastCutoff, w);
-        g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
-        g.drawVerticalLine((int)cutoffX, 0.0f, h);
+        // Cutoff frequency marker (the Custom type ignores the cutoff)
+        if (lastFilterType != FilterModule::kCustomTypeIndex) {
+            float cutoffX = freqToX(lastCutoff, w);
+            g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
+            g.drawVerticalLine((int)cutoffX, 0.0f, h);
+        }
     }
 
 private:
@@ -320,6 +338,11 @@ private:
     float lastResonance = 0.0f;
     float lastDrive = 0.0f;
     int lastFilterType = -1;
+    struct CustomState {
+        float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f;
+        int generation = -1;
+        bool operator==(const CustomState&) const = default;
+    } lastCustom;
 
     // Spectrum analyzer
     bool showSpectrum = false;
@@ -341,6 +364,15 @@ private:
         float cutoff = lastCutoff;
         float resonance = lastResonance;
         int filterType = lastFilterType;
+
+        if (filterType == FilterModule::kCustomTypeIndex) {
+            // The drawn shapes blended at the morph cursor, then shifted and scaled: what the kernel is designed from.
+            const auto db = synth::customfilter::responseGridDb(filterModule.getCustomShapes(), lastCustom.morphX,
+                                                                lastCustom.morphY, lastCustom.shift, lastCustom.depth);
+            for (int i = 0; i < numPoints; ++i)
+                magnitudes[(size_t)i] = plotDb(db[(size_t)i]);
+            return;
+        }
 
         if (cutoff < 20.0f)
             cutoff = 20.0f;

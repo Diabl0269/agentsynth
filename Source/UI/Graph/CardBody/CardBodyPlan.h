@@ -58,9 +58,11 @@ struct CardBodyPlan {
         std::optional<juce::String> title; ///< Drawn as a header row above the items; nullopt = none.
         juce::Component* header = nullptr; ///< The header row; null until built, and without a title.
         std::optional<CardCondition> visibleWhen;
-        bool visible = true;   ///< visibleWhen's current result.
-        bool holding = false;  ///< Not visible any more but still laid out while its controls fade out.
-        bool footer = false;   ///< The footer row (CardSection::kFooterId), always laid out last.
+        bool visible = true; ///< visibleWhen's current result (false while codeHidden).
+        bool codeHidden =
+            false;            ///< The card hides this section whatever its condition says (CardBody::setSectionHidden).
+        bool holding = false; ///< Not visible any more but still laid out while its controls fade out.
+        bool footer = false;  ///< The footer row (CardSection::kFooterId), always laid out last.
         bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
         int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
         int altGroup = -1;     ///< Index into CardBodyPlan::altGroups; -1 = none.

@@ -10,15 +10,13 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include <cmath>
 
 using namespace detail;
 using synth::LfoCustomWave;
 using synth::ui::CurveHitKind;
 using synth::ui::CurveHitResult;
-using synth::ui::CurveMode;
-using synth::ui::CurveModel;
-using synth::ui::CurveNode;
 using synth::ui::CurvePlayhead;
 
 namespace {
@@ -39,44 +37,6 @@ const int kLfoGridDivisions[] = {0, 4, 8, 16, 32, 64, 128};
 const char* const kLfoGridLabels[] = {"Grid Off",  "Grid 1/4",  "Grid 1/8",  "Grid 1/16",
                                       "Grid 1/32", "Grid 1/64", "Grid 1/128"};
 
-// Free-mode CurveModel <-> LfoCustomWave: the LFO card's own topology (spec section 4 "Card
-// wiring"). Endpoints are pinned in x (a wave always spans phase 0..1); every point is movable
-// in y over the full 0..1 range (bipolar/unipolar is a card-side display convention, not a model
-// constraint -- see setFillBaselineLevel below).
-CurveModel buildLfoCurveModel(const LfoCustomWave& wave) {
-    const int n = (int)wave.points.size();
-    std::vector<CurveNode> nodes((size_t)n);
-    for (int i = 0; i < n; ++i) {
-        CurveNode node;
-        node.x = (double)wave.points[(size_t)i].x;
-        node.y = wave.points[(size_t)i].y;
-        node.xMovable = (i != 0 && i != n - 1);
-        node.yMovable = true;
-        node.minY = 0.0f;
-        node.maxY = 1.0f;
-        nodes[(size_t)i] = node;
-    }
-    CurveModel model(CurveMode::Free);
-    model.setNodes(std::move(nodes));
-    for (int seg = 0; seg < n - 1; ++seg)
-        model.setBend(seg, wave.points[(size_t)seg].bend);
-    return model;
-}
-
-LfoCustomWave lfoWaveFromCurveModel(const CurveModel& model) {
-    LfoCustomWave wave;
-    const int n = model.getNumNodes();
-    wave.points.resize((size_t)n);
-    for (int i = 0; i < n; ++i) {
-        const auto& node = model.getNode(i);
-        wave.points[(size_t)i].x = (float)node.x;
-        wave.points[(size_t)i].y = node.y;
-        wave.points[(size_t)i].bend = (i < n - 1) ? model.getBend(i) : 0.0f;
-    }
-    wave.sanitise();
-    return wave;
-}
-
 LFOModule* asLfo(juce::AudioProcessor* module) { return dynamic_cast<LFOModule*>(module); }
 
 } // namespace
@@ -89,7 +49,7 @@ void ModuleComponent::createLfoCardControls() {
     lfoCurveEditor = std::make_unique<synth::ui::CurveEditorComponent>();
     lfoCurveEditor->setTitle("LFO custom wave");
     lfoCurveEditor->setDescription("Custom waveform of the LFO");
-    lfoCurveEditor->setModel(buildLfoCurveModel(lfo->getCustomWave()));
+    lfoCurveEditor->setModel(synth::ui::curveModelFromWave(lfo->getCustomWave()));
     lfoCurveEditor->setVisibleRangeOverride(1.0);
     lfoCurveEditor->setZeroSegmentPx(0.0f);
     lfoCurveEditor->setTimeLabelFormatter([](double) { return juce::String(); });
@@ -184,7 +144,7 @@ void ModuleComponent::writeLfoWaveFromCurve() {
     auto* lfo = asLfo(module);
     if (lfoCurveEditor == nullptr || lfo == nullptr)
         return;
-    lfo->setCustomWave(lfoWaveFromCurveModel(lfoCurveEditor->getModel()));
+    lfo->setCustomWave(synth::ui::waveFromCurveModel(lfoCurveEditor->getModel()));
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
 }
 
@@ -194,7 +154,7 @@ void ModuleComponent::syncLfoCurveFromModule() {
     auto* lfo = asLfo(module);
     if (lfoCurveEditor == nullptr || lfo == nullptr || lfoCurveGestureActive)
         return;
-    lfoCurveEditor->setModel(buildLfoCurveModel(lfo->getCustomWave()));
+    lfoCurveEditor->setModel(synth::ui::curveModelFromWave(lfo->getCustomWave()));
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
 }
 

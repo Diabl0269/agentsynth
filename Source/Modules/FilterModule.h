@@ -82,10 +82,12 @@ public:
         // shapes, a pitch shift of the whole response, and a multiplier on its dB.
         addParameter(morphXParam = new juce::AudioParameterFloat("morphX", "Morph X", 0.0f, 1.0f, 0.5f));
         addParameter(morphYParam = new juce::AudioParameterFloat("morphY", "Morph Y", 0.0f, 1.0f, 0.5f));
-        addParameter(shiftParam = new juce::AudioParameterFloat(
-                         "shift", "Shift", juce::NormalisableRange<float>(-48.0f, 48.0f, 0.01f), 0.0f,
-                         juce::AudioParameterFloatAttributes().withLabel("st")));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 2.0f, 1.0f));
+        addParameter(shiftParam = new juce::AudioParameterFloat("shift", "Shift",
+                                                                juce::NormalisableRange<float>(-48.0f, 48.0f, 0.01f),
+                                                                0.0f, synth::semitonesAttributes()));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 2.0f),
+                                                       1.0f, synth::multiplierPercentAttributes()));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.
@@ -329,11 +331,18 @@ public:
     float getModulatedResonance() const { return modulatedResonance.load(std::memory_order_relaxed); }
     float getCurrentDrive() const { return *driveParam; }
     int getCurrentFilterType() const { return filterTypeParam->getIndex(); }
+    /** The Custom controls as set on their knobs (no CV): morph cursor, shift in semitones, depth. */
+    float getCurrentMorphX() const { return morphXParam->get(); }
+    float getCurrentMorphY() const { return morphYParam->get(); }
+    float getCurrentShift() const { return shiftParam->get(); }
+    float getCurrentDepth() const { return depthParam->get(); }
     double getLastSampleRate() const { return lastSampleRate; }
 
     /** Message thread only: the Custom type's drawn shapes. */
     const synth::CustomFilterShapes& getCustomShapes() const { return customEngine.getShapes(); }
     void setCustomShapes(const synth::CustomFilterShapes& shapes) { customEngine.setShapes(shapes); }
+    /** Changes whenever the shape list is replaced, whoever replaced it. */
+    int getCustomShapesGeneration() const { return customEngine.getShapesGeneration(); }
     /** Custom kernels designed so far (tests and diagnostics). */
     int getCustomDesignCount() const { return customEngine.getDesignCount(); }
 

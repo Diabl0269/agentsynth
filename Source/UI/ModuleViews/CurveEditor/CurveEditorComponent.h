@@ -7,6 +7,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace synth::ui {
 
@@ -69,6 +70,20 @@ public:
      *  set. Never affects a bend drag. Off by default. */
     void setSnapToGrid(bool enabled);
 
+    /** One labelled guide line: `position` is in model units along x, or a level in [0, 1] along y. */
+    struct AxisGuide {
+        double position = 0.0;
+        juce::String label;
+        bool emphasised = false; // drawn brighter (a zero line)
+    };
+    struct AxisGuides {
+        std::vector<AxisGuide> x;
+        std::vector<AxisGuide> y;
+    };
+    /** Draws exactly these guides, with their labels, in place of the even grid or the time grid (for an axis that
+     *  is not linear, such as frequency). `nullopt` (the default) restores the grid. */
+    void setAxisGuides(std::optional<AxisGuides> guides);
+
     /** Baseline level `paintCurve` fills its area down (or up) to -- 0 by default. The LFO card
      *  sets 0.5 for a bipolar wave (so the fill reads from the zero line, not the bottom) and 0
      *  for unipolar. */
@@ -113,7 +128,7 @@ public:
     void resetBend(int segment);
 
     /** Free mode only. Snaps like `dragNodeTo` (same `bypassSnap` meaning). Returns the new
-     *  node's index, or -1 outside Free mode. */
+     *  node's index, or -1 outside Free mode or when the curve is at CurveModel::kMaxNodes. */
     int addPointAt(juce::Point<float> point, bool bypassSnap = false);
 
     /** Free mode only. Returns false if refused (pinned node, or would drop below 2 nodes) or
@@ -194,6 +209,7 @@ private:
     std::function<juce::String(double)> timeLabelFormatter_ = &CurveEditorGeometry::defaultTimeLabel;
 
     std::optional<CurveGrid> grid_;
+    std::optional<AxisGuides> guides_;
     bool snapToGrid_ = false;
     float fillBaselineLevel_ = 0.0f;
 

@@ -70,6 +70,11 @@ void CurveEditorComponent::setGrid(std::optional<CurveGrid> grid) {
     repaint();
 }
 
+void CurveEditorComponent::setAxisGuides(std::optional<AxisGuides> guides) {
+    guides_ = std::move(guides);
+    repaint();
+}
+
 void CurveEditorComponent::setSnapToGrid(bool enabled) { snapToGrid_ = enabled; }
 
 void CurveEditorComponent::setFillBaselineLevel(float level) {
@@ -191,7 +196,7 @@ void CurveEditorComponent::resetBend(int segment) {
 }
 
 int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) {
-    if (model_.getMode() != CurveMode::Free)
+    if (model_.getMode() != CurveMode::Free || model_.getNumNodes() >= CurveModel::kMaxNodes)
         return -1;
 
     const auto geometry = currentGeometry();

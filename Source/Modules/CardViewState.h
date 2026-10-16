@@ -17,8 +17,12 @@ struct CardViewState {
     bool showScope = false;
     bool showResponse = false;
     std::optional<bool> showSpectrum;
+    /** The Filter's morph map (Custom type): unset follows the card default, shown from two shapes up. */
+    std::optional<bool> showMorphMap;
 
-    bool isDefault() const noexcept { return !showScope && !showResponse && !showSpectrum.has_value(); }
+    bool isDefault() const noexcept {
+        return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value();
+    }
 
     /** A void var when everything is at its default, so an untouched card adds no JSON. */
     juce::var toVar() const {
@@ -31,6 +35,8 @@ struct CardViewState {
             obj->setProperty("response", true);
         if (showSpectrum.has_value())
             obj->setProperty("spectrum", *showSpectrum);
+        if (showMorphMap.has_value())
+            obj->setProperty("morphMap", *showMorphMap);
         return juce::var(obj);
     }
 
@@ -46,6 +52,9 @@ struct CardViewState {
             out.showResponse = response.isBool() && static_cast<bool>(response);
             if (spectrum.isBool())
                 out.showSpectrum = static_cast<bool>(spectrum);
+            const auto morphMap = obj->getProperty("morphMap");
+            if (morphMap.isBool())
+                out.showMorphMap = static_cast<bool>(morphMap);
         }
         return out;
     }

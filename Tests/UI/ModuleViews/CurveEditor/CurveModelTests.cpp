@@ -182,6 +182,22 @@ TEST(CurveModelTest, FreeAddPointInsertsAtSortedPosition) {
     EXPECT_FLOAT_EQ(model.getBend(1), 0.4f);
 }
 
+TEST(CurveModelTest, AddPointStopsAtTheNodeCap) {
+    CurveModel model(CurveMode::Free);
+    std::vector<CurveNode> nodes((size_t)CurveModel::kMaxNodes);
+    for (int i = 0; i < CurveModel::kMaxNodes; ++i)
+        nodes[(size_t)i] = CurveNode{(double)i / (CurveModel::kMaxNodes - 1), 0.5f, true, true};
+    model.setNodes(nodes);
+    ASSERT_EQ(model.getNumNodes(), CurveModel::kMaxNodes);
+
+    EXPECT_EQ(model.addPoint(0.123, 0.2f), -1) << "a full curve refuses another point";
+    EXPECT_EQ(model.getNumNodes(), CurveModel::kMaxNodes);
+
+    ASSERT_TRUE(model.removePoint(10));
+    EXPECT_GE(model.addPoint(0.123, 0.2f), 0) << "one slot freed, one point accepted";
+    EXPECT_EQ(model.getNumNodes(), CurveModel::kMaxNodes);
+}
+
 TEST(CurveModelTest, FreeRemovePointRefusesPinnedNode) {
     auto model = buildFreeModel();
     ASSERT_FALSE(model.getNode(0).xMovable);
