@@ -39,7 +39,7 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"EQWindow", 0, 0},
     {"ModuleViews", 0, 0},
     {"ShapeEditorWindow", 0, 0},
-    {"FilterCustomCard", 0, 0},
+    {"MorphShapesCard", 0, 0},
     {"WelcomeScreen", 0, 0},
     {"ColourPickerPopup", 0, 0},
     {"ModuleLibraryHelpPopup", 0, 0},

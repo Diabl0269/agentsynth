@@ -17,7 +17,8 @@ struct CardViewState {
     bool showScope = false;
     bool showResponse = false;
     std::optional<bool> showSpectrum;
-    /** The Filter's morph map (Custom type): unset follows the card default, shown from two shapes up. */
+    /** The morph map of the Filter's Custom type and the LFO's Custom shape: unset follows the card default, shown
+     *  from two shapes up. */
     std::optional<bool> showMorphMap;
 
     bool isDefault() const noexcept {

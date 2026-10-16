@@ -118,6 +118,14 @@ CardLayout malletLayout() {
     return layout;
 }
 
+// The Custom wave's morph cursor: Morph X and Y show only while the shape is Custom, so every other shape keeps
+// the old card. Where the shapes' map and its Edit shapes button sit is decided separately.
+CardSection morphSection() {
+    auto morph = section("morph", "Morph", {param("morphX"), param("morphY")});
+    morph.visibleWhen = CardCondition{"shape", {"Custom"}, CardConditionEffect::Show};
+    return morph;
+}
+
 // Shape stays a combo: six values (Sawtooth, Triangle) do not fit one 256 px switch.
 // Rate is the one control the LFO is about: Hz and the tempo division share its cell, swapped by Sync.
 // The custom-wave editor stays card chrome and opens under the body while the shape is Custom.
@@ -134,6 +142,7 @@ CardLayout lfoLayout() {
         section("shaping", std::nullopt,
                 {param("phase"), param("fadeIn"), param("level"), dimUnless(param("glide"), "shape", {"S&H"})},
                 kQuadColumns),
+        morphSection(),
         footer({param("bipolar"), param("retrig")}),
     };
     return layout;

@@ -3,12 +3,12 @@
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
-#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/SequencerModule.h"
+#include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -414,9 +414,9 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
     }
 
     // The Filter's morph map shows its Morph X / Y sliders in place of those knobs: a drop on one lands on it.
-    if (filterCustom_ != nullptr)
-        if (const auto channel = filterCustom_->channelAt(localPoint))
-            return Port{filterCustom_->stripBoundsFor(*channel), *channel, /*isInput*/ true, /*isMidi*/ false};
+    if (morphCard_ != nullptr)
+        if (const auto channel = morphCard_->channelAt(localPoint))
+            return Port{morphCard_->stripBoundsFor(*channel), *channel, /*isInput*/ true, /*isMidi*/ false};
 
     if (thresholdControl != nullptr && thresholdControl->getSlider() != nullptr &&
         thresholdControl->getBounds().contains(localPoint)) {
@@ -477,8 +477,8 @@ float ModuleComponent::knobLandingRadiusOffset() const {
 }
 
 std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int destChannel) const {
-    if (filterCustom_ != nullptr)
-        if (const auto anchor = filterCustom_->anchorFor(destChannel))
+    if (morphCard_ != nullptr)
+        if (const auto anchor = morphCard_->anchorFor(destChannel))
             return anchor;
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
@@ -580,8 +580,8 @@ bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
     if (modDropTargetChannel == channelIndex)
         return false;
     modDropTargetChannel = channelIndex;
-    if (filterCustom_ != nullptr)
-        filterCustom_->setDropChannel(channelIndex);
+    if (morphCard_ != nullptr)
+        morphCard_->setDropChannel(channelIndex);
     repaint();
     return true;
 }

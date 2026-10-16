@@ -108,6 +108,10 @@ public:
      *  it. Unset (the default): a right-click starts no drag and is otherwise a no-op. */
     std::function<void(const juce::MouseEvent&, CurveHitResult)> onContextMenu;
 
+    /** Free mode: a double-click on empty space (not a node or a bend handle) asks this first; returning true
+     *  means the owner handled it, and no point is added. Unset (the default): the double-click adds a point. */
+    std::function<bool(const juce::MouseEvent&)> onEmptyDoubleClick;
+
     // ---------- interaction primitives (public so tests can drive them directly) ----------
 
     CurveHitResult hitTest(juce::Point<float> point) const;

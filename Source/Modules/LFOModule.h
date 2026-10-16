@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Envelope/EnvelopeTempoSync.h"
+#include "Lfo/LfoCustomShapes.h"
 #include "Lfo/LfoCustomWave.h"
+#include "Lfo/LfoShapeBlender.h"
 #include "LfoRateDivisions.h"
 #include "ModuleBase.h"
 #include "ParameterText.h"
@@ -13,7 +15,8 @@
  *
  *  Channel layout (mono):
  *    In  ch0 Rate CV | ch1 Level CV | ch2 Glide CV | ch3 Phase CV | ch4 Fade In CV
- *    Out ch0 CV      | ch1-4 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing,
+ *        ch5 Morph X CV | ch6 Morph Y CV (knob-only: no gutter jack)
+ *    Out ch0 CV      | ch1-6 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing,
  *                       docs/modules/poly-channel-layout.md)
  *
  *  ch0 carries the Rate CV input on the way in and the LFO's own CV output on the way out — read
@@ -24,10 +27,12 @@ class LFOModule : public ModuleBase {
 public:
     // Declared output count must be >= the highest CV input channel this module reads (Fade In,
     // ch4), per docs/modules/poly-channel-layout.md, or JUCE aliases ch1-4 onto ch0's buffer.
-    static constexpr int kNumInputs = 5;
-    static constexpr int kNumOutputs = 5;
+    static constexpr int kNumInputs = 7;
+    static constexpr int kNumOutputs = 7;
     static constexpr int kPhaseChannel = 3;
     static constexpr int kFadeInChannel = 4;
+    static constexpr int kMorphXChannel = 5;
+    static constexpr int kMorphYChannel = 6;
 
     // The Custom-waveform section only shows on the card while shape == this index.
     static constexpr int kCustomShapeIndex = 5;
@@ -40,13 +45,6 @@ public:
         // Shape
         juce::StringArray shapes({"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"});
         addParameter(shapeParam = new juce::AudioParameterChoice("shape", "Shape", shapes, 0));
-
-        // Rendered once here so a fresh module (never touched by setCustomWave) already
-        // has a valid Triangle table on both sides of the publish/adopt seam -- see
-        // DefaultCustomWaveIsTriangleBeforeAnyPublish.
-        customWave_.renderTable(pendingCustomTable_);
-        customTablePending_ = false;
-        audioCustomTable_ = pendingCustomTable_;
 
         // Mode: Hz (false) / Sync (true). The text is what the card's Free/Sync switch shows.
         addParameter(modeParam = new juce::AudioParameterBool(
@@ -82,6 +80,9 @@ public:
         addParameter(fadeInParam = new juce::AudioParameterFloat("fadeIn", "Fade In",
                                                                  juce::NormalisableRange<float>(0.0f, 10000.0f), 0.0f,
                                                                  synth::millisecondsAttributes()));
+        // Custom shape only: the morph cursor over the drawn shapes (one shape ignores it).
+        addParameter(morphXParam = new juce::AudioParameterFloat("morphX", "Morph X", 0.0f, 1.0f, 0.5f));
+        addParameter(morphYParam = new juce::AudioParameterFloat("morphY", "Morph Y", 0.0f, 1.0f, 0.5f));
         addMuteParameter();
     }
 
@@ -118,11 +119,6 @@ public:
         if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
             return;
 
-        // Adopt whatever custom-wave table the message thread last published, once per
-        // block, before the sample loop reads audioCustomTable_ -- see adoptPendingCustomTable's
-        // own comment for why this is a try-lock, not a lock.
-        adoptPendingCustomTable();
-
         // Rate/Level/Glide CV, read once per block (docs/modules/modulation.md#cv-in-normalised-units).
         // ch0 must be read before the sample loop below overwrites it with the CV output.
         const float rateCv = blockCV(buffer, 0);
@@ -130,6 +126,8 @@ public:
         const float glideCv = blockCV(buffer, 2);
         const float phaseCv = blockCV(buffer, kPhaseChannel);
         const float fadeInCv = blockCV(buffer, kFadeInChannel);
+        const float morphXCv = blockCV(buffer, kMorphXChannel);
+        const float morphYCv = blockCV(buffer, kMorphYChannel);
 
         auto* channelData0 = buffer.getWritePointer(0);
 
@@ -181,6 +179,12 @@ public:
             smoothedPhase.setTargetValue(phaseTarget);
         }
         int shape = shapeParam->getIndex();
+        // The Custom wave: the shapes blended at the morph cursor, once per block (and only when the list or the
+        // cursor changed); the sample loop below reads the resulting table.
+        const synth::LfoCustomWave::Table* customTable = nullptr;
+        if (shape == kCustomShapeIndex)
+            customTable = &shapes_.blend(modulateNormalised(*morphXParam, morphXParam->get(), morphXCv),
+                                         modulateNormalised(*morphYParam, morphYParam->get(), morphYCv));
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
             const float level = smoothedLevel.getNextValue();
@@ -216,8 +220,8 @@ public:
                 const float pos = readPhase * (float)synth::LfoCustomWave::kTableSize;
                 const int i = juce::jlimit(0, synth::LfoCustomWave::kTableSize - 1, (int)pos);
                 const float f = pos - (float)i;
-                currentSample = audioCustomTable_[(size_t)i] +
-                                (audioCustomTable_[(size_t)i + 1] - audioCustomTable_[(size_t)i]) * f;
+                currentSample =
+                    (*customTable)[(size_t)i] + ((*customTable)[(size_t)i + 1] - (*customTable)[(size_t)i]) * f;
                 currentSample = currentSample * 2.0f - 1.0f; // table is 0..1 -> bipolar -1..1 like every other shape
                 break;
             }
@@ -302,11 +306,11 @@ public:
     ModuleType getModuleType() const override { return ModuleType::LFO; }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Rate", "Level", "Glide", "Phase", "Fade In"};
+        const juce::String labels[] = {"Rate", "Level", "Glide", "Phase", "Fade In", "Morph X", "Morph Y"};
         return (i >= 0 && i < kNumInputs) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
-    // Only ch0 (CV out) is visible; ch1-4 are silent pass-throughs (see class comment).
+    // Only ch0 (CV out) is visible; ch1-6 are silent pass-throughs (see class comment).
     int getVisibleOutputPortCount() const override { return 1; }
 
     // Every raw input channel this module declares must be claimed here, or an unclaimed one
@@ -338,48 +342,76 @@ public:
 
     // Every continuous parameter gets a CV jack
     // (docs/modules/modulation.md#every-continuous-parameter-is-a-target). paramId binds each
-    // jack to its knob; "Rate" vs the knob name "Rate (Hz)" would not match without it.
+    // jack to its knob; "Rate" vs the knob name "Rate (Hz)" would not match without it. The two Morph targets
+    // are knob-only (no gutter row): a cable lands on the knob's ring, so the LFO card keeps its jack column.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Rate", 0, "rateHz"},
                 {"Level", 1, "level"},
                 {"Glide", 2, "glide"},
                 {"Phase", kPhaseChannel, "phase"},
-                {"Fade In", kFadeInChannel, "fadeIn"}};
+                {"Fade In", kFadeInChannel, "fadeIn"},
+                {"Morph X", kMorphXChannel, "morphX", true},
+                {"Morph Y", kMorphYChannel, "morphY", true}};
     }
 
     // ---- Custom waveform (message thread only, except where noted) ------------
 
-    /** Sanitises, stores, re-renders the audio-thread table and bumps the generation counter --
-     *  called by the card's forward-sync (ModuleComponentLfoCard.cpp) and by setExtraState. */
+    /** The wave of the FIRST shape: sanitises it, stores it (the other shapes stay), re-renders the audio-thread
+     *  table and bumps the generation counter -- called by the card's forward-sync (ModuleComponentLfoCard.cpp). With
+     *  one shape this is the whole Custom wave, exactly as before shapes existed. */
     void setCustomWave(const synth::LfoCustomWave& wave) {
-        customWave_ = wave;
-        customWave_.sanitise();
-        synth::LfoCustomWave::Table table{};
-        customWave_.renderTable(table);
-        publishCustomTable(table);
-        customWaveGeneration_.fetch_add(1, std::memory_order_relaxed);
+        auto list = shapes_.getShapes();
+        list.shapes.front().curve = wave;
+        shapes_.setShapes(list);
     }
-    const synth::LfoCustomWave& getCustomWave() const noexcept { return customWave_; }
-    /** Bumped by every setCustomWave call -- the card polls this against its own last-seen value
+    /** Replaces the curve of shape `index` (clamped into the list) and keeps the rest: the card's small curve editor
+     *  works on the shape nearest the cursor. */
+    void setCustomShapeCurve(int index, const synth::LfoCustomWave& wave) {
+        auto list = shapes_.getShapes();
+        list.shapes[(size_t)juce::jlimit(0, (int)list.shapes.size() - 1, index)].curve = wave;
+        shapes_.setShapes(list);
+    }
+    /** The first shape's wave. */
+    const synth::LfoCustomWave& getCustomWave() const noexcept { return shapes_.getShapes().shapes.front().curve; }
+    /** The Custom wave's shapes on the morph map. */
+    const synth::LfoCustomShapes& getCustomShapes() const noexcept { return shapes_.getShapes(); }
+    void setCustomShapes(const synth::LfoCustomShapes& shapes) { shapes_.setShapes(shapes); }
+    /** Bumped by every setCustomWave/setCustomShapes call -- the card polls this against its own last-seen value
      *  to reverse-sync after an undo/redo or preset load it didn't itself just write. */
-    int getCustomWaveGeneration() const noexcept { return customWaveGeneration_.load(std::memory_order_relaxed); }
+    int getCustomWaveGeneration() const noexcept { return shapes_.getGeneration(); }
+    /** The morph cursor as set on its knobs (no CV). */
+    float getCurrentMorphX() const { return morphXParam->get(); }
+    float getCurrentMorphY() const { return morphYParam->get(); }
     /** Written once per block by processBlock (audio thread); read by the card's gated 15 Hz
      *  playhead poll. */
     float getPhaseForUI() const noexcept { return uiPhase_.load(std::memory_order_relaxed); }
 
-    /** `{}` while the wave is still the Triangle default (regardless of the current shape index --
+    /** `{}` while the shapes are still the one Triangle default (regardless of the current shape index --
      *  a Custom wave sculpted while on another shape must not be lost when the user switches back
-     *  and forth), else `customWave_.toVar()`. Applied on the TRUSTED path only, same as every
-     *  other module's extra state (docs/ai/patch-safety.md). */
-    juce::var getExtraState() const override { return customWave_.isDefault() ? juce::var() : customWave_.toVar(); }
+     *  and forth), else `LfoCustomShapes::toVar()`: the bare wave JSON for a single plain shape (what every
+     *  project saved before shapes existed), the shape list otherwise. */
+    juce::var getExtraState() const override {
+        const auto& list = shapes_.getShapes();
+        return list.isDefault() ? juce::var() : list.toVar();
+    }
     /** A void/absent state (no extra-state key at all, or an explicit void var) resolves to the
-     *  default wave via setCustomWave(fromVar({})) -- fromVar's own rules give that outcome for
-     *  any non-object var, so this needs no special case. */
-    void setExtraState(const juce::var& state) override { setCustomWave(synth::LfoCustomWave::fromVar(state)); }
-    /** The curve is only points (fromVar clamps x/y/bend and caps the count at kMaxPoints; garbage
-     *  becomes the default wave), so AI-authored patches may set it too: with Retrig on it is a
-     *  per-note shape such as a pitch swoop (docs/ai/patch-safety.md). */
-    void setUntrustedExtraState(const juce::var& state) override { setExtraState(state); }
+     *  default wave -- LfoCustomShapes::fromVar gives that outcome for any non-object var, and reads a
+     *  pre-shapes bare wave as one shape. */
+    void setExtraState(const juce::var& state) override { shapes_.setShapes(synth::LfoCustomShapes::fromVar(state)); }
+    /** The shapes are only curve points, map coordinates and short whitelisted names (fromUntrustedVar caps
+     *  the count at 16, the points at kMaxPoints; garbage becomes the default wave), so AI-authored patches
+     *  may set them too: with Retrig on it is a per-note shape such as a pitch swoop
+     *  (docs/ai/patch-safety.md). A shape list that holds nothing usable leaves the current shapes alone; the
+     *  bare wave format behaves as it always did. */
+    void setUntrustedExtraState(const juce::var& state) override {
+        if (!synth::LfoCustomShapes::isShapeListVar(state)) {
+            setExtraState(state);
+            return;
+        }
+        synth::LfoCustomShapes parsed;
+        if (synth::LfoCustomShapes::fromUntrustedVar(state, parsed))
+            shapes_.setShapes(parsed);
+    }
 
 private:
     /** The LFO rate in Hz for this block: the Rate knob (plus its CV) in Hz mode, the tempo
@@ -421,31 +453,7 @@ private:
         return rate;
     }
 
-    // Mirrors WavetableOscillatorModule's publishLoadedTable/adoptPendingTable
-    // (WavetableOscillatorModule.cpp), simplified to a fixed-size array (no allocation, ever,
-    // rather than a swapped shared_ptr) since a custom-wave table's size is compile-time fixed.
-    void publishCustomTable(const synth::LfoCustomWave::Table& t) {
-        const juce::SpinLock::ScopedLockType lock(customTableLock_);
-        pendingCustomTable_ = t;
-        customTablePending_ = true;
-    }
-    // Audio thread, once per block, before the sample loop. A try-lock: on contention this block
-    // simply keeps last block's table, which is at worst one block of staleness and never blocks
-    // or allocates -- the audio-thread invariant every SpinLock use in this codebase must keep.
-    void adoptPendingCustomTable() {
-        const juce::SpinLock::ScopedTryLockType lock(customTableLock_);
-        if (!lock.isLocked() || !customTablePending_)
-            return;
-        audioCustomTable_ = pendingCustomTable_;
-        customTablePending_ = false;
-    }
-
-    mutable juce::SpinLock customTableLock_; // guards pendingCustomTable_/customTablePending_ only
-    synth::LfoCustomWave::Table pendingCustomTable_{};
-    bool customTablePending_ = false;
-    synth::LfoCustomWave::Table audioCustomTable_{}; // audio-thread-private; never touched from the message thread
-    synth::LfoCustomWave customWave_ = synth::LfoCustomWave::defaultWave(); // message-thread-only
-    std::atomic<int> customWaveGeneration_{0};
+    synth::LfoShapeBlender shapes_; // the Custom wave: shape list (message thread) and blended table (audio thread)
     std::atomic<float> uiPhase_{0.0f};
 
     juce::AudioParameterChoice* shapeParam;
@@ -458,6 +466,8 @@ private:
     juce::AudioParameterFloat* glideParam;
     juce::AudioParameterFloat* phaseParam;
     juce::AudioParameterFloat* fadeInParam;
+    juce::AudioParameterFloat* morphXParam;
+    juce::AudioParameterFloat* morphYParam;
 
     float phase = 0.0f;
     double currentSampleRate = 44100.0;

@@ -3,11 +3,11 @@
 // and the default body-content layout shared by most module cards. ModuleComponent is declared
 // in ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one.
-#include "FilterCustomCard/FilterCustomCard.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -223,8 +223,8 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
         y += blockHeight(responseFade_, kRowHeight + 2);
     }
 
-    if (filterCustom_ != nullptr)
-        y = filterCustom_->layout(y, contentX, contentW, apply);
+    if (morphCard_ != nullptr)
+        y = morphCard_->layout(y, contentX, contentW, apply);
 
     if (scopeToggle && !footer) {
         if (apply)
@@ -246,7 +246,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
 
 std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
     std::vector<juce::ToggleButton*> toggles;
-    juce::ToggleButton* morphToggle = filterCustom_ != nullptr ? &filterCustom_->getToggle() : nullptr;
+    juce::ToggleButton* morphToggle = morphCard_ != nullptr ? &morphCard_->getToggle() : nullptr;
     for (auto* toggle :
          {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle, scopeToggle.get()})
         if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))

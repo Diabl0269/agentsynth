@@ -155,10 +155,10 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   Escape, so each text field calls `bubbleEscapeToParents` and Escape travels up as it would from any
   other control. Return presses the dialog's default button where it has one (Export, Open in Browser).
 
-## The Filter's morph map and shape editor
+## The morph map and shape editor
 
-Both the Filter card (Custom type) and the shape editor window use `MorphMap`; the audit covers them as the
-`FilterCustomCard` and `ShapeEditorWindow` surfaces (no baseline gaps). The map is a Tab stop with the soft region
+The Filter card (Custom type), the LFO card (Custom shape) and the shape editor window use `MorphMap`; the audit covers
+them as the `MorphShapesCard` (both cards) and `ShapeEditorWindow` surfaces (no baseline gaps). The map is a Tab stop with the soft region
 outline, and each dot, the cursor and the two edge sliders is a transparent, mouse-inert stop over the painted thing
 (the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. Names carry
 values and are re-set on every change ("ah, X 0.20, Y 0.25", "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"); tooltips

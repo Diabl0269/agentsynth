@@ -1,5 +1,6 @@
 # The Filter module and its Custom type (drawn shapes, minimum-phase kernel design, partitioned
-# convolution). Part of Core; its own list so the root file stays under the line cap.
+# convolution), plus the shape-list pieces it shares with the LFO's Custom wave (Source/Modules/Shapes,
+# LfoCustomShapes, LfoShapeBlender). Part of Core; its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/FilterModule.h
     Source/Modules/Filter/CustomFilterShapes.h
@@ -17,4 +18,11 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/CustomFilterVoiceCursors.cpp
     Source/Modules/Filter/CustomFilterBlend.h
     Source/Modules/Filter/CustomFilterBlend.cpp
+    Source/Modules/Shapes/LockFreeHandoff.h
+    Source/Modules/Shapes/MorphShapes.h
+    Source/Modules/Shapes/MorphShapes.cpp
+    Source/Modules/Lfo/LfoCustomShapes.h
+    Source/Modules/Lfo/LfoCustomShapes.cpp
+    Source/Modules/Lfo/LfoShapeBlender.h
+    Source/Modules/Lfo/LfoShapeBlender.cpp
 )

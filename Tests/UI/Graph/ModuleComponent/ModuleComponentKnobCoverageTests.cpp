@@ -18,8 +18,8 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/FilterCustomCard/FilterCustomCard.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -168,10 +168,12 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
 }
 
 // Card sections a choice shows only in one mode (the Filter's Custom knobs, shown while filterType is
-// "Custom"): the sweep runs once per listed choice as well as at the default, and a knob that exists
-// but is hidden in the current mode is checked in the pass where its mode is on instead.
+// "Custom"; the LFO's Morph knobs, shown while shape is "Custom"): the sweep runs once per listed choice as well as at
+// the default, and a knob that exists but is hidden in the current mode is checked in the pass where its mode is on
+// instead.
 const std::map<juce::String, std::pair<juce::String, juce::String>> kModeChoices = {
     {"Filter", {"filterType", "Custom"}},
+    {"LFO", {"shape", "Custom"}},
 };
 
 void setChoiceByName(ModuleBase& mb, const juce::String& paramId, const juce::String& choiceName) {
@@ -247,9 +249,8 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
                     SCOPED_TRACE(target.name.toStdString());
                     // The Filter's morph map shows slider strips in place of the Morph X / Y knobs: they land the
                     // cable.
-                    const bool landsOnMapSlider =
-                        card.getFilterCustomCard() != nullptr &&
-                        card.getFilterCustomCard()->anchorFor(target.channelIndex).has_value();
+                    const bool landsOnMapSlider = card.getMorphCard() != nullptr &&
+                                                  card.getMorphCard()->anchorFor(target.channelIndex).has_value();
                     EXPECT_TRUE(card.sliderIndexForModTarget(target) >= 0 || landsOnMapSlider)
                         << "jack \"" << target.name << "\" (channel " << target.channelIndex
                         << ") has no bound knob -- a dropped cable would find nothing to ring";

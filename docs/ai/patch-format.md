@@ -89,6 +89,14 @@ triangle. It is pure data, so it cannot name a file. The curve plays when the no
 with `retrig` on it restarts on every note, so a model can give each note its own shape, such as a pitch
 swoop on a bird call. Tests: `Tests/AI/LfoCurveTrustTests.cpp`.
 
+The LFO's Custom wave can also be a list of shapes the `morphX` / `morphY` params blend between, in the
+Filter's list format below (`{"shapes": [{"name", "position", "curve"}, ...]}`, the curve being the points
+object above, a bad curve becoming the triangle). It is read under the same caps as the Filter's: at most
+16 shapes, 64 points a curve, 3 map values clamped to 0..1, a name of at most 24 characters of letters,
+digits, space and `-`, every other key ignored. A state with a `shapes` key but no usable shape leaves the
+current shapes unchanged; the bare curve object above still sets one shape. The blend is inverse-distance
+over the map, as the Filter's. Tests: `Tests/AI/LfoCustomShapesTrustTests.cpp`.
+
 **The second exception: a `Filter` node's Custom shapes.** `FilterModule` overrides
 `setUntrustedExtraState()` too. Its `state` is the shape list the Custom filter type morphs between:
 
