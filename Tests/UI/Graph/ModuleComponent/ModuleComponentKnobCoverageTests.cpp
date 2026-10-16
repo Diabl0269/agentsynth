@@ -168,10 +168,12 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
 }
 
 // Card sections a choice shows only in one mode (the Filter's Custom knobs, shown while filterType is
-// "Custom"): the sweep runs once per listed choice as well as at the default, and a knob that exists
-// but is hidden in the current mode is checked in the pass where its mode is on instead.
+// "Custom"; the LFO's Morph knobs, shown while shape is "Custom"): the sweep runs once per listed choice as well as at
+// the default, and a knob that exists but is hidden in the current mode is checked in the pass where its mode is on
+// instead.
 const std::map<juce::String, std::pair<juce::String, juce::String>> kModeChoices = {
     {"Filter", {"filterType", "Custom"}},
+    {"LFO", {"shape", "Custom"}},
 };
 
 void setChoiceByName(ModuleBase& mb, const juce::String& paramId, const juce::String& choiceName) {

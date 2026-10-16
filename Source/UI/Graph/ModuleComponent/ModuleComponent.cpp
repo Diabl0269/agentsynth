@@ -212,6 +212,9 @@ void ModuleComponent::detachFromProcessor() {
     filterCustom_.reset();
     responseFade_.reset();
     lfoFade_.reset();
+    if (lfoShapesWindow_ != nullptr)
+        delete lfoShapesWindow_.getComponent();
+    lfoShapesWindow_ = nullptr;
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();

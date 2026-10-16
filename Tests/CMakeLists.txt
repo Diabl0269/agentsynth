@@ -92,6 +92,7 @@ add_executable(Tests
     Modules/LFOModuleTests.cpp
     Modules/Lfo/LfoCustomWaveTests.cpp
     Modules/Lfo/LFOModuleCustomShapeTests.cpp
+    Modules/Lfo/LfoShapeMorphTests.cpp
     Modules/Lfo/LFOModulePhaseFadeInTests.cpp
     Modules/Lfo/LFOSyncPhaseLockTests.cpp
     Modules/SampleHoldModuleTests.cpp
@@ -218,6 +219,7 @@ add_executable(Tests
     AI/CardLayoutTrustTests.cpp
     AI/LfoCurveTrustTests.cpp
     AI/FilterCustomShapesTrustTests.cpp
+    AI/LfoCustomShapesTrustTests.cpp
     UI/Graph/CardBody/ModuleCardLayoutResolverTests.cpp
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperCatalogTests.cpp
@@ -534,6 +536,7 @@ add_executable(Tests
     UI/ModuleViews/ShapeEditor/ShapeEditorTests.cpp
     UI/ModuleViews/ShapeEditor/MorphMapTests.cpp
     UI/ModuleViews/ShapeEditor/PerNoteBarTests.cpp
+    UI/ModuleViews/ShapeEditor/LfoShapesWindowTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Layout/FadeVisibilityTests.cpp
     UI/Layout/ReducedMotionTests.cpp

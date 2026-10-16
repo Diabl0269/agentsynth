@@ -100,7 +100,7 @@ void CustomFilterEngine::processPerVoice(float* const* channels, int numChannels
                                          const CustomFilterVoiceCursors::Settings& settings) noexcept {
     perVoiceActive_ = true;
     numVoices = juce::jmin(numVoices, kMaxVoices);
-    const ShapeTable& table = *current_;
+    const ShapeTable& table = *tables_.current();
     const CustomFilterVoiceCursors::ShapeMap map{table.count, table.x.data(), table.y.data(), table.orderByX.data()};
     cursors_.update(voices, numVoices, numSamples, settings, map, controls.morphX, controls.morphY);
 

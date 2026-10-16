@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Modules/Lfo/LfoCustomWave.h"
+#include "Modules/Shapes/MorphShapes.h"
 #include <juce_core/juce_core.h>
 #include <vector>
 
@@ -12,24 +13,18 @@ namespace synth {
 
 /** One drawn shape: a magnitude curve in LfoCustomWave's point model (x = log frequency from
  *  kMinHz to kMaxHz, y in [0, 1] mapped linearly to kMinDb..kMaxDb, so y = 0.8 is 0 dB) and a
- *  position on the morph map (each coordinate in [0, 1]; two used today, more allowed). */
-struct CustomFilterShape {
-    juce::String name;
-    LfoCustomWave curve;
-    std::vector<float> position;
-
-    bool operator==(const CustomFilterShape&) const;
-};
+ *  position on the morph map. The record is shared with the LFO's shape list (morph::Shape). */
+using CustomFilterShape = morph::Shape;
 
 /** The whole shape list. Always sanitised to at least one shape (see `sanitise()`). */
 struct CustomFilterShapes {
     static constexpr int kVersion = 1;
-    static constexpr int kMapDimensions = 2; // coordinates the audio path reads
-    static constexpr int kMaxShapes = 64;    // parse cap only; the format itself has no count
-    static constexpr int kMaxNameLength = 64;
-    static constexpr int kMaxUntrustedShapes = 16;     // model-authored patches
-    static constexpr int kMaxUntrustedNameLength = 24; // [A-Za-z0-9 space -] only
-    static constexpr int kMaxUntrustedMapValues = 3;
+    static constexpr int kMapDimensions = morph::kMapDimensions; // coordinates the audio path reads
+    static constexpr int kMaxShapes = morph::kMaxShapes;         // parse cap only; the format has no count
+    static constexpr int kMaxNameLength = morph::kMaxNameLength;
+    static constexpr int kMaxUntrustedShapes = morph::kMaxUntrustedShapes;         // model-authored patches
+    static constexpr int kMaxUntrustedNameLength = morph::kMaxUntrustedNameLength; // [A-Za-z0-9 space -] only
+    static constexpr int kMaxUntrustedMapValues = morph::kMaxUntrustedMapValues;
     static constexpr float kMinHz = 20.0f;
     static constexpr float kMaxHz = 20000.0f;
     static constexpr float kMinDb = -48.0f;

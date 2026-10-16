@@ -11,6 +11,8 @@
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include <cmath>
 
 using namespace detail;
@@ -305,4 +307,21 @@ int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int content
     y += blockHeight(lfoFade_, kLfoWaveGraphHeight + 8);
 
     return y;
+}
+
+/** One window per card; asking again raises it and selects the shape. The title carries the card's current name. */
+juce::DialogWindow* ModuleComponent::openShapesWindow(int shapeIndex) {
+    auto* lfo = dynamic_cast<LFOModule*>(module);
+    if (lfo == nullptr)
+        return nullptr;
+    if (lfoShapesWindow_ != nullptr) {
+        lfoShapesWindow_->toFront(true);
+        if (auto* editor = dynamic_cast<synth::ui::ShapeListEditor*>(lfoShapesWindow_->getContentComponent()))
+            editor->setSelected(shapeIndex);
+        return lfoShapesWindow_.getComponent();
+    }
+    auto adapter = std::make_shared<synth::ui::LfoShapesAdapter>(*lfo, undoManager, owner.getAudioEngine().getGraph(),
+                                                                 nodeId, cardTitle());
+    lfoShapesWindow_ = synth::ui::openShapeEditorWindow(std::move(adapter), shapeIndex, this);
+    return lfoShapesWindow_.getComponent();
 }

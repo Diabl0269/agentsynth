@@ -328,12 +328,14 @@ TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(lfo->getInputPortLabel(2), "Glide");
     EXPECT_EQ(lfo->getInputPortLabel(3), "Phase");
     EXPECT_EQ(lfo->getInputPortLabel(4), "Fade In");
-    EXPECT_EQ(lfo->getVisibleInputPortCount(), 5);
+    EXPECT_EQ(lfo->getInputPortLabel(5), "Morph X");
+    EXPECT_EQ(lfo->getInputPortLabel(6), "Morph Y");
+    EXPECT_EQ(lfo->getVisibleInputPortCount(), 7) << "Morph X / Y are knob-only jacks: raw channels, no gutter row";
     EXPECT_EQ(lfo->getVisibleOutputPortCount(), 1);
     EXPECT_EQ(lfo->getOutputPortLabel(0), "CV");
 
     auto targets = lfo->getModulationTargets();
-    ASSERT_EQ(targets.size(), 5u);
+    ASSERT_EQ(targets.size(), 7u);
     EXPECT_EQ(targets[0].name, "Rate");
     EXPECT_EQ(targets[0].channelIndex, 0);
     EXPECT_EQ(targets[0].paramId, "rateHz");

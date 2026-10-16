@@ -152,7 +152,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, dualIO, muted"},
-        {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, muted, phase, rateHz, rateSync, retrig, shape"},
+        {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, morphX, morphY, muted, phase, rateHz, rateSync, "
+                "retrig, shape"},
         {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         // The four Macro I/O port node types: pure pass-throughs, so the inherited

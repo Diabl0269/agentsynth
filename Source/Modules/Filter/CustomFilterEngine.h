@@ -8,6 +8,7 @@
 #include "CustomFilterPerNote.h"
 #include "CustomFilterShapes.h"
 #include "CustomFilterVoiceCursors.h"
+#include "Modules/Shapes/LockFreeHandoff.h"
 #include "PartitionedConvolver.h"
 #include <array>
 #include <atomic>
@@ -91,8 +92,6 @@ private:
     bool needsDesign(const Controls& c) const noexcept;
     void design(const Controls& c, int fadeSamples) noexcept;
     void designKernel(const Controls& c) noexcept;
-    void adoptPendingTable() noexcept;
-    void freeRetiredTables() noexcept;
     CustomFilterVoiceCursors::Settings readPerNoteSettings() noexcept;
     void processPerVoice(float* const* channels, int numChannels, int numSamples, const Controls& controls,
                          const VoiceInput* voices, int numVoices, const CustomFilterVoiceCursors::Settings& s) noexcept;
@@ -104,12 +103,7 @@ private:
 
     CustomFilterShapes shapes_; // message thread only
 
-    // Lock-free table handoff: see CustomFilterEngine.cpp.
-    std::atomic<ShapeTable*> pending_{nullptr};
-    ShapeTable* current_ = nullptr; // audio thread only
-    static constexpr int kRetireCapacity = 32;
-    std::array<ShapeTable*, kRetireCapacity> retired_{};
-    juce::AbstractFifo retireFifo_{kRetireCapacity};
+    LockFreeHandoff<ShapeTable> tables_; // message thread publishes, audio thread adopts
 
     CustomFilterKernelDesigner designer_;
     PartitionedConvolver convolver_;

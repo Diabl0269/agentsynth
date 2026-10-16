@@ -26,6 +26,22 @@ reach the module through its extra state (`setCustomShapes` / `setExtraState`) a
   `ah` (0.2, 0.25), `ee` (0.8, 0.25) and `oo` (0.5, 0.8), whose peaks stay at or below +2 dB, so
   switching to Custom sounds at once and adds no gain (the gain audit sweeps `filterType`).
 
+## Shared with the LFO
+
+The LFO's Custom wave is the same idea over phase ([`lfo.md`](lfo.md)), so the pieces that do not depend on what a
+curve means live in `Source/Modules/Shapes/` and both modules use them:
+
+- `morph::Shape` (name, `LfoCustomWave` curve, map position) is `CustomFilterShape`; `morph::blendWeights` is the
+  inverse-distance blend below (`CustomFilterEngine::blendWeights` calls it); `morph::shapeToVar`,
+  `shapesFromVar` (trusted and untrusted caps) and `sanitiseShapes` are the JSON and sanitising rules of both lists.
+  The caps (`kMaxShapes` 64, 16 untrusted, 24-character names, 3 map values) are `CustomFilterShapes::k...` aliases.
+- `LockFreeHandoff<T>` is the pending slot and retire FIFO that `CustomFilterEngine` uses to give the audio thread a
+  new table without allocating or freeing there; `LfoShapeBlender` uses the same one.
+- The shape list editor window and morph map take any `ShapeListAdapter`: `FilterShapesAdapter` and `LfoShapesAdapter`.
+
+What stays per module: the Filter's dB/Hz curve meaning, presets, defaults and format version
+(`CustomFilterShapes`), the LFO's phase curve and plain-wave save format (`LfoCustomShapes`).
+
 ## Parameters
 
 | ID | Range | Default | Effect |

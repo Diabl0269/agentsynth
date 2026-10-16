@@ -653,7 +653,7 @@ layout's tab section never binds its jack, selected or not, so a tab switch neve
 
 - draws no gutter dot or label at all (`ModuleComponent::paint`'s input loop iterates
   `drawnInputJackIndices()`, not every visible index);
-- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV) is left out of that list even
+- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV and the LFO's Morph X/Y) is left out of that list even
   while its knob is hidden, so a mode that hides the knob never brings its jack back into the gutter;
 - is never hit-tested by `getPortForPoint` (same list), so a mouse-down there falls through to the
   knob's own gesture handling instead of starting a jack drag;

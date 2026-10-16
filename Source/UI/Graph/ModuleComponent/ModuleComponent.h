@@ -626,6 +626,7 @@ private:
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
+    juce::Component::SafePointer<juce::DialogWindow> lfoShapesWindow_; // the shape list editor, while open
 
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
@@ -846,6 +847,9 @@ public:
     void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step
     void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
     void setLfoGridDivisions(int n);          // 0: grid Off (no snap); else {n, min(n, 8)}, snap on
+    /** Opens (or raises) this LFO's shape list editor on `shapeIndex`; null for a non-LFO or when a test hook took it.
+     */
+    juce::DialogWindow* openShapesWindow(int shapeIndex = 0);
 
     // ---- Parametric EQ card ----
     /** Opens the pop-out EQ editor, or raises it when it is already open. Public so the mixer's EQ key
