@@ -16,6 +16,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## Modules
 
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
+- [`docs/modules/sequencer-design.md`](modules/sequencer-design.md) — design (pending picks): scales, step count, per-step settings and pattern tools for the sequencers, on a scale engine shared with the piano roll
 - [`docs/modules/pluck-mallet.md`](modules/pluck-mallet.md) — the Pluck (extended Karplus-Strong string) and Mallet (modal struck bar) instruments: parameters, algorithms, formulas
 - [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)
 - [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
@@ -57,6 +58,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/macros/auto-ports.md`](macros/auto-ports.md) — the auto-port preference, auto-creating ports when grouping, a modulation cable through an attenuverter, ungroup and direct deletion of a port, ports on a cable drag
 - [`docs/macros/configure-io.md`](macros/configure-io.md) — the Configure I/O dialog: adding/renaming/reordering/deleting a port, changing its shape, per-port colour, keyboard handling
 - [`docs/macros/menu-and-membership.md`](macros/menu-and-membership.md) — the macro menu's entry points, adding to/removing from a macro, incremental port splicing, Cmd-drag across a hull border (join, leave, transfer; the drag-without-Cmd preference), dropping a library module into a macro, the collapse button
+- [`docs/macros/custom-module-design.md`](macros/custom-module-design.md) — design (pending picks): a folded macro with a designed face, saved to the library, buildable by the AI
 - [`docs/mixer/mixer.md`](mixer/mixer.md) — hub: what a channel is, node types, channels follow audio not tracks, solo as a render-time gate, mono/stereo, bypass/mute, inserts, building a channel, AI authorability
 - [`docs/mixer/fader.md`](mixer/fader.md) — the mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
 - [`docs/mixer/meters.md`](mixer/meters.md) — the per-reader peak latch, dB scale and taper, ballistics, colour zones, user-editable meter colours, the clip readout, the track header chip
