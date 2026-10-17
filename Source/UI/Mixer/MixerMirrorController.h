@@ -59,6 +59,7 @@ public:
     ~MixerMirrorController();
 
     bool isOpen() const noexcept { return window_ != nullptr; }
+    void raiseIfOpen();
 
     /** Opens the mirror window (building + configuring + copy-wiring mirror_ the first time only,
      *  then re-copying the wiring and rebuilding on every open() in case it changed since) or, if

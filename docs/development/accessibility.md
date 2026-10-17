@@ -192,6 +192,7 @@ Settings window's strip both do):
   it to the panel's region root); Tab goes into the content by normal traversal, so the leaf is ahead of the
   content in the Tab order, and Shift+Tab from the content's first control returns to the leaf.
 - Keys with a modifier, Tab and Escape are not the strip's: they bubble up to the window.
+- A tab's icons (the dock's swap and detach icons) are buttons inside its radio element, never Tab stops of their own: the focused strip presses them with Shift+Return and Option+Return and shows the ring on the icon while that modifier is held.
 - There is no global "next tab" chord: the former rebindable `tabPrevious` / `tabNext` actions were removed
   because the focused strip's arrows do the job. A saved binding that still names them is ignored on load.
 

@@ -59,7 +59,7 @@ TEST_F(BottomDockSwapIconTest, EveryOfferedTabHasAnEnabledSwapIconAtItsRightEdge
     }
 }
 
-TEST_F(BottomDockSwapIconTest, TheCanvasTabHasASwapIconOnceItIsInThePanelAndNoDetachButton) {
+TEST_F(BottomDockSwapIconTest, TheCanvasTabHasASwapIconOnceItIsInThePanelAndNoDetachIcon) {
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
     auto& icon = dock().getSwapIcon(Tab::Canvas);
     EXPECT_TRUE(icon.getParentComponent()->isVisible());
@@ -67,7 +67,7 @@ TEST_F(BottomDockSwapIconTest, TheCanvasTabHasASwapIconOnceItIsInThePanelAndNoDe
     EXPECT_TRUE(icon.isEnabled());
 
     dock().setActiveTab(Tab::Canvas);
-    EXPECT_FALSE(dock().getDetachButtonForTest().isVisible()) << "the canvas cannot open in its own window";
+    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the canvas cannot open in its own window";
 }
 
 TEST_F(BottomDockSwapIconTest, ClickingAnIconPutsThatViewInTheMainAreaAndTheCanvasReturnsItOnTheCanvasIcon) {

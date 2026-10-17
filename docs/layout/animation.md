@@ -1,8 +1,7 @@
 # Animation System
 
 `Source/UI/Layout/UIAnimation.h` (namespace `synth::ui`) holds the shared animation infrastructure.
-All motion in the app uses it. The `juce_animation` module is linked into both the `Core` and the
-`AgentSynth` app targets. What is allowed to repaint at all is [rendering](rendering.md).
+All motion in the app uses it. The `juce_animation` module is linked into `Core` and `AgentSynth`. What is allowed to repaint at all is [rendering](rendering.md).
 
 ## Easing functions
 
@@ -774,11 +773,16 @@ shown), repainting only a strip across the middle of the canvas.
 
 A fold arrow turns instead of flipping. `synth::ui::ChevronTurn` (`Source/UI/Layout/ChevronTurn.h`) holds the arrow's
 openness (0 folded, 1 open, the number `paintDisclosureChevron` takes), tweens it over 160 ms `easeOutCubic` and
-retargets from the current openness, so a second click mid-turn reverses from where the arrow is. The Preferences
-section headers and the Keyboard Shortcuts section headers use it (the module library's help popover and the mod dot
-panel have their own). A turn is movement: under Reduce Motion, with Animations Off, or when the header is not on
-screen the arrow lands at once, and a header laid out for the first time (a restored fold) starts where it belongs.
-Frames run only while an arrow turns.
+retargets from the current openness. The Preferences and Keyboard Shortcuts section headers use it. Under Reduce Motion,
+with Animations Off, or off screen the arrow lands at once (a restored fold starts where it belongs); frames run only while it turns.
+
+### Bottom dock tabs
+
+A tab leaves the strip when its panel opens in its own window or goes to the main area, and comes back when it docks again.
+The leaving tab shrinks about its slot's centre (180 ms), then the others close the gap (200 ms); an arriving tab opens the
+gap, then grows (180 ms): the shared `ExitEnterTimeline` slots (`BottomDockTabMotion`), frames from `ReorderFramePump`, no
+Timer, nothing repaints once settled. Reduce Motion fades the tab instead; Animations Off or an off-screen strip lands at once;
+a change mid-motion retargets from the current slots, and a leaving tab takes no click.
 
 ## Tooltips
 
@@ -844,9 +848,7 @@ duration that branches on the mode (full, reduced, or 0 under Off). Off is insta
 (`reallyClose` runs at once), and the self-clocked motions (the Card Layout Editor's fades and shrink ghost, the
 automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
 `AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
-`CalloutReveal` is the first consumer of the reduced answer: with it on, the popup is never hidden and nothing animates;
-it also lands at once when the callout is not on screen (no VBlank reaches it). Tests: `setAnimationMode` sets the mode
-(restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer under Follow system.
+Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer.
 
 ## formatShortcutHint
 
@@ -876,7 +878,7 @@ strings.
 | **Automation lane reorder** | Dragging a lane header within its track: the lane's block (row plus modulator rows) lifts under the pointer, the other lanes glide aside (160 ms, `easeOutCubic`), settle on drop (140 ms), Esc returns it; Cmd+Alt+Up/Down glides the moved block into its slot; headers only (the curve editors follow on commit); at once when not on screen; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` via `ReorderDragSession` |
 | **Track delete and undo (timeline row, mixer column)** | A deleted track's row (header and lane line) shrinks toward its centre (180 ms) and the rows below close the gap (200 ms); a mixer column that leaves does the same sideways. Cmd+Z makes room (200 ms), grows it back (180 ms) and fades a 1 px accent outline (400 ms); phases never overlap; a plain fade under Reduce Motion; instant when off screen or Animations Off; see [delete and undo animation](#delete-and-undo-animation) | `ExitEnterListMotion` via `TimelinePanelComponent`, `MixerPanelComponent`, `MixerRowsMotion` (insert and send rows) |
 | **Modulator row fold** | A modulator row's fold arrow (or Left/Right on the row) shrinks the row and its band to the title line, or grows them back from it, as a 160 ms `easeOutCubic` height tween; the controls leave when the fold lands and return as an open starts; at once under Reduce Motion, Animations Off or when the timeline is not showing. Cmd+Alt+Up/Down on a modulator row slides it and the row it swaps with (and their bands) into their new slots, 160 ms `easeOutCubic`, at once under the same conditions Dragging a row (`TimelineAutomationLanesModulatorDrag.cpp`, `ReorderDragSession`): the row lifts under the pointer (its band follows), the lane's other rows glide aside (160 ms, `easeOutCubic`) and settle on drop (140 ms), a drop line fades in (160 ms) and glides between slots (100 ms), Esc returns everything; over a lane that cannot take it the row dims and no line shows; a drop on another lane fades the moved row in at its slot like any new routing; at once when not on screen or under Reduce Motion; a Change source (pick or New LFO / New envelope) swaps the routing's key, so the old row fades out and the new one fades in; the border on a lane header's or a modulator row's name button fades in and out with the hover (`FadeAmount`, `LaneNameButton`); a lane header's "+" row wipes open left to right (180 ms, `easeOutCubic`; shut `easeInCubic`) and Edit controls slides its tray down (280 ms, `easeInOutCubic`, the rows below moving with it) while the header outline fades with the tray, chips slide to their new slots (160 ms) and a chip that changes side grows in (220 ms, `easeOutBackGrow` on the header), all at once under Reduce Motion, Animations Off or when not showing; see [Reorder drag](#reorder-drag) | `TimelineAutomationLanes` (`TimelineAutomationLanesModulatorFold.cpp`), `LaneNameButton`, `LaneControlStrip`, `LaneControlMoreRow` |
-| **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
+| **Dock tab, mixer column and timeline track reorder** | A dock tab entering or leaving the strip shrinks and grows, see [Bottom dock tabs](#bottom-dock-tabs). Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
 | **Side pane open/close** | The pane's width tweens 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out from the current width; content keeps its full width and is revealed; lands at once when not on screen; see [side pane](side-pane.md) | `SidePane` |
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |
 | **Library rows** | Hover highlight; grab / dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query highlight on matching labels (shared `drawSearchHighlightedText`, static fill, no animation) | `ModuleLibraryComponent` |
@@ -906,9 +908,8 @@ strings.
 
 ## Song steps
 
-The hosted song cards ([song steps](../ai/song-steps.md)) move like this; everything lands at once when the card is not
-on screen or Animations is Off, and under Reduce Motion the icons sit still in their running colour and the list opens
-without animating.
+The hosted song cards ([song steps](../ai/song-steps.md)) land at once when not on screen or with Animations Off; under
+Reduce Motion the icons sit still in their running colour and the list opens without animating.
 
 | What | Motion | Where |
 |---|---|---|
@@ -953,12 +954,11 @@ Never add:
 A third exception is not granted just because the second was. The playhead earned it by satisfying
 three clauses, all enforced in code and asserted in `Tests/UI/Timeline/TimelinePlayheadTests.cpp`:
 
-1. **Playing only.** The 30 Hz `juce::Timer` is started on the play transition and stopped on the
-   stop or pause transition — it never runs while the transport is stopped, so an idle app repaints
-   nothing (`ZeroRepaintsOver100IdleFrames`).
-2. **Strip only.** A frame never repaints the component. It repaints the *union of the old and new
-   line strips* (`kStripHalfWidth` px either side of the line), clipped to the bounds; a frame whose
-   rounded x did not move requests nothing at all (`PlayingRequestsConfinedStrips`).
+1. **Playing only.** The 30 Hz `juce::Timer` starts on play and stops on stop or pause, so an idle app
+   repaints nothing (`ZeroRepaintsOver100IdleFrames`).
+2. **Strip only.** A frame repaints the *union of the old and new line strips* (`kStripHalfWidth` px
+   either side of the line), never the component; a frame whose rounded x did not move requests nothing
+   (`PlayingRequestsConfinedStrips`).
 3. **Explicit stop.** Stopping emits exactly **one** final strip, so the line settles on the
    position playback ended at, and then goes silent (`StopEmitsOneFinalStripThenSilence`).
 

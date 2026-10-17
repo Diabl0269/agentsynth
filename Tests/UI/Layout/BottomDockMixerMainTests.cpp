@@ -133,9 +133,9 @@ TEST_F(BottomDockMixerMainTest, TheMirrorStaysOutOfTheMainAreaHost) {
     dock().applyDetachBothPlacesPreference();
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Mixer));
 
-    // The detach button acts on the active dock tab, never on the view in main.
+    // The view in main has no tab, so its detach icon does nothing.
     ASSERT_NE(dock().getActiveTab(), Tab::Mixer);
-    dock().getDetachButtonForTest().onClick();
+    dock().getDetachIcon(Tab::Mixer)->onClick();
     EXPECT_FALSE(dock().isMixerMirrorOpenForTest());
     EXPECT_EQ(dock().getMixerHost().getParentComponent(), &holder());
     EXPECT_FALSE(dock().getMixerHost().isDetached());
@@ -145,7 +145,7 @@ TEST_F(BottomDockMixerMainTest, AMirrorOpenBeforeTheMixerWentToMainClosesWithout
     setLiveSetting("detachedPanelBothPlaces", "both");
     dock().applyDetachBothPlacesPreference();
     dock().setActiveTab(Tab::Mixer);
-    dock().getDetachButtonForTest().onClick();
+    dock().getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock().isMixerMirrorOpenForTest());
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Mixer));
 

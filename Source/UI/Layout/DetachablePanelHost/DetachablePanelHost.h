@@ -40,11 +40,11 @@ public:
      *  DetachedPanelWindow. Idempotent -- calling with the current state is a no-op. */
     void setDetached(bool detached);
     bool isDetached() const noexcept { return window_ != nullptr; }
-    /** Brings an already-detached panel's window forward (Cmd+number/the tab strip's own
+    /** Brings an already-detached panel's window forward and moves keyboard focus into its panel (Cmd+number, the
      *  "show tab" action on a detached tab) instead of redocking it. No-op while docked. */
     void bringDetachedWindowToFront() {
         if (window_ != nullptr)
-            window_->toFront(true);
+            window_->raiseAndFocusPanel();
     }
 
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }

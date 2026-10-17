@@ -43,7 +43,7 @@ when reasoning about a key that "does nothing."
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
 | Cmd+J | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active, and closing it hides the Canvas too while that is a tab. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the view in the main area. Cmd+T is released (a saved Cmd+T moves to Cmd+J once, see below). See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
-| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+J closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). Each key belongs to its view: reordering the strip never re-keys them — see [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+J closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window and focuses its panel instead; with the Mixer in both places, the second window is raised and the docked copy focused). Each key belongs to its view: reordering the strip never re-keys them — see [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
 | Cmd+4 | Show Canvas (`showCanvas`) — the fourth view's key; while the canvas is in the main area it focuses the canvas and leaves the dock as it is, else it shows the Canvas tab |
 | Opt+Cmd+1 / 2 / 3 / 4 | Show Timeline / Mixer / Controllers / Canvas in the Main Area (`swapTimelineToMain`/`swapMixerToMain`/`swapMidiRemoteToMain`/`swapCanvasToMain`) — the keys behind each tab's swap icon: the view trades places with the one in the main area, and a screen reader hears "<View> in the main area". The digit matches the view's own Cmd+digit, and each key stays with its view. A view in its own window, one already in the main area, or the Mixer outside the Tab placement is refused: nothing changes (Ctrl+Alt+1..4 off the Mac). The icon's tooltip names the live key |
 | Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
@@ -82,15 +82,11 @@ Ctrl, so a Ctrl+A default there would be the same chord as Select All and the tw
 collide. Like every row above, all of these are rebindable in Settings; a machine that already persisted the old
 bindings keeps them until "Reset to Defaults" (defaults only fill the gaps).
 
-Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old
-`Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the toggleBottomPanel action,
-one-shot, the first time it loads its settings — `ShortcutManager::migrateBottomPanelToggleKeys`;
-an old `Cmd+Alt+M` for Mixer just carries forward unchanged, since it never collided with anything).
-Cmd+T was then released: `migrateBottomPanelCmdJ` moves a saved toggleBottomPanel that is exactly Cmd+T to
-Cmd+J once (any other binding, or a Cmd+J already held by another action, is left alone), and Cmd+T is unbound by default.
-Dragging a tab to reorder it never re-keys anything: each view keeps its own keys (Cmd+1..4 to show it,
-Opt+Cmd+1..4 to swap it into the main area), so a key never changes meaning when a view moves. Bindings an
-older build re-keyed on a reorder are kept as saved.
+Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old `Cmd+Alt+M` (a saved Cmd+T binding
+migrates onto toggleBottomPanel once, `ShortcutManager::migrateBottomPanelToggleKeys`; an old `Cmd+Alt+M` carries
+forward). Cmd+T was then released: `migrateBottomPanelCmdJ` moves a saved toggleBottomPanel that is exactly Cmd+T to
+Cmd+J once (any other binding, or a Cmd+J held by another action, is left alone). Dragging a tab to reorder it never
+re-keys anything: each view keeps its own keys (Cmd+1..4 to show it, Opt+Cmd+1..4 to swap it into the main area).
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by
@@ -900,11 +896,15 @@ window gives it.
 
 A **hosted plugin editor window** (a separate top-level window, not a panel inside the main one)
 has its own fixed convention, same "never in the `ShortcutManager` table" shape as the table above:
-Esc closes it only if the plugin's own editor didn't handle it first — a native NSView editor gets
-first crack at it too, via the AppKit responder chain, and only an unhandled Esc reaches
-`HostedPluginEditorWindow::keyPressed()` from there (verified against Apple's own AUDelay) — while
-Cmd+W always closes it, via a mac-only `NSEvent` monitor scoped to the key window. See
-[`architecture/plugin-layer.md#editor-windows`](../architecture/plugin-layer.md#editor-windows) (FRO337) for the full split.
+Esc closes it only if the plugin's own editor didn't handle it first (a native NSView editor gets
+first crack via the AppKit responder chain, so only an unhandled Esc reaches
+`HostedPluginEditorWindow::keyPressed()`), while Cmd+W always closes it, via a mac-only `NSEvent`
+monitor scoped to the key window. See
+[`architecture/plugin-layer.md#editor-windows`](../architecture/plugin-layer.md#editor-windows) for the full split.
+
+A **detached panel window** (Timeline, Mixer, Controllers) follows the same fixed shape: Esc or Cmd+W returns the section
+to the bottom panel, the close button's path. The window tries the app's shortcuts first (so the MIDI pick's Esc wins) and a
+control inside the panel that uses Esc, such as a text field, keeps it.
 
 Arrow keys and the tool digits are split across two components with opposite rules:
 `PianoRollComponent::keyPressed()` consumes an arrow **only when something is selected** (an

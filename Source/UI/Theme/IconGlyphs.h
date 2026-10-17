@@ -34,7 +34,8 @@ enum class Glyph {
     // The markers before a timeline lane header's name, drawn on a 14 px grid at any size.
     LaneAutomation, // a rising and falling line with two points on it: changes drawn over time
     LaneMod,        // one wave: a modulator moves the parameter
-    Swap            // two opposite arrows: two views trade places
+    Swap,           // two opposite arrows: two views trade places
+    Detach          // a window with an arrow leaving its corner: a view opens in its own window
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.

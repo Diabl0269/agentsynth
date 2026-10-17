@@ -59,18 +59,9 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
         buttonForTab(t).onClick = [this, t] { setActiveTab(t); };
     }
 
-    // Icon-only, lives in this strip rather than either host's own header -- see
-    // DetachablePanelHost's class comment. Acts on whichever tab is active (activeHost()) --
-    // OR, for the Mixer tab with "both places" on, toggles the mirror window instead (see
-    // toggleActiveHostDetach()).
-    detachButton_.setClickingTogglesState(false);
-    detachButton_.onClick = [this] { toggleActiveHostDetach(); };
-    addAndMakeVisible(detachButton_);
-
-    // Keeps the detach button's own label/icon state (refreshDetachButton()) in sync with
-    // the mirror opening/closing, the same way onEitherHostDetachStateChanged below does for a real
-    // detach/redock.
-    mixerMirror_.onOpenedOrClosed = [this] { refreshDetachButton(); };
+    // Keeps each tab's detach button name (refreshDetachIcons()) in sync with the mirror opening/closing, the same
+    // way onEitherHostDetachStateChanged below does for a real detach/redock.
+    mixerMirror_.onOpenedOrClosed = [this] { refreshDetachIcons(); };
 
     // Both hosts draw no header of their own while docked here -- this tab strip IS their header.
     // Each host's own constructor already parents its panel (timelinePanel_ / mixer_) into itself
@@ -204,8 +195,6 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
 }
 
 void BottomDockComponent::refreshTabVisibility() { applyTabVisibility(false); }
-
-DetachablePanelHost* BottomDockComponent::activeHost() noexcept { return hostForTab(activeTab_); }
 
 DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) noexcept {
     return const_cast<DetachablePanelHost*>(std::as_const(*this).hostForTab(tab));
@@ -368,7 +357,7 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     // between the last live refresh and now.
     if (midiRemoteActive && allowMixerRebuild)
         midiRemotePanel_.rebuildFromProfiles();
-    refreshDetachButton();
+    refreshDetachIcons();
     refreshSwapIcons();
     resized();
     // After the layout above, so a listener reading getCanvasBodyBounds() sees the new tab's geometry.

@@ -177,13 +177,18 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
   tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
-  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`4` (`swap<View>ToMain`). It sits in a right-aligned icon row inside the tab (a detach icon will join it on its left), and the label
+  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`4` (`swap<View>ToMain`). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
   ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
   its own window, which also takes the tab out of the strip. The icon is a button inside the tab's radio element and
   not a Tab stop (the strip stays one); Shift+Return on the strip presses the active tab's icon, which shows the
   focus ring while Shift is held on the focused strip.
+- **The detach icon.** Every tab but Canvas has a `Glyph::Detach` `IconButton` left of the swap icon, named "Detach <Tab>
+  to its own window"; Option+Return on the strip presses it (ring while Option is held; the tooltip names the key). A click
+  runs `toggleTabDetach(tab)` for THAT tab (Mixer in "both" mode toggles its mirror). Esc or Cmd+W in the window docks the
+  panel again (after app shortcuts and the panel's controls; fixed keys), Cmd+1/2/3 raise and focus it (mirror open: raise
+  the mirror, focus the docked copy), and tabs glide in and out ([animation](../layout/animation.md#bottom-dock-tabs)).
 - **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes the main
   view, a tab detached to its own window (the canvas has no host and never detaches) and a Mixer
   disabled by the Own-panel/Window placement; `applyTabVisibility` picks a fallback —
@@ -239,7 +244,7 @@ row in the table below).
 FRO336 adds a second, orthogonal Preferences setting: **"When a panel opens in its own window:"
 Move it there** (default) or **Show it in both places** (`detachedPanelBothPlaces`, "move"/"both" —
 `BottomDockComponent::usesMixerMirrorForDetach`). It only changes what the Tab placement's own
-tab-strip detach button (above) does for the **Mixer** tab; Timeline/Controllers, and Mixer's own
+tab's detach icon (above) does for the **Mixer** tab; Timeline/Controllers, and Mixer's own
 Own-panel/Window placements, always move (see `usesMixerMirrorForDetach`'s own guard).
 
 **Why "both" needs a second instance, not a second parent.** A `juce::Component` has exactly one
@@ -302,14 +307,11 @@ Own panel/Window (`setMixerTabEnabled(false)`), since those placements have thei
 detach state.
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
-24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
-acts on whichever tab is active, and the header — with the real button, now reading "Dock back" —
-appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
-either host's own button through three different parents.
+24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries each tab's own detach icon, and the header
+(its button reading "Dock back") appears only on the DETACHED window, not reparented through three parents.
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
-dock's own top edge — not inside the Timeline panel — so the Mixer and Controllers tabs resize the
-dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays24 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
+dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 24 px; tab buttons are laid out below it, so a grab never lands on one) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
 `onResizeHeightCommitted`. The dock carves nothing for the Mixer: `+ Bus`/Reset Meters live in the
 mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the
@@ -979,11 +981,9 @@ row in `resized()`, `setInterceptsMouseClicks(false, false)` so the existing `mo
 stays the only path for a real click, titled `"<insert name>, bypassed"`/`"<insert name>"` or `"Add
 send"` and rebuilt on every `setEntries()` (same idiom as `MixerSendList::rebuildKnobs()`). Direct's
 "Make channel" button gets an explicit `setTitle("Make channel")` for the same reason
-`MixerMasterColumn`'s mute button already does — `ButtonAccessibilityHandler::getTitle()` falls back
-to `Button::getButtonText()` only when no title is set, and a bare ctor-argument fallback is one
-accidental rename away from leaking an internal string (`BottomDockComponent`'s own detach button and
-`StatusBarComponent`'s master-mute/transport buttons got the same explicit `setTitle()` fix in this
-ticket, for the identical reason).
+`MixerMasterColumn`'s mute button already does: `ButtonAccessibilityHandler::getTitle()` falls back
+to the button text only when no title is set, and that fallback is one rename from leaking an
+internal string (`BottomDockComponent`'s detach icons and `StatusBarComponent`'s buttons too).
 
 ## Related
 

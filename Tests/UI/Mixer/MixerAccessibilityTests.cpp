@@ -329,13 +329,15 @@ TEST(MixerAccessibilityTest, StatusBarButtonsHaveHumanTitlesNotInternalIds) {
         << "same fallback leak, for \"statusBarTransportPlayStop\"";
 }
 
-TEST(MixerAccessibilityTest, BottomDockDetachButtonHasAHumanTitleNotItsComponentId) {
+TEST(MixerAccessibilityTest, BottomDockDetachIconsHaveAHumanTitleNotTheirComponentId) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
-    auto& detachButton = mc.getBottomDock().getDetachButtonForTest();
-    const auto title = detachButton.getTitle();
-    EXPECT_NE(title, juce::String("detachActiveTab"))
-        << "the ctor's component-name argument must never leak through as the AX title";
-    EXPECT_TRUE(title == "Open in window" || title == "Dock back") << "got: " << title;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    for (const Tab tab : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        const auto title = mc.getBottomDock().getDetachIcon(tab)->getTitle();
+        EXPECT_NE(title, juce::String("detachTab"))
+            << "the ctor's component-name argument must never leak through as the AX title";
+        EXPECT_TRUE(title.startsWith("Detach ") && title.endsWith(" to its own window")) << "got: " << title;
+    }
 }
 
 TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {

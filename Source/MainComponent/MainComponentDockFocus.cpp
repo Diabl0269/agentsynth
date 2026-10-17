@@ -45,8 +45,9 @@ void MainComponent::focusMainViewIfOpen() {
         focusRegions_.focusRegionById(mainRegion);
 }
 
-// Cmd+1/2/3/4. A tab that is detached raises its own window, and the Mixer outside the Tab placement is
-// revealed elsewhere (its own panel or window): neither has a docked strip to focus. The view in the
+// Cmd+1/2/3/4. A tab that is detached raises its own window and focuses its panel, and the Mixer outside the Tab
+// placement is revealed elsewhere (its own panel or window): neither has a docked strip to focus. With "show it in
+// both places" on, the Mixer's second window is raised and the docked copy gets the focus. The view in the
 // main area has no tab; the key focuses it there instead.
 void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
@@ -59,6 +60,8 @@ void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent
     const auto* host = bottomDock.hostForTab(tab);
     const bool detached = host != nullptr && host->isDetached();
     showBottomDockTab(tab);
+    if (tab == Tab::Mixer && !mixerRevealedElsewhere)
+        bottomDock.raiseMixerMirror(); // before the focus moves: raising takes none
     if (!mixerRevealedElsewhere && !detached)
         focusDockTabStripIfShowing();
 }
