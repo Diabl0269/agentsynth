@@ -257,117 +257,143 @@ struct CowbellVoice {
     }
 };
 
-/** Six detuned square oscillators at 808-style ratios; the raw material of hats and cymbals. */
+// Hat and cymbal voicing: cutoffs of the two cascaded high-pass stages (Hz, before the velocity brightness), the
+// noise sheen levels (the metal bank is the body, so these stay well under it) and the output scales that keep
+// each hit as loud as it always was.
+inline constexpr float kHatClosedHpfHz = 7500.0f;
+inline constexpr float kHatOpenHpfHz = 6500.0f;
+inline constexpr float kHatNoiseMix = 0.12f;
+inline constexpr float kClosedHatOutScale = 13.5f;
+inline constexpr float kOpenHatOutScale = 17.3f;
+inline constexpr float kCrashNoiseMix = 0.1f;
+inline constexpr float kCrashOutScale = 12.2f;
+inline constexpr float kRideNoiseMix = 0.05f;
+inline constexpr float kRideOutScale = 4.3f;
+inline constexpr float kRidePingMix = 0.15f;
+
+/** Six detuned band-limited square oscillators at 808-style ratios, summed: the metal of hats and cymbals. Each
+ *  square carries odd harmonics, so the sum is a dense set of steady, inharmonic lines up in the top octaves.
+ *  Those lines are what rings like metal; a ring-modulated or noisy source scatters them into a hiss. */
 struct MetallicBank {
     static constexpr std::array<float, 6> kHz = {205.3f, 304.4f, 369.6f, 522.7f, 540.0f, 800.0f};
     std::array<float, 6> phase{};
 
-    void reset() noexcept { phase.fill(0.0f); }
+    /** Starts the squares at spread phases: all six at zero would add into one big click whose size depends on the
+     *  filter cutoffs, so a soft hit could peak above a hard one. */
+    void reset() noexcept { phase = {0.0f, 0.37f, 0.71f, 0.13f, 0.53f, 0.89f}; }
+
+    /** Two-sample PolyBLEP correction around a step at phase 0 (`dt` is the phase step per sample). */
+    static float polyBlep(float t, float dt) noexcept {
+        if (t < dt) {
+            t /= dt;
+            return t + t - t * t - 1.0f;
+        }
+        if (t > 1.0f - dt) {
+            t = (t - 1.0f) / dt;
+            return t * t + t + t + 1.0f;
+        }
+        return 0.0f;
+    }
+
     float tick(float tune, double sr) noexcept {
         float sum = 0.0f;
         for (std::size_t i = 0; i < kHz.size(); ++i) {
-            phase[i] += kHz[i] * tune / static_cast<float>(sr);
+            const float dt = kHz[i] * tune / static_cast<float>(sr);
+            phase[i] += dt;
             phase[i] -= std::floor(phase[i]);
-            sum += phase[i] < 0.5f ? 1.0f : -1.0f;
+            float half = phase[i] + 0.5f;
+            half -= std::floor(half);
+            sum += (phase[i] < 0.5f ? 1.0f : -1.0f) + polyBlep(phase[i], dt) - polyBlep(half, dt);
         }
         return sum * (1.0f / 6.0f);
     }
-
-    /** The three pairs (0,3), (1,4), (2,5) multiplied together: a square times a square is a square-wave
-     *  XOR, so every partial lands on a sum or difference of the pair's two rates. That is a dense inharmonic
-     *  scatter with no strong line, where the plain sum keeps six clearly pitched lines (and 540 + 800 Hz is
-     *  the 808 cowbell). */
-    float tickRing(float tune, double sr) noexcept {
-        std::array<float, 6> sq{};
-        for (std::size_t i = 0; i < kHz.size(); ++i) {
-            phase[i] += kHz[i] * tune / static_cast<float>(sr);
-            phase[i] -= std::floor(phase[i]);
-            sq[i] = phase[i] < 0.5f ? 1.0f : -1.0f;
-        }
-        return (sq[0] * sq[3] + sq[1] * sq[4] + sq[2] * sq[5]) * (1.0f / 3.0f);
-    }
 };
-
-// Hat voicing: cutoffs of the two cascaded high-pass stages (Hz, before the velocity brightness), the
-// square-bank and noise levels, the 10 kHz presence band and the output scale that keeps the hit as loud as a
-// hat always was.
-inline constexpr float kHatClosedHpfHz = 7500.0f;
-inline constexpr float kHatOpenHpfHz = 6500.0f;
-inline constexpr float kHatBankMix = 0.2f;
-inline constexpr float kHatNoiseMix = 0.6f;
-inline constexpr float kHatPresenceMix = 0.5f;
-inline constexpr float kHatOutScale = 2.3f;
 
 enum class MetallicKind { ClosedHat, OpenHat, Crash, Ride };
 
-/** Hats, crash and ride: the metallic bank, noise, a high-pass and a low-pass (a band for the ride). The hats are
- *  mostly noise through a 24 dB per octave high-pass with a presence band near 10 kHz, so they read as a hiss. */
+/** Hats, crash and ride. The metal bank is the voice: it is band-emphasised, high-passed at 24 dB per octave and
+ *  rings for the whole decay. Noise is only a short sheen on the strike, on its own faster envelope, so the tail
+ *  is steady partials rather than hiss. The ride adds a high ping that dies away faster than the wash. */
 struct MetallicVoice {
-    DecayEnv env;
+    DecayEnv env, noiseEnv, pingEnv;
     MetallicBank bank;
-    Svf hpf, hpf2, lpf, presence;
-    float tune = 1.0f, gain = 0.0f, noiseMix = 0.0f, outScale = 1.0f, bankMix = 0.8f, presenceMix = 0.0f;
-    bool isHat = false;
+    Svf band, hpf, hpf2, lpf;
+    float tune = 1.0f, gain = 0.0f, noiseMix = 0.0f, outScale = 1.0f, pingMix = 0.0f, pingPhase = 0.0f, pingHz = 0.0f;
 
     void trigger(const Hit& h, MetallicKind kind, double sr) noexcept {
         bank.reset();
+        band.reset();
         hpf.reset();
         hpf2.reset();
         lpf.reset();
-        presence.reset();
-        isHat = false;
-        bankMix = 0.8f;
-        presenceMix = 0.0f;
+        pingMix = 0.0f;
+        pingPhase = 0.0f;
         tune = h.tune;
         gain = h.velocity * h.gain;
         const float bright = brightness(h.velocity);
+        float bandHz = 8000.0f, bandQ = 0.9f, hpfHz = 7000.0f, lpfHz = 14000.0f, noiseSeconds = 0.01f;
         switch (kind) {
         case MetallicKind::ClosedHat:
-        case MetallicKind::OpenHat: {
-            const float cutoff = (kind == MetallicKind::ClosedHat ? kHatClosedHpfHz : kHatOpenHpfHz) * bright;
-            isHat = true;
-            bankMix = kHatBankMix;
+            hpfHz = kHatClosedHpfHz;
             noiseMix = kHatNoiseMix;
-            outScale = kHatOutScale;
-            presenceMix = kHatPresenceMix;
-            hpf.set(cutoff, 0.707f, sr);
-            hpf2.set(cutoff, 0.707f, sr);
-            presence.set(10000.0f, 1.0f, sr);
-            lpf.set(14000.0f, 0.7f, sr);
+            outScale = kClosedHatOutScale;
+            noiseSeconds = std::clamp(h.decay * 0.3f, 0.004f, 0.012f);
             break;
-        }
+        case MetallicKind::OpenHat:
+            hpfHz = kHatOpenHpfHz;
+            noiseMix = kHatNoiseMix;
+            outScale = kOpenHatOutScale;
+            noiseSeconds = 0.02f;
+            break;
         case MetallicKind::Crash:
-            noiseMix = 0.4f;
-            outScale = 3.6f;
-            hpf.set(5000.0f * bright, 0.7f, sr);
-            lpf.set(12000.0f, 0.7f, sr);
+            bandHz = 6500.0f;
+            bandQ = 0.7f;
+            hpfHz = 4500.0f;
+            lpfHz = 14000.0f;
+            noiseMix = kCrashNoiseMix;
+            outScale = kCrashOutScale;
+            noiseSeconds = 0.06f;
             break;
         case MetallicKind::Ride:
-            noiseMix = 0.0f;
-            outScale = 4.3f;
-            hpf.set(3000.0f * bright, 0.7f, sr);
-            lpf.set(8000.0f, 0.7f, sr);
+            bandHz = 5000.0f;
+            bandQ = 1.0f;
+            hpfHz = 2800.0f;
+            lpfHz = 11000.0f;
+            noiseMix = kRideNoiseMix;
+            outScale = kRideOutScale;
+            noiseSeconds = 0.008f;
+            pingMix = kRidePingMix;
+            pingHz = 5400.0f * h.tune;
             break;
         }
+        band.set(bandHz * bright, bandQ, sr);
+        hpf.set(hpfHz * bright, 0.707f, sr);
+        hpf2.set(hpfHz * bright, 0.707f, sr);
+        lpf.set(lpfHz, 0.7f, sr);
         env.trigger(h.decay, sr);
+        noiseEnv.trigger(noiseSeconds, sr);
+        pingEnv.trigger(h.decay * 0.25f, sr);
     }
     bool active() const noexcept { return env.active(); }
     void stop() noexcept { env.stop(); }
     /** Cuts the ring-out in about 3 ms (the closed hat choking the open hat). */
-    void choke(double sr) noexcept { env.setDecay(0.003f, sr); }
+    void choke(double sr) noexcept {
+        env.setDecay(0.003f, sr);
+        noiseEnv.setDecay(0.003f, sr);
+        pingEnv.setDecay(0.003f, sr);
+    }
     float tick(double sr, NoiseSource& noise) noexcept {
-        if (isHat) {
-            const float src = bank.tickRing(tune, sr) * bankMix + noise.next() * noiseMix;
-            hpf.process(src);
-            hpf2.process(hpf.hp);
-            presence.process(hpf2.hp);
-            lpf.process(hpf2.hp + presence.bp * presenceMix);
-            return lpf.lp * env.tick() * outScale * 0.6f * gain;
+        band.process(bank.tick(tune, sr));
+        float src = band.bp * env.tick() + noise.next() * noiseMix * noiseEnv.tick();
+        if (pingMix > 0.0f) {
+            pingPhase += pingHz / static_cast<float>(sr);
+            pingPhase -= std::floor(pingPhase);
+            src += std::sin(kTwoPi * pingPhase) * pingMix * pingEnv.tick();
         }
-        const float src = bank.tick(tune, sr) * 0.8f + noise.next() * noiseMix;
         hpf.process(src);
-        lpf.process(hpf.hp);
-        return lpf.lp * env.tick() * outScale * 0.6f * gain;
+        hpf2.process(hpf.hp);
+        lpf.process(hpf2.hp);
+        return lpf.lp * outScale * 0.6f * gain;
     }
 };
 

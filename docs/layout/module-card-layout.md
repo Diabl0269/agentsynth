@@ -659,23 +659,10 @@ model stays validatable so that path can be opened later without a format change
 
 ## Custom module (future)
 
-A user-built "synth in one card" is **a macro with a face** (decided 2026-10-01): any macro may be
-given a face, and that is all a custom module is; there is no second kind of node or library item
-to tell apart. The user groups ordinary modules
-(Oscillator, ADSR, Filter, LFO, a Macros knob bank for their own knobs) into a macro, and the
-collapsed macro card renders a `CardLayout` whose items point at its members' parameters.
-
-- **Why not a new container module.** A node's parameter set and channel count are fixed for its
-  lifetime (`Source/Modules/CLAUDE.md`), members would leave uuid space and orphan their lanes and
-  bindings, and it would need a second sound engine. A macro reuses every module, poly voices come
-  from members' own Poly flags, and undo is already joint.
-- **What v2 reserves now:** `ParamItem.node` (a member's uuid; null = this module), a layout that can
-  live on a macro (a `layout` key in the macro's own record, next to its ports), and a model that can
-  be validated on the untrusted path. Paste and snippet insert remap `node` through the same id map
-  macro ports use.
-- **What it changes when it starts:** two of the macro design's deliberate limits
-  ([macros.md](../macros/macros.md#deliberate-limits)), "a macro is not a saveable library item" and
-  "no macro-level parameter exposure", are lifted by that work, not this one.
+A user-built "synth in one card" is a folded macro with a **face**: any macro may get one, and its
+items point at member parameters through `ParamItem.node`. The design (data model, the face validator,
+snippet remap, undo, poly, library saving and AI authoring) is in
+[custom-module-design.md](../macros/custom-module-design.md).
 
 ---
 

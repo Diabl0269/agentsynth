@@ -230,6 +230,58 @@ TEST(DrumKitModule, HatsAreBrightHissWithNoLowToneToRingLikeACowbell) {
     }
 }
 
+// Spectral flatness (geometric over arithmetic mean of the power) of a Hann-windowed 2048-sample slice that starts at
+// `startSec`, over [lowHz, highHz). White noise sits near 0.5; a handful of steady partials sits near 0.
+float spectralFlatness(const std::vector<float>& s, double startSec, double lowHz, double highHz) {
+    constexpr int n = 2048;
+    const auto start = static_cast<std::size_t>(startSec * kRate);
+    double logSum = 0.0, sum = 0.0;
+    int bins = 0;
+    for (int k = static_cast<int>(lowHz / kRate * n); k < static_cast<int>(highHz / kRate * n); ++k) {
+        double re = 0.0, im = 0.0;
+        for (int i = 0; i < n && start + static_cast<std::size_t>(i) < s.size(); ++i) {
+            const double window = 0.5 - 0.5 * std::cos(2.0 * 3.14159265358979 * i / n);
+            const double ph = 2.0 * 3.14159265358979 * k * i / n;
+            const double x = s[start + static_cast<std::size_t>(i)] * window;
+            re += x * std::cos(ph);
+            im += x * std::sin(ph);
+        }
+        const double power = re * re + im * im;
+        logSum += std::log(power + 1.0e-30);
+        sum += power;
+        ++bins;
+    }
+    return static_cast<float>(std::exp(logSum / bins) / (sum / bins + 1.0e-30));
+}
+
+// Hats and cymbals ring with steady metallic partials and fade; the old voices were mostly noise, which left a
+// hiss bed (flatness near 0.5) in the tail where a metal tail has distinct lines.
+TEST(DrumKitModule, HatsAndCymbalsRingAsMetalWithNoHissBedAndDecayMonotonically) {
+    struct Voice {
+        int note;
+        const char* decayParam;
+        float scale;
+        double lowHz; // the band the voice lives in
+    };
+    for (const auto& v : {Voice{42, "closedDecay", 1.0f, 8000.0}, Voice{46, "openDecay", 1.0f, 8000.0},
+                          Voice{49, "cymbalDecay", 1.0f, 8000.0}, Voice{51, "cymbalDecay", 0.8f, 3000.0}}) {
+        SCOPED_TRACE("note " + std::to_string(v.note));
+        auto kit = makeKit();
+        const double decay = paramValue(*kit, v.decayParam) * v.scale;
+        const auto out = render(*kit, {{v.note}}, decay * 1.6 + 0.3);
+        EXPECT_LT(spectralFlatness(out, decay * 0.2, v.lowHz, 16000.0), 0.25f) << "tail is partials, not noise";
+        EXPECT_LT(spectralFlatness(out, decay * 0.5, v.lowHz, 16000.0), 0.25f) << "late tail is partials too";
+        // The level (RMS in 20 percent of decay windows from 10 percent on) never grows by more than 10 percent.
+        double previous = 1.0e9;
+        for (int w = 0; w < 5; ++w) {
+            const double from = decay * (0.1 + 0.2 * w);
+            const double level = rmsOf(out, from, from + decay * 0.2);
+            EXPECT_LT(level, previous * 1.1) << "window " << w;
+            previous = level;
+        }
+    }
+}
+
 // Share of a hit's energy inside [lowHz, highHz), on the same grid as energyShareBelow.
 float energyShareBetween(const std::vector<float>& s, double lowHz, double highHz) {
     return energyShareBelow(s, highHz) - energyShareBelow(s, lowHz);
