@@ -10,7 +10,7 @@ void MainComponent::beginMainViewSwapMotion() {
         mainViewSwapMotion_.discardPending();
         return;
     }
-    mainViewSwapMotion_.begin(mainAreaBounds_);
+    mainViewSwapMotion_.begin(mainAreaBounds_, bottomDock.getPanelBodyBounds() + bottomDock.getPosition());
 }
 
 void MainComponent::playMainViewSwapMotion() {

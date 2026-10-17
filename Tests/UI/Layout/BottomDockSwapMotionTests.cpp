@@ -3,6 +3,7 @@
 // once when off screen, with Animations Off or with the panel closed; a second swap lands the first
 // (docs/layout/animation.md "What moves, and how").
 #include "BottomDockMainAreaFixture.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/MainViewSwapMotion.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -187,4 +188,47 @@ TEST_F(BottomDockSwapMotionTest, ALayoutPassMidMoveEndsItOnTheFinalFrame) {
     mc_->resized();
     EXPECT_FALSE(motion().isRunning());
     EXPECT_FALSE(motion().mainLayer().isVisible());
+}
+
+TEST_F(BottomDockSwapMotionTest, TheCanvasIsAlreadyFitInThePanelWhenTheMoveStartsAndStaysSo) {
+    auto& graph = mc_->getGraphEditor();
+    graph.addModuleAtCanvasPosition("Oscillator", {100, 100}, nullptr);
+    graph.addModuleAtCanvasPosition("Delay", {1500, 900}, nullptr);
+    const auto before = graph.getVisibleCanvasRect();
+    juce::Rectangle<int> all;
+    for (auto* m : graph.getModuleComponents())
+        all = all.getUnion(m->getBounds());
+    ASSERT_FALSE(all.isEmpty());
+    ASSERT_FALSE(before.contains(all.toFloat())) << "the cards do not fit the main view's zoom";
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+    ASSERT_TRUE(motion().isRunning());
+    const auto atStart = graph.getVisibleCanvasRect();
+    EXPECT_TRUE(atStart.contains(all.toFloat())) << "already fit to the panel's body";
+    motion().stepForTest(0.5f);
+    EXPECT_EQ(graph.getVisibleCanvasRect(), atStart) << "the real canvas does not change mid-move";
+    motion().stepForTest(1.0f);
+    EXPECT_EQ(graph.getVisibleCanvasRect(), atStart) << "nor when the layers come off";
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Canvas));
+    ASSERT_TRUE(motion().isRunning());
+    const auto backAtStart = graph.getVisibleCanvasRect();
+    motion().stepForTest(0.5f);
+    motion().stepForTest(1.0f);
+    EXPECT_EQ(graph.getVisibleCanvasRect(), backAtStart) << "returning to main moves it no further";
+}
+
+TEST_F(BottomDockSwapMotionTest, TheFirstAndLastFramesAreThePicturesOfTheRealPanelBody) {
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+    ASSERT_TRUE(motion().isRunning());
+    EXPECT_FLOAT_EQ(motion().departingBodyAlpha(), 1.0f) << "starts on the panel as it was";
+    EXPECT_FLOAT_EQ(motion().settledBodyAlpha(), 0.0f);
+    motion().stepForTest(0.5f);
+    EXPECT_LT(motion().departingBodyAlpha(), 1.0f);
+    EXPECT_GE(motion().settledBodyAlpha(), 0.0f);
+    motion().stepForTest(0.99f);
+    EXPECT_FLOAT_EQ(motion().departingBodyAlpha(), 0.0f);
+    EXPECT_GT(motion().settledBodyAlpha(), 0.9f) << "ends on the panel as it is";
+    motion().stepForTest(1.0f);
+    EXPECT_FALSE(motion().isRunning());
 }

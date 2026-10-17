@@ -8,9 +8,11 @@
 // area's view with the bottom panel's. The owner lays everything out for the final state first; this hides the real
 // components under two opaque layers (one over the main area, one over the panel's body) while the leaving view's
 // picture shrinks down into the panel body and the arriving view's picture grows from the panel body up to the main
-// area, 240 ms easeOutCubic. Under Reduce Motion only the main-area layer shows, the leaving picture fading out over
-// the real view in 80 ms. Layers take no mouse, no keyboard focus and are hidden from accessibility. Frames run only
-// while the tween does.
+// area, 240 ms easeOutCubic. Pictures keep their aspect while they move (scaled to fit the moving box, centred in it);
+// the old panel body's picture fades out over the arriving one at the start and the finished panel body's picture
+// fades in over the leaving one at the end, so the first and last frames are the real layout. Under Reduce Motion only
+// the main-area layer shows, the leaving picture fading out over the real view in 80 ms. Layers take no mouse, no
+// keyboard focus and are hidden from accessibility. Frames run only while the tween does.
 namespace synth::ui {
 
 class MainViewSwapMotion {
@@ -24,12 +26,14 @@ public:
     /** Called with true when a motion starts and false when it has ended, however it ended. */
     std::function<void(bool running)> onRunningChanged;
 
-    /** Pictures `mainArea` as it is now, before the swap changes anything. Returns false, and takes nothing, when the
+    /** Pictures `mainArea` and `panelBody` as they are now, before the swap changes anything. Returns false, and takes
+     *  nothing, when the
      *  swap will not animate: the host is not on screen, Animations is Off, or the rectangle is empty. Finishes a
      *  motion still running first, so its end state is what the next one starts from. */
-    bool begin(juce::Rectangle<int> mainArea);
+    bool begin(juce::Rectangle<int> mainArea, juce::Rectangle<int> panelBody);
     /** Starts the motion once the swap is laid out: pictures the arriving view in `mainArea` and moves it from
-     *  `panelBody`. Returns false, and shows nothing, when begin() took no picture or the panel body is empty. */
+     *  `panelBody` (also pictured now). Returns false, and shows nothing, when begin() took no picture or the panel
+     * body is empty. */
     bool play(juce::Rectangle<int> panelBody);
     /** Drops a picture taken by begin() that play() will not use. */
     void discardPending() noexcept;
@@ -46,6 +50,10 @@ public:
      *  under the fade). */
     juce::Rectangle<float> leavingRect() const noexcept;
     juce::Rectangle<float> arrivingRect() const noexcept;
+    /** Opacity, 0 to 1, of the finished panel body's picture over the leaving view and of the old panel body's picture
+     *  over the arriving view (both 0 under the fade). */
+    float settledBodyAlpha() const noexcept;
+    float departingBodyAlpha() const noexcept;
     /** The layers, for tests: the main-area layer and the panel-body layer. */
     juce::Component& mainLayer() noexcept { return mainLayer_; }
     juce::Component& bodyLayer() noexcept { return bodyLayer_; }
@@ -72,8 +80,8 @@ private:
     Layer bodyLayer_{*this};
     juce::VBlankAnimatorUpdater updater_{&mainLayer_};
     AnimationDriver driver_;
-    juce::Image leaving_, arriving_;
-    juce::Rectangle<int> mainArea_, panelBody_;
+    juce::Image leaving_, arriving_, departingBody_, settledBody_;
+    juce::Rectangle<int> mainArea_, panelBody_, oldPanelBody_;
     float progress_ = 0.0f;
     bool running_ = false;
     bool fade_ = false;

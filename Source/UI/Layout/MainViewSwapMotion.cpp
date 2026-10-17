@@ -17,6 +17,17 @@ juce::Rectangle<float> lerpRect(juce::Rectangle<int> from, juce::Rectangle<int> 
     return {a.getX() + (b.getX() - a.getX()) * t, a.getY() + (b.getY() - a.getY()) * t,
             a.getWidth() + (b.getWidth() - a.getWidth()) * t, a.getHeight() + (b.getHeight() - a.getHeight()) * t};
 }
+
+// A picture of `size` fitted into `box` at its own aspect, centred.
+juce::Rectangle<float> fitted(juce::Rectangle<float> box, juce::Rectangle<int> size) {
+    if (size.isEmpty() || box.isEmpty())
+        return box;
+    const float scale = std::min(box.getWidth() / (float)size.getWidth(), box.getHeight() / (float)size.getHeight());
+    return juce::Rectangle<float>(0.0f, 0.0f, size.getWidth() * scale, size.getHeight() * scale)
+        .withCentre(box.getCentre());
+}
+
+float ramp(float t, float from, float to) { return std::clamp((t - from) / (to - from), 0.0f, 1.0f); }
 } // namespace
 
 // A layer paints nothing itself: both draw the same pair of pictures, each clipped to its own area, so a picture that
@@ -47,23 +58,28 @@ juce::Image MainViewSwapMotion::pictureOf(juce::Rectangle<int> area) const {
 
 // Nothing is pictured unless the motion would play: off screen no VBlank frame ever arrives, and under Animations Off
 // the swap lands at once (FadeVisibility::canAnimateIn answers both, and the test override).
-bool MainViewSwapMotion::begin(juce::Rectangle<int> mainArea) {
+bool MainViewSwapMotion::begin(juce::Rectangle<int> mainArea, juce::Rectangle<int> panelBody) {
     finishNow();
     discardPending();
     if (mainArea.isEmpty() || !FadeVisibility::canAnimateIn(&host_))
         return false;
     mainArea_ = mainArea;
     leaving_ = pictureOf(mainArea);
+    oldPanelBody_ = panelBody;
+    departingBody_ = panelBody.isEmpty() ? juce::Image{} : pictureOf(panelBody);
     return leaving_.isValid();
 }
 
 void MainViewSwapMotion::discardPending() noexcept {
     leaving_ = {};
     arriving_ = {};
+    departingBody_ = {};
+    settledBody_ = {};
 }
 
 // The real components are already in their final places; the layers go over them and come off on the last frame. The
-// move needs the arriving view's picture (taken now, laid out in the main area) and an opaque layer over each place;
+// move needs the arriving view's picture (taken now, laid out in the main area), the finished panel body's picture and
+// an opaque layer over each place;
 // the fade needs neither, the real arriving view showing through the leaving picture as it fades.
 bool MainViewSwapMotion::play(juce::Rectangle<int> panelBody) {
     if (!leaving_.isValid() || !FadeVisibility::canAnimateIn(&host_))
@@ -75,6 +91,7 @@ bool MainViewSwapMotion::play(juce::Rectangle<int> panelBody) {
     }
     panelBody_ = panelBody;
     arriving_ = fade_ ? juce::Image{} : pictureOf(mainArea_);
+    settledBody_ = fade_ ? juce::Image{} : pictureOf(panelBody_);
     progress_ = 0.0f;
     running_ = true;
 
@@ -139,6 +156,16 @@ juce::Rectangle<float> MainViewSwapMotion::arrivingRect() const noexcept {
     return fade_ ? juce::Rectangle<float>{} : lerpRect(panelBody_, mainArea_, progress_);
 }
 
+// Eased progress is the clock for both crossfades: the old body gives way early, the finished one arrives late.
+float MainViewSwapMotion::settledBodyAlpha() const noexcept { return fade_ ? 0.0f : ramp(progress_, 0.5f, 1.0f); }
+
+float MainViewSwapMotion::departingBodyAlpha() const noexcept {
+    return fade_ ? 0.0f : 1.0f - ramp(progress_, 0.0f, 0.35f);
+}
+
+// Back to front: the leaving view with the finished panel body fading in over it, then the arriving view with the old
+// panel body fading out over it. Each picture is drawn at its own aspect inside its moving box, so nothing squashes;
+// the two body pictures sit exactly on the panel body.
 void MainViewSwapMotion::paintLayer(juce::Graphics& g, const Layer& layer) const {
     if (!running_)
         return;
@@ -152,8 +179,13 @@ void MainViewSwapMotion::paintLayer(juce::Graphics& g, const Layer& layer) const
     g.setColour(synth::theme::themeOf(layer).colors.bg0);
     g.fillRect(layer.getBounds());
     g.setOpacity(1.0f);
-    g.drawImage(leaving_, leavingRect());
-    g.drawImage(arriving_, arrivingRect());
+    g.drawImage(leaving_, fitted(leavingRect(), mainArea_));
+    g.setOpacity(settledBodyAlpha());
+    g.drawImage(settledBody_, panelBody_.toFloat());
+    g.setOpacity(1.0f);
+    g.drawImage(arriving_, fitted(arrivingRect(), mainArea_));
+    g.setOpacity(departingBodyAlpha());
+    g.drawImage(departingBody_, oldPanelBody_.toFloat());
 }
 
 } // namespace synth::ui
