@@ -620,7 +620,7 @@ jobs:
           done
 
     - name: Run Tests
-      run: xvfb-run ./build/Tests/Tests
+      run: ./build/Tests/Tests # no xvfb, as in build-and-test: bare Xvfb makes JUCE peers die on BadAtom
 
   build-and-test-macos:
     name: Build and Test (macOS)
