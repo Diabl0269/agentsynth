@@ -169,6 +169,52 @@ TEST_F(ProjectCollectorTest, WavetableFolderIsCopiedWholeAndTheCursorStaysOnTheL
     EXPECT_EQ(wavetable->getFolderIndex(), 1);
 }
 
+TEST_F(ProjectCollectorTest, InstrumentFolderIsCopiedAsATreeAndTheSfzStillResolves) {
+    const auto folder = root.getChildFile("Packs/Piano");
+    ASSERT_TRUE(writeWav(folder.getChildFile("Samples/c4.wav"), 2048));
+    ASSERT_TRUE(folder.getChildFile("piano.sfz").replaceWithText("<region> sample=Samples/c4.wav key=60\n"));
+    ASSERT_TRUE(folder.getChildFile("readme.pdf").replaceWithText("not copied"));
+
+    juce::AudioProcessorGraph graph;
+    auto* sampler = add<SamplerModule>(graph);
+    ASSERT_TRUE(sampler->loadInstrumentFromSfz(folder.getChildFile("piano.sfz")));
+
+    const auto result = ProjectCollector::collect(graph, bundle);
+
+    const auto copied = bundle.getChildFile(ProjectBundle::kInstrumentsSubdirName).getChildFile("Piano");
+    EXPECT_EQ(result.filesCopied, 2);
+    EXPECT_TRUE(copied.getChildFile("piano.sfz").existsAsFile());
+    EXPECT_TRUE(copied.getChildFile("Samples/c4.wav").existsAsFile());
+    EXPECT_FALSE(copied.getChildFile("readme.pdf").exists());
+    EXPECT_TRUE(folder.getChildFile("Samples/c4.wav").existsAsFile()) << "the source is left alone";
+    EXPECT_EQ(sampler->getExtraState()["instrumentFolder"].toString(), copied.getFullPathName());
+    EXPECT_NE(sampler->getInstrument(), nullptr) << "the module reloaded from the copy";
+    EXPECT_EQ(ProjectCollector::collect(graph, bundle).filesCopied, 0) << "a second run copies nothing";
+}
+
+TEST_F(ProjectCollectorTest, DroppedInstrumentFilesAreCopiedAndTheirRegionIndicesStayValid) {
+    const auto a = root.getChildFile("Drop/piano_C3.wav");
+    const auto b = root.getChildFile("Drop/piano_C4.wav");
+    ASSERT_TRUE(writeWav(a, 2048));
+    ASSERT_TRUE(writeWav(b, 2048));
+
+    juce::AudioProcessorGraph graph;
+    auto* sampler = add<SamplerModule>(graph);
+    ASSERT_TRUE(sampler->loadInstrumentFromFiles({a.getFullPathName(), b.getFullPathName()}));
+    const auto regionsBefore = sampler->getExtraState()["instrumentRegions"];
+
+    ProjectCollector::collect(graph, bundle);
+
+    const auto state = sampler->getExtraState();
+    const auto* files = state["instrumentFiles"].getArray();
+    ASSERT_NE(files, nullptr);
+    ASSERT_EQ(files->size(), 2);
+    const auto samples = bundle.getChildFile(ProjectBundle::kSamplesSubdirName);
+    EXPECT_EQ((*files)[0].toString(), samples.getChildFile("piano_C3.wav").getFullPathName());
+    EXPECT_EQ((*files)[1].toString(), samples.getChildFile("piano_C4.wav").getFullPathName());
+    EXPECT_EQ(juce::JSON::toString(state["instrumentRegions"]), juce::JSON::toString(regionsBefore));
+}
+
 TEST_F(ProjectCollectorTest, SameNamedFoldersGetSeparateCopies) {
     const auto first = root.getChildFile("A/Pads");
     const auto second = root.getChildFile("B/Pads");

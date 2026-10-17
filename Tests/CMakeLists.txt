@@ -62,6 +62,8 @@ add_executable(Tests
     Modules/Sampler/SamplerInstrumentTests.cpp
     Modules/Sampler/SfzReaderTests.cpp
     Modules/Sampler/SamplerVoicePoolTests.cpp
+    Modules/Sampler/SamplerInstrumentModeTests.cpp
+    Modules/Sampler/SoundPackLibraryTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp

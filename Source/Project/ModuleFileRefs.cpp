@@ -33,6 +33,8 @@ const std::vector<ModuleFileKey>& ModuleFileRefs::keys() {
         {fk::kSamplerType, fk::kSampleFile, false, ProjectBundle::kSamplesSubdirName},
         {fk::kWavetableType, fk::kWavetableFile, false, ProjectBundle::kWavetablesSubdirName},
         {fk::kWavetableType, fk::kWavetableFolder, true, ProjectBundle::kWavetablesSubdirName},
+        {fk::kSamplerType, fk::kInstrumentFolder, true, ProjectBundle::kInstrumentsSubdirName, false, true},
+        {fk::kSamplerType, fk::kInstrumentFiles, false, ProjectBundle::kSamplesSubdirName, true},
     };
     return registry;
 }
@@ -45,9 +47,39 @@ void ModuleFileRefs::forEachFileValue(const juce::String& moduleType, const juce
     for (const auto& key : keys()) {
         if (moduleType != key.moduleType)
             continue;
-        const juce::String value = obj->getProperty(key.stateKey).toString();
-        if (value.isNotEmpty())
-            fn(key, value);
+        if (!key.isList) {
+            const juce::String value = obj->getProperty(key.stateKey).toString();
+            if (value.isNotEmpty())
+                fn(key, value);
+        } else if (auto* list = obj->getProperty(key.stateKey).getArray()) {
+            for (const auto& element : *list)
+                if (element.toString().isNotEmpty())
+                    fn(key, element.toString());
+        }
+    }
+}
+
+void ModuleFileRefs::rewriteFileValues(
+    const juce::String& moduleType, juce::DynamicObject& state,
+    const std::function<std::optional<juce::String>(const ModuleFileKey&, const juce::String&)>& fn) {
+    for (const auto& key : keys()) {
+        if (moduleType != key.moduleType)
+            continue;
+        if (!key.isList) {
+            const juce::String value = state.getProperty(key.stateKey).toString();
+            const auto replacement = value.isNotEmpty() ? fn(key, value) : std::nullopt;
+            if (!replacement)
+                continue;
+            if (replacement->isEmpty())
+                state.removeProperty(key.stateKey);
+            else
+                state.setProperty(key.stateKey, *replacement);
+        } else if (auto* list = state.getProperty(key.stateKey).getArray()) {
+            for (auto& element : *list)
+                if (element.toString().isNotEmpty())
+                    if (const auto replacement = fn(key, element.toString()))
+                        element = *replacement;
+        }
     }
 }
 
@@ -69,12 +101,12 @@ juce::File ModuleFileRefs::resolveBundleRef(const juce::String& ref, const juce:
 
 void ModuleFileRefs::relativizeForSave(juce::var& patchJson, const juce::File& bundleDir) {
     forEachNodeState(patchJson, [&bundleDir](const juce::String& type, juce::DynamicObject& state) {
-        forEachFileValue(type, juce::var(&state), [&](const ModuleFileKey& key, const juce::String& value) {
-            if (!juce::File::isAbsolutePath(value))
-                return;
-            const auto ref = toBundleRef(juce::File(value), bundleDir);
-            if (ref.isNotEmpty())
-                state.setProperty(key.stateKey, ref);
+        rewriteFileValues(type, state, [&](const ModuleFileKey&, const juce::String& value) {
+            std::optional<juce::String> replacement;
+            if (juce::File::isAbsolutePath(value))
+                if (const auto ref = toBundleRef(juce::File(value), bundleDir); ref.isNotEmpty())
+                    replacement = ref;
+            return replacement;
         });
     });
 }
@@ -82,17 +114,14 @@ void ModuleFileRefs::relativizeForSave(juce::var& patchJson, const juce::File& b
 // An absolute value is a legacy project or a genuinely external file and passes through untouched.
 // A relative one that does not resolve inside the bundle is removed rather than left for the
 // module to interpret: juce::File asserts on a relative path, and a dropped key reads as "no file"
-// exactly like a missing one.
+// exactly like a missing one. A list element is blanked instead, so the others keep their indices.
 void ModuleFileRefs::resolveOnLoad(juce::var& patchJson, const juce::File& bundleDir) {
     forEachNodeState(patchJson, [&bundleDir](const juce::String& type, juce::DynamicObject& state) {
-        forEachFileValue(type, juce::var(&state), [&](const ModuleFileKey& key, const juce::String& value) {
-            if (juce::File::isAbsolutePath(value))
-                return;
-            const auto resolved = resolveBundleRef(value, bundleDir);
-            if (resolved == juce::File())
-                state.removeProperty(key.stateKey);
-            else
-                state.setProperty(key.stateKey, resolved.getFullPathName());
+        rewriteFileValues(type, state, [&](const ModuleFileKey&, const juce::String& value) {
+            std::optional<juce::String> replacement;
+            if (!juce::File::isAbsolutePath(value))
+                replacement = resolveBundleRef(value, bundleDir).getFullPathName(); // empty when it does not resolve
+            return replacement;
         });
     });
 }

@@ -77,7 +77,7 @@ TEST(SfzReaderTest, NoteNamesUseOctaveFourForMiddleC) {
 }
 
 TEST(SfzReaderTest, DefinesSubstituteIntoLaterValues) {
-    const auto r = parse("#define $LO 36\n#define $NAME kick one\n<region> sample=$NAME.wav lokey=$LO key=50\n");
+    const auto r = parse("#define $LO 36\n#define $NAME kick one\n<region> sample=$NAME.wav key=50 lokey=$LO\n");
     ASSERT_EQ(r.regions.size(), 1u);
     EXPECT_TRUE(r.regions[0].samplePath.endsWith("kick one.wav"));
     EXPECT_EQ(r.regions[0].loKey, 36);
@@ -172,4 +172,36 @@ TEST(SfzReaderTest, LoadsAnInstrumentFromDisk) {
 
     EXPECT_EQ(loadSfzInstrument(dir.file("nope.sfz"), errors), nullptr);
     EXPECT_FALSE(errors.isEmpty());
+}
+
+TEST(SfzReaderTest, ARegionKeyOverridesTheRangesInheritedFromAbove) {
+    const auto r = parse("<global> lokey=0 hikey=127 pitch_keycenter=36\n"
+                         "<group> lokey=10 hikey=20\n"
+                         "<region> sample=a.wav key=60\n"
+                         "<region> sample=b.wav key=62 hikey=70\n"
+                         "<region> sample=c.wav hikey=70 key=64\n"
+                         "<region> sample=d.wav\n");
+    ASSERT_EQ(r.regions.size(), 4u);
+    EXPECT_EQ(r.regions[0].loKey, 60);
+    EXPECT_EQ(r.regions[0].hiKey, 60);
+    EXPECT_EQ(r.regions[0].rootKey, 60);
+    // Within one header the later opcode wins.
+    EXPECT_EQ(r.regions[1].loKey, 62);
+    EXPECT_EQ(r.regions[1].hiKey, 70);
+    EXPECT_EQ(r.regions[2].hiKey, 64);
+    // A region without key= still inherits.
+    EXPECT_EQ(r.regions[3].loKey, 10);
+    EXPECT_EQ(r.regions[3].hiKey, 20);
+    EXPECT_EQ(r.regions[3].rootKey, 36);
+}
+
+TEST(SfzReaderTest, ParseWarningsReachTheLoadErrors) {
+    TempDir dir;
+    ASSERT_TRUE(writeWav(dir.file("a.wav"), 400, 1, 44100.0, [](int, int) { return 0.1f; }));
+    ASSERT_TRUE(dir.file("x.sfz").replaceWithText("<region> sample=a.wav cutoff=900\n"));
+    juce::StringArray errors;
+    ASSERT_NE(loadSfzInstrument(dir.file("x.sfz"), errors), nullptr);
+    ASSERT_EQ(errors.size(), 1);
+    EXPECT_TRUE(errors[0].startsWith("warning: "));
+    EXPECT_TRUE(errors[0].contains("cutoff"));
 }

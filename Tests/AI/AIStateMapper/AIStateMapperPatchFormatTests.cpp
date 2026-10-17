@@ -198,8 +198,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
-         "bypassed, density, dualIO, end, fine, grainSize, level, loop, muted, pitch, playMode, reverse, rootNote, "
-         "spray, start"},
+         "attack, bypassed, density, dualIO, end, feel, fine, grainSize, level, loop, muted, pitch, playMode, "
+         "release, releaseSound, reverse, rootNote, spray, start, tone, voices"},
         {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},

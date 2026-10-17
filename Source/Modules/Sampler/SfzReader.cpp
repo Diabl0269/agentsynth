@@ -68,6 +68,12 @@ void splitOpcodes(const juce::String& chunk, std::vector<std::pair<juce::String,
     }
 }
 
+// The opcodes a key= also sets.
+void eraseRangeOpcodes(OpcodeMap& m) {
+    for (const char* name : {"lokey", "hikey", "pitch_keycenter"})
+        m.erase(name);
+}
+
 struct Parser {
     juce::File directory;
     SfzParseResult result;
@@ -183,6 +189,9 @@ void Parser::opcode(const juce::String& name, const juce::String& value) {
                         : section == Section::Master ? &master
                         : section == Section::Group  ? &group
                                                      : &region;
+    // Within one header the later opcode wins, so a key= drops the range opcodes written before it.
+    if (name == "key")
+        eraseRangeOpcodes(*target);
     (*target)[name] = value;
 }
 
@@ -238,9 +247,13 @@ void Parser::finishRegion() {
         return;
     regionOpen = false;
     OpcodeMap merged;
-    for (const OpcodeMap* level : {&global, &master, &group, &region})
+    // The more specific header wins: a key= replaces the ranges inherited from the headers above it.
+    for (const OpcodeMap* level : {&global, &master, &group, &region}) {
+        if (level->count("key") != 0)
+            eraseRangeOpcodes(merged);
         for (const auto& kv : *level)
             merged[kv.first] = kv.second;
+    }
     if (merged.count("sample") == 0 || merged["sample"].isEmpty()) {
         result.warnings.add("A region without a sample was dropped");
         return;
@@ -275,6 +288,8 @@ Instrument::Ptr loadSfzInstrument(const juce::File& sfzFile, juce::StringArray& 
         errors.add("The SFZ file has no usable regions.");
         return nullptr;
     }
+    for (const auto& warning : parsed.warnings)
+        errors.add("warning: " + warning);
     return buildInstrument(sfzFile.getFileNameWithoutExtension(), parsed.regions, errors);
 }
 

@@ -11,4 +11,10 @@ target_sources(Core PRIVATE
     Source/Modules/Sampler/SfzReader.h
     Source/Modules/Sampler/SamplerVoicePool.cpp
     Source/Modules/Sampler/SamplerVoicePool.h
+    Source/Modules/Sampler/SamplerInstrumentPlayer.cpp
+    Source/Modules/Sampler/SamplerInstrumentPlayer.h
+    Source/Modules/Sampler/SamplerInstrumentSlot.cpp
+    Source/Modules/Sampler/SamplerInstrumentSlot.h
+    Source/Modules/Sampler/SoundPackLibrary.cpp
+    Source/Modules/Sampler/SoundPackLibrary.h
 )

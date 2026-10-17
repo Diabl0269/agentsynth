@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "ModuleFileStateKeys.h"
+#include "Modules/Sampler/SamplerInstrumentSlot.h"
 #include "Modules/Sampler/SamplerSampleData.h"
 #include "Project/DeferredAssetLoads.h"
 #include <array>
@@ -10,9 +11,10 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 /**
- * Sample player / granular source.
+ * Sample player / granular source / multi-sample instrument.
  *
- * Loads an audio file from disk and plays it back one of two ways, selected by `playMode`:
+ * Loads an audio file from disk and plays it back one of two ways, selected by `playMode`, or plays a
+ * multi-sample instrument from MIDI (third mode):
  *
  *   • **Sample**   — classic one-shot / looping playback of the region from `start` to `end`.
  *                    `pitch` (± 24 semitones), `fine` (± 100 cents) and MIDI note number set the
@@ -21,12 +23,16 @@
  *   • **Granular** — scatters short windowed grains read from around the `start` position, never
  *                    from or past `end`. `grainSize`, `density` and `spray` shape the cloud;
  *                    `reverse` plays each grain backwards.
+ *   • **Instrument** — polyphonic, MIDI-only playback of the loaded multi-sample instrument (an SFZ, a sound
+ *                    pack entry or dropped files; see docs/modules/sampler-instruments.md). `pitch`, `fine`,
+ *                    the Pitch / Fine / Level CV inputs and `level` apply; `attack`, `release`, `tone`, `feel`,
+ *                    `voices` and `releaseSound` apply in this mode only. The Trigger input (ch0) is ignored.
  *
  * Channel layout (mono module — there is no poly mode):
  *
  *   | raw ch | in                | out                        |
  *   | :----- | :---------------- | :------------------------- |
- *   | 0      | Trigger / Gate    | Audio L                    |
+ *   | 0      | Trigger / Gate *  | Audio L                    |
  *   | 1      | Pitch CV          | Audio R                    |
  *   | 2      | Position CV       | silent pass-through        |
  *   | 3      | Grain Size CV     | silent pass-through        |
@@ -36,6 +42,8 @@
  *   | 7      | Root Note CV      | silent pass-through        |
  *   | 8      | End CV            | silent pass-through        |
  *   | 9      | Fine CV           | silent pass-through        |
+ *
+ * (*) ignored in Instrument mode, which plays from MIDI only.
  *
  * 8 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
@@ -47,7 +55,8 @@
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
  * thread never blocks — a block that races a load renders silence. Replaced samples stay alive in
- * `retainedSamples` so the audio thread's refcount release can never run a destructor.
+ * `retainedSamples` so the audio thread's refcount release can never run a destructor. The instrument is
+ * published the same way by synth::sampler::InstrumentPlayer.
  */
 class SamplerModule : public ModuleBase {
 public:
@@ -82,13 +91,19 @@ public:
     static constexpr float kMaxDensity = 100.0f;
     static constexpr float kDensitySpan = kMaxDensity - kMinDensity;
 
+    // ---- Play modes (the `playMode` choice index; Instrument is appended so saved Sample/Granular stay valid) ----
+    static constexpr int kModeSample = 0;
+    static constexpr int kModeGranular = 1;
+    static constexpr int kModeInstrument = 2;
+
     using SampleData = synth::sampler::SampleData;
 
     SamplerModule()
         // StereoAudio::Declared: its legs ARE the contiguous ch0/ch1 pair, but the module declares
         // seven channels (CV inputs), so the Auto shape test cannot see it. Ships SPLIT.
         : ModuleBase("Sampler", kNumChannels, kNumChannels, StereoAudio::Declared) {
-        addParameter(playModeParam = new juce::AudioParameterChoice("playMode", "Mode", {"Sample", "Granular"}, 0));
+        addParameter(playModeParam =
+                         new juce::AudioParameterChoice("playMode", "Mode", {"Sample", "Granular", "Instrument"}, 0));
         addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch", -24.0f, 24.0f, 0.0f));
         addParameter(rootNoteParam =
                          new juce::AudioParameterInt(juce::ParameterID("rootNote", 1), "Root Note", 0, 127, 60));
@@ -109,6 +124,7 @@ public:
         // module has always emitted a real stereo pair. Collapsing uses the FX helpers rather than
         // the split-block ones: one "Audio" jack that owns both raw legs.
         addMuteParameter();
+        addInstrumentParameters();
         enableVisualBuffer(true);
     }
 
@@ -206,17 +222,57 @@ public:
     bool isPlaying() const noexcept { return playingFlag.load(); }
 
     // =========================================================================
+    // Instrument mode (message thread only unless noted)
+    // =========================================================================
+
+    /** Each load* decodes now and, on success, replaces the instrument and selects Instrument mode. False keeps the
+     *  loaded instrument; getInstrumentMessages() says why. Loading never makes a sound by itself. */
+    bool loadInstrumentFromSfz(const juce::File& sfz) {
+        return loadInstrument(synth::sampler::InstrumentSource::fromSfz(sfz));
+    }
+    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId) {
+        return loadInstrument(synth::sampler::InstrumentSource::fromPack(packId, instrumentId));
+    }
+    bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths) {
+        return !absolutePaths.isEmpty() && loadInstrument(synth::sampler::InstrumentSource::fromFiles(absolutePaths));
+    }
+
+    /** Drops the instrument; Instrument mode then renders silence. */
+    void clearInstrument() { instrumentSlot.clear(); }
+
+    juce::String getInstrumentName() const { return instrumentPlayer.name(); }
+
+    /** Bumped on every publish or clear so UI caches know to rebuild. */
+    int getInstrumentGeneration() const noexcept { return instrumentPlayer.generation(); }
+
+    /** For drawing: null when none is loaded or a publish is in flight. */
+    synth::sampler::Instrument::Ptr getInstrument() const { return instrumentPlayer.current(); }
+
+    /** Errors and "warning: " lines of the last load. */
+    juce::StringArray getInstrumentMessages() const { return instrumentSlot.messages(); }
+
+    /** True while a project open is still decoding this module's instrument. */
+    bool isInstrumentLoadPending() const noexcept { return instrumentSlot.isPending(); }
+
+    /** Any thread. The notes sounding at the end of the last block. */
+    std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }
+
+    // =========================================================================
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)
     // =========================================================================
 
     // A file still decoding (a project opening on screen) is what the module holds: a save or an undo snapshot taken
     // before it lands keeps it.
+    // The sample file and the instrument are both held; the play mode picks which one sounds.
     juce::var getExtraState() const override {
         const juce::String path = pendingPath.isNotEmpty() ? pendingPath : loadedPath;
-        if (path.isEmpty())
+        const auto& source = instrumentSlot.sourceToSave();
+        if (path.isEmpty() && source.kind == synth::sampler::InstrumentSource::Kind::None)
             return {};
         juce::DynamicObject::Ptr state = new juce::DynamicObject();
-        state->setProperty(synth::module_file_keys::kSampleFile, path);
+        if (path.isNotEmpty())
+            state->setProperty(synth::module_file_keys::kSampleFile, path);
+        synth::sampler::writeInstrumentState(source, *state);
         return juce::var(state.get());
     }
 
@@ -225,6 +281,7 @@ public:
             const juce::String path = obj->getProperty(synth::module_file_keys::kSampleFile).toString();
             if (path.isNotEmpty() && !deferSampleLoad(juce::File(path)))
                 loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
+            instrumentSlot.restore(synth::sampler::readInstrumentState(*obj));
         }
     }
 
@@ -241,6 +298,7 @@ public:
         // Snapped to the knob at prepare so a static render is unchanged.
         smoothedLevel.reset(currentSampleRate, 0.01);
         smoothedLevel.setCurrentAndTargetValue(levelParam->get());
+        instrumentPlayer.prepare(currentSampleRate, levelParam->get());
         resetPlayback();
     }
 
@@ -255,9 +313,15 @@ public:
         // OscillatorModule and NoiseModule also take.
         if (isBypassed() || isMuted()) {
             buffer.clear();
+            instrumentPlayer.release();
             playingFlag.store(false);
             return;
         }
+        if (isInstrumentMode()) {
+            processInstrumentMode(buffer, midiMessages);
+            return;
+        }
+        instrumentPlayer.release(); // left Instrument mode: its voices stop
 
         const int ns = juce::jmin(numSamples, kMaxBlock);
 
@@ -322,7 +386,7 @@ public:
         const float baseDensity = densityParam->get();
         const float baseSpray = sprayParam->get();
         smoothedLevel.setTargetValue(levelParam->get());
-        const bool granular = playModeParam->getIndex() == 1;
+        const bool granular = isGranularMode();
         const bool looping = loopParam->get();
 
         // Expected simultaneous grains, used to keep the cloud's loudness roughly independent of
@@ -424,23 +488,7 @@ public:
                 playhead = -1.0; // fully faded out: stop reading until the next trigger
         }
 
-        // A MidiBuffer should never carry an event at/past numSamples, but keep heldNotes correct
-        // defensively (mirrors ADSRModule) rather than silently dropping it.
-        for (const auto metadata : midiMessages)
-            if (metadata.samplePosition >= numSamples)
-                applyHeldNoteMessage(metadata.getMessage());
-
-        // Position readout for the UI — once per block, never per sample.
-        if (granular)
-            playheadNorm.store(juce::jlimit(0.0f, 1.0f, baseStart));
-        else
-            playheadNorm.store(
-                playhead >= 0.0 ? juce::jlimit(0.0f, 1.0f, (float)(playhead / (double)(sampleFrames - 1))) : 0.0f);
-        playingFlag.store(envelope > 0.0f || envelopeTarget > 0.0f);
-
-        if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(outL, numSamples);
-        }
+        finishSampleBlock(buffer, midiMessages, granular, baseStart, sampleFrames);
     }
 
     // =========================================================================
@@ -505,6 +553,71 @@ private:
         int elapsed = 0;
         int length = 0;
     };
+
+    bool isGranularMode() const { return playModeParam->getIndex() == kModeGranular; }
+    bool isInstrumentMode() const { return playModeParam->getIndex() == kModeInstrument; }
+
+    // The Instrument-mode parameters sit after every older one so saved projects and routings keep their order.
+    void addInstrumentParameters() {
+        // Time knobs are skewed so the short end of the range has resolution.
+        addParameter(attackParam = new juce::AudioParameterFloat(
+                         "attack", "Attack", juce::NormalisableRange<float>(0.001f, 2.0f, 0.0f, 0.3f), 0.002f));
+        addParameter(releaseParam = new juce::AudioParameterFloat(
+                         "release", "Release", juce::NormalisableRange<float>(0.01f, 8.0f, 0.0f, 0.4f), 0.6f));
+        addParameter(toneParam = new juce::AudioParameterFloat("tone", "Tone", 0.0f, 1.0f, 1.0f));
+        addParameter(feelParam = new juce::AudioParameterFloat("feel", "Feel", 0.0f, 1.0f, 0.7f));
+        addParameter(voicesParam = new juce::AudioParameterInt(juce::ParameterID("voices", 1), "Voices", 1,
+                                                               synth::sampler::VoicePool::kMaxVoices, 16));
+        addParameter(releaseSoundParam = new juce::AudioParameterBool("releaseSound", "Release Sound", true));
+    }
+
+    bool loadInstrument(const synth::sampler::InstrumentSource& source) {
+        if (!instrumentSlot.load(source))
+            return false;
+        playModeParam->setValueNotifyingHost(playModeParam->convertTo0to1((float)kModeInstrument));
+        return true;
+    }
+
+    // Everything a Sample/Granular block does after its per-sample loop.
+    void finishSampleBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages, bool granular,
+                           float baseStart, int sampleFrames) {
+        const int numSamples = buffer.getNumSamples();
+        // A MidiBuffer should never carry an event at/past numSamples, but keep heldNotes correct
+        // defensively (mirrors ADSRModule) rather than silently dropping it.
+        for (const auto metadata : midiMessages)
+            if (metadata.samplePosition >= numSamples)
+                applyHeldNoteMessage(metadata.getMessage());
+
+        // Position readout for the UI — once per block, never per sample.
+        if (granular)
+            playheadNorm.store(juce::jlimit(0.0f, 1.0f, baseStart));
+        else
+            playheadNorm.store(
+                playhead >= 0.0 ? juce::jlimit(0.0f, 1.0f, (float)(playhead / (double)(sampleFrames - 1))) : 0.0f);
+        playingFlag.store(envelope > 0.0f || envelopeTarget > 0.0f);
+
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+    }
+
+    void processInstrumentMode(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages) {
+        synth::sampler::PlayerBlockParams p;
+        p.voice.attackSeconds = attackParam->get();
+        p.voice.releaseSeconds = releaseParam->get();
+        p.voice.tone = toneParam->get();
+        p.voice.feel = feelParam->get();
+        p.voice.maxVoices = voicesParam->get();
+        p.voice.releaseSound = releaseSoundParam->get();
+        p.voice.pitchSemis = (double)pitchParam->get() + (double)fineParam->get() / 100.0;
+        p.level = levelParam->get();
+        p.pitchCvChannel = kPitchCVCh;
+        p.fineCvChannel = kFineCVCh;
+        p.levelCvChannel = kLevelCVCh;
+        instrumentPlayer.process(buffer, midiMessages, p);
+        playingFlag.store(instrumentPlayer.getSoundingNotes().any());
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
+    }
 
     // =========================================================================
     // Sample publication
@@ -824,6 +937,15 @@ private:
     juce::AudioParameterFloat* endParam = nullptr;
     juce::AudioParameterFloat* fineParam = nullptr;
     juce::AudioParameterBool* reverseParam = nullptr;
+    juce::AudioParameterFloat* attackParam = nullptr;
+    juce::AudioParameterFloat* releaseParam = nullptr;
+    juce::AudioParameterFloat* toneParam = nullptr;
+    juce::AudioParameterFloat* feelParam = nullptr;
+    juce::AudioParameterInt* voicesParam = nullptr;
+    juce::AudioParameterBool* releaseSoundParam = nullptr;
+
+    synth::sampler::InstrumentPlayer instrumentPlayer; // before the slot, which refers to it
+    synth::sampler::InstrumentSlot instrumentSlot{instrumentPlayer, this};
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerModule)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerModule)

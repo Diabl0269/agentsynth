@@ -2,23 +2,28 @@
 
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <vector>
 
 namespace synth {
 
 /** One node "state" key that holds a path on disk: which module type writes it, whether it names a
- *  folder rather than a file, and the bundle subdirectory Collect copies it into. */
+ *  folder rather than a file, and the bundle subdirectory Collect copies it into. A list key holds an array of
+ *  paths (an empty element stands for a file that is gone, so the indices other state refers to stay valid); a
+ *  whole-tree folder is copied with everything below it, not just its audio files. */
 struct ModuleFileKey {
     const char* moduleType;
     const char* stateKey;
     bool isFolder;
     const char* bundleSubdir;
+    bool isList = false;
+    bool wholeTree = false;
 };
 
 /**
  * @class ModuleFileRefs
- * @brief The bundle-relative path convention for module file state (Sampler sample, Wavetable
- *        file and folder) inside a saved `.agsproj`.
+ * @brief The bundle-relative path convention for module file state (Sampler sample, instrument folder and
+ *        dropped files, Wavetable file and folder) inside a saved `.agsproj`.
  *
  * Modules always hold ABSOLUTE paths in memory; this class translates at the bundle boundary only.
  * On save, a path inside the bundle is written as a relative ref with '/' separators
@@ -31,10 +36,16 @@ public:
     /** Every registered file-state key. */
     static const std::vector<ModuleFileKey>& keys();
 
-    /** Calls `fn` once per registered key present (non-empty) in `state` for `moduleType`. `state`
-     *  may be void or a non-object, in which case nothing is called. */
+    /** Calls `fn` once per registered value present (non-empty) in `state` for `moduleType`: each non-empty
+     *  element of a list key. `state` may be void or a non-object, in which case nothing is called. */
     static void forEachFileValue(const juce::String& moduleType, const juce::var& state,
                                  const std::function<void(const ModuleFileKey&, const juce::String&)>& fn);
+
+    /** Like forEachFileValue, but a string returned from `fn` replaces the value in `state`; nullopt leaves it.
+     *  An empty replacement removes a plain key and blanks a list element. */
+    static void
+    rewriteFileValues(const juce::String& moduleType, juce::DynamicObject& state,
+                      const std::function<std::optional<juce::String>(const ModuleFileKey&, const juce::String&)>& fn);
 
     /** `file` as a '/'-separated bundle-relative ref, or empty when it is not inside `bundleDir`. */
     static juce::String toBundleRef(const juce::File& file, const juce::File& bundleDir);
@@ -48,8 +59,8 @@ public:
     static void relativizeForSave(juce::var& patchJson, const juce::File& bundleDir);
 
     /** Resolves, in place, every relative ref in `patchJson`'s node states to an absolute path in
-     *  `bundleDir`, removing any ref that is malformed or escapes the bundle. Call before the
-     *  patch is applied. */
+     *  `bundleDir`, removing any ref that is malformed or escapes the bundle (a list element becomes empty).
+     *  Call before the patch is applied. */
     static void resolveOnLoad(juce::var& patchJson, const juce::File& bundleDir);
 
 private:
