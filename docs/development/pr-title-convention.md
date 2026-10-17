@@ -57,4 +57,4 @@ type), `chore:bump ccache size` (missing space after colon).
 **Making a title check required is a one-way door for open PRs.** The moment it becomes a required
 status check it fails every PR open at the time, including ones mid-review whose titles predate the
 rule, so it lands non-required and the open PRs are retitled by hand before the branch-protection
-flip.
+flip. That is how it went: the check landed non-required (FRO182) and became required in the same branch-protection pass as FRO170's Docs check.

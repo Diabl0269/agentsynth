@@ -251,7 +251,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
 - **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
   the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's and
-  `LfoShapesAdapter` the LFO's. Both share `ModuleShapesAdapter` (the undo bracket and the morph cursor's parameters).
+  `LfoShapesAdapter` the LFO's. Both share `ModuleShapesAdapter` (the undo bracket and the morph cursor's parameters). The window and the card's map edit the adapter through `ShapeMapController`, so every edit is one undo step.
 
 ## Morph map
 
@@ -266,7 +266,7 @@ double-click to edit", "Morph cursor - drag to blend shapes". Two sliders huggin
 ## Card
 
 With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`, revision 3; the logic is
-`MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape):
+`MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape). It is a collaborator, not `ModuleComponent` members: it owns the morph map, the Edit shapes button and the Show Morph Map pill, gets the card's hooks through its `Host`, and `ModuleComponent` holds one pointer to it (`getMorphCard()`):
 
 - **Tone row.** Cutoff and Resonance (ignored here) swap in place for Shift and Depth, the same cells, with the
   swap-in-place motion of any condition; Drive stays. Every other type has exactly its old card.

@@ -215,7 +215,7 @@ Parameter values are a flat scalar map, permanently. Time-varying data lives und
 something clear to do with it: old builds preserve it, new builds honour it, neither corrupts the
 other's data.
 
-`"timeline"`, `"macros"` and `"midiRemote"` are reserved root keys and are **refused, not ignored**,
+`"timeline"`, `"macros"` (macro card layout), `"midiRemote"` (MIDI controller assignments), `"mixerPanLaw"` (the mixer's per-project pan law), `"mixerView"` (which mixer channels are pinned or hidden) and `"view"` (the graph canvas zoom and pan) are reserved root keys, all app-authored project data, and are **refused, not ignored**,
 on the untrusted path (`PatchValidationError::TimelineNotAllowed` for the first). The validator lets
 unknown keys through, so a future build that starts honouring one of them would otherwise silently
 begin executing provider-authored data against patches accepted today. Refusing means that door can

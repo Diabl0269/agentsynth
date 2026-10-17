@@ -59,6 +59,7 @@ the Settings window is.
   (`layoutGraphGroups` in `...GraphBehaviour.cpp`, `layoutTimelineGroups`, `layoutAutosaveGroup`,
   `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup`,
   `layoutInfoTooltipsGroup`, `layoutMidiRemoteGroup` and `layoutUsageStatsGroup`, chained from the mixer group). Each sets `layoutCategory` first.
+- `layoutContent` is only the driver, so a new row is a group block in its category's `layout*Groups` unit (which sets `layoutCategory` first), never a new block in `layoutContent`; persisted keys and getters/setters do not depend on the category.
 - `layoutContent` builds three closures (`groupMatches`, `setGroupVisible`, `beginGroup`) and calls the
   per-category functions in order. With an empty filter `groupMatches` is true only for groups whose
   `layoutCategory` equals `selectedCategory`; with a filter it is the text match, across all categories.

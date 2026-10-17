@@ -12,7 +12,7 @@ ballistics themselves.
 
 ## A per reader peak latch
 
-**One latch per leg, keyed by `MeterReader` (`Mixer`, `TrackHeader`), not one shared float.**
+**One latch per leg, keyed by `MeterReader` (`Mixer`, `TrackHeader`), not one shared float.** A meter reader takes its own slot and never reads another reader's; a new consumer gets a new enumerator in `Source/Mixer/PeakMeterLatch.h`, never an existing one repurposed.
 `Source/Mixer/PeakMeterLatch.h`: the audio thread's `storeBlockPeak()` is a **lock-free CAS-max loop
 into EVERY reader's own slot**, and each reader's `takePeak()` is a read-and-reset of **only its own
 slot** — so the mixer column and a track header's channel chip poll independently and never steal

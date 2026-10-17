@@ -922,7 +922,7 @@ appears on each visible button that has a shortcut: `⌘T` on the Show/Hide Pane
 `⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Each bubble grows out of the
 button it labels; release and they shrink back and fade out. The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
-`MainComponent` that paints only while the hints are up.
+`MainComponent` that paints only while the hints are up. It costs nothing at rest and can never be in the way: it takes no clicks (`setInterceptsMouseClicks(false, false)`), is hidden from the accessibility tree, and never moves or resizes another component.
 
 - **Four hold keys.** **Cmd** alone and **Ctrl** alone (macOS; off the Mac Ctrl is Cmd) both show
   every target that has any binding, bare keys included (the timeline's edit tools, Follow playhead,
