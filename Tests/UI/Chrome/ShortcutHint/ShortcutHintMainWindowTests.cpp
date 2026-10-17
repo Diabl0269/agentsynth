@@ -4,7 +4,7 @@
 #include "../../Layout/BottomDockActiveTabResetGuard.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/EditTool.h"

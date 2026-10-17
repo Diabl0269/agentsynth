@@ -1,7 +1,7 @@
 #pragma once
 
 #include "MixerPanelComponent.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
 #include <functional>
 

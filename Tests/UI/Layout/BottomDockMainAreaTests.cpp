@@ -6,7 +6,7 @@
 #include "../../TestSettingsHelpers.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 #include <memory>

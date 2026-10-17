@@ -45,7 +45,7 @@
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
 #include "UI/Layout/AppTooltipWindow.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/MainViewHolder.h"

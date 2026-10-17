@@ -1,7 +1,7 @@
 #include "MainComponentShortcutHints.h"
 
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"

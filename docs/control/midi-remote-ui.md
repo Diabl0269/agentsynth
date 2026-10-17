@@ -109,7 +109,7 @@ audio, playback and every other click keep working; it is not a modal mode.
 ## The Controllers panel
 
 A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to Timeline and
-Mixer (`Source/UI/Mixer/BottomDockComponent.h`) — it reuses the dock's slide, persistence
+Mixer (`Source/UI/Layout/BottomDockComponent/BottomDockComponent.h`) — it reuses the dock's slide, persistence
 (`"bottomDockActiveTab"`), detach-to-window (`DetachablePanelHost`) and focus-region machinery.
 Opened with `Cmd+3` / the Settings shortcut list's "Show Controllers Tab" (`ShortcutManager` action
 `toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+T open/close toggle,

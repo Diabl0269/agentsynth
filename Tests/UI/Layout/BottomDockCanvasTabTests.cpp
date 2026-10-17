@@ -5,7 +5,7 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>

@@ -3,7 +3,7 @@
 // "mainView" / "bottomDockTabOrder" settings round trip (docs/layout/chrome.md#panel-collapse-and-persistence).
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "BottomDockActiveTabResetGuard.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>
