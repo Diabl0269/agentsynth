@@ -214,7 +214,8 @@ TEST_F(CanvasToolbarWindowTest, TurningOffShowButtonLabelsLeavesEveryTopBarAndCa
         EXPECT_FALSE(b->getTooltip().isEmpty()) << b->getComponentID() << " keeps its tooltip";
     }
     EXPECT_LT(strip().autoArrangeButton().getWidth(), labelledWidth);
-    EXPECT_NE(strip().autoArrangeButton().getTooltip().indexOfIgnoreCase("Cmd"), -1)
+    // "(Cmd + L)" on the Mac, "(Ctrl + L)" elsewhere.
+    EXPECT_TRUE(strip().autoArrangeButton().getTooltip().containsIgnoreCase("+ L)"))
         << strip().autoArrangeButton().getTooltip() << " still names the key";
 
     setShowLabels(true);
