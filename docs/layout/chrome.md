@@ -340,7 +340,7 @@ Mixer's Own-panel move generalised, and the dock lays out only the hosts still p
 leaves main its host returns to the dock as a tab that is not active (it fades in if it becomes the active one).
 The Library and the AI panel keep their places beside the main area.
 
-A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+T) never hides it,
+A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+J) never hides it,
 a dock tab switch never fades it, and every "is it showing" gate counts it:
 `BottomDockComponent::isTimelineShowing()` / `isMidiRemoteShowing()` / `isMixerShowing()` (the playhead poll,
 the activity tick, the meters, and the Timeline's edit commands through `resolveEditSurface()`),
@@ -356,7 +356,10 @@ leaving the Tab placement puts the canvas back first. In main the Mixer fills th
 region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
 a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
 ([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. A swap
-relays the main area out through `BottomDockComponent::onMainViewChanged`.
+relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
+so Tab follows the new layout. The same swap has a key per view, Opt+Cmd+1 Timeline, 2 Mixer, 3 Controllers, 4 Canvas
+(`swap<View>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
+readers once ("Timeline in the main area"), and a refused one is silent.
 
 ### The canvas as a tab
 
@@ -371,7 +374,7 @@ first lands in the panel its view is fitted once, after the slide ends.
 `MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
 the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to
 Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
-every project or patch load, and an accepted AI patch. Cmd+T closing the panel around the canvas hands keyboard
+every project or patch load, and an accepted AI patch. Cmd+J closing the panel around the canvas hands keyboard
 focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
 
 ### Tab strip keyboard and screen-reader access
@@ -391,17 +394,17 @@ Canvas, tab strip, then the panel.
 
 Otherwise plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
 is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
-uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+T (when it opens the pane) and
-Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+T closing the pane around the focus
-hands focus to the canvas ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
+uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+J (when it opens the pane) and
+Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+J closing the pane around the focus
+hands focus to the view in the main area ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
 `paintFocusRing` while the strip has focus (not during a reorder drag), drawn by the dock over the tab.
 Clicking a tab does not give the strip focus.
 
 **Screen reader.** JUCE has no tab role, so each tab is exposed as a radio button, its closest selectable
 and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas", with the selected state
 following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
-handler and the tests use). Inside it is the swap icon, a button named like its tooltip, "Show Mixer in the main
-area"; it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
+handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
+area" (its tooltip adds the key, Opt+Cmd+1-4); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
 Return presses it). The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay

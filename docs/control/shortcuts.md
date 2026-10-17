@@ -42,9 +42,10 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the canvas. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
-| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). Each key belongs to its view: reordering the strip never re-keys them — see [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
-| Cmd+4 | Show Canvas (`showCanvas`) — the fourth view's key; while the canvas is in the main area (always, today) it focuses the canvas and leaves the dock as it is |
+| Cmd+J | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active, and closing it hides the Canvas too while that is a tab. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the view in the main area. Cmd+T is released (a saved Cmd+T moves to Cmd+J once, see below). See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+J closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). Each key belongs to its view: reordering the strip never re-keys them — see [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
+| Cmd+4 | Show Canvas (`showCanvas`) — the fourth view's key; while the canvas is in the main area it focuses the canvas and leaves the dock as it is, else it shows the Canvas tab |
+| Opt+Cmd+1 / 2 / 3 / 4 | Show Timeline / Mixer / Controllers / Canvas in the Main Area (`swapTimelineToMain`/`swapMixerToMain`/`swapMidiRemoteToMain`/`swapCanvasToMain`) — the keys behind each tab's swap icon: the view trades places with the one in the main area, and a screen reader hears "<View> in the main area". The digit matches the view's own Cmd+digit, and each key stays with its view. A view in its own window, one already in the main area, or the Mixer outside the Tab placement is refused: nothing changes (Ctrl+Alt+1..4 off the Mac). The icon's tooltip names the live key |
 | Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
@@ -68,28 +69,28 @@ when reasoning about a key that "does nothing."
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 | Cmd+Shift+F | Send Feedback (`openFeedback`) — opens the Send feedback window from anywhere (canvas, timeline, mixer): the same action as the top bar's **Feedback** button, whose tooltip names the live chord. Rebindable. Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen; Cmd+F is Focus Library Search and bare F is Follow Playhead, so Cmd+Shift+F is free |
-| Ctrl+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add Track (`openAddTrackMenu`) — shows the Timeline, focuses its **+ Track** button and opens the searchable Add Track picker with the search field ready; Enter adds the first match, Escape closes and focus stays on **+ Track**. A real Control on the Mac (Cmd+T is Toggle Bottom Panel); off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
+| Ctrl+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add Track (`openAddTrackMenu`) — shows the Timeline, focuses its **+ Track** button and opens the searchable Add Track picker with the search field ready; Enter adds the first match, Escape closes and focus stays on **+ Track**. A real Control on the Mac; off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
 
-Cmd+T (now `toggleBottomPanel`) and Space are always active (see
-[`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
-and zoom commands below are inactive whenever the panel itself isn't open (`isBottomDockVisible`),
-the same as any other timeline-only command.
+Cmd+J (`toggleBottomPanel`) and Space are always active (see
+[`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid and zoom commands below
+are inactive while the panel is closed, unless the Timeline is in the main area.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
 modifier there) and on `Cmd+Shift+A` everywhere else: on Windows/Linux JUCE's `commandModifier` IS
 Ctrl, so a Ctrl+A default there would be the same chord as Select All and the two commands would
-collide. Like every row above, all of these are rebindable in
-Settings — and note that a machine which already persisted the old bindings keeps them until
-"Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
+collide. Like every row above, all of these are rebindable in Settings; a machine that already persisted the old
+bindings keeps them until "Reset to Defaults" (defaults only fill the gaps).
 
-FRO333: Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old
-`Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the new toggleBottomPanel action,
+Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old
+`Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the toggleBottomPanel action,
 one-shot, the first time it loads its settings — `ShortcutManager::migrateBottomPanelToggleKeys`;
 an old `Cmd+Alt+M` for Mixer just carries forward unchanged, since it never collided with anything).
-Dragging a tab in the strip to reorder it no longer re-keys anything: each view keeps its own key
-(Cmd+1/2/3, Cmd+4 for the canvas), so a key never changes meaning when a view moves between the main
-area and the strip. Bindings an older build re-keyed on a reorder are kept as saved.
+Cmd+T was then released: `migrateBottomPanelCmdJ` moves a saved toggleBottomPanel that is exactly Cmd+T to
+Cmd+J once (any other binding, or a Cmd+J already held by another action, is left alone), and Cmd+T is unbound by default.
+Dragging a tab to reorder it never re-keys anything: each view keeps its own keys (Cmd+1..4 to show it,
+Opt+Cmd+1..4 to swap it into the main area), so a key never changes meaning when a view moves. Bindings an
+older build re-keyed on a reorder are kept as saved.
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by
@@ -344,7 +345,7 @@ moves into the open tab and Shift+Tab comes back to the strip ([rule](../develop
 keys belong to the focused strip and are not actions. The former Cmd+Opt+Left / Right `tabPrevious` / `tabNext`
 actions are gone; a saved shortcut or MIDI mapping that still names them is ignored on load.
 
-- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+T opens the pane, and both leave focus on the strip (Cmd+4 focuses the canvas)
+- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+J opens the pane, and both leave focus on the strip (Cmd+4 focuses the canvas)
   ([details](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access)).
 - **Settings window**: Cmd+1..9 opens the Nth tab, a fixed key, not an action (a text field passes it up). Holding
   Cmd over the window shows each tab's `Cmd+N` as a hint badge ([hints](#shortcut-hints)).

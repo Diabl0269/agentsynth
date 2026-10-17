@@ -6,6 +6,7 @@
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Layout/TabStripKeys.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
@@ -379,8 +380,14 @@ void BottomDockComponent::refreshSwapIcons() {
         const juce::String title = describeTab(t, activeTab_).swapTitle;
         icon.setEnabled(!inOwnWindow);
         icon.setTitle(title);
-        icon.setTooltip(inOwnWindow ? juce::String(nameForTab(t)) + " is open in its own window" : title);
+        icon.setTooltip(inOwnWindow ? juce::String(nameForTab(t)) + " is open in its own window"
+                                    : formatShortcutHint(title, swapShortcutTexts_[static_cast<size_t>(t)]));
     }
+}
+
+void BottomDockComponent::setSwapShortcutText(Tab view, const juce::String& text) {
+    swapShortcutTexts_[static_cast<size_t>(view)] = text;
+    refreshSwapIcons();
 }
 
 // Hides the swap icon of the tab being dragged: its slot shows the dashed marker, which a child would paint over.

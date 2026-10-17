@@ -65,7 +65,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", bottomDock.getMidiRemotePanel());
     bottomDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     bottomDock.getMixerHost().setHostedPanelFocusRegion("mixer", bottomDock.getMixerPanel());
-    // App-wide shortcuts (Cmd+T, Cmd+1..9) still fire while a detached tab's own window has
+    // App-wide shortcuts (Cmd+J, Cmd+1..9) still fire while a detached tab's own window has
     // focus -- see DetachedPanelWindow::onAppShortcut's own comment on why it can't just reach
     // MainComponent::keyPressed directly.
     auto appShortcutFallback = [this](const juce::KeyPress& key) { return keyPressed(key); };
@@ -130,7 +130,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     trackChannelLink_.setCanvasRevealHook([this] { ensureCanvasShowing(); });
     bottomDock.getMixerPanel().onRevealCanvas = [this] { ensureCanvasShowing(); };
     bottomDock.onCanvasBodyChanged = [this] { resized(); };
-    bottomDock.onMainViewChanged = [this] { resized(); }; // the swap icon moves a host into or out of the holder
+    bottomDock.onMainViewChanged = [this] { handleMainViewChanged(); };
 
     // The user's bindings for the three surfaces that resolve their OWN keys (see
     // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are

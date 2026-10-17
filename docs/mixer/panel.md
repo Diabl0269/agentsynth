@@ -160,11 +160,11 @@ down takes B's place; the Timeline, Mixer (Tab placement only) or Controllers ho
 ([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. The swap icon on each tab does this ([below](#the-tab-strip)); the choice is
 remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)).
 
-- **One toggle, four shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
+- **One toggle, four shows.** `Cmd+J`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
   active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
   `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
-  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main.
+  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main. `Opt+Cmd+1`-`4` swap a view in (below).
 - **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
   tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
   the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
@@ -173,11 +173,11 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)).
   `paintReorderLift` look (`surfaceHi` fill, 1 px `accent` outline, soft shadow, 95% opacity, easing in with the
   lift); the other tabs glide aside (160 ms) and the gap shows a 1 px dashed `border` outline (its swap icon hides). **The order does not change while dragging.** On release
   it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); each view
-  keeps its own key (Cmd+1/2/3, Cmd+4 `showCanvas`), never re-keyed. Esc returns the tab and commits
+  keeps its own keys (Cmd+1-4 show, Opt+Cmd+1-4 swap), never re-keyed. Esc returns the tab and commits
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
-  tab's full height) named and tooltipped "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
-  Canvas). It sits in a right-aligned icon row inside the tab (a detach icon will join it on its left), and the label
+  tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
+  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`4` (`swap<View>ToMain`). It sits in a right-aligned icon row inside the tab (a detach icon will join it on its left), and the label
   ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
@@ -190,7 +190,7 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)).
   the active tab if it's still offered, else the first offered tab in strip order — every time
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
   showing nothing. `MainComponent` hides the whole dock only once `hasAnyVisibleTab()` goes false and reopens it the
-  moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+T close).
+  moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+J close).
 - **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is otherwise
   unreachable from a separate top-level `DetachedPanelWindow` (see [**Per window keyboard focus**](#per-window-keyboard-focus));
   `DetachedPanelWindow::onAppShortcut`, wired through `DetachablePanelHost::onAppShortcutFallback`, retries them, with

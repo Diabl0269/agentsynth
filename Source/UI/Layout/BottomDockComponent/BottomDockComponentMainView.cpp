@@ -40,7 +40,31 @@ bool BottomDockComponent::swapTabToMain(Tab view) {
     if (!setMainView(view))
         return false;
     setActiveTab(previous);
+    const auto text = mainViewAnnouncement(view);
+    if (announceHook_)
+        announceHook_(text);
+    else
+        juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
     return true;
+}
+
+// One fixed key per view (Opt+Cmd+1..4, matching the view's own Cmd+digit), named by view so a swap never re-keys.
+const char* BottomDockComponent::swapActionIdForTab(Tab view) noexcept {
+    switch (view) {
+    case Tab::Mixer:
+        return "swapMixerToMain";
+    case Tab::MidiRemote:
+        return "swapMidiRemoteToMain";
+    case Tab::Canvas:
+        return "swapCanvasToMain";
+    case Tab::Timeline:
+        break;
+    }
+    return "swapTimelineToMain";
+}
+
+juce::String BottomDockComponent::mainViewAnnouncement(Tab view) {
+    return juce::String(nameForTab(view)) + " in the main area";
 }
 
 void BottomDockComponent::setMainAreaHolder(juce::Component* holder) {

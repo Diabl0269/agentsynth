@@ -91,6 +91,13 @@ public:
     /** The swap icon's action: setMainView(view), then the view that was in the main area becomes the active tab.
      *  False, and nothing changes, when setMainView() refuses. */
     bool swapTabToMain(Tab view);
+    /** The rebindable action behind each view's "show it in the main area" key (the swap icon's shortcut). */
+    static const char* swapActionIdForTab(Tab view) noexcept;
+    /** What a screen reader is told after a swap, e.g. "Timeline in the main area". */
+    static juce::String mainViewAnnouncement(Tab view);
+    /** The key shown in `view`'s swap icon tooltip (its swap action's binding, empty when unbound). Pushed by
+     *  MainComponent on every shortcut change: the dock is built before the shortcut table exists. */
+    void setSwapShortcutText(Tab view, const juce::String& text);
     /** Fires after every successful setMainView(), once the dock has laid out; MainComponent relays out the main area.
      */
     std::function<void()> onMainViewChanged;
@@ -352,6 +359,8 @@ public:
     /** The swap button inside `tab`'s strip button (the Canvas tab's included). Disabled while `tab` cannot go to the
      *  main area (it is open in its own window); not shown while `tab` is not offered. */
     synth::ui::IconButton& getSwapIcon(Tab tab) noexcept;
+    /** Test seam: receives each swap announcement instead of the screen reader. */
+    void setAnnouncementHookForTest(std::function<void(const juce::String&)> hook) { announceHook_ = std::move(hook); }
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
     /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade); never Canvas. */
@@ -551,6 +560,8 @@ private:
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;
     ShortcutManager* shortcutManager_ = nullptr;
+    std::function<void(const juce::String&)> announceHook_;
+    juce::String swapShortcutTexts_[4];
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
     // The user-controlled strip order (a permutation of all four views, the main view and detached
     // tabs keeping their slots) and the main view.

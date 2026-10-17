@@ -192,6 +192,14 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleMidiRemotePanel;
     if (actionId == "showCanvas")
         return showCanvas;
+    if (actionId == "swapTimelineToMain")
+        return swapTimelineToMain;
+    if (actionId == "swapMixerToMain")
+        return swapMixerToMain;
+    if (actionId == "swapMidiRemoteToMain")
+        return swapMidiRemoteToMain;
+    if (actionId == "swapCanvasToMain")
+        return swapCanvasToMain;
     if (actionId == "toggleSidePane")
         return toggleSidePane;
     if (actionId == "snapSetWhole")

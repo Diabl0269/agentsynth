@@ -27,15 +27,18 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"toggleMinimap", ShortcutCategory::General},
         {"toggleAiPanel", ShortcutCategory::General},
         {"toggleLibrary", ShortcutCategory::General},
-        // The ONE bottom-dock open/close toggle (docs/layout/chrome.md), reopening on the last active tab.
-        // The three rows below only SHOW their tab (opening the dock if needed) -- see their own comments.
+        // The ONE bottom-dock open/close toggle (docs/layout/chrome.md); the rows below only SHOW or SWAP a view.
         {"toggleBottomPanel", ShortcutCategory::General},
-        // "show the Timeline/Mixer/Controllers tab / the Canvas" -- default Cmd+1/2/3/4, one fixed
-        // key per view: a drag-reorder of the tab strip never re-keys them.
+        // Show a view: default Cmd+1/2/3/4, one fixed key per view (a tab reorder never re-keys them).
         {"toggleTimelinePanel", ShortcutCategory::General},
         {"toggleMixerPanel", ShortcutCategory::General},
         {"toggleMidiRemotePanel", ShortcutCategory::General},
         {"showCanvas", ShortcutCategory::General},
+        // Swap a view into the main area: default Opt+Cmd+1..4, the digit of the view's own show key.
+        {"swapTimelineToMain", ShortcutCategory::General},
+        {"swapMixerToMain", ShortcutCategory::General},
+        {"swapMidiRemoteToMain", ShortcutCategory::General},
+        {"swapCanvasToMain", ShortcutCategory::General},
         {"toggleSidePane", ShortcutCategory::General},
         {"selectAllModules", ShortcutCategory::General},
         {"copySelection", ShortcutCategory::General},

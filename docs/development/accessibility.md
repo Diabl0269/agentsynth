@@ -210,7 +210,7 @@ Settings window's strip both do):
   tooltips say "(Cmd+N)"; holding Cmd over the window also shows each tab's Cmd+N as a hint badge
   (`ShortcutHintOverlay::addFixedKeyTarget`). It is the second exception to "every new key is a rebindable
   action", beside the list arrow keys below. The bottom dock's Cmd+1/2/3 are ordinary rebindable actions, and
-  they (like Cmd+T when it opens the pane) leave focus on the dock's strip.
+  they (like Cmd+J when it opens the pane) leave focus on the dock's strip.
 - The Settings window remembers its open tab by name (`settingsTabName`), not by position, because the Audio
   tab exists in the app and not in the plugin.
 - **Tests** deliver the key through the listener-then-`keyPressed` walk with a text field as the starting

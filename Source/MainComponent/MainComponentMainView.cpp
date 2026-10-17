@@ -16,6 +16,12 @@ void MainComponent::layoutMainView(juce::Rectangle<int> mainArea) {
         mainViewHolder_.setBounds(mainArea);
 }
 
+// A swap moves a host into or out of the holder, and the Tab order follows the layout.
+void MainComponent::handleMainViewChanged() {
+    rebuildFocusRegions();
+    resized();
+}
+
 // isBottomDockVisible alone used to answer this; a view in the main area is on screen with the dock closed.
 bool MainComponent::isViewOnScreen(BottomDockComponent::Tab view) const {
     return bottomDock.isInMainArea(view) || (isBottomDockVisible && bottomDock.getActiveTab() == view);

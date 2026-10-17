@@ -1,4 +1,4 @@
-// MainComponentDockFocus.cpp -- where keyboard focus goes after the bottom-panel shortcuts (Cmd+T,
+// MainComponentDockFocus.cpp -- where keyboard focus goes after the bottom-panel shortcuts (Cmd+J,
 // Cmd+1/2/3/4) run: onto the dock's tab strip when the pane is showing, back to the view in the main area
 // when the pane closes around the focus. The shortcuts' dispatch rows are in MainComponentCommandTable.cpp.
 #include "MainComponent.h"
@@ -18,7 +18,7 @@ void MainComponent::focusDockTabStripIfShowing() {
         focusRegions_.focusRegionById(kDockTabsRegion);
 }
 
-// Cmd+T. Opening the pane puts focus on its tab strip so the arrow keys switch tab at once. Closing it
+// Cmd+J. Opening the pane puts focus on its tab strip so the arrow keys switch tab at once. Closing it
 // would leave focus on a hidden component (the Canvas tab's canvas included), so a press that closes the
 // pane around the focus hands focus to the view in the main area.
 void MainComponent::toggleBottomPanelFromShortcut() {

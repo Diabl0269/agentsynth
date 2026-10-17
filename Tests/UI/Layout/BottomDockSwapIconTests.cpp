@@ -4,6 +4,7 @@
 // (docs/mixer/panel.md#the-tab-strip).
 #include "BottomDockMainAreaFixture.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
@@ -25,6 +26,12 @@ bool pressShiftReturn(BottomDockComponent& dock) {
 // Every test below starts with the panel open, so the tab strip is laid out.
 class BottomDockSwapIconTest : public BottomDockMainAreaTest {
 protected:
+    // The tooltip is the name plus the swap action's live key.
+    juce::String tooltipWithKey(Tab view, const juce::String& name) {
+        const auto key = ShortcutManager::keyPressToDisplayString(
+            mc_->getShortcutManager().getBinding(BottomDockComponent::swapActionIdForTab(view)));
+        return synth::ui::formatShortcutHint(name, key);
+    }
     void SetUp() override {
         BottomDockMainAreaTest::SetUp();
         openPanel();
@@ -117,7 +124,7 @@ TEST_F(BottomDockSwapIconTest, ATabInItsOwnWindowHasADisabledIconAndNothingHappe
 
     dock().getTimelineHost().setDetached(false);
     EXPECT_TRUE(icon.isEnabled());
-    EXPECT_EQ(icon.getTooltip(), "Show Timeline in the main area");
+    EXPECT_EQ(icon.getTooltip(), tooltipWithKey(Tab::Timeline, "Show Timeline in the main area"));
 }
 
 TEST_F(BottomDockSwapIconTest, TheMixerCannotSwapOutsideTheTabPlacement) {
@@ -138,7 +145,7 @@ TEST_F(BottomDockSwapIconTest, TheTooltipAndTheScreenReaderNameNameTheView) {
         const juce::String expected = juce::String("Show ") + c.name + " in the main area";
         EXPECT_EQ(BottomDockComponent::describeTab(c.tab, Tab::Canvas).swapTitle, expected);
         auto& icon = dock().getSwapIcon(c.tab);
-        EXPECT_EQ(icon.getTooltip(), expected);
+        EXPECT_EQ(icon.getTooltip(), tooltipWithKey(c.tab, expected));
         EXPECT_EQ(icon.getTitle(), expected);
         EXPECT_TRUE(icon.isAccessible());
     }

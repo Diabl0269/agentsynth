@@ -50,11 +50,11 @@ void ShortcutManager::addGeneralDefaultBindings() {
         isMac ? juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)
               : juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
-    // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
-    // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the ONE bottom-dock
-    // open/close toggle (this used to be toggleTimelinePanel's own chord before the
-    // dock grew a single shared toggle — see migrateBottomPanelToggleKeys() below).
-    bindings["toggleBottomPanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+    // 'j' with plain Cmd is unused by any other binding (the bare J is the timeline's snap toggle, a
+    // different modifier set) — the ONE bottom-dock open/close toggle. It was Cmd+T until the key was
+    // released for the Mac's new-tab convention (see migrateBottomPanelToggleKeys() and
+    // migrateBottomPanelCmdJ() in ShortcutManager.h).
+    bindings["toggleBottomPanel"] = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
     // Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
     // order (Timeline, Mixer, Controllers). Each key stays with its view: reordering the strip
     // never re-keys them. Free chords: no other binding in this table uses a bare Cmd+digit.
@@ -116,13 +116,13 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' went to "locateMaster"
     // (Graph, below) instead. Free on both
     // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
-    // (toggleBottomPanel is bare Cmd+T; autoArrange is bare Cmd+L, a different category
+    // (toggleBottomPanel is bare Cmd+J; autoArrange is bare Cmd+L, a different category
     // entirely), and no component keyPressed() override hardcodes either chord.
     bindings["focusTimeline"] =
         juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-    // Ctrl+T opens the Add Track menu. On the Mac a REAL ctrlModifier (Cmd+T is Toggle Bottom Panel and Ctrl is a
-    // distinct physical key there, the same trick as toggleAiPanel). Off the Mac Cmd IS Ctrl, so the one literal
-    // chord would collide with Toggle Bottom Panel and the key takes Ctrl+Alt+T instead.
+    // Ctrl+T opens the Add Track menu. On the Mac a REAL ctrlModifier (a distinct physical key from Cmd, the same
+    // trick as toggleAiPanel). Off the Mac Cmd IS Ctrl, so the key stays on Ctrl+Alt+T, where installs that
+    // already saved it hold it (Cmd+T itself is unbound by default).
     bindings["openAddTrackMenu"] =
         isMac ? juce::KeyPress('t', juce::ModifierKeys::ctrlModifier, 0)
               : juce::KeyPress('t', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
@@ -176,12 +176,18 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
     // comment above (the Cmd+1/2/3 family). Previously shipped
     // unbound; a returning user's saved unbound value carries forward unchanged, same
-    // as toggleMixerPanel's old Cmd+Alt+M -- only toggleTimelinePanel's Cmd+T is migrated (see
-    // migrateBottomPanelToggleKeys()), since only that one collides with the new
-    // toggleBottomPanel default.
+    // as toggleMixerPanel's old Cmd+Alt+M -- only the panel toggle's and toggleTimelinePanel's old
+    // Cmd+T are migrated (see migrateBottomPanelToggleKeys() and migrateBottomPanelCmdJ()).
     bindings["toggleMidiRemotePanel"] = juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0);
     // The fourth view's key, next to the three tabs': focuses the canvas while it is the main view.
     bindings["showCanvas"] = juce::KeyPress('4', juce::ModifierKeys::commandModifier, 0);
+    // Opt+Cmd+1..4 swap that view into the main area, the same digit as its own Cmd+digit show key (Timeline 1,
+    // Mixer 2, Controllers 3, Canvas 4). Each key stays with its view. Free: no other binding is Alt+Cmd+digit.
+    const auto commandAlt = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
+    bindings["swapTimelineToMain"] = juce::KeyPress('1', commandAlt, 0);
+    bindings["swapMixerToMain"] = juce::KeyPress('2', commandAlt, 0);
+    bindings["swapMidiRemoteToMain"] = juce::KeyPress('3', commandAlt, 0);
+    bindings["swapCanvasToMain"] = juce::KeyPress('4', commandAlt, 0);
     // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =

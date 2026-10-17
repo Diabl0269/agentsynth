@@ -150,7 +150,7 @@ TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
 
 // ----------------------------------------------------------------------------
 // The timeline is GA (the old Preferences "Show timeline (experimental)" kill switch and its
-// MainComponent::applyTimelineFeatureEnabled() plumbing are gone): the toolbar button, Cmd+T and
+// MainComponent::applyTimelineFeatureEnabled() plumbing are gone): the toolbar button, Cmd+J and
 // Space must never be gated off again.
 // ----------------------------------------------------------------------------
 

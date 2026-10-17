@@ -123,7 +123,12 @@ enum CommandIDs {
     // Opens the Send feedback window (the top bar's Feedback button). Appended, like every id above.
     openFeedback,
     // Shows the Canvas: focuses it while it is the main view, else shows its bottom-panel tab.
-    showCanvas
+    showCanvas,
+    // Swap a view into the main area: the Timeline, the Mixer, the Controllers (MIDI Remote) or the Canvas.
+    swapTimelineToMain,
+    swapMixerToMain,
+    swapMidiRemoteToMain,
+    swapCanvasToMain
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

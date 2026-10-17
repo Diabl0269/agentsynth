@@ -967,6 +967,7 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
         append(buildFocusAndHelpCommandRows());
         append(buildTransportCommandRows());
         append(buildSelectionStepCommandRows());
+        append(buildViewSwapCommandRows());
         return t;
     }();
     return table;
