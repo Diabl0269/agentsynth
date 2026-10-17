@@ -87,7 +87,10 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
         // False -- see applyTabVisibility()'s own doc comment on why a pure
         // detach/redock must never rebuild the mixer's columns (it would silently wipe every
         // column's latched clip-readout state).
+        const bool mainViewChanged = refreshMainViewAvailability();
         applyTabVisibility(false);
+        if (mainViewChanged && onMainViewChanged)
+            onMainViewChanged();
         if (onPanelDetachStateChanged)
             onPanelDetachStateChanged();
     };
@@ -133,6 +136,7 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
     // longer offered (the main view, a detached tab) is resolved by applyTabVisibility() below.
     activeTab_ = BottomDockTabModel::viewForKey(settings->getValue(kActiveTabKey, "timeline")).value_or(Tab::Timeline);
     tabModel_.load(settings->getValue(kTabOrderKey, ""), settings->getValue(kMainViewKey, ""));
+    refreshMainViewAvailability();
     placeMainViewHost();
     // The plain initial read -- nothing is open yet, so there is no live transition to run
     // (applyDetachBothPlacesPreference() below is what re-reads this LIVE, on a later settings-file
@@ -187,14 +191,16 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
     // panel/Window placement have their own, unrelated detach state, MixerPlacementController's).
     if (!enabled && mixerMirror_.isOpen())
         mixerMirror_.close();
-    // The Mixer in the main area goes back to the dock first, so the placement controller takes its host from
-    // the dock, not from the main-area holder.
-    if (!enabled && getMainView() == Tab::Mixer)
-        setMainView(Tab::Canvas);
+    // The Mixer in the main area goes back to the dock first (the Canvas fills the main area, the setting stays), so
+    // the placement controller takes its host from the dock, not from the main-area holder. Back in the Tab
+    // placement the Mixer returns to the main area.
+    const bool mainViewChanged = refreshMainViewAvailability();
     // No separate "was Mixer active?" branch needed any more -- applyTabVisibility() picks
     // a fallback active tab itself whenever the current one stops being offered, which disabling
     // Mixer while it's active is just one more instance of (a detach is the other).
     applyTabVisibility();
+    if (mainViewChanged && onMainViewChanged)
+        onMainViewChanged();
 }
 
 void BottomDockComponent::refreshTabVisibility() { applyTabVisibility(false); }

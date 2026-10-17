@@ -83,8 +83,13 @@ public:
      *  dock has laid out, so MainComponent can place the canvas. */
     std::function<void()> onCanvasBodyChanged;
 
-    /** The view in the main area (Canvas unless setMainView() moved another one up). */
+    /** The view in the main area now: Canvas unless setMainView() moved another one up, and Canvas again while
+     *  that view cannot be there (see getStoredMainView()). */
     Tab getMainView() const noexcept { return tabModel_.getMainView(); }
+    /** The view the user put in the main area, the one saved in the settings. It differs from getMainView() only
+     *  while it is in its own window or the Mixer is outside the Tab placement: the Canvas fills the main area for
+     *  the session so it is never empty, and the stored view returns when its panel is docked again. */
+    Tab getStoredMainView() const noexcept { return tabModel_.getStoredMainView(); }
     /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. False, and nothing
      *  changes, when `view` is already there, is open in its own window, or is the Mixer outside the Tab placement. */
     bool setMainView(Tab view);
@@ -469,6 +474,9 @@ private:
     synth::ui::DetachablePanelHost* mainAreaHostFor(Tab view) noexcept;
     // Moves hosts between this dock and the main-area holder so the main view's host is the one in the holder.
     void placeMainViewHost();
+    /** Suspends or resumes the stored main view as its panel leaves or returns to the dock; true when that changed
+     *  the view in the main area. The caller runs applyTabVisibility() and onMainViewChanged afterwards. */
+    bool refreshMainViewAvailability();
     synth::ui::FadeVisibility& fadeForHost(const synth::ui::DetachablePanelHost& host) noexcept;
     void persistActiveTab();
     // The active tab's DetachablePanelHost -- whichever the tab-strip detach button acts

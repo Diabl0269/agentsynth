@@ -303,7 +303,7 @@ launches via `ApplicationProperties`:
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 | `bottomDockActiveTab` | `"timeline"` | the bottom dock's active tab (`timeline`/`mixer`/`midiRemote`/`canvas`); a saved tab that is not offered falls back to the first offered one |
 | `bottomDockTabOrder` | `"timeline,mixer,midiRemote,canvas"` | the dock's strip order, all four views; a saved three-entry order (older builds) gains `canvas` at the end, anything malformed falls back to the default, and an older build reading four entries falls back to its own default. See [the tab strip](../mixer/panel.md#the-tab-strip) |
-| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Written on every swap and applied at launch (a Mixer saved as the main view returns to the canvas if the Mixer placement is not Tab) |
+| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Written on every swap and applied at launch. A saved view whose panel is in its own window, or a Mixer outside the Tab placement, is suspended for the session (the Canvas fills the main area) and the saved value is kept |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -350,8 +350,7 @@ region's `open`, "Edit MIDI assignment...", adding a plugin automation lane) nev
 (`ensureDockOpenFor()`), and `setActiveTab()` ignores the main view. A project load's edit block covers the holder
 as well as the dock. `setMainView()` refuses a view that is open in its own window; while in main the host shows
 no header of its own, so it cannot be detached from there. The Mixer goes to main only in the Tab placement
-(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused), and
-leaving the Tab placement puts the canvas back first. In main the Mixer fills the area (`canGrowHost` is false,
+(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused). In main the Mixer fills the area (`canGrowHost` is false,
 `growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
 region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
 a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
@@ -360,6 +359,16 @@ relays the main area out through `BottomDockComponent::onMainViewChanged`, which
 so Tab follows the new layout. The same swap has a key per view, Opt+Cmd+1 Timeline, 2 Mixer, 3 Controllers, 4 Canvas
 (`swap<View>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
 readers once ("Timeline in the main area"), and a refused one is silent.
+
+**The main area is never empty.** The stored view (`getStoredMainView()`, the saved `mainView`) and the view in the
+main area now (`getMainView()`) are separate in `BottomDockTabModel`. While the stored view's panel is open in its
+own window, or the Mixer leaves the Tab placement, the model suspends it: the Canvas fills the main area for the
+session, `refreshMainViewAvailability()` returns the host to the dock, and the setting on disk is not touched. When
+the panel docks again (or the Mixer returns to the Tab placement) the stored view goes back to the main area;
+choosing any view meanwhile, the Canvas included, replaces the stored choice. A tab detached while another view is
+in main changes nothing in the main area (the Canvas tab keeps the panel usable), and a tab in its own window is not
+in the strip, so its disabled swap icon is never on screen. The "both places" mirror is a second view of the docked
+Mixer and never suspends anything. Each change fires `onMainViewChanged`.
 
 ### The canvas as a tab
 

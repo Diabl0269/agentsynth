@@ -66,6 +66,7 @@ juce::String BottomDockTabModel::serializeOrder(const std::vector<DockView>& ord
 void BottomDockTabModel::load(const juce::String& savedOrder, const juce::String& savedMainView) {
     order_ = parseOrder(savedOrder).value_or(defaultOrder());
     mainView_ = viewForKey(savedMainView).value_or(DockView::Canvas);
+    suspended_ = false;
 }
 
 // The order holds every view, the main one included, so exchanging the two slots is the whole swap:
@@ -75,6 +76,7 @@ bool BottomDockTabModel::setMainView(DockView view) {
         return false;
     swapSlots(mainView_, view);
     mainView_ = view;
+    suspended_ = false;
     return true;
 }
 

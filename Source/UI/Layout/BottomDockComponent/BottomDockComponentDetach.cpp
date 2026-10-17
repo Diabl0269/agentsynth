@@ -50,7 +50,8 @@ void BottomDockComponent::toggleActiveHostDetach() {
             openMixerMirror();
         return;
     }
-    if (auto* host = activeHost())
+    // The view in the main area never detaches from here: it has no tab, and the active tab is never it.
+    if (auto* host = activeHost(); host != nullptr && host != hostInMain_)
         host->setDetached(!host->isDetached());
 }
 

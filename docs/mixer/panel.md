@@ -158,7 +158,7 @@ holds the order, a permutation of all four persisted as `bottomDockTabOrder` (de
 whose slot stays hidden. `setMainView(B)` swaps B's and the old main view's slots, so the view coming
 down takes B's place; the Timeline, Mixer (Tab placement only) or Controllers host moves into the main area
 ([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. The swap icon on each tab does this ([below](#the-tab-strip)); the choice is
-remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)).
+remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In Own panel or Window placement the Mixer has no tab or swap icon, and a saved Mixer main view waits (Canvas stands in) until the Tab placement returns.
 
 - **One toggle, four shows.** `Cmd+J`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
@@ -191,6 +191,7 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)).
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
   showing nothing. `MainComponent` hides the whole dock only once `hasAnyVisibleTab()` goes false and reopens it the
   moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+J close).
+  The main view's own panel detaching suspends it: the Canvas takes the main area ([main view](../layout/chrome.md#the-main-view)).
 - **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is otherwise
   unreachable from a separate top-level `DetachedPanelWindow` (see [**Per window keyboard focus**](#per-window-keyboard-focus));
   `DetachedPanelWindow::onAppShortcut`, wired through `DetachablePanelHost::onAppShortcutFallback`, retries them, with

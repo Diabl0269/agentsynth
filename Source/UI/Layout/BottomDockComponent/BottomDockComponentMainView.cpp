@@ -24,7 +24,7 @@ bool BottomDockComponent::setMainView(Tab view) {
     persistTabOrder();
     persistMainView();
     placeMainViewHost();
-    if (activeTab_ == view)
+    if (activeTab_ == view && previous != view)
         setActiveTab(previous);
     else
         applyTabVisibility();
@@ -39,7 +39,8 @@ bool BottomDockComponent::swapTabToMain(Tab view) {
     const Tab previous = getMainView();
     if (!setMainView(view))
         return false;
-    setActiveTab(previous);
+    if (previous != view) // the Canvas already filling the main area for the session is not a tab to show
+        setActiveTab(previous);
     const auto text = mainViewAnnouncement(view);
     if (announceHook_)
         announceHook_(text);
@@ -65,6 +66,20 @@ const char* BottomDockComponent::swapActionIdForTab(Tab view) noexcept {
 
 juce::String BottomDockComponent::mainViewAnnouncement(Tab view) {
     return juce::String(nameForTab(view)) + " in the main area";
+}
+
+// A stored main view whose panel is in its own window, or is the Mixer outside the Tab placement, cannot fill the
+// main area: the Canvas does for the session, and the stored view (and its setting) comes back with its panel.
+bool BottomDockComponent::refreshMainViewAvailability() {
+    const Tab stored = tabModel_.getStoredMainView();
+    const auto* host = hostForTab(stored);
+    const bool available =
+        stored == Tab::Canvas || (host != nullptr && !host->isDetached() && (stored != Tab::Mixer || mixerTabEnabled_));
+    if (tabModel_.isMainViewSuspended() == !available)
+        return false;
+    tabModel_.setMainViewSuspended(!available);
+    placeMainViewHost();
+    return true;
 }
 
 void BottomDockComponent::setMainAreaHolder(juce::Component* holder) {
@@ -127,7 +142,8 @@ bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().
 void BottomDockComponent::persistMainView() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(kMainViewKey, BottomDockTabModel::keyFor(tabModel_.getMainView()));
+    appProperties_->getUserSettings()->setValue(kMainViewKey,
+                                                BottomDockTabModel::keyFor(tabModel_.getStoredMainView()));
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 

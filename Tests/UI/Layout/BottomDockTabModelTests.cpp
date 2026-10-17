@@ -92,3 +92,40 @@ TEST(BottomDockTabModelTests, SwapSlotsAndSetSlotKeepEveryOtherSlot) {
     model.setSlot(9, DockView::Timeline); // out of range: ignored
     EXPECT_EQ(model.getOrder(), (Order{DockView::Mixer, DockView::MidiRemote, DockView::Timeline, DockView::Canvas}));
 }
+
+// A stored main view that cannot fill the main area is suspended: the Canvas stands in for it, the stored view and
+// the order stay, and any new choice ends the suspension.
+TEST(BottomDockTabModelTests, ASuspendedMainViewLetsTheCanvasStandInAndKeepsTheStoredView) {
+    BottomDockTabModel model;
+    ASSERT_TRUE(model.setMainView(DockView::Timeline));
+    const auto order = model.getOrder();
+
+    model.setMainViewSuspended(true);
+    EXPECT_TRUE(model.isMainViewSuspended());
+    EXPECT_EQ(model.getMainView(), DockView::Canvas);
+    EXPECT_TRUE(model.isInMain(DockView::Canvas));
+    EXPECT_FALSE(model.isInMain(DockView::Timeline));
+    EXPECT_EQ(model.getStoredMainView(), DockView::Timeline);
+    EXPECT_EQ(model.getOrder(), order);
+
+    model.setMainViewSuspended(false);
+    EXPECT_EQ(model.getMainView(), DockView::Timeline);
+}
+
+TEST(BottomDockTabModelTests, TheCanvasCannotBeSuspendedAndANewChoiceOrALoadEndsASuspension) {
+    BottomDockTabModel model;
+    model.setMainViewSuspended(true);
+    EXPECT_FALSE(model.isMainViewSuspended()) << "the Canvas is always available";
+
+    ASSERT_TRUE(model.setMainView(DockView::Mixer));
+    model.setMainViewSuspended(true);
+    ASSERT_TRUE(model.setMainView(DockView::Canvas)) << "choosing the Canvas while it stands in is a real change";
+    EXPECT_FALSE(model.isMainViewSuspended());
+    EXPECT_EQ(model.getStoredMainView(), DockView::Canvas);
+
+    ASSERT_TRUE(model.setMainView(DockView::Timeline));
+    model.setMainViewSuspended(true);
+    model.load("", "mixer");
+    EXPECT_FALSE(model.isMainViewSuspended());
+    EXPECT_EQ(model.getMainView(), DockView::Mixer);
+}
