@@ -91,6 +91,8 @@ public:
      *  while it is in its own window or the Mixer is outside the Tab placement: the Canvas fills the main area for
      *  the session so it is never empty, and the stored view returns when its panel is docked again. */
     Tab getStoredMainView() const noexcept { return tabModel_.getStoredMainView(); }
+    /** The panel's body in this dock's own coordinates: everything under the tab strip, whatever tab is showing. */
+    juce::Rectangle<int> getPanelBodyBounds() const { return getLocalBounds().withTrimmedTop(kTabStripHeight); }
     /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. False, and nothing
      *  changes, when `view` is already there, is open in its own window, or is the Mixer outside the Tab placement. */
     bool setMainView(Tab view);
@@ -107,6 +109,11 @@ public:
     /** Fires after every successful setMainView(), once the dock has laid out; MainComponent relays out the main area.
      */
     std::function<void()> onMainViewChanged;
+    /** Fires just before a setMainView() / swapTabToMain() that will change the main view, with nothing moved yet, so
+     *  MainComponent can take the picture of the main area the swap motion starts from. */
+    std::function<void()> onMainViewWillChange;
+    /** Turns the drag-to-resize strip on the dock's top edge on or off (off while the swap motion plays). */
+    void setResizeHandleActive(bool active);
     /** MainComponent's main-area container. While the Timeline or MIDI Remote is the main view its host is a
      *  child of `holder`, and comes back here when it leaves. Set once; `holder` must outlive this dock. */
     void setMainAreaHolder(juce::Component* holder);
@@ -506,6 +513,8 @@ private:
     synth::ui::DetachablePanelHost* mainAreaHostFor(Tab view) noexcept;
     // Moves hosts between this dock and the main-area holder so the main view's host is the one in the holder.
     void placeMainViewHost();
+    // setMainView() / swapTabToMain() in one place; `showLeavingView` makes the view that went up the active tab.
+    bool changeMainView(Tab view, bool showLeavingView);
     /** Suspends or resumes the stored main view as its panel leaves or returns to the dock; true when that changed
      *  the view in the main area. The caller runs applyTabVisibility() and onMainViewChanged afterwards. */
     bool refreshMainViewAvailability();

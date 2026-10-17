@@ -130,7 +130,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     trackChannelLink_.setCanvasRevealHook([this] { ensureCanvasShowing(); });
     bottomDock.getMixerPanel().onRevealCanvas = [this] { ensureCanvasShowing(); };
     bottomDock.onCanvasBodyChanged = [this] { resized(); };
-    bottomDock.onMainViewChanged = [this] { handleMainViewChanged(); };
+    wireMainViewHooks();
 
     // The user's bindings for the three surfaces that resolve their OWN keys (see
     // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are

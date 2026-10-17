@@ -404,6 +404,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void MainComponent::resized() {
+    mainViewSwapMotion_.finishNow(); // the layers' rectangles belong to the layout they were pictured in
     // CANONICAL LAYOUT (docs/layout/chrome.md#application-chrome). Carve top→bottom: toolbar strip, status bar,
     // timeline panel (bottom), AI panel (right), library sidebar (left), canvas (remainder). Dimensions come from the
     // themed Metrics tokens, with literal fallbacks for the headless test path.

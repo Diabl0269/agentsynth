@@ -9,6 +9,7 @@ using synth::ui::BottomDockComponent;
 // (layoutCanvas). Hidden while it holds nothing (the canvas, or a view the main area cannot host yet), so an
 // empty holder never sits over the canvas.
 void MainComponent::layoutMainView(juce::Rectangle<int> mainArea) {
+    mainAreaBounds_ = mainArea;
     layoutCanvas(mainArea);
     const bool holding = mainViewHolder_.getNumChildComponents() > 0;
     mainViewHolder_.setVisible(holding);
@@ -16,10 +17,12 @@ void MainComponent::layoutMainView(juce::Rectangle<int> mainArea) {
         mainViewHolder_.setBounds(mainArea);
 }
 
-// A swap moves a host into or out of the holder, and the Tab order follows the layout.
+// A swap moves a host into or out of the holder, and the Tab order follows the layout. The motion starts last: the
+// layout it plays over is final by then.
 void MainComponent::handleMainViewChanged() {
     rebuildFocusRegions();
     resized();
+    playMainViewSwapMotion();
 }
 
 // isBottomDockVisible alone used to answer this; a view in the main area is on screen with the dock closed.

@@ -404,7 +404,8 @@ the panel docks again (or the Mixer returns to the Tab placement) the stored vie
 choosing any view meanwhile, the Canvas included, replaces the stored choice. A tab detached while another view is
 in main changes nothing in the main area (the Canvas tab keeps the panel usable), and a tab in its own window is not
 in the strip, so its disabled swap icon is never on screen. The "both places" mirror is a second view of the docked
-Mixer and never suspends anything. Each change fires `onMainViewChanged`.
+Mixer and never suspends anything. Each change fires `onMainViewChanged`. A swap with the panel open on screen is
+animated, not a jump: the two views trade places in 240 ms ([swap motion](animation.md#what-moves-and-how)).
 
 ### The canvas as a tab
 

@@ -13,18 +13,40 @@ namespace synth::ui {
 // falls back through applyTabVisibility() if it is no longer offered). A view open in its own window
 // is refused: its panel lives in that window, not in the host that would move. So is the Mixer outside
 // the Tab placement, where MixerPlacementController owns its host.
-bool BottomDockComponent::setMainView(Tab view) {
+bool BottomDockComponent::setMainView(Tab view) { return changeMainView(view, false); }
+
+// The swap icon's click. The view that went up leaves its slot to the one that came down, and that one is
+// what the dock shows next, whichever tab was active before.
+bool BottomDockComponent::swapTabToMain(Tab view) {
+    if (!changeMainView(view, true))
+        return false;
+    const auto text = mainViewAnnouncement(view);
+    if (announceHook_)
+        announceHook_(text);
+    else
+        juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
+    return true;
+}
+
+// The active tab is settled before onMainViewChanged fires, so the owner's layout (and the swap motion that starts
+// from it) sees the final state of both places. onMainViewWillChange fires first, with nothing moved.
+bool BottomDockComponent::changeMainView(Tab view, bool showLeavingView) {
     if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
         return false;
     if (view == Tab::Mixer && !mixerTabEnabled_)
         return false;
+    if (tabModel_.getStoredMainView() == view)
+        return false;
+    // Choosing the Canvas while a suspended view holds the stored choice changes the setting, not the main area.
     const Tab previous = tabModel_.getMainView();
+    if (previous != view && onMainViewWillChange)
+        onMainViewWillChange();
     if (!tabModel_.setMainView(view))
         return false;
     persistTabOrder();
     persistMainView();
     placeMainViewHost();
-    if (activeTab_ == view && previous != view)
+    if ((activeTab_ == view || showLeavingView) && previous != view)
         setActiveTab(previous);
     else
         applyTabVisibility();
@@ -33,21 +55,7 @@ bool BottomDockComponent::setMainView(Tab view) {
     return true;
 }
 
-// The swap icon's click. The view that went up leaves its slot to the one that came down, and that one is
-// what the dock shows next, whichever tab was active before.
-bool BottomDockComponent::swapTabToMain(Tab view) {
-    const Tab previous = getMainView();
-    if (!setMainView(view))
-        return false;
-    if (previous != view) // the Canvas already filling the main area for the session is not a tab to show
-        setActiveTab(previous);
-    const auto text = mainViewAnnouncement(view);
-    if (announceHook_)
-        announceHook_(text);
-    else
-        juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
-    return true;
-}
+void BottomDockComponent::setResizeHandleActive(bool active) { resizeHandle_.setInterceptsMouseClicks(active, false); }
 
 // One fixed key per view (Opt+Cmd+1..4, matching the view's own Cmd+digit), named by view so a swap never re-keys.
 const char* BottomDockComponent::swapActionIdForTab(Tab view) noexcept {

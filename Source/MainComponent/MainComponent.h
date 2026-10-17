@@ -50,6 +50,7 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/MainViewHolder.h"
+#include "UI/Layout/MainViewSwapMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
@@ -320,6 +321,7 @@ public:
      *  in main), and lays out. Nothing in the app does this yet. False when the dock refuses (a detached view). */
     bool setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
     juce::Component& getMainViewHolderForTest() noexcept { return mainViewHolder_; }
+    synth::ui::MainViewSwapMotion& getMainViewSwapMotionForTest() noexcept { return mainViewSwapMotion_; }
     void simulateNewPatchClick();
     void simulateUndoClick();
     void simulateRedoClick();
@@ -884,14 +886,19 @@ private:
     // Gives the main area to the canvas or, for another main view, to mainViewHolder_.
     void layoutMainView(juce::Rectangle<int> mainArea);
     void handleMainViewChanged();
+    // The swap motion (MainComponentMainViewMotion.cpp): pictures the main area before a swap, plays it after.
+    void wireMainViewHooks();
+    void beginMainViewSwapMotion();
+    void playMainViewSwapMotion();
     // True while `view` (Timeline or MIDI Remote) is in the main area or is the open dock's active tab.
     bool isViewOnScreen(synth::ui::BottomDockComponent::Tab view) const;
     // Focuses the main view's region when it is open (a main area left empty has none open).
     void focusMainViewIfOpen();
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
-    bool canvasInDockLayout_ = false;    // the canvas was last laid into the dock (not the main area)
-    bool canvasRecentrePending_ = false; // it just moved there: fit its view once it is showing and settled
+    juce::Rectangle<int> mainAreaBounds_; // where layoutMainView last put the main view
+    bool canvasInDockLayout_ = false;     // the canvas was last laid into the dock (not the main area)
+    bool canvasRecentrePending_ = false;  // it just moved there: fit its view once it is showing and settled
 
     // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
     void focusDockTabStripIfShowing();
@@ -913,6 +920,8 @@ private:
     synth::ui::PanelSlide timelineSlide_;
 
     static constexpr double kPanelSlideMs = 190.0; // shared by all three slides
+
+    synth::ui::MainViewSwapMotion mainViewSwapMotion_{*this}; // layers over the main area and the panel body
 
     const synth::ui::PanelSlide& panelSlide(SlidingPanel p) const noexcept;
     synth::ui::PanelSlide& panelSlide(SlidingPanel p) noexcept;
