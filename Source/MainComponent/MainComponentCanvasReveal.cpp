@@ -4,6 +4,8 @@
 // dock only reports the rectangle (BottomDockComponent::getCanvasBodyBounds).
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <utility>
 
 using synth::ui::BottomDockComponent;
 
@@ -19,11 +21,13 @@ int canvasToolbarHeightIn(int available) { return juce::jmin(synth::ui::CanvasTo
 // on every frame.
 void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
     if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas) {
-        canvasInDockLayout_ = false;
+        const bool leavingDock = std::exchange(canvasInDockLayout_, false);
         canvasToolbar_.setVisible(true);
         canvasToolbar_.setBounds(mainArea.removeFromTop(canvasToolbarHeightIn(mainArea.getHeight())));
         graphEditor.setVisible(true);
         graphEditor.setBounds(mainArea);
+        if (leavingDock)
+            restoreCanvasMainView();
     } else {
         // Hidden, not zero-sized, while the Canvas tab is not showing: its timers and predicates then
         // read isShowing() as false and land synchronously.
@@ -31,6 +35,7 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
         if (!canvasInDockLayout_) {
             canvasInDockLayout_ = true;
             canvasRecentrePending_ = true;
+            canvasMainView_ = graphEditor.getViewDoc(); // still the main area's view: the bounds change below
         }
         if (showing) {
             auto body = bottomDock.getCanvasBodyBounds() + bottomDock.getPosition();
@@ -46,6 +51,33 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
         }
     }
     refreshMinimapButton();
+}
+
+// A project's saved view belongs to the main area. While the canvas is in the panel it is kept for the canvas's
+// return, and the panel fits the new patch again on its next layout pass.
+void MainComponent::applyLoadedCanvasView(const synth::ViewDoc& view) {
+    graphEditor.applyViewDoc(view);
+    if (!canvasInDockLayout_)
+        return;
+    canvasMainView_ = view;
+    canvasRecentrePending_ = true;
+}
+
+// Puts the view the canvas had in the main area back, unless the patch moved on while it was in the panel and none of
+// its modules would be on screen: then it is fit to them instead. Runs inside the layout pass, so a swap's
+// arriving picture is taken of this view.
+void MainComponent::restoreCanvasMainView() {
+    canvasRecentrePending_ = false;
+    if (!canvasMainView_)
+        return;
+    graphEditor.applyViewDoc(*canvasMainView_);
+    canvasMainView_.reset();
+    const auto visible = graphEditor.getVisibleCanvasRect();
+    for (auto* module : graphEditor.getModuleComponents())
+        if (module != nullptr && visible.intersects(module->getBounds().toFloat()))
+            return;
+    if (!graphEditor.getModuleComponents().isEmpty())
+        graphEditor.fitViewToModules();
 }
 
 void MainComponent::ensureCanvasShowing() {

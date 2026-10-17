@@ -22,6 +22,7 @@
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
+#include "Project/ViewDoc.h"
 #include "ProjectBundle.h"
 #include "RecentProjects.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -322,6 +323,7 @@ public:
     bool setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
     juce::Component& getMainViewHolderForTest() noexcept { return mainViewHolder_; }
     synth::ui::MainViewSwapMotion& getMainViewSwapMotionForTest() noexcept { return mainViewSwapMotion_; }
+    void applyLoadedCanvasViewForTest(const synth::ViewDoc& view) { applyLoadedCanvasView(view); }
     void simulateNewPatchClick();
     void simulateUndoClick();
     void simulateRedoClick();
@@ -896,9 +898,15 @@ private:
     void focusMainViewIfOpen();
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
+    // Restores the zoom and pan the canvas had in the main area (see canvasMainView_).
+    void restoreCanvasMainView();
+    // Applies a loaded project's canvas view; while the canvas sits in the panel it becomes the main-area view.
+    void applyLoadedCanvasView(const synth::ViewDoc& view);
     juce::Rectangle<int> mainAreaBounds_; // where layoutMainView last put the main view
     bool canvasInDockLayout_ = false;     // the canvas was last laid into the dock (not the main area)
     bool canvasRecentrePending_ = false;  // it just moved there: fit its view once it is showing and settled
+    // The canvas's zoom and pan as the main area had them, kept while it sits in the panel so it returns as it was.
+    std::optional<synth::ViewDoc> canvasMainView_;
 
     // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
     void focusDockTabStripIfShowing();

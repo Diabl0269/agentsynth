@@ -198,7 +198,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // mixer is rebuilt from this by reconcileTimelineAfterGraphChange() below.
     bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
     applyLoadedTransport(loadedTransport);
-    graphEditor.applyViewDoc(loadedView); // a view change only: no undo step, never marks the document unsaved
+    applyLoadedCanvasView(loadedView); // a view change only: no undo step, never marks the document unsaved
 
     // A freshly loaded project starts every profile on page 1 -- this is a NEW project's
     // assignments, not the ordinary edits publishAssignments() below also handles, which must
@@ -269,7 +269,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     audioEngine.setMixerPanLaw(loadedPanLaw);
     bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
     applyLoadedTransport(loadedTransport);
-    graphEditor.applyViewDoc(loadedView); // a view change only: no undo step, never marks the document unsaved
+    applyLoadedCanvasView(loadedView); // a view change only: no undo step, never marks the document unsaved
 
     // Same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
     remoteEngine.resetActivePages();

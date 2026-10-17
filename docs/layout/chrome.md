@@ -164,8 +164,8 @@ Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/
 the canvas's own top row, wherever the canvas is. It owns the three `ToolbarButton`s (same icons, groups, captions,
 tooltips and keys as before; `MainComponent` wires their `onClick`, titles and tooltips in `applyToolbarIcons()`),
 is a `MainComponent` child like the canvas, and is laid out by `MainComponent::layoutCanvas()`: the top
-`CanvasToolbar::kHeight` (40 px: the 30 x 24 chip, a one-line caption, and a 1 px inset) of the main area when the
-canvas is the main view, or of the Canvas tab body when it is a panel tab (the canvas there is 40 px shorter). In a rectangle so short that 40 px would be over half of it, the strip takes half, so the canvas never vanishes. It is
+`CanvasToolbar::kHeight` (44 px, the top bar's height, so a captioned button gets the same room as on the top bar) of the main area when the
+canvas is the main view, or of the Canvas tab body when it is a panel tab (the canvas there is 44 px shorter). In a rectangle so short that 44 px would be over half of it, the strip takes half, so the canvas never vanishes. It is
 visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. The strip is the
 same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
 aligned, 84 px wide with captions and 32 px without.
@@ -415,7 +415,9 @@ reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything u
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
 does per frame). The editor is hidden, not zero-sized, while another tab shows or the panel is closed. When it
-first lands in the panel its view is fitted once, after the slide ends.
+first lands in the panel its view is fitted once, after the slide ends. The zoom and pan it had in the main area are remembered meanwhile (this session only) and put back in the
+layout pass where it returns there, before a swap takes its arriving picture, so it looks exactly as it was left; if
+no module would be visible in that view any more, it is fitted to its modules instead.
 
 `MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
 the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to

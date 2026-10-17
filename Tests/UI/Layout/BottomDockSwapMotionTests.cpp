@@ -3,6 +3,7 @@
 // once when off screen, with Animations Off or with the panel closed; a second swap lands the first
 // (docs/layout/animation.md "What moves, and how").
 #include "BottomDockMainAreaFixture.h"
+#include "Project/ViewDoc.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/MainViewSwapMotion.h"
@@ -216,6 +217,76 @@ TEST_F(BottomDockSwapMotionTest, TheCanvasIsAlreadyFitInThePanelWhenTheMoveStart
     motion().stepForTest(0.5f);
     motion().stepForTest(1.0f);
     EXPECT_EQ(graph.getVisibleCanvasRect(), backAtStart) << "returning to main moves it no further";
+}
+
+TEST_F(BottomDockSwapMotionTest, TheCanvasReturnsToTheMainAreaWithTheViewItHadThere) {
+    auto& graph = mc_->getGraphEditor();
+    graph.addModuleAtCanvasPosition("Oscillator", {100, 100}, nullptr);
+    graph.addModuleAtCanvasPosition("Delay", {1500, 900}, nullptr);
+    synth::ViewDoc view;
+    view.zoom = 0.73f;
+    view.panX = -41.0f;
+    view.panY = 27.0f;
+    graph.applyViewDoc(view);
+    const auto original = graph.getVisibleCanvasRect();
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+    motion().stepForTest(1.0f);
+    EXPECT_NE(graph.getVisibleCanvasRect(), original) << "in the panel the canvas is fit to its body";
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Canvas));
+    // The panel is as tall as the swapped-in Mixer left it, so only the height of the rect may differ.
+    auto expectRestored = [&](const char* when) {
+        const auto now = graph.getVisibleCanvasRect();
+        EXPECT_EQ(now.getTopLeft(), original.getTopLeft()) << when;
+        EXPECT_EQ(now.getWidth(), original.getWidth()) << when;
+        EXPECT_FLOAT_EQ(graph.getViewDoc().zoom, view.zoom) << when;
+    };
+    expectRestored("the arriving picture is taken of the restored view");
+    motion().stepForTest(1.0f);
+    expectRestored("and it stays so when the layers come off");
+}
+
+TEST_F(BottomDockSwapMotionTest, AProjectLoadedWhileTheCanvasIsInThePanelBringsItsOwnViewBack) {
+    auto& graph = mc_->getGraphEditor();
+    graph.addModuleAtCanvasPosition("Oscillator", {100, 100}, nullptr);
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+    motion().stepForTest(1.0f);
+
+    synth::ViewDoc loaded;
+    loaded.zoom = 0.61f;
+    loaded.panX = -12.0f;
+    loaded.panY = 8.0f;
+    mc_->applyLoadedCanvasViewForTest(loaded);
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Canvas));
+    motion().stepForTest(1.0f);
+    EXPECT_FLOAT_EQ(graph.getViewDoc().zoom, loaded.zoom) << "the loaded project's view, not the one from before";
+    EXPECT_FLOAT_EQ(graph.getViewDoc().panX, loaded.panX);
+    EXPECT_FLOAT_EQ(graph.getViewDoc().panY, loaded.panY);
+}
+
+TEST_F(BottomDockSwapMotionTest, TheCanvasFitsItsModulesWhenNoneIsInTheSavedView) {
+    auto& graph = mc_->getGraphEditor();
+    graph.addModuleAtCanvasPosition("Oscillator", {100, 100}, nullptr);
+    synth::ViewDoc view;
+    view.zoom = 1.0f;
+    view.panX = -5000.0f;
+    view.panY = -5000.0f;
+    graph.applyViewDoc(view);
+    const auto lookingAway = graph.getVisibleCanvasRect();
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+    motion().stepForTest(1.0f);
+
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Canvas));
+    motion().stepForTest(1.0f);
+
+    const auto visible = graph.getVisibleCanvasRect();
+    EXPECT_NE(visible.getTopLeft(), lookingAway.getTopLeft()) << "the saved view showed no module";
+    bool anyVisible = false;
+    for (auto* m : graph.getModuleComponents())
+        anyVisible = anyVisible || visible.intersects(m->getBounds().toFloat());
+    EXPECT_TRUE(anyVisible) << "so the canvas is fit to its modules instead";
 }
 
 TEST_F(BottomDockSwapMotionTest, TheFirstAndLastFramesAreThePicturesOfTheRealPanelBody) {
