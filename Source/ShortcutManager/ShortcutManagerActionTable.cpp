@@ -30,15 +30,12 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         // The ONE bottom-dock open/close toggle (docs/layout/chrome.md), reopening on the last active tab.
         // The three rows below only SHOW their tab (opening the dock if needed) -- see their own comments.
         {"toggleBottomPanel", ShortcutCategory::General},
-        // "show the Timeline/Mixer/Controllers tab" -- default Cmd+1/2/3, in the bottom
-        // dock's default tab order. A drag-reorder of the tab strip PERMUTES these three
-        // bindings so Cmd+N keeps naming the tab now in position N (BottomDockComponent::
-        // permuteShortcutKeysForNewOrder) -- never a user's own rebind away from the Cmd+digit
-        // convention, which the permute leaves alone (same guard shape as
-        // migrateSaveAsChordSwap below).
+        // "show the Timeline/Mixer/Controllers tab / the Canvas" -- default Cmd+1/2/3/4, one fixed
+        // key per view: a drag-reorder of the tab strip never re-keys them.
         {"toggleTimelinePanel", ShortcutCategory::General},
         {"toggleMixerPanel", ShortcutCategory::General},
         {"toggleMidiRemotePanel", ShortcutCategory::General},
+        {"showCanvas", ShortcutCategory::General},
         {"toggleSidePane", ShortcutCategory::General},
         {"selectAllModules", ShortcutCategory::General},
         {"copySelection", ShortcutCategory::General},

@@ -65,7 +65,8 @@ namespace AppCommands {
  *    description, command mapping) cover it unconditionally.
  *  - toggleBottomPanel: the ONE bottom-dock open/close toggle (see ShortcutManager.h's comment on
  *    the action id). toggleTimelinePanel, toggleMixerPanel and toggleMidiRemotePanel each just SHOW
- *    their tab, never close the dock.
+ *    their tab, never close the dock; showCanvas is the fourth view's sibling (it focuses the canvas while
+ *    the canvas is the main view).
  *  - toggleSidePane: shows or hides the active bottom-panel tab's side pane
  *    (docs/layout/side-pane.md).
  *  - snapSet*: the grid division set outright (Ctrl+Shift+1..8). Eight commands rather than one
@@ -189,6 +190,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleMixerPanel;
     if (actionId == "toggleMidiRemotePanel")
         return toggleMidiRemotePanel;
+    if (actionId == "showCanvas")
+        return showCanvas;
     if (actionId == "toggleSidePane")
         return toggleSidePane;
     if (actionId == "snapSetWhole")

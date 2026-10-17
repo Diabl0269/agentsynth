@@ -14,18 +14,21 @@ constexpr double kMinimapReducedMs = 80.0; // Reduce Motion: plain fade, no slid
 constexpr int kMinimapSlidePx = 12;        // distance travelled from its corner
 } // namespace
 
+bool GraphEditor::isMinimapSuppressedBySize() const noexcept {
+    return !synth::ui::MinimapComponent::fitsEditor(getWidth(), getHeight());
+}
+
 void GraphEditor::layoutMinimap() {
     // Bottom-LEFT with a 12px margin — the mod-matrix panel occupies a 600px panel on the right.
     // Auto-hide when the editor is too small to show it without swallowing the view, but never
     // clobber the user's preference: `minimapVisible` still reflects what they asked for, and
     // layout just recomputes whether that preference currently fits.
     constexpr int kMargin = 12;
-    // Absolute floors, not a fraction of the editor: a fraction-of-self test is always
-    // satisfied (w/4 * 2 <= w for any w), so it would never actually hide anything.
-    constexpr int kMinEditorW = 480, kMinEditorH = 360;
+    // Absolute floors (MinimapComponent::fitsEditor), not a fraction of the editor: a fraction-of-self
+    // test is always satisfied (w/4 * 2 <= w for any w), so it would never actually hide anything.
     const int mmW = juce::jmin(220, getWidth() / 4);
     const int mmH = juce::jmin(150, getHeight() / 4);
-    const bool fits = getWidth() >= kMinEditorW && getHeight() >= kMinEditorH;
+    const bool fits = !isMinimapSuppressedBySize();
 
     // The map emerges from its corner: at fraction 0 it sits minimapSlideDistance_ px toward it.
     const float p = minimapSlide_.getProgress();

@@ -73,6 +73,7 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     , timelineTabButton_(*this, Tab::Timeline, nameForTab(Tab::Timeline))
     , mixerTabButton_(*this, Tab::Mixer, nameForTab(Tab::Mixer))
     , midiRemoteTabButton_(*this, Tab::MidiRemote, nameForTab(Tab::MidiRemote))
+    , canvasTabButton_(*this, Tab::Canvas, nameForTab(Tab::Canvas))
     , shortcutManager_(shortcutManager) {
     // The leaving tab's own panel flag follows once its host has faded out (see applyTabVisibility).
     timelineFade_.onHidden = [this] {
@@ -91,12 +92,11 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);
     addAndMakeVisible(midiRemoteTabButton_);
-    timelineTabButton_.setClickingTogglesState(false);
-    mixerTabButton_.setClickingTogglesState(false);
-    midiRemoteTabButton_.setClickingTogglesState(false);
-    timelineTabButton_.onClick = [this] { setActiveTab(Tab::Timeline); };
-    mixerTabButton_.onClick = [this] { setActiveTab(Tab::Mixer); };
-    midiRemoteTabButton_.onClick = [this] { setActiveTab(Tab::MidiRemote); };
+    addChildComponent(canvasTabButton_); // layoutTabButtons() shows it only while it is offered
+    for (Tab t : tabModel_.getOrder()) {
+        buttonForTab(t).setClickingTogglesState(false);
+        buttonForTab(t).onClick = [this, t] { setActiveTab(t); };
+    }
 
     // Icon-only, lives in this strip rather than either host's own header -- see
     // DetachablePanelHost's class comment. Acts on whichever tab is active (activeHost()) --
@@ -168,31 +168,31 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
     auto* settings = appProperties_->getUserSettings();
-    const auto saved = settings->getValue(kActiveTabKey, "timeline");
-    activeTab_ = saved == "mixer" ? Tab::Mixer : (saved == "midiRemote" ? Tab::MidiRemote : Tab::Timeline);
-    // "timeline,mixer,midiRemote" (comma-joined action-suffix names, reusing kActiveTabKey's
-    // own vocabulary) -- absent or malformed (wrong length, an unrecognised or repeated name) falls
-    // back to the default order rather than half-applying a corrupt permutation.
-    const auto savedOrder = juce::StringArray::fromTokens(settings->getValue(kTabOrderKey, ""), ",", "");
-    if (savedOrder.size() == 3) {
-        std::vector<Tab> parsed;
-        for (const auto& name : savedOrder)
-            parsed.push_back(name == "mixer" ? Tab::Mixer : (name == "midiRemote" ? Tab::MidiRemote : Tab::Timeline));
-        std::vector<Tab> sorted = parsed;
-        std::sort(sorted.begin(), sorted.end());
-        const std::vector<Tab> everyTab{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
-        if (sorted == everyTab)
-            tabOrder_ = parsed;
-    }
+    // One vocabulary for all three keys (BottomDockTabModel::keyFor); a saved active tab that is no
+    // longer offered (the main view, a detached tab) is resolved by applyTabVisibility() below.
+    activeTab_ = BottomDockTabModel::viewForKey(settings->getValue(kActiveTabKey, "timeline")).value_or(Tab::Timeline);
+    tabModel_.load(settings->getValue(kTabOrderKey, ""), settings->getValue(kMainViewKey, ""));
     // The plain initial read -- nothing is open yet, so there is no live transition to run
     // (applyDetachBothPlacesPreference() below is what re-reads this LIVE, on a later settings-file
     // write).
     detachBothPlacesEnabled_ = settings->getValue(kDetachBothPlacesKey, "move") == "both";
-    // The saved order and the Cmd+digit bindings are stored separately, so they can disagree (an order
-    // that was never saved next to bindings that were, or the reverse); the order wins, under the same
-    // "only while all three still use the default Cmd+digit set" guard a drag reorder applies.
-    permuteShortcutKeysForNewOrder();
     applyTabVisibility();
+}
+
+// The view that comes down takes over as the active tab when the dock was showing the one that went
+// up, so the dock keeps showing something in the same place; otherwise the active tab stays (or
+// falls back through applyTabVisibility() if it is no longer offered). Nothing in the app calls this
+// with a view other than the canvas yet: the main area cannot host another view.
+void BottomDockComponent::setMainView(Tab view) {
+    const Tab previous = tabModel_.getMainView();
+    if (!tabModel_.setMainView(view))
+        return;
+    persistTabOrder();
+    persistMainView();
+    if (activeTab_ == view)
+        setActiveTab(previous);
+    else
+        applyTabVisibility();
 }
 
 void BottomDockComponent::applyDetachBothPlacesPreference() {
@@ -281,22 +281,25 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
 
 void BottomDockComponent::refreshTabVisibility() { applyTabVisibility(false); }
 
-DetachablePanelHost& BottomDockComponent::activeHost() noexcept { return hostForTab(activeTab_); }
+DetachablePanelHost* BottomDockComponent::activeHost() noexcept { return hostForTab(activeTab_); }
 
-DetachablePanelHost& BottomDockComponent::hostForTab(Tab tab) noexcept {
-    return const_cast<DetachablePanelHost&>(std::as_const(*this).hostForTab(tab));
+DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) noexcept {
+    return const_cast<DetachablePanelHost*>(std::as_const(*this).hostForTab(tab));
 }
 
-const DetachablePanelHost& BottomDockComponent::hostForTab(Tab tab) const noexcept {
+// The canvas is never detached to a window of its own, so it has no host.
+const DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) const noexcept {
     switch (tab) {
     case Tab::Mixer:
-        return mixerHost_;
+        return &mixerHost_;
     case Tab::MidiRemote:
-        return midiRemoteHost_;
+        return &midiRemoteHost_;
+    case Tab::Canvas:
+        return nullptr;
     case Tab::Timeline:
         break;
     }
-    return timelineHost_;
+    return &timelineHost_;
 }
 
 juce::TextButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
@@ -305,6 +308,8 @@ juce::TextButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
         return mixerTabButton_;
     case Tab::MidiRemote:
         return midiRemoteTabButton_;
+    case Tab::Canvas:
+        return canvasTabButton_;
     case Tab::Timeline:
         break;
     }
@@ -312,13 +317,14 @@ juce::TextButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
 }
 
 bool BottomDockComponent::isTabOfferedInStrip(Tab tab) const noexcept {
-    if (tab == Tab::Mixer && !mixerTabEnabled_)
+    if (tabModel_.isInMain(tab) || (tab == Tab::Mixer && !mixerTabEnabled_))
         return false;
-    return !hostForTab(tab).isDetached();
+    const auto* host = hostForTab(tab);
+    return host == nullptr || !host->isDetached();
 }
 
 bool BottomDockComponent::hasAnyVisibleTab() const noexcept {
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             return true;
     return false;
@@ -368,7 +374,7 @@ const MixerPanelComponent& BottomDockComponent::getMixerPanel() const noexcept {
 BottomDockComponent::Tab BottomDockComponent::pickFallbackActiveTab() const noexcept {
     if (isTabOfferedInStrip(activeTab_))
         return activeTab_;
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             return t;
     return activeTab_; // hasAnyVisibleTab() is false -- nothing to fall back to.
@@ -384,7 +390,8 @@ void BottomDockComponent::toggleActiveHostDetach() {
             openMixerMirror();
         return;
     }
-    activeHost().setDetached(!activeHost().isDetached());
+    if (auto* host = activeHost())
+        host->setDetached(!host->isDetached());
 }
 
 void BottomDockComponent::openMixerMirror() {
@@ -401,7 +408,10 @@ void BottomDockComponent::refreshDetachButton() {
     // "detachActiveTab" component name leaks as the AX title (ButtonAccessibilityHandler::
     // getTitle()'s getButtonText() fallback). While "both places" drives the Mixer tab, the
     // button's own state tracks the MIRROR (mixerHost_ itself never actually detaches then).
-    const bool detached = usesMixerMirrorForDetach() ? mixerMirror_.isOpen() : activeHost().isDetached();
+    // The canvas has no window to open into, so the button is hidden while its tab is active.
+    const auto* host = activeHost();
+    detachButton_.setVisible(host != nullptr);
+    const bool detached = usesMixerMirrorForDetach() ? mixerMirror_.isOpen() : host != nullptr && host->isDetached();
     const juce::String label = detached ? "Dock back" : "Open in window";
     detachButton_.setTooltip(label);
     detachButton_.setTitle(label);
@@ -460,8 +470,9 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
-    const std::array<juce::Component*, 4> announced{&timelineTabButton_, &mixerTabButton_, &midiRemoteTabButton_,
-                                                    &stripFocus_};
+    canvasTabButton_.setToggleState(activeTab_ == Tab::Canvas, juce::dontSendNotification);
+    const std::array<juce::Component*, 5> announced{&timelineTabButton_, &mixerTabButton_, &midiRemoteTabButton_,
+                                                    &canvasTabButton_, &stripFocus_};
     for (auto* c : announced)
         if (auto* handler = c->getAccessibilityHandler())
             handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
@@ -479,17 +490,28 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
         midiRemotePanel_.rebuildFromProfiles();
     refreshDetachButton();
     resized();
+    // After the layout above, so a listener reading getCanvasBodyBounds() sees the new tab's geometry.
+    if (canvasBodyWasShowing_ != isCanvasBodyShowing()) {
+        canvasBodyWasShowing_ = isCanvasBodyShowing();
+        if (onCanvasBodyChanged)
+            onCanvasBodyChanged();
+    }
 }
+
+juce::Rectangle<int> BottomDockComponent::getCanvasBodyBounds() const {
+    if (!isCanvasBodyShowing())
+        return {};
+    return getLocalBounds().withTrimmedTop(kTabStripHeight);
+}
+
+// The canvas shows through the dock's body (it is a sibling underneath, not a child), so a click there
+// belongs to the canvas.
+bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().contains(x, y); }
 
 void BottomDockComponent::persistActiveTab() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    const char* value = "timeline";
-    if (activeTab_ == Tab::Mixer)
-        value = "mixer";
-    else if (activeTab_ == Tab::MidiRemote)
-        value = "midiRemote";
-    appProperties_->getUserSettings()->setValue(kActiveTabKey, value);
+    appProperties_->getUserSettings()->setValue(kActiveTabKey, BottomDockTabModel::keyFor(activeTab_));
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
@@ -499,61 +521,28 @@ const char* BottomDockComponent::actionIdForTab(Tab tab) noexcept {
         return "toggleMixerPanel";
     case Tab::MidiRemote:
         return "toggleMidiRemotePanel";
+    case Tab::Canvas:
+        return "showCanvas";
     case Tab::Timeline:
         break;
     }
     return "toggleTimelinePanel";
 }
 
-void BottomDockComponent::swapTabOrder(Tab a, Tab b) {
-    auto ia = std::find(tabOrder_.begin(), tabOrder_.end(), a);
-    auto ib = std::find(tabOrder_.begin(), tabOrder_.end(), b);
-    if (ia != tabOrder_.end() && ib != tabOrder_.end())
-        std::iter_swap(ia, ib);
-}
-
 void BottomDockComponent::persistTabOrder() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    juce::StringArray names;
-    for (Tab t : tabOrder_)
-        names.add(t == Tab::Mixer ? "mixer" : (t == Tab::MidiRemote ? "midiRemote" : "timeline"));
-    appProperties_->getUserSettings()->setValue(kTabOrderKey, names.joinIntoString(","));
+    appProperties_->getUserSettings()->setValue(kTabOrderKey, BottomDockTabModel::serializeOrder(tabModel_.getOrder()));
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
-// A drag-reorder keeps the "Cmd+N opens the Nth tab" convention true by permuting the three
-// actions' OWN key bindings to the new order -- but only when they still hold the {Cmd+1, Cmd+2,
-// Cmd+3} set as a whole (any assignment), the same "only touch what's still at its convention"
-// guard ShortcutManager::migrateSaveAsChordSwap uses. A binding a user rebound away from a bare
-// Cmd+digit takes at least one of the three out of that set, so the whole permute is skipped and
-// every one of the three keeps whatever the user last set it to.
-void BottomDockComponent::permuteShortcutKeysForNewOrder() {
-    if (shortcutManager_ == nullptr)
+// Writes the stored value, which can differ from the effective one (BottomDockTabModel::load).
+void BottomDockComponent::persistMainView() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    std::vector<int> digits;
-    for (Tab t : tabOrder_) {
-        const auto key = shortcutManager_->getBinding(actionIdForTab(t));
-        bool matched = false;
-        for (int d = 1; d <= 3; ++d)
-            if (key == juce::KeyPress('0' + d, juce::ModifierKeys::commandModifier, 0)) {
-                digits.push_back(d);
-                matched = true;
-                break;
-            }
-        if (!matched)
-            return; // at least one of the three has been rebound away from the convention.
-    }
-    std::vector<int> sortedDigits = digits;
-    std::sort(sortedDigits.begin(), sortedDigits.end());
-    if (sortedDigits != std::vector<int>{1, 2, 3})
-        return; // not currently a {Cmd+1, Cmd+2, Cmd+3} set (shouldn't happen, belt-and-braces).
-    if (digits == std::vector<int>{1, 2, 3})
-        return; // already keyed to tabOrder_: nothing to write
-    for (size_t i = 0; i < tabOrder_.size(); ++i)
-        shortcutManager_->setBinding(actionIdForTab(tabOrder_[i]),
-                                     juce::KeyPress('1' + (int)i, juce::ModifierKeys::commandModifier, 0));
-    shortcutManager_->saveToProperties();
+    appProperties_->getUserSettings()->setValue(kMainViewKey,
+                                                BottomDockTabModel::keyFor(tabModel_.getStoredMainView()));
+    appProperties_->getUserSettings()->saveIfNeeded();
 }
 
 // The pointer's x in dock coordinates, read straight from the event: JUCE re-derives
@@ -571,7 +560,7 @@ void BottomDockComponent::beginTabDrag(Tab tab, const juce::MouseEvent& e) {
     reorderTabs_.clear();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
-    for (Tab t : tabOrder_) {
+    for (Tab t : tabModel_.getOrder()) {
         if (!isTabOfferedInStrip(t))
             continue;
         if (t == tab)
@@ -623,7 +612,7 @@ void BottomDockComponent::applyReorderOffsets() {
     if (!reorder_.isReordering())
         return;
     std::vector<Tab> offered;
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             offered.push_back(t);
     if (offered.size() != reorderTabs_.size()) { // a tab was detached or redocked mid-gesture
@@ -640,15 +629,16 @@ void BottomDockComponent::applyReorderOffsets() {
     repaint(0, 0, getWidth(), kTabStripHeight);
 }
 
-// The order is committed only here, on release: while dragging, tabOrder_ never changes and the
-// neighbours merely glide aside. Detached tabs keep their slots in tabOrder_; only the offered
-// tabs are permuted among the positions they occupy.
+// The order is committed only here, on release: while dragging, the strip order never changes and the
+// neighbours merely glide aside. The main view and detached tabs keep their slots in the order; only
+// the offered tabs are permuted among the positions they occupy.
 void BottomDockComponent::commitTabDrag() {
+    const auto& tabOrder = tabModel_.getOrder();
     std::vector<Tab> offered;
     std::vector<size_t> positions;
-    for (size_t i = 0; i < tabOrder_.size(); ++i)
-        if (isTabOfferedInStrip(tabOrder_[i])) {
-            offered.push_back(tabOrder_[i]);
+    for (size_t i = 0; i < tabOrder.size(); ++i)
+        if (isTabOfferedInStrip(tabOrder[i])) {
+            offered.push_back(tabOrder[i]);
             positions.push_back(i);
         }
     if (offered != reorderTabs_) { // a tab was detached mid-drag: abandon the gesture
@@ -662,15 +652,14 @@ void BottomDockComponent::commitTabDrag() {
     bool changed = false;
     for (size_t i = 0; i < positions.size(); ++i) {
         const Tab tab = reorderTabs_[static_cast<size_t>(order[i])];
-        if (tabOrder_[positions[i]] != tab) {
-            tabOrder_[positions[i]] = tab;
+        if (tabOrder[positions[i]] != tab) {
+            tabModel_.setSlot(positions[i], tab);
             changed = true;
         }
     }
-    if (changed) {
+    // Each view keeps its own shortcut key, so a reorder changes only the strip.
+    if (changed)
         persistTabOrder();
-        permuteShortcutKeysForNewOrder();
-    }
 
     layoutTabButtons();
     std::vector<float> finalStarts;
@@ -699,8 +688,8 @@ bool BottomDockComponent::endTabDrag() {
     return true;
 }
 
-// Nothing is committed: tabOrder_ was never touched, so the animator only has to glide everything
-// back to the pickup layout, and no persistence or key re-binding happens.
+// Nothing is committed: the strip order was never touched, so the animator only has to glide everything
+// back to the pickup layout, and nothing is persisted.
 void BottomDockComponent::cancelTabDrag() {
     reorderCancelKey_.disarm();
     if (!reorder_.isReordering())
@@ -728,7 +717,7 @@ bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID
 void BottomDockComponent::layoutTabButtons() {
     auto tabStrip = tabButtonsArea_;
     std::vector<Tab> offered;
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             offered.push_back(t);
     for (size_t i = 0; i < offered.size(); ++i) {
@@ -738,7 +727,7 @@ void BottomDockComponent::layoutTabButtons() {
                              ? tabStrip
                              : tabStrip.removeFromLeft(tabStrip.getWidth() / (int)(offered.size() - i)));
     }
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (!isTabOfferedInStrip(t))
             buttonForTab(t).setVisible(false);
 }
@@ -754,8 +743,8 @@ void BottomDockComponent::resized() {
     // Rightmost: the detach button (always present, acts on whichever tab is active).
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
 
-    // Whatever's left splits between the tabs currently offered, in tabOrder_'s user-controlled
-    // (drag-to-reorder) order -- see layoutTabButtons(). A reorder in flight then shifts the
+    // Whatever's left splits between the tabs currently offered, in the user's
+    // (drag-to-reorder) strip order -- see layoutTabButtons(). A reorder in flight then shifts the
     // buttons to their animated places.
     tabButtonsArea_ = tabStrip;
     stripFocus_.setBounds(tabButtonsArea_);
@@ -773,7 +762,7 @@ void BottomDockComponent::resized() {
 
 std::vector<BottomDockComponent::StripTab> BottomDockComponent::getStripTabs() {
     std::vector<StripTab> tabs;
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             tabs.push_back({&buttonForTab(t), actionIdForTab(t), buttonForTab(t).getButtonText()});
     return tabs;
@@ -839,6 +828,8 @@ const char* BottomDockComponent::nameForTab(Tab tab) noexcept {
         return "Mixer";
     case Tab::MidiRemote:
         return "Controllers";
+    case Tab::Canvas:
+        return "Canvas";
     case Tab::Timeline:
         break;
     }
@@ -877,6 +868,8 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
         return mixer_.get();
     case Tab::MidiRemote:
         return &midiRemotePanel_;
+    case Tab::Canvas:
+        return nullptr; // no canvas panel lives in the dock yet
     case Tab::Timeline:
         break;
     }
@@ -886,12 +879,12 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 // Plain Left/Right/Home/End walk the tabs that are offered, in the user's tab order, and stop at the
 // ends (tabStripKeyTarget); Return hands focus to the selected tab's panel root, and Down does the same
 // then takes the panel's own first Down step (on the Timeline: "+ Track"), since the panel sits below
-// the strip. Everything else (Cmd+1/2/3 included) is left for the app-wide shortcuts.
+// the strip. Everything else (the Cmd+digit tab keys included) is left for the app-wide shortcuts.
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     std::vector<Tab> offered;
-    for (Tab t : tabOrder_)
+    for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
             offered.push_back(t);
     if (offered.empty())
@@ -919,7 +912,7 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
 
 void BottomDockComponent::selectTabAt(int offeredIndex) {
     int index = 0;
-    for (Tab t : tabOrder_) {
+    for (Tab t : tabModel_.getOrder()) {
         if (!isTabOfferedInStrip(t))
             continue;
         if (index++ == offeredIndex) {

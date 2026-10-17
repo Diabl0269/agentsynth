@@ -66,6 +66,7 @@ float graphZoomWheelDeltaFor(double factor) { return (float)((factor - 1.0) / kG
 // ---- Named perform() bodies (moved verbatim from the former MainComponent::perform switch) ----
 
 bool MainComponent::performLocateMaster() {
+    ensureCanvasShowing();
     switch (graphEditor.locateMasterOrOutput()) {
     case GraphEditor::LocateMasterResult::Master:
         statusBar.showMessage("Located Master");
@@ -766,6 +767,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          {},
          [](MainComponent& m) {
              m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::MidiRemote);
+             return true;
+         }},
+        // The fourth view's key: focuses the canvas while it is the main view.
+        {AppCommands::showCanvas,
+         "Show Canvas",
+         "Show the patch canvas and focus it",
+         "View",
+         "showCanvas",
+         {},
+         [](MainComponent& m) {
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Canvas);
              return true;
          }},
         // A no-op (that still consumes the key) when the active tab has no side pane.

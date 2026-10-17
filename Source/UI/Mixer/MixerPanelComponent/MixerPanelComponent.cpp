@@ -162,6 +162,8 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
     if (graphEditor_ == nullptr || macros_ == nullptr || targetId.isEmpty())
         return;
+    if (onRevealCanvas)
+        onRevealCanvas();
     // `targetId` is either a macro id directly (MixerInsertList's editOnCanvasTargetUuid, per
     // MixerModel.h's own contract) or a node uuid (a column's own strip uuid, from
     // onColumnClicked) -- try the macro id first, then "which macro (if any) boxes this node",

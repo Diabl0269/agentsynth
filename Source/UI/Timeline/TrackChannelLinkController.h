@@ -100,6 +100,9 @@ public:
         mixerRevealHook_ = std::move(hook);
     }
 
+    /** Makes the canvas visible before the canvas reveal below selects and frames the strip's card. */
+    void setCanvasRevealHook(std::function<void()> hook) { canvasRevealHook_ = std::move(hook); }
+
 private:
     juce::AudioProcessorGraph& graph() const;
     synth::MacroSet& macros() const;
@@ -133,6 +136,7 @@ private:
     AppUndoManager& undo_;
     GraphEditor& graphEditor_;
     std::function<bool(juce::AudioProcessorGraph::NodeID)> mixerRevealHook_;
+    std::function<void()> canvasRevealHook_;
     // Re-entrancy guard: reconcileLinkedTracks() writes the doc, which notifies, which can land
     // back in the same reconcile funnel.
     bool reconciling_ = false;

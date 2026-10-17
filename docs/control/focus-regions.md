@@ -10,8 +10,8 @@ track header rows ([`shortcuts.md`](shortcuts.md#library-keyboard-navigation), [
 singleton — a host process can run multiple plugin instances, and a future separate-window
 mixer/timeline would need its own registry), populated with eleven regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
-dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
+(open while the `graphEditor` is visible: always in the main area, in the bottom panel only while its Canvas tab shows; its `open` callback reveals it, see [chrome](../layout/chrome.md#the-canvas-as-a-tab)), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
+dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible` with the Timeline the active dock tab),
 **Routing pane** (`timelineRouting`: the Timeline showing with its side pane open) and **Scale pane** (`scaleAssist`: the Timeline showing with the piano roll's scale panel on screen), both straight after Timeline and with no `open` callback, **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
 Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
 bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
@@ -92,7 +92,8 @@ below for the Mixer region's own keyboard behaviour.
   region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
   Return moves focus into the selected panel, and Down does too and then takes the panel's first Down step (on the Timeline that lands on `"+ Track"`) (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
   Cmd+T, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+T closing the pane
-  around the focus focuses the Canvas region instead. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
+  around the focus focuses the region of the view in the main area instead (the Canvas region while the canvas
+  is the main view; focus is also handed over when the pane closes around the canvas shown as a tab). Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
   [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
 - **The Timeline's two side panes** — Tab goes track list, routing pane, scale pane, each only while it is on screen

@@ -462,6 +462,7 @@ void MainComponent::aiPatchAboutToApply() {
 
 void MainComponent::aiPatchApplied() {
     aiApplyScope.reset();
+    ensureCanvasShowing();
     // The graph is fully applied by the time this fires (on the initial apply AND on undo/redo,
     // which reuse this pair as their restore hooks), so bindings can be reconciled straight away —
     // no need to wait for the async updateComponents() below.

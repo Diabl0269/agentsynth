@@ -151,16 +151,19 @@ track-walk rule, so renaming a channel here renames its stem file too.
 
 ## The tab strip
 
-FRO333: `BottomDockComponent` offers its three tabs (Timeline, Mixer, Controllers) through one
-drag-reorderable strip, backed by a `std::vector<Tab> tabOrder_` — a permutation of all three,
-persisted as `bottomDockTabOrder` (comma-joined tab names, e.g. `"mixer,timeline,midiRemote"`;
-default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
+Four views (Canvas, Timeline, Mixer, Controllers) share two places: one sits in the main area
+(`mainView`, the canvas today), the others are tabs in one drag-reorderable strip. `BottomDockTabModel`
+holds the order, a permutation of all four persisted as `bottomDockTabOrder` (default
+`"timeline,mixer,midiRemote,canvas"`; a saved three-entry order gains `canvas`), and the main view,
+whose slot stays hidden. `setMainView(B)` swaps B's and the old main view's slots, so the view coming
+down takes B's place. Only the canvas can be in main yet (`kMainViewSwapEnabled`, see
+[the settings table](../layout/chrome.md#panel-collapse-and-persistence)).
 
-- **One toggle, three shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
+- **One toggle, four shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
   active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
   `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
-  was hidden, otherwise just switching — and never close it.
+  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main.
 - **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
   tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
   the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
@@ -168,17 +171,14 @@ default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
   it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row (a
   the shared `paintReorderLift` look: `surfaceHi` fill, 1 px `accent` outline, soft shadow, at 95%
   opacity; the rise and shadow ease in with the lift), while the other tabs glide aside (160 ms) to open a gap and the gap
-  shows a 1 px dashed `border` outline. **`tabOrder_` does not change while dragging.** On release
-  the order is applied in one go — persisted, and the three tabs' own Cmd+digit key bindings
-  re-keyed to match (`permuteShortcutKeysForNewOrder`) — and the lifted tab settles into its slot
-  (140 ms). Esc returns the tab to where it was picked up and commits nothing. A plain click (under
-  the threshold) still fires that tab's `onClick` as usual; a drag or a cancelled drag does not.
-  The re-key only touches the three bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set
-  (see [`docs/control/shortcuts.md`](../control/shortcuts.md)).
-- **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes a tab
-  that's detached to its own window (or, Mixer only, disabled by the Own-panel/Window placement
-  preference) from both the layout and the Cmd-digit count; `applyTabVisibility` picks a fallback —
-  the active tab if it's still offered, else the first offered tab in `tabOrder_` order — every time
+  shows a 1 px dashed `border` outline. **The order does not change while dragging.** On release
+  it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); each view
+  keeps its own key (Cmd+1/2/3, Cmd+4 `showCanvas`), never re-keyed. Esc returns the tab and commits
+  nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
+- **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes the main
+  view, a tab detached to its own window (the canvas has no host and never detaches) and a Mixer
+  disabled by the Own-panel/Window placement; `applyTabVisibility` picks a fallback —
+  the active tab if it's still offered, else the first offered tab in strip order — every time
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
   showing nothing (FRO158). `MainComponent` hides the whole dock only once
   `BottomDockComponent::hasAnyVisibleTab()` goes false, and reopens it automatically the moment a

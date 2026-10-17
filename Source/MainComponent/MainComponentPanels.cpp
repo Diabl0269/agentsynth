@@ -483,7 +483,7 @@ void MainComponent::resized() {
     if (libW > 0 || moduleLibrary.isVisible())
         moduleLibrary.setBounds(bounds.removeFromLeft(libW));
 
-    graphEditor.setBounds(bounds);
+    layoutCanvas(bounds);
     if (toast_)
         toast_->placeIn(bounds);
 
@@ -559,8 +559,7 @@ void MainComponent::applyToolbarIcons() {
     const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
     toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));
 
-    const juce::String minimapBase = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
-    toggleMinimapButton.setTooltip(hint(minimapBase, "toggleMinimap"));
+    refreshMinimapButton();
     // The map itself advertises the same binding on hover. MinimapComponent has no ShortcutManager
     // dependency, so the display string is resolved here and pushed down.
     graphEditor.getMinimap().setShortcutHint(
@@ -733,18 +732,18 @@ void MainComponent::fitMixerHostToSections() {
 }
 
 // No longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
-// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing.
+// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing or
+// `tab` is the view in the main area (it has no tab then).
 // mixerPlacement_.revealOrToggle() is Mixer's OWN Own-panel/Window placement detour, unrelated to
 // the tab strip: it returns true and handles everything itself when Mixer isn't in Tab placement.
 void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
-    if (tab == Tab::Mixer && mixerPlacement_.revealOrToggle())
+    if (bottomDock.getMainView() == tab || (tab == Tab::Mixer && mixerPlacement_.revealOrToggle()))
         return;
-    auto& host = tab == Tab::Timeline ? bottomDock.getTimelineHost()
-                 : tab == Tab::Mixer  ? bottomDock.getMixerHost()
-                                      : bottomDock.getMidiRemoteHost();
-    if (host.isDetached()) {
-        host.bringDetachedWindowToFront();
+    // The canvas has no host: its tab is never detached.
+    auto* host = bottomDock.hostForTab(tab);
+    if (host != nullptr && host->isDetached()) {
+        host->bringDetachedWindowToFront();
         return;
     }
     ensureBottomDockOpen();
@@ -799,7 +798,9 @@ void MainComponent::hideWelcomeScreen() {
     // A no-op is deliberately safe here: null in Hosted mode, and every guarded action's `proceed`
     // continuation (loadPresetGuarded, newPatch) calls this unconditionally as its last step even
     // when the welcome screen was never showing in the first place (e.g. the toolbar's own Load
-    // button, not the welcome screen, triggered the load).
+    // button, not the welcome screen, triggered the load). Every load path ends here, so a freshly loaded
+    // patch is revealed on the canvas even when it sits in the bottom panel.
+    ensureCanvasShowing();
     if (welcomeFade_)
         welcomeFade_->setShown(false); // fades out, then hides
 }

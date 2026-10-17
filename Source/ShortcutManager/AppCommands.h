@@ -121,7 +121,9 @@ enum CommandIDs {
     renameSelectedModule,
     replaceSelectedModule,
     // Opens the Send feedback window (the top bar's Feedback button). Appended, like every id above.
-    openFeedback
+    openFeedback,
+    // Shows the Canvas: focuses it while it is the main view, else shows its bottom-panel tab.
+    showCanvas
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

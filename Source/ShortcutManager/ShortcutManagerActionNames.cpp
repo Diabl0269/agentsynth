@@ -189,6 +189,19 @@ juce::String drawShapeActionName(const juce::String& actionId) {
     return {};
 }
 
+// The four views' own "show" actions: the three bottom-panel tabs and the canvas.
+juce::String dockViewActionName(const juce::String& actionId) {
+    if (actionId == "toggleTimelinePanel")
+        return "Show Timeline Tab";
+    if (actionId == "toggleMixerPanel")
+        return "Show Mixer Tab";
+    if (actionId == "toggleMidiRemotePanel")
+        return "Show Controllers Tab";
+    if (actionId == "showCanvas")
+        return "Show Canvas";
+    return {};
+}
+
 // Add Track and the selected-module Rename / Replace actions.
 juce::String addRenameReplaceActionName(const juce::String& actionId) {
     if (actionId == "foldAndPackMacros")
@@ -266,12 +279,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Play / Stop";
     if (actionId == "toggleBottomPanel")
         return "Toggle Bottom Panel";
-    if (actionId == "toggleTimelinePanel")
-        return "Show Timeline Tab";
-    if (actionId == "toggleMixerPanel")
-        return "Show Mixer Tab";
-    if (actionId == "toggleMidiRemotePanel")
-        return "Show Controllers Tab";
+    if (const auto name = dockViewActionName(actionId); name.isNotEmpty())
+        return name;
     if (actionId == "toggleSidePane")
         return "Show/Hide Side Pane";
     if (actionId == "zoomInHorizontal")
