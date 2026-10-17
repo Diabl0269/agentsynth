@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "ModuleFileStateKeys.h"
+#include "Modules/Sampler/SamplerSampleData.h"
 #include "Project/DeferredAssetLoads.h"
 #include <array>
 #include <bitset>
@@ -81,14 +82,7 @@ public:
     static constexpr float kMaxDensity = 100.0f;
     static constexpr float kDensitySpan = kMaxDensity - kMinDensity;
 
-    struct SampleData : public juce::ReferenceCountedObject {
-        using Ptr = juce::ReferenceCountedObjectPtr<SampleData>;
-        juce::AudioBuffer<float> audio;
-        double sourceSampleRate = 44100.0;
-        juce::String filePath;
-        juce::String fileName;
-        bool truncated = false;
-    };
+    using SampleData = synth::sampler::SampleData;
 
     SamplerModule()
         // StereoAudio::Declared: its legs ARE the contiguous ch0/ch1 pair, but the module declares
@@ -154,31 +148,7 @@ public:
 
     /** Reads `file` into memory; null when it is missing, unreadable or too short. Any thread: it touches no module. */
     static SampleData::Ptr decodeSampleFile(const juce::File& file) {
-        if (!file.existsAsFile())
-            return nullptr;
-
-        juce::AudioFormatManager formatManager;
-        formatManager.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
-        if (reader == nullptr)
-            return nullptr;
-
-        const double readerRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-        const juce::int64 maxFrames = (juce::int64)(kMaxSampleSeconds * readerRate);
-        const juce::int64 available = reader->lengthInSamples;
-        const int frames = (int)juce::jmin(available, maxFrames);
-        if (frames <= 1)
-            return nullptr;
-
-        SampleData::Ptr loaded = new SampleData();
-        loaded->audio.setSize(juce::jlimit(1, 2, (int)reader->numChannels), frames);
-        loaded->audio.clear();
-        reader->read(&loaded->audio, 0, frames, 0, true, true);
-        loaded->sourceSampleRate = readerRate;
-        loaded->filePath = file.getFullPathName();
-        loaded->fileName = file.getFileName();
-        loaded->truncated = available > maxFrames;
-        return loaded;
+        return synth::sampler::decodeSampleFile(file, kMaxSampleSeconds);
     }
 
     /** Publishes a decoded sample to the audio thread: the one install path of a picked file, a restore and a
@@ -760,17 +730,7 @@ private:
     /** 4-point Catmull-Rom. Linear interpolation of a pitched-down sample audibly dulls the top
      *  octave; this costs three extra multiplies and does not. */
     static float interpolate(const float* data, int numFrames, double position) {
-        const int i1 = juce::jlimit(0, numFrames - 1, (int)position);
-        const float t = (float)(position - (double)(int)position);
-        const int i0 = juce::jmax(0, i1 - 1);
-        const int i2 = juce::jmin(numFrames - 1, i1 + 1);
-        const int i3 = juce::jmin(numFrames - 1, i1 + 2);
-
-        const float y0 = data[i0], y1 = data[i1], y2 = data[i2], y3 = data[i3];
-        const float c1 = 0.5f * (y2 - y0);
-        const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
-        const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
-        return ((c3 * t + c2) * t + c1) * t + y1;
+        return synth::sampler::interpolateCatmullRom(data, numFrames, position);
     }
 
     /** Copies `ch` into `dest` and reports whether it carried anything. A channel that is all-zero

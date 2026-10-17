@@ -58,6 +58,10 @@ add_executable(Tests
     Modules/Pluck/PluckModuleTests.cpp
     Modules/Mallet/MalletModuleTests.cpp
     Modules/Sampler/SamplerRegionTests.cpp
+    Modules/Sampler/SamplerNoteNamesTests.cpp
+    Modules/Sampler/SamplerInstrumentTests.cpp
+    Modules/Sampler/SfzReaderTests.cpp
+    Modules/Sampler/SamplerVoicePoolTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp

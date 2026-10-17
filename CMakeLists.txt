@@ -574,6 +574,7 @@ include(cmake/ProjectLoadSources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/PluckMalletSources.cmake)
+include(cmake/SamplerInstrumentSources.cmake)
 include(cmake/FilterSources.cmake)
 # Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
 # licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
