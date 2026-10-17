@@ -1,6 +1,7 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
 #include "UI/Layout/ReducedMotion.h"
+#include <BinaryData.h>
 
 namespace synth::ui {
 
@@ -10,6 +11,8 @@ constexpr int kRecentRowHeight = 28;
 constexpr int kContributeRowHeight = 36;
 constexpr double kPromptCollapseMs = 180.0; // leaving: easeInCubic
 constexpr double kThanksHoldMs = 1100.0;    // Share's one-line thanks, faded over its last third
+constexpr double kLogoRevealMs = 320.0;     // fade + rise on show: easeOutCubic
+constexpr float kLogoRisePx = 10.0f;
 } // namespace
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
@@ -17,6 +20,8 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     // The overlay covers the whole window, so Tab and Shift+Tab cycle inside it rather than
     // escaping to the toolbar and canvas hidden underneath.
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
+
+    logo_ = juce::ImageCache::getFromMemory(BinaryData::agentsynthlogo256_png, BinaryData::agentsynthlogo256_pngSize);
 
     titleLabel.setText(juce::String("Welcome to ") + synth::branding::kProductName, juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(24.0f, juce::Font::bold)));
@@ -105,6 +110,25 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     addAndMakeVisible(versionLabel);
 
     rebuildRecentProjectButtons();
+}
+
+void WelcomeScreenComponent::visibilityChanged() {
+    if (!isShowing()) {
+        logoAnim_.stop(vblank_);
+        logoReveal_ = 1.0f;
+        return;
+    }
+    if (synth::ui::prefersReducedMotion()) {
+        logoAnim_.stop(vblank_);
+        logoReveal_ = 1.0f;
+        repaint(logoBounds_.expanded(0, (int)kLogoRisePx));
+        return;
+    }
+    logoReveal_ = 0.0f;
+    logoAnim_.start(vblank_, kLogoRevealMs, synth::ui::easeOutCubic, [this](float e) {
+        logoReveal_ = e;
+        repaint(logoBounds_.expanded(0, (int)kLogoRisePx));
+    });
 }
 
 void WelcomeScreenComponent::setDismissible(bool dismissible) {
@@ -244,13 +268,13 @@ void WelcomeScreenComponent::rebuildRecentProjectButtons() {
 
 juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
     const int recentsHeight = recentFiles_.empty() ? kRecentRowHeight : (int)recentFiles_.size() * kRecentRowHeight;
-    // Mirrors resized() row for row (pad, title, subtitle, the usage statistics card slot, three action buttons,
+    // Mirrors resized() row for row (pad, logo, title, subtitle, the usage statistics card slot, three action buttons,
     // recents header, recents rows, contribute row, footer, pad) so the drawn card and its children always agree. Fixed
     // heights rather than FlexBox: a small, static layout whose only variable is the recents count.
-    const int cardHeight = 20 /*top pad*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 + 36 /*New*/ + 10 +
-                           36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 + 20 /*recents header*/ + 6 +
-                           recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ + 20 /*bottom pad*/ +
-                           promptSlotHeight() /*usage statistics card + gap, 0 once answered*/;
+    const int cardHeight = 20 /*top pad*/ + kLogoSize + kLogoGap /*logo*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 +
+                           36 /*New*/ + 10 + 36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 +
+                           20 /*recents header*/ + 6 + recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ +
+                           20 /*bottom pad*/ + promptSlotHeight() /*usage statistics card + gap, 0 once answered*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -270,6 +294,16 @@ void WelcomeScreenComponent::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(card.toFloat(), 10.0f);
     g.setColour(findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(card.toFloat(), 10.0f, 1.0f);
+
+    if (logo_.isValid() && logoReveal_ > 0.0f) {
+        // The artwork is a transparent cut-out with its neon outline, so it sits on the card with no tile or border.
+        const auto dest = logoBounds_.toFloat().translated(0.0f, (1.0f - logoReveal_) * kLogoRisePx);
+        g.saveState();
+        g.setOpacity(logoReveal_);
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        g.drawImage(logo_, dest, juce::RectanglePlacement::stretchToFit);
+        g.restoreState();
+    }
 }
 
 void WelcomeScreenComponent::resized() {
@@ -277,6 +311,8 @@ void WelcomeScreenComponent::resized() {
     closeButton_.setBounds(juce::Rectangle<int>(28, 28).withRightX(card.getRight() - 10).withY(card.getY() + 10));
     auto area = card.reduced(28, 20);
 
+    logoBounds_ = area.removeFromTop(kLogoSize).withSizeKeepingCentre(kLogoSize, kLogoSize);
+    area.removeFromTop(kLogoGap);
     titleLabel.setBounds(area.removeFromTop(34));
     area.removeFromTop(4);
     subtitleLabel.setBounds(area.removeFromTop(22));

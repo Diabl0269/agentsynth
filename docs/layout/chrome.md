@@ -432,6 +432,12 @@ correctly positioned and stacked:
   stale rect from before the last window resize can never show through the instant
   `showWelcomeScreen()` makes it visible again.
 
+**Logo.** The cat mark (`assets/brand/agentsynth-logo-256.png`, embedded through `cmake/Assets.cmake`, so
+`BinaryData::agentsynthlogo256_png`) is drawn above the title, 96 pt square as a transparent cut-out (neon outline kept,
+no tile or border) so it reads on both themes; 256 px is sharp at 2x. `getCardBounds()` and `resized()` both reserve its 96 pt plus a 12 pt
+gap. Each time the overlay is shown it fades in and rises 10 px (320 ms, `easeOutCubic`, paint-only); Reduced Motion
+lands it at once. Tests: `Tests/UI/Chrome/WelcomeScreenLogoTests.cpp`.
+
 **Usage statistics card.** While `usageStatsAsked` and `shareUsageStats` are both false, an inset panel
 (`UsageStatsPromptComponent`, accent border and fill from the theme) sits between the subtitle and the three start
 buttons: heading, a plain-words body, Share and No thanks as equal buttons, and a "What we collect" link. All
