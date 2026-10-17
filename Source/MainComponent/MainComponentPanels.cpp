@@ -483,7 +483,7 @@ void MainComponent::resized() {
     if (libW > 0 || moduleLibrary.isVisible())
         moduleLibrary.setBounds(bounds.removeFromLeft(libW));
 
-    graphEditor.setBounds(bounds);
+    layoutCanvas(bounds);
     if (toast_)
         toast_->placeIn(bounds);
 
@@ -559,8 +559,7 @@ void MainComponent::applyToolbarIcons() {
     const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
     toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));
 
-    const juce::String minimapBase = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
-    toggleMinimapButton.setTooltip(hint(minimapBase, "toggleMinimap"));
+    refreshMinimapButton();
     // The map itself advertises the same binding on hover. MinimapComponent has no ShortcutManager
     // dependency, so the display string is resolved here and pushed down.
     graphEditor.getMinimap().setShortcutHint(
@@ -799,7 +798,9 @@ void MainComponent::hideWelcomeScreen() {
     // A no-op is deliberately safe here: null in Hosted mode, and every guarded action's `proceed`
     // continuation (loadPresetGuarded, newPatch) calls this unconditionally as its last step even
     // when the welcome screen was never showing in the first place (e.g. the toolbar's own Load
-    // button, not the welcome screen, triggered the load).
+    // button, not the welcome screen, triggered the load). Every load path ends here, so a freshly loaded
+    // patch is revealed on the canvas even when it sits in the bottom panel.
+    ensureCanvasShowing();
     if (welcomeFade_)
         welcomeFade_->setShown(false); // fades out, then hides
 }

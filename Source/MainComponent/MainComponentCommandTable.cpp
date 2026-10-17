@@ -66,6 +66,7 @@ float graphZoomWheelDeltaFor(double factor) { return (float)((factor - 1.0) / kG
 // ---- Named perform() bodies (moved verbatim from the former MainComponent::perform switch) ----
 
 bool MainComponent::performLocateMaster() {
+    ensureCanvasShowing();
     switch (graphEditor.locateMasterOrOutput()) {
     case GraphEditor::LocateMasterResult::Master:
         statusBar.showMessage("Located Master");

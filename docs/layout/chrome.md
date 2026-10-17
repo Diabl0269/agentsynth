@@ -328,6 +328,24 @@ grab point, the others glide aside, the order is applied and persisted on releas
 [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) and
 [`docs/layout/animation.md#reorder-drag`](animation.md#reorder-drag).
 
+### The canvas as a tab
+
+When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
+canvas is main, and the tab has no detach button). `GraphEditor` stays a `MainComponent` child: the dock only
+reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
+mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
+layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
+does per frame). The editor is hidden, not zero-sized, while another tab shows or the panel is closed. When it
+first lands in the panel its view is fitted once, after the slide ends. The main area is left empty until the
+other views can be hosted there.
+
+`MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
+the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to
+Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
+every project or patch load, and an accepted AI patch. Cmd+T closing the panel around the canvas hands keyboard
+focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
+`MainComponent::setMainViewForTest` is the only way to put another view in main today.
+
 ### Tab strip keyboard and screen-reader access
 
 The tab strip is one Tab stop of its own, the "dockTabs" focus region, registered between Canvas and the

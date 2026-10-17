@@ -425,6 +425,8 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
     if (mixerRevealHook_ && mixerRevealHook_(info.stripId))
         return;
 
+    if (canvasRevealHook_)
+        canvasRevealHook_();
     // Scroll into view AND select -- the Locate Master contract (a chip's whole point is finding
     // something that may be off-screen), not the binding chip's highlight-only one.
     const auto* macro = macroForStrip(info.stripUuid);

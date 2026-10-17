@@ -71,6 +71,17 @@ public:
      *  the order and the main view on every setMainView(). */
     void setApplicationProperties(juce::ApplicationProperties* properties);
 
+    /** True while the Canvas tab is the active one, i.e. the canvas fills the dock's body (only possible
+     *  once another view is in the main area). The caller also checks the dock itself is showing. */
+    bool isCanvasBodyShowing() const noexcept { return activeTab_ == Tab::Canvas && getMainView() != Tab::Canvas; }
+    /** The Canvas tab's body in this dock's own coordinates: everything under the tab strip. Empty unless
+     *  isCanvasBodyShowing(). The canvas itself is not a child of the dock, so MainComponent lays it into
+     *  this rect and the dock lets mouse events through it. */
+    juce::Rectangle<int> getCanvasBodyBounds() const;
+    /** Fires after the canvas body appears or disappears (a tab switch or a main-view change), once the
+     *  dock has laid out, so MainComponent can place the canvas. */
+    std::function<void()> onCanvasBodyChanged;
+
     /** The view in the main area (Canvas unless setMainView() moved another one up). */
     Tab getMainView() const noexcept { return tabModel_.getMainView(); }
     /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. */
@@ -281,7 +292,8 @@ public:
 
     void resized() override;
     void paintOverChildren(juce::Graphics& g) override; // the lifted tab of a reorder drag
-    void lookAndFeelChanged() override;                 // refreshes the tab-strip detach button's themed icon
+    bool hitTest(int x, int y) override;
+    void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
 
     /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
     static constexpr int kTabStripHeight = 24;
@@ -487,6 +499,7 @@ private:
     // Added LAST in the constructor so it wins the hit test; forwards into onResizeHeight*.
     PanelResizeHandle resizeHandle_{*this};
     Tab activeTab_ = Tab::Timeline;
+    bool canvasBodyWasShowing_ = false; // what onCanvasBodyChanged last reported
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;
     ShortcutManager* shortcutManager_ = nullptr;

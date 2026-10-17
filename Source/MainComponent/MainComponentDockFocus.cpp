@@ -2,11 +2,11 @@
 // Cmd+1/2/3/4) run: onto the dock's tab strip when the pane is showing, back to the canvas when the pane
 // closes around the focus. The shortcuts' dispatch rows are in MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPlacementController.h"
 
 namespace {
 constexpr const char* kDockTabsRegion = "dockTabs";
-constexpr const char* kCanvasRegion = "canvas";
 } // namespace
 
 // Focus goes only to a strip that is on screen: the "dockTabs" region is open while the dock is showing
@@ -19,19 +19,27 @@ void MainComponent::focusDockTabStripIfShowing() {
 }
 
 // Cmd+T. Opening the pane puts focus on its tab strip so the arrow keys switch tab at once. Closing it
-// would leave focus on a hidden component, so a press that closes the pane around the focus hands focus
-// to the canvas.
+// would leave focus on a hidden component (the Canvas tab's canvas included), so a press that closes the
+// pane around the focus hands focus to the view in the main area.
 void MainComponent::toggleBottomPanelFromShortcut() {
     const auto* focused = getFocusedComponentForMenu();
-    const bool focusWasInDock = focused != nullptr && (focused == &bottomDock || bottomDock.isParentOf(focused));
+    const bool focusWasInDock =
+        focused != nullptr &&
+        (focused == &bottomDock || bottomDock.isParentOf(focused) ||
+         (bottomDock.isCanvasBodyShowing() && (focused == &graphEditor || graphEditor.isParentOf(focused))));
     // The button's own handler, run now: triggerClick() only posts the click, and the focus decision below
     // needs the new open/closed state.
     if (toggleBottomPanelButton.onClick)
         toggleBottomPanelButton.onClick();
     if (isBottomDockVisible)
         focusDockTabStripIfShowing();
-    else if (focusWasInDock)
-        focusRegions_.focusRegionById(kCanvasRegion);
+    else if (focusWasInDock) {
+        // Only a region that is open: focusing a closed one would run its `open` callback and bring the pane back.
+        const auto mainRegion = getMainViewFocusRegionId();
+        const auto* region = focusRegions_.findById(mainRegion);
+        if (region != nullptr && region->isCurrentlyOpen())
+            focusRegions_.focusRegionById(mainRegion);
+    }
 }
 
 // Cmd+1/2/3/4. A tab that is detached raises its own window, and the Mixer outside the Tab placement is
@@ -41,7 +49,7 @@ void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent
     using Tab = synth::ui::BottomDockComponent::Tab;
     if (bottomDock.getMainView() == tab) {
         if (tab == Tab::Canvas)
-            focusRegions_.focusRegionById(kCanvasRegion);
+            focusRegions_.focusRegionById("canvas");
         return;
     }
     const bool mixerRevealedElsewhere =

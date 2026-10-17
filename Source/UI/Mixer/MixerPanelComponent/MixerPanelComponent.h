@@ -138,6 +138,8 @@ public:
     /** Forwarded from every column's insert list after an add/reorder/remove mutation --
      *  BottomDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
+    /** Fired before a column or insert selects its card on the canvas, so the canvas is on screen first. */
+    std::function<void()> onRevealCanvas;
 
     /** Fired after a real interactive mute/solo/pan-law change -- see the .cpp wiring. */
     std::function<void()> onLiveMixerStateChanged;

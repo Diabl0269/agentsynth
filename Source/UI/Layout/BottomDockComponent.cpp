@@ -408,9 +408,9 @@ void BottomDockComponent::refreshDetachButton() {
     // "detachActiveTab" component name leaks as the AX title (ButtonAccessibilityHandler::
     // getTitle()'s getButtonText() fallback). While "both places" drives the Mixer tab, the
     // button's own state tracks the MIRROR (mixerHost_ itself never actually detaches then).
-    // The canvas has no window to open into, so the button is disabled while its tab is active.
+    // The canvas has no window to open into, so the button is hidden while its tab is active.
     const auto* host = activeHost();
-    detachButton_.setEnabled(host != nullptr);
+    detachButton_.setVisible(host != nullptr);
     const bool detached = usesMixerMirrorForDetach() ? mixerMirror_.isOpen() : host != nullptr && host->isDetached();
     const juce::String label = detached ? "Dock back" : "Open in window";
     detachButton_.setTooltip(label);
@@ -490,7 +490,23 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
         midiRemotePanel_.rebuildFromProfiles();
     refreshDetachButton();
     resized();
+    // After the layout above, so a listener reading getCanvasBodyBounds() sees the new tab's geometry.
+    if (canvasBodyWasShowing_ != isCanvasBodyShowing()) {
+        canvasBodyWasShowing_ = isCanvasBodyShowing();
+        if (onCanvasBodyChanged)
+            onCanvasBodyChanged();
+    }
 }
+
+juce::Rectangle<int> BottomDockComponent::getCanvasBodyBounds() const {
+    if (!isCanvasBodyShowing())
+        return {};
+    return getLocalBounds().withTrimmedTop(kTabStripHeight);
+}
+
+// The canvas shows through the dock's body (it is a sibling underneath, not a child), so a click there
+// belongs to the canvas.
+bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().contains(x, y); }
 
 void BottomDockComponent::persistActiveTab() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)

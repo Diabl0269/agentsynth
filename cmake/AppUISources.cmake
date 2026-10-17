@@ -29,6 +29,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentCommandPredicates.cpp
     Source/MainComponent/MainComponentSelectionCommands.cpp
     Source/MainComponent/MainComponentPanels.cpp
+    Source/MainComponent/MainComponentCanvasReveal.cpp
     Source/MainComponent/MainComponentDockFocus.cpp
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp

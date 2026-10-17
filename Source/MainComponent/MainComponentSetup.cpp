@@ -871,8 +871,9 @@ void MainComponent::rebuildFocusRegions() {
     focusRegions_.addRegion({"toolbar", &toolbar, nullptr, nullptr});
     focusRegions_.addRegion(
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
-    // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
-    focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
+    // Open while the canvas is on screen: always in the main area, in the dock only on its Canvas tab.
+    focusRegions_.addRegion(
+        {"canvas", &graphEditor, [this] { return graphEditor.isVisible(); }, [this] { ensureCanvasShowing(); }});
     // The dock's tab strip is one stop of its own, ahead of the panel it selects. It is open whenever the
     // dock is showing with at least one docked tab, and has no `open` callback: no direct-focus shortcut
     // targets it.
@@ -888,14 +889,13 @@ void MainComponent::rebuildFocusRegions() {
     // Guarded -- a Timeline detached to its own window has nothing docked here to cycle to; Tab
     // inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
-    // The dock has a third tab (MidiRemote) -- excluding only Mixer here is not enough to say
-    // Timeline is the one actually showing, or this region reports open while the MidiRemote tab is
-    // the one on screen.
+    // The dock has more tabs (MidiRemote, Canvas) -- ruling out one or two is not enough to say
+    // Timeline is the one actually showing, so the active tab is named.
     if (!bottomDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
                                  [this] {
-                                     return isBottomDockVisible && !bottomDock.isMixerTabActive() &&
-                                            !bottomDock.isMidiRemoteTabActive();
+                                     return isBottomDockVisible &&
+                                            bottomDock.getActiveTab() == synth::ui::BottomDockComponent::Tab::Timeline;
                                  },
                                  [this] {
                                      bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
@@ -906,7 +906,7 @@ void MainComponent::rebuildFocusRegions() {
     // inside the Timeline, so the same dock guard applies; Up/Down walk their controls (FocusStepWithin.h).
     if (!bottomDock.getTimelineHost().isDetached()) {
         const auto timelineShowing = [this] {
-            return isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive();
+            return isBottomDockVisible && bottomDock.getActiveTab() == synth::ui::BottomDockComponent::Tab::Timeline;
         };
         focusRegions_.addRegion(
             {"timelineRouting", &timelinePanel.getRoutingPane(),

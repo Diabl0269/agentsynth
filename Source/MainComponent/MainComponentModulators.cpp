@@ -448,6 +448,7 @@ void MainComponent::showNodeOnCanvas(const juce::String& uuid) {
     auto* node = findNodeByUuid(uuid);
     if (node == nullptr)
         return;
+    ensureCanvasShowing();
     selectNodeInGraph(uuid);
     const synth::Macro* collapsedCard = nullptr;
     auto& macros = graphEditor.getMacros();

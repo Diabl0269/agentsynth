@@ -186,6 +186,11 @@ public:
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
+    /** Makes the canvas visible before something selects or frames a card on it: a no-op while the canvas is the
+     *  main view, else opens the dock on its Canvas tab. */
+    void ensureCanvasShowing();
+    /** The id of the focus region of the view in the main area ("canvas", "timeline", "mixer", "midiRemote"). */
+    juce::String getMainViewFocusRegionId() const;
     /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then
      *  shown (never closed); false, and nothing changes, when the active tab has no pane. */
     bool toggleActiveSidePane();
@@ -305,6 +310,9 @@ public:
     void simulateToggleMinimapClick();
     void simulateToggleLibraryClick();
     void simulateToggleBottomPanelClick();
+    /** Puts `view` in the main area without the shipped clamp, so the canvas sits in the dock (or, with Canvas, back
+     *  in main), and lays out. Nothing in the app does this yet. */
+    void setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
     void simulateNewPatchClick();
     void simulateUndoClick();
     void simulateRedoClick();
@@ -855,6 +863,13 @@ private:
     juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
     std::optional<EditSurface> editSurfaceOverrideForTest_; // consulted first by resolveEditSurface()
     bool midiRemoteDevicesOpenedAfterEngineUp_ = false;     // set by openMidiRemoteDevices(); test-only read
+
+    // Lays the canvas into the main area, or into the Canvas tab's body (hidden when that tab is not showing).
+    void layoutCanvas(juce::Rectangle<int> mainArea);
+    // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
+    void refreshMinimapButton();
+    bool canvasInDockLayout_ = false;    // the canvas was last laid into the dock (not the main area)
+    bool canvasRecentrePending_ = false; // it just moved there: fit its view once it is showing and settled
 
     // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
     void focusDockTabStripIfShowing();

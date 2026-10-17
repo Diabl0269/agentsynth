@@ -32,7 +32,10 @@ Below a 480x360 editor the minimap auto-hides. `GraphEditor::resized()` recomput
 `minimapVisible && fits` on every layout pass against **absolute floors** — a fraction-of-self test
 such as `w/4 * 2 <= w` is always true, so it would never actually hide anything. This never clobbers
 the user's preference: `minimapVisible` still records what they asked for, and the map reappears the
-moment the window grows back past the floor.
+moment the window grows back past the floor. `GraphEditor::isMinimapSuppressedBySize()` reports the floor
+(`MinimapComponent::fitsEditor`): while it holds, the toolbar's Minimap button is greyed out with the tooltip
+"Needs a taller canvas" (re-evaluated on every `MainComponent` layout pass), and is the normal toggle otherwise.
+The canvas can be that small when it is a bottom-panel tab.
 
 ## What it draws
 

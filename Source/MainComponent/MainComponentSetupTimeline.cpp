@@ -127,6 +127,10 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         return bottomDock.revealColumnForStrip(stripId);
     });
 
+    trackChannelLink_.setCanvasRevealHook([this] { ensureCanvasShowing(); });
+    bottomDock.getMixerPanel().onRevealCanvas = [this] { ensureCanvasShowing(); };
+    bottomDock.onCanvasBodyChanged = [this] { resized(); };
+
     // The user's bindings for the three surfaces that resolve their OWN keys (see
     // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are
     // installed together and MUST stay together: with a manager installed, resolution is strict —

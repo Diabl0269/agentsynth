@@ -28,6 +28,11 @@ void MainComponent::simulateToggleMinimapClick() {
         toggleMinimapButton.onClick();
 }
 
+void MainComponent::setMainViewForTest(synth::ui::BottomDockComponent::Tab view) {
+    bottomDock.setMainView(view);
+    resized();
+}
+
 void MainComponent::simulateToggleLibraryClick() {
     if (toggleLibraryButton.onClick)
         toggleLibraryButton.onClick();

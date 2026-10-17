@@ -685,6 +685,7 @@ add_executable(Tests
     UI/Mixer/MixerSendListMacroPortTests.cpp
     UI/Layout/BottomDockComponentTests.cpp
     UI/Layout/BottomDockTabModelTests.cpp
+    UI/Layout/BottomDockCanvasTabTests.cpp
     UI/Layout/BottomDockMainViewTests.cpp
     UI/Layout/BottomDockMixerMirrorTests.cpp
     UI/Layout/BottomDockResizeTests.cpp

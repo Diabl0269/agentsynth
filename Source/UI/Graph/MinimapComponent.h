@@ -56,6 +56,12 @@ class MinimapComponent
 public:
     MinimapComponent();
 
+    /** False when an editor of this size is too small to show the map without swallowing the view:
+     *  the owner hides the map (its preference is untouched) and greys out the toggle. */
+    static bool fitsEditor(int editorWidth, int editorHeight) noexcept {
+        return editorWidth >= 480 && editorHeight >= 360;
+    }
+
     /** Replaces the model. Repaints ONLY when the new model differs from the current one —
      *  the owner ticks at 30 Hz and a static patch must not cause a repaint storm. */
     void setModel(MinimapModel model);

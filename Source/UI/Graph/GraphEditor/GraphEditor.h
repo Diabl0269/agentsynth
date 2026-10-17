@@ -88,6 +88,7 @@ public:
     void setMinimapVisible(bool shouldBeVisible);
     void toggleMinimapVisibility();
     bool isMinimapVisible() const noexcept { return minimapVisible; }
+    bool isMinimapSuppressedBySize() const noexcept; // under the size floor: hidden whatever the preference
     /** Mini map slide-and-fade (GraphEditorMinimapSlide.cpp): 0 = gone, 1 = fully shown. */
     float getMinimapSlideProgress() const noexcept { return minimapSlide_.getProgress(); }
     bool isMinimapSlideMovingForTest() const noexcept { return minimapSlide_.isMoving(); }
