@@ -168,7 +168,21 @@ void LfoCustomWave::sanitise() {
         p.bend = std::isfinite(p.bend) ? juce::jlimit(-1.0f, 1.0f, p.bend) : 0.0f;
     }
 
-    std::stable_sort(points.begin(), points.end(), [](const Point& a, const Point& b) { return a.x < b.x; });
+    // Stable by x, but via std::sort on (x, original index) rather than std::stable_sort: libstdc++ 14's
+    // stable_sort temp buffer (operator new(nothrow) freed by a different path) trips a false
+    // alloc-dealloc-mismatch under clang's ASAN on Linux, which killed the test binary at
+    // gtest_discover_tests time. Equal x keeps its input order, as before.
+    {
+        std::vector<std::pair<Point, size_t>> keyed;
+        keyed.reserve(points.size());
+        for (size_t i = 0; i < points.size(); ++i)
+            keyed.emplace_back(points[i], i);
+        std::sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) {
+            return a.first.x < b.first.x || (a.first.x == b.first.x && a.second < b.second);
+        });
+        for (size_t i = 0; i < keyed.size(); ++i)
+            points[i] = keyed[i].first;
+    }
     if ((int)points.size() > kMaxPoints)
         points.resize((size_t)kMaxPoints);
 
