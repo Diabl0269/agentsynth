@@ -312,7 +312,7 @@ TEST(DrumKitModule, TomsAreTunedLowToHighByNote) {
         auto kit = makeKit();
         const auto s = render(*kit, {{note}}, 0.3);
         int count = 0;
-        for (std::size_t i = 4411; i < 4411 + 8820; ++i) // 0.1 s .. 0.3 s, after the pitch drop
+        for (std::size_t i = 4411; i < s.size(); ++i) // 0.1 s .. 0.3 s (the buffer's end), after the pitch drop
             count += (s[i - 1] < 0.0f) != (s[i] < 0.0f);
         return count;
     };
