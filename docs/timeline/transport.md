@@ -18,7 +18,7 @@ together so the glyphs render at their intended size instead of being clamped ba
 `synth::ui::IconButton` (Framed style, [`theming.md`](../layout/theming.md#themed-widgets)). The
 glyphs are plain `juce::Path` shapes in `Source/UI/Theme/IconGlyphs.cpp` — a triangle/square for
 play-stop, a circle for record, an open arc with an arrowhead for loop, a filled ellipse notehead
-plus a `juce::Rectangle` stem for the metronome. This mirrors the root `CLAUDE.md` rule that themes
+plus a `juce::Rectangle` stem for the metronome. This mirrors the `Source/UI/CLAUDE.md` rule that themes
 never swap typefaces: a one-off shape for a single caller does not earn a new icon asset either.
 
 **Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter

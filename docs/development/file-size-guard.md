@@ -46,11 +46,13 @@ outgrows one file gets its own directory named after the class, holding the head
 plus shared private helpers in `GraphEditorInternal.h`) — never flat siblings dropped next to
 unrelated files. Tests mirror it
 (`Tests/UI/Graph/GraphEditor/GraphEditor<Topic>Tests.cpp`, with shared fixtures in
-`GraphEditorTestFixture.h`).
+`GraphEditorTestFixture.h`, helpers in `<Class>TestHelpers.h`). Each unit opens with a comment naming its
+concern. Include a moved or shared header Source-rooted (`"UI/Layout/LayoutUtil.h"`), so a file's depth never
+matters.
 
 A directory itself gets split by area once it passes roughly 30 files. `Source/UI/` holds only area
 directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`,
-`Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`), each class directory nested in its area.
+`Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`, `MidiRemote/`, `Mixer/`), each class directory nested in its area.
 `Tests/` mirrors the code by area — `Modules/`, `FX/`, `Engine/`, `Plugin/`, `Timeline/`, `Mixer/`,
 `Macros/`, `AI/`, `Account/`, `Project/`, `App/` (MainComponent-level and end-to-end), and
 `UI/<area>/` matching `Source/UI/`; only shared helpers (`TestMain.cpp`, `TestAudioHelpers.h`,

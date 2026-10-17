@@ -243,7 +243,7 @@ and rewires connections — a real graph edit — so it calls `updateComponents(
 `recordGraphAndMacroChange` transaction that does the splicing, exactly as `deleteSelection()` does.
 That fires `onGraphStructureChanged` to `MainComponent::reconcileTimelineBindingsOnly()`, the seam
 that keeps a timeline binding from surviving stale, keyed to a now-deleted node's uuid, into the next
-audio-thread render pass (root `CLAUDE.md`, and the hook inventory in
+audio-thread render pass (`Source/CLAUDE.md`, and the hook inventory in
 [`docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step`](../architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)).
 
 ### A port node is directly deletable

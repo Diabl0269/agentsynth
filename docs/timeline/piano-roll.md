@@ -154,7 +154,7 @@ A 20 px header strip sits above both the keys column and the grid. Its chips are
 (`AppLookAndFeel::drawChip`, [theming](../layout/theming.md#themed-widgets)) holding plain
 `juce::Path` and text shapes, never a Unicode glyph through a themed font — the same "draw it,
 don't asset it" rule the shared icon glyphs (`Source/UI/Theme/IconGlyphs.cpp`) follow, and the reason every label
-here goes through `AppLookAndFeel`; see the root `CLAUDE.md`'s font-swap invariant.
+here goes through `AppLookAndFeel`; see `Source/UI/CLAUDE.md`'s themes-don't-swap-fonts invariant.
 
 ## The keys column
 
@@ -347,7 +347,7 @@ Pitches** does not, because it is silently a no-op with no scale chosen, matchin
 
 The flash is a **one-shot** `juce::Timer` (`kQuantiseFlashMs` = 120; `timerCallback()` stops the
 timer on its first call) repainting only the chip's own rect — bounded, never a running animation,
-per the root `CLAUDE.md` repaint invariant. Tooltips are served by `juce::TooltipClient` resolved
+per `Source/UI/CLAUDE.md`'s repaint invariant. Tooltips are served by `juce::TooltipClient` resolved
 by position (`getTooltipFor(Point<int>)`), since the header's buttons are drawn shapes.
 
 **Four chips carry drawn vector glyphs rather than letters**, because a bare "Q" for length- or

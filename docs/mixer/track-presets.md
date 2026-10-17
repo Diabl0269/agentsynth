@@ -114,7 +114,7 @@ macros with their parent links.
 `insertTrackPreset` is `SnippetManager::insertSnippet` with `trustedPayload=false`, so
 `validatePatch(..., trusted=false)` still runs as a separate gate on every disk-sourced preset before
 a trusted `applyJSONToGraph` — the `SnippetManager::insertSnippet` / `ProjectBundle::load` reference
-pairing the root `CLAUDE.md` names.
+pairing in `snippets-clipboard.md`.
 
 **`"timeline"` stays a reserved field, refused on the untrusted path.** `prepareForInsert` only ever
 copies `"nodes"`, `"connections"` and `"macros"`, so a smuggled `"timeline"` key has no effect at all.
