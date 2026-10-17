@@ -1,10 +1,11 @@
 # Bundle metadata shared by the app and plugin targets, split out of the root CMakeLists.txt to keep
 # that file under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh).
 
-# App/plugin icon: the full original logo at every size (1024 for the big slot, 256 for the small).
+# App/plugin icon: the transparent cat cut-out (no dark ground, so it reads on light and dark
+# Docks and window switchers; 1024 for the big slot, 256 for the small).
 set(SYNTH_ICON_ARGS
-    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/agentsynth-logo-1024.png"
-    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/agentsynth-logo-256.png")
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/agentsynth-icon-1024.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/agentsynth-icon-256.png")
 
 # Sparkle Info.plist keys, merged into JUCE's generated plist. Empty string on non-Apple
 # platforms, where JUCE ignores the argument entirely.
