@@ -283,7 +283,8 @@ private:
 };
 
 // The registry MainComponent builds must be exactly the documented regions, in the documented Tab-cycle order
-// (Toolbar, Library, Canvas, Dock tabs, Timeline, Routing pane, Scale pane, Mixer, Controllers, AI Panel, Mod Matrix).
+// (Toolbar, Library, Canvas toolbar, Canvas, Dock tabs, Timeline, Routing pane, Scale pane, Mixer, Controllers, AI
+// Panel, Mod Matrix).
 TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheDocumentedRegionsInOrder) {
     // The mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
@@ -295,8 +296,9 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheDocumentedRegionsInOrder
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "dockTabs", "timeline", "timelineRouting",
-                                      "scaleAssist", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids,
+              juce::StringArray({"toolbar", "library", "canvasToolbar", "canvas", "dockTabs", "timeline",
+                                 "timelineRouting", "scaleAssist", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
@@ -354,11 +356,12 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     ASSERT_FALSE(mc.isAiPanelConfiguredVisible());
     ASSERT_FALSE(mc.getGraphEditor().isModMatrixVisible());
 
-    // "toolbar", "library" and "canvas" are open (Toolbar has no closed state, same as Canvas) --
+    // "toolbar", "library", "canvasToolbar" and "canvas" are open (Toolbar has no closed state, same as Canvas) --
     // everything else is skipped.
     EXPECT_EQ(regs.nextOpenRegionId("toolbar", true), "library");
-    EXPECT_EQ(regs.nextOpenRegionId("library", true), "canvas");
-    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the three closed ones";
+    EXPECT_EQ(regs.nextOpenRegionId("library", true), "canvasToolbar");
+    EXPECT_EQ(regs.nextOpenRegionId("canvasToolbar", true), "canvas");
+    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the closed ones";
     EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "canvas") << "wraps backward too";
 
     // Opening the timeline (via the real command, not a fake) adds the dock's tab strip and then the

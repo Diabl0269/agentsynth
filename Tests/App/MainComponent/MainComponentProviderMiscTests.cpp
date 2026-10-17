@@ -95,7 +95,7 @@ TEST_F(MainComponentTest, ToolbarButtonsHaveNonZeroBoundsAfterConstruction) {
     MainComponent mc(std::make_unique<MockProvider>());
     // No extra setSize() or toggle call — bounds must already be set by the constructor.
     auto buttons = collectToolbarButtons(mc);
-    ASSERT_EQ((int)buttons.size(), 9) << "Expected 9 toolbar DrawableButtons";
+    ASSERT_EQ((int)buttons.size(), 7) << "Expected 7 top-bar DrawableButtons";
     for (auto* b : buttons) {
         EXPECT_GT(b->getWidth(), 0) << "Button '" << b->getComponentID() << "' has zero width after construction";
         EXPECT_GT(b->getHeight(), 0) << "Button '" << b->getComponentID() << "' has zero height after construction";

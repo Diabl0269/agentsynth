@@ -28,9 +28,8 @@ void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> bt
 // ---------------------------------------------------------------------------
 // Sub-group membership per Slot, used both to space groups apart in layoutButtons() and to
 // find the group boundaries paint() draws separator hairlines at. Matches the Slot enum's
-// documented grouping (ToolbarComponent.h:21-22): left [Library]|[New,Save,Load]|
-// [Settings,Feedback]|[Undo,Redo]|[AutoArrange]; right
-// [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
+// documented grouping (ToolbarComponent.h): left [Library]|[New,Save,Load]|
+// [Settings,Feedback]|[Undo,Redo]; right [ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
 namespace {
 int groupOf(int slot) {
     switch (slot) {
@@ -46,15 +45,11 @@ int groupOf(int slot) {
     case ToolbarComponent::Undo:
     case ToolbarComponent::Redo:
         return 3;
-    case ToolbarComponent::AutoArrange:
-        return 4;
-    case ToolbarComponent::ToggleMinimap:
-    case ToolbarComponent::ToggleModMatrix:
     case ToolbarComponent::ToggleAiPanel:
     case ToolbarComponent::ToggleBottomPanel:
-        return 5;
+        return 4;
     case ToolbarComponent::ToggleTheme:
-        return 6;
+        return 5;
     default:
         return -1;
     }
@@ -78,9 +73,6 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         84.0f,  // Feedback — wide enough for its caption at full size
         72.0f,  // Undo
         72.0f,  // Redo
-        120.0f, // AutoArrange
-        108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
-        104.0f, // ToggleModMatrix
         92.0f,  // ToggleAiPanel
         100.0f, // ToggleBottomPanel ("Hide Panel"/"Show Panel")
         110.0f  // ToggleTheme
@@ -96,10 +88,10 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // actions read as clusters rather than one flat row.
     static constexpr float kGroupGap = 12.0f;
 
-    // Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange.
+    // Left group: Library, New, Save, Load, Settings, Feedback, Undo, Redo.
     // Invisible buttons yield their slot entirely rather than leaving a reserved gap.
     int lastGroup = -1;
-    for (int slot = Library; slot <= AutoArrange; ++slot)
+    for (int slot = Library; slot <= Redo; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
             if (lastGroup != -1 && groupOf(slot) != lastGroup)
                 fb.items.add(juce::FlexItem().withWidth(kGroupGap));
@@ -114,9 +106,9 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
+    // Right group: ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
     lastGroup = -1;
-    for (int slot = ToggleMinimap; slot <= ToggleTheme; ++slot)
+    for (int slot = ToggleAiPanel; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
             if (lastGroup != -1 && groupOf(slot) != lastGroup)
                 fb.items.add(juce::FlexItem().withWidth(kGroupGap));
@@ -152,10 +144,10 @@ void ToolbarComponent::paint(juce::Graphics& g) {
     // grouping cue rather than a hard divider.
     g.setColour(lnf->getTheme().colors.border.withAlpha(0.45f));
 
-    // Sections match the two layoutButtons() loops (left: Library..AutoArrange, right:
-    // ToggleMinimap..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
+    // Sections match the two layoutButtons() loops (left: Library..Redo, right:
+    // ToggleAiPanel..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
     // spacer, not a sub-group gap, so it is deliberately excluded here.
-    auto sectionOf = [](int slot) { return slot <= AutoArrange ? 0 : 1; };
+    auto sectionOf = [](int slot) { return slot <= Redo ? 0 : 1; };
 
     int prevGroup = -1;
     int prevSection = -1;

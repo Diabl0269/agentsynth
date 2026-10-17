@@ -32,6 +32,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentPanels.cpp
     Source/MainComponent/MainComponentCanvasReveal.cpp
     Source/MainComponent/MainComponentMainView.cpp
+    Source/MainComponent/MainComponentMainViewMotion.cpp
     Source/MainComponent/MainComponentDockFocus.cpp
     Source/MainComponent/MainComponentFocusRegions.cpp
     Source/MainComponent/MainComponentTimeline.cpp
@@ -298,6 +299,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/BottomDockTabModel.cpp
     Source/UI/Layout/MainViewHolder.h
     Source/UI/Layout/MainViewHolder.cpp
+    Source/UI/Layout/MainViewSwapMotion.h
+    Source/UI/Layout/MainViewSwapMotion.cpp
     Source/UI/Layout/ArrowKeyNavigation.h
     Source/UI/Layout/ArrowKeyNavigation.cpp
     Source/UI/Layout/FoldAllButton.h
@@ -434,6 +437,9 @@ set(APPUI_SOURCES
     Source/UI/Chrome/Toast/ToastComponent.cpp
     Source/UI/Chrome/ProgressTaskWindow.cpp
     Source/UI/Chrome/ProgressTaskWindow.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.cpp
+    Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
@@ -800,6 +806,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabToolbarLabels.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp

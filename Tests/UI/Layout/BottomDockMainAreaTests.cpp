@@ -20,7 +20,8 @@ using Tab = BottomDockComponent::Tab;
 } // namespace
 
 TEST_F(BottomDockMainAreaTest, TheTimelineHostFillsTheRectTheCanvasHad) {
-    const auto mainRect = mc_->getGraphEditor().getBounds();
+    // The main area is the canvas plus its toolbar row.
+    const auto mainRect = mc_->getGraphEditor().getBounds().getUnion(mc_->getCanvasToolbar().getBounds());
     const auto library = regionBounds("library");
     const auto aiPanel = regionBounds("aiPanel");
 

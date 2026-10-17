@@ -524,6 +524,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "toggleModMatrix",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.toggleModMatrixButton.triggerClick();
              return true;
          }},
@@ -534,6 +535,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "toggleMinimap",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.toggleMinimapButton.triggerClick();
              return true;
          }},
@@ -554,6 +556,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "autoArrange",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.graphEditor.autoArrange();
              return true;
          }},

@@ -20,9 +20,9 @@ class ToolbarComponent : public juce::Component {
 public:
     ToolbarComponent();
 
-    // Logical slot order — matches the left group [Library..AutoArrange] + right group
-    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. NumSlots is
-    // the array size. Feedback sits immediately after Settings (same group — icon-only,
+    // Logical slot order — matches the left group [Library..Redo] + right group
+    // [ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. (Auto Arrange, Minimap and Matrix sit on the canvas's own
+    // toolbar, not here.) NumSlots is the array size. Feedback sits immediately after Settings (same group — icon-only,
     // visually paired with the settings gear rather than a new standalone cluster).
     enum Slot {
         Library = 0,
@@ -33,11 +33,6 @@ public:
         Feedback,
         Undo,
         Redo,
-        AutoArrange,
-        // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> bottom panel -> theme.
-        ToggleMinimap,
-        ToggleModMatrix,
         ToggleAiPanel,
         // The ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
         // the former separate ToggleTimeline/ToggleMidiRemote slots.

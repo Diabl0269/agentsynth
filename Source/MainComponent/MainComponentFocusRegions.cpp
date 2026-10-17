@@ -19,6 +19,9 @@ void MainComponent::rebuildFocusRegions() {
 
     // Open while the canvas is on screen: in the main area, or in the dock only on its Canvas tab.
     const auto addCanvas = [this] {
+        // The canvas's own toolbar: one stop ahead of the canvas, open while the canvas is on screen.
+        focusRegions_.addRegion({"canvasToolbar", &canvasToolbar_, [this] { return canvasToolbar_.isVisible(); },
+                                 [this] { ensureCanvasShowing(); }});
         focusRegions_.addRegion(
             {"canvas", &graphEditor, [this] { return graphEditor.isVisible(); }, [this] { ensureCanvasShowing(); }});
     };

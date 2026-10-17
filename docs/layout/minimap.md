@@ -33,7 +33,7 @@ Below a 480x360 editor the minimap auto-hides. `GraphEditor::resized()` recomput
 such as `w/4 * 2 <= w` is always true, so it would never actually hide anything. This never clobbers
 the user's preference: `minimapVisible` still records what they asked for, and the map reappears the
 moment the window grows back past the floor. `GraphEditor::isMinimapSuppressedBySize()` reports the floor
-(`MinimapComponent::fitsEditor`): while it holds, the toolbar's Minimap button is greyed out with the tooltip
+(`MinimapComponent::fitsEditor`): while it holds, the canvas toolbar's Minimap button is greyed out with the tooltip
 "Needs a taller canvas" (re-evaluated on every `MainComponent` layout pass), and is the normal toggle otherwise.
 The canvas can be that small when it is a bottom-panel tab.
 
@@ -115,7 +115,7 @@ off-screen also removes it and its children from the accessibility tree, not jus
 
 ## Toolbar, shortcut and persistence
 
-A toolbar toggle (`ToggleMinimap`, in the right-hand group before `ToggleModMatrix`) and the
+A toggle on the [canvas toolbar](chrome.md#canvas-toolbar) (not the top bar) and the
 **Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, defaulting to `true`.

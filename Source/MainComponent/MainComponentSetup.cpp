@@ -438,6 +438,7 @@ void MainComponent::wirePluginScanAndRecents() {
 
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
+        ensureCanvasShowing();
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
     };
     // Enter-to-insert on a keyboard-focused Module/Snippet row — the click-to-add path those two
@@ -447,6 +448,7 @@ void MainComponent::wirePluginScanAndRecents() {
     // fallback GraphEditor::itemDropped already uses. With exactly one card selected, a module goes right after that
     // card instead, the cards after it making room (synth::insertModuleAfterSelectedCard).
     moduleLibrary.onModuleActivated = [this](const juce::String& name) {
+        ensureCanvasShowing();
         if (!synth::insertModuleAfterSelectedCard(graphEditor, name))
             graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
     };
@@ -456,6 +458,7 @@ void MainComponent::wirePluginScanAndRecents() {
         auto snippet = graphEditor.snippetProvider(name);
         if (!snippet.isObject())
             return;
+        ensureCanvasShowing();
         graphEditor.insertSnippetAt(snippet, graphEditor.getViewportCentreInCanvasSpace());
     };
     refreshPluginLibrary();

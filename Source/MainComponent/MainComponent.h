@@ -22,6 +22,7 @@
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
+#include "Project/ViewDoc.h"
 #include "ProjectBundle.h"
 #include "RecentProjects.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -37,6 +38,7 @@
 #include "Transport/TransportDoc.h"
 #include "Transport/TransportNudge.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Chrome/Toast/ToastComponent.h"
@@ -49,6 +51,7 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/MainViewHolder.h"
+#include "UI/Layout/MainViewSwapMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
@@ -211,6 +214,7 @@ public:
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
+    synth::ui::CanvasToolbar& getCanvasToolbar() { return canvasToolbar_; }
     StatusBarComponent& getStatusBar() { return statusBar; }
     synth::AIChatComponent& getAiChatComponent() { return aiChatComponent; }
     ShortcutManager& getShortcutManager() { return shortcutManager; }
@@ -318,6 +322,8 @@ public:
      *  in main), and lays out. Nothing in the app does this yet. False when the dock refuses (a detached view). */
     bool setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
     juce::Component& getMainViewHolderForTest() noexcept { return mainViewHolder_; }
+    synth::ui::MainViewSwapMotion& getMainViewSwapMotionForTest() noexcept { return mainViewSwapMotion_; }
+    void applyLoadedCanvasViewForTest(const synth::ViewDoc& view) { applyLoadedCanvasView(view); }
     void simulateNewPatchClick();
     void simulateUndoClick();
     void simulateRedoClick();
@@ -711,6 +717,8 @@ private:
     void applyToolbarIcons();
     // Sets every toolbar button's screen-reader name, and its visible text unless `iconOnly`.
     void applyToolbarLabels(bool iconOnly);
+    /** Re-applies the labels when the "Show button labels" preference changed; called on every settings write. */
+    void applyToolbarLabelPreference();
     void applyStoredDualIOPreferenceToPatch();
     juce::String computeOutputDeviceInfoText() const;
     void setLibraryVisible(bool v);
@@ -787,9 +795,11 @@ private:
     synth::ui::ToolbarButton undoButton{"undo"};
     synth::ui::ToolbarButton redoButton{"redo"};
     synth::ui::ToolbarButton toggleAiPanelButton{"toggleAi"};
-    synth::ui::ToolbarButton toggleModMatrixButton{"toggleMatrix"};
-    synth::ui::ToolbarButton toggleMinimapButton{"toggleMinimap"};
-    synth::ui::ToolbarButton autoArrangeButton{"autoArrange"};
+    // Auto Arrange, Minimap and Matrix live on the canvas's own top row; the names below are the toolbar's buttons.
+    synth::ui::CanvasToolbar canvasToolbar_;
+    synth::ui::ToolbarButton& toggleModMatrixButton = canvasToolbar_.matrixButton();
+    synth::ui::ToolbarButton& toggleMinimapButton = canvasToolbar_.minimapButton();
+    synth::ui::ToolbarButton& autoArrangeButton = canvasToolbar_.autoArrangeButton();
     synth::ui::ToolbarButton toggleLibraryButton{"toggleLibrary"};
     synth::ui::ToolbarButton toggleBottomPanelButton{"toggleBottomPanel"};
     synth::ui::ToolbarButton themeToggleButton{"toggleTheme"};
@@ -832,6 +842,7 @@ private:
         aiApplyScope; // AI apply span; its own slot because the pair may be unbalanced
 
     bool toolbarNarrowMode_{false}; // applyToolbarIcons() re-clones icons only on the transition
+    bool toolbarLabelsShown_{true}; // the last-applied "Show button labels" preference
     int statusBarTickCount_{0};     // status bar updates every 2nd 10 Hz tick
 
     juce::String currentPatchName_{"Default"}; // declared before statusBar
@@ -877,14 +888,25 @@ private:
     // Gives the main area to the canvas or, for another main view, to mainViewHolder_.
     void layoutMainView(juce::Rectangle<int> mainArea);
     void handleMainViewChanged();
+    // The swap motion (MainComponentMainViewMotion.cpp): pictures the main area before a swap, plays it after.
+    void wireMainViewHooks();
+    void beginMainViewSwapMotion();
+    void playMainViewSwapMotion();
     // True while `view` (Timeline or MIDI Remote) is in the main area or is the open dock's active tab.
     bool isViewOnScreen(synth::ui::BottomDockComponent::Tab view) const;
     // Focuses the main view's region when it is open (a main area left empty has none open).
     void focusMainViewIfOpen();
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
-    bool canvasInDockLayout_ = false;    // the canvas was last laid into the dock (not the main area)
-    bool canvasRecentrePending_ = false; // it just moved there: fit its view once it is showing and settled
+    // Restores the zoom and pan the canvas had in the main area (see canvasMainView_).
+    void restoreCanvasMainView();
+    // Applies a loaded project's canvas view; while the canvas sits in the panel it becomes the main-area view.
+    void applyLoadedCanvasView(const synth::ViewDoc& view);
+    juce::Rectangle<int> mainAreaBounds_; // where layoutMainView last put the main view
+    bool canvasInDockLayout_ = false;     // the canvas was last laid into the dock (not the main area)
+    bool canvasRecentrePending_ = false;  // it just moved there: fit its view once it is showing and settled
+    // The canvas's zoom and pan as the main area had them, kept while it sits in the panel so it returns as it was.
+    std::optional<synth::ViewDoc> canvasMainView_;
 
     // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
     void focusDockTabStripIfShowing();
@@ -906,6 +928,8 @@ private:
     synth::ui::PanelSlide timelineSlide_;
 
     static constexpr double kPanelSlideMs = 190.0; // shared by all three slides
+
+    synth::ui::MainViewSwapMotion mainViewSwapMotion_{*this}; // layers over the main area and the panel body
 
     const synth::ui::PanelSlide& panelSlide(SlidingPanel p) const noexcept;
     synth::ui::PanelSlide& panelSlide(SlidingPanel p) noexcept;
