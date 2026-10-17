@@ -83,6 +83,7 @@ public:
     void holdStructureNotify(bool begin) override;
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
+    void completeModMatrixSlideForTest() { modMatrixAnim.completeForTest(); }
 
     // ---- Minimap ----
     void setMinimapVisible(bool shouldBeVisible);
@@ -901,9 +902,8 @@ private:
     float smartPreviewReveal_ = 1.0f;
     synth::ui::AnimationDriver smartPreviewRevealAnim_;
 
-    // Mod-matrix panel ease; modMatrixTargetBounds is the final position set on complete.
-    synth::ui::AnimationDriver modMatrixAnim;
-    juce::Rectangle<int> modMatrixTargetBounds;
+    synth::ui::AnimationDriver modMatrixAnim;   // Mod-matrix panel ease
+    juce::Rectangle<int> modMatrixTargetBounds; // its final position, set on complete
 
     // Macro-crossing cable slide + module flash: tween state (MacroCrossingAnimator.h) plus its driver.
     MacroCrossingAnimator macroCrossingAnim_;

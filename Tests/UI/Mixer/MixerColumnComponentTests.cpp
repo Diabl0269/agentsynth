@@ -434,3 +434,85 @@ TEST(MixerColumnComponentTests, RenamingABoxedStripGoesToItsMacroNotASecondStrip
     EXPECT_TRUE(strip->getStripName().isEmpty())
         << "never ALSO written to the strip's own name -- that would be a second, competing name for one column";
 }
+
+namespace {
+
+// A strip column on its own (no panel), with `inserts` listed after the strip's node.
+struct EditOnCanvasRig {
+    AudioEngine engine;
+    AppUndoManager undoManager;
+    std::unique_ptr<GraphEditor> editor;
+    synth::ui::MixerColumnComponent column;
+    juce::AudioProcessorGraph::Node::Ptr stripNode;
+    synth::MixerColumn model;
+    juce::String clicked;
+
+    EditOnCanvasRig() {
+        auto& graph = engine.getGraph();
+        graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+        editor = std::make_unique<GraphEditor>(engine, &undoManager);
+        editor->setSize(900, 600);
+        stripNode = addUuidNode(graph, std::make_unique<ChannelStripModule>(), "strip-uuid");
+        dynamic_cast<ChannelStripModule*>(stripNode->getProcessor())->setShape(ChannelStripModule::Shape::Stereo);
+        column.configure(graph, undoManager, editor->getMacros(), *editor, engine);
+        column.setSize(140, 300);
+        column.onEditOnCanvas = [this](const juce::String& target) { clicked = target; };
+        model.nodeId = stripNode->nodeID;
+        model.uuid = "strip-uuid";
+        model.name = "Strip";
+        model.insertChainIsLinear = true;
+        model.sourceNodeId = stripNode->nodeID; // anything but empty: the chain has a start to add after
+    }
+
+    synth::ui::TrackShowModuleButton& button() { return column.getHeaderForTest().getEditOnCanvasButtonForTest(); }
+};
+
+} // namespace
+
+// Regression test for FRO894: the column always carries an "Edit on canvas" button, named and tooltipped like the
+// timeline header's target button, and the "+ Insert" row is not what it turns into.
+TEST(MixerColumnComponentTests, EveryColumnShowsAnEditOnCanvasButtonBesideItsInsertRow) {
+    EditOnCanvasRig rig;
+    rig.column.setColumn(rig.model, "");
+
+    auto& button = rig.button();
+    EXPECT_TRUE(button.isShowing() || button.isVisible());
+    EXPECT_TRUE(button.getWantsKeyboardFocus()) << "a Tab stop, like the track header's button";
+    EXPECT_EQ(button.getTitle(), "Edit Strip on canvas");
+    EXPECT_TRUE(button.getTooltip().containsIgnoreCase("canvas"));
+    EXPECT_TRUE(rig.column.getInsertListForTest().hasAddRow()) << "an editable chain still ends in \"+ Insert\"";
+
+    button.triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    EXPECT_EQ(rig.clicked, "strip-uuid") << "an unboxed straight chain edits the channel itself";
+}
+
+TEST(MixerColumnComponentTests, TheEditOnCanvasButtonStaysWhenTheChainBranchesAndTargetsItsMacro) {
+    EditOnCanvasRig rig;
+    rig.model.insertChainIsLinear = false;
+    rig.model.editOnCanvasTargetUuid = "macro-1";
+    rig.column.setColumn(rig.model, "");
+
+    EXPECT_FALSE(rig.column.getInsertListForTest().hasAddRow()) << "a read-only chain has no \"+ Insert\"";
+    EXPECT_EQ(rig.column.getInsertListForTest().getRowCount(), 0) << "and no link row stands in for it";
+    EXPECT_TRUE(rig.button().isVisible()) << "the button does not come and go with the chain's shape";
+    EXPECT_EQ(rig.button().getTitle(), "Edit Strip on canvas");
+
+    rig.button().triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    EXPECT_EQ(rig.clicked, "macro-1");
+}
+
+TEST(MixerColumnComponentTests, TheEditOnCanvasButtonPressesFromTheKeyboardAndFollowsTheChannelName) {
+    EditOnCanvasRig rig;
+    rig.column.setColumn(rig.model, "");
+    rig.model.name = "Lead";
+    rig.column.setColumn(rig.model, "");
+
+    EXPECT_EQ(rig.button().getTitle(), "Edit Lead on canvas");
+    EXPECT_TRUE(rig.button().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(rig.clicked, "strip-uuid");
+    rig.clicked.clear();
+    EXPECT_TRUE(rig.button().keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(rig.clicked, "strip-uuid");
+}

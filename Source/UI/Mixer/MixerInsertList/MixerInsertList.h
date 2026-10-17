@@ -2,6 +2,7 @@
 
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListPlan.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -38,8 +39,8 @@ class ModMatrixPicker;
 // outlives the list, so a column rebuilt after an edit keeps it. Rows can be bypassed, moved within their path and
 // removed; the split row's bypass covers every module under it.
 //
-// Any other branch: the same list, read-only, plus a bottom "Edit on canvas" link that resolves and
-// selects editOnCanvasTargetUuid exactly like a column header click does.
+// Any other branch: the same list, read-only (no "+ Insert" row; the column header's "Edit on canvas" button is the
+// way into the canvas for every chain, whatever its shape).
 //
 // Row indices in this API are the rows on screen: a folded split's paths have none.
 namespace synth::ui {
@@ -57,13 +58,10 @@ public:
 
     /** `stripNodeId` is the node the chain feeds: the strip itself, or Master's chain terminator. */
     void setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
-                    const juce::String& editOnCanvasTargetUuid, juce::AudioProcessorGraph::NodeID sourceNodeId,
-                    juce::AudioProcessorGraph::NodeID stripNodeId);
+                    juce::AudioProcessorGraph::NodeID sourceNodeId, juce::AudioProcessorGraph::NodeID stripNodeId);
 
     /** Fires when a split folds or opens (every frame while it animates): the column re-reads getPreferredHeight(). */
     std::function<void()> onPreferredHeightChanged;
-    /** Fires when "Edit on canvas" is clicked, with editOnCanvasTargetUuid. */
-    std::function<void(const juce::String&)> onEditOnCanvas;
     /** Fires after a mutation changed the graph -- the caller runs its own post-topology-change
      *  reconcile (MainComponent::reconcileTimelineAfterGraphChange). */
     std::function<void()> onMutated;
@@ -91,6 +89,10 @@ public:
     /** What a screen reader says for the row: "Insert 2, Compressor", "Insert 3, split into 2 paths, folded",
      *  "Insert 4, Delay 1, path 1". Empty when out of range. */
     juce::String describeRow(int rowIndex) const;
+    /** The motion's view of the list: every entry's row key, and the rows on screen (the "+ Insert" row excluded) in
+     *  this list's coordinates. See MixerRowsMotion. */
+    std::vector<juce::String> entryKeys() const;
+    std::vector<ExitEnterListRow> motionRows() const;
     /** The row's module uuid (what "select on canvas" resolves), or empty when out of range or a split row. */
     juce::String getRowUuid(int rowIndex) const;
     /** A linear or split chain can be edited row by row; any other branch is read-only. */
@@ -249,7 +251,6 @@ private:
     juce::VBlankAnimatorUpdater vblank_{this};
     AnimationDriver foldAnimation_;
     int focusedRow_ = -1;
-    juce::String editOnCanvasTargetUuid_;
     // The row boundary the pointer is on with a "+" showing there, or -1.
     int hoverGap_ = -1;
     juce::AudioProcessorGraph::NodeID sourceNodeId_;

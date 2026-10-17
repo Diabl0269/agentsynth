@@ -97,8 +97,7 @@ struct MasterListFixture {
         juce::StringArray names;
         if (column == nullptr)
             return names;
-        list.setEntries(column->inserts, column->insertChainIsLinear, column->editOnCanvasTargetUuid,
-                        column->sourceNodeId, column->chainEndNodeId);
+        list.setEntries(column->inserts, column->insertChainIsLinear, column->sourceNodeId, column->chainEndNodeId);
         for (const auto& entry : column->inserts)
             names.add(entry.name);
         return names;

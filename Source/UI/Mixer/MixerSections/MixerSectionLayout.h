@@ -19,7 +19,7 @@ public:
     static constexpr int kInsertRowHeight = 18;
     static constexpr int kSendRowHeight = 20;
     static constexpr int kEqHeight = 28;
-    static constexpr int kDefaultInsertRows = 5; // 4 inserts plus the link row: 90 px
+    static constexpr int kDefaultInsertRows = 5; // 4 inserts plus the "+ Insert" row: 90 px
     static constexpr int kDefaultSendRows = 3;   // 2 sends plus "+ Send": 60 px
     static constexpr int kMaxRows = 16;
 

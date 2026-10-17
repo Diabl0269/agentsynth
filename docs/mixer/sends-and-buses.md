@@ -152,6 +152,14 @@ assignment cache (`MidiLearnController::publishAssignments()`) right after its o
 the undo/redo postRestore, so a hardware control already resolves against the send's new slot with no
 separate reconcile step.
 
+**The commit must not rebuild the mixer from inside itself.** That edit's undo step wakes the
+structure-changed catch-up (`rebuildIfStale`), which would destroy the send list whose `moveRow` is still
+running; its next line, `onMutated()`, then reads freed members (a segfault on Linux through
+`MixerColumnComponent`'s `onMutated` lambda, silent on macOS). The move provider in
+`MixerPanelColumnReuse.cpp` holds `rebuildIfStale()` and `rebuildWhenShown()` for the length of
+`moveSendRow` (`rebuildHoldDepth_`), so the one rebuild is the `onMutated()` that follows. Test:
+`MixerSendListDragTests.TheListIsStillAliveWhenItsMoveReturnsAndTheMixerRebuildsOnce`.
+
 ## Pre and post, mute and bypass
 
 **Pre-fader is tapped after the hygiene and mono duplication and before gain and pan; post-fader

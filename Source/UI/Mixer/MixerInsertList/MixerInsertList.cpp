@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Mixer/MixerRowsMotion.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <set>
@@ -46,7 +47,6 @@ void MixerInsertList::configure(juce::AudioProcessorGraph& graph, AppUndoManager
 }
 
 void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
-                                 const juce::String& editOnCanvasTargetUuid,
                                  juce::AudioProcessorGraph::NodeID sourceNodeId,
                                  juce::AudioProcessorGraph::NodeID stripNodeId) {
     foldAnimation_.stop(vblank_);
@@ -54,7 +54,6 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
     entries_ = entries;
     linear_ = linear;
     hasSplits_ = std::any_of(entries_.begin(), entries_.end(), [](const auto& e) { return e.kind == Kind::Split; });
-    editOnCanvasTargetUuid_ = editOnCanvasTargetUuid;
     sourceNodeId_ = sourceNodeId;
     stripNodeId_ = stripNodeId;
     refreshRows();
@@ -330,6 +329,23 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
     }
 }
 
+std::vector<juce::String> MixerInsertList::entryKeys() const {
+    std::vector<juce::String> keys;
+    for (const auto& entry : entries_)
+        keys.push_back(MixerRowsMotion::insertKey(entry));
+    return keys;
+}
+
+std::vector<ExitEnterListRow> MixerInsertList::motionRows() const {
+    std::vector<ExitEnterListRow> rows;
+    for (size_t i = 0; i < visible_.size(); ++i) {
+        const auto bounds = getRowBounds((int)i);
+        rows.push_back({MixerRowsMotion::insertKey(entries_[(size_t)visible_[i]]), (float)bounds.getY(),
+                        (float)bounds.getHeight()});
+    }
+    return rows;
+}
+
 juce::Rectangle<int> MixerInsertList::getRowBounds(int rowIndex) const {
     if (isAddRow(rowIndex))
         return getLocalBounds().withY(listedRowsHeight()).withHeight(kRowHeight);
@@ -381,13 +397,11 @@ juce::String MixerInsertList::tooltipAt(juce::Point<int> mouse) const {
                                            : ": a branching chain, edit it on the canvas");
     }
     if (!isEditable())
-        return "Select this channel's insert chain on the canvas";
+        return "A branching chain: edit it on the canvas";
     return "Insert chain";
 }
 
-int MixerInsertList::getPreferredHeight() const noexcept {
-    return contentHeight() + (isEditable() ? 0 : kRowHeight); // + the "Edit on canvas" link row
-}
+int MixerInsertList::getPreferredHeight() const noexcept { return contentHeight(); }
 
 int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
     if (position.y < 0)
@@ -472,11 +486,6 @@ void MixerInsertList::paint(juce::Graphics& g) {
         g.setColour(theme.colors.bg0);
         g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
         g.drawText("+", dot.translated(0.0f, -0.5f), juce::Justification::centred, false);
-    }
-    if (!isEditable()) {
-        auto linkRow = getLocalBounds().withY(contentHeight()).withHeight(kRowHeight);
-        g.setColour(accent);
-        g.drawText("Edit on canvas", linkRow.reduced(2, 0), juce::Justification::centredLeft, true);
     }
 }
 

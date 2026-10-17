@@ -1,12 +1,8 @@
-// MixerInsertListTests.cpp -- MixerInsertList's own paint()/mouseDown()
-// overlap bug, and the moveRow regression the bus insert-discovery fix opened.
+// MixerInsertListTests.cpp -- MixerInsertList's read-only state, and the moveRow regression the bus
+// insert-discovery fix opened.
 //
-//   * overlap  -- when the list has zero entries AND is non-linear, the "(no inserts)" placeholder
-//                 and the "Edit on canvas" link used to anchor at the SAME row (both at
-//                 entries_.size() * kRowHeight == 0), so a click meant for the placeholder's row
-//                 fired onEditOnCanvas too. Proven behaviourally (mouseDown's hit test), not by
-//                 pixel-diffing paint() -- see this file's own comment on the fix for why the two
-//                 methods share one anchor formula.
+//   * read-only -- a branching chain lists its rows with no "+ Insert" row and no link row of its own: the column
+//                  header's "Edit on canvas" button is the way into the canvas (MixerColumnComponentTests.cpp).
 //   * moveRow  -- a bus's sourceNodeId_ is invalid (no external predecessor -- docs/mixer/mixer.md
 //                 docs/mixer/sends-and-buses.md D6), so moving a row to the very front of its chain must refuse rather
 //                 than splice against an invalid id and orphan the node (reorderInsert's second step has no rollback of
@@ -17,6 +13,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerInsertList/MixerInsertList.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -30,27 +27,23 @@ juce::MouseEvent makeMouseDownAt(juce::Component& component, juce::Point<int> po
 
 } // namespace
 
-TEST(MixerInsertListTests, EmptyNonLinearListDoesNotOverlapThePlaceholderAndTheEditOnCanvasLink) {
+// Regression test for FRO894: a chain that stops being editable swapped its "+ Insert" row for an "Edit on canvas"
+// link row that did nothing. The list now has no link row at all; "+ Insert" is simply absent while read-only.
+TEST(MixerInsertListTests, AReadOnlyListHasNoLinkRowAndAClickOnItDoesNothing) {
     synth::ui::MixerInsertList list;
-    list.setEntries({}, /*linear=*/false, "target-uuid", {}, {});
+    list.setEntries({}, /*linear=*/false, {}, {});
     list.setSize(140, list.getPreferredHeight());
 
-    // getPreferredHeight() for zero entries, non-linear: one placeholder row + one link row.
-    const int rowHeight = list.getPreferredHeight() / 2;
-    ASSERT_GT(rowHeight, 0);
+    EXPECT_EQ(list.getPreferredHeight(), synth::ui::MixerSectionLayout::kInsertRowHeight)
+        << "the empty state is one placeholder row, no link row beneath it";
+    EXPECT_FALSE(list.hasAddRow());
+    EXPECT_EQ(list.getRowCount(), 0);
 
-    juce::String captured;
-    list.onEditOnCanvas = [&](const juce::String& uuid) { captured = uuid; };
-
-    // A click inside row 0 (the "(no inserts)" placeholder) must NOT be treated as the link --
-    // before the fix, linkRowTop was entries_.size() * kRowHeight == 0, so this click hit it too.
-    list.mouseDown(makeMouseDownAt(list, {10, rowHeight / 2}));
-    EXPECT_TRUE(captured.isEmpty()) << "the empty-state placeholder row must not double as the link";
-
-    // A click inside row 1 (the actual link row, now correctly shifted past the placeholder) must
-    // fire onEditOnCanvas.
-    list.mouseDown(makeMouseDownAt(list, {10, rowHeight + rowHeight / 2}));
-    EXPECT_EQ(captured, "target-uuid") << "the link row itself must still work";
+    bool mutated = false;
+    list.onMutated = [&] { mutated = true; };
+    list.mouseDown(makeMouseDownAt(list, {10, synth::ui::MixerSectionLayout::kInsertRowHeight / 2}));
+    list.mouseDown(makeMouseDownAt(list, {10, synth::ui::MixerSectionLayout::kInsertRowHeight + 4}));
+    EXPECT_FALSE(mutated);
 }
 
 TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningIt) {
@@ -79,8 +72,7 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
 
     synth::ui::MixerInsertList list;
     list.configure(graph, undoManager, editor.getMacros(), editor);
-    list.setEntries(busColumn->inserts, busColumn->insertChainIsLinear, busColumn->editOnCanvasTargetUuid,
-                    busColumn->sourceNodeId, busColumn->nodeId);
+    list.setEntries(busColumn->inserts, busColumn->insertChainIsLinear, busColumn->sourceNodeId, busColumn->nodeId);
 
     bool mutated = false;
     list.onMutated = [&] { mutated = true; };

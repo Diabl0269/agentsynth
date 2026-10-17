@@ -15,6 +15,7 @@
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
 #include "UI/Mixer/MixerRowFocus.h"
+#include "UI/Mixer/MixerRowsMotion.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -368,7 +369,14 @@ public:
     void resized() override;
 
 private:
+    /** What a column's canvas target resolves to: a macro to select, else a bare node. */
+    struct CanvasTarget {
+        juce::String macroId;
+        juce::AudioProcessorGraph::NodeID nodeId;
+    };
+    std::optional<CanvasTarget> resolveCanvasTarget(const juce::String& targetId) const;
     void selectOnCanvas(const juce::String& targetId);
+    void revealOnCanvas(const juce::String& targetId);
     // ---- Colour dot -- implemented in MixerPanelColour.cpp ----
     ColourRoute colourRouteFor(const std::vector<synth::TrackId>& feedingTracks, const juce::String& uuid) const;
     void openColourPicker(const juce::String& uuid, juce::Rectangle<int> dotScreenBounds);
@@ -387,7 +395,12 @@ private:
     bool columnsUnbound_ = false;
     /** A rebuildIfStale() came in while the panel was hidden and did nothing; visibilityChanged() runs it. */
     bool staleCheckPending_ = false;
-    bool rebuildPending_ = false;                // a rebuildWhenShown() came in while hidden
+    bool rebuildPending_ = false; // a rebuildWhenShown() came in while hidden
+    /** Above 0 while a column's own mutation is mid-flight: rebuildIfStale() / rebuildWhenShown() do nothing, because
+     *  they would destroy the list that is still committing. The mutation's own onMutated() does the one rebuild. */
+    int rebuildHoldDepth_ = 0;
+    /** The rows of the strip columns the running rebuildFrom() replaced, by column uuid (MixerRowsMotion). */
+    std::vector<std::pair<juce::String, MixerRowsMotion::Snapshot>> pendingRowMotions_;
     int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
     /** rebuild() with the snapshot already built (and its saved bus order applied) by the caller. */

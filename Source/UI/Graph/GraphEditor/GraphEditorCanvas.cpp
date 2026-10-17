@@ -389,13 +389,15 @@ void GraphEditor::toggleModMatrixVisibility() {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     modMatrixAnim.start(
         vblankUpdater, 220.0, synth::ui::easeOutCubic,
-        [safeThis, fromBounds, toBounds](float t) {
+        [safeThis, fromBounds](float t) {
             if (auto* self = safeThis.getComponent())
-                self->modMatrix.setBounds(synth::ui::AnimationDriver::lerpBounds(fromBounds, toBounds, t));
+                self->modMatrix.setBounds(
+                    synth::ui::AnimationDriver::lerpBounds(fromBounds, self->modMatrixTargetBounds, t));
         },
-        [safeThis, hidingAfterAnim, toBounds]() {
+        [safeThis, hidingAfterAnim]() {
             if (auto* self = safeThis.getComponent()) {
-                self->modMatrix.setBounds(toBounds);
+                // The target resized() kept current, so a canvas resize mid-slide lands where the canvas is now.
+                self->modMatrix.setBounds(self->modMatrixTargetBounds);
                 if (hidingAfterAnim)
                     self->modMatrix.setVisible(false);
             }

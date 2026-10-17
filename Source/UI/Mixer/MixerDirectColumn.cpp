@@ -18,7 +18,8 @@ MixerDirectColumn::MixerDirectColumn() {
     setTitle("Direct");
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
-    header_.setRenameEnabled(false); // Direct has no node, so no strip/macro name to write a rename to
+    header_.setRenameEnabled(false);     // Direct has no node, so no strip/macro name to write a rename to
+    header_.setEditOnCanvasShown(false); // ...and nothing on the canvas to edit
     addAndMakeVisible(makeChannelButton_);
     // Explicit, rather than relying on Button::getButtonText()'s fallback (the ctor's
     // "Make channel" argument already IS the button text, but a title makes the AX handler's

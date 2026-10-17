@@ -680,6 +680,7 @@ add_executable(Tests
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
+    UI/Mixer/MixerRowsMotionTests.cpp
     UI/Mixer/MixerSendListDragTests.cpp
     UI/Mixer/MixerSendListKeyTargetTests.cpp
     UI/Mixer/MixerSendListMacroPortTests.cpp

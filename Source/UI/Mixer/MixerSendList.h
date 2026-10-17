@@ -4,6 +4,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListPlan.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
@@ -90,6 +91,10 @@ public:
     /** -1 clears; any other row is scrolled into the section's frame. */
     void setFocusedRow(int rowIndex);
     int getFocusedRow() const noexcept { return focusedRow_; }
+    /** The motion's view of the list: every row's key, and the rows on screen ("+ Send" excluded) in this list's
+     *  coordinates. See MixerRowsMotion. */
+    std::vector<juce::String> entryKeys() const;
+    std::vector<ExitEnterListRow> motionRows() const;
     /** Row `rowIndex`'s bounds in this list's coordinates; empty when out of range. */
     juce::Rectangle<int> getRowBounds(int rowIndex) const;
     /** What a screen reader says for the row: "Send to Reverb Bus, -6.0 dB". Empty when out of range. */
@@ -138,7 +143,8 @@ public:
      *  success, onMutated(), same shape as every other row mutation's mutateAndNotify. A synthesized
      *  test drag (mouseDown/mouseDrag past the threshold/mouseUp on the name area) reaches this
      *  through the real mouse path; a test that wants to skip the gesture can call it directly.
-     *  onMutated() normally rebuilds the mixer and destroys this list: nothing may follow moveRow(). */
+     *  onMutated() normally rebuilds the mixer and destroys this list: nothing may follow moveRow(). The
+     *  panel holds its own stale-check rebuild while moveSendRow runs, so the list outlives that call. */
     void moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     /** Modules whose Key input this strip may feed (synth::enumerateKeySendTargets). */

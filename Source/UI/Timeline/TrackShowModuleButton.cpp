@@ -24,9 +24,14 @@ TrackShowModuleButton::TrackShowModuleButton()
 
 void TrackShowModuleButton::setTrack(const juce::String& trackName, const juce::String& shortcutText) {
     const juce::String name = trackName.isNotEmpty() ? trackName : juce::String("track");
-    setTitle("Show " + name + " module");
-    setTooltip("Show " + name + "'s module on the canvas; an instrument's window opens, or closes if open (" +
-               shortcutText + ")");
+    setTexts("Show " + name + " module",
+             "Show " + name + "'s module on the canvas; an instrument's window opens, or closes if open (" +
+                 shortcutText + ")");
+}
+
+void TrackShowModuleButton::setTexts(const juce::String& title, const juce::String& tooltip) {
+    setTitle(title);
+    setTooltip(tooltip);
     repaint();
 }
 
