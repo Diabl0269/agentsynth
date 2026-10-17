@@ -187,6 +187,10 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
     // panel/Window placement have their own, unrelated detach state, MixerPlacementController's).
     if (!enabled && mixerMirror_.isOpen())
         mixerMirror_.close();
+    // The Mixer in the main area goes back to the dock first, so the placement controller takes its host from
+    // the dock, not from the main-area holder.
+    if (!enabled && getMainView() == Tab::Mixer)
+        setMainView(Tab::Canvas);
     // No separate "was Mixer active?" branch needed any more -- applyTabVisibility() picks
     // a fallback active tab itself whenever the current one stops being offered, which disabling
     // Mixer while it's active is just one more instance of (a detach is the other).

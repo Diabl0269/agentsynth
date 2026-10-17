@@ -11,10 +11,13 @@ namespace synth::ui {
 // The view that comes down takes over as the active tab when the dock was showing the one that went
 // up, so the dock keeps showing something in the same place; otherwise the active tab stays (or
 // falls back through applyTabVisibility() if it is no longer offered). A view open in its own window
-// is refused: its panel lives in that window, not in the host that would move. Nothing in the app
-// calls this with a view other than the canvas yet (MainComponent::setMainViewForTest does).
+// is refused: its panel lives in that window, not in the host that would move. So is the Mixer outside
+// the Tab placement, where MixerPlacementController owns its host. Nothing in the app calls this with a
+// view other than the canvas yet (MainComponent::setMainViewForTest does).
 bool BottomDockComponent::setMainView(Tab view) {
     if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
+        return false;
+    if (view == Tab::Mixer && !mixerTabEnabled_)
         return false;
     const Tab previous = tabModel_.getMainView();
     if (!tabModel_.setMainView(view))
@@ -37,9 +40,10 @@ void BottomDockComponent::setMainAreaHolder(juce::Component* holder) {
 
 // A JUCE child is clipped to its parent, so the dock cannot show a view over the main area itself: the
 // view's whole host moves into MainComponent's holder (the Own-panel placement's move, generalised), and
-// with it the panel's side pane and detach state. The Mixer stays here until the main area can host it.
+// with it the panel's side pane and detach state. The Mixer goes only in the Tab placement; in Own panel
+// or Window its host belongs to MixerPlacementController.
 DetachablePanelHost* BottomDockComponent::mainAreaHostFor(Tab view) noexcept {
-    if (mainAreaHolder_ == nullptr || view == Tab::Mixer)
+    if (mainAreaHolder_ == nullptr || (view == Tab::Mixer && !mixerTabEnabled_))
         return nullptr;
     return hostForTab(view);
 }
@@ -65,6 +69,8 @@ void BottomDockComponent::placeMainViewHost() {
     // Catches up on whatever changed while it was a hidden tab, as a switch to its tab does (applyTabVisibility).
     if (wanted == &midiRemoteHost_)
         midiRemotePanel_.rebuildFromProfiles();
+    else if (wanted == &mixerHost_)
+        mixer_->rebuildWhenShown();
 }
 
 FadeVisibility& BottomDockComponent::fadeForHost(const DetachablePanelHost& host) noexcept {

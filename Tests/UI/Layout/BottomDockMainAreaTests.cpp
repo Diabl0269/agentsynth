@@ -2,9 +2,8 @@
 // MainComponent's holder at the canvas's rect, on screen with the bottom panel closed (edit commands, the
 // playhead gate, focus regions), and back in the dock when the canvas returns (docs/layout/chrome.md#the-main-view).
 // Reached only through MainComponent::setMainViewForTest: nothing shipped moves another view into main yet.
-#include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
-#include "BottomDockActiveTabResetGuard.h"
+#include "BottomDockMainAreaFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -17,44 +16,6 @@ namespace {
 
 using synth::ui::BottomDockComponent;
 using Tab = BottomDockComponent::Tab;
-
-class BottomDockMainAreaTest : public MainComponentTest {
-protected:
-    void SetUp() override {
-        MainComponentTest::SetUp();
-        resetGuard_.emplace();
-        build();
-    }
-    void TearDown() override {
-        mc_.reset();
-        resetGuard_.reset();
-        MainComponentTest::TearDown();
-    }
-    void build() {
-        mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
-        mc_->setSize(1400, 900);
-        mc_->newPatchForTest();
-    }
-
-    BottomDockComponent& dock() { return mc_->getBottomDock(); }
-    juce::Component& holder() { return mc_->getMainViewHolderForTest(); }
-    synth::ui::TimelinePanelComponent& timeline() { return mc_->getTimelinePanel(); }
-    bool regionOpen(const char* id) {
-        const auto* region = mc_->getFocusRegionsForTest().findById(id);
-        return region != nullptr && region->isCurrentlyOpen();
-    }
-    juce::Rectangle<int> regionBounds(const char* id) {
-        return mc_->getFocusRegionsForTest().findById(id)->root->getBounds();
-    }
-    bool commandActive(juce::CommandID id) {
-        juce::ApplicationCommandInfo info(id);
-        mc_->getCommandInfo(id, info);
-        return (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0;
-    }
-
-    std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
-    std::unique_ptr<MainComponent> mc_;
-};
 
 } // namespace
 
@@ -172,12 +133,6 @@ TEST_F(BottomDockMainAreaTest, TheMidiRemotePanelInMainIsShowingWithThePanelClos
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Canvas));
     EXPECT_EQ(dock().getMidiRemoteHost().getParentComponent(), &dock());
     EXPECT_FALSE(dock().isMidiRemoteShowing());
-}
-
-TEST_F(BottomDockMainAreaTest, TheMixerStaysInTheDockForNow) {
-    ASSERT_TRUE(mc_->setMainViewForTest(Tab::Mixer));
-    EXPECT_FALSE(dock().isInMainArea(Tab::Mixer));
-    EXPECT_FALSE(holder().isVisible()) << "the main area is left empty";
 }
 
 TEST_F(BottomDockMainAreaTest, AViewInItsOwnWindowIsRefused) {

@@ -722,6 +722,8 @@ void MainComponent::finishPanelSlide() {
 // grows, through the panel's growHost -- the same clamped path a divider drag uses -- so the canvas
 // keeps the minimum the dock's own resize handle leaves it.
 void MainComponent::fitMixerHostToSections() {
+    if (bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer))
+        return; // fills the main area; growing would resize the shared panel height
     using Placement = synth::ui::MixerPlacementController::Placement;
     const bool ownPanelOpen =
         mixerPlacement_.isOwnPanelShowing() && mixerPlacement_.getCarveHeight() == mixerPlacement_.getOwnPanelHeight();

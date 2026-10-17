@@ -30,7 +30,8 @@ void BottomDockComponent::applyDetachBothPlacesPreference() {
             // Was "both" -- close the mirror and detach the real host instead, which is exactly
             // the "a detached tab leaves the strip" behaviour the default preference restores.
             mixerMirror_.close();
-            mixerHost_.setDetached(true);
+            if (!isInMainArea(Tab::Mixer)) // a host in the main area stays there; it cannot detach from it yet
+                mixerHost_.setDetached(true);
         }
     } else if (mixerMirror_.isOpen()) {
         // A mirror should never outlive Tab placement -- see setMixerTabEnabled()'s own comment.

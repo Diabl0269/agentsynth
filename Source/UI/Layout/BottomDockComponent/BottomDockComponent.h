@@ -85,7 +85,7 @@ public:
     /** The view in the main area (Canvas unless setMainView() moved another one up). */
     Tab getMainView() const noexcept { return tabModel_.getMainView(); }
     /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. False, and nothing
-     *  changes, when `view` is already there or is open in its own window. */
+     *  changes, when `view` is already there, is open in its own window, or is the Mixer outside the Tab placement. */
     bool setMainView(Tab view);
     /** MainComponent's main-area container. While the Timeline or MIDI Remote is the main view its host is a
      *  child of `holder`, and comes back here when it leaves. Set once; `holder` must outlive this dock. */
@@ -209,7 +209,7 @@ public:
     // Whether the Mixer tab itself is offered at all -- false when the Mixer
     // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
     // entirely in those modes; see that class). True (the default) is the existing Tab-placement
-    // behaviour, unchanged.
+    // behaviour, unchanged. Disabling it while the Mixer is the main view puts the canvas back in main.
     void setMixerTabEnabled(bool enabled);
 
     /** Re-applies visibility/z-order for the active tab, without a Mixer/MIDI Remote rebuild. */

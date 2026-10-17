@@ -331,7 +331,7 @@ grab point, the others glide aside, the order is applied and persisted on releas
 ### The main view
 
 The rect the canvas gets in the carve above is the **main area**, and one of four views fills it (`mainView`;
-the canvas unless `BottomDockComponent::setMainView()` moved another one up). With the Timeline or the MIDI Remote
+the canvas unless `BottomDockComponent::setMainView()` moved another one up). With the Timeline, the Mixer or the MIDI Remote
 panel there, the dock moves that view's whole `DetachablePanelHost` (not the bare panel, so its side pane and
 detach state travel with it) into `MainComponent`'s `MainViewHolder` (`Source/UI/Layout/MainViewHolder.h`), which
 `MainComponent::layoutMainView()` places at the main rect; the canvas goes to the dock as a tab (below). A JUCE
@@ -349,8 +349,12 @@ the activity tick, the meters, and the Timeline's edit commands through `resolve
 region's `open`, "Edit MIDI assignment...", adding a plugin automation lane) never opens the panel
 (`ensureDockOpenFor()`), and `setActiveTab()` ignores the main view. A project load's edit block covers the holder
 as well as the dock. `setMainView()` refuses a view that is open in its own window; while in main the host shows
-no header of its own, so it cannot be detached from there. The Mixer cannot be hosted yet: as the main view it
-leaves the main area empty. `MainComponent::setMainViewForTest` is the only way to put another view in main today.
+no header of its own, so it cannot be detached from there. The Mixer goes to main only in the Tab placement
+(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused), and
+leaving the Tab placement puts the canvas back first. In main the Mixer fills the area (`canGrowHost` is false,
+`growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
+region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
+a mirror already open closes without detaching the host). `MainComponent::setMainViewForTest` is the only way to put another view in main today.
 
 ### The canvas as a tab
 
