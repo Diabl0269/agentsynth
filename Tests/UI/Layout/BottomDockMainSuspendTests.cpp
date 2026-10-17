@@ -165,7 +165,7 @@ TEST_F(BottomDockMainSuspendTest, ASavedMainViewWhosePanelIsAlreadyInItsOwnWindo
     EXPECT_EQ(dock().getMainView(), Tab::Timeline);
 }
 
-TEST_F(BottomDockMainSuspendTest, TheDetachButtonNeverActsOnTheViewInTheMainArea) {
+TEST_F(BottomDockMainSuspendTest, TheViewInTheMainAreaHasNoTabAndTheCanvasTabHasNoDetachIcon) {
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
     for (Tab tab : {Tab::Canvas, Tab::Mixer, Tab::MidiRemote}) {
         dock().setActiveTab(tab);
@@ -173,7 +173,8 @@ TEST_F(BottomDockMainSuspendTest, TheDetachButtonNeverActsOnTheViewInTheMainArea
         EXPECT_FALSE(dock().getTimelineHost().isHeaderShownForTest()) << "the main view's host draws no header";
     }
     dock().setActiveTab(Tab::Canvas);
-    EXPECT_FALSE(dock().getDetachButtonForTest().isVisible()) << "the Canvas tab has nothing to detach";
+    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the Canvas tab has nothing to detach";
+    EXPECT_FALSE(dock().getDetachIcon(Tab::Timeline)->getParentComponent()->isVisible()) << "and no tab, so no icon";
     EXPECT_FALSE(dock().getTimelineHost().isDetached());
 }
 
@@ -203,7 +204,7 @@ TEST_F(BottomDockMainSuspendTest, TheBothPlacesMirrorLeavesTheMainAreaAlone) {
     dock().applyDetachBothPlacesPreference();
     mc_->ensureBottomDockOpen();
     dock().setActiveTab(Tab::Mixer);
-    dock().getDetachButtonForTest().onClick();
+    dock().getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock().isMixerMirrorOpenForTest());
 
     EXPECT_FALSE(dock().getMixerHost().isDetached()) << "the mirror is a second view, the host stays docked";

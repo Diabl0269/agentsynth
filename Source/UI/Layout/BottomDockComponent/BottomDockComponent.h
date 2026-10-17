@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/BottomDockComponent/BottomDockTabMotion.h"
 #include "UI/Layout/BottomDockTabModel.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DragCursor.h"
@@ -252,6 +253,7 @@ public:
     bool isMixerMirrorOpenForTest() const noexcept { return mixerMirror_.isOpen(); }
     MixerPanelComponent* getMixerMirrorPanelForTest() const noexcept { return mixerMirror_.getMirrorPanelForTest(); }
     bool isDetachBothPlacesEnabledForTest() const noexcept { return detachBothPlacesEnabled_; }
+    DetachedPanelWindow* getMixerMirrorWindowForTest() const noexcept { return mixerMirror_.getMirrorWindowForTest(); }
 
     /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
      *  placement (docs/mixer/panel.md's placement table: "Bottom dock: unaffected"). */
@@ -326,7 +328,6 @@ public:
     void resized() override;
     void paintOverChildren(juce::Graphics& g) override; // the lifted tab of a reorder drag
     bool hitTest(int x, int y) override;
-    void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
 
     /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
     static constexpr int kTabStripHeight = 24;
@@ -355,7 +356,8 @@ public:
         juce::String title;
         juce::AccessibilityRole role;
         bool selected;
-        juce::String swapTitle; // the name (and tooltip) of the swap button inside the tab
+        juce::String swapTitle;   // the name (and tooltip) of the swap button inside the tab
+        juce::String detachTitle; // the same for the detach button; empty for the Canvas, which has no window
     };
     static TabAccessibility describeTab(Tab tab, Tab activeTab);
     /** Replaces the panel focus grab, which needs a native window a headless test lacks. */
@@ -366,8 +368,18 @@ public:
     synth::ui::IconButton& getSwapIcon(Tab tab) noexcept;
     /** Test seam: receives each swap announcement instead of the screen reader. */
     void setAnnouncementHookForTest(std::function<void(const juce::String&)> hook) { announceHook_ = std::move(hook); }
-    /** Test seam: this dock's own detach/redock button. */
-    juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
+    /** The detach button inside `tab`'s strip button, left of its swap button; null for the Canvas, which has no
+     *  window to open into. Pressing it opens the tab's panel in its own window (with "both places" on, the Mixer's
+     *  opens a second view of it instead, and the button then closes that view). */
+    synth::ui::IconButton* getDetachIcon(Tab tab) noexcept;
+    /** True while the Mixer's "both places" second view is open; raiseMixerMirror() brings its window forward
+     *  without taking focus from the docked view. */
+    bool isMixerMirrorOpen() const noexcept { return mixerMirror_.isOpen(); }
+    void raiseMixerMirror() { mixerMirror_.raiseIfOpen(); }
+    /** Test seam: puts a running tab-strip motion at `elapsedMs` after it began (landing it when that is past its
+     *  end), since no VBlank reaches an off-screen strip. */
+    void stepTabMotionForTest(double elapsedMs);
+    bool isTabMotionRunningForTest() const noexcept { return tabMotion_.isRunning(); }
     /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade); never Canvas. */
     juce::Component& getTabHostForTest(Tab tab) noexcept { return *hostForTab(tab); }
     /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
@@ -403,10 +415,20 @@ private:
             addAndMakeVisible(swapIcon_);
             swapIcon_.setWantsKeyboardFocus(false);
             swapIcon_.onClick = [this] { owner_.swapTabToMain(tab_); };
+            if (hasDetachIcon()) {
+                addAndMakeVisible(detachIcon_);
+                detachIcon_.setWantsKeyboardFocus(false);
+                detachIcon_.onClick = [this] { owner_.toggleTabDetach(tab_); };
+            }
         }
-        /** The row of small icon buttons at the tab's right edge; the label keeps clear of it. */
+        /** The row of small icon buttons at the tab's right edge (swap rightmost, detach to its left); the label
+         *  keeps clear of it. The Canvas has no window, so its row has no detach button. */
         synth::ui::IconButton& getSwapIcon() noexcept { return swapIcon_; }
-        void setIconRowShown(bool shown) { swapIcon_.setVisible(shown); }
+        synth::ui::IconButton* getDetachIcon() noexcept { return hasDetachIcon() ? &detachIcon_ : nullptr; }
+        void setIconRowShown(bool shown) {
+            swapIcon_.setVisible(shown);
+            detachIcon_.setVisible(shown && hasDetachIcon());
+        }
         void resized() override;
         void paint(juce::Graphics& g) override;
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
@@ -429,9 +451,12 @@ private:
         }
 
     private:
+        bool hasDetachIcon() const noexcept { return tab_ != Tab::Canvas; }
+
         BottomDockComponent& owner_;
         Tab tab_;
         synth::ui::IconButton swapIcon_{"swapMainView", synth::theme::Glyph::Swap};
+        synth::ui::IconButton detachIcon_{"detachTab", synth::theme::Glyph::Detach};
     };
 
     // The strip's focusable leaf: transparent, behind the tab buttons, never hit by the mouse.
@@ -452,14 +477,21 @@ private:
     void selectTabAt(int offeredIndex);
     void repaintTabStrip() { repaint(0, 0, getWidth(), kTabStripHeight); }
     void paintTabFocusRing(juce::Graphics& g);
-    void paintSwapFocusRing(juce::Graphics& g);
+    /** The ring on the swap icon while Shift is held, on the detach icon while Option is held: the icon Return presses.
+     */
+    void paintIconFocusRing(juce::Graphics& g);
     /** Shift+Return on the strip: presses the active tab's swap icon. */
     bool pressActiveSwapIcon();
+    /** Option+Return on the strip: presses the active tab's detach icon. */
+    bool pressActiveDetachIcon();
     /** Re-derives each swap icon's enabled state, tooltip and name. */
     void refreshSwapIcons();
+    /** Re-derives each detach icon's tooltip and name (it reads "Close ..." while the Mixer's second view is open). */
+    void refreshDetachIcons();
     void setLiftedTab(std::optional<Tab> tab);
     static const char* nameForTab(Tab tab) noexcept;
     static juce::String swapTitleForTab(Tab tab);
+    static juce::String detachTitleForTab(Tab tab);
 
     // `allowMixerRebuild` is false ONLY from the detach/redock callback
     // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
@@ -479,17 +511,13 @@ private:
     bool refreshMainViewAvailability();
     synth::ui::FadeVisibility& fadeForHost(const synth::ui::DetachablePanelHost& host) noexcept;
     void persistActiveTab();
-    // The active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
-    // on (docs/mixer/panel.md: "the tab-strip button detaches whichever tab is active"); null for Canvas.
-    synth::ui::DetachablePanelHost* activeHost() noexcept;
-    void refreshDetachButton();
 
-    // ---- "both places" -- the tab-strip detach button routes through the mirror instead
+    // ---- "both places" -- a tab's detach button routes through the mirror instead
     // of a real detach only for the Mixer tab, and only while the preference is on.
-    bool usesMixerMirrorForDetach() const noexcept { return activeTab_ == Tab::Mixer && detachBothPlacesEnabled_; }
-    /** The detach button's own onClick target -- replaces the plain
-     *  `activeHost().setDetached(!activeHost().isDetached())` toggle. */
-    void toggleActiveHostDetach();
+    bool usesMixerMirrorForDetach(Tab tab) const noexcept { return tab == Tab::Mixer && detachBothPlacesEnabled_; }
+    /** A detach button's onClick target: opens `tab`'s panel in its own window (or closes it again), or toggles the
+     *  Mixer's second view. Never touches the view in the main area, which has no tab. */
+    void toggleTabDetach(Tab tab);
     /** Resolves the live LookAndFeel/native-window flag the same way a real Mixer detach already
      *  does, and opens the mirror against `mixer_`. */
     void openMixerMirror();
@@ -516,8 +544,17 @@ private:
     void commitTabDrag();
     /** Esc mid-drag: the lifted tab returns to where it was picked up and nothing is committed. */
     void cancelTabDrag();
-    /** Lays the offered tab buttons out at their static slots, in the strip order. */
+    /** Lays the offered tab buttons out at their static slots, in the strip order; a change of the offered set
+     *  on screen is played as a tab motion instead (BottomDockComponentTabMotion.cpp). */
     void layoutTabButtons();
+    /** The tabs in the strip right now, in the strip order. */
+    std::vector<Tab> offeredTabs() const;
+    void startTabMotion(const std::vector<Tab>& before, const std::vector<Tab>& after);
+    /** Places the buttons where the running motion says they are. */
+    void placeTabsForMotion();
+    void onTabMotionFrame();
+    /** Lands the motion: every button back to its static look, the target set laid out. */
+    void finishTabMotion();
     /** Moves the buttons to where the reorder animator says they are right now. */
     void applyReorderOffsets();
     void onReorderFrame();
@@ -555,10 +592,6 @@ private:
     DockTabButton midiRemoteTabButton_;
     // Offered only while the canvas is not the main view (it then has no panel in the dock yet).
     DockTabButton canvasTabButton_;
-    // Icon-only, embedded in this tab strip (not either host's own header -- see
-    // DetachablePanelHost's class comment on why this is a separate button instance rather than a
-    // literal shared one across three different parents).
-    juce::DrawableButton detachButton_{"detachActiveTab", juce::DrawableButton::ImageFitted};
     // Added LAST in the constructor so it wins the hit test; forwards into onResizeHeight*.
     PanelResizeHandle resizeHandle_{*this};
     Tab activeTab_ = Tab::Timeline;
@@ -585,6 +618,11 @@ private:
     std::vector<Tab> reorderTabs_;
     ReorderDragAnimator reorder_;
     ReorderFramePump reorderFrames_{*this};
+    // Tabs coming and going: the offered set the buttons were last laid out for, and the move to a new one.
+    BottomDockTabMotion tabMotion_;
+    ReorderFramePump tabMotionFrames_{*this};
+    std::vector<Tab> laidOutTabs_;
+    double tabMotionStartMs_ = 0.0;
     ReorderCancelKey reorderCancelKey_;
     bool tabDragCancelled_ = false; // Esc pressed in this gesture: the mouse-up must not click
     unsigned reorderGenerationSeen_ = 0;

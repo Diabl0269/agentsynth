@@ -54,6 +54,9 @@ public:
     void moved() override;
     void resized() override;
     void lookAndFeelChanged() override;
+    /** Tab cycling and the open-context-menu key resolve here, then the app-wide shortcuts. A key nothing else wants
+     *  is Esc or Cmd+W: the window closes like its close button does (the panel goes back to the bottom panel). Esc
+     *  reaches here only when the focused control inside did not use it; neither key is a rebindable action. */
     bool keyPressed(const juce::KeyPress& key) override;
     /** Stands in for the real keyboard focus (which needs a native peer) when the open-context-menu key resolves. */
     void setFocusedComponentOverrideForTest(juce::Component* focused) { focusedComponentOverrideForTest_ = focused; }
@@ -62,6 +65,9 @@ public:
      *  HostedPluginEditorWindow::onCloseRequested). DetachablePanelHost installs this to redock
      *  (setDetached(false)), which resets the unique_ptr that owns this window. */
     std::function<void()> onCloseRequested;
+
+    /** Raises the window, makes it the active one and puts keyboard focus on its panel's focus region. */
+    void raiseAndFocusPanel();
 
     /** Registers the ONE focus region this window's hosted panel resolves to -- called once by
      *  DetachablePanelHost right after construction, with the panel itself as the region root

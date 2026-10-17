@@ -104,4 +104,10 @@ void MixerMirrorController::close() {
         onOpenedOrClosed();
 }
 
+// Brings the open window forward without moving keyboard focus into it (the docked copy takes the focus).
+void MixerMirrorController::raiseIfOpen() {
+    if (window_ != nullptr)
+        window_->toFront(false);
+}
+
 } // namespace synth::ui

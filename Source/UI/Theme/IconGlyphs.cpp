@@ -251,6 +251,27 @@ void paintSwap(juce::Graphics& g, juce::Rectangle<float> area) {
     path.lineTo(at(8, 7));
     g.strokePath(path, juce::PathStrokeType(1.6f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
+
+// A window with an arrow leaving its top-right corner, on the 24 x 24 grid of the app's "open in window" artwork,
+// drawn at 14 px like the swap glyph.
+void paintDetach(juce::Graphics& g, juce::Rectangle<float> area) {
+    const float side = std::min(14.0f, std::min(area.getWidth(), area.getHeight()));
+    const auto square = juce::Rectangle<float>(side, side).withCentre(area.getCentre());
+    const float scale = side / 24.0f;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(square.getX() + x * scale, square.getY() + y * scale);
+    };
+    const float thickness = 2.2f * scale;
+    const juce::PathStrokeType stroke(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    g.drawRoundedRectangle(juce::Rectangle<float>(at(3, 7), at(16, 21)), 1.5f * scale, thickness);
+    juce::Path arrow;
+    arrow.startNewSubPath(at(9, 15));
+    arrow.lineTo(at(21, 3));
+    arrow.startNewSubPath(at(15, 3));
+    arrow.lineTo(at(21, 3));
+    arrow.lineTo(at(21, 9));
+    g.strokePath(arrow, stroke);
+}
 } // namespace
 
 void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
@@ -320,6 +341,9 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::Swap:
         paintSwap(g, area);
+        break;
+    case Glyph::Detach:
+        paintDetach(g, area);
         break;
     }
 }

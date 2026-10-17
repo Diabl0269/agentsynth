@@ -180,7 +180,8 @@ public:
     /** Opens the dock if hidden (never closes it) and switches to `tab`; a detached tab's window is raised instead. */
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
     /** The Cmd+1/2/3 actions: showBottomDockTab(), then keyboard focus onto the dock's tab strip when the tab
-     *  is docked and showing (nothing moves for a detached tab or a Mixer shown outside the dock). */
+     *  is docked and showing; a detached tab's window is raised and its panel focused, and a Mixer shown outside the
+     *  dock is left alone. */
     void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
     /** The Cmd+J action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
      *  closes around the focus hands it to the view in the main area. */

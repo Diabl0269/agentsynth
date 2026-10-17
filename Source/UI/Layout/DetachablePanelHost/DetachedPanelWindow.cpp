@@ -200,9 +200,21 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
     }
     // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+J, Cmd+1..9)
     // before giving up; see onAppShortcut's own comment.
-    if (onAppShortcut)
-        return onAppShortcut(key);
+    if (onAppShortcut && onAppShortcut(key))
+        return true;
+    // Last: Esc or Cmd+W returns the section. Everything inside the panel, and any app shortcut, has had its turn.
+    if (key == juce::KeyPress::escapeKey || key == juce::KeyPress('w', juce::ModifierKeys::commandModifier, 0)) {
+        closeButtonPressed();
+        return true;
+    }
     return false;
+}
+
+void DetachedPanelWindow::raiseAndFocusPanel() {
+    toFront(true);
+    const auto& regions = focusRegions_.getRegions();
+    if (!regions.empty())
+        focusRegions_.focusRegionById(regions.front().id);
 }
 
 void DetachedPanelWindow::registerHostedPanelFocusRegion(const juce::String& id, juce::Component& root) {

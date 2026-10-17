@@ -290,7 +290,10 @@ set(APPUI_SOURCES
     Source/UI/Layout/BottomDockComponent/BottomDockComponent.cpp
     Source/UI/Layout/BottomDockComponent/BottomDockComponentDetach.cpp
     Source/UI/Layout/BottomDockComponent/BottomDockComponentMainView.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponentTabMotion.cpp
     Source/UI/Layout/BottomDockComponent/BottomDockComponentTabStrip.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockTabMotion.h
+    Source/UI/Layout/BottomDockComponent/BottomDockTabMotion.cpp
     Source/UI/Layout/BottomDockTabModel.h
     Source/UI/Layout/BottomDockTabModel.cpp
     Source/UI/Layout/MainViewHolder.h

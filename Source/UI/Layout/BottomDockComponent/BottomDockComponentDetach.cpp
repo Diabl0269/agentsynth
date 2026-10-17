@@ -1,4 +1,4 @@
-// Concern: BottomDockComponent detach-to-window, the tab strip's detach button and the Mixer "both places"
+// Concern: BottomDockComponent detach-to-window, each tab's detach button and the Mixer "both places"
 // mirror (docs/mixer/panel.md).
 #include "BottomDockComponent.h"
 
@@ -25,7 +25,7 @@ void BottomDockComponent::applyDetachBothPlacesPreference() {
             // mirror instead, so both places show it as the preference now promises.
             mixerHost_.setDetached(false);
             setActiveTab(Tab::Mixer);
-            toggleActiveHostDetach(); // Mixer is active + detachBothPlacesEnabled_ is already true -> opens the mirror
+            toggleTabDetach(Tab::Mixer); // detachBothPlacesEnabled_ is already true -> opens the mirror
         } else if (!enabled && mixerMirror_.isOpen()) {
             // Was "both" -- close the mirror and detach the real host instead, which is exactly
             // the "a detached tab leaves the strip" behaviour the default preference restores.
@@ -37,58 +37,56 @@ void BottomDockComponent::applyDetachBothPlacesPreference() {
         // A mirror should never outlive Tab placement -- see setMixerTabEnabled()'s own comment.
         mixerMirror_.close();
     }
-    refreshDetachButton();
+    refreshDetachIcons();
 }
 
-// Replaces the plain activeHost().setDetached(!isDetached()) toggle -- routes the Mixer
-// tab through the mirror instead of a real detach while "both places" is on.
-void BottomDockComponent::toggleActiveHostDetach() {
-    if (usesMixerMirrorForDetach()) {
+// A tab's detach button: routes the Mixer tab through the mirror instead of a real detach while "both places" is on.
+void BottomDockComponent::toggleTabDetach(Tab tab) {
+    if (!isTabOfferedInStrip(tab))
+        return; // the view in the main area has no tab, and a window that is already open redocks from itself
+    if (usesMixerMirrorForDetach(tab)) {
         if (mixerMirror_.isOpen())
             mixerMirror_.close();
         else
             openMixerMirror();
         return;
     }
-    // The view in the main area never detaches from here: it has no tab, and the active tab is never it.
-    if (auto* host = activeHost(); host != nullptr && host != hostInMain_)
+    // The view in the main area never detaches from here: it has no tab.
+    if (auto* host = hostForTab(tab); host != nullptr && host != hostInMain_)
         host->setDetached(!host->isDetached());
 }
 
 void BottomDockComponent::openMixerMirror() {
-    // Same dynamic_cast-with-null-fallback convention refreshDetachButton()/applyIcon() use --
-    // headless tests (no real LookAndFeel installed yet) leave the mirror window unthemed, matching
-    // a real detach's own fallback.
+    // Same dynamic_cast-with-null-fallback convention applyIcon() uses -- headless tests (no real LookAndFeel
+    // installed yet) leave the mirror window unthemed, matching a real detach's own fallback.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     mixerMirror_.open(*mixer_, lf, shortcutManager_, mixerHost_.onAppShortcutFallback,
                       mixerHost_.isCreatingNativeWindows());
 }
 
-void BottomDockComponent::refreshDetachButton() {
-    // Same wording as the tooltip -- without an explicit setTitle(), the ctor's
-    // "detachActiveTab" component name leaks as the AX title (ButtonAccessibilityHandler::
-    // getTitle()'s getButtonText() fallback). While "both places" drives the Mixer tab, the
-    // button's own state tracks the MIRROR (mixerHost_ itself never actually detaches then).
-    // The canvas has no window to open into, so the button is hidden while its tab is active.
-    const auto* host = activeHost();
-    detachButton_.setVisible(host != nullptr);
-    const bool detached = usesMixerMirrorForDetach() ? mixerMirror_.isOpen() : host != nullptr && host->isDetached();
-    const juce::String label = detached ? "Dock back" : "Open in window";
-    detachButton_.setTooltip(label);
-    detachButton_.setTitle(label);
-    // Same dynamic_cast-with-null-fallback convention DetachablePanelHost::applyIcon uses.
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    if (lf == nullptr)
-        return;
-    auto base = lf->getIcon(synth::theme::Icon::ActionDetachWindow);
-    if (base == nullptr)
-        return;
-    const auto& colors = lf->getTheme().colors;
-    auto hoverIcon = base->createCopy();
-    hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
-    detachButton_.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
+synth::ui::IconButton* BottomDockComponent::getDetachIcon(Tab tab) noexcept {
+    return buttonForTab(tab).getDetachIcon();
 }
 
-void BottomDockComponent::lookAndFeelChanged() { refreshDetachButton(); }
+juce::String BottomDockComponent::detachTitleForTab(Tab tab) {
+    return tab == Tab::Canvas ? juce::String() : juce::String("Detach ") + nameForTab(tab) + " to its own window";
+}
+
+// The button is a plain button, never a Tab stop of its own (the strip is the one stop; Option+Return presses the
+// active tab's), named like its tooltip so a screen reader reads "Detach Mixer to its own window" for the button
+// inside the Mixer tab. While the Mixer's second view is open the same button closes it.
+void BottomDockComponent::refreshDetachIcons() {
+    static const auto pressKey = ShortcutManager::keyPressToDisplayString(
+        juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::altModifier, 0));
+    for (Tab t : tabModel_.getOrder()) {
+        auto* icon = getDetachIcon(t);
+        if (icon == nullptr)
+            continue;
+        const bool closesMirror = usesMixerMirrorForDetach(t) && mixerMirror_.isOpen();
+        const juce::String title = closesMirror ? juce::String("Close the second Mixer window") : detachTitleForTab(t);
+        icon->setTitle(title);
+        icon->setTooltip(synth::ui::formatShortcutHint(title, pressKey));
+    }
+}
 
 } // namespace synth::ui

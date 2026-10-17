@@ -352,7 +352,7 @@ as well as the dock. `setMainView()` refuses a view that is open in its own wind
 no header of its own, so it cannot be detached from there. The Mixer goes to main only in the Tab placement
 (Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused). In main the Mixer fills the area (`canGrowHost` is false,
 `growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
-region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
+region is open, and the "both places" mirror is not reachable from it (a tab's detach icon is not reachable from it;
 a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
 ([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. A swap
 relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
@@ -373,7 +373,7 @@ Mixer and never suspends anything. Each change fires `onMainViewChanged`.
 ### The canvas as a tab
 
 When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
-canvas is main, and the tab has no detach button, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
+canvas is main, and the tab has no detach icon, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
 reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
@@ -400,6 +400,7 @@ Canvas, tab strip, then the panel.
 | Home / End | First / last tab |
 | Return | Move keyboard focus into the selected tab's panel (its region root) |
 | Shift+Return | Press the selected tab's swap icon (below); consumed even while the icon is disabled |
+| Option+Return | Press the selected tab's detach icon (below); consumed on the Canvas tab, which has none |
 
 Otherwise plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
 is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
@@ -414,7 +415,7 @@ and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas
 following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
 handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
 area" (its tooltip adds the key, Opt+Cmd+1-4); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
-Return presses it). The strip itself is a group named "Panel tabs" whose value is the selected tab.
+Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay
 

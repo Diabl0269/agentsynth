@@ -23,7 +23,7 @@ constexpr float kLiftedTabRadius = 4.0f;
 constexpr float kLiftedTabOpacity = 0.95f;
 
 // The icon row at a tab's right edge: square-ish buttons the tab's full height, `kTabIconGap` apart, `kTabIconEdge`
-// in from the edge. A second icon (the detach one) joins to the left of the swap icon.
+// in from the edge. The swap icon is rightmost, the detach icon sits immediately to its left.
 constexpr int kTabIconWidth = 22;
 constexpr int kTabIconGap = 2;
 constexpr int kTabIconEdge = 2;
@@ -54,9 +54,11 @@ private:
 // Lays the icons out right to left, then tells the look-and-feel how much of the tab's right edge the label must
 // leave free: the label ellipsises in what remains, so the icons are never what gives way on a narrow tab.
 void BottomDockComponent::DockTabButton::resized() {
-    juce::Component* const icons[] = {&swapIcon_};
+    juce::Component* const icons[] = {&swapIcon_, &detachIcon_};
     int right = getWidth() - kTabIconEdge;
     for (auto* icon : icons) {
+        if (icon == &detachIcon_ && !hasDetachIcon())
+            continue;
         icon->setBounds(right - kTabIconWidth, 0, kTabIconWidth, getHeight());
         right -= kTabIconWidth + kTabIconGap;
     }
@@ -237,11 +239,18 @@ void BottomDockComponent::cancelTabDrag() {
 // disabled by placement AND any detached tab); the last one absorbs the rounding remainder. A tab
 // not offered is hidden outright -- it has left the strip.
 void BottomDockComponent::layoutTabButtons() {
+    const auto offered = offeredTabs();
+    if (tabMotion_.isRunning() && offered != tabMotion_.getTarget())
+        finishTabMotion(); // the set changed again mid-motion: land that one, then move on from there
+    if (!tabMotion_.isRunning() && offered != laidOutTabs_ && !laidOutTabs_.empty() && !tabButtonsArea_.isEmpty() &&
+        FadeVisibility::canAnimateIn(this))
+        startTabMotion(laidOutTabs_, offered);
+    if (tabMotion_.isRunning()) {
+        placeTabsForMotion();
+        return;
+    }
+    laidOutTabs_ = offered;
     auto tabStrip = tabButtonsArea_;
-    std::vector<Tab> offered;
-    for (Tab t : tabModel_.getOrder())
-        if (isTabOfferedInStrip(t))
-            offered.push_back(t);
     for (size_t i = 0; i < offered.size(); ++i) {
         auto& button = buttonForTab(offered[i]);
         button.setVisible(true);
@@ -262,8 +271,6 @@ void BottomDockComponent::resized() {
 
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
-    // Rightmost: the detach button (always present, acts on whichever tab is active).
-    detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
 
     // Whatever's left splits between the tabs currently offered, in the user's
     // (drag-to-reorder) strip order -- see layoutTabButtons(). A reorder in flight then shifts the
@@ -315,7 +322,7 @@ void BottomDockComponent::paintTabSlot(juce::Graphics& g, juce::Rectangle<int> b
 // into its slot after release. The raise and the shadow/border strength ease with getLift().
 void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     paintTabFocusRing(g);
-    paintSwapFocusRing(g);
+    paintIconFocusRing(g);
     if (!liftedTab_.has_value() || !reorder_.isReordering())
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -363,7 +370,8 @@ juce::String BottomDockComponent::swapTitleForTab(Tab tab) {
 }
 
 BottomDockComponent::TabAccessibility BottomDockComponent::describeTab(Tab tab, Tab activeTab) {
-    return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab, swapTitleForTab(tab)};
+    return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab, swapTitleForTab(tab),
+            detachTitleForTab(tab)};
 }
 
 synth::ui::IconButton& BottomDockComponent::getSwapIcon(Tab tab) noexcept { return buttonForTab(tab).getSwapIcon(); }
@@ -390,7 +398,7 @@ void BottomDockComponent::setSwapShortcutText(Tab view, const juce::String& text
     refreshSwapIcons();
 }
 
-// Hides the swap icon of the tab being dragged: its slot shows the dashed marker, which a child would paint over.
+// Hides the icon row of the tab being dragged: its slot shows the dashed marker, which a child would paint over.
 void BottomDockComponent::setLiftedTab(std::optional<Tab> tab) {
     liftedTab_ = tab;
     for (Tab t : tabModel_.getOrder())
@@ -440,12 +448,11 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (key == juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0))
         return pressActiveSwapIcon();
+    if (key == juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::altModifier, 0))
+        return pressActiveDetachIcon();
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
-    std::vector<Tab> offered;
-    for (Tab t : tabModel_.getOrder())
-        if (isTabOfferedInStrip(t))
-            offered.push_back(t);
+    const auto offered = offeredTabs();
     if (offered.empty())
         return false;
     const int current = (int)(std::find(offered.begin(), offered.end(), activeTab_) - offered.begin());
@@ -492,13 +499,29 @@ bool BottomDockComponent::pressActiveSwapIcon() {
     return true;
 }
 
-// The icon shows the keyboard focus ring while Shift is held on the focused strip: that is when Return presses it.
-void BottomDockComponent::paintSwapFocusRing(juce::Graphics& g) {
-    if (!stripFocus_.hasKeyboardFocus(false) || !juce::ModifierKeys::currentModifiers.isShiftDown() ||
-        !isTabOfferedInStrip(activeTab_) || liftedTab_.has_value())
+// Option+Return: the same for the active tab's detach icon. The Canvas tab has none, and the key is still consumed.
+bool BottomDockComponent::pressActiveDetachIcon() {
+    if (!isTabOfferedInStrip(activeTab_))
+        return false;
+    if (auto* icon = getDetachIcon(activeTab_); icon != nullptr && icon->isEnabled() && icon->onClick)
+        icon->onClick();
+    return true;
+}
+
+// An icon shows the keyboard focus ring while its modifier is held on the focused strip: that is when Return
+// presses it (Shift: swap, Option: detach).
+void BottomDockComponent::paintIconFocusRing(juce::Graphics& g) {
+    if (!stripFocus_.hasKeyboardFocus(false) || !isTabOfferedInStrip(activeTab_) || liftedTab_.has_value())
         return;
-    const auto& icon = getSwapIcon(activeTab_);
-    synth::ui::paintFocusRingAlways(g, getLocalArea(&icon, icon.getLocalBounds()).toFloat(), stripFocus_,
+    const auto modifiers = juce::ModifierKeys::currentModifiers;
+    const juce::Component* icon = nullptr;
+    if (modifiers.isShiftDown())
+        icon = &getSwapIcon(activeTab_);
+    else if (modifiers.isAltDown())
+        icon = getDetachIcon(activeTab_);
+    if (icon == nullptr)
+        return;
+    synth::ui::paintFocusRingAlways(g, getLocalArea(icon, icon->getLocalBounds()).toFloat(), stripFocus_,
                                     synth::theme::themeOf(*this).metrics.cornerRadiusSmall);
 }
 
