@@ -884,3 +884,4 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyFades.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
+# ASAN probe: path-filter trigger, do not merge
