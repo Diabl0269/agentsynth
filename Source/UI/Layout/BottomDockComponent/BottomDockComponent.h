@@ -6,6 +6,7 @@
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -87,6 +88,12 @@ public:
     /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. False, and nothing
      *  changes, when `view` is already there, is open in its own window, or is the Mixer outside the Tab placement. */
     bool setMainView(Tab view);
+    /** The swap icon's action: setMainView(view), then the view that was in the main area becomes the active tab.
+     *  False, and nothing changes, when setMainView() refuses. */
+    bool swapTabToMain(Tab view);
+    /** Fires after every successful setMainView(), once the dock has laid out; MainComponent relays out the main area.
+     */
+    std::function<void()> onMainViewChanged;
     /** MainComponent's main-area container. While the Timeline or MIDI Remote is the main view its host is a
      *  child of `holder`, and comes back here when it leaves. Set once; `holder` must outlive this dock. */
     void setMainAreaHolder(juce::Component* holder);
@@ -336,11 +343,15 @@ public:
         juce::String title;
         juce::AccessibilityRole role;
         bool selected;
+        juce::String swapTitle; // the name (and tooltip) of the swap button inside the tab
     };
     static TabAccessibility describeTab(Tab tab, Tab activeTab);
     /** Replaces the panel focus grab, which needs a native window a headless test lacks. */
     void setPanelFocusHookForTest(std::function<void(juce::Component&)> hook) { panelFocusHook_ = std::move(hook); }
 
+    /** The swap button inside `tab`'s strip button (the Canvas tab's included). Disabled while `tab` cannot go to the
+     *  main area (it is open in its own window); not shown while `tab` is not offered. */
+    synth::ui::IconButton& getSwapIcon(Tab tab) noexcept;
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
     /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade); never Canvas. */
@@ -375,7 +386,14 @@ private:
             , tab_(tab) {
             setTitle(text);
             setWantsKeyboardFocus(false); // the strip's one Tab stop is stripFocus_
+            addAndMakeVisible(swapIcon_);
+            swapIcon_.setWantsKeyboardFocus(false);
+            swapIcon_.onClick = [this] { owner_.swapTabToMain(tab_); };
         }
+        /** The row of small icon buttons at the tab's right edge; the label keeps clear of it. */
+        synth::ui::IconButton& getSwapIcon() noexcept { return swapIcon_; }
+        void setIconRowShown(bool shown) { swapIcon_.setVisible(shown); }
+        void resized() override;
         void paint(juce::Graphics& g) override;
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
         void mouseDown(const juce::MouseEvent& e) override {
@@ -399,6 +417,7 @@ private:
     private:
         BottomDockComponent& owner_;
         Tab tab_;
+        synth::ui::IconButton swapIcon_{"swapMainView", synth::theme::Glyph::Swap};
     };
 
     // The strip's focusable leaf: transparent, behind the tab buttons, never hit by the mouse.
@@ -406,6 +425,7 @@ private:
     public:
         explicit TabStripFocus(BottomDockComponent& owner);
         bool keyPressed(const juce::KeyPress& key) override { return owner_.handleTabStripKey(key); }
+        void modifierKeysChanged(const juce::ModifierKeys&) override { owner_.repaintTabStrip(); }
         void focusGained(FocusChangeType) override { owner_.repaintTabStrip(); }
         void focusLost(FocusChangeType) override { owner_.repaintTabStrip(); }
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
@@ -418,7 +438,14 @@ private:
     void selectTabAt(int offeredIndex);
     void repaintTabStrip() { repaint(0, 0, getWidth(), kTabStripHeight); }
     void paintTabFocusRing(juce::Graphics& g);
+    void paintSwapFocusRing(juce::Graphics& g);
+    /** Shift+Return on the strip: presses the active tab's swap icon. */
+    bool pressActiveSwapIcon();
+    /** Re-derives each swap icon's enabled state, tooltip and name. */
+    void refreshSwapIcons();
+    void setLiftedTab(std::optional<Tab> tab);
     static const char* nameForTab(Tab tab) noexcept;
+    static juce::String swapTitleForTab(Tab tab);
 
     // `allowMixerRebuild` is false ONLY from the detach/redock callback
     // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
@@ -451,7 +478,7 @@ private:
     void openMixerMirror();
 
     // ---- Tab order, "which tabs are offered right now", and the fallback pick ------------
-    juce::TextButton& buttonForTab(Tab tab) noexcept;
+    DockTabButton& buttonForTab(Tab tab) noexcept;
     /** True when `tab` belongs in the strip right now: not the main view, not detached, and (Mixer
      *  only) not disabled by the placement preference. */
     bool isTabOfferedInStrip(Tab tab) const noexcept;

@@ -12,8 +12,7 @@ namespace synth::ui {
 // up, so the dock keeps showing something in the same place; otherwise the active tab stays (or
 // falls back through applyTabVisibility() if it is no longer offered). A view open in its own window
 // is refused: its panel lives in that window, not in the host that would move. So is the Mixer outside
-// the Tab placement, where MixerPlacementController owns its host. Nothing in the app calls this with a
-// view other than the canvas yet (MainComponent::setMainViewForTest does).
+// the Tab placement, where MixerPlacementController owns its host.
 bool BottomDockComponent::setMainView(Tab view) {
     if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
         return false;
@@ -29,6 +28,18 @@ bool BottomDockComponent::setMainView(Tab view) {
         setActiveTab(previous);
     else
         applyTabVisibility();
+    if (onMainViewChanged)
+        onMainViewChanged();
+    return true;
+}
+
+// The swap icon's click. The view that went up leaves its slot to the one that came down, and that one is
+// what the dock shows next, whichever tab was active before.
+bool BottomDockComponent::swapTabToMain(Tab view) {
+    const Tab previous = getMainView();
+    if (!setMainView(view))
+        return false;
+    setActiveTab(previous);
     return true;
 }
 
@@ -89,12 +100,10 @@ juce::Rectangle<int> BottomDockComponent::getCanvasBodyBounds() const {
 // belongs to the canvas.
 bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().contains(x, y); }
 
-// Writes the stored value, which can differ from the effective one (BottomDockTabModel::load).
 void BottomDockComponent::persistMainView() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(kMainViewKey,
-                                                BottomDockTabModel::keyFor(tabModel_.getStoredMainView()));
+    appProperties_->getUserSettings()->setValue(kMainViewKey, BottomDockTabModel::keyFor(tabModel_.getMainView()));
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 

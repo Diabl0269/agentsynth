@@ -1,5 +1,5 @@
 // BottomDockTabModelTests.cpp -- the bottom dock's view model on its own: parsing and migrating the
-// saved tab order, the main view's round trip and load-time clamp, and the main-view swap.
+// saved tab order, the main view's round trip and the main-view swap.
 #include "UI/Layout/BottomDockTabModel.h"
 #include <gtest/gtest.h>
 #include <vector>
@@ -16,7 +16,6 @@ TEST(BottomDockTabModelTests, DefaultIsTheThreeTabsThenTheCanvasInMain) {
     const BottomDockTabModel model;
     EXPECT_EQ(model.getOrder(), (Order{DockView::Timeline, DockView::Mixer, DockView::MidiRemote, DockView::Canvas}));
     EXPECT_EQ(model.getMainView(), DockView::Canvas);
-    EXPECT_EQ(model.getStoredMainView(), DockView::Canvas);
 }
 
 TEST(BottomDockTabModelTests, AThreeEntryOrderMigratesByAppendingTheCanvas) {
@@ -46,7 +45,6 @@ TEST(BottomDockTabModelTests, LoadFallsBackToTheDefaultOrderAndTheCanvas) {
     model.load("mixer,mixer,timeline", "piano");
     EXPECT_EQ(model.getOrder(), BottomDockTabModel::defaultOrder());
     EXPECT_EQ(model.getMainView(), DockView::Canvas);
-    EXPECT_EQ(model.getStoredMainView(), DockView::Canvas);
 }
 
 TEST(BottomDockTabModelTests, TheOrderAndEveryViewKeyRoundTrip) {
@@ -58,16 +56,13 @@ TEST(BottomDockTabModelTests, TheOrderAndEveryViewKeyRoundTrip) {
         EXPECT_EQ(BottomDockTabModel::viewForKey(BottomDockTabModel::keyFor(v)), v);
 }
 
-// A main view written by a build that can swap views is kept and written back, but this build still
-// shows the canvas in the main area: it cannot lay out another view there.
-TEST(BottomDockTabModelTests, AStoredNonCanvasMainViewRoundTripsButIsClampedToTheCanvas) {
-    static_assert(!BottomDockTabModel::kMainViewSwapEnabled, "update this test when the swap is enabled");
+// A saved main view is honoured as it is, a non-canvas one included.
+TEST(BottomDockTabModelTests, AStoredNonCanvasMainViewIsTheMainViewOnLoad) {
     BottomDockTabModel model;
     model.load("canvas,mixer,midiRemote,timeline", "timeline");
-    EXPECT_EQ(model.getStoredMainView(), DockView::Timeline);
-    EXPECT_EQ(model.getMainView(), DockView::Canvas);
-    EXPECT_TRUE(model.isInMain(DockView::Canvas));
-    EXPECT_FALSE(model.isInMain(DockView::Timeline));
+    EXPECT_EQ(model.getMainView(), DockView::Timeline);
+    EXPECT_TRUE(model.isInMain(DockView::Timeline));
+    EXPECT_FALSE(model.isInMain(DockView::Canvas));
     EXPECT_EQ(model.getOrder(), (Order{DockView::Canvas, DockView::Mixer, DockView::MidiRemote, DockView::Timeline}));
 }
 
@@ -76,7 +71,6 @@ TEST(BottomDockTabModelTests, SetMainViewSwapsTheTwoViewsSlots) {
     BottomDockTabModel model;
     ASSERT_TRUE(model.setMainView(DockView::Mixer));
     EXPECT_EQ(model.getMainView(), DockView::Mixer);
-    EXPECT_EQ(model.getStoredMainView(), DockView::Mixer);
     EXPECT_EQ(model.getOrder(), (Order{DockView::Timeline, DockView::Canvas, DockView::MidiRemote, DockView::Mixer}));
 
     ASSERT_TRUE(model.setMainView(DockView::Timeline));

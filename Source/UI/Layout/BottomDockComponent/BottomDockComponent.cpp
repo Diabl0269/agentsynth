@@ -220,7 +220,7 @@ const DetachablePanelHost* BottomDockComponent::hostForTab(Tab tab) const noexce
     return &timelineHost_;
 }
 
-juce::TextButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
+BottomDockComponent::DockTabButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
     switch (tab) {
     case Tab::Mixer:
         return mixerTabButton_;
@@ -363,6 +363,7 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     if (midiRemoteActive && allowMixerRebuild)
         midiRemotePanel_.rebuildFromProfiles();
     refreshDetachButton();
+    refreshSwapIcons();
     resized();
     // After the layout above, so a listener reading getCanvasBodyBounds() sees the new tab's geometry.
     if (canvasBodyWasShowing_ != isCanvasBodyShowing()) {

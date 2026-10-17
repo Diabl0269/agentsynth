@@ -114,7 +114,7 @@ TEST_F(BottomDockTabStripTest, ReturnMovesFocusIntoTheSelectedPanelsRegionRoot) 
 TEST_F(BottomDockTabStripTest, ModifiedAndUnrelatedKeysAreLeftForTheAppShortcuts) {
     EXPECT_FALSE(press(juce::KeyPress::rightKey, juce::ModifierKeys::commandModifier));
     EXPECT_FALSE(press('2', juce::ModifierKeys::commandModifier)) << "Cmd+2 still reaches the shortcut table";
-    EXPECT_FALSE(press(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier));
+    EXPECT_FALSE(press(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier));
     EXPECT_FALSE(press(juce::KeyPress::tabKey)) << "Tab still cycles the focus regions";
     EXPECT_FALSE(press(juce::KeyPress::upKey)) << "Up has nothing above the strip to enter";
     EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);

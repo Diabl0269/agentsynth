@@ -1,7 +1,7 @@
 // BottomDockMainAreaTests.cpp -- the Timeline or the MIDI Remote panel in the main area: its host moved into
 // MainComponent's holder at the canvas's rect, on screen with the bottom panel closed (edit commands, the
 // playhead gate, focus regions), and back in the dock when the canvas returns (docs/layout/chrome.md#the-main-view).
-// Reached only through MainComponent::setMainViewForTest: nothing shipped moves another view into main yet.
+// Moved up through MainComponent::setMainViewForTest; the swap icon's own path is BottomDockSwapIconTests.cpp.
 #include "../../TestSettingsHelpers.h"
 #include "BottomDockMainAreaFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -144,9 +144,8 @@ TEST_F(BottomDockMainAreaTest, AViewInItsOwnWindowIsRefused) {
     EXPECT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
 }
 
-// A saved Timeline main view opens with the canvas in main while the swap is switched off; the test seam then
-// moves the Timeline in exactly as a startup with the swap on would.
-TEST_F(BottomDockMainAreaTest, ASavedTimelineMainViewStillOpensWithTheCanvasInMain) {
+// A saved Timeline main view opens with the Timeline in the main area and the canvas in the dock.
+TEST_F(BottomDockMainAreaTest, ASavedTimelineMainViewOpensWithTheTimelineInMain) {
     mc_.reset();
     {
         juce::ApplicationProperties props;
@@ -156,10 +155,9 @@ TEST_F(BottomDockMainAreaTest, ASavedTimelineMainViewStillOpensWithTheCanvasInMa
     }
     build();
 
-    EXPECT_EQ(dock().getMainView(), Tab::Canvas);
-    EXPECT_EQ(dock().getTimelineHost().getParentComponent(), &dock());
-    EXPECT_TRUE(mc_->getGraphEditor().isVisible());
-
-    ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
+    EXPECT_EQ(dock().getMainView(), Tab::Timeline);
     EXPECT_EQ(dock().getTimelineHost().getParentComponent(), &holder());
+    EXPECT_TRUE(holder().isVisible());
+    EXPECT_FALSE(holder().getBounds().isEmpty());
+    EXPECT_EQ(dock().getTimelineHost().getBounds(), holder().getLocalBounds());
 }

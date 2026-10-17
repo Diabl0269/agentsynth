@@ -228,6 +228,29 @@ void paintLaneMarker(juce::Graphics& g, juce::Rectangle<float> area, bool mod) {
     for (const auto dot : {at(5, 4), at(9, 8)})
         g.fillEllipse(juce::Rectangle<float>(3.2f * scale, 3.2f * scale).withCentre(dot));
 }
+
+// Two opposite arrows on a 16 x 16 grid drawn at 14 px (the size of the other fixed-size glyphs), so the swap
+// icon matches the decided design at any button size.
+void paintSwap(juce::Graphics& g, juce::Rectangle<float> area) {
+    const float side = std::min(14.0f, std::min(area.getWidth(), area.getHeight()));
+    const auto square = juce::Rectangle<float>(side, side).withCentre(area.getCentre());
+    const float scale = side / 16.0f;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(square.getX() + x * scale, square.getY() + y * scale);
+    };
+    juce::Path path;
+    path.startNewSubPath(at(2, 6));
+    path.lineTo(at(11, 6));
+    path.startNewSubPath(at(8, 3));
+    path.lineTo(at(11, 6));
+    path.lineTo(at(8, 9));
+    path.startNewSubPath(at(14, 10));
+    path.lineTo(at(5, 10));
+    path.startNewSubPath(at(8, 13));
+    path.lineTo(at(5, 10));
+    path.lineTo(at(8, 7));
+    g.strokePath(path, juce::PathStrokeType(1.6f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
 } // namespace
 
 void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
@@ -294,6 +317,9 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::LaneMod:
         paintLaneMarker(g, area, true);
+        break;
+    case Glyph::Swap:
+        paintSwap(g, area);
         break;
     }
 }

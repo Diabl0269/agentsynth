@@ -14,10 +14,6 @@ enum class DockView { Timeline, Mixer, MidiRemote, Canvas };
 
 class BottomDockTabModel {
 public:
-    /** False until the main area can host a view other than the canvas: a stored non-canvas main
-     *  view is kept and written back, but the effective main view stays the canvas. */
-    static constexpr bool kMainViewSwapEnabled = false;
-
     /** The settings vocabulary ("timeline", "mixer", "midiRemote", "canvas"), shared by every key. */
     static const char* keyFor(DockView view) noexcept;
     static std::optional<DockView> viewForKey(const juce::String& key);
@@ -37,8 +33,6 @@ public:
     const std::vector<DockView>& getOrder() const noexcept { return order_; }
     /** The view the main area shows. */
     DockView getMainView() const noexcept { return mainView_; }
-    /** The value to persist: equals getMainView() except after loading a clamped value. */
-    DockView getStoredMainView() const noexcept { return storedMainView_; }
     bool isInMain(DockView view) const noexcept { return view == mainView_; }
 
     /** Puts `view` in the main area; the view that was there takes `view`'s slot in the order.
@@ -52,7 +46,6 @@ public:
 private:
     std::vector<DockView> order_ = defaultOrder();
     DockView mainView_ = DockView::Canvas;
-    DockView storedMainView_ = DockView::Canvas;
 };
 
 } // namespace synth::ui

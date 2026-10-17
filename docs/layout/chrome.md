@@ -303,7 +303,7 @@ launches via `ApplicationProperties`:
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 | `bottomDockActiveTab` | `"timeline"` | the bottom dock's active tab (`timeline`/`mixer`/`midiRemote`/`canvas`); a saved tab that is not offered falls back to the first offered one |
 | `bottomDockTabOrder` | `"timeline,mixer,midiRemote,canvas"` | the dock's strip order, all four views; a saved three-entry order (older builds) gains `canvas` at the end, anything malformed falls back to the default, and an older build reading four entries falls back to its own default. See [the tab strip](../mixer/panel.md#the-tab-strip) |
-| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Nothing in the app moves another view there yet: another stored value is kept and written back, but the canvas is shown (`BottomDockTabModel::kMainViewSwapEnabled`) |
+| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Written on every swap and applied at launch (a Mixer saved as the main view returns to the canvas if the Mixer placement is not Tab) |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -354,12 +354,14 @@ no header of its own, so it cannot be detached from there. The Mixer goes to mai
 leaving the Tab placement puts the canvas back first. In main the Mixer fills the area (`canGrowHost` is false,
 `growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
 region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
-a mirror already open closes without detaching the host). `MainComponent::setMainViewForTest` is the only way to put another view in main today.
+a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
+([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. A swap
+relays the main area out through `BottomDockComponent::onMainViewChanged`.
 
 ### The canvas as a tab
 
 When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
-canvas is main, and the tab has no detach button). `GraphEditor` stays a `MainComponent` child: the dock only
+canvas is main, and the tab has no detach button, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
 reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
@@ -385,8 +387,9 @@ Canvas, tab strip, then the panel.
 | Left / Right | Select the previous / next tab in the strip's current order, which switches the panel as a click does. Tabs that are not offered (detached, or the Mixer in another placement) are skipped; it stops at the ends |
 | Home / End | First / last tab |
 | Return | Move keyboard focus into the selected tab's panel (its region root) |
+| Shift+Return | Press the selected tab's swap icon (below); consumed even while the icon is disabled |
 
-Plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
+Otherwise plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
 is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
 uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+T (when it opens the pane) and
 Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+T closing the pane around the focus
@@ -395,9 +398,11 @@ hands focus to the canvas ([shortcuts](../control/shortcuts.md#switching-tabs)).
 Clicking a tab does not give the strip focus.
 
 **Screen reader.** JUCE has no tab role, so each tab is exposed as a radio button, its closest selectable
-and mutually exclusive item, named "Timeline", "Mixer" or "Controllers", with the selected state following
-the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the handler
-and the tests use). The strip itself is a group named "Panel tabs" whose value is the selected tab.
+and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas", with the selected state
+following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
+handler and the tests use). Inside it is the swap icon, a button named like its tooltip, "Show Mixer in the main
+area"; it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
+Return presses it). The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay
 

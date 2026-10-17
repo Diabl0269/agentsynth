@@ -689,6 +689,7 @@ add_executable(Tests
     UI/Layout/BottomDockCanvasTabTests.cpp
     UI/Layout/BottomDockMainAreaTests.cpp
     UI/Layout/BottomDockMixerMainTests.cpp
+    UI/Layout/BottomDockSwapIconTests.cpp
     UI/Layout/BottomDockMainViewTests.cpp
     UI/Layout/BottomDockMixerMirrorTests.cpp
     UI/Layout/BottomDockResizeTests.cpp

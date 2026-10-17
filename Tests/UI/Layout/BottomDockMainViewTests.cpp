@@ -93,18 +93,17 @@ TEST_F(BottomDockMainViewTest, SetMainViewPersistsTheMainViewAndTheOrder) {
     EXPECT_EQ(settings().getValue("bottomDockTabOrder"), "timeline,mixer,midiRemote,canvas");
 }
 
-// A main view saved by a build that can swap views opens with the canvas in main here, and the saved
-// value survives untouched for when that build runs again.
-TEST_F(BottomDockMainViewTest, ASavedNonCanvasMainViewIsKeptButTheCanvasStaysInMain) {
+// A saved non-canvas main view is the main view on launch, and its tab leaves the strip for the canvas's.
+TEST_F(BottomDockMainViewTest, ASavedNonCanvasMainViewIsTheMainViewOnLaunch) {
     settings().setValue("mainView", "timeline");
     settings().setValue("bottomDockTabOrder", "canvas,mixer,midiRemote,timeline");
     reload();
 
-    EXPECT_EQ(dock().getMainView(), Tab::Canvas);
-    EXPECT_EQ(stripNames(), (Names{"Mixer", "Controllers", "Timeline"}));
-    dock().reorderTabsForTest(Tab::Mixer, Tab::Timeline);
-    EXPECT_EQ(settings().getValue("mainView"), "timeline") << "a reorder never rewrites the stored main view";
-    EXPECT_EQ(settings().getValue("bottomDockTabOrder"), "canvas,timeline,midiRemote,mixer");
+    EXPECT_EQ(dock().getMainView(), Tab::Timeline);
+    EXPECT_EQ(stripNames(), (Names{"Canvas", "Mixer", "Controllers"}));
+    dock().reorderTabsForTest(Tab::Mixer, Tab::Canvas);
+    EXPECT_EQ(settings().getValue("mainView"), "timeline") << "a reorder never rewrites the main view";
+    EXPECT_EQ(settings().getValue("bottomDockTabOrder"), "mixer,canvas,midiRemote,timeline");
 }
 
 TEST_F(BottomDockMainViewTest, AnOlderThreeEntryOrderLoadsWithTheCanvasAppended) {
