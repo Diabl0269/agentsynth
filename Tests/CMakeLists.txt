@@ -492,6 +492,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltipsTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabToolbarLabelsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStatsTests.cpp
@@ -833,6 +834,7 @@ add_executable(Tests
     UI/PianoRoll/NoteAccessibilityTextTests.cpp
     UI/PianoRoll/PianoRollFocusedNoteTests.cpp
     UI/PianoRoll/PianoRollKeyboardReachTests.cpp
+    UI/Chrome/CanvasToolbarTests.cpp
     UI/Chrome/ToolbarKeyboardTests.cpp
     UI/Chrome/ToolbarTitlesTests.cpp
     UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp

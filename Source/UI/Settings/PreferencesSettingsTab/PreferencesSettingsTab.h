@@ -152,6 +152,10 @@ public:
     // channel's "Plays into this channel: ...") keep showing. Read live by synth::ui::AppTooltipWindow.
     bool isShowInfoTooltipsEnabled() const;
     void setShowInfoTooltipsEnabled(bool enabled);
+    // "Show button labels" (Panels & Windows): off leaves only the icons on the top bar and the canvas toolbar.
+    // Persisted at once; MainComponent re-applies the labels when the settings change.
+    bool isShowToolbarLabelsEnabled() const;
+    void setShowToolbarLabelsEnabled(bool enabled);
 
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
@@ -352,6 +356,7 @@ private:
     void persistMixerPlacement(const juce::String& placement);
     void persistPanelDetachMode(const juce::String& mode);
     void persistShowInfoTooltips(bool enabled);
+    void persistShowToolbarLabels(bool enabled);
     void persistAnimationMode(synth::ui::AnimationMode mode);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
@@ -386,6 +391,8 @@ private:
     // The "Show info tooltips" row, chained from the tail of setupAnimationModeControls() before the MIDI Remote
     // group.
     void setupInfoTooltipsControls();
+    // The "Show button labels" row, chained from the tail of setupInfoTooltipsControls() before the MIDI Remote group.
+    void setupToolbarLabelsControls();
     // The MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
     // same baselined-constructor reason.
     void setupMidiRemoteControls();
@@ -463,8 +470,15 @@ private:
                             const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
                             const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // Lays out the MIDI Remote group, chained from layoutInfoTooltipsGroup() (after the panel-detach-mode row) the same
-    // way that one is chained from layoutMixerPlacementGroup().
+    // Lays out the "Show button labels" row, chained from layoutInfoTooltipsGroup() and chaining on to the MIDI Remote
+    // group.
+    void
+    layoutToolbarLabelsGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                             const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                             const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the MIDI Remote group, chained from layoutToolbarLabelsGroup() (after the info tooltips row) (after the
+    // panel-detach-mode row) the same way that one is chained from layoutMixerPlacementGroup().
     void
     layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
                           const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
@@ -619,6 +633,8 @@ private:
     // "Show info tooltips" (default on) and its one-line hint.
     juce::ToggleButton showInfoTooltipsToggle{"Show info tooltips"};
     juce::Label showInfoTooltipsHint;
+    // "Show button labels" (default on).
+    juce::ToggleButton showToolbarLabelsToggle{"Show button labels"};
     // Default takeover (Jump / Pick-up / Scale) and the badge switch.
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;

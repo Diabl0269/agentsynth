@@ -35,8 +35,11 @@ const std::vector<ExpectedTitle>& expectedTitles() {
     return titles;
 }
 
+// The top bar's buttons are children of the window; Auto Arrange, Minimap and Matrix are the canvas toolbar's.
 juce::Button* findToolbarButton(MainComponent& mc, const char* id) {
-    return dynamic_cast<juce::Button*>(mc.findChildWithID(id));
+    if (auto* button = dynamic_cast<juce::Button*>(mc.findChildWithID(id)))
+        return button;
+    return dynamic_cast<juce::Button*>(mc.getCanvasToolbar().findChildWithID(id));
 }
 
 void expectEveryButtonNamed(MainComponent& mc) {
@@ -83,16 +86,17 @@ TEST_F(MainComponentTest, ToolbarRovingFocusDrivesTheRealButtons) {
     auto& toolbar = mc.getToolbar();
     ASSERT_TRUE(mc.getGraphEditor().isMinimapVisible()) << "minimap starts shown";
 
-    // From the ring's first stop to the minimap toggle: End is the theme toggle, then four Lefts back.
+    // From the ring's first stop to the AI panel toggle: End is the theme toggle, then two Lefts back.
+    const bool aiShown = mc.isAiPanelConfiguredVisible();
     toolbar.keyPressed(juce::KeyPress(juce::KeyPress::endKey));
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 2; ++i)
         toolbar.keyPressed(juce::KeyPress(juce::KeyPress::leftKey));
-    ASSERT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::ToggleMinimap);
-    EXPECT_EQ(toolbar.getFocusedButtonName(), "Hide Minimap");
+    ASSERT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::ToggleAiPanel);
+    EXPECT_EQ(toolbar.getFocusedButtonName(), aiShown ? "Hide AI" : "Show AI");
 
     EXPECT_TRUE(toolbar.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    EXPECT_FALSE(mc.getGraphEditor().isMinimapVisible()) << "Return pressed the minimap toggle";
-    EXPECT_EQ(toolbar.getFocusedButtonName(), "Show Minimap");
+    EXPECT_EQ(mc.isAiPanelConfiguredVisible(), !aiShown) << "Return pressed the AI panel toggle";
+    EXPECT_EQ(toolbar.getFocusedButtonName(), aiShown ? "Show AI" : "Hide AI");
 }
 
 TEST_F(MainComponentTest, ToolbarSkipsTheDisabledUndoAndRedoButtons) {
@@ -101,10 +105,10 @@ TEST_F(MainComponentTest, ToolbarSkipsTheDisabledUndoAndRedoButtons) {
     auto& toolbar = mc.getToolbar();
     ASSERT_FALSE(findToolbarButton(mc, "undoButton")->isEnabled());
 
-    // Library -> New, Save, Load, Settings, Feedback, then straight past Undo/Redo to Auto Arrange.
+    // Library -> New, Save, Load, Settings, Feedback, then straight past Undo/Redo to the AI panel toggle.
     for (int i = 0; i < 5; ++i)
         toolbar.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
     ASSERT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::Feedback);
     toolbar.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
-    EXPECT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::AutoArrange);
+    EXPECT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::ToggleAiPanel);
 }

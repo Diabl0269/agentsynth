@@ -8,8 +8,8 @@ base for arrow-key navigation within the module library and for Up/Down + M/S/R 
 track header rows ([`shortcuts.md`](shortcuts.md#library-keyboard-navigation), [Timeline](shortcuts.md#timeline)); both build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with eleven regions once every root component
-exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
+mixer/timeline would need its own registry), populated with twelve regions once every root component
+exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas toolbar** (`canvasToolbar`: the strip on the canvas's top row, open while it is visible; its `open` callback reveals the canvas, see [chrome](../layout/chrome.md#canvas-toolbar)), **Canvas**
 (open while the `graphEditor` is visible: always in the main area, in the bottom panel only while its Canvas tab shows; its `open` callback reveals it, see [chrome](../layout/chrome.md#the-canvas-as-a-tab)), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
 dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible` with the Timeline the active dock tab, or the Timeline in the main area: `MainComponent::isViewOnScreen`),
 **Routing pane** (`timelineRouting`: the Timeline showing with its side pane open) and **Scale pane** (`scaleAssist`: the Timeline showing with the piano roll's scale panel on screen), both straight after Timeline and with no `open` callback, **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
@@ -26,8 +26,9 @@ below for the Mixer region's own keyboard behaviour.
 
 - **The order follows the layout** — Toolbar, Library, the view in the main area, Dock tabs, then the views in the
   panel (Canvas, Timeline, Mixer, Controllers), AI Panel, Mod Matrix; the Timeline's two side panes stay right after
-  the Timeline. A swap (icon or Opt+Cmd+1-4, [shortcuts](shortcuts.md)) re-registers the regions, so with the Timeline
-  in the main area Tab goes Library, Timeline, Dock tabs, Canvas (while its tab shows).
+  the Timeline, and the Canvas toolbar stop sits right before the Canvas wherever the canvas is. A swap (icon or
+  Opt+Cmd+1-4, [shortcuts](shortcuts.md)) re-registers the regions, so with the Timeline in the main area Tab goes
+  Library, Timeline, Dock tabs, Canvas toolbar, Canvas (both while the Canvas tab shows).
 - **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
   by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
   (both actions report inactive, so the key falls through unhandled) while the launch welcome screen

@@ -6,7 +6,7 @@ canonical layout method. It slices top to bottom:
 
 ```
 +---------------------------------+  <- toolbar strip  (Metrics::toolbarHeight = 44 px)
-|  [Lib] [Save][Load][Cfg][<][>][ ]   ...   [Matrix][AI]  |
+|  [Lib] [Save][Load][Cfg][<][>]      ...      [AI][Panel][ ]  |
 +----------+----------------------+
 |  Library |                      |  <- library sidebar (Metrics::librarySidebarWidth = 200 px,
 | (200 px) |    Graph canvas      |                      or 0 when hidden)
@@ -30,9 +30,11 @@ here. See [animation](animation.md#panelslide).
 
 `ToolbarComponent::layoutButtons(bounds)` runs a single `juce::FlexBox` (row, align-center):
 
-- Left group: Library, Save, Load, Settings, Feedback, Undo, Redo, AutoArrange
+- Left group: Library, New, Save, Load, Settings, Feedback, Undo, Redo
 - Flex spacer (`withFlex(1.0f)`) filling the gap
-- Right group: ToggleModMatrix, ToggleAiPanel
+- Right group: ToggleAiPanel, ToggleBottomPanel, ToggleTheme
+
+Auto Arrange, Minimap and Matrix are not here: they sit on the [canvas toolbar](#canvas-toolbar).
 
 `paint()` fills the toolbar background with `theme.colors.bg0` via a
 `dynamic_cast<AppLookAndFeel*>`; a null cast (headless tests, non-themed context) falls back to the
@@ -40,8 +42,8 @@ hardcoded colour `0xff0B0D10`.
 
 **Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px): every button's
 `prefWidth` becomes 32 (icon-only). In wide mode each button has a labelled preferred width —
-Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104,
-ToggleAiPanel 92. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
+Library 96, New 88, Save 112, Load 116, Settings 96, Undo 72, Redo 72, ToggleAiPanel 92, ToggleBottomPanel 100,
+ToggleTheme 110. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
 for both, so no separator is drawn between them; its tooltip and Cmd-hold key-cap name Cmd+Shift+F, `openFeedback`) and is 84 px wide, enough for its "Feedback" caption
 at full size.
 
@@ -54,7 +56,7 @@ It no-ops when the `LookAndFeel` is not the themed `AppLookAndFeel`.
 
 **Toggle state.** `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
 `setToggleState(..., juce::dontSendNotification)` on their panel-toggle button (Library, Minimap,
-ModMatrix, AiPanel, Panel) so the button's toggle state always matches panel visibility. Always
+Matrix, AiPanel, Panel) so the button's toggle state always matches panel visibility. Always
 `dontSendNotification`, never `setClickingTogglesState`, so a button's own `onClick` never
 double-fires.
 
@@ -139,11 +141,45 @@ The focused button wears `paintFocusRing` (the solid accent ring), drawn by the 
 around the button, since the buttons are siblings that paint above the strip. The region outline on the
 strip stays as before.
 
-**Names.** `MainComponent::applyToolbarLabels` gives every button a screen-reader title and, unless the
-toolbar is in narrow mode, the same visible text. A toggle's title is the action a press does ("Hide
+**Names.** `MainComponent::applyToolbarLabels` gives every button (the canvas toolbar's too) a screen-reader title and,
+unless the toolbar is in narrow mode or Show button labels is off, the same visible text. A toggle's title is the action a press does ("Hide
 Library" / "Show Library", likewise Minimap, Matrix, AI and Panel; "Light Mode" / "Dark Mode"), in both
 widths, because these buttons expose no checked state to a screen reader. The toolbar's accessibility value is the name of the ringed button, so Left/Right announce it.
 Tooltips name each button's shortcut where it has one.
+
+### Show button labels
+
+The Preferences switch **Show button labels** (Panels & Windows; `showToolbarLabels` in the user settings, on by
+default; `Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h`) takes the caption off every top-bar button and
+every [canvas toolbar](#canvas-toolbar) button, leaving the icon chip. `applyToolbarLabels(iconOnly)` ORs it with the
+narrow-width answer, so a narrow window is icon-only whatever the switch says, and a settings write
+(`MainComponent::changeListenerCallback`) re-applies the labels at once through `applyToolbarLabelPreference()`,
+which does work only when the value flipped. Titles and tooltips (with the key) are unchanged in both modes, so a
+screen reader and a hover still name each button. Tests: `Tests/UI/Chrome/CanvasToolbarTests.cpp`,
+`PreferencesSettingsTabToolbarLabelsTests.cpp`.
+
+## Canvas toolbar
+
+Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/Chrome/CanvasToolbar/`), a strip on
+the canvas's own top row, wherever the canvas is. It owns the three `ToolbarButton`s (same icons, groups, captions,
+tooltips and keys as before; `MainComponent` wires their `onClick`, titles and tooltips in `applyToolbarIcons()`),
+is a `MainComponent` child like the canvas, and is laid out by `MainComponent::layoutCanvas()`: the top
+`CanvasToolbar::kHeight` (40 px: the 30 x 24 chip, a one-line caption, and a 1 px inset) of the main area when the
+canvas is the main view, or of the Canvas tab body when it is a panel tab (the canvas there is 40 px shorter). In a rectangle so short that 40 px would be over half of it, the strip takes half, so the canvas never vanishes. It is
+visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. The strip is the
+same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
+aligned, 84 px wide with captions and 32 px without.
+
+The canvas keys reveal a hidden canvas first: Cmd+L, Cmd+K and Cmd+M call `ensureCanvasShowing()` before acting
+(`MainComponentCommandTable.cpp`), and adding a module, plugin or snippet from the Library with a click or Return
+does the same (drags land on the canvas, so they already show it). The greyed-out Minimap keeps its
+"Needs a taller canvas" tooltip ([minimap](minimap.md#placement-sizing-and-auto-hide)).
+
+**Keyboard.** The strip is one Tab stop, the "canvasToolbar" focus region (right before Canvas, wherever the canvas is: the main
+area or the bottom panel's Canvas tab; open while the strip is visible), with the same roving ring as the top bar: Left/Right/Home/End move across the visible, enabled
+buttons (the greyed Minimap is skipped), Space/Return press the ringed one, modified chords bubble up. The buttons give
+up their own focus, the ring is drawn with `paintFocusRing`, and the strip's accessibility value is the ringed button's
+name.
 
 ## Minimum window size
 

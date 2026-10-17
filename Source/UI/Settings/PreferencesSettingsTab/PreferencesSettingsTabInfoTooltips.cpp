@@ -5,8 +5,8 @@
 // Concern: the "Show info tooltips" row (docs/layout/animation.md#tooltips; Panels & Windows). Off hides the tooltips
 // that explain a control; helper tips keep showing. Nothing is pushed from here: every synth::ui::AppTooltipWindow
 // reads synth::ui::kShowInfoTooltipsKey from the user settings each time it is asked for a tip, so a toggle applies at
-// once, in the main window and every detached window. Chained between the panel-detach-mode row and the MIDI Remote
-// group.
+// once, in the main window and every detached window. Chained between the panel-detach-mode row and the "Show button
+// labels" row.
 
 bool PreferencesSettingsTab::isShowInfoTooltipsEnabled() const { return showInfoTooltipsToggle.getToggleState(); }
 
@@ -39,7 +39,7 @@ void PreferencesSettingsTab::setupInfoTooltipsControls() {
         "into a mixer channel, are not affected.",
         juce::dontSendNotification);
     styleMutedHintLabel(showInfoTooltipsHint);
-    setupMidiRemoteControls(); // Chained here, the constructor is baselined
+    setupToolbarLabelsControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutInfoTooltipsGroup(
@@ -62,5 +62,5 @@ void PreferencesSettingsTab::layoutInfoTooltipsGroup(
         showInfoTooltipsHint.setBounds({24, y, contentWidth - 24, kHintHeight});
         y += kHintHeight;
     }
-    layoutMidiRemoteGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
+    layoutToolbarLabelsGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
 }

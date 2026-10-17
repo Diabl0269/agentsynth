@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentShortcutHints.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/SettingsWindow.h"
@@ -16,6 +17,8 @@
 
 void MainComponent::addCanvasAndPanels() {
     addAndMakeVisible(graphEditor);
+    // The canvas's own top row. Laid out by layoutCanvas() wherever the canvas is, and hidden with it.
+    addAndMakeVisible(canvasToolbar_);
     // Right above the canvas: the main area's other views sit under every panel and overlay, as it does.
     addChildComponent(mainViewHolder_);
     bottomDock.setMainAreaHolder(&mainViewHolder_);
@@ -212,8 +215,6 @@ void MainComponent::addToolbarToggleButtons() {
         beginPanelSlide();
     };
 
-    addAndMakeVisible(toggleMinimapButton);
-    toggleMinimapButton.setComponentID("toggleMinimap");
     toggleMinimapButton.onClick = [this] {
         graphEditor.toggleMinimapVisibility();
         appProperties.getUserSettings()->setValue("minimapVisible", graphEditor.isMinimapVisible() ? "1" : "0");
@@ -221,8 +222,6 @@ void MainComponent::addToolbarToggleButtons() {
         applyToolbarIcons();
     };
 
-    addAndMakeVisible(toggleModMatrixButton);
-    toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
         graphEditor.toggleModMatrixVisibility();
         applyToolbarIcons();
@@ -237,8 +236,6 @@ void MainComponent::addToolbarToggleButtons() {
     themeToggleButton.setComponentID("themeToggle");
     themeToggleButton.onClick = [this] { themeManager->toggleLightDarkMode(); };
 
-    addAndMakeVisible(autoArrangeButton);
-    autoArrangeButton.setComponentID("autoArrangeButton");
     autoArrangeButton.onClick = [this] { graphEditor.autoArrange(); };
 
     addAndMakeVisible(settingsButton);
@@ -253,7 +250,12 @@ void MainComponent::addToolbarToggleButtons() {
 // The visible text of a toggle says what a press does ("Hide Library" / "Show Library"), so that same
 // string is its screen-reader name in every width: narrow mode only drops the visible text, and the
 // toggles are not click-toggling buttons, so a screen reader gets no checked state to carry it.
+//
+// `iconOnly` is the narrow-width answer; the "Show button labels" preference forces icon-only on top of it, for the
+// top bar and the canvas toolbar alike. The canvas toolbar is re-laid because a captioned button is wider.
 void MainComponent::applyToolbarLabels(bool iconOnly) {
+    toolbarLabelsShown_ = synth::ui::showToolbarLabels(appProperties.getUserSettings());
+    iconOnly = iconOnly || !toolbarLabelsShown_;
     const bool darkTheme = themeManager != nullptr && themeManager->getActiveTheme().isDark;
     const std::pair<juce::DrawableButton*, juce::String> labels[] = {
         {&toggleLibraryButton, isLibraryVisible ? "Hide Library" : "Show Library"},
@@ -275,6 +277,13 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
         button->setTitle(label);
         button->setButtonText(iconOnly ? juce::String() : label);
     }
+    canvasToolbar_.setIconOnly(iconOnly);
+}
+
+// Called on every settings write: only a flip of "Show button labels" does any work.
+void MainComponent::applyToolbarLabelPreference() {
+    if (synth::ui::showToolbarLabels(appProperties.getUserSettings()) != toolbarLabelsShown_)
+        applyToolbarLabels(toolbarNarrowMode_);
 }
 
 // One place for both entry points (the gear and the feedback button), which differ only in the tab
@@ -314,8 +323,7 @@ void MainComponent::assembleToolbar() {
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
-                        &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &toggleBottomPanelButton, &themeToggleButton});
+                        &undoButton, &redoButton, &toggleAiPanelButton, &toggleBottomPanelButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.

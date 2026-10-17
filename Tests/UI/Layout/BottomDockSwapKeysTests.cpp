@@ -171,7 +171,8 @@ TEST_F(BottomDockSwapKeysTest, TheCmdHoldHintsSkipTheViewInMainAndShowTheCanvasT
 TEST_F(BottomDockSwapKeysTest, TheTabOrderFollowsTheLayoutWithAnyViewInTheMainArea) {
     // Canvas in main: it comes first, then the strip and the panel's views.
     auto ids = regionIds();
-    EXPECT_LT(indexOf(ids, "library"), indexOf(ids, "canvas"));
+    EXPECT_LT(indexOf(ids, "library"), indexOf(ids, "canvasToolbar"));
+    EXPECT_EQ(indexOf(ids, "canvasToolbar") + 1, indexOf(ids, "canvas")) << "the canvas toolbar is right before it";
     EXPECT_LT(indexOf(ids, "canvas"), indexOf(ids, "dockTabs"));
     EXPECT_LT(indexOf(ids, "dockTabs"), indexOf(ids, "timeline"));
 
@@ -185,6 +186,7 @@ TEST_F(BottomDockSwapKeysTest, TheTabOrderFollowsTheLayoutWithAnyViewInTheMainAr
         EXPECT_LT(indexOf(ids, "library"), indexOf(ids, mainRegion)) << row.swapAction;
         EXPECT_LT(indexOf(ids, mainRegion), indexOf(ids, "dockTabs")) << row.swapAction;
         EXPECT_LT(indexOf(ids, "dockTabs"), indexOf(ids, "canvas")) << row.swapAction << ": the canvas is in the panel";
+        EXPECT_EQ(indexOf(ids, "canvasToolbar") + 1, indexOf(ids, "canvas")) << row.swapAction << ": toolbar leads it";
         EXPECT_LT(indexOf(ids, "canvas"), indexOf(ids, "aiPanel"));
         EXPECT_EQ(std::count(ids.begin(), ids.end(), juce::String(mainRegion)), 1) << "registered once";
         ASSERT_TRUE(run(AppCommands::swapCanvasToMain));

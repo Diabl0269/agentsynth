@@ -40,11 +40,7 @@ protected:
         return region != nullptr && region->isCurrentlyOpen();
     }
     juce::Button* minimapButton() {
-        for (auto* child : mc_->getChildren())
-            if (auto* button = dynamic_cast<juce::Button*>(child))
-                if (button->getComponentID() == "toggleMinimap")
-                    return button;
-        return nullptr;
+        return dynamic_cast<juce::Button*>(mc_->getCanvasToolbar().findChildWithID("toggleMinimap"));
     }
 
     std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
@@ -62,8 +58,11 @@ TEST_F(BottomDockCanvasTabTest, TheCanvasFillsTheTabBodyWhileItsTabShows) {
     ASSERT_TRUE(canvas().isVisible());
     const auto body = dock().getCanvasBodyBounds();
     EXPECT_FALSE(body.isEmpty());
-    EXPECT_EQ(canvas().getBounds(), body + dock().getPosition());
-    EXPECT_EQ(canvas().getY(), dock().getY() + BottomDockComponent::kTabStripHeight);
+    // The canvas toolbar is the body's top row; the canvas takes the rest.
+    const auto bodyInWindow = body + dock().getPosition();
+    EXPECT_EQ(canvas().getBounds(), bodyInWindow.withTrimmedTop(synth::ui::CanvasToolbar::kHeight));
+    EXPECT_EQ(canvas().getY(),
+              dock().getY() + BottomDockComponent::kTabStripHeight + synth::ui::CanvasToolbar::kHeight);
     EXPECT_FALSE(dock().hitTest(body.getCentreX(), body.getCentreY())) << "clicks in the body belong to the canvas";
     EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the canvas has no window to open into";
 }

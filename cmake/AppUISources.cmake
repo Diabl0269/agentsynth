@@ -434,6 +434,9 @@ set(APPUI_SOURCES
     Source/UI/Chrome/Toast/ToastComponent.cpp
     Source/UI/Chrome/ProgressTaskWindow.cpp
     Source/UI/Chrome/ProgressTaskWindow.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.cpp
+    Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
@@ -800,6 +803,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabToolbarLabels.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp

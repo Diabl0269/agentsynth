@@ -195,7 +195,7 @@ TEST_F(MainComponentTest, ToggleModMatrixButtonToggleStateFollowsVisibility) {
     mainComp.setSize(1600, 900);
 
     juce::Button* toggleBtn = nullptr;
-    for (auto* child : mainComp.getChildren())
+    for (auto* child : mainComp.getCanvasToolbar().getChildren())
         if (auto* btn = dynamic_cast<juce::Button*>(child))
             if (btn->getComponentID() == "toggleModMatrix")
                 toggleBtn = btn;

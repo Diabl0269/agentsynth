@@ -30,7 +30,8 @@ protected:
 } // namespace
 
 TEST_F(BottomDockMixerMainTest, TheMixerHostFillsTheRectTheCanvasHadAndTheCanvasGoesToTheDock) {
-    const auto mainRect = mc_->getGraphEditor().getBounds();
+    // The main area is the canvas plus its toolbar row.
+    const auto mainRect = mc_->getGraphEditor().getBounds().getUnion(mc_->getCanvasToolbar().getBounds());
 
     ASSERT_TRUE(mc_->setMainViewForTest(Tab::Mixer));
     auto& host = dock().getMixerHost();

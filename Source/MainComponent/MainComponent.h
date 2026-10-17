@@ -37,6 +37,7 @@
 #include "Transport/TransportDoc.h"
 #include "Transport/TransportNudge.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Chrome/Toast/ToastComponent.h"
@@ -211,6 +212,7 @@ public:
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
+    synth::ui::CanvasToolbar& getCanvasToolbar() { return canvasToolbar_; }
     StatusBarComponent& getStatusBar() { return statusBar; }
     synth::AIChatComponent& getAiChatComponent() { return aiChatComponent; }
     ShortcutManager& getShortcutManager() { return shortcutManager; }
@@ -711,6 +713,8 @@ private:
     void applyToolbarIcons();
     // Sets every toolbar button's screen-reader name, and its visible text unless `iconOnly`.
     void applyToolbarLabels(bool iconOnly);
+    /** Re-applies the labels when the "Show button labels" preference changed; called on every settings write. */
+    void applyToolbarLabelPreference();
     void applyStoredDualIOPreferenceToPatch();
     juce::String computeOutputDeviceInfoText() const;
     void setLibraryVisible(bool v);
@@ -787,9 +791,11 @@ private:
     synth::ui::ToolbarButton undoButton{"undo"};
     synth::ui::ToolbarButton redoButton{"redo"};
     synth::ui::ToolbarButton toggleAiPanelButton{"toggleAi"};
-    synth::ui::ToolbarButton toggleModMatrixButton{"toggleMatrix"};
-    synth::ui::ToolbarButton toggleMinimapButton{"toggleMinimap"};
-    synth::ui::ToolbarButton autoArrangeButton{"autoArrange"};
+    // Auto Arrange, Minimap and Matrix live on the canvas's own top row; the names below are the toolbar's buttons.
+    synth::ui::CanvasToolbar canvasToolbar_;
+    synth::ui::ToolbarButton& toggleModMatrixButton = canvasToolbar_.matrixButton();
+    synth::ui::ToolbarButton& toggleMinimapButton = canvasToolbar_.minimapButton();
+    synth::ui::ToolbarButton& autoArrangeButton = canvasToolbar_.autoArrangeButton();
     synth::ui::ToolbarButton toggleLibraryButton{"toggleLibrary"};
     synth::ui::ToolbarButton toggleBottomPanelButton{"toggleBottomPanel"};
     synth::ui::ToolbarButton themeToggleButton{"toggleTheme"};
@@ -832,6 +838,7 @@ private:
         aiApplyScope; // AI apply span; its own slot because the pair may be unbalanced
 
     bool toolbarNarrowMode_{false}; // applyToolbarIcons() re-clones icons only on the transition
+    bool toolbarLabelsShown_{true}; // the last-applied "Show button labels" preference
     int statusBarTickCount_{0};     // status bar updates every 2nd 10 Hz tick
 
     juce::String currentPatchName_{"Default"}; // declared before statusBar
