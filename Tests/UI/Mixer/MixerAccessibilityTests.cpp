@@ -142,7 +142,8 @@ TEST(MixerAccessibilityTest, HeaderDescribesLinkedAndReceivesBadgesInWords) {
 
     receiving->setSize(140, 400);
     ASSERT_GT(header.getWidth(), 40);
-    const juce::Point<int> onBadge(header.getWidth() - 10, header.getHeight() / 2);
+    // The badges sit left of the Edit on canvas button, which takes the header's right end.
+    const juce::Point<int> onBadge(header.getWidth() - 4 - 16 - 6, header.getHeight() / 2);
     EXPECT_EQ(header.getComponentAt(onBadge), &header)
         << "the badge area belongs to the header, whose tooltip names the badges";
 }
@@ -242,7 +243,7 @@ TEST(MixerAccessibilityTest, InsertListRowsExposeNameAndBypassedStateAsRealAxChi
     synth::ui::MixerInsertList list;
     list.setEntries(
         {{{}, "gate-uuid", "Gate", /*bypassed=*/true}, {{}, "eq-uuid", "Parametric EQ", /*bypassed=*/false}},
-        /*linear=*/true, {}, {}, {});
+        /*linear=*/true, {}, {});
     list.setSize(140, list.getPreferredHeight());
 
     auto* row0 = list.getRowAccessibilityComponentForTest(0);

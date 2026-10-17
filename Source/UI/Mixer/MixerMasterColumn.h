@@ -9,6 +9,7 @@
 #include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowsMotion.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -60,8 +61,9 @@ public:
      *  what the meter and clip/peak readout read once Master has >= 1 insert. Null falls back to Master's own
      *  pre-insert latch. Survives unbindFromGraph(): it points at the engine, not into the graph. */
     std::function<float(int leg)> outputPeakProvider;
-    /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas / onMutated. */
+    /** Fires with Master's uuid when the header's "Edit on canvas" button is activated. */
     std::function<void(const juce::String&)> onEditOnCanvas;
+    /** Forwarded from the insert list after a mutation. */
     std::function<void()> onMutated;
     /** Fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
      *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
@@ -70,6 +72,9 @@ public:
     /** The row list the panel's keyboard row focus walks (MixerPanelRowKeyboard.cpp). */
     MixerInsertList& getInsertList() noexcept { return insertList_; }
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
+    MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
+    /** Plays the insert-row motion in a headless run, where the column is never showing. */
+    void forceRowMotionForTest(bool on) noexcept { rowMotionForced_ = on; }
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
     /** Sets the callback for a right-click on the header (the pin menu). */
     void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
@@ -152,6 +157,7 @@ public:
     void refreshLiveVisuals();
 
 private:
+    void setInsertEntries(const synth::MixerColumn& column);
     void refreshPanLawButton();
     void showPanLawMenu();
     void setPanLaw(synth::MixerPanLaw law);
@@ -194,7 +200,11 @@ private:
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     MixerColumnHeader header_;
+    juce::String editOnCanvasTarget_;
     MixerInsertList insertList_;
+    MixerRowsMotion rowsMotion_{*this};
+    std::vector<synth::MixerInsertEntry> shownInserts_; // what insertList_ was last given
+    bool rowMotionForced_ = false;
     MixerSectionLayout ownSectionLayout_; // until setSectionLayout() hands over the panel's
     MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
     MixerSectionViewport insertViewport_;

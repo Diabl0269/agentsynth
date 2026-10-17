@@ -84,7 +84,7 @@ struct SplitListRig {
     void refresh() {
         editor.updateComponents();
         const auto c = column();
-        list.setEntries(c.inserts, c.insertChainIsLinear, c.editOnCanvasTargetUuid, c.sourceNodeId, c.nodeId);
+        list.setEntries(c.inserts, c.insertChainIsLinear, c.sourceNodeId, c.nodeId);
     }
 
     std::vector<juce::String> rows() const {

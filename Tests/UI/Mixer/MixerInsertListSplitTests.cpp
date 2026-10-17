@@ -39,7 +39,7 @@ TEST(MixerInsertListSplitTests, AClickOnTheSplitRowOpensItsPathsAndTheOpenStateS
 
     synth::ui::MixerInsertList other; // the detached mixer's copy of the same column
     const auto c = p.column();
-    other.setEntries(c.inserts, false, {}, c.sourceNodeId, c.nodeId);
+    other.setEntries(c.inserts, false, c.sourceNodeId, c.nodeId);
     EXPECT_TRUE(other.isSplitOpen(1));
 
     p.list.setSplitOpen(1, false);

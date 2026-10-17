@@ -260,6 +260,25 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
               panelBounds.getY() - synth::ui::BottomDockComponent::kTabStripHeight);
 }
 
+// Regression test for FRO816: a Mod Matrix that had finished sliding open kept its old size when the bottom pane
+// closed under it, because the canvas still thought the slide was running.
+TEST_F(PanelSlideLayoutTest, TheModMatrixFollowsTheCanvasWhenTheBottomPaneCloses) {
+    MainComponent mc(std::make_unique<MockProviderPAL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleBottomPanelClick();
+    auto& canvas = mc.getGraphEditor();
+    canvas.toggleModMatrixVisibility();
+    canvas.completeModMatrixSlideForTest();
+    ASSERT_EQ(canvas.getModMatrix().getHeight(), canvas.getHeight());
+
+    mc.setPanelOpenProgressForTest(SlidingPanel::Timeline, 0.0f);
+
+    EXPECT_GT(canvas.getHeight(), 700) << "the canvas took the pane's room";
+    EXPECT_EQ(canvas.getModMatrix().getBounds(),
+              juce::Rectangle<int>(canvas.getWidth() - 600, 0, 600, canvas.getHeight()))
+        << "the matrix is as tall as the canvas it covers";
+}
+
 // The jump this whole design removes: the tween starts from the fraction's CURRENT value, so
 // catching a slide half-open and toggling back reverses from there instead of restarting.
 TEST_F(PanelSlideLayoutTest, TogglingMidSlideReversesFromTheCurrentFraction) {

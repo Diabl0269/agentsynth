@@ -792,3 +792,29 @@ TEST_F(ModMatrixTest, AClosedMatrixStillNumbersSameTypeModules) {
     matrix.timerCallback();
     EXPECT_NE(a->getProcessor()->getName(), b->getProcessor()->getName());
 }
+
+// Regression test for FRO816: once the show/hide slide has landed the matrix sits at the canvas's right edge, and a
+// canvas resize (a pane closing, a window drag) carries it along instead of leaving the old size behind.
+TEST_F(ModMatrixTest, AMatrixThatFinishedSlidingOpenFollowsTheCanvasWhenItResizes) {
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.toggleModMatrixVisibility();
+    editor.completeModMatrixSlideForTest();
+    ASSERT_EQ(editor.getModMatrix().getBounds(), juce::Rectangle<int>(400, 0, 600, 600));
+
+    editor.setSize(1200, 900);
+
+    EXPECT_EQ(editor.getModMatrix().getBounds(), juce::Rectangle<int>(600, 0, 600, 900));
+}
+
+// A resize while the slide is still running keeps the slide's own bounds and retargets where it lands.
+TEST_F(ModMatrixTest, AResizeMidSlideRetargetsWhereTheMatrixLands) {
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.toggleModMatrixVisibility();
+
+    editor.setSize(1200, 900);
+    editor.completeModMatrixSlideForTest();
+
+    EXPECT_EQ(editor.getModMatrix().getBounds(), juce::Rectangle<int>(600, 0, 600, 900));
+}

@@ -240,6 +240,34 @@ TEST(MixerSendListDragTests, TheHeldRowFollowsThePointerAndTheOtherRowGlidesInto
     drag.release(25.0f);
 }
 
+// A drop must not free its own list: the move's own graph update reaches the structure-changed catch-up, which saw the
+// reordered sends, rebuilt the mixer and destroyed the list that was still committing its drag. moveRow() then read
+// its onMutated from freed memory (a segfault on Linux, silent on macOS). The list must outlive the move and be
+// told once; the rebuild comes with that notification, not before it.
+TEST(MixerSendListDragTests, TheListIsStillAliveWhenItsMoveReturnsAndTheMixerRebuildsOnce) {
+    DragRig rig;
+    auto& sendList = rig.sourceColumn()->getSendListForTest();
+    juce::Component::SafePointer<synth::ui::MixerSendList> alive(&sendList);
+    bool aliveAfterMove = false;
+    bool* aliveAfterMoveOut = &aliveAfterMove; // locals only: the list owning this lambda may be gone on return
+    const auto original = sendList.moveSendRow;
+    sendList.moveSendRow = [alive, aliveAfterMoveOut, original](NodeID strip, int from, int to) {
+        const bool moved = original(strip, from, to);
+        *aliveAfterMoveOut = alive != nullptr;
+        return moved;
+    };
+    const int rebuildsBefore = rig.panel().getRebuildCountForTest();
+
+    RowDrag drag(sendList);
+    drag.press();
+    drag.dragBy(25.0f);
+    drag.release(25.0f);
+
+    EXPECT_TRUE(aliveAfterMove) << "the list is destroyed only by the rebuild its own notification asks for";
+    EXPECT_EQ(rig.panel().getRebuildCountForTest() - rebuildsBefore, 1);
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), rig.sourceColumn()->getNodeId(), 1), rig.busA);
+}
+
 TEST(MixerSendListDragTests, EscapeMidDragCommitsNothingAndPutsBothRowsBack) {
     DragRig rig;
     auto* column = rig.sourceColumn();

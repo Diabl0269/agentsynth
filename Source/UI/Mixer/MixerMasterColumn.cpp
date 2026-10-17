@@ -46,9 +46,9 @@ MixerMasterColumn::MixerMasterColumn() {
     ownSectionLayout_.onGeometryChanged = [this] { resized(); };
     ownSectionLayout_.onAppearanceChanged = [this] { repaintSectionDividers(); };
     setSectionLayout(ownSectionLayout_);
-    insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
+    header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
-            onEditOnCanvas(uuid);
+            onEditOnCanvas(editOnCanvasTarget_);
     };
     insertList_.onMutated = [this] {
         if (onMutated)
@@ -98,12 +98,35 @@ void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManag
     refreshPanLawButton();
 }
 
+// This column outlives its edits, so the rows it showed are still here to be compared with the ones it shows next.
+// A rebuild that leaves the inserts as they were neither restarts nor cuts short a motion already playing.
+void MixerMasterColumn::setInsertEntries(const synth::MixerColumn& column) {
+    const bool changed = column.inserts != shownInserts_;
+    const bool canAnimate = changed && (isShowing() || rowMotionForced_);
+    std::vector<juce::String> nextKeys;
+    for (const auto& entry : column.inserts)
+        nextKeys.push_back(MixerRowsMotion::insertKey(entry));
+    MixerRowsMotion::Part rowsBefore;
+    if (canAnimate)
+        rowsBefore = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), nextKeys);
+    if (changed)
+        rowsMotion_.finishNow();
+    shownInserts_ = column.inserts;
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.chainEndNodeId);
+    if (canAnimate) {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+        rowsMotion_.play(MixerRowsMotion::List::Inserts, rowsBefore,
+                         MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()),
+                         synth::theme::themeOf(*this).colors.surfaceHi);
+    }
+}
+
 void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     setNodeId(column.nodeId);
     // Master's chain hangs off Master's own output (column.sourceNodeId == column.nodeId) and feeds the Rec Tap /
     // Audio Output (column.chainEndNodeId) -- see MixerModelInserts.cpp's buildMasterInsertsForColumn.
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
-                           column.sourceNodeId, column.chainEndNodeId);
+    editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
+    setInsertEntries(column);
     const bool hasInserts = !column.inserts.empty();
     insertsCollapsed_.setSummary(
         mixerSectionCountSummary(synth::countInsertModules(column.inserts), "insert", "inserts"));

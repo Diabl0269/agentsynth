@@ -147,6 +147,37 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     EXPECT_TRUE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }
 
+// Regression test for FRO894: the button selects the channel's macro like a header click does, and brings it into
+// view, so a press always shows something.
+TEST(MixerPanelComponentTests, TheEditOnCanvasButtonSelectsTheMacroAndBringsItIntoView) {
+    MainComponent mc(std::make_unique<MockProviderMPCT>());
+    mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    mixerPanel.setSize(1400, 300);
+    mixerPanel.resized();
+
+    auto& canvas = mc.getGraphEditor();
+    ASSERT_EQ(canvas.getMacros().size(), 1);
+    const auto macro = canvas.getMacros().getAll().front();
+    const auto macroCentre = macro.bounds.toFloat().getCentre();
+    canvas.centreViewOn({macroCentre.x + 1500.0f, macroCentre.y + 1500.0f});
+    ASSERT_FALSE(canvas.getVisibleCanvasRect().contains(macroCentre)) << "the macro starts off screen";
+    ASSERT_FALSE(canvas.getMacroController().isMacroSelected(macro.id));
+
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    column->getHeaderForTest().getEditOnCanvasButtonForTest().triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+
+    EXPECT_TRUE(canvas.getMacroController().isMacroSelected(macro.id));
+    EXPECT_TRUE(canvas.getVisibleCanvasRect().contains(macroCentre));
+}
+
 // An empty graph (the default new patch, before any track or bus exists) shows a hint
 // instead of a blank panel; adding a channel hides it again, and removing that channel brings it
 // back -- exercised with createBus() (public, and the smallest path to a column) rather than

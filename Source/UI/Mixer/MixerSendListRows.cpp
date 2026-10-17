@@ -2,6 +2,7 @@
 // text, the level nudge behind Left and Right, and the tooltip for each part of a row.
 #include "AppUndoManager.h"
 #include "MixerDbAccessibilityText.h"
+#include "MixerRowsMotion.h"
 #include "MixerSendList.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
@@ -16,6 +17,23 @@ ChannelStripModule* stripOf(juce::AudioProcessorGraph* graph, juce::AudioProcess
     return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
 }
 } // namespace
+
+std::vector<juce::String> MixerSendList::entryKeys() const {
+    std::vector<juce::String> keys;
+    for (const auto& entry : entries_)
+        keys.push_back(MixerRowsMotion::sendKey(entry));
+    return keys;
+}
+
+std::vector<ExitEnterListRow> MixerSendList::motionRows() const {
+    std::vector<ExitEnterListRow> rows;
+    for (int i = 0; i < (int)entries_.size(); ++i) {
+        const auto bounds = getRowBounds(i);
+        rows.push_back(
+            {MixerRowsMotion::sendKey(entries_[(size_t)i]), (float)bounds.getY(), (float)bounds.getHeight()});
+    }
+    return rows;
+}
 
 juce::Rectangle<int> MixerSendList::getRowBounds(int rowIndex) const {
     if (rowIndex < 0 || rowIndex >= (int)entries_.size())

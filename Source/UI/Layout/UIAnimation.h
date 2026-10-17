@@ -164,8 +164,19 @@ public:
         }
     }
 
-    /** Returns true if an animation is currently in progress. */
-    bool isRunning() const noexcept { return animator.has_value(); }
+    /** Returns true if an animation is currently in progress. A finished one is not: the animator stays held after its
+     *  last frame, and a layout pass that defers to "the running tween" must not wait on one that already landed. */
+    bool isRunning() const noexcept { return animator.has_value() && !animator->isComplete(); }
+
+    /** Test seam: lands a running animation on its final frame and runs its complete callback, standing in for the
+     *  VBlank frames that never reach an off-screen component. A no-op when nothing runs. */
+    void completeForTest() {
+        if (!animator.has_value())
+            return;
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        animator->update(now);                                   // the frame that starts it
+        animator->update(now + animator->getDurationMs() + 1.0); // and the one past its end
+    }
 
     // -------------------------------------------------------------------------
     /** Linearly interpolate between two rectangles by normalised t ∈ [0,1].

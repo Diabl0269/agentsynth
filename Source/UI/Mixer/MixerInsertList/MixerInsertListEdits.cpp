@@ -85,12 +85,8 @@ std::function<void(std::unique_ptr<ModMatrixPicker>)>& MixerInsertList::pickerHo
 // ---- Mouse and menus -------------------------------------------------------------------------------------------
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
-    if (!isEditable()) {
-        // The link sits right under the rows (or the "(no inserts)" placeholder) -- the same anchor paint() uses.
-        if (event.y >= contentHeight() && onEditOnCanvas)
-            onEditOnCanvas(editOnCanvasTargetUuid_);
+    if (!isEditable())
         return;
-    }
     if (const auto gap = gapTargetAt(event.getPosition()); gap && !event.mods.isPopupMenu()) {
         showAddPicker(*gap, juce::Rectangle<int>(event.x, event.y, 1, 1));
         return;

@@ -85,6 +85,7 @@ window has its own chord, **Ctrl+Cmd+E** on macOS / **Ctrl+Alt+E** elsewhere (`t
 window can be closed from its own title bar. A built-in instrument has no window, so the chord does nothing there. An unbound or
 orphaned track does nothing. The button (`TrackShowModuleButton`) is a Tab stop with a focus ring, named "Show <track> module", its
 tooltip names the live binding, and a click leaves focus on the row. It is not drawn on the Automation section header.
+The mixer column header reuses the button as "Edit <channel> on canvas" ([Edit on canvas](../mixer/edit-on-canvas.md)).
 Tests: `Tests/UI/Timeline/TimelineTrackShowModuleTests.cpp`, `Tests/App/MainComponent/MainComponentShowTrackModuleTests.cpp`.
 
 ## Keyboard focus and M/S/R

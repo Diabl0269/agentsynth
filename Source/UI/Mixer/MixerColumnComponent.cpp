@@ -64,9 +64,9 @@ MixerColumnComponent::MixerColumnComponent() {
 
     insertViewport_.setList(insertList_);
     addAndMakeVisible(insertViewport_);
-    insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
+    header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
-            onEditOnCanvas(uuid);
+            onEditOnCanvas(editOnCanvasTarget_);
     };
     insertList_.onMutated = [this] {
         if (onMutated)
@@ -179,8 +179,9 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // costs no row and the columns' faders stay level without any reserved space.
     showsSources_ = sources.isNotEmpty() && sources != column.name;
     header_.setSources(showsSources_ ? sources : juce::String());
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
-                           column.sourceNodeId, column.nodeId);
+    // A branching chain names its own target (the first boxed module's macro); any other column edits its channel.
+    editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId);
 
     // The first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -567,6 +568,28 @@ void MixerColumnComponent::layoutSections(const MixerSectionLayout::Geometry& ge
     }
     insertViewport_.setContentHeight(insertList_.getPreferredHeight());
     sendViewport_.setContentHeight(sendList_.getPreferredHeight());
+}
+
+// The old column's rows (and, for a removal, the picture of the section they were drawn in) for the column that
+// replaces it; the replacement's lists are new objects, so the rows themselves cannot carry the motion over.
+MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::MixerColumn& next) {
+    std::vector<juce::String> insertKeys, sendKeys;
+    for (const auto& entry : next.inserts)
+        insertKeys.push_back(MixerRowsMotion::insertKey(entry));
+    for (const auto& entry : next.sends)
+        sendKeys.push_back(MixerRowsMotion::sendKey(entry));
+    MixerRowsMotion::Snapshot snapshot;
+    snapshot.inserts = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), insertKeys);
+    snapshot.sends = MixerRowsMotion::capture(*this, sendViewport_, sendList_.motionRows(), sendKeys);
+    return snapshot;
+}
+
+void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before) {
+    const auto background = synth::theme::themeOf(*this).colors.surface;
+    rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts,
+                     MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()), background);
+    rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
+                     MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
 }
 
 void MixerColumnComponent::setSectionLayout(MixerSectionLayout& layout) {

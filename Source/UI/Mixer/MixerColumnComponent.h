@@ -8,6 +8,7 @@
 #include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowsMotion.h"
 #include "MixerSendList.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
@@ -151,7 +152,8 @@ public:
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;
-    /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas. */
+    /** Fires with the target to select on the canvas: the header's "Edit on canvas" button (the channel, or the macro
+     *  of a branching chain) and the EQ thumbnail's click (the EQ's own uuid). */
     std::function<void(const juce::String&)> onEditOnCanvas;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
@@ -176,6 +178,12 @@ public:
     void setSendSettlePendingHandler(std::function<void(int finalRow, float fromY)> handler) {
         sendList_.onSettlePending = std::move(handler);
     }
+    /** What the insert and send rows look like now, for the replacement column that `next` builds (pictures only when
+     *  rows go and none come). Call before this column is destroyed; see MixerRowsMotion. */
+    MixerRowsMotion::Snapshot captureRowSnapshot(const synth::MixerColumn& next);
+    /** Plays the rows that came or went since `before`, on this freshly laid-out column. */
+    void playRowMotion(const MixerRowsMotion::Snapshot& before);
+    MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
     /** Starts the dropped send row's settle on this (rebuilt) column -- see MixerSendList::startSettleFrom. */
     void startSendSettle(int finalRow, float fromY) { sendList_.startSettleFrom(finalRow, fromY); }
 
@@ -376,6 +384,7 @@ private:
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
+    juce::String editOnCanvasTarget_;
     /** The same EQ's NodeID -- compared against MixerInsertList::onBeforeNodeRemoved's argument to
      *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (use-after-free
      *  fix; unbindFromGraph() above handles the graph-replacing-restore case, not this one). Empty
@@ -386,6 +395,7 @@ private:
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;
+    MixerRowsMotion rowsMotion_{*this};
     // Used only until setSectionLayout() hands over the panel's shared one (a standalone column).
     MixerSectionLayout ownSectionLayout_;
     MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;

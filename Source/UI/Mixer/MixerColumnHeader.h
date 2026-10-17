@@ -6,6 +6,7 @@
 #include "UI/Mixer/MixerHeader/MixerColourDot.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour dot + name label +
@@ -17,7 +18,8 @@
 // Two real buttons sit in the row: the colour dot at the left (click, Return or Space opens the colour picker,
 // docs/mixer/panel.md#the-colour-dot) and, only on a channel something plays into, the sources badge at the right
 // of the name (hover shows who plays into it, docs/mixer/panel.md#the-sources-badge). Both are Tab stops with a
-// screen-reader name and a tooltip.
+// screen-reader name and a tooltip. A third sits at the far right of every channel and Master header: the target
+// button of the timeline's track headers, "Edit on canvas" (docs/mixer/edit-on-canvas.md).
 //
 // The name is also double-click-to-rename in place -- nameLabel_ reuses the exact
 // juce::Label(false, true, false) + onTextChange pattern TimelineTrackHeaderComponent::nameLabel_
@@ -77,6 +79,14 @@ public:
                 onHeaderClicked();
         };
 
+        addAndMakeVisible(editOnCanvasButton_);
+        editOnCanvasButton_.setComponentID("mixerEditOnCanvas");
+        editOnCanvasButton_.onClick = [this] {
+            if (onEditOnCanvasClicked)
+                onEditOnCanvasClicked();
+        };
+        refreshEditOnCanvasTexts();
+
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -130,7 +140,20 @@ public:
     }
     juce::String getSources() const { return sources_; }
 
+    /** Fires when the "Edit on canvas" button is clicked or activated from the keyboard. */
+    std::function<void()> onEditOnCanvasClicked;
+
+    /** Whether the "Edit on canvas" button shows; off for Direct, which has nothing on the canvas. */
+    void setEditOnCanvasShown(bool shown) {
+        if (editOnCanvasButton_.isVisible() == shown)
+            return;
+        editOnCanvasButton_.setVisible(shown);
+        resized();
+        repaint();
+    }
+
     /** Test seams: the real buttons, so a test drives them through the clicks and keys a live press produces. */
+    TrackShowModuleButton& getEditOnCanvasButtonForTest() noexcept { return editOnCanvasButton_; }
     MixerColourDot& getColourDotForTest() noexcept { return colourDot_; }
     MixerIconButton& getSourcesButtonForTest() noexcept { return sourcesButton_; }
 
@@ -148,6 +171,7 @@ public:
         nameLabel_.setText(name_, juce::dontSendNotification);
         nameLabel_.setTitle(name_ + " name");
         colourDot_.setTitle(name_ + " colour");
+        refreshEditOnCanvasTexts();
     }
     juce::String getDisplayName() const { return name_; }
 
@@ -265,6 +289,7 @@ public:
         const auto slots = layoutSlots();
         colourDot_.setBounds(slots.dot);
         sourcesButton_.setBounds(slots.sources);
+        editOnCanvasButton_.setBounds(slots.editOnCanvas);
         nameLabel_.setBounds(slots.name);
     }
 
@@ -314,16 +339,19 @@ public:
 
 private:
     // Where every part of the row sits, left to right: the colour dot, the name, then (right to left) the
-    // linked/bus badge, the receives badge and the sources button. Painting the badges and placing the
-    // child components both read this, so they can never drift apart; the name label takes whatever is left.
+    // Edit on canvas button, the linked/bus badge, the receives badge and the sources button. Painting the badges
+    // and placing the child components both read this, so they can never drift apart; the name label takes
+    // whatever is left.
     struct Slots {
-        juce::Rectangle<int> dot, name, badge, receives, sources;
+        juce::Rectangle<int> dot, name, editOnCanvas, badge, receives, sources;
     };
     Slots layoutSlots() const {
         Slots slots;
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0)
             slots.dot = bounds.removeFromLeft(kDotButtonWidth);
+        if (editOnCanvasButton_.isVisible())
+            slots.editOnCanvas = bounds.removeFromRight(kEditOnCanvasWidth);
         if (busBadgeVisible_)
             slots.badge = bounds.removeFromRight(kBusBadgeWidth);
         else if (linkedBadgeVisible_)
@@ -334,6 +362,14 @@ private:
             slots.sources = bounds.removeFromRight(kSourcesBadgeWidth);
         slots.name = bounds;
         return slots;
+    }
+
+    // The screen-reader name and the tooltip follow the channel's name, like the colour dot's title.
+    void refreshEditOnCanvasTexts() {
+        const juce::String name = name_.isNotEmpty() ? name_ : juce::String("channel");
+        editOnCanvasButton_.setTexts("Edit " + name + " on canvas",
+                                     "Edit " + name +
+                                         " on the canvas: selects its cards there and brings them into view");
     }
 
     // The badges in words: the header's tooltip and its accessible description, one string so the
@@ -372,6 +408,7 @@ private:
     static constexpr int kLinkBadgeWidth = 16;
     static constexpr int kReceivesBadgeWidth = 22;
     static constexpr int kSourcesBadgeWidth = 16;
+    static constexpr int kEditOnCanvasWidth = 16;
     static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
@@ -384,6 +421,7 @@ private:
     juce::String sources_;
     MixerColourDot colourDot_;
     MixerIconButton sourcesButton_{"mixerSourcesBadge"};
+    TrackShowModuleButton editOnCanvasButton_;
     FadeVisibility colourDotFade_{&colourDot_}; // the dot and the badge fade as a colour or sources appear
     FadeVisibility sourcesFade_{&sourcesButton_};
 

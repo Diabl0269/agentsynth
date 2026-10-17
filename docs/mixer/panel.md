@@ -692,7 +692,7 @@ the section empty; Master (no sends, EQ or pan) leaves those rows blank so its I
 row and fader still line up; Direct has none of the rows and stays as it was. A standalone column
 (no panel, e.g. a test) falls back to its own private layout.
 
-- **Defaults.** Inserts 4 rows plus the link row (5 x 18 = 90 px), Sends 2 rows plus "+ Send"
+- **Defaults.** Inserts 4 rows plus "+ Insert" (5 x 18 = 90 px), Sends 2 rows plus "+ Send"
   (3 x 20 = 60 px), EQ shown (28 px).
 - **Show/hide.** The [toolbar](#the-toolbar)'s Inserts / Sends / EQ toggles hide or show the section
   in every column.
@@ -790,7 +790,7 @@ for only the first one in signal order**, Cubase's own single-slot idiom and a d
   while hidden; its `isVisible()` keeps meaning "this column has an EQ".
 - **Click** — forwarded through the column's existing `onEditOnCanvas` seam with the EQ node's own
   uuid, so `MixerPanelComponent::selectOnCanvas` resolves it exactly like a column header click or the
-  insert list's own "Edit on canvas" link: macro id, then `findByMember`, else the bare node. No new
+  header's "Edit on canvas" button: macro id, then `findByMember`, else the bare node. No new
   canvas plumbing.
 
 ## Keyboard navigation and accessibility
@@ -845,7 +845,7 @@ the other section, or back to column mode when none is left. Master has insert r
 - **B** (`mixerToggleRowBypass`, rebindable, Mixer category, default bare B) bypasses the focused row -- see
   [Bypassing a row](#bypassing-a-row).
 - **Return** on an insert selects its channel on the canvas, the same `selectOnCanvas` the EQ thumbnail's
-  click and the insert list's "Edit on canvas" link use; on a split row it opens or folds the paths, and on the
+  click and the header's "Edit on canvas" button use; on a split row it opens or folds the paths, and on the
   last insert row, "+ Insert", it opens the effect picker ([adding an insert](mixer.md#adding-an-insert)). **Delete** or **Backspace** removes the send or
   insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus
   use, undoable -- and a branching insert chain (read-only) keeps its rows. **Esc** returns to column mode.

@@ -355,8 +355,9 @@ and the strip. When that chain is a straight line, the column supports adding, r
 modules directly in the mixer. When it splits into parallel paths that meet again before the strip, the
 column lists them as a split row (see [Parallel paths](#parallel-paths)) and stays editable. Any other
 branch (a path that leaves the chain, a shared node feeding more than one channel, paths that meet at
-different places) shows the module list read-only with an "Edit on canvas" link, rather than presenting a
-branching chain as if it were a reorderable list.
+different places) shows the module list read-only (no "+ Insert" row), rather than presenting a branching chain as
+if it were a reorderable list. Every column's header carries an "Edit on canvas" button
+([Edit on canvas](edit-on-canvas.md)), the way to edit such a chain.
 
 ### Parallel paths
 
@@ -411,9 +412,9 @@ why **`MixerInsertList::moveRow` refuses to move a row to the very front of a bu
 no external predecessor to splice against, and `reorderInsert`'s second step has no rollback of its
 own.
 
-**An empty insert list and the "Edit on canvas" link must not paint on the same row.** The link
-anchors right under the rows, or under the "(no inserts)" placeholder when there are none, in `paint()`,
-`mouseDown()` and `getPreferredHeight()` alike.
+**"+ Insert" never turns into "Edit on canvas".** The button lives in the column header and stays whatever the
+chain looks like, so adding a line into a parallel module cannot swap one for the other; a read-only list simply has
+no "+ Insert" row and no link row (`getPreferredHeight()` is the rows alone).
 
 ## Master inserts
 
@@ -438,7 +439,7 @@ node — the terminator, recorded as `MixerColumn::chainEndNodeId` and never its
 in between are the inserts, in signal order; `MixerColumn::sourceNodeId` is Master's own node, so the
 same `MixerInsertList` splice code that serves a strip runs unchanged (predecessor = the last entry or
 Master, successor = the terminator). A node with more than one signal successor, or an insert with more
-than one signal predecessor, makes the list read-only with "Edit on canvas", exactly as for a strip. Other
+than one signal predecessor, makes the list read-only, exactly as for a strip (the header's "Edit on canvas" button reaches the chain). Other
 feeders on the terminator itself do NOT: a hand-wired source landing on the Rec Tap or Audio Output does
 not stop the user adding a Limiter in front of Master's own connection. A Master whose output never
 reaches a terminator has nothing to splice against, so its list is empty and read-only, and "Edit on

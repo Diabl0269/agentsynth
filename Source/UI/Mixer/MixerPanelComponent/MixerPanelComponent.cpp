@@ -14,6 +14,7 @@
 #include "MixerPanelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -116,7 +117,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     masterColumn_->outputPeakProvider = [this](int leg) -> float {
         return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(meterReader_, leg) : 0.0f;
     };
-    masterColumn_->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
+    masterColumn_->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
     masterColumn_->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
@@ -159,29 +160,53 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     setSettingsStore(other.settings_);
 }
 
+// `targetId` is either a macro id directly (the editOnCanvasTargetUuid of a branching chain, per MixerModel.h's own
+// contract) or a node uuid (a column's own strip uuid) -- try the macro id first, then "which macro (if any) boxes
+// this node", else the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro",
+// falling back to the node when it isn't boxed).
+std::optional<MixerPanelComponent::CanvasTarget>
+MixerPanelComponent::resolveCanvasTarget(const juce::String& targetId) const {
+    if (graph_ == nullptr || macros_ == nullptr || targetId.isEmpty())
+        return std::nullopt;
+    if (macros_->find(targetId) != nullptr)
+        return CanvasTarget{targetId, {}};
+    if (const auto* macro = synth::nearestChannelMacro(*graph_, *macros_, targetId))
+        return CanvasTarget{macro->id, {}};
+    for (auto* node : graph_->getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == targetId)
+            return CanvasTarget{{}, node->nodeID};
+    return std::nullopt;
+}
+
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
     if (graphEditor_ == nullptr || macros_ == nullptr || targetId.isEmpty())
         return;
     if (onRevealCanvas)
         onRevealCanvas();
-    // `targetId` is either a macro id directly (MixerInsertList's editOnCanvasTargetUuid, per
-    // MixerModel.h's own contract) or a node uuid (a column's own strip uuid, from
-    // onColumnClicked) -- try the macro id first, then "which macro (if any) boxes this node",
-    // else select the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro",
-    // falling back to the node when it isn't boxed).
-    if (macros_->find(targetId) != nullptr) {
-        graphEditor_->getMacroController().selectMacro(targetId, false);
+    const auto target = resolveCanvasTarget(targetId);
+    if (!target)
+        return;
+    if (target->macroId.isNotEmpty())
+        graphEditor_->getMacroController().selectMacro(target->macroId, false);
+    else
+        graphEditor_->selectModule(target->nodeId, false);
+}
+
+// The "Edit on canvas" button: the same selection as a header click, and the canvas is brought to it, so the press
+// always shows something even when the cards were off screen.
+void MixerPanelComponent::revealOnCanvas(const juce::String& targetId) {
+    selectOnCanvas(targetId);
+    const auto target = resolveCanvasTarget(targetId);
+    if (graphEditor_ == nullptr || !target)
+        return;
+    if (target->macroId.isNotEmpty()) {
+        if (const auto* macro = macros_->find(target->macroId))
+            graphEditor_->centreViewOn(macro->bounds.toFloat().getCentre());
         return;
     }
-    if (const auto* macro = synth::nearestChannelMacro(*graph_, *macros_, targetId)) {
-        graphEditor_->getMacroController().selectMacro(macro->id, false);
-        return;
-    }
-    for (auto* node : graph_->getNodes())
-        if (node != nullptr && node->properties["uuid"].toString() == targetId) {
-            graphEditor_->selectModule(node->nodeID, false);
-            return;
-        }
+    for (auto* comp : graphEditor_->getModuleComponents())
+        if (comp != nullptr && comp->getNodeId() == target->nodeId)
+            graphEditor_->centreViewOn(comp->getBounds().toFloat().getCentre());
 }
 
 namespace {
@@ -365,6 +390,13 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     resized();
     syncRowVisuals(); // again, now the columns have a height to scroll the focused row into
 
+    // An insert or send row that came or went in a rebuilt column opens or closes where it was.
+    const auto rowMotions = std::exchange(pendingRowMotions_, {});
+    for (const auto& [uuid, snapshot] : rowMotions)
+        for (auto& column : stripColumns_)
+            if (column != nullptr && column->getUuid() == uuid)
+                column->playRowMotion(snapshot);
+
     // A dropped send row glides into its slot on the new column of the same strip; the pending
     // settle is cleared whether or not that column exists.
     const auto settle = std::exchange(pendingSendSettle_, PendingSendSettle{});
@@ -495,6 +527,8 @@ void MixerPanelComponent::visibilityChanged() {
 }
 
 void MixerPanelComponent::rebuildWhenShown() {
+    if (rebuildHoldDepth_ > 0)
+        return;
     if (isVisible())
         rebuild();
     else
@@ -502,6 +536,8 @@ void MixerPanelComponent::rebuildWhenShown() {
 }
 
 void MixerPanelComponent::rebuildIfStale() {
+    if (rebuildHoldDepth_ > 0)
+        return;
     // A hidden panel does no work (docs/layout/rendering.md): the check waits for visibilityChanged(). Not isShowing():
     // headless tests have no peer, so it is always false there.
     if (!isVisible()) {

@@ -233,6 +233,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerEqThumbnail.h
     Source/UI/Mixer/MixerEqThumbnail.cpp
     Source/UI/Mixer/MixerRowFocus.h
+    Source/UI/Mixer/MixerRowsMotion.h
+    Source/UI/Mixer/MixerRowsMotion.cpp
     Source/UI/Mixer/MixerSendList.h
     Source/UI/Mixer/MixerSendList.cpp
     Source/UI/Mixer/MixerSendListRows.cpp

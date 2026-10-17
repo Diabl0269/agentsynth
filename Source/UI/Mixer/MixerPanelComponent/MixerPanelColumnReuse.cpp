@@ -65,6 +65,9 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::takeOrBuildStripColum
             return widget;
         }
         stripColumnState_.erase(widget.get());
+        // The replacement's rows move from where this column's were (played at the end of rebuildFrom()).
+        if (canAnimateColumnMotion())
+            pendingRowMotions_.emplace_back(column.uuid, widget->captureRowSnapshot(column));
     }
     return buildStripColumn(column, channelId, sources, state);
 }
@@ -80,7 +83,12 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
     widget->setColumn(column, sources);
     widget->setCreateBusProvider([this] { return createBus(); });
     widget->setMoveSendRowProvider([this](juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow) {
-        return moveSendRow(stripNodeId, fromRow, toRow);
+        // The move's undo step wakes the structure-changed catch-up, which would rebuild the mixer and free the
+        // send list that is still committing this drag; the list's onMutated() does the one rebuild afterwards.
+        ++rebuildHoldDepth_;
+        const bool moved = moveSendRow(stripNodeId, fromRow, toRow);
+        --rebuildHoldDepth_;
+        return moved;
     });
 
     widget->setSendSettlePendingHandler([this, stripId = column.nodeId](int finalRow, float fromY) {
@@ -88,7 +96,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
     });
 
     widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
-    widget->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
+    widget->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
     widget->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
