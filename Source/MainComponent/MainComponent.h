@@ -45,9 +45,10 @@
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
 #include "UI/Layout/AppTooltipWindow.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/MainViewHolder.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
@@ -182,7 +183,7 @@ public:
      *  is docked and showing (nothing moves for a detached tab or a Mixer shown outside the dock). */
     void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
     /** The Cmd+T action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
-     *  closes around the focus hands it to the canvas. */
+     *  closes around the focus hands it to the view in the main area. */
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
@@ -191,6 +192,8 @@ public:
     void ensureCanvasShowing();
     /** The id of the focus region of the view in the main area ("canvas", "timeline", "mixer", "midiRemote"). */
     juce::String getMainViewFocusRegionId() const;
+    /** Opens the dock unless `view` is in the main area (where it shows whether or not the dock is open). */
+    void ensureDockOpenFor(synth::ui::BottomDockComponent::Tab view);
     /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then
      *  shown (never closed); false, and nothing changes, when the active tab has no pane. */
     bool toggleActiveSidePane();
@@ -311,8 +314,9 @@ public:
     void simulateToggleLibraryClick();
     void simulateToggleBottomPanelClick();
     /** Puts `view` in the main area without the shipped clamp, so the canvas sits in the dock (or, with Canvas, back
-     *  in main), and lays out. Nothing in the app does this yet. */
-    void setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
+     *  in main), and lays out. Nothing in the app does this yet. False when the dock refuses (a detached view). */
+    bool setMainViewForTest(synth::ui::BottomDockComponent::Tab view);
+    juce::Component& getMainViewHolderForTest() noexcept { return mainViewHolder_; }
     void simulateNewPatchClick();
     void simulateUndoClick();
     void simulateRedoClick();
@@ -398,7 +402,7 @@ private:
     synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
     synth::LaneId activeLane() const;                          // the lane the lane commands (Duplicate) act on
     bool hasPointSelection() const;
-    bool isBottomDockVisibleForSnap() const;
+    bool isTimelineReachable() const; // in the open dock or in the main area: the Timeline commands apply
     bool isZoomCommandActive(juce::CommandID id) const;
     bool isWelcomeScreenHidden() const;
 
@@ -803,6 +807,7 @@ private:
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
 
     synth::ui::TimelinePanelComponent timelinePanel;
+    synth::ui::MainViewHolder mainViewHolder_; // before bottomDock: outlives the host the dock may have moved into it
     synth::ui::BottomDockComponent bottomDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
                                               graphEditor,   appProperties, lookAndFeel, &shortcutManager};
     synth::ui::MixerPlacementController mixerPlacement_{bottomDock, appProperties}; // after bottomDock
@@ -866,6 +871,12 @@ private:
 
     // Lays the canvas into the main area, or into the Canvas tab's body (hidden when that tab is not showing).
     void layoutCanvas(juce::Rectangle<int> mainArea);
+    // Gives the main area to the canvas or, for another main view, to mainViewHolder_.
+    void layoutMainView(juce::Rectangle<int> mainArea);
+    // True while `view` (Timeline or MIDI Remote) is in the main area or is the open dock's active tab.
+    bool isViewOnScreen(synth::ui::BottomDockComponent::Tab view) const;
+    // Focuses the main view's region when it is open (a main area left empty has none open).
+    void focusMainViewIfOpen();
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
     bool canvasInDockLayout_ = false;    // the canvas was last laid into the dock (not the main area)

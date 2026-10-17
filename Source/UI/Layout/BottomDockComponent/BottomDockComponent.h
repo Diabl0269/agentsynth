@@ -84,8 +84,14 @@ public:
 
     /** The view in the main area (Canvas unless setMainView() moved another one up). */
     Tab getMainView() const noexcept { return tabModel_.getMainView(); }
-    /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. */
-    void setMainView(Tab view);
+    /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. False, and nothing
+     *  changes, when `view` is already there, is open in its own window, or is the Mixer outside the Tab placement. */
+    bool setMainView(Tab view);
+    /** MainComponent's main-area container. While the Timeline or MIDI Remote is the main view its host is a
+     *  child of `holder`, and comes back here when it leaves. Set once; `holder` must outlive this dock. */
+    void setMainAreaHolder(juce::Component* holder);
+    /** True while `view`'s host sits in the main-area holder: on screen whether or not this dock is. */
+    bool isInMainArea(Tab view) const noexcept { return hostInMain_ != nullptr && hostForTab(view) == hostInMain_; }
 
     /** MainComponent::reconcileTimelineAfterGraphChange -- fired after an insert-list mutation
      *  changes the graph (add/reorder/remove). */
@@ -116,9 +122,9 @@ public:
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
     bool isMidiRemoteTabActive() const noexcept { return activeTab_ == Tab::MidiRemote; }
-    /** Switches tabs (persisting the choice) and lays out; a no-op if already on `tab`. Does NOT
-     *  open/close the dock itself -- that stays MainComponent's own isBottomDockVisible/
-     *  beginPanelSlide() (see the class comment). */
+    /** Switches tabs (persisting the choice) and lays out; a no-op if already on `tab` or `tab` is the
+     *  main view. Does NOT open/close the dock itself -- that stays MainComponent's own
+     *  isBottomDockVisible/beginPanelSlide() (see the class comment). */
     void setActiveTab(Tab tab);
 
     /** True while at least one tab is currently offered in the strip. MainComponent hides
@@ -184,18 +190,26 @@ public:
      *  MainComponent::timerCallback). A detached window, once opened, is treated as "showing"
      *  regardless of OS-level occlusion/minimize -- the same fidelity the pre-existing docked
      *  check already had (isVisible() doesn't know the app itself is minimized either). */
-    bool isMixerShowing() const noexcept { return mixerHost_.isDetached() || (isMixerTabActive() && isVisible()); }
+    bool isMixerShowing() const noexcept {
+        return mixerHost_.isDetached() || isInMainArea(Tab::Mixer) || (isMixerTabActive() && isVisible());
+    }
 
-    /** Same "showing anywhere a tick would be visible" shape as isMixerShowing() above,
-     *  for MainComponent::timerCallback's refreshMidiRemoteActivity() gate. */
+    /** Same "showing anywhere a tick would be visible" shape as isMixerShowing() above (the main area
+     *  included), for MainComponent::timerCallback's refreshMidiRemoteActivity() gate. */
     bool isMidiRemoteShowing() const noexcept {
-        return midiRemoteHost_.isDetached() || (isMidiRemoteTabActive() && isVisible());
+        return midiRemoteHost_.isDetached() || isInMainArea(Tab::MidiRemote) ||
+               (isMidiRemoteTabActive() && isVisible());
+    }
+    /** The same for the Timeline: its playhead poll and its edit commands. */
+    bool isTimelineShowing() const noexcept {
+        return timelineHost_.isDetached() || isInMainArea(Tab::Timeline) ||
+               (activeTab_ == Tab::Timeline && isVisible());
     }
 
     // Whether the Mixer tab itself is offered at all -- false when the Mixer
     // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
     // entirely in those modes; see that class). True (the default) is the existing Tab-placement
-    // behaviour, unchanged.
+    // behaviour, unchanged. Disabling it while the Mixer is the main view puts the canvas back in main.
     void setMixerTabEnabled(bool enabled);
 
     /** Re-applies visibility/z-order for the active tab, without a Mixer/MIDI Remote rebuild. */
@@ -415,6 +429,11 @@ private:
     // switch, or the Mixer tab regaining `mixerTabEnabled_`) keeps the pre-existing "catch up on
     // whatever changed while the Mixer tab was hidden" rebuild, unchanged (default true).
     void applyTabVisibility(bool allowMixerRebuild = true);
+    // The host that belongs in the main-area holder for `view`; null for the canvas, and for the Mixer for now.
+    synth::ui::DetachablePanelHost* mainAreaHostFor(Tab view) noexcept;
+    // Moves hosts between this dock and the main-area holder so the main view's host is the one in the holder.
+    void placeMainViewHost();
+    synth::ui::FadeVisibility& fadeForHost(const synth::ui::DetachablePanelHost& host) noexcept;
     void persistActiveTab();
     // The active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
     // on (docs/mixer/panel.md: "the tab-strip button detaches whichever tab is active"); null for Canvas.
@@ -499,7 +518,9 @@ private:
     // Added LAST in the constructor so it wins the hit test; forwards into onResizeHeight*.
     PanelResizeHandle resizeHandle_{*this};
     Tab activeTab_ = Tab::Timeline;
-    bool canvasBodyWasShowing_ = false; // what onCanvasBodyChanged last reported
+    bool canvasBodyWasShowing_ = false;                    // what onCanvasBodyChanged last reported
+    juce::Component* mainAreaHolder_ = nullptr;            // MainComponent's; null keeps every host here
+    synth::ui::DetachablePanelHost* hostInMain_ = nullptr; // the host currently parented to mainAreaHolder_
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;
     ShortcutManager* shortcutManager_ = nullptr;

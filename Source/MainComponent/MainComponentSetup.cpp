@@ -385,7 +385,7 @@ void MainComponent::wireGraphEditorCallbacks() {
         const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
         if (nodeUuid.isEmpty())
             return;
-        ensureBottomDockOpen();
+        ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::MidiRemote);
         bottomDock.selectMidiRemoteAssignment(nodeUuid, paramId);
     };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
@@ -889,25 +889,17 @@ void MainComponent::rebuildFocusRegions() {
     // Guarded -- a Timeline detached to its own window has nothing docked here to cycle to; Tab
     // inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
-    // The dock has more tabs (MidiRemote, Canvas) -- ruling out one or two is not enough to say
-    // Timeline is the one actually showing, so the active tab is named.
+    // The dock has more tabs (MidiRemote, Canvas), so the active tab is named; in the main area the
+    // Timeline is open whatever the dock does (isViewOnScreen), and opening it there changes nothing.
+    using Tab = synth::ui::BottomDockComponent::Tab;
     if (!bottomDock.getTimelineHost().isDetached())
-        focusRegions_.addRegion({"timeline", &timelinePanel,
-                                 [this] {
-                                     return isBottomDockVisible &&
-                                            bottomDock.getActiveTab() == synth::ui::BottomDockComponent::Tab::Timeline;
-                                 },
-                                 [this] {
-                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
-                                     ensureBottomDockOpen();
-                                 }});
+        focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isViewOnScreen(Tab::Timeline); },
+                                 [this] { showBottomDockTab(Tab::Timeline); }});
     // The Timeline's two side panels are Tab stops of their own right after the track list, each only while it is on
     // screen: the routing pane (the side pane open on the Timeline tab) and the piano roll's scale pane. They live
-    // inside the Timeline, so the same dock guard applies; Up/Down walk their controls (FocusStepWithin.h).
+    // inside the Timeline, so the same guard applies; Up/Down walk their controls (FocusStepWithin.h).
     if (!bottomDock.getTimelineHost().isDetached()) {
-        const auto timelineShowing = [this] {
-            return isBottomDockVisible && bottomDock.getActiveTab() == synth::ui::BottomDockComponent::Tab::Timeline;
-        };
+        const auto timelineShowing = [this] { return isViewOnScreen(Tab::Timeline); };
         focusRegions_.addRegion(
             {"timelineRouting", &timelinePanel.getRoutingPane(),
              [this, timelineShowing] { return timelineShowing() && timelinePanel.getSidePane().isOpen(); }, nullptr});
@@ -949,11 +941,8 @@ void MainComponent::rebuildFocusRegions() {
     // wireTimelinePanelServicesAndShortcuts() below).
     if (!bottomDock.getMidiRemoteHost().isDetached())
         focusRegions_.addRegion({"midiRemote", &bottomDock.getMidiRemotePanel(),
-                                 [this] { return isBottomDockVisible && bottomDock.isMidiRemoteTabActive(); },
-                                 [this] {
-                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
-                                     ensureBottomDockOpen();
-                                 }});
+                                 [this] { return isViewOnScreen(Tab::MidiRemote); },
+                                 [this] { showBottomDockTab(Tab::MidiRemote); }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

@@ -5,7 +5,7 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -131,7 +131,7 @@ TEST_F(BottomDockCanvasTabTest, TheCanvasFocusRegionIsOpenOnlyWhileTheCanvasIsOn
 
     mc_->ensureCanvasShowing();
     EXPECT_TRUE(regionOpen("canvas"));
-    EXPECT_FALSE(regionOpen("timeline")) << "the dock shows the canvas, not the timeline";
+    EXPECT_TRUE(regionOpen("timeline")) << "the timeline is open in the main area, above the canvas tab";
     EXPECT_TRUE(regionOpen("dockTabs"));
 
     dock().setActiveTab(Tab::Mixer);

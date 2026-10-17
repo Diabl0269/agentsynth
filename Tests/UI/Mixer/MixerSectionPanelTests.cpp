@@ -7,7 +7,7 @@
 
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

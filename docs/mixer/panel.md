@@ -156,8 +156,8 @@ Four views (Canvas, Timeline, Mixer, Controllers) share two places: one sits in 
 holds the order, a permutation of all four persisted as `bottomDockTabOrder` (default
 `"timeline,mixer,midiRemote,canvas"`; a saved three-entry order gains `canvas`), and the main view,
 whose slot stays hidden. `setMainView(B)` swaps B's and the old main view's slots, so the view coming
-down takes B's place. Only the canvas can be in main yet (`kMainViewSwapEnabled`, see
-[the settings table](../layout/chrome.md#panel-collapse-and-persistence)).
+down takes B's place; the Timeline, Mixer (Tab placement only) or Controllers host moves into the main area
+([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. Nothing in the app swaps yet (`kMainViewSwapEnabled`, [settings](../layout/chrome.md#panel-collapse-and-persistence)).
 
 - **One toggle, four shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last

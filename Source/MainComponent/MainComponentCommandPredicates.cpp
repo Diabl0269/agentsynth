@@ -144,7 +144,7 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
     case EditSurface::TimelineClips:
     case EditSurface::PianoRoll:
     case EditSurface::AutomationLane:
-        return isBottomDockVisible;
+        return isTimelineReachable();
     case EditSurface::Mixer:
         return false; // no zoom concept at all -- inactive on both axes, unlike Graph above
     }
@@ -153,7 +153,5 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
 
 // Export is unavailable while an Export Audio/Stems render owns the engine.
 bool MainComponent::isExportAvailable() const { return !isBounceInProgress_; }
-
-bool MainComponent::isBottomDockVisibleForSnap() const { return isBottomDockVisible; }
 
 bool MainComponent::isWelcomeScreenHidden() const { return welcomeFade_ == nullptr || !welcomeFade_->isShown(); }

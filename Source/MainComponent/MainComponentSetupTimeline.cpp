@@ -123,7 +123,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip
     // switches tabs and scrolls to the column -- a closed dock has nothing on screen to scroll to yet.
     trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
-        ensureBottomDockOpen();
+        ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::Mixer);
         return bottomDock.revealColumnForStrip(stripId);
     });
 
@@ -204,8 +204,14 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // the clamp and persistence stay in one place. A detached window cannot be grown from here: the
     // panel scrolls its content instead (docs/mixer/panel.md#shared-sections).
     auto& mixerPanel = bottomDock.getMixerPanel();
-    mixerPanel.canGrowHost = [this] { return !bottomDock.getMixerHost().isDetached(); };
+    // In the main area it fills the space the canvas had: nothing to grow, and the dock's height is not its own.
+    mixerPanel.canGrowHost = [this] {
+        return !bottomDock.getMixerHost().isDetached() &&
+               !bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer);
+    };
     mixerPanel.growHost = [this](int extraPx, bool commit) {
+        if (bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer))
+            return;
         if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
             mixerPlacement_.setOwnPanelHeight(mixerPlacement_.getOwnPanelHeight() + extraPx, commit);
         else
