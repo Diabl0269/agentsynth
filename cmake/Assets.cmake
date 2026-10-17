@@ -21,6 +21,8 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexSans-SemiBold.ttf
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexMono-Regular.ttf
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexMono-Medium.ttf
+    # Brand mark drawn on the Welcome card (256 px covers 2x at 96 pt). BinaryData symbol: agentsynthlogo256_png.
+    ${CMAKE_SOURCE_DIR}/assets/brand/agentsynth-logo-256.png
     # Icons (23 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
     ${CMAKE_SOURCE_DIR}/assets/icons/transport-play.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/transport-stop.svg

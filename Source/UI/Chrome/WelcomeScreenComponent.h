@@ -25,6 +25,10 @@ namespace synth::ui {
 // not on screen land at once. The card height always includes the panel's current slot, so getCardBounds() and
 // resized() stay in step through the collapse.
 //
+// Logo: the cat mark sits above the title as a transparent cut-out with its neon outline, no tile or border (readable
+// on both themes). Each time the overlay is shown it fades in and rises 10 px into place (320 ms, easeOutCubic);
+// Reduced Motion lands it at once.
+//
 // Two modes. Launch (the default): an opaque screen with no way out, since there is nothing to return to; the
 // owner picks how to start. Dismissible (setDismissible(true), used when it is reopened over an open project):
 // the project stays visible under a dimmed scrim, a close button sits in the card's top-right corner, and
@@ -46,6 +50,7 @@ public:
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& e) override;
+    void visibilityChanged() override;
 
     /** true: project visible under a scrim, close button shown, Escape / close button / click outside the card
      *  call onDismissRequested. false (the launch default): opaque, nothing dismisses it. */
@@ -100,6 +105,9 @@ public:
     UsageStatsPromptComponent& getUsageStatsPromptForTest() { return usageStatsPrompt_; }
     // The height the card gives the panel and its gap right now (0 once it is gone).
     int getUsageStatsSlotHeightForTest() const { return promptSlotHeight(); }
+    float getLogoRevealForTest() const noexcept { return logoReveal_; }
+    juce::Rectangle<int> getLogoBoundsForTest() const { return logoBounds_; }
+    void completeLogoRevealForTest() { logoAnim_.completeForTest(); }
     int getCardHeightForTest() const { return getCardBounds().getHeight(); }
     int getRecentProjectCountForTest() const { return (int)recentProjectButtons.size(); }
     // Simulates clicking recent row `index` — a no-op (never crashes) if out of range.
@@ -120,6 +128,13 @@ private:
     void handleUsageStatsChoice(bool share);
     void collapseUsageStatsPrompt();
     void finishUsageStatsCollapse();
+
+    static constexpr int kLogoSize = 96;
+    static constexpr int kLogoGap = 12; // between the logo and the title
+    juce::Image logo_;
+    juce::Rectangle<int> logoBounds_;
+    float logoReveal_ = 1.0f; // 0 = hidden, 1 = settled; paint-only, never moves the layout
+    synth::ui::AnimationDriver logoAnim_;
 
     UsageStatsPromptComponent usageStatsPrompt_;
     PromptState promptState_ = PromptState::hidden;
