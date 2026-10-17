@@ -36,6 +36,8 @@ InstallDir "$LOCALAPPDATA\AgentSynth"
 RequestExecutionLevel user
 
 !define MUI_ABORTWARNING
+!define MUI_ICON "..\..\assets\brand\agentsynth.ico"
+!define MUI_UNICON "..\..\assets\brand\agentsynth.ico"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\Agent Synth.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Run Agent Synth"
 

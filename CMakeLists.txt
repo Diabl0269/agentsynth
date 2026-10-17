@@ -613,16 +613,11 @@ else()
     target_compile_options(Core PRIVATE -Wall -Wextra)
 endif()
 
-# Sparkle Info.plist keys, merged into JUCE's generated plist. Empty string on non-Apple
-# platforms, where JUCE ignores the argument entirely.
-set(SYNTH_SPARKLE_PLIST_TO_MERGE "")
-if(APPLE)
-    set(SYNTH_SPARKLE_PLIST_TO_MERGE
-        "<?xml version='1.0' encoding='UTF-8'?><plist version='1.0'><dict><key>SUFeedURL</key><string>${SYNTH_UPDATE_FEED_URL}</string><key>SUEnableAutomaticChecks</key><true/><key>SUScheduledCheckInterval</key><integer>86400</integer><key>SUPublicEDKey</key><string>${SYNTH_SPARKLE_PUBLIC_KEY}</string></dict></plist>")
-endif()
+include(cmake/AppBundleMetadata.cmake)
 
 # Create the application target
 juce_add_gui_app(AgentSynth
+    ${SYNTH_ICON_ARGS}
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "${SYNTH_MARKETING_VERSION}"
     BUILD_VERSION "${SYNTH_BUILD_NUMBER}"
@@ -843,6 +838,7 @@ if(ENABLE_PLUGIN)
     endif()
 
     juce_add_plugin(AgentSynthPlugin
+        ${SYNTH_ICON_ARGS}
         PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
         VERSION "${SYNTH_MARKETING_VERSION}"
         COMPANY_NAME "${SYNTH_COMPANY_NAME}"
