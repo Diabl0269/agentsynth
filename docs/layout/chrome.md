@@ -303,7 +303,7 @@ launches via `ApplicationProperties`:
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 | `bottomDockActiveTab` | `"timeline"` | the bottom dock's active tab (`timeline`/`mixer`/`midiRemote`/`canvas`); a saved tab that is not offered falls back to the first offered one |
 | `bottomDockTabOrder` | `"timeline,mixer,midiRemote,canvas"` | the dock's strip order, all four views; a saved three-entry order (older builds) gains `canvas` at the end, anything malformed falls back to the default, and an older build reading four entries falls back to its own default. See [the tab strip](../mixer/panel.md#the-tab-strip) |
-| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Nothing in the app moves another view there yet: another stored value is kept and written back, but the canvas is shown (`BottomDockTabModel::kMainViewSwapEnabled`) |
+| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Written on every swap and applied at launch. A saved view whose panel is in its own window, or a Mixer outside the Tab placement, is suspended for the session (the Canvas fills the main area) and the saved value is kept |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -340,7 +340,7 @@ Mixer's Own-panel move generalised, and the dock lays out only the hosts still p
 leaves main its host returns to the dock as a tab that is not active (it fades in if it becomes the active one).
 The Library and the AI panel keep their places beside the main area.
 
-A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+T) never hides it,
+A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+J) never hides it,
 a dock tab switch never fades it, and every "is it showing" gate counts it:
 `BottomDockComponent::isTimelineShowing()` / `isMidiRemoteShowing()` / `isMixerShowing()` (the playhead poll,
 the activity tick, the meters, and the Timeline's edit commands through `resolveEditSurface()`),
@@ -350,16 +350,30 @@ region's `open`, "Edit MIDI assignment...", adding a plugin automation lane) nev
 (`ensureDockOpenFor()`), and `setActiveTab()` ignores the main view. A project load's edit block covers the holder
 as well as the dock. `setMainView()` refuses a view that is open in its own window; while in main the host shows
 no header of its own, so it cannot be detached from there. The Mixer goes to main only in the Tab placement
-(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused), and
-leaving the Tab placement puts the canvas back first. In main the Mixer fills the area (`canGrowHost` is false,
+(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused). In main the Mixer fills the area (`canGrowHost` is false,
 `growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
 region is open, and the "both places" mirror is not reachable from it (the detach button acts on the active dock tab;
-a mirror already open closes without detaching the host). `MainComponent::setMainViewForTest` is the only way to put another view in main today.
+a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
+([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. A swap
+relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
+so Tab follows the new layout. The same swap has a key per view, Opt+Cmd+1 Timeline, 2 Mixer, 3 Controllers, 4 Canvas
+(`swap<View>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
+readers once ("Timeline in the main area"), and a refused one is silent.
+
+**The main area is never empty.** The stored view (`getStoredMainView()`, the saved `mainView`) and the view in the
+main area now (`getMainView()`) are separate in `BottomDockTabModel`. While the stored view's panel is open in its
+own window, or the Mixer leaves the Tab placement, the model suspends it: the Canvas fills the main area for the
+session, `refreshMainViewAvailability()` returns the host to the dock, and the setting on disk is not touched. When
+the panel docks again (or the Mixer returns to the Tab placement) the stored view goes back to the main area;
+choosing any view meanwhile, the Canvas included, replaces the stored choice. A tab detached while another view is
+in main changes nothing in the main area (the Canvas tab keeps the panel usable), and a tab in its own window is not
+in the strip, so its disabled swap icon is never on screen. The "both places" mirror is a second view of the docked
+Mixer and never suspends anything. Each change fires `onMainViewChanged`.
 
 ### The canvas as a tab
 
 When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
-canvas is main, and the tab has no detach button). `GraphEditor` stays a `MainComponent` child: the dock only
+canvas is main, and the tab has no detach button, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
 reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
@@ -369,7 +383,7 @@ first lands in the panel its view is fitted once, after the slide ends.
 `MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
 the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to
 Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
-every project or patch load, and an accepted AI patch. Cmd+T closing the panel around the canvas hands keyboard
+every project or patch load, and an accepted AI patch. Cmd+J closing the panel around the canvas hands keyboard
 focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
 
 ### Tab strip keyboard and screen-reader access
@@ -385,19 +399,22 @@ Canvas, tab strip, then the panel.
 | Left / Right | Select the previous / next tab in the strip's current order, which switches the panel as a click does. Tabs that are not offered (detached, or the Mixer in another placement) are skipped; it stops at the ends |
 | Home / End | First / last tab |
 | Return | Move keyboard focus into the selected tab's panel (its region root) |
+| Shift+Return | Press the selected tab's swap icon (below); consumed even while the icon is disabled |
 
-Plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
+Otherwise plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
 is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
-uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+T (when it opens the pane) and
-Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+T closing the pane around the focus
-hands focus to the canvas ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
+uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+J (when it opens the pane) and
+Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+J closing the pane around the focus
+hands focus to the view in the main area ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
 `paintFocusRing` while the strip has focus (not during a reorder drag), drawn by the dock over the tab.
 Clicking a tab does not give the strip focus.
 
 **Screen reader.** JUCE has no tab role, so each tab is exposed as a radio button, its closest selectable
-and mutually exclusive item, named "Timeline", "Mixer" or "Controllers", with the selected state following
-the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the handler
-and the tests use). The strip itself is a group named "Panel tabs" whose value is the selected tab.
+and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas", with the selected state
+following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
+handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
+area" (its tooltip adds the key, Opt+Cmd+1-4); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
+Return presses it). The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay
 

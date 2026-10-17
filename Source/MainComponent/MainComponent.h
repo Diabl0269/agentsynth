@@ -182,7 +182,7 @@ public:
     /** The Cmd+1/2/3 actions: showBottomDockTab(), then keyboard focus onto the dock's tab strip when the tab
      *  is docked and showing (nothing moves for a detached tab or a Mixer shown outside the dock). */
     void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
-    /** The Cmd+T action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
+    /** The Cmd+J action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
      *  closes around the focus hands it to the view in the main area. */
     void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
@@ -381,6 +381,7 @@ private:
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
     static std::vector<CommandSpec> buildTransportCommandRows();
     static std::vector<CommandSpec> buildSelectionStepCommandRows();
+    static std::vector<CommandSpec> buildViewSwapCommandRows();
 
     // Named perform() bodies.
     bool performLocateMaster();
@@ -702,7 +703,8 @@ private:
     void openMidiRemoteDevices(); // standalone-only continuation of wireMidiRemoteEngine()
     void createWelcomeScreen();
     void registerFocusRegions();
-    /** The clear+rebuild half of registerFocusRegions(); call only from there or after a detach/redock. */
+    /** The clear+rebuild half of registerFocusRegions(); call only from there, after a detach/redock or when the main
+     *  view changes (the Tab order follows the layout). */
     void rebuildFocusRegions();
 
     void applyToolbarIcons();
@@ -873,6 +875,7 @@ private:
     void layoutCanvas(juce::Rectangle<int> mainArea);
     // Gives the main area to the canvas or, for another main view, to mainViewHolder_.
     void layoutMainView(juce::Rectangle<int> mainArea);
+    void handleMainViewChanged();
     // True while `view` (Timeline or MIDI Remote) is in the main area or is the open dock's active tab.
     bool isViewOnScreen(synth::ui::BottomDockComponent::Tab view) const;
     // Focuses the main view's region when it is open (a main area left empty has none open).

@@ -114,7 +114,7 @@ TEST_F(BottomDockTabStripTest, ReturnMovesFocusIntoTheSelectedPanelsRegionRoot) 
 TEST_F(BottomDockTabStripTest, ModifiedAndUnrelatedKeysAreLeftForTheAppShortcuts) {
     EXPECT_FALSE(press(juce::KeyPress::rightKey, juce::ModifierKeys::commandModifier));
     EXPECT_FALSE(press('2', juce::ModifierKeys::commandModifier)) << "Cmd+2 still reaches the shortcut table";
-    EXPECT_FALSE(press(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier));
+    EXPECT_FALSE(press(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier));
     EXPECT_FALSE(press(juce::KeyPress::tabKey)) << "Tab still cycles the focus regions";
     EXPECT_FALSE(press(juce::KeyPress::upKey)) << "Up has nothing above the strip to enter";
     EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);
@@ -171,7 +171,7 @@ TEST_F(BottomDockTabStripTest, TheStripIsAFocusRegionBetweenTheCanvasAndTheTimel
     EXPECT_EQ(regions.nextOpenRegionId("dockTabs", true), "timeline");
 }
 
-// ---- Cmd+T and Cmd+1/2/3 put focus on the strip -----------------------------------------------------------
+// ---- Cmd+J and Cmd+1/2/3 put focus on the strip -----------------------------------------------------------
 
 namespace {
 // MainComponent::keyPressed hands a matched command to the command manager asynchronously, so the
@@ -238,28 +238,28 @@ TEST_F(DockShortcutFocusTest, ADetachedTabIsRaisedAndNothingIsFocused) {
     dock().getTimelineHost().setDetached(false);
 }
 
-TEST_F(DockShortcutFocusTest, CommandTOpensThePaneOnItsTabStrip) {
+TEST_F(DockShortcutFocusTest, CommandJOpensThePaneOnItsTabStrip) {
     setDockOpen(false);
     focused_.clear();
-    EXPECT_TRUE(pressKey(mc(), cmd('t')));
+    EXPECT_TRUE(pressKey(mc(), cmd('j')));
     EXPECT_TRUE(mc().isBottomDockConfiguredVisible());
     EXPECT_EQ(focused_.joinIntoString(","), "dockTabs");
 }
 
-TEST_F(DockShortcutFocusTest, CommandTClosingThePaneAroundTheFocusMovesFocusToTheCanvas) {
+TEST_F(DockShortcutFocusTest, CommandJClosingThePaneAroundTheFocusMovesFocusToTheCanvas) {
     setDockOpen(true);
     mc().setFocusedComponentOverrideForTest(&dock().getTabStripFocus());
     focused_.clear();
-    EXPECT_TRUE(pressKey(mc(), cmd('t')));
+    EXPECT_TRUE(pressKey(mc(), cmd('j')));
     EXPECT_FALSE(mc().isBottomDockConfiguredVisible());
     EXPECT_EQ(focused_.joinIntoString(","), "canvas") << "focus must not be lost with the hidden pane";
 }
 
-TEST_F(DockShortcutFocusTest, CommandTClosingThePaneWithFocusElsewhereLeavesFocusAlone) {
+TEST_F(DockShortcutFocusTest, CommandJClosingThePaneWithFocusElsewhereLeavesFocusAlone) {
     setDockOpen(true);
     mc().setFocusedComponentOverrideForTest(mc().getFocusRegionsForTest().findById("library")->root);
     focused_.clear();
-    EXPECT_TRUE(pressKey(mc(), cmd('t')));
+    EXPECT_TRUE(pressKey(mc(), cmd('j')));
     EXPECT_FALSE(mc().isBottomDockConfiguredVisible());
     EXPECT_EQ(focused_.joinIntoString(","), "");
 }

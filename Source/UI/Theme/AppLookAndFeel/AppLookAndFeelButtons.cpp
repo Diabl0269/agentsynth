@@ -54,7 +54,9 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
     const float alpha = !button.isEnabled() ? 0.5f : (paintsDimmed(button) ? kDisabledControlAlpha : 1.0f);
     g.setColour(ButtonStateEase::mix(textOff, textOn, ButtonStateEase::current(button).on).withMultipliedAlpha(alpha));
 
-    g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
+    auto textArea = button.getLocalBounds().reduced(4, 0);
+    textArea.removeFromRight(static_cast<int>(button.getProperties()[kTextInsetRightProperty]));
+    g.drawFittedText(button.getButtonText(), textArea, juce::Justification::centred, 1);
 }
 
 void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton& button,

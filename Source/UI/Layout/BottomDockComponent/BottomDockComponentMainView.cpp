@@ -12,8 +12,7 @@ namespace synth::ui {
 // up, so the dock keeps showing something in the same place; otherwise the active tab stays (or
 // falls back through applyTabVisibility() if it is no longer offered). A view open in its own window
 // is refused: its panel lives in that window, not in the host that would move. So is the Mixer outside
-// the Tab placement, where MixerPlacementController owns its host. Nothing in the app calls this with a
-// view other than the canvas yet (MainComponent::setMainViewForTest does).
+// the Tab placement, where MixerPlacementController owns its host.
 bool BottomDockComponent::setMainView(Tab view) {
     if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
         return false;
@@ -25,10 +24,61 @@ bool BottomDockComponent::setMainView(Tab view) {
     persistTabOrder();
     persistMainView();
     placeMainViewHost();
-    if (activeTab_ == view)
+    if (activeTab_ == view && previous != view)
         setActiveTab(previous);
     else
         applyTabVisibility();
+    if (onMainViewChanged)
+        onMainViewChanged();
+    return true;
+}
+
+// The swap icon's click. The view that went up leaves its slot to the one that came down, and that one is
+// what the dock shows next, whichever tab was active before.
+bool BottomDockComponent::swapTabToMain(Tab view) {
+    const Tab previous = getMainView();
+    if (!setMainView(view))
+        return false;
+    if (previous != view) // the Canvas already filling the main area for the session is not a tab to show
+        setActiveTab(previous);
+    const auto text = mainViewAnnouncement(view);
+    if (announceHook_)
+        announceHook_(text);
+    else
+        juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
+    return true;
+}
+
+// One fixed key per view (Opt+Cmd+1..4, matching the view's own Cmd+digit), named by view so a swap never re-keys.
+const char* BottomDockComponent::swapActionIdForTab(Tab view) noexcept {
+    switch (view) {
+    case Tab::Mixer:
+        return "swapMixerToMain";
+    case Tab::MidiRemote:
+        return "swapMidiRemoteToMain";
+    case Tab::Canvas:
+        return "swapCanvasToMain";
+    case Tab::Timeline:
+        break;
+    }
+    return "swapTimelineToMain";
+}
+
+juce::String BottomDockComponent::mainViewAnnouncement(Tab view) {
+    return juce::String(nameForTab(view)) + " in the main area";
+}
+
+// A stored main view whose panel is in its own window, or is the Mixer outside the Tab placement, cannot fill the
+// main area: the Canvas does for the session, and the stored view (and its setting) comes back with its panel.
+bool BottomDockComponent::refreshMainViewAvailability() {
+    const Tab stored = tabModel_.getStoredMainView();
+    const auto* host = hostForTab(stored);
+    const bool available =
+        stored == Tab::Canvas || (host != nullptr && !host->isDetached() && (stored != Tab::Mixer || mixerTabEnabled_));
+    if (tabModel_.isMainViewSuspended() == !available)
+        return false;
+    tabModel_.setMainViewSuspended(!available);
+    placeMainViewHost();
     return true;
 }
 
@@ -89,7 +139,6 @@ juce::Rectangle<int> BottomDockComponent::getCanvasBodyBounds() const {
 // belongs to the canvas.
 bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().contains(x, y); }
 
-// Writes the stored value, which can differ from the effective one (BottomDockTabModel::load).
 void BottomDockComponent::persistMainView() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;

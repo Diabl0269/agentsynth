@@ -112,7 +112,7 @@ A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to 
 Mixer (`Source/UI/Layout/BottomDockComponent/BottomDockComponent.h`) — it reuses the dock's slide, persistence
 (`"bottomDockActiveTab"`), detach-to-window (`DetachablePanelHost`) and focus-region machinery.
 Opened with `Cmd+3` / the Settings shortcut list's "Show Controllers Tab" (`ShortcutManager` action
-`toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+T open/close toggle,
+`toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+J open/close toggle (it was Cmd+T),
 so there is no per-tab toolbar button any more — see
 [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip)). Files:
 `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit per region below),

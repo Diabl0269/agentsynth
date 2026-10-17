@@ -6,6 +6,7 @@
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Layout/TabStripKeys.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
@@ -20,6 +21,12 @@ namespace {
 constexpr int kLiftedTabRise = 4;
 constexpr float kLiftedTabRadius = 4.0f;
 constexpr float kLiftedTabOpacity = 0.95f;
+
+// The icon row at a tab's right edge: square-ish buttons the tab's full height, `kTabIconGap` apart, `kTabIconEdge`
+// in from the edge. A second icon (the detach one) joins to the left of the swap icon.
+constexpr int kTabIconWidth = 22;
+constexpr int kTabIconGap = 2;
+constexpr int kTabIconEdge = 2;
 
 // A tab as a screen reader meets it: the shared role/name/selected data, plus a press that selects it.
 // The state is read live, since the handler outlives every tab switch.
@@ -43,6 +50,19 @@ private:
     std::function<BottomDockComponent::TabAccessibility()> describe_;
 };
 } // namespace
+
+// Lays the icons out right to left, then tells the look-and-feel how much of the tab's right edge the label must
+// leave free: the label ellipsises in what remains, so the icons are never what gives way on a narrow tab.
+void BottomDockComponent::DockTabButton::resized() {
+    juce::Component* const icons[] = {&swapIcon_};
+    int right = getWidth() - kTabIconEdge;
+    for (auto* icon : icons) {
+        icon->setBounds(right - kTabIconWidth, 0, kTabIconWidth, getHeight());
+        right -= kTabIconWidth + kTabIconGap;
+    }
+    const int reserved = getWidth() - right - kTabIconGap;
+    getProperties().set(synth::theme::AppLookAndFeel::kTextInsetRightProperty, reserved);
+}
 
 const char* BottomDockComponent::actionIdForTab(Tab tab) noexcept {
     switch (tab) {
@@ -69,7 +89,7 @@ void BottomDockComponent::beginTabDrag(Tab tab, const juce::MouseEvent& e) {
     reorderFrames_.stop();
     reorderCancelKey_.disarm();
     tabDragCancelled_ = false;
-    liftedTab_.reset();
+    setLiftedTab(std::nullopt);
     reorderTabs_.clear();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
@@ -93,7 +113,7 @@ void BottomDockComponent::beginTabDrag(Tab tab, const juce::MouseEvent& e) {
 void BottomDockComponent::dragTab(const juce::MouseEvent& e) {
     if (!reorder_.dragTo(pointerXInDock(e)))
         return;
-    liftedTab_ = reorderTabs_[static_cast<size_t>(reorder_.getDraggedKey())];
+    setLiftedTab(reorderTabs_[static_cast<size_t>(reorder_.getDraggedKey())]);
     if (!reorderCancelKey_.isArmed())
         reorderCancelKey_.arm(*this, [this] { cancelTabDrag(); });
     startReorderFramesIfNeeded();
@@ -116,7 +136,7 @@ void BottomDockComponent::onReorderFrame() {
         applyReorderOffsets();
         return;
     }
-    liftedTab_.reset();
+    setLiftedTab(std::nullopt);
     layoutTabButtons();
     repaint(0, 0, getWidth(), kTabStripHeight);
 }
@@ -130,7 +150,7 @@ void BottomDockComponent::applyReorderOffsets() {
             offered.push_back(t);
     if (offered.size() != reorderTabs_.size()) { // a tab was detached or redocked mid-gesture
         reorder_.cancel();
-        liftedTab_.reset();
+        setLiftedTab(std::nullopt);
         layoutTabButtons();
         return;
     }
@@ -156,7 +176,7 @@ void BottomDockComponent::commitTabDrag() {
         }
     if (offered != reorderTabs_) { // a tab was detached mid-drag: abandon the gesture
         reorder_.cancel();
-        liftedTab_.reset();
+        setLiftedTab(std::nullopt);
         resized();
         return;
     }
@@ -180,7 +200,7 @@ void BottomDockComponent::commitTabDrag() {
         finalStarts.push_back(static_cast<float>(buttonForTab(t).getX()));
     reorder_.release(finalStarts);
     if (!reorder_.isReordering())
-        liftedTab_.reset();
+        setLiftedTab(std::nullopt);
     startReorderFramesIfNeeded();
     applyReorderOffsets();
     repaint(0, 0, getWidth(), kTabStripHeight);
@@ -295,6 +315,7 @@ void BottomDockComponent::paintTabSlot(juce::Graphics& g, juce::Rectangle<int> b
 // into its slot after release. The raise and the shadow/border strength ease with getLift().
 void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     paintTabFocusRing(g);
+    paintSwapFocusRing(g);
     if (!liftedTab_.has_value() || !reorder_.isReordering())
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -314,7 +335,10 @@ void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     paintReorderLift(g, tab.expanded(0.5f), lift, c.surfaceHi, c.accent);
     g.setColour(c.textPrimary);
     g.setFont(lf->getTextButtonFont(button, button.getHeight()));
-    g.drawFittedText(button.getButtonText(), tab.toNearestInt().reduced(4, 0), juce::Justification::centred, 1);
+    auto textArea = tab.toNearestInt().reduced(4, 0);
+    textArea.removeFromRight(
+        static_cast<int>(button.getProperties()[synth::theme::AppLookAndFeel::kTextInsetRightProperty]));
+    g.drawFittedText(button.getButtonText(), textArea, juce::Justification::centred, 1);
     g.endTransparencyLayer();
 }
 
@@ -334,8 +358,43 @@ const char* BottomDockComponent::nameForTab(Tab tab) noexcept {
     return "Timeline";
 }
 
+juce::String BottomDockComponent::swapTitleForTab(Tab tab) {
+    return juce::String("Show ") + nameForTab(tab) + " in the main area";
+}
+
 BottomDockComponent::TabAccessibility BottomDockComponent::describeTab(Tab tab, Tab activeTab) {
-    return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab};
+    return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab, swapTitleForTab(tab)};
+}
+
+synth::ui::IconButton& BottomDockComponent::getSwapIcon(Tab tab) noexcept { return buttonForTab(tab).getSwapIcon(); }
+
+// The icon is a plain button, never a Tab stop of its own (the strip is the one stop), named like its tooltip so a
+// screen reader reads "Show Mixer in the main area" for the button inside the Mixer tab. A tab whose view is open
+// in its own window cannot go to the main area (setMainView refuses it), so its icon is disabled and the tooltip
+// says why; such a tab is not in the strip at all while its window is open, so this is what a redock starts from.
+void BottomDockComponent::refreshSwapIcons() {
+    for (Tab t : tabModel_.getOrder()) {
+        auto& icon = getSwapIcon(t);
+        const auto* host = hostForTab(t);
+        const bool inOwnWindow = host != nullptr && host->isDetached();
+        const juce::String title = describeTab(t, activeTab_).swapTitle;
+        icon.setEnabled(!inOwnWindow);
+        icon.setTitle(title);
+        icon.setTooltip(inOwnWindow ? juce::String(nameForTab(t)) + " is open in its own window"
+                                    : formatShortcutHint(title, swapShortcutTexts_[static_cast<size_t>(t)]));
+    }
+}
+
+void BottomDockComponent::setSwapShortcutText(Tab view, const juce::String& text) {
+    swapShortcutTexts_[static_cast<size_t>(view)] = text;
+    refreshSwapIcons();
+}
+
+// Hides the swap icon of the tab being dragged: its slot shows the dashed marker, which a child would paint over.
+void BottomDockComponent::setLiftedTab(std::optional<Tab> tab) {
+    liftedTab_ = tab;
+    for (Tab t : tabModel_.getOrder())
+        buttonForTab(t).setIconRowShown(!tab.has_value() || *tab != t);
 }
 
 std::unique_ptr<juce::AccessibilityHandler> BottomDockComponent::DockTabButton::createAccessibilityHandler() {
@@ -379,6 +438,8 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 // then takes the panel's own first Down step (on the Timeline: "+ Track"), since the panel sits below
 // the strip. Everything else (the Cmd+digit tab keys included) is left for the app-wide shortcuts.
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
+    if (key == juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0))
+        return pressActiveSwapIcon();
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     std::vector<Tab> offered;
@@ -418,6 +479,27 @@ void BottomDockComponent::selectTabAt(int offeredIndex) {
             return;
         }
     }
+}
+
+// Shift+Return: the strip is the one Tab stop, so the active tab's swap icon is pressed from here. Consumed
+// whenever a tab is offered, even if the icon is disabled, so the key never falls through to a shortcut.
+bool BottomDockComponent::pressActiveSwapIcon() {
+    if (!isTabOfferedInStrip(activeTab_))
+        return false;
+    auto& icon = getSwapIcon(activeTab_);
+    if (icon.isEnabled() && icon.onClick)
+        icon.onClick(); // not triggerClick(), which posts the click for later
+    return true;
+}
+
+// The icon shows the keyboard focus ring while Shift is held on the focused strip: that is when Return presses it.
+void BottomDockComponent::paintSwapFocusRing(juce::Graphics& g) {
+    if (!stripFocus_.hasKeyboardFocus(false) || !juce::ModifierKeys::currentModifiers.isShiftDown() ||
+        !isTabOfferedInStrip(activeTab_) || liftedTab_.has_value())
+        return;
+    const auto& icon = getSwapIcon(activeTab_);
+    synth::ui::paintFocusRingAlways(g, getLocalArea(&icon, icon.getLocalBounds()).toFloat(), stripFocus_,
+                                    synth::theme::themeOf(*this).metrics.cornerRadiusSmall);
 }
 
 void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {

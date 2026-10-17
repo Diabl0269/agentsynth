@@ -24,6 +24,10 @@ region's `open` re-selects its own tab before falling through to the same "open 
 closed" step every panel toggle already does. See [**Mixer column navigation**](shortcuts.md#mixer-column-navigation)
 below for the Mixer region's own keyboard behaviour.
 
+- **The order follows the layout** — Toolbar, Library, the view in the main area, Dock tabs, then the views in the
+  panel (Canvas, Timeline, Mixer, Controllers), AI Panel, Mod Matrix; the Timeline's two side panes stay right after
+  the Timeline. A swap (icon or Opt+Cmd+1-4, [shortcuts](shortcuts.md)) re-registers the regions, so with the Timeline
+  in the main area Tab goes Library, Timeline, Dock tabs, Canvas (while its tab shows).
 - **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
   by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
   (both actions report inactive, so the key falls through unhandled) while the launch welcome screen
@@ -91,7 +95,7 @@ below for the Mixer region's own keyboard behaviour.
   buttons (no wrap), Home/End jump to the ends, Space/Return press the ringed button; in the **Dock tabs**
   region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
   Return moves focus into the selected panel, and Down does too and then takes the panel's first Down step (on the Timeline that lands on `"+ Track"`) (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
-  Cmd+T, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+T closing the pane
+  Cmd+J, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+J closing the pane
   around the focus focuses the region of the view in the main area instead (the Canvas region while the canvas
   is the main view; focus is also handed over when the pane closes around the canvas shown as a tab). Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and

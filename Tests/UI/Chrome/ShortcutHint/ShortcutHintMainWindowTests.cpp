@@ -73,7 +73,7 @@ TEST_F(ShortcutHintMainWindowTest, OpenDockLabelsTheToolbarAndEveryDockTab) {
         EXPECT_TRUE(labelled) << tab.name;
     }
 
-    // The Show/Hide Panel toolbar button carries Cmd+T's bubble, below the toolbar and clear of the dock.
+    // The Show/Hide Panel toolbar button carries Cmd+J's bubble, below the toolbar and clear of the dock.
     bool panelToggleLabelled = false;
     for (const auto& e : overlay->getEntries())
         if (!e.isPill && e.keyText == keyText(mc, "toggleBottomPanel") && e.bounds.getY() < 100)

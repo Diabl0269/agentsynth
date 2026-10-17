@@ -63,14 +63,10 @@ juce::String BottomDockTabModel::serializeOrder(const std::vector<DockView>& ord
     return names.joinIntoString(",");
 }
 
-// The stored main view always round-trips, so a value written by a build that can swap views
-// survives a session in this one. Only the effective main view is clamped to the canvas while
-// kMainViewSwapEnabled is false: nothing here can lay out the timeline, mixer or controllers in the
-// main area yet, so honouring the value would hide that tab with nowhere left to show it.
 void BottomDockTabModel::load(const juce::String& savedOrder, const juce::String& savedMainView) {
     order_ = parseOrder(savedOrder).value_or(defaultOrder());
-    storedMainView_ = viewForKey(savedMainView).value_or(DockView::Canvas);
-    mainView_ = kMainViewSwapEnabled ? storedMainView_ : DockView::Canvas;
+    mainView_ = viewForKey(savedMainView).value_or(DockView::Canvas);
+    suspended_ = false;
 }
 
 // The order holds every view, the main one included, so exchanging the two slots is the whole swap:
@@ -80,7 +76,7 @@ bool BottomDockTabModel::setMainView(DockView view) {
         return false;
     swapSlots(mainView_, view);
     mainView_ = view;
-    storedMainView_ = view;
+    suspended_ = false;
     return true;
 }
 

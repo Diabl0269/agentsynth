@@ -292,6 +292,9 @@ public:
     // one: a switch's segments, a stepper's buttons, a combo's text), which stays enabled.
     static constexpr const char* kTogglePillProperty = "togglePill";
     static constexpr const char* kDimmedProperty = "dimmed";
+    // A text button whose properties hold kTextInsetRightProperty = n (px) keeps its label clear of the n px at its
+    // right edge (a child icon there); the label is centred and ellipsised in what is left.
+    static constexpr const char* kTextInsetRightProperty = "textInsetRight";
     // True when `component` paints greyed out: disabled, or it or its parent carries kDimmedProperty.
     static bool paintsDimmed(const juce::Component& component);
     static constexpr float kTogglePillFontHeight = 12.0f;

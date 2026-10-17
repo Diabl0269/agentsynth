@@ -75,6 +75,7 @@ public:
         const auto loaded = bindings;
         migrateSaveAsChordSwap(*settings);
         migrateBottomPanelToggleKeys(*settings);
+        migrateBottomPanelCmdJ(*settings);
         migrateTransportCtrlChords(*settings);
         persistMigratedBindings(*settings, loaded);
     }
@@ -140,6 +141,22 @@ public:
             bindings["toggleBottomPanel"] = cmdT;
             bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
         }
+    }
+
+    /** One-shot: the bottom-panel toggle moved from Cmd+T to Cmd+J (Cmd+T is released). A saved install holds
+     *  the old default for it (saveToProperties() persists every action), so move it across -- but only when it
+     *  still holds exactly Cmd+T and no other action already holds Cmd+J; any other binding is the user's
+     *  choice and stays. Runs after migrateBottomPanelToggleKeys(), so an install that old still ends on Cmd+J.
+     *  The flag stops it re-firing if they later bind Cmd+T on purpose. */
+    void migrateBottomPanelCmdJ(juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_bottomPanelCmdJ";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const auto cmdT = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+        const auto cmdJ = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
+        if (bindings["toggleBottomPanel"] == cmdT && getConflictingAction("toggleBottomPanel", cmdJ).isEmpty())
+            bindings["toggleBottomPanel"] = cmdJ;
     }
 
     /** One-shot: Record and Metronome gained default chords (Ctrl+R / Ctrl+M) on every platform, but

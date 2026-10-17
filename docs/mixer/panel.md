@@ -152,68 +152,68 @@ track-walk rule, so renaming a channel here renames its stem file too.
 ## The tab strip
 
 Four views (Canvas, Timeline, Mixer, Controllers) share two places: one sits in the main area
-(`mainView`, the canvas today), the others are tabs in one drag-reorderable strip. `BottomDockTabModel`
+(`mainView`, the canvas unless one was swapped up), the others are tabs in one drag-reorderable strip. `BottomDockTabModel`
 holds the order, a permutation of all four persisted as `bottomDockTabOrder` (default
 `"timeline,mixer,midiRemote,canvas"`; a saved three-entry order gains `canvas`), and the main view,
 whose slot stays hidden. `setMainView(B)` swaps B's and the old main view's slots, so the view coming
 down takes B's place; the Timeline, Mixer (Tab placement only) or Controllers host moves into the main area
-([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. Nothing in the app swaps yet (`kMainViewSwapEnabled`, [settings](../layout/chrome.md#panel-collapse-and-persistence)).
+([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. The swap icon on each tab does this ([below](#the-tab-strip)); the choice is
+remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In Own panel or Window placement the Mixer has no tab or swap icon, and a saved Mixer main view waits (Canvas stands in) until the Tab placement returns.
 
-- **One toggle, four shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
+- **One toggle, four shows.** `Cmd+J`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
   active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
   `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
-  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main.
+  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main. `Opt+Cmd+1`-`4` swap a view in (below).
 - **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
   tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
   the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
   Past a 4 px threshold the dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`):
-  it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row (a
-  the shared `paintReorderLift` look: `surfaceHi` fill, 1 px `accent` outline, soft shadow, at 95%
-  opacity; the rise and shadow ease in with the lift), while the other tabs glide aside (160 ms) to open a gap and the gap
-  shows a 1 px dashed `border` outline. **The order does not change while dragging.** On release
+  it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row, in the shared
+  `paintReorderLift` look (`surfaceHi` fill, 1 px `accent` outline, soft shadow, 95% opacity, easing in with the
+  lift); the other tabs glide aside (160 ms) and the gap shows a 1 px dashed `border` outline (its swap icon hides). **The order does not change while dragging.** On release
   it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); each view
-  keeps its own key (Cmd+1/2/3, Cmd+4 `showCanvas`), never re-keyed. Esc returns the tab and commits
+  keeps its own keys (Cmd+1-4 show, Opt+Cmd+1-4 swap), never re-keyed. Esc returns the tab and commits
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
+- **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
+  tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
+  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`4` (`swap<View>ToMain`). It sits in a right-aligned icon row inside the tab (a detach icon will join it on its left), and the label
+  ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
+  `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
+  `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
+  its own window, which also takes the tab out of the strip. The icon is a button inside the tab's radio element and
+  not a Tab stop (the strip stays one); Shift+Return on the strip presses the active tab's icon, which shows the
+  focus ring while Shift is held on the focused strip.
 - **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes the main
   view, a tab detached to its own window (the canvas has no host and never detaches) and a Mixer
   disabled by the Own-panel/Window placement; `applyTabVisibility` picks a fallback —
   the active tab if it's still offered, else the first offered tab in strip order — every time
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
-  showing nothing (FRO158). `MainComponent` hides the whole dock only once
-  `BottomDockComponent::hasAnyVisibleTab()` goes false, and reopens it automatically the moment a
-  redock brings it back true — `bottomDockAutoHiddenByEmptyTabs_` tracks that this specific
-  auto-hide (never a deliberate Cmd+T close) is what a later redock should undo.
-- **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is
-  otherwise unreachable from a separate top-level `DetachedPanelWindow` (see
-  [**Per window keyboard focus**](#per-window-keyboard-focus) below); `DetachedPanelWindow::onAppShortcut`
-  is the one retry hook `MainComponent` wires (via `DetachablePanelHost::onAppShortcutFallback`) so
-  Cmd+T/Cmd+1..3 still work with a detached window focused, without a global key monitor that would
-  also steal keys a hosted plugin's own window should get first.
+  showing nothing. `MainComponent` hides the whole dock only once `hasAnyVisibleTab()` goes false and reopens it the
+  moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+J close).
+  The main view's own panel detaching suspends it: the Canvas takes the main area ([main view](../layout/chrome.md#the-main-view)).
+- **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is otherwise
+  unreachable from a separate top-level `DetachedPanelWindow` (see [**Per window keyboard focus**](#per-window-keyboard-focus));
+  `DetachedPanelWindow::onAppShortcut`, wired through `DetachablePanelHost::onAppShortcutFallback`, retries them, with
+  no global key monitor that would steal keys a hosted plugin's own window should get first.
 
 ## Placement and detachable windows
 
 Panel placement is a **Preferences setting** with three options: **Tab beside the Timeline**
 (default), **Own panel**, or **Window**.
 
-**Why a tab as the default.** A tab beside the Timeline puts the mixer where the bottom dock already
-is, with no second dock to learn and no window to manage; the other two stay available as settings for
-users who want them.
+**Why a tab as the default.** It puts the mixer where the bottom dock already is, with no second dock or window
+to manage; the other two stay available as settings.
 
-Whichever is chosen, detaching a panel into its own window uses **one mechanism shared by Timeline
-and Mixer, not two** — detaching the Timeline and detaching the Mixer are the same code path applied
-to different panels, not two separate features. The reference implementation is the existing
-hosted-plugin pattern, `Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}`, including its
-`addToDesktop=false` construction path, which is **the headless-testable seam** that lets a window be
-built and inspected in a test with no real desktop window ever created.
+Whichever is chosen, detaching a panel into its own window is **one mechanism shared by Timeline and Mixer**, the
+same code path for both. The reference is the hosted-plugin pattern, `Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}`,
+including its `addToDesktop=false` path, **the headless-testable seam** that builds a window with no real desktop
+window.
 
-The detach control is **icon-only**, with a tooltip reading "Open in window" when docked and "Dock
-back" when detached.
+The detach control is **icon-only**: tooltip "Open in window" when docked, "Dock back" when detached.
 
-**In the plugin build a detached window sets its OWN `LookAndFeel` instance; it never calls
-`Desktop::setDefaultLookAndFeel`**, which is process-global inside the host and would repaint
-everything else the host owns (root `CLAUDE.md` / `Source/UI/CLAUDE.md` invariant). Keyboard focus is
-scoped per window.
+**In the plugin build a detached window sets its OWN `LookAndFeel` instance, never `Desktop::setDefaultLookAndFeel`**
+(process-global inside the host; `Source/UI/CLAUDE.md`). Keyboard focus is scoped per window.
 
 ### The three placements
 
@@ -222,8 +222,8 @@ The mechanism is `Source/UI/Layout/DetachablePanelHost/` (`DetachablePanelHost` 
 between its dock and a `DetachedPanelWindow`. `BottomDockComponent` owns three hosts,
 `timelineHost_`/`mixerHost_`/`midiRemoteHost_`, each wrapping the SAME `TimelinePanelComponent`/
 `MixerPanelComponent`/`MidiRemotePanelComponent` instance it already held, so scroll, zoom and
-selection survive a detach untouched. `midiRemoteHost_` (FRO131) is always Tab placement — no
-Own-panel/Window placement variant like Mixer's own, so it has no third row in the table below.
+selection survive a detach untouched. `midiRemoteHost_` is always Tab placement (no Own-panel/Window variant, so no
+row in the table below).
 
 `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h` adds for this) moves
 `mixerHost_` between its three homes:

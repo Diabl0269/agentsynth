@@ -110,6 +110,11 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::selectPreviousModule,
     AppCommands::selectNextTrack,
     AppCommands::selectPreviousTrack,
+    // buildViewSwapCommandRows(), appended last.
+    AppCommands::swapTimelineToMain,
+    AppCommands::swapMixerToMain,
+    AppCommands::swapMidiRemoteToMain,
+    AppCommands::swapCanvasToMain,
 };
 
 } // namespace

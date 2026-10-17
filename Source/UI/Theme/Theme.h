@@ -170,7 +170,7 @@ struct Metrics {
     int aiPanelWidth{300};        // code-only; not parsed from user JSON
     int iconSize{16};             // code-only; not parsed from user JSON
 
-    // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
+    // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+J).
     int timelinePanelHeight{220}; // code-only; not parsed from user JSON
     // 200 (was 190, 160 before that): 190 was widened alongside the M/S/R toggle row (TimelineTrackHeaderComponent::
     // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the

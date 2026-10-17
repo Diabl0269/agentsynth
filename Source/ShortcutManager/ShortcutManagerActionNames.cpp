@@ -189,7 +189,8 @@ juce::String drawShapeActionName(const juce::String& actionId) {
     return {};
 }
 
-// The four views' own "show" actions: the three bottom-panel tabs and the canvas.
+// The four views' own "show" actions (the three bottom-panel tabs and the canvas) and their "show in the main area"
+// twins.
 juce::String dockViewActionName(const juce::String& actionId) {
     if (actionId == "toggleTimelinePanel")
         return "Show Timeline Tab";
@@ -199,6 +200,14 @@ juce::String dockViewActionName(const juce::String& actionId) {
         return "Show Controllers Tab";
     if (actionId == "showCanvas")
         return "Show Canvas";
+    if (actionId == "swapTimelineToMain")
+        return "Show Timeline in the Main Area";
+    if (actionId == "swapMixerToMain")
+        return "Show Mixer in the Main Area";
+    if (actionId == "swapMidiRemoteToMain")
+        return "Show Controllers in the Main Area";
+    if (actionId == "swapCanvasToMain")
+        return "Show Canvas in the Main Area";
     return {};
 }
 

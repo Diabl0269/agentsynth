@@ -81,7 +81,7 @@ user's height scaled by the panel's open fraction, so the same carve serves both
 and every frame of its slide.
 
 FRO333: ONE toolbar toggle (`ToolbarComponent::Slot::ToggleBottomPanel`, right-hand group,
-immediately before `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleBottomPanel`; see
+immediately before `ToggleTheme`) and the **Cmd+J** shortcut (action id `toggleBottomPanel`; see
 [`shortcuts.md`](../control/shortcuts.md)) flip `MainComponent::isBottomDockVisible` — show/hide the
 whole dock, reopening on whichever tab was last active. It replaced the former separate
 Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
@@ -181,6 +181,6 @@ three panels.
 Everything past the always-present `TimelinePanelComponent` member and the `resized()` carve — the
 toolbar button and the `toggleTimelinePanel` command included — is ordinary, always-compiled,
 always-active code. There is no build configuration and no runtime preference that omits the
-button, the shortcut or the panel carve, and Cmd+T and Space are always available. A stale
+button, the shortcut or the panel carve, and Cmd+J and Space are always available. A stale
 `timelineFeatureEnabled` key left in an existing install's `ApplicationProperties` by an earlier
 kill switch is ignored.

@@ -26,12 +26,14 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentCommands.cpp
     Source/MainComponent/MainComponentCommandTable.cpp
     Source/MainComponent/MainComponentFocusCommandRows.cpp
+    Source/MainComponent/MainComponentViewSwapCommandRows.cpp
     Source/MainComponent/MainComponentCommandPredicates.cpp
     Source/MainComponent/MainComponentSelectionCommands.cpp
     Source/MainComponent/MainComponentPanels.cpp
     Source/MainComponent/MainComponentCanvasReveal.cpp
     Source/MainComponent/MainComponentMainView.cpp
     Source/MainComponent/MainComponentDockFocus.cpp
+    Source/MainComponent/MainComponentFocusRegions.cpp
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp

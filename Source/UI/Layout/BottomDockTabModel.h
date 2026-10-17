@@ -14,10 +14,6 @@ enum class DockView { Timeline, Mixer, MidiRemote, Canvas };
 
 class BottomDockTabModel {
 public:
-    /** False until the main area can host a view other than the canvas: a stored non-canvas main
-     *  view is kept and written back, but the effective main view stays the canvas. */
-    static constexpr bool kMainViewSwapEnabled = false;
-
     /** The settings vocabulary ("timeline", "mixer", "midiRemote", "canvas"), shared by every key. */
     static const char* keyFor(DockView view) noexcept;
     static std::optional<DockView> viewForKey(const juce::String& key);
@@ -35,14 +31,19 @@ public:
 
     /** Always a permutation of all four views; the main view keeps its (hidden) slot. */
     const std::vector<DockView>& getOrder() const noexcept { return order_; }
-    /** The view the main area shows. */
-    DockView getMainView() const noexcept { return mainView_; }
-    /** The value to persist: equals getMainView() except after loading a clamped value. */
-    DockView getStoredMainView() const noexcept { return storedMainView_; }
-    bool isInMain(DockView view) const noexcept { return view == mainView_; }
+    /** The view the main area shows now: the stored one, or the Canvas while the stored one is suspended. */
+    DockView getMainView() const noexcept { return suspended_ ? DockView::Canvas : mainView_; }
+    bool isInMain(DockView view) const noexcept { return view == getMainView(); }
+    /** The view the user chose for the main area, the one that is saved. */
+    DockView getStoredMainView() const noexcept { return mainView_; }
+    /** While the stored main view cannot fill the main area (it is in its own window, or its placement moved it
+     *  out of the dock) the Canvas fills it for the session; the stored view is untouched and returns when the
+     *  suspension ends. A new setMainView() or load() ends it. */
+    bool isMainViewSuspended() const noexcept { return suspended_; }
+    void setMainViewSuspended(bool suspended) noexcept { suspended_ = suspended && mainView_ != DockView::Canvas; }
 
     /** Puts `view` in the main area; the view that was there takes `view`'s slot in the order.
-     *  False (nothing changes) when `view` is already in main. */
+     *  False (nothing changes) when `view` is the stored main view. */
     bool setMainView(DockView view);
     /** Exchanges two views' slots; a no-op when either is missing or they are equal. */
     void swapSlots(DockView a, DockView b);
@@ -52,7 +53,7 @@ public:
 private:
     std::vector<DockView> order_ = defaultOrder();
     DockView mainView_ = DockView::Canvas;
-    DockView storedMainView_ = DockView::Canvas;
+    bool suspended_ = false;
 };
 
 } // namespace synth::ui

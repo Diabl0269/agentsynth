@@ -62,10 +62,10 @@ TEST_F(ShortcutManagerTest, GetActionForKeyPress_Correct) {
 }
 
 TEST_F(ShortcutManagerTest, GetActionForKeyPress_UnknownReturnsEmpty) {
-    // Cmd+J has no default binding (Cmd+X became cutSelection, so it no longer works as the
-    // "unknown" sample here).
-    juce::KeyPress cmdJ('j', juce::ModifierKeys::commandModifier, 0);
-    EXPECT_TRUE(manager.getActionForKeyPress(cmdJ).isEmpty());
+    // Cmd+Y has no default binding (Cmd+X became cutSelection and Cmd+J the bottom panel, so neither works as
+    // the "unknown" sample here).
+    juce::KeyPress cmdY('y', juce::ModifierKeys::commandModifier, 0);
+    EXPECT_TRUE(manager.getActionForKeyPress(cmdY).isEmpty());
 }
 
 TEST_F(ShortcutManagerTest, SetBinding_Updates) {

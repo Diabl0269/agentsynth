@@ -574,6 +574,10 @@ void MainComponent::applyToolbarIcons() {
     bottomDock.getMixerPanel().getSidePaneButton().setShortcutText(sidePaneKey);
     bottomDock.getMixerPanel().refreshShortcutHints();
     timelinePanel.getSidePaneButton().setShortcutText(sidePaneKey);
+    using Dock = synth::ui::BottomDockComponent;
+    for (const auto view : {Dock::Tab::Timeline, Dock::Tab::Mixer, Dock::Tab::MidiRemote, Dock::Tab::Canvas})
+        bottomDock.setSwapShortcutText(
+            view, shortcutHintFor(&shortcutManager, Dock::swapActionIdForTab(view), juce::KeyPress()));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
