@@ -266,11 +266,11 @@ A whole electronic drum kit on one MIDI track. Each MIDI note plays a synthesize
 | 38, 40 | Snare | 185 Hz sine body with a short pitch drop (decays at 0.55 x the Snare decay) plus noise high-passed at 1.5 kHz and low-passed at 6.5 kHz |
 | 37 | Rim | 1.75 kHz triangle click and a high-passed noise burst, about 30 ms |
 | 39 | Clap | Noise band-passed at 1.2 kHz: three 8 ms bursts 10 ms apart, then the tail (Clap decay) |
-| 42, 44 | Closed / pedal hat | Six square oscillators at 808 ratios (205, 304, 370, 523, 540, 800 Hz x Tune) plus a little noise, high-passed at 7 kHz and low-passed at 12 kHz (tames the aliasing of the squares); the pedal hat is 20 percent shorter and softer. Chokes the open hat |
-| 46 | Open hat | The same source with the Open decay |
+| 42, 44 | Closed / pedal hat | Six band-limited square oscillators at 808 ratios (205, 304, 370, 523, 540, 800 Hz x Tune) summed, band-emphasised near 8 kHz and high-passed at 7.5 kHz (24 dB per octave), so the tail is steady metallic partials; a short noise sheen (about 10 ms, its own envelope) sits on the strike only. The pedal hat is 20 percent shorter and softer. Chokes the open hat |
+| 46 | Open hat | The same source with the Open decay, high-passed at 6.5 kHz |
 | 41, 43, 45, 47, 48, 50 | Toms, low to high | Sine at 82, 98, 117, 140, 165, 196 Hz with a 30 percent pitch drop over about 20 ms |
-| 49, 57 | Crash | Metallic source plus noise, band-passed 5 to 12 kHz |
-| 51, 59 | Ride | Metallic source band-passed 3 to 8 kHz, 0.8 x the Cymbal decay |
+| 49, 57 | Crash | The same metal bank, band-emphasised near 6.5 kHz and high-passed at 4.5 kHz; a short noise sheen (about 60 ms) on the strike, then only the metal wash for the Cymbal decay |
+| 51, 59 | Ride | The same metal bank, band-emphasised near 5 kHz and high-passed at 2.8 kHz, plus a 5.4 kHz ping that fades in a quarter of the decay; almost no noise; 0.8 x the Cymbal decay |
 | 56 | Cowbell | The 808 cowbell: square oscillators at 540 and 800 Hz (x Tune) summed and band-passed at 2.6 kHz (Q 1.7); a bright 15 ms knock over a quieter tail that takes the Cowbell decay |
 
 Any other note is silent. Velocity scales the level linearly and brightens the filters slightly. A drum plays out its own decay, so Note-Off does nothing and a long note changes nothing.
