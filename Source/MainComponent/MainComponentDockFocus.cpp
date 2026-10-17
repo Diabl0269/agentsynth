@@ -1,6 +1,6 @@
 // MainComponentDockFocus.cpp -- where keyboard focus goes after the bottom-panel shortcuts (Cmd+T,
-// Cmd+1/2/3/4) run: onto the dock's tab strip when the pane is showing, back to the canvas when the pane
-// closes around the focus. The shortcuts' dispatch rows are in MainComponentCommandTable.cpp.
+// Cmd+1/2/3/4) run: onto the dock's tab strip when the pane is showing, back to the view in the main area
+// when the pane closes around the focus. The shortcuts' dispatch rows are in MainComponentCommandTable.cpp.
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPlacementController.h"
@@ -33,23 +33,25 @@ void MainComponent::toggleBottomPanelFromShortcut() {
         toggleBottomPanelButton.onClick();
     if (isBottomDockVisible)
         focusDockTabStripIfShowing();
-    else if (focusWasInDock) {
-        // Only a region that is open: focusing a closed one would run its `open` callback and bring the pane back.
-        const auto mainRegion = getMainViewFocusRegionId();
-        const auto* region = focusRegions_.findById(mainRegion);
-        if (region != nullptr && region->isCurrentlyOpen())
-            focusRegions_.focusRegionById(mainRegion);
-    }
+    else if (focusWasInDock)
+        focusMainViewIfOpen();
+}
+
+// Only a region that is open: focusing a closed one would run its `open` callback and bring the pane back.
+void MainComponent::focusMainViewIfOpen() {
+    const auto mainRegion = getMainViewFocusRegionId();
+    const auto* region = focusRegions_.findById(mainRegion);
+    if (region != nullptr && region->isCurrentlyOpen())
+        focusRegions_.focusRegionById(mainRegion);
 }
 
 // Cmd+1/2/3/4. A tab that is detached raises its own window, and the Mixer outside the Tab placement is
 // revealed elsewhere (its own panel or window): neither has a docked strip to focus. The view in the
-// main area has no tab; for the canvas the key focuses it there instead.
+// main area has no tab; the key focuses it there instead.
 void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
     if (bottomDock.getMainView() == tab) {
-        if (tab == Tab::Canvas)
-            focusRegions_.focusRegionById("canvas");
+        focusMainViewIfOpen();
         return;
     }
     const bool mixerRevealedElsewhere =

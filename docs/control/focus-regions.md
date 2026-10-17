@@ -11,11 +11,11 @@ singleton — a host process can run multiple plugin instances, and a future sep
 mixer/timeline would need its own registry), populated with eleven regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
 (open while the `graphEditor` is visible: always in the main area, in the bottom panel only while its Canvas tab shows; its `open` callback reveals it, see [chrome](../layout/chrome.md#the-canvas-as-a-tab)), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
-dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible` with the Timeline the active dock tab),
+dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible` with the Timeline the active dock tab, or the Timeline in the main area: `MainComponent::isViewOnScreen`),
 **Routing pane** (`timelineRouting`: the Timeline showing with its side pane open) and **Scale pane** (`scaleAssist`: the Timeline showing with the piano roll's scale panel on screen), both straight after Timeline and with no `open` callback, **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
-bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
-`open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
+Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible` with the Controllers the active dock tab, or the panel in the
+main area, FRO131 — same dock-tab shape as Mixer, but does take a direct
+`open` callback, which changes nothing while the panel is in the main area), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
 (`graphEditor.isModMatrixVisible()`). Timeline, Mixer and Controllers share one dock
 (`BottomDockComponent`) with one tab visible at a time, so `isBottomDockVisible` alone (the dock's own
 open/closed state) stopped being enough to say the Timeline region is on screen the moment a second

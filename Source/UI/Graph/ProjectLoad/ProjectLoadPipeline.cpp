@@ -18,7 +18,8 @@ namespace synth::ui {
 namespace lr = load_reveal;
 
 ProjectLoadPipeline::ProjectLoadPipeline(GraphEditor& editor, AudioEngine& engine, juce::Component& overlayParent,
-                                         juce::Component* dock, std::function<void(const juce::String&)> status,
+                                         const std::vector<juce::Component*>& panels,
+                                         std::function<void(const juce::String&)> status,
                                          std::function<void(bool, const std::function<void()>&)> blockDetached)
     : editor_(editor)
     , engine_(engine)
@@ -32,10 +33,11 @@ ProjectLoadPipeline::ProjectLoadPipeline(GraphEditor& editor, AudioEngine& engin
     const auto& refused = refused_;
     canvasBlock_ = std::make_unique<EditBlockOverlay>(editor_, refused);
     overlayParent_.addChildComponent(*canvasBlock_);
-    if (dock != nullptr && overlayParent_.isParentOf(dock)) {
-        dockBlock_ = std::make_unique<EditBlockOverlay>(*dock, refused);
-        overlayParent_.addChildComponent(*dockBlock_);
-    }
+    for (auto* panel : panels)
+        if (panel != nullptr && overlayParent_.isParentOf(panel)) {
+            panelBlocks_.push_back(std::make_unique<EditBlockOverlay>(*panel, refused));
+            overlayParent_.addChildComponent(*panelBlocks_.back());
+        }
     stageLine_ = std::make_unique<LoadStageLine>(editor_);
     overlayParent_.addChildComponent(*stageLine_);
     loads_.onInstalled = [this](const void* owner) { assetInstalled(owner); };
@@ -47,10 +49,11 @@ ProjectLoadPipeline::~ProjectLoadPipeline() {
         blockDetached_(false, {});
     loads_.onInstalled = nullptr;
     for (auto* overlay :
-         {static_cast<juce::Component*>(canvasBlock_.get()), static_cast<juce::Component*>(dockBlock_.get()),
-          static_cast<juce::Component*>(stageLine_.get())})
+         {static_cast<juce::Component*>(canvasBlock_.get()), static_cast<juce::Component*>(stageLine_.get())})
         if (overlay != nullptr)
             overlayParent_.removeChildComponent(overlay);
+    for (auto& overlay : panelBlocks_)
+        overlayParent_.removeChildComponent(overlay.get());
 }
 
 double ProjectLoadPipeline::nowMs() const { return clock_ ? clock_() : juce::Time::getMillisecondCounterHiRes(); }
@@ -185,8 +188,8 @@ void ProjectLoadPipeline::setBusy(bool busy) {
 void ProjectLoadPipeline::setBlocking(bool blocking) {
     editor_.getLoadReveal().setBlockingEdits(blocking);
     canvasBlock_->setBlocking(blocking);
-    if (dockBlock_ != nullptr)
-        dockBlock_->setBlocking(blocking);
+    for (auto& overlay : panelBlocks_)
+        overlay->setBlocking(blocking);
     if (blockDetached_)
         blockDetached_(blocking, refused_);
 }

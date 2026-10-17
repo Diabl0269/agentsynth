@@ -16,6 +16,9 @@
 
 void MainComponent::addCanvasAndPanels() {
     addAndMakeVisible(graphEditor);
+    // Right above the canvas: the main area's other views sit under every panel and overlay, as it does.
+    addChildComponent(mainViewHolder_);
+    bottomDock.setMainAreaHolder(&mainViewHolder_);
     addAndMakeVisible(moduleLibrary);
 
     // Grey out the singleton I/O rows once the patch already has one, and repaint the library

@@ -303,7 +303,7 @@ launches via `ApplicationProperties`:
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 | `bottomDockActiveTab` | `"timeline"` | the bottom dock's active tab (`timeline`/`mixer`/`midiRemote`/`canvas`); a saved tab that is not offered falls back to the first offered one |
 | `bottomDockTabOrder` | `"timeline,mixer,midiRemote,canvas"` | the dock's strip order, all four views; a saved three-entry order (older builds) gains `canvas` at the end, anything malformed falls back to the default, and an older build reading four entries falls back to its own default. See [the tab strip](../mixer/panel.md#the-tab-strip) |
-| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`); its tab is not offered in the strip. Only the canvas can be shown there today: another stored value is kept and written back, but the canvas is shown (`BottomDockTabModel::kMainViewSwapEnabled`) |
+| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Nothing in the app moves another view there yet: another stored value is kept and written back, but the canvas is shown (`BottomDockTabModel::kMainViewSwapEnabled`) |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -328,6 +328,30 @@ grab point, the others glide aside, the order is applied and persisted on releas
 [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) and
 [`docs/layout/animation.md#reorder-drag`](animation.md#reorder-drag).
 
+### The main view
+
+The rect the canvas gets in the carve above is the **main area**, and one of four views fills it (`mainView`;
+the canvas unless `BottomDockComponent::setMainView()` moved another one up). With the Timeline or the MIDI Remote
+panel there, the dock moves that view's whole `DetachablePanelHost` (not the bare panel, so its side pane and
+detach state travel with it) into `MainComponent`'s `MainViewHolder` (`Source/UI/Layout/MainViewHolder.h`), which
+`MainComponent::layoutMainView()` places at the main rect; the canvas goes to the dock as a tab (below). A JUCE
+child is clipped to its parent, so the dock could not show the view over the main area itself; the move is the
+Mixer's Own-panel move generalised, and the dock lays out only the hosts still parented to it. When the view
+leaves main its host returns to the dock as a tab that is not active (it fades in if it becomes the active one).
+The Library and the AI panel keep their places beside the main area.
+
+A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+T) never hides it,
+a dock tab switch never fades it, and every "is it showing" gate counts it:
+`BottomDockComponent::isTimelineShowing()` / `isMidiRemoteShowing()` / `isMixerShowing()` (the playhead poll,
+the activity tick, the meters, and the Timeline's edit commands through `resolveEditSurface()`),
+`MainComponent::isTimelineReachable()` (snap grid, track step, timeline zoom and the locator keys) and the
+`timeline`, `timelineRouting`, `scaleAssist` and `midiRemote` focus regions. Revealing it (Cmd+1/3, a focus
+region's `open`, "Edit MIDI assignment...", adding a plugin automation lane) never opens the panel
+(`ensureDockOpenFor()`), and `setActiveTab()` ignores the main view. A project load's edit block covers the holder
+as well as the dock. `setMainView()` refuses a view that is open in its own window; while in main the host shows
+no header of its own, so it cannot be detached from there. The Mixer cannot be hosted yet: as the main view it
+leaves the main area empty. `MainComponent::setMainViewForTest` is the only way to put another view in main today.
+
 ### The canvas as a tab
 
 When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
@@ -336,15 +360,13 @@ reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything u
 mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
 layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
 does per frame). The editor is hidden, not zero-sized, while another tab shows or the panel is closed. When it
-first lands in the panel its view is fitted once, after the slide ends. The main area is left empty until the
-other views can be hosted there.
+first lands in the panel its view is fitted once, after the slide ends.
 
 `MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
 the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to
 Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
 every project or patch load, and an accepted AI patch. Cmd+T closing the panel around the canvas hands keyboard
 focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
-`MainComponent::setMainViewForTest` is the only way to put another view in main today.
 
 ### Tab strip keyboard and screen-reader access
 

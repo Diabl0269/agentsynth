@@ -113,8 +113,11 @@ tab redocks. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mix
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is
 open — it only reflects "the Timeline tab is selected" — so a caller that needs "is the panel
-actually on screen" composes `timelinePanel.isVisible() && bottomDock.isVisible()`.
-`MainComponent::timerCallback()`'s 10 Hz poll gate is the reference call site.
+actually on screen" asks `bottomDock.isTimelineShowing()`: the Timeline tab of a showing dock, its own
+window, or the main area, where the panel shows with the dock closed (see
+[the main view](../layout/chrome.md#the-main-view); the Timeline commands' gate there is
+`MainComponent::isTimelineReachable()`). `MainComponent::timerCallback()`'s 10 Hz poll gate is the
+reference call site.
 
 ## Panel height
 

@@ -243,7 +243,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     wireStatusBar();
     // ORDER: after the canvas, the dock and the status bar exist; its overlays sit above both.
     projectLoad_ = std::make_unique<synth::ui::ProjectLoadPipeline>(
-        graphEditor, audioEngine, *this, &bottomDock,
+        graphEditor, audioEngine, *this, std::vector<juce::Component*>{&bottomDock, &mainViewHolder_},
         [this](const juce::String& message) { statusBar.showMessage(message); },
         [this](bool blocked, const std::function<void()>& onRefused) {
             bottomDock.setDetachedEditsBlocked(blocked, onRefused);

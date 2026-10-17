@@ -172,6 +172,7 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
     // longer offered (the main view, a detached tab) is resolved by applyTabVisibility() below.
     activeTab_ = BottomDockTabModel::viewForKey(settings->getValue(kActiveTabKey, "timeline")).value_or(Tab::Timeline);
     tabModel_.load(settings->getValue(kTabOrderKey, ""), settings->getValue(kMainViewKey, ""));
+    placeMainViewHost();
     // The plain initial read -- nothing is open yet, so there is no live transition to run
     // (applyDetachBothPlacesPreference() below is what re-reads this LIVE, on a later settings-file
     // write).
@@ -181,18 +182,67 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
 
 // The view that comes down takes over as the active tab when the dock was showing the one that went
 // up, so the dock keeps showing something in the same place; otherwise the active tab stays (or
-// falls back through applyTabVisibility() if it is no longer offered). Nothing in the app calls this
-// with a view other than the canvas yet: the main area cannot host another view.
-void BottomDockComponent::setMainView(Tab view) {
+// falls back through applyTabVisibility() if it is no longer offered). A view open in its own window
+// is refused: its panel lives in that window, not in the host that would move. Nothing in the app
+// calls this with a view other than the canvas yet (MainComponent::setMainViewForTest does).
+bool BottomDockComponent::setMainView(Tab view) {
+    if (const auto* host = hostForTab(view); host != nullptr && host->isDetached())
+        return false;
     const Tab previous = tabModel_.getMainView();
     if (!tabModel_.setMainView(view))
-        return;
+        return false;
     persistTabOrder();
     persistMainView();
+    placeMainViewHost();
     if (activeTab_ == view)
         setActiveTab(previous);
     else
         applyTabVisibility();
+    return true;
+}
+
+void BottomDockComponent::setMainAreaHolder(juce::Component* holder) {
+    mainAreaHolder_ = holder;
+    placeMainViewHost();
+    applyTabVisibility(false);
+}
+
+// A JUCE child is clipped to its parent, so the dock cannot show a view over the main area itself: the
+// view's whole host moves into MainComponent's holder (the Own-panel placement's move, generalised), and
+// with it the panel's side pane and detach state. The Mixer stays here until the main area can host it.
+DetachablePanelHost* BottomDockComponent::mainAreaHostFor(Tab view) noexcept {
+    if (mainAreaHolder_ == nullptr || view == Tab::Mixer)
+        return nullptr;
+    return hostForTab(view);
+}
+
+// The leaving host lands hidden, like any tab that is not active; applyTabVisibility() (which every caller
+// runs next) fades it in if it is. The arriving host lands shown, whatever fade it was in the middle of.
+void BottomDockComponent::placeMainViewHost() {
+    auto* wanted = mainAreaHostFor(getMainView());
+    if (wanted != nullptr && wanted->isDetached())
+        wanted = nullptr;
+    if (wanted == hostInMain_)
+        return;
+    if (auto* leaving = std::exchange(hostInMain_, nullptr)) {
+        addAndMakeVisible(*leaving);
+        fadeForHost(*leaving).snapTo(false);
+        resizeHandle_.toFront(false);
+    }
+    if (wanted == nullptr)
+        return;
+    hostInMain_ = wanted;
+    mainAreaHolder_->addAndMakeVisible(*wanted);
+    fadeForHost(*wanted).snapTo(true);
+    // Catches up on whatever changed while it was a hidden tab, as a switch to its tab does (applyTabVisibility).
+    if (wanted == &midiRemoteHost_)
+        midiRemotePanel_.rebuildFromProfiles();
+}
+
+FadeVisibility& BottomDockComponent::fadeForHost(const DetachablePanelHost& host) noexcept {
+    if (&host == &mixerHost_)
+        return mixerFade_;
+    return &host == &midiRemoteHost_ ? midiRemoteFade_ : timelineFade_;
 }
 
 void BottomDockComponent::applyDetachBothPlacesPreference() {
@@ -256,7 +306,7 @@ void BottomDockComponent::setOnBuildTrackColourPicker(
 }
 
 void BottomDockComponent::setActiveTab(Tab tab) {
-    if (activeTab_ == tab)
+    if (activeTab_ == tab || tabModel_.isInMain(tab))
         return;
     activeTab_ = tab;
     applyTabVisibility();
@@ -445,12 +495,16 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     const bool mixerActive = activeTab_ == Tab::Mixer;
     const bool midiRemoteActive = activeTab_ == Tab::MidiRemote;
     const bool timelineActive = activeTab_ == Tab::Timeline;
+    // A host in the main area shows whatever tab is active here.
+    const bool timelineShown = timelineActive || isInMainArea(Tab::Timeline);
+    const bool mixerShown = mixerActive || isInMainArea(Tab::Mixer);
+    const bool midiRemoteShown = midiRemoteActive || isInMainArea(Tab::MidiRemote);
     // A tab switch cross-fades: the leaving host fades out as the arriving one fades in (FadeVisibility, animation.md).
     // Whether a tab is selected lands at once (isShown()); the leaving panel keeps its own visible flag until its host
     // has faded out (onHidden), so the picture does not empty while it fades.
-    timelineFade_.setShown(timelineActive);
-    mixerFade_.setShown(mixerActive);
-    midiRemoteFade_.setShown(midiRemoteActive);
+    timelineFade_.setShown(timelineShown);
+    mixerFade_.setShown(mixerShown);
+    midiRemoteFade_.setShown(midiRemoteShown);
     // Also toggle each panel's OWN visible flag, preserving the contract
     // TimelinePanelTestFixture.h's timelinePanelIsOpen() documents ("timelinePanel_.isVisible()
     // means the Timeline tab is selected") for the common (docked) case -- but ONLY while docked
@@ -464,9 +518,9 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
         if (active || !fade.isFading())
             panel.setVisible(active);
     };
-    syncPanel(timelineHost_, timelineFade_, timelinePanel_, timelineActive);
-    syncPanel(mixerHost_, mixerFade_, *mixer_, mixerActive);
-    syncPanel(midiRemoteHost_, midiRemoteFade_, midiRemotePanel_, midiRemoteActive);
+    syncPanel(timelineHost_, timelineFade_, timelinePanel_, timelineShown);
+    syncPanel(mixerHost_, mixerFade_, *mixer_, mixerShown);
+    syncPanel(midiRemoteHost_, midiRemoteFade_, midiRemotePanel_, midiRemoteShown);
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
@@ -751,13 +805,11 @@ void BottomDockComponent::resized() {
     layoutTabButtons();
     applyReorderOffsets();
 
-    timelineHost_.setBounds(bounds);
-    // In the Own-panel placement the host lives in MixerPlacementController's strip, which lays it
-    // out itself; sizing it to the dock here would leave it at the wrong height until that strip's
-    // next layout pass.
-    if (mixerHost_.getParentComponent() == this)
-        mixerHost_.setBounds(bounds);
-    midiRemoteHost_.setBounds(bounds);
+    // A host parented elsewhere (the main-area holder, the Mixer's Own-panel strip) is laid out by that
+    // parent; sizing it to the dock here would leave it at the wrong size until the parent's next layout.
+    for (auto* host : {&timelineHost_, &mixerHost_, &midiRemoteHost_})
+        if (host->getParentComponent() == this)
+            host->setBounds(bounds);
 }
 
 std::vector<BottomDockComponent::StripTab> BottomDockComponent::getStripTabs() {

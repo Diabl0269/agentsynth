@@ -310,15 +310,13 @@ void MainComponent::timerCallback() {
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout/animation.md.
     //
-    // timelinePanel is nested inside bottomDock (the Timeline/Mixer tab
-    // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
-    // dock is open" -- AND bottomDock.isVisible(), composing both local flags without walking up
-    // to a real OS peer, matching bottomDock's own isMixerTabActive() && isVisible() gate for the
-    // meters just below. Deliberately not isShowing(): it additionally requires the ROOT
+    // isTimelineShowing() is the meters' isMixerShowing() shape: the Timeline tab of a showing dock, its
+    // own window, or the main area (on screen whether or not the dock is), composed from local flags
+    // without walking up to a real OS peer. Deliberately not isShowing(): it additionally requires the ROOT
     // component to have a real Desktop peer (juce::Component::isShowing()'s own implementation),
     // which is never true in a headless test -- this codebase's own tests construct MainComponent
     // without ever calling addToDesktop().
-    if (timelinePanel.isVisible() && bottomDock.isVisible()) {
+    if (bottomDock.isTimelineShowing()) {
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
         // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
         // that actually separates "rendered" from "heard".

@@ -68,8 +68,8 @@ exactly as synchronous as it always was: nothing is deferred, hidden, blocked or
    and every hosted plugin still instantiating (`HostedPluginModule::isLoading`, polled; its own async load is
    unchanged). The canvas reveal starts ([animation.md](../layout/animation.md#project-load-reveal)). With nothing
    pending the load is fast: the patch is usable at once. With anything pending it is slow: the waiting cards are
-   outlined, the stage line says what is pending after 400 ms, and **edits wait**: a click on the canvas or the bottom
-   dock, a canvas Delete or arrow key, a drop on the canvas, a library add and every `"Edit"` command are refused with a
+   outlined, the stage line says what is pending after 400 ms, and **edits wait**: a click on the canvas, the bottom
+   dock or a panel in the main area, a canvas Delete or arrow key, a drop on the canvas, a library add and every `"Edit"` command are refused with a
    short "Still loading" status message, while scrolling and zooming still work (`EditBlockOverlay` passes wheel and
    pinch through). The same wait holds on the other ways in: a detached panel window gets its own `EditBlockOverlay`
    (`ProjectLoadPipeline`'s `blockDetached` hook, `BottomDockComponent::setDetachedEditsBlocked`; a panel detached

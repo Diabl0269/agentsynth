@@ -319,19 +319,19 @@ juce::Component* MainComponent::getFocusedComponentForMenu() const {
 // docked on the tab strip, an "Own panel" strip, or detached into its own window — so its
 // showing check is the same OR MainComponent::timerCallback already uses to gate meter ticks
 // (bottomDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
-// isOwnPanelShowing() covers Own panel), not the plain isBottomDockVisible gate the two timeline
-// surfaces use. MixerPanelComponent is the mixer's single focusable leaf (every column's
-// own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls
-// too, not just the panel root itself. Public: both perform()/getCommandInfo() and
-// FocusArbitrationTests.cpp call it directly.
+// isOwnPanelShowing() covers Own panel); the timeline surfaces ask bottomDock.isTimelineShowing() (the
+// active tab of a showing dock, its own window, or the main area). MixerPanelComponent is the mixer's single focusable
+// leaf (every column's own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls too,
+// not just the panel root itself. Public: both perform()/getCommandInfo() and FocusArbitrationTests.cpp call it
+// directly.
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
 
     // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
-    // check visibility BEFORE even asking what's focused.
-    if (isBottomDockVisible) {
-        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+    // check visibility BEFORE even asking what's focused (the real focus, or a test's stand-in).
+    if (bottomDock.isTimelineShowing()) {
+        if (auto* focused = getFocusedComponentForMenu()) {
             if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
                 return EditSurface::PianoRoll;
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
@@ -341,7 +341,7 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
         }
     }
     if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
-        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+        if (auto* focused = getFocusedComponentForMenu()) {
             if (isOrIsChildOf(focused, bottomDock.getMixerPanel()))
                 return EditSurface::Mixer;
         }
@@ -394,7 +394,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while
     // the graph canvas has focus, which is a different feature with its own design question. These
     // two act on the transport, are chorded, and mean nothing on any other surface.
-    if (isBottomDockVisible) {
+    if (isTimelineReachable()) {
         static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2"};
         for (const auto& action : shortcutManager.getActionsForKeyPress(key))
             if (forwardsToTimelinePanel.contains(action))
@@ -483,7 +483,7 @@ void MainComponent::resized() {
     if (libW > 0 || moduleLibrary.isVisible())
         moduleLibrary.setBounds(bounds.removeFromLeft(libW));
 
-    layoutCanvas(bounds);
+    layoutMainView(bounds);
     if (toast_)
         toast_->placeIn(bounds);
 
