@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/BottomDockTabModel.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -51,10 +52,8 @@ class TimelinePanelComponent;
 
 class BottomDockComponent : public juce::Component {
 public:
-    // MidiRemote is a third, always-offered tab -- unlike Mixer it has no OwnPanel/Window
-    // placement variant, so there is no MidiRemote counterpart to mixerTabEnabled_
-    // (see docs/control/midi-remote-ui.md#the-controllers-panel).
-    enum class Tab { Timeline, Mixer, MidiRemote };
+    // The four views (BottomDockTabModel.h); the one in the main area is never offered as a tab.
+    using Tab = DockView;
 
     // `appProperties`/`lookAndFeel`/`shortcutManager` are forwarded straight into
     // timelineHost_/mixerHost_ (both DetachablePanelHost) -- see that class for what each is
@@ -66,10 +65,16 @@ public:
                         ShortcutManager* shortcutManager);
     ~BottomDockComponent() override;
 
-    /** Reads the persisted active tab and tab order once ("bottomDockActiveTab" /
-     *  "bottomDockTabOrder", docs/layout/chrome.md's "Panel collapse and persistence" table);
-     *  writes the former on every tab switch and the latter on every drag-reorder. */
+    /** Reads the persisted active tab, tab order and main view once ("bottomDockActiveTab" /
+     *  "bottomDockTabOrder" / "mainView", docs/layout/chrome.md's "Panel collapse and persistence"
+     *  table); writes the active tab on every tab switch, the order on every drag-reorder and both
+     *  the order and the main view on every setMainView(). */
     void setApplicationProperties(juce::ApplicationProperties* properties);
+
+    /** The view in the main area (Canvas unless setMainView() moved another one up). */
+    Tab getMainView() const noexcept { return tabModel_.getMainView(); }
+    /** Moves `view` into the main area; the view it replaces takes `view`'s tab slot. */
+    void setMainView(Tab view);
 
     /** MainComponent::reconcileTimelineAfterGraphChange -- fired after an insert-list mutation
      *  changes the graph (add/reorder/remove). */
@@ -259,7 +264,7 @@ public:
      *  Remote pick overlay lets clicks through to. */
     std::vector<juce::Component*> getTabButtons() {
         std::vector<juce::Component*> buttons;
-        for (Tab t : tabOrder_)
+        for (Tab t : tabModel_.getOrder())
             buttons.push_back(&buttonForTab(t));
         return buttons;
     }
@@ -312,24 +317,27 @@ public:
 
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
-    /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade). */
-    juce::Component& getTabHostForTest(Tab tab) noexcept { return hostForTab(tab); }
+    /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade); never Canvas. */
+    juce::Component& getTabHostForTest(Tab tab) noexcept { return *hostForTab(tab); }
     /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
     float getLiftedTabLeftForTest() const { return reorder_.getDraggedStart(); }
     /** Test seam: the Esc key press a real drag would receive from the window. */
     bool sendEscapeToTabDragForTest() {
         return reorderCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
     }
-    /** Test seam: the tab strip's current drag-reorderable order. */
-    const std::vector<Tab>& getTabOrderForTest() const noexcept { return tabOrder_; }
-    /** Test seam: applies a reorder through the same persist + key-permute path a real
-     *  drag-and-release ends in, without synthesizing mouse events. */
+    /** Test seam: the tab strip's current drag-reorderable order (all four views). */
+    const std::vector<Tab>& getTabOrderForTest() const noexcept { return tabModel_.getOrder(); }
+    /** Test seam: applies a reorder through the same persist path a real drag-and-release ends in,
+     *  without synthesizing mouse events. */
     void reorderTabsForTest(Tab dragged, Tab droppedOnto) {
-        swapTabOrder(dragged, droppedOnto);
+        tabModel_.swapSlots(dragged, droppedOnto);
         persistTabOrder();
-        permuteShortcutKeysForNewOrder();
         resized();
     }
+
+    /** The detach-to-window host of `tab`; null for Canvas, which has none. */
+    synth::ui::DetachablePanelHost* hostForTab(Tab tab) noexcept;
+    const synth::ui::DetachablePanelHost* hostForTab(Tab tab) const noexcept;
 
 private:
     // One tab-strip button; reports drags to its owner for drag-to-reorder (see .cpp).
@@ -397,8 +405,8 @@ private:
     void applyTabVisibility(bool allowMixerRebuild = true);
     void persistActiveTab();
     // The active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
-    // on (docs/mixer/panel.md: "the tab-strip button detaches whichever tab is active").
-    synth::ui::DetachablePanelHost& activeHost() noexcept;
+    // on (docs/mixer/panel.md: "the tab-strip button detaches whichever tab is active"); null for Canvas.
+    synth::ui::DetachablePanelHost* activeHost() noexcept;
     void refreshDetachButton();
 
     // ---- "both places" -- the tab-strip detach button routes through the mirror instead
@@ -412,13 +420,11 @@ private:
     void openMixerMirror();
 
     // ---- Tab order, "which tabs are offered right now", and the fallback pick ------------
-    synth::ui::DetachablePanelHost& hostForTab(Tab tab) noexcept;
-    const synth::ui::DetachablePanelHost& hostForTab(Tab tab) const noexcept;
     juce::TextButton& buttonForTab(Tab tab) noexcept;
-    /** True when `tab` belongs in the strip right now: not detached, and (Mixer only) not disabled
-     *  by the placement preference. */
+    /** True when `tab` belongs in the strip right now: not the main view, not detached, and (Mixer
+     *  only) not disabled by the placement preference. */
     bool isTabOfferedInStrip(Tab tab) const noexcept;
-    /** `activeTab_` if it's still offered, else the first offered tab in tabOrder_, else
+    /** `activeTab_` if it's still offered, else the first offered tab in the strip order, else
      *  `activeTab_` unchanged (hasAnyVisibleTab() is false -- nothing to fall back to). */
     Tab pickFallbackActiveTab() const noexcept;
 
@@ -435,17 +441,15 @@ private:
     void commitTabDrag();
     /** Esc mid-drag: the lifted tab returns to where it was picked up and nothing is committed. */
     void cancelTabDrag();
-    /** Lays the offered tab buttons out at their static slots, in tabOrder_. */
+    /** Lays the offered tab buttons out at their static slots, in the strip order. */
     void layoutTabButtons();
     /** Moves the buttons to where the reorder animator says they are right now. */
     void applyReorderOffsets();
     void onReorderFrame();
     void startReorderFramesIfNeeded();
     float pointerXInDock(const juce::MouseEvent& e);
-    void swapTabOrder(Tab a, Tab b);
     void persistTabOrder();
-    /** Permutes the three tabs' own Cmd+digit key bindings to match tabOrder_'s new order. */
-    void permuteShortcutKeysForNewOrder();
+    void persistMainView();
     static const char* actionIdForTab(Tab tab) noexcept;
 
     TimelinePanelComponent& timelinePanel_;
@@ -474,6 +478,8 @@ private:
     DockTabButton timelineTabButton_;
     DockTabButton mixerTabButton_;
     DockTabButton midiRemoteTabButton_;
+    // Offered only while the canvas is not the main view (it then has no panel in the dock yet).
+    DockTabButton canvasTabButton_;
     // Icon-only, embedded in this tab strip (not either host's own header -- see
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).
@@ -485,11 +491,11 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     ShortcutManager* shortcutManager_ = nullptr;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
-    // User-controlled visual/Cmd+N order, a permutation of all three Tab values regardless
-    // of which are currently detached (a detached tab keeps its slot so redocking restores it there
-    // rather than always appending it at the end).
-    std::vector<Tab> tabOrder_{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    // The user-controlled strip order (a permutation of all four views, the main view and detached
+    // tabs keeping their slots) and the main view.
+    BottomDockTabModel tabModel_;
     static constexpr const char* kTabOrderKey = "bottomDockTabOrder";
+    static constexpr const char* kMainViewKey = "mainView";
     // The tab currently drawn lifted (under the pointer, then gliding into its slot); empty outside
     // a drag that has cleared the drag threshold.
     std::optional<Tab> liftedTab_;

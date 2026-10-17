@@ -85,7 +85,8 @@ TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabB
     // The strip is chrome ON the tab strip, not extra height: the content below still starts at
     // kTabStripHeight, but no button reaches into the top kHeight px, so a grab never lands on one.
     for (auto* button : dock.getTabButtons())
-        EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
+        if (button->isVisible())
+            EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
     // Every tab gets the dock's full content height: the mixer's toolbar row lives inside the mixer
     // panel, so no host is carved.
     EXPECT_EQ(dock.getTimelineHost().getY(), Dock::kTabStripHeight);

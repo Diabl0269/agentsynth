@@ -87,8 +87,8 @@ whole dock, reopening on whichever tab was last active. It replaced the former s
 Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
 **Cmd+1/2/3** (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) now each only SHOW
 their own tab (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
-closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration and the drag-reorder
-re-keying. Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
+closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (each tab keeps its
+key when the strip is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
 default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
@@ -99,7 +99,7 @@ actually drive. `isBottomDockVisible` / `bottomDockVisible` mean "the dock is op
 which tab is active; which tab is *showing* inside an open dock is the separate, independently
 persisted `bottomDockActiveTab` key (`BottomDockComponent::kActiveTabKey`, default `"timeline"`), and
 the strip's own user-reorderable left-to-right order is the also-independent `bottomDockTabOrder`
-key (comma-joined tab names, default `"timeline,mixer,midiRemote"`) — both keys are documented
+key (comma-joined view names, default `"timeline,mixer,midiRemote,canvas"`) — both keys are documented
 alongside the tab strip itself in
 [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows).
 

@@ -768,6 +768,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::MidiRemote);
              return true;
          }},
+        // The fourth view's key: focuses the canvas while it is the main view.
+        {AppCommands::showCanvas,
+         "Show Canvas",
+         "Show the patch canvas and focus it",
+         "View",
+         "showCanvas",
+         {},
+         [](MainComponent& m) {
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Canvas);
+             return true;
+         }},
         // A no-op (that still consumes the key) when the active tab has no side pane.
         {AppCommands::toggleSidePane,
          "Show/Hide Side Pane",

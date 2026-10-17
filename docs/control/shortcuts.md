@@ -43,7 +43,8 @@ when reasoning about a key that "does nothing."
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the canvas. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
-| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). Each key belongs to its view: reordering the strip never re-keys them — see [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
+| Cmd+4 | Show Canvas (`showCanvas`) — the fourth view's key; while the canvas is in the main area (always, today) it focuses the canvas and leaves the dock as it is |
 | Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
@@ -86,10 +87,9 @@ FRO333: Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab
 `Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the new toggleBottomPanel action,
 one-shot, the first time it loads its settings — `ShortcutManager::migrateBottomPanelToggleKeys`;
 an old `Cmd+Alt+M` for Mixer just carries forward unchanged, since it never collided with anything).
-Dragging a tab in the strip to reorder it re-keys Cmd+1/2/3 to match the new order
-(`BottomDockComponent::permuteShortcutKeysForNewOrder`) — but only while all three still hold a bare
-Cmd+digit as a set; rebinding one of the three away from that convention (in Settings) opts it out of
-future re-keying, same guard shape as the Save-As/Save-Snippet chord-swap migration below.
+Dragging a tab in the strip to reorder it no longer re-keys anything: each view keeps its own key
+(Cmd+1/2/3, Cmd+4 for the canvas), so a key never changes meaning when a view moves between the main
+area and the strip. Bindings an older build re-keyed on a reorder are kept as saved.
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by
@@ -344,7 +344,7 @@ moves into the open tab and Shift+Tab comes back to the strip ([rule](../develop
 keys belong to the focused strip and are not actions. The former Cmd+Opt+Left / Right `tabPrevious` / `tabNext`
 actions are gone; a saved shortcut or MIDI mapping that still names them is ignored on load.
 
-- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+T opens the pane, and both leave focus on the strip
+- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+T opens the pane, and both leave focus on the strip (Cmd+4 focuses the canvas)
   ([details](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access)).
 - **Settings window**: Cmd+1..9 opens the Nth tab, a fixed key, not an action (a text field passes it up). Holding
   Cmd over the window shows each tab's `Cmd+N` as a hint badge ([hints](#shortcut-hints)).

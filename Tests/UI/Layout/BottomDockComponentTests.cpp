@@ -238,42 +238,45 @@ TEST(BottomDockComponentTests, ShowTabActionsNeverCloseTheDock) {
     EXPECT_EQ(ShortcutManager::getActionDescription("toggleBottomPanel"), "Toggle Bottom Panel");
 }
 
-// The dock's own tab order (Timeline, Mixer, Controllers by default) is what Cmd+1..3 and
-// the strip's own left-to-right layout follow; getTabButtons() reports it in that same order.
+// The dock's own tab order (Timeline, Mixer, Controllers, then the Canvas, which is in the main area
+// and so not in the strip) is the strip's left-to-right layout; getTabButtons() reports it in that order.
 TEST(BottomDockComponentTests, DefaultTabOrderIsTimelineMixerControllers) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
     auto& dock = mc.getBottomDock();
     using Tab = synth::ui::BottomDockComponent::Tab;
-    const std::vector<Tab> expected{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    const std::vector<Tab> expected{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(dock.getTabOrderForTest(), expected);
+    EXPECT_EQ(dock.getMainView(), Tab::Canvas);
+    std::vector<juce::String> strip;
+    for (const auto& tab : dock.getStripTabs())
+        strip.push_back(tab.name);
+    EXPECT_EQ(strip, (std::vector<juce::String>{"Timeline", "Mixer", "Controllers"})) << "the strip is unchanged";
 }
 
-// Dragging a tab past another swaps their order, persists it, and re-keys Cmd+1/2/3 so
-// Cmd+1 keeps opening whichever tab now sits first.
-TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndPermutesTheCmdDigitBindings) {
+// Dragging a tab past another swaps their order and persists it; each view keeps its own Cmd+digit.
+TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndKeepsEachViewsKey) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
     auto& dock = mc.getBottomDock();
     using Tab = synth::ui::BottomDockComponent::Tab;
 
+    const auto cmd = [](int digit) { return juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0); };
     dock.reorderTabsForTest(Tab::Timeline, Tab::Mixer);
 
-    const std::vector<Tab> expected{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    const std::vector<Tab> expected{Tab::Mixer, Tab::Timeline, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(dock.getTabOrderForTest(), expected);
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMixerPanel"),
-              juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0));
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleTimelinePanel"),
-              juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0));
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMidiRemotePanel"),
-              juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleTimelinePanel"), cmd(1));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMixerPanel"), cmd(2));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMidiRemotePanel"), cmd(3));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("showCanvas"), cmd(4));
 }
 
-// The saved tab order and the Cmd+digit bindings live in separate stores, so they can disagree at
-// launch; loading re-keys the digits from the restored order so the first tab is always Cmd+1.
-TEST(BottomDockComponentTests, LoadingRekeysTheCmdDigitsFromTheRestoredTabOrder) {
+// The saved tab order and the key bindings are separate stores; loading an order never re-keys a
+// binding, so a user who swapped Cmd+1 and Cmd+2 (or whose older build did on a reorder) keeps them.
+TEST(BottomDockComponentTests, LoadingATabOrderNeverRekeysTheCmdDigits) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
@@ -287,16 +290,9 @@ TEST(BottomDockComponentTests, LoadingRekeysTheCmdDigitsFromTheRestoredTabOrder)
 
     mc.getBottomDock().setApplicationProperties(&mc.getAppPropertiesForTest());
 
-    EXPECT_EQ(shortcuts.getBinding("toggleTimelinePanel"), cmd(1));
-    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), cmd(2));
-    EXPECT_EQ(shortcuts.getBinding("toggleMidiRemotePanel"), cmd(3));
-
-    // A binding the user moved off the Cmd+digit convention is never overridden.
-    shortcuts.setBinding("toggleMixerPanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
-    shortcuts.setBinding("toggleTimelinePanel", cmd(2));
-    mc.getBottomDock().setApplicationProperties(&mc.getAppPropertiesForTest());
+    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), cmd(1));
     EXPECT_EQ(shortcuts.getBinding("toggleTimelinePanel"), cmd(2));
-    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(shortcuts.getBinding("toggleMidiRemotePanel"), cmd(3));
 
     shortcuts.setBinding("toggleMixerPanel", cmd(2));
     shortcuts.setBinding("toggleTimelinePanel", cmd(1));
@@ -509,19 +505,20 @@ TEST(BottomDockComponentTests, ADragKeepsTheOrderUntilReleaseThenSavesItAndClear
 
     f.press();
     f.dragBy(dx);
-    const std::vector<Tab> unchanged{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    const std::vector<Tab> unchanged{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), unchanged) << "the order is not touched mid-drag";
     EXPECT_TRUE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
 
     f.release(dx);
-    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), dropped);
     EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
     auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
     ASSERT_NE(settings, nullptr);
-    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,timeline,midiRemote");
+    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,timeline,midiRemote,canvas");
     EXPECT_EQ(f.mc.getShortcutManager().getBinding("toggleMixerPanel"),
-              juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0));
+              juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0))
+        << "a reorder never re-keys a view";
 }
 
 TEST(BottomDockComponentTests, APlainClickNeverShowsTheLiftedTab) {
@@ -573,12 +570,12 @@ TEST(BottomDockComponentTests, LiftedTabStaysUnderTheGrabPointAcrossEveryInserti
                          x0 + grab + w * 2 - 4}) {
         drag.dragTo(pointerX);
         EXPECT_FLOAT_EQ(f.dock().getLiftedTabLeftForTest(), (float)(pointerX - grab)) << "pointer at " << pointerX;
-        const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+        const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas};
         EXPECT_EQ(f.dock().getTabOrderForTest(), untouched) << "the order is only applied on release";
     }
 
     drag.up(x0 + grab + w * 2 - 4);
-    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), dropped);
 }
 
@@ -587,7 +584,7 @@ TEST(BottomDockComponentTests, DroppingAtTheStripEndMovesTheTabLastAndPersistsIt
     using Tab = synth::ui::BottomDockComponent::Tab;
     const int x0 = f.timeline->getX();
     const int w = f.timeline->getWidth();
-    const int stripRight = f.dock().getTabButtons().back()->getRight();
+    const int stripRight = f.dock().getStripTabs().back().button->getRight();
     RealisticTabDrag drag{*f.timeline, x0 + 10};
     drag.down();
     drag.dragTo(x0 + 10 + w);
@@ -596,11 +593,12 @@ TEST(BottomDockComponentTests, DroppingAtTheStripEndMovesTheTabLastAndPersistsIt
         << "the lifted tab is held inside the strip";
     drag.up(x0 + 10 + 3 * w);
 
-    const std::vector<Tab> expected{Tab::Mixer, Tab::MidiRemote, Tab::Timeline};
+    // The Canvas keeps its slot: only the offered tabs are permuted among their positions.
+    const std::vector<Tab> expected{Tab::Mixer, Tab::MidiRemote, Tab::Timeline, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), expected);
     auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
     ASSERT_NE(settings, nullptr);
-    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,midiRemote,timeline");
+    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,midiRemote,timeline,canvas");
 }
 
 // Esc mid-drag: the tab returns where it was, nothing is committed or persisted, and the release
@@ -624,7 +622,7 @@ TEST(BottomDockComponentTests, EscapeMidDragCancelsWithoutReorderingOrClicking) 
     EXPECT_FALSE(f.dock().sendEscapeToTabDragForTest()) << "the key listener is gone once the drag is cancelled";
 
     drag.up(x0 + 10 + w + w / 2);
-    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), untouched);
     EXPECT_FALSE(settings->containsKey("bottomDockTabOrder")) << "no persistence for a cancelled drag";
     EXPECT_EQ(f.dock().getActiveTab(), Tab::Mixer) << "the release of a cancelled drag is not a click";
@@ -647,7 +645,7 @@ TEST(BottomDockComponentTests, APressBelowTheThresholdNeverLiftsOrReordersTabs) 
     EXPECT_FALSE(f.dock().sendEscapeToTabDragForTest()) << "no drag is in progress to cancel";
     press.up(mixer->getX() + 12);
     EXPECT_EQ(mixer->getBounds(), resting);
-    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(f.dock().getTabOrderForTest(), untouched);
     EXPECT_FALSE(settings->containsKey("bottomDockTabOrder"));
 }

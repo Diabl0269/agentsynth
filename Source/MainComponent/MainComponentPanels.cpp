@@ -733,18 +733,18 @@ void MainComponent::fitMixerHostToSections() {
 }
 
 // No longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
-// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing.
+// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing or
+// `tab` is the view in the main area (it has no tab then).
 // mixerPlacement_.revealOrToggle() is Mixer's OWN Own-panel/Window placement detour, unrelated to
 // the tab strip: it returns true and handles everything itself when Mixer isn't in Tab placement.
 void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
-    if (tab == Tab::Mixer && mixerPlacement_.revealOrToggle())
+    if (bottomDock.getMainView() == tab || (tab == Tab::Mixer && mixerPlacement_.revealOrToggle()))
         return;
-    auto& host = tab == Tab::Timeline ? bottomDock.getTimelineHost()
-                 : tab == Tab::Mixer  ? bottomDock.getMixerHost()
-                                      : bottomDock.getMidiRemoteHost();
-    if (host.isDetached()) {
-        host.bringDetachedWindowToFront();
+    // The canvas has no host: its tab is never detached.
+    auto* host = bottomDock.hostForTab(tab);
+    if (host != nullptr && host->isDetached()) {
+        host->bringDetachedWindowToFront();
         return;
     }
     ensureBottomDockOpen();

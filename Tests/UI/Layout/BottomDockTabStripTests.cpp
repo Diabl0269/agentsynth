@@ -81,7 +81,7 @@ TEST_F(BottomDockTabStripTest, ArrowsFollowTheUsersTabOrderAndSkipTabsNotOffered
     press(juce::KeyPress::rightKey);
     EXPECT_EQ(dock().getActiveTab(), Tab::Timeline) << "steps over the tab that is not offered";
 
-    // The swap also re-keys Cmd+1/2/3 and saves them; put both back.
+    // Put the order back for the tests that follow.
     dock().setMixerTabEnabled(true);
     dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote);
 }
@@ -209,6 +209,16 @@ TEST_F(DockShortcutFocusTest, CommandDigitsShowTheTabAndFocusTheStrip) {
         EXPECT_EQ(dock().getActiveTab(), tab) << digit;
         EXPECT_EQ(focused_.joinIntoString(","), "dockTabs") << "Cmd+" << digit << " focuses the strip";
     }
+}
+
+// The canvas is the main view, so its key has no tab to show: it focuses the canvas and leaves the dock alone.
+TEST_F(DockShortcutFocusTest, CommandFourFocusesTheCanvasInTheMainAreaAndLeavesTheDockAlone) {
+    setDockOpen(false);
+    focused_.clear();
+    EXPECT_TRUE(pressKey(mc(), cmd('4')));
+    EXPECT_EQ(focused_.joinIntoString(","), "canvas");
+    EXPECT_FALSE(mc().isBottomDockConfiguredVisible()) << "the dock does not open";
+    EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);
 }
 
 TEST_F(DockShortcutFocusTest, CommandDigitOnAClosedDockOpensItAndFocusesTheStrip) {

@@ -315,7 +315,7 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
 
         // The dock's tab buttons let clicks through, and a tab switch keeps the session and re-collects.
         ASSERT_TRUE(controller.beginPickTarget("p1", "knob"));
-        EXPECT_EQ(mc.getBottomDock().getTabButtons().size(), 3u);
+        EXPECT_EQ(mc.getBottomDock().getTabButtons().size(), 4u) << "every view's tab, the hidden Canvas one included";
         ASSERT_TRUE(static_cast<bool>(mc.getBottomDock().onActiveTabChanged));
         // Calling the real tab-change hook must leave the session up (it re-collects, never ends).
         mc.getBottomDock().onActiveTabChanged();

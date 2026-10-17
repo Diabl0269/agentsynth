@@ -1,5 +1,5 @@
 // MainComponentDockFocus.cpp -- where keyboard focus goes after the bottom-panel shortcuts (Cmd+T,
-// Cmd+1/2/3) run: onto the dock's tab strip when the pane is showing, back to the canvas when the pane
+// Cmd+1/2/3/4) run: onto the dock's tab strip when the pane is showing, back to the canvas when the pane
 // closes around the focus. The shortcuts' dispatch rows are in MainComponentCommandTable.cpp.
 #include "MainComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
@@ -34,16 +34,20 @@ void MainComponent::toggleBottomPanelFromShortcut() {
         focusRegions_.focusRegionById(kCanvasRegion);
 }
 
-// Cmd+1/2/3. A tab that is detached raises its own window, and the Mixer outside the Tab placement is
-// revealed elsewhere (its own panel or window): neither has a docked strip to focus.
+// Cmd+1/2/3/4. A tab that is detached raises its own window, and the Mixer outside the Tab placement is
+// revealed elsewhere (its own panel or window): neither has a docked strip to focus. The view in the
+// main area has no tab; for the canvas the key focuses it there instead.
 void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
+    if (bottomDock.getMainView() == tab) {
+        if (tab == Tab::Canvas)
+            focusRegions_.focusRegionById(kCanvasRegion);
+        return;
+    }
     const bool mixerRevealedElsewhere =
         tab == Tab::Mixer && mixerPlacement_.getPlacement() != synth::ui::MixerPlacementController::Placement::Tab;
-    const auto& host = tab == Tab::Timeline ? bottomDock.getTimelineHost()
-                       : tab == Tab::Mixer  ? bottomDock.getMixerHost()
-                                            : bottomDock.getMidiRemoteHost();
-    const bool detached = host.isDetached();
+    const auto* host = bottomDock.hostForTab(tab);
+    const bool detached = host != nullptr && host->isDetached();
     showBottomDockTab(tab);
     if (!mixerRevealedElsewhere && !detached)
         focusDockTabStripIfShowing();

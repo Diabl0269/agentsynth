@@ -56,9 +56,8 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // dock grew a single shared toggle — see migrateBottomPanelToggleKeys() below).
     bindings["toggleBottomPanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
     // Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
-    // order (Timeline, Mixer, Controllers); a drag-reorder keeps Cmd+N pointed at whichever tab
-    // is now Nth (BottomDockComponent::permuteShortcutKeysForNewOrder). Free chords: no other
-    // binding in this table uses a bare Cmd+digit.
+    // order (Timeline, Mixer, Controllers). Each key stays with its view: reordering the strip
+    // never re-keys them. Free chords: no other binding in this table uses a bare Cmd+digit.
     bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
     bindings["toggleMixerPanel"] = juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0);
     // The platform-standard Select All chord (Cubase, and every text field, read Cmd+A this
@@ -175,12 +174,14 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["selectPreviousTrack"] = juce::KeyPress();
 
     // "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
-    // comment above (the Cmd+1/2/3 family, permuted by a drag-reorder). Previously shipped
+    // comment above (the Cmd+1/2/3 family). Previously shipped
     // unbound; a returning user's saved unbound value carries forward unchanged, same
     // as toggleMixerPanel's old Cmd+Alt+M -- only toggleTimelinePanel's Cmd+T is migrated (see
     // migrateBottomPanelToggleKeys()), since only that one collides with the new
     // toggleBottomPanel default.
     bindings["toggleMidiRemotePanel"] = juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0);
+    // The fourth view's key, next to the three tabs': focuses the canvas while it is the main view.
+    bindings["showCanvas"] = juce::KeyPress('4', juce::ModifierKeys::commandModifier, 0);
     // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =
