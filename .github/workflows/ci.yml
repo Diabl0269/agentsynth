@@ -498,6 +498,9 @@ jobs:
     name: Build and Test (ASAN)
     if: contains(github.event.pull_request.labels.*.name, 'run-asan')
     runs-on: ubuntu-latest
+    # Job-wide so gtest_discover_tests (Build step) gets it too; libstdc++14+clang stable_sort false positive, see ci-pipeline.md.
+    env:
+      ASAN_OPTIONS: detect_leaks=0:alloc_dealloc_mismatch=0
     # actions: write only for the Prune step below (gh cache delete), same as build-and-test.
     permissions:
       contents: read
@@ -618,8 +621,6 @@ jobs:
 
     - name: Run Tests
       run: xvfb-run ./build/Tests/Tests
-      env:
-        ASAN_OPTIONS: detect_leaks=0
 
   build-and-test-macos:
     name: Build and Test (macOS)
