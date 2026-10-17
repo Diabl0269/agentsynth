@@ -211,7 +211,7 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   the same panel for that port's node, anchored on the dot, listing the cables drawn to the card: an inlet's outside
   cables (its input jack), an outlet's cables out of the card. The title is the port's own name. The card's port node has
   no visible module card, so the controller takes a `PortRef` plus an anchor rectangle
-  (`PortPanelController::jackReleased(anchor, area, ref, e)`, `open(anchor, area, ref)`); every other rule is the jack's.
+  (`PortPanelController::jackReleased(anchor, area, ref, e)`, `open(anchor, area, ref)`); every other rule is the jack's. `ModuleComponent::mouseUp` (and `MacroCardComponent::mouseUp` for a collapsed card's port dot) hands a jack release to `GraphEditor::getPortPanel()`, and the double-click branch asks it first (a jack with several cables keeps the panel); no card opens its own popup. The panel's row motion is `ExitEnterRowSlots`, shared with the mod dot's rows.
   Hovering a dot draws a ring, not a delete: the press no longer deletes. The '+', '-', the chevron and a shift/cmd click
   keep priority over the click; a
   press that becomes a drag moves the card as before. A double-click still expands the macro (there is no port

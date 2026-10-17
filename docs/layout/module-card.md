@@ -45,7 +45,7 @@ Around the body, `layoutDefaultContent(bool apply)` adds the card's chrome (Samp
 rows above it; the LFO wave editor, Show Envelope Graph / Response / Spectrum / Scope rows below it;
 the More row last). It runs twice per size change: once with `apply = false` to measure the
 height, once with `apply = true` from `resized()` to position the children, and the card body's
-own `layout(apply)` follows the same rule.
+own `layout(apply)` follows the same rule. A long card function such as `layoutDefaultContent` gets a new step by extracting a named sibling function first, never by growing the function itself.
 
 **Why one function runs twice instead of two functions.** The measured height and the real positions
 cannot drift apart when they come from the same code. They previously did: two hand-maintained

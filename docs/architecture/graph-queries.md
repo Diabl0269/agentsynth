@@ -51,7 +51,7 @@ topology more than once therefore issues every change with `UpdateKind::none` in
 scope or `GraphRebuildBatch` around it. The macro port splicing a membership change does (a module dragged into or out
 of a macro, grouped, ungrouped; `MacroGroupControllerPortSplice.cpp`, `MacroGroupControllerPorts.cpp`,
 `MacroGroupControllerProgrammaticRouting.cpp`) and `GraphEditor::removeNodesNow` (a module, macro or track deleted)
-work this way. Before, dragging a module into a macro on the Load test project took about 7 s, and deleting a track or a
+work this way, and so does `applyJSONToGraph`: every add/remove of a node or cable inside it (and in its helpers `removePatchNode`, `applyModulationEntries`) uses `UpdateKind::none`, and `RebuildOnExit` rebuilds the render sequence when it returns, through `GraphRebuildBatch::rebuild`; inside a `GraphRebuildBatch` scope that rebuild waits for the outermost scope, so a bulk edit (duplicating several tracks at once) pays for one. New topology ops in that path must stay deferred, and it asks the graph for its cables once per step, never per node or per modulation. Before, dragging a module into a macro on the Load test project took about 7 s, and deleting a track or a
 macro about 0.3 s. `MacroDragMembership.CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExactlyOncePerGesture` holds
 it as a rebuild count.
 

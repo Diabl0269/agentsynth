@@ -4,7 +4,7 @@
 git-tracked source, test, docs, script and config file. It runs in
 [the Lint job](ci-pipeline.md#jobs)'s "Check file sizes" step, in the "Docs" job, directly from
 [`local-ci.md`](local-ci.md)'s local reproduction, and in the pre-commit hook.
-`scripts/tests/check-file-sizes.test.sh` covers the checker itself against fixtures.
+`scripts/tests/check-file-sizes.test.sh` covers the checker itself against fixtures. In the Lint job it is a required check, not advisory, run against the ratchet baseline `scripts/file-size-baseline.txt`.
 
 One cap for everything: a 6,000-line test file is exactly as unreviewable as a 6,000-line source
 file, and a per-directory cap would only move the goalposts.
@@ -51,8 +51,7 @@ concern. Include a moved or shared header Source-rooted (`"UI/Layout/LayoutUtil.
 matters.
 
 A directory itself gets split by area once it passes roughly 30 files. `Source/UI/` holds only area
-directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`,
-`Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`, `MidiRemote/`, `Mixer/`), each class directory nested in its area.
+directories, each class directory nested in its area, and a new file goes into its area, never back into `Source/UI/` itself: `Graph/` (GraphEditor, ModuleComponent, cables, selection, minimap, mod matrix), `Timeline/` (panel, clip lanes, ruler, headers, transport, automation lanes, edit tools), `PianoRoll/`, `Library/` (module library), `Macros/`, `ModuleViews/` (per-module visualizers), `Settings/`, `Assistant/` (AI chat + account), `Chrome/` (toolbar, status bar, welcome, export, shared popups), `Layout/` (layout/focus/animation primitives), `Theme/`, `Mixer/`, `MidiRemote/` (the shared right-click MIDI Learn menu/badge/armed-outline helpers every learnable surface calls into, `MidiLearnMenu.h`). `GraphEditor.cpp` is the cautionary tale: it was 9,000+ lines before the guard.
 `Tests/` mirrors the code by area — `Modules/`, `FX/`, `Engine/`, `Plugin/`, `Timeline/`, `Mixer/`,
 `Macros/`, `AI/`, `Account/`, `Project/`, `App/` (MainComponent-level and end-to-end), and
 `UI/<area>/` matching `Source/UI/`; only shared helpers (`TestMain.cpp`, `TestAudioHelpers.h`,

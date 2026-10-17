@@ -257,6 +257,14 @@ jumped up to +6 dB. **Render-time only, never a graph edge.**
   their L/R outputs into one jack still sum.
 - Pinned by `Tests/Engine/StereoDownMixTests.cpp`.
 
+### Non-finite sample scrub
+
+A non-finite sample (NaN/Inf) must never reach the device or the host. `AudioEngine::renderNextBlock` scrubs one to `0.0f` in place as its very last step (FRO161), scoped to `mainProcessorGraph.getTotalNumOutputChannels()`. It is deliberately NOT in `MasterModule`: Master is spliced in only once a channel exists (it is absent from the default patch entirely) and is not last on the signal path even when present (the Rec Tap, and the metronome's post-graph click, both sit after it). On the canvas Master, Rec Tap and Audio Output form the derived-position output dock ([layout.md](../layout/layout.md#output-dock); Audio Output can never be deleted, nor Master while a channel exists, `synth::outputDockDeleteRefusal`); `renderNextBlock` is the one place both host modes actually funnel through. The test is a branchless IEEE-754 bit test, not `std::isfinite` (fast-math-proof, though this repo does not build with it today); `-0.0` and every denormal are finite and pass through untouched.
+
+### Shutdown and onBeforeShutdown
+
+`AudioEngine::shutdown()` always fires `onBeforeShutdown` as its very first statement, before `mainProcessorGraph.clear()` frees any node's `AudioProcessorParameters`. Any UI owner holding live parameter attachments into the graph (e.g. `GraphEditor`'s `ModuleComponents`) must wire this hook to detach them, or a caller that invokes `shutdown()` directly, not only through that owner's own destructor, hits a heap-use-after-free (FRO87). `MainComponent` wires and clears it unconditionally in both Standalone and Hosted mode; `AudioEngine.h`'s doc comment on the member itself repeats the contract.
+
 ### Measuring render cost
 
 `Tests/App/ModuleCpuProfileTests.cpp` is a disabled bench: `DISABLED_ModuleCpuProfile` opens a temporary copy of the

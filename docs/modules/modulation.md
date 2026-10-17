@@ -31,6 +31,7 @@ modules already work.
 
 Two consequences worth stating explicitly:
 
+- **"Is a CV input patched?" probes scan the whole block, never the first 64 samples.** An envelope idles at exactly 0 between notes and fires mid-block, so a head-of-block probe reads it as unpatched, drops the attack and steps the note in a block later (an audible click at every note onset). VCA and Attenuverter probe every sample; the probes still in Oscillator, Noise, Wavetable and Envelope Follower have the same shape and want the same change when touched.
 - **Automation is visible to the user as a moved knob**, because it really is one. That is why the
   applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per
   automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection
@@ -347,8 +348,8 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
      cable is removed. The result is a mono patch that plays every note.
 4. **Feedback.** A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
    modules mono", with **Undo** ([`chrome.md`](../layout/chrome.md#toast)).
-5. **Only a user click propagates.** The pill does not toggle itself (`setClickingTogglesState(false)`; its attachment
-   follows the parameter), so no second or half undo step exists. Setting the parameter any other way (undo/redo
+5. **Only a user click propagates.** The pill does not toggle itself (`CardBody::installPolyPill`: `setClickingTogglesState(false)`; its attachment
+   follows the parameter; the click goes to `GraphEditor::getPolyChain()`, and the track header's switch reads `TrackHeaderHost::getTrackPolyState`, never the graph), so no second or half undo step exists. Setting the parameter any other way (undo/redo
    restore, project load, the AI, MIDI Learn, automation) changes that one module and never reaches the controller.
 6. **A new module joins.** `GraphEditor::connectPorts` (every drag, smart connection, insert-between and port-panel
    cable) asks `joinConnectedModules` first: a poly-capable module with **no cables at all** that is cabled to a

@@ -69,7 +69,7 @@ Two defences keep the anti-aliasing guarantee intact, and **both** are needed:
    a mode reaches — the factor by which it can outrun a plain 1× read. `selectMip()` is fed
    `dt × factor`, so the stored frame is already band-limited for the fastest read the warp will
    perform.
-2. **Oversampling.** Modes whose output has a *step* or an *amplitude nonlinearity* generate harmonics
+2. **Oversampling** (the `warpNeedsOversampling` flag). Modes whose output has a *step* or an *amplitude nonlinearity* generate harmonics
    no amount of input band-limiting can prevent. Those render at 4× and come back through a 33-tap
    Blackman-windowed sinc decimator (~−74 dB stopband). The whole voice — every unison sub-oscillator
    plus the sub — is summed at the oversampled rate and decimated once per stereo leg, which is valid
@@ -95,7 +95,7 @@ musical pitches the clamp never binds — 8× `Sync` only starts costing amount 
 Every mode is swept at full warp on MIDI 108 by
 `WavetableWarpAliasTest.EveryWarpModeStaysCleanBelowTheFundamental` (parameterised over all 11) and
 held to bounded output by `WavetableWarpBoundsTest`. **A warp mode that aliases is a regression, not a
-feature** — extend both suites when adding one.
+feature** — a new mode needs one of the two defences (a `warpRateFactor` entry or the `warpNeedsOversampling` flag) **and** an entry in both suites; they iterate `Warp::Count`, so an unhandled mode fails the test run instead of shipping.
 
 ## Phase control
 

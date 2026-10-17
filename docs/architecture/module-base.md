@@ -60,6 +60,8 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 | `getVisibleInputPortCount()` / `getVisibleOutputPortCount()` | How many jacks the UI renders |
 | `JackTarget` / `getJackTargets(jack, isInput)` | Inverse of `mapInput/OutputChannel` — every poly-group head anchored to a visible jack; drives connection creation in `GraphEditor` |
 
+**A module's channel count is fixed for its lifetime.** JUCE settles the bus layout in the `ModuleBase` constructor, and renegotiating it drops every existing connection. Variable-port modules (Macro bank, Audio Input, Hosted Plugin) declare their **maximum** and vary only `getVisibleInputPortCount()` / `getVisibleOutputPortCount()`, clearing hidden channels each block; when the visible count shrinks, routings on the now-hidden jacks are dropped (`GraphEditor::dropRoutingsOnHiddenJacks`). A hosted plugin wider than `kMaxPluginChannels` is refused with a message, never truncated. When a module's visible jack count grows, override the default port map: the fallback marks unclaimed channels as phantom poly heads and `getJackTargets` duplicates wires.
+
 `GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modules/modulation.md](../modules/modulation.md#creating-poly-connections).
 
 ### isAutoPromotableModTarget

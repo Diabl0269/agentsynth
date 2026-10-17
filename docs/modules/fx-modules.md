@@ -438,7 +438,7 @@ Compressor and Gate share one mechanism (FRO317):
   crossing a macro boundary gets a collapsed stereo port.
 - **Connectivity is published, not guessed.** JUCE's graph does not tell a processor which inputs
   are connected, so `synth::publishSidechainConnections` (message thread) scans the connection
-  list and sets each module's relaxed-atomic `ModuleBase::setSidechainConnected`; `processBlock`
+  list and sets each module's relaxed-atomic `ModuleBase::setSidechainConnected` (read back through `ModuleBase::isSidechainConnected()`; the detector keys only while it is true, never inferred from the key's level); `processBlock`
   loads it once per block and also requires the buffer to carry ch7/ch8. `AudioEngine` runs it on
   every graph change broadcast (a plain cable drag never reaches `publishTimeline`), from
   `publishTimeline` beside the solo recount, and from the plugin's `setStateInformation`.

@@ -70,7 +70,7 @@ See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-over
 
 ## New API goes on the collaborator, not GraphEditor
 
-`GraphEditor` is a thin owner of these three collaborators, not a facade over them. A new method
+`GraphEditor` is a thin owner of these three collaborators, not a facade over them (extracted in FRO77: `SmartConnectionEngine` in PR1, `MacroGroupController` in PR2, `GraphDragDropController` in PR3). A new method
 for one of these concerns is declared on the collaborator only and reached through
 `getMacroController()` / `getSmartConnections()` / `getDragDropController()` — all three accessors
 exist (FRO254). Re-declaring it on `GraphEditor` would add it to a header that ~300 translation
