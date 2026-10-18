@@ -435,6 +435,25 @@ TEST(MorphMapKeyboard, FocusOnAStopSurvivesAKeyStep) {
     EXPECT_TRUE(map.getDotStop(1)->hasKeyboardFocus(false));
 }
 
+// Regression test for FRO949: Delete on a dot left nothing focused, so the next Tab started from the top.
+TEST(MorphMapKeyboard, DeleteFocusesTheNextDotAndTheNewLastWhenTheLastWasDeleted) {
+    ShownEditor shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    map.grabKeyboardFocus();
+
+    map.getDotStop(1)->keyPressed(key(juce::KeyPress::backspaceKey));
+    ASSERT_EQ(map.getNumDots(), 2);
+    EXPECT_EQ(map.getDots()[1].name, "oo");
+    EXPECT_TRUE(map.getDotStop(1)->hasKeyboardFocus(false)) << "the former dot 2 is now dot 2 of 2 and has focus";
+
+    map.grabKeyboardFocus();
+    map.getDotStop(1)->keyPressed(key(juce::KeyPress::deleteKey));
+    ASSERT_EQ(map.getNumDots(), 1);
+    EXPECT_TRUE(map.getDotStop(0)->hasKeyboardFocus(false)) << "deleting the last dot focuses the new last";
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The glide model
 // ---------------------------------------------------------------------------------------------------------------

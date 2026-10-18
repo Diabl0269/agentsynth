@@ -113,8 +113,13 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
         return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
-        if (onDeleteDot && (!canDeleteDot || canDeleteDot()))
+        if (onDeleteDot && (!canDeleteDot || canDeleteDot())) {
+            juce::Component::SafePointer<MorphMap> safe(this);
             onDeleteDot(index);
+            // The owner refreshed the dots at once, so dot `index` is the one that followed (or the new last).
+            if (safe != nullptr && !safe->dotStops_.empty())
+                safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
+        }
         return true;
     }
     if (code == juce::KeyPress::F2Key) {
