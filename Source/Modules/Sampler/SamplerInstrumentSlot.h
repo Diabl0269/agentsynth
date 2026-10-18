@@ -9,10 +9,17 @@
 
 namespace synth::sampler {
 
-/** One dropped file's placement; `file` indexes InstrumentSource::files and `key` is the root key. */
+/** One recording's placement; `file` indexes InstrumentSource::files and `key` is the root key. The fields after the
+    velocity range are RegionSpec's, so a converted SFZ or pack instrument loses nothing. */
 struct DroppedRegion {
     int file = 0;
     int loKey = 0, hiKey = 127, key = 60, loVel = 1, hiVel = 127;
+    float tuneCents = 0.0f, volumeDb = 0.0f;
+    RegionSpec::Loop loop = RegionSpec::Loop::None;
+    juce::int64 loopStart = -1, loopEnd = -1;
+    int seqLength = 1, seqPosition = 1;
+    bool releaseTrigger = false;
+    float ampReleaseSeconds = -1.0f;
 };
 
 struct InstrumentSource {
@@ -24,6 +31,7 @@ struct InstrumentSource {
     juce::String packId, instrumentId;
     juce::StringArray files; // an entry may be empty (a file a bundle no longer holds); indices stay valid
     std::vector<DroppedRegion> regions;
+    juce::String name; // Kind::Files only; empty = named after the files
 
     static InstrumentSource fromSfz(const juce::File& sfz);
     static InstrumentSource fromPack(const juce::String& packId, const juce::String& instrumentId);
@@ -33,6 +41,12 @@ struct InstrumentSource {
     /** The common start of the file names, or "My instrument". */
     static juce::String nameForFiles(const juce::StringArray& files);
 };
+
+/** The Kind::Files source holding `specs` (absolute sample paths) with every field; regions on one file share it. */
+InstrumentSource sourceFromSpecs(const std::vector<RegionSpec>& specs, const juce::String& name);
+
+/** The regions a Kind::Files source plays (a region whose file entry is empty is left out). */
+std::vector<RegionSpec> specsFor(const InstrumentSource& source);
 
 /** Adds the instrument keys of `source` to `state` (nothing for Kind::None). */
 void writeInstrumentState(const InstrumentSource& source, juce::DynamicObject& state);
@@ -61,6 +75,19 @@ public:
         otherwise. False when it failed now or could not be started. */
     bool restore(const InstrumentSource& source);
 
+    /** Message thread. Rebuilds the instrument from `specs` (reusing the samples already decoded), publishes it and
+        keeps it as a Kind::Files source whatever it was before. False, keeping the loaded instrument, when `specs`
+        is empty or nothing in it can play. */
+    bool replaceRegions(const std::vector<RegionSpec>& specs);
+
+    /** The loaded instrument's regions as specs; empty when none is loaded. */
+    const std::vector<RegionSpec>& regions() const noexcept { return specs_; }
+
+    /** What the loaded instrument came from (Kind::None when nothing is loaded or a restore is still pending). */
+    InstrumentSource::Kind loadedKind() const noexcept {
+        return specs_.empty() ? InstrumentSource::Kind::None : loaded_.kind;
+    }
+
     void clear();
 
     bool isPending() const noexcept { return pending_; }
@@ -81,6 +108,7 @@ private:
     InstrumentPlayer& player_;
     const void* owner_;
     InstrumentSource loaded_, pendingSource_;
+    std::vector<RegionSpec> specs_; // the loaded instrument's regions, without their audio
     juce::StringArray messages_;
     bool pending_ = false;
     int serial_ = 0;

@@ -8,6 +8,7 @@
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/ModuleViews/SampleWaveformComponent.h"
 #include <functional>
@@ -60,13 +61,20 @@ public:
     // ---- Instrument loading ----
     /** Runs `load` as ONE undo step (the instrument and the mode come back together) and reports its messages. */
     bool loadUndoably(const std::function<bool(SamplerModule&)>& load);
+    /** Runs an edit of the instrument's regions as ONE undo step (see SamplerModule::editInstrumentRegions). */
+    bool editRegionsUndoably(const std::vector<synth::sampler::RegionSpec>& specs);
     void openPicker();
+    /** Opens the instrument map window out of the card, or brings the open one forward. */
+    void openMap();
+    /** The open map's content; null while the map is closed (or when a test hook took it). */
+    SamplerMapView* getMapView() const noexcept { return mapView_.getComponent(); }
     /** The notes on the caption line after the last load (errors and warnings); empty when it was clean. */
     juce::StringArray getLoadMessages() const { return loadMessages_; }
 
     // ---- Parts, for tests ----
     SamplerInstrumentPicker& getPicker() noexcept { return picker_; }
     SamplerKeyStrip& getKeyStrip() noexcept { return strip_; }
+    juce::TextButton& getEditMapButton() noexcept { return editMapButton_; }
     juce::Label& getCaption() noexcept { return caption_; }
     juce::TextButton& getLoadSampleButton() noexcept { return loadButton_; }
     SampleWaveformComponent& getWaveform() noexcept { return waveform_; }
@@ -75,6 +83,7 @@ public:
 
 private:
     void applyMode(bool instrument, bool animate);
+    void closeMap();
     void refreshInstrument();
     void reportLoad(bool ok);
     void chooseInstrument(const InstrumentChoice& choice);
@@ -90,10 +99,13 @@ private:
     juce::TextButton loadButton_{"Load Sample..."};
     juce::Label nameLabel_{"Sample", juce::String()};
     SamplerInstrumentPicker picker_;
+    juce::TextButton editMapButton_{"Edit map"};
     juce::Label caption_{"Instrument caption", juce::String()};
     SamplerKeyStrip strip_;
     FadeVisibility sampleFade_{&waveform_, &loadButton_, &nameLabel_};
-    FadeVisibility instrumentFade_{&picker_, &caption_, &strip_};
+    FadeVisibility instrumentFade_{&picker_, &editMapButton_, &caption_, &strip_};
+    juce::Component::SafePointer<juce::DialogWindow> mapWindow_;
+    juce::Component::SafePointer<SamplerMapView> mapView_;
     std::unique_ptr<juce::ParameterAttachment> modeAttachment_;
     std::unique_ptr<juce::FileChooser> chooser_;
     juce::StringArray loadMessages_;

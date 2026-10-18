@@ -14,8 +14,12 @@ namespace fk = synth::module_file_keys;
 constexpr const char* kDefaultFilesName = "My instrument";
 constexpr int kMinNameLength = 3;
 
-// A dropped file's placement as saved; the later map editor writes the same shape.
+constexpr int kLoopKinds = 4;
+
+// A region as saved. The fields after the velocity range are written only when they differ from the default, so a
+// file of plain dropped recordings keeps its old shape and an older app still reads what it knows.
 juce::var regionToVar(const DroppedRegion& r) {
+    const DroppedRegion defaults;
     juce::DynamicObject::Ptr o = new juce::DynamicObject();
     o->setProperty("file", r.file);
     o->setProperty("lokey", r.loKey);
@@ -23,6 +27,24 @@ juce::var regionToVar(const DroppedRegion& r) {
     o->setProperty("key", r.key);
     o->setProperty("lovel", r.loVel);
     o->setProperty("hivel", r.hiVel);
+    if (r.tuneCents != defaults.tuneCents)
+        o->setProperty("tune", r.tuneCents);
+    if (r.volumeDb != defaults.volumeDb)
+        o->setProperty("volume", r.volumeDb);
+    if (r.loop != defaults.loop)
+        o->setProperty("loop", (int)r.loop);
+    if (r.loopStart != defaults.loopStart)
+        o->setProperty("loopstart", r.loopStart);
+    if (r.loopEnd != defaults.loopEnd)
+        o->setProperty("loopend", r.loopEnd);
+    if (r.seqLength != defaults.seqLength)
+        o->setProperty("seqlength", r.seqLength);
+    if (r.seqPosition != defaults.seqPosition)
+        o->setProperty("seqposition", r.seqPosition);
+    if (r.releaseTrigger)
+        o->setProperty("release", true);
+    if (r.ampReleaseSeconds != defaults.ampReleaseSeconds)
+        o->setProperty("ampeg_release", r.ampReleaseSeconds);
     return juce::var(o.get());
 }
 
@@ -34,6 +56,15 @@ DroppedRegion regionFromVar(const juce::var& v) {
     r.key = juce::jlimit(0, 127, (int)v.getProperty("key", 60));
     r.loVel = juce::jlimit(1, 127, (int)v.getProperty("lovel", 1));
     r.hiVel = juce::jlimit(1, 127, (int)v.getProperty("hivel", 127));
+    r.tuneCents = (float)v.getProperty("tune", 0.0);
+    r.volumeDb = (float)v.getProperty("volume", 0.0);
+    r.loop = (RegionSpec::Loop)juce::jlimit(0, kLoopKinds - 1, (int)v.getProperty("loop", 0));
+    r.loopStart = (juce::int64)v.getProperty("loopstart", (juce::int64)-1);
+    r.loopEnd = (juce::int64)v.getProperty("loopend", (juce::int64)-1);
+    r.seqLength = juce::jmax(1, (int)v.getProperty("seqlength", 1));
+    r.seqPosition = juce::jlimit(1, r.seqLength, (int)v.getProperty("seqposition", 1));
+    r.releaseTrigger = (bool)v.getProperty("release", false);
+    r.ampReleaseSeconds = (float)v.getProperty("ampeg_release", -1.0);
     return r;
 }
 
@@ -57,23 +88,6 @@ juce::String trimSeparators(juce::String text) {
     while (text.isNotEmpty() && !juce::CharacterFunctions::isLetterOrDigit(text.getLastCharacter()))
         text = text.dropLastCharacters(1);
     return text;
-}
-
-std::vector<RegionSpec> specsFor(const InstrumentSource& source) {
-    std::vector<RegionSpec> specs;
-    for (const auto& r : source.regions) {
-        if (r.file < 0 || r.file >= source.files.size() || source.files[r.file].isEmpty())
-            continue;
-        RegionSpec spec;
-        spec.samplePath = source.files[r.file];
-        spec.loKey = r.loKey;
-        spec.hiKey = r.hiKey;
-        spec.rootKey = r.key;
-        spec.loVel = r.loVel;
-        spec.hiVel = r.hiVel;
-        specs.push_back(spec);
-    }
-    return specs;
 }
 
 InstrumentLoad decodeSfz(const juce::File& sfz) {
@@ -102,11 +116,69 @@ InstrumentLoad decodeFiles(const InstrumentSource& source) {
         out.messages.add("None of the instrument's files could be found.");
         return out;
     }
-    out.instrument = buildInstrument(InstrumentSource::nameForFiles(source.files), specs, out.messages);
+    out.instrument = buildInstrument(
+        source.name.isNotEmpty() ? source.name : InstrumentSource::nameForFiles(source.files), specs, out.messages);
     return out;
 }
 
 } // namespace
+
+std::vector<RegionSpec> specsFor(const InstrumentSource& source) {
+    std::vector<RegionSpec> specs;
+    for (const auto& r : source.regions) {
+        if (r.file < 0 || r.file >= source.files.size() || source.files[r.file].isEmpty())
+            continue;
+        RegionSpec spec;
+        spec.samplePath = source.files[r.file];
+        spec.loKey = r.loKey;
+        spec.hiKey = r.hiKey;
+        spec.rootKey = r.key;
+        spec.loVel = r.loVel;
+        spec.hiVel = r.hiVel;
+        spec.tuneCents = r.tuneCents;
+        spec.volumeDb = r.volumeDb;
+        spec.loop = r.loop;
+        spec.loopStart = r.loopStart;
+        spec.loopEnd = r.loopEnd;
+        spec.seqLength = r.seqLength;
+        spec.seqPosition = r.seqPosition;
+        spec.releaseTrigger = r.releaseTrigger;
+        spec.ampReleaseSeconds = r.ampReleaseSeconds;
+        specs.push_back(spec);
+    }
+    return specs;
+}
+
+InstrumentSource sourceFromSpecs(const std::vector<RegionSpec>& specs, const juce::String& name) {
+    InstrumentSource s;
+    s.kind = InstrumentSource::Kind::Files;
+    s.name = name;
+    for (const auto& spec : specs) {
+        int file = s.files.indexOf(spec.samplePath);
+        if (file < 0) {
+            file = s.files.size();
+            s.files.add(spec.samplePath);
+        }
+        DroppedRegion r;
+        r.file = file;
+        r.loKey = spec.loKey;
+        r.hiKey = spec.hiKey;
+        r.key = spec.rootKey;
+        r.loVel = spec.loVel;
+        r.hiVel = spec.hiVel;
+        r.tuneCents = spec.tuneCents;
+        r.volumeDb = spec.volumeDb;
+        r.loop = spec.loop;
+        r.loopStart = spec.loopStart;
+        r.loopEnd = spec.loopEnd;
+        r.seqLength = spec.seqLength;
+        r.seqPosition = spec.seqPosition;
+        r.releaseTrigger = spec.releaseTrigger;
+        r.ampReleaseSeconds = spec.ampReleaseSeconds;
+        s.regions.push_back(r);
+    }
+    return s;
+}
 
 InstrumentSource InstrumentSource::fromSfz(const juce::File& sfz) {
     InstrumentSource s;
@@ -179,6 +251,8 @@ void writeInstrumentState(const InstrumentSource& s, juce::DynamicObject& state)
             regions.add(regionToVar(r));
         state.setProperty(fk::kInstrumentFiles, files);
         state.setProperty(fk::kInstrumentRegions, regions);
+        if (s.name.isNotEmpty())
+            state.setProperty(fk::kInstrumentName, s.name);
         break;
     }
     }
@@ -201,6 +275,7 @@ InstrumentSource readInstrumentState(const juce::DynamicObject& state) {
     if (const auto* list = state.getProperty(fk::kInstrumentFiles).getArray(); list != nullptr && !list->isEmpty()) {
         InstrumentSource s;
         s.kind = InstrumentSource::Kind::Files;
+        s.name = state.getProperty(fk::kInstrumentName).toString();
         for (const auto& f : *list)
             s.files.add(f.toString());
         if (const auto* regions = state.getProperty(fk::kInstrumentRegions).getArray()) {
@@ -236,11 +311,13 @@ bool InstrumentSlot::install(const InstrumentSource& source, InstrumentLoad&& re
     if (result.instrument == nullptr) {
         if (isRestore) {
             loaded_ = source;
+            specs_.clear();
             player_.publish(nullptr);
         }
         return false;
     }
     loaded_ = source;
+    specs_.assign(result.instrument->regions.begin(), result.instrument->regions.end());
     player_.publish(result.instrument);
     return true;
 }
@@ -284,7 +361,24 @@ bool InstrumentSlot::restore(const InstrumentSource& source) {
     return install(source, decodeInstrument(source), true);
 }
 
+// The saved source is rebuilt from the regions that decoded, so what is saved is what plays.
+bool InstrumentSlot::replaceRegions(const std::vector<RegionSpec>& specs) {
+    if (specs.empty())
+        return false;
+    InstrumentLoad result;
+    const juce::String name = player_.name().isNotEmpty() ? player_.name() : juce::String(kDefaultFilesName);
+    result.instrument = buildInstrument(name, specs, result.messages, kDefaultMemoryBudget, player_.current().get());
+    ++serial_;
+    pending_ = false;
+    if (result.instrument == nullptr)
+        return install({}, std::move(result), false);
+    std::vector<RegionSpec> kept(result.instrument->regions.begin(), result.instrument->regions.end());
+    const auto source = sourceFromSpecs(kept, result.instrument->name);
+    return install(source, std::move(result), false);
+}
+
 void InstrumentSlot::clear() {
+    specs_.clear();
     ++serial_;
     ++loadSerial_;
     pending_ = false;

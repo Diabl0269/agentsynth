@@ -6,6 +6,7 @@
 #include "Modules/SamplerModule.h"
 #include "UI/Theme/Theme.h"
 #include <bitset>
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
@@ -39,7 +40,14 @@ public:
     /** "<N> recordings · soft and loud" (or "· one layer"); empty with no instrument. */
     juce::String getCaptionText() const;
 
+    /** Called on a double-click on the strip. */
+    std::function<void()> onDoubleClick;
+
     void paint(juce::Graphics& g) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override {
+        if (onDoubleClick)
+            onDoubleClick();
+    }
 
 private:
     void readInstrument();

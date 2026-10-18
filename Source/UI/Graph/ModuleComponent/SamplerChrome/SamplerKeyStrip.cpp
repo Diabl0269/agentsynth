@@ -35,7 +35,7 @@ SamplerKeyStrip::SamplerKeyStrip(SamplerModule& sampler)
     : sampler_(sampler) {
     setWantsKeyboardFocus(false);
     setTooltip("Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing "
-               "notes light up.");
+               "notes light up. Double-click to edit the map.");
     refresh();
 }
 

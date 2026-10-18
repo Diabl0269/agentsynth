@@ -620,6 +620,15 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChromeMap.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp

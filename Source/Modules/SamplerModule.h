@@ -27,7 +27,8 @@
  *   • **Instrument** — polyphonic, MIDI-only playback of the loaded multi-sample instrument (an SFZ, a sound
  *                    pack entry or dropped files; see docs/modules/sampler-instruments.md). `pitch`, `fine`,
  *                    the Pitch / Fine / Level CV inputs and `level` apply; `attack`, `release`, `tone`, `feel`,
- *                    `voices` and `releaseSound` apply in this mode only. The Trigger input (ch0) is ignored.
+ *                    `voices`, `releaseSound`, `glide` and `mono` apply in this mode only. The Trigger input (ch0) is
+ * ignored.
  *
  * Channel layout (mono module — there is no poly mode):
  *
@@ -48,6 +49,7 @@
  *   | 12     | Tone CV (**)      | silent pass-through        |
  *   | 13     | Feel CV (**)      | silent pass-through        |
  *   | 14     | Voices CV (**)    | silent pass-through        |
+ *   | 15     | Glide CV (**)     | silent pass-through        |
  *
  * (*) ignored in Instrument mode, which plays from MIDI only.
  * (**) Instrument mode only: read once per block over the knob's own span, like Root Note CV.
@@ -56,7 +58,7 @@
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
  * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7), End CV (ch8) and
- * Fine CV (ch9) and the Instrument CVs (ch10-14) were APPENDED after every other channel rather than inserted
+ * Fine CV (ch9) and the Instrument CVs (ch10-15) were APPENDED after every other channel rather than inserted
  * earlier, so no existing saved-patch routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
@@ -85,7 +87,8 @@ public:
     static constexpr int kToneCVCh = 12;
     static constexpr int kFeelCVCh = 13;
     static constexpr int kVoicesCVCh = 14;
-    static constexpr int kNumChannels = 15;
+    static constexpr int kGlideCVCh = 15;
+    static constexpr int kNumChannels = 16;
 
     // ---- Limits --------------------------------------------------------------
     static constexpr int kMaxGrains = 24;
@@ -241,15 +244,19 @@ public:
 
     /** Each load* decodes now and, on success, replaces the instrument and selects Instrument mode. False keeps the
      *  loaded instrument; getInstrumentMessages() says why. Loading never makes a sound by itself. */
-    bool loadInstrumentFromSfz(const juce::File& sfz) {
-        return loadInstrument(synth::sampler::InstrumentSource::fromSfz(sfz));
-    }
-    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId) {
-        return loadInstrument(synth::sampler::InstrumentSource::fromPack(packId, instrumentId));
-    }
-    bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths) {
-        return !absolutePaths.isEmpty() && loadInstrument(synth::sampler::InstrumentSource::fromFiles(absolutePaths));
-    }
+    bool loadInstrumentFromSfz(const juce::File& sfz);
+    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId);
+    bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths);
+
+    /** The loaded instrument's recordings, to edit and hand back to editInstrumentRegions (empty when none). */
+    const std::vector<synth::sampler::RegionSpec>& getInstrumentRegions() const;
+
+    /** Replaces the instrument by `specs` (keeping decoded samples) and saves it as the module's own list of
+     *  recordings, whatever it was loaded from. False keeps the loaded instrument; getInstrumentMessages() says why. */
+    bool editInstrumentRegions(const std::vector<synth::sampler::RegionSpec>& specs);
+
+    /** What the loaded instrument came from (None when nothing is loaded). */
+    synth::sampler::InstrumentSource::Kind getInstrumentKind() const;
 
     /** Drops the instrument; Instrument mode then renders silence. */
     void clearInstrument() { instrumentSlot.clear(); }
@@ -533,13 +540,14 @@ public:
                 {"Release", kReleaseCVCh, "release", true},
                 {"Tone", kToneCVCh, "tone", true},
                 {"Feel", kFeelCVCh, "feel", true},
-                {"Voices", kVoicesCVCh, "voices", true}};
+                {"Voices", kVoicesCVCh, "voices", true},
+                {"Glide", kGlideCVCh, "glide", true}};
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Trig",   "Pitch",   "Start",     "Grain Size", "Density",
-                                       "Spray",  "Level",   "Root Note", "End",        "Fine",
-                                       "Attack", "Release", "Tone",      "Feel",       "Voices"};
+        const juce::String labels[] = {"Trig",  "Pitch",     "Start",  "Grain Size", "Density", "Spray",
+                                       "Level", "Root Note", "End",    "Fine",       "Attack",  "Release",
+                                       "Tone",  "Feel",      "Voices", "Glide"};
         return (i >= 0 && i < kNumChannels) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
@@ -597,6 +605,9 @@ private:
         addParameter(voicesParam = new juce::AudioParameterInt(juce::ParameterID("voices", 1), "Voices", 1,
                                                                synth::sampler::VoicePool::kMaxVoices, 16));
         addParameter(releaseSoundParam = new juce::AudioParameterBool("releaseSound", "Release Sound", true));
+        addParameter(glideParam = new juce::AudioParameterFloat(
+                         "glide", "Glide", juce::NormalisableRange<float>(0.0f, 2.0f, 0.0f, 0.4f), 0.0f));
+        addParameter(monoParam = new juce::AudioParameterBool("mono", "Mono", false));
     }
 
     bool loadInstrument(const synth::sampler::InstrumentSource& source) {
@@ -639,6 +650,8 @@ private:
         p.voice.feel = knob(*feelParam, feelParam->get(), kFeelCVCh);
         p.voice.maxVoices = juce::roundToInt(knob(*voicesParam, (float)voicesParam->get(), kVoicesCVCh));
         p.voice.releaseSound = releaseSoundParam->get();
+        p.voice.glideSeconds = knob(*glideParam, glideParam->get(), kGlideCVCh);
+        p.voice.mono = monoParam->get();
         p.voice.pitchSemis = (double)pitchParam->get() + (double)fineParam->get() / 100.0;
         p.level = levelParam->get();
         p.pitchCvChannel = kPitchCVCh;
@@ -974,6 +987,8 @@ private:
     juce::AudioParameterFloat* feelParam = nullptr;
     juce::AudioParameterInt* voicesParam = nullptr;
     juce::AudioParameterBool* releaseSoundParam = nullptr;
+    juce::AudioParameterFloat* glideParam = nullptr;
+    juce::AudioParameterBool* monoParam = nullptr;
 
     synth::sampler::InstrumentPlayer instrumentPlayer; // before the slot, which refers to it
     synth::sampler::InstrumentSlot instrumentSlot{instrumentPlayer, this};
