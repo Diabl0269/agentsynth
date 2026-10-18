@@ -1,0 +1,263 @@
+// CurveEditorMultiSelectTests.cpp
+// Selecting several curve points and acting on them together: Shift+arrows extend and shrink the
+// selection, Alt+arrows and a mouse drag move the group rigidly as one gesture, Delete removes it, and
+// Cmd+A / C / V / D select, copy, paste and duplicate it.
+
+#include "CurveEditorTestHelpers.h"
+#include "UI/ModuleViews/ModuleViewAccessibility.h"
+#include <gtest/gtest.h>
+
+using namespace synth::ui;
+using namespace synth::ui::test;
+
+namespace {
+
+constexpr int kShift = juce::ModifierKeys::shiftModifier;
+constexpr int kAlt = juce::ModifierKeys::altModifier;
+constexpr int kCmd = juce::ModifierKeys::commandModifier;
+
+juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
+
+// Pinned ends (time fixed, level free) around `interior` evenly spaced points.
+CurveModel freeModel(int interior) {
+    CurveModel model(CurveMode::Free);
+    std::vector<CurveNode> nodes;
+    nodes.push_back(CurveNode{0.0, 0.5f, false, true});
+    for (int i = 1; i <= interior; ++i)
+        nodes.push_back(CurveNode{(double)i / (double)(interior + 1), 0.5f, true, true});
+    nodes.push_back(CurveNode{1.0, 0.5f, false, true});
+    model.setNodes(nodes);
+    return model;
+}
+
+struct Rig {
+    CurveEditorComponent editor;
+    std::vector<juce::String> events;
+
+    explicit Rig(CurveModel model) {
+        editor.setBounds(0, 0, 400, 160);
+        editor.setModel(std::move(model));
+        editor.onGestureStart = [this] { events.push_back("start"); };
+        editor.onGestureEnd = [this] { events.push_back("end"); };
+        editor.onNodeChanged = [this](int) { events.push_back("node"); };
+        editor.onPointsChanged = [this] { events.push_back("points"); };
+    }
+    bool press(int code, int mods = 0) { return editor.keyPressed(key(code, mods)); }
+    const CurveNode& node(int i) const { return editor.getModel().getNode(i); }
+    std::vector<int> selected() const { return editor.getSelectedIndices(); }
+    juce::Point<float> posOf(int i) const {
+        return CurveEditorGeometry(editor.getModel(), editor.getLocalBounds().toFloat()).nodePosition(i);
+    }
+    // Selects interior points 1 and 2 of a `freeModel(3)` with the keyboard.
+    void selectFirstTwoInterior() {
+        press(juce::KeyPress::rightKey);
+        press(juce::KeyPress::rightKey);
+        press(juce::KeyPress::rightKey, kShift);
+    }
+    void click(juce::Point<float> p, int mods = 0) {
+        const auto m = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | mods);
+        editor.mouseDown(makeCurveMouseEvent(editor, p, m, false, p));
+        editor.mouseUp(makeCurveMouseEvent(editor, p, m, false, p));
+    }
+};
+
+} // namespace
+
+TEST(CurveEditorMultiSelect, ShiftRightExtendsAndShiftLeftShrinksAndPinnedPointsNeverJoin) {
+    Rig rig(buildEnvelopeModel());
+    rig.press(juce::KeyPress::rightKey);
+    ASSERT_EQ(rig.selected(), (std::vector<int>{1}));
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kShift));
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2}));
+    rig.press(juce::KeyPress::rightKey, kShift);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 3) << "the cursor is the end that moved";
+    rig.press(juce::KeyPress::leftKey, kShift);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2}));
+    rig.press(juce::KeyPress::leftKey, kShift);
+    rig.press(juce::KeyPress::leftKey, kShift);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1})) << "the pinned origin is never selected";
+    EXPECT_TRUE(rig.events.empty()) << "selecting edits nothing";
+}
+
+TEST(CurveEditorMultiSelect, APlainArrowCollapsesTheSelectionToOnePoint) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    ASSERT_EQ(rig.selected().size(), 2u);
+    rig.press(juce::KeyPress::rightKey);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{3}));
+}
+
+TEST(CurveEditorMultiSelect, AltRightMovesEverySelectedPointTogetherAsOneGestureAndStopsAtANeighbour) {
+    Rig rig(freeModel(3)); // interior points at 0.25, 0.5, 0.75
+    rig.selectFirstTwoInterior();
+    ASSERT_EQ(rig.selected(), (std::vector<int>{1, 2}));
+
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kAlt));
+    EXPECT_GT(rig.node(1).x, 0.25);
+    EXPECT_GT(rig.node(2).x, 0.5);
+    EXPECT_NEAR(rig.node(2).x - rig.node(1).x, 0.25, 1e-9) << "rigid: the spacing is kept";
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "node", "node", "end"}));
+
+    for (int i = 0; i < 80; ++i)
+        rig.press(juce::KeyPress::rightKey, kAlt);
+    EXPECT_NEAR(rig.node(2).x, 0.75, 1e-9) << "the leading point stops at the unselected neighbour";
+    EXPECT_NEAR(rig.node(1).x, 0.5, 1e-9);
+    EXPECT_EQ(rig.editor.getModel().getNumNodes(), 5) << "nothing crossed a neighbour";
+    rig.events.clear();
+    rig.press(juce::KeyPress::rightKey, kAlt);
+    EXPECT_TRUE(rig.events.empty()) << "a clamped press records no undo step";
+
+    rig.press(juce::KeyPress::upKey, kAlt);
+    EXPECT_NEAR(rig.node(1).y, 0.55f, 1e-5f);
+    EXPECT_NEAR(rig.node(2).y, 0.55f, 1e-5f);
+    EXPECT_FLOAT_EQ(rig.node(3).y, 0.5f) << "an unselected point stays";
+}
+
+TEST(CurveEditorMultiSelect, ShiftClickTogglesAPointWithoutMovingIt) {
+    Rig rig(freeModel(3));
+    const auto first = rig.posOf(1);
+    const auto second = rig.posOf(2);
+    rig.click(first);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1}));
+    rig.click(second, kShift);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2}));
+    rig.click(first, kShift);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{2})) << "a second Shift-click removes it";
+    rig.click(rig.posOf(3), kCmd);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{2, 3})) << "Cmd toggles too";
+    EXPECT_TRUE(rig.events.empty());
+    EXPECT_NEAR(rig.node(1).x, 0.25, 1e-12);
+}
+
+TEST(CurveEditorMultiSelect, DraggingOneOfSeveralSelectedPointsMovesThemAllAsOneGesture) {
+    Rig rig(freeModel(3));
+    rig.click(rig.posOf(1));
+    rig.click(rig.posOf(2), kShift);
+    ASSERT_EQ(rig.selected(), (std::vector<int>{1, 2}));
+    const auto start = rig.posOf(2);
+    const double x1 = rig.node(1).x;
+    const double x2 = rig.node(2).x;
+    const auto left = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+
+    rig.editor.mouseDown(makeCurveMouseEvent(rig.editor, start, left, false, start));
+    const juce::Point<float> to{start.x + 15.0f, start.y - 30.0f};
+    rig.editor.mouseDrag(curveLeftDrag(rig.editor, to, start));
+    rig.editor.mouseUp(curveLeftDrag(rig.editor, to, start));
+
+    EXPECT_GT(rig.node(1).x, x1);
+    EXPECT_GT(rig.node(2).x, x2);
+    EXPECT_NEAR(rig.node(1).x - x1, rig.node(2).x - x2, 1e-9) << "the same shift for both";
+    EXPECT_GT(rig.node(1).y, 0.5f);
+    EXPECT_NEAR(rig.node(1).y, rig.node(2).y, 1e-6f);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2})) << "the group stays selected";
+    EXPECT_EQ(std::count(rig.events.begin(), rig.events.end(), juce::String("start")), 1);
+    EXPECT_EQ(std::count(rig.events.begin(), rig.events.end(), juce::String("end")), 1);
+}
+
+TEST(CurveEditorMultiSelect, APlainClickOnOneOfSeveralCollapsesToItButADragDoesNot) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    rig.click(rig.posOf(1));
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1}));
+}
+
+TEST(CurveEditorMultiSelect, DeleteRemovesEverySelectedPointInFreeModeOnly) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    EXPECT_TRUE(rig.press(juce::KeyPress::deleteKey));
+    EXPECT_EQ(rig.editor.getModel().getNumNodes(), 3);
+    EXPECT_NEAR(rig.node(1).x, 0.75, 1e-12);
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"}));
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 1) << "the cursor goes to the next remaining point";
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1}));
+
+    Rig fixed(buildEnvelopeModel());
+    fixed.press(juce::KeyPress::rightKey);
+    fixed.press(juce::KeyPress::rightKey, kShift);
+    EXPECT_FALSE(fixed.press(juce::KeyPress::deleteKey)) << "a Fixed curve leaves Delete to the app";
+    EXPECT_EQ(fixed.editor.getModel().getNumNodes(), 5);
+}
+
+TEST(CurveEditorMultiSelect, CommandACommandCAndCommandVStayWithTheAppWhenTheyHaveNothingToDo) {
+    Rig rig(freeModel(3));
+    EXPECT_FALSE(rig.press('C', kCmd)) << "nothing selected: Copy goes to the app";
+    EXPECT_FALSE(rig.press('D', kCmd));
+    rig.selectFirstTwoInterior();
+    EXPECT_TRUE(rig.press('C', kCmd));
+
+    Rig fixed(buildEnvelopeModel());
+    fixed.press(juce::KeyPress::rightKey);
+    EXPECT_FALSE(fixed.press('V', kCmd)) << "a Fixed curve cannot take pasted points";
+    EXPECT_FALSE(fixed.press('D', kCmd));
+}
+
+TEST(CurveEditorMultiSelect, CommandASelectsEveryMovablePoint) {
+    Rig rig(buildEnvelopeModel());
+    EXPECT_TRUE(rig.press('A', kCmd));
+    EXPECT_EQ(rig.selected(), (std::vector<int>{1, 2, 3, 4})) << "the pinned origin stays out";
+}
+
+TEST(CurveEditorMultiSelect, CopyThenPasteLandsAfterTheCursorKeepingTheSpacingAsOneGesture) {
+    Rig rig(freeModel(3)); // 0.25, 0.5, 0.75
+    rig.selectFirstTwoInterior();
+    ASSERT_TRUE(rig.press('C', kCmd));
+    rig.press(juce::KeyPress::rightKey); // the cursor on the last interior point, x 0.75
+    rig.events.clear();
+    ASSERT_TRUE(rig.press('V', kCmd));
+
+    EXPECT_EQ(rig.editor.getModel().getNumNodes(), 7);
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"}));
+    const auto picked = rig.selected();
+    ASSERT_EQ(picked.size(), 2u);
+    EXPECT_GE(rig.node(picked[0]).x, 0.75);
+    EXPECT_LE(rig.node(picked[1]).x, 1.0);
+    EXPECT_NEAR(rig.node(picked[1]).x - rig.node(picked[0]).x, 0.25, 1e-9) << "the spacing is kept";
+    EXPECT_EQ(rig.editor.getSelectedIndex(), picked.back());
+}
+
+TEST(CurveEditorMultiSelect, DuplicateCopiesTheSelectionRightAfterItsLastPointAsOneGesture) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    rig.events.clear();
+    ASSERT_TRUE(rig.press('D', kCmd));
+
+    EXPECT_EQ(rig.editor.getModel().getNumNodes(), 7);
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"}));
+    const auto picked = rig.selected();
+    ASSERT_EQ(picked.size(), 2u);
+    EXPECT_GT(rig.node(picked[0]).x, 0.5) << "just after the original group";
+    EXPECT_NEAR(rig.node(picked[1]).x - rig.node(picked[0]).x, 0.25, 1e-9);
+    EXPECT_NEAR(rig.node(1).x, 0.25, 1e-12) << "the originals stay";
+}
+
+TEST(CurveEditorMultiSelect, ThePasteIsClampedToTheRangeAndToTheRoomLeft) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    rig.press('C', kCmd);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey); // the pinned end, x 1.0
+    ASSERT_TRUE(rig.press('V', kCmd));
+    for (const int i : rig.selected()) {
+        EXPECT_GE(rig.node(i).x, 0.0);
+        EXPECT_LE(rig.node(i).x, 1.0);
+    }
+
+    CurveModel full(CurveMode::Free);
+    std::vector<CurveNode> nodes;
+    for (int i = 0; i < CurveModel::kMaxNodes; ++i)
+        nodes.push_back(
+            CurveNode{(double)i / (CurveModel::kMaxNodes - 1), 0.5f, i != 0 && i != CurveModel::kMaxNodes - 1, true});
+    full.setNodes(nodes);
+    Rig packed(std::move(full));
+    packed.press(juce::KeyPress::rightKey);
+    packed.press(juce::KeyPress::rightKey);
+    packed.press('C', kCmd);
+    EXPECT_FALSE(packed.press('V', kCmd)) << "a full curve takes nothing more";
+}
+
+TEST(CurveEditorMultiSelect, TheSpokenValueSaysHowManyPointsAreSelected) {
+    Rig rig(freeModel(3));
+    rig.selectFirstTwoInterior();
+    EXPECT_EQ(rig.editor.getAccessibilityValueText(), "2 points selected, Point 3 of 5, time 0.5, level 0.50");
+}

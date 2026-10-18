@@ -7,8 +7,9 @@ CurveEditorComponent::CurveEditorComponent() {
     setWantsKeyboardFocus(true);
     setTitle("Curve editor");
     setDescription("Breakpoint curve");
-    setTooltip("Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points "
-               "and bend handles, double-click to add or remove a point");
+    setTooltip("Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them, "
+               "Delete removes them, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: drag points and bend "
+               "handles, Shift-click adds a point to the selection, double-click to add or remove a point");
 }
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
@@ -40,6 +41,10 @@ void CurveEditorComponent::setModel(CurveModel model) {
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;
         selectedIndex_ = -1;
+        anchorIndex_ = -1;
+        selection_.clear();
+        pendingToggleIndex_ = -1;
+        pendingCollapseIndex_ = -1;
     }
     repaint();
     refreshAccessibilityValue();
@@ -145,8 +150,8 @@ int CurveEditorComponent::moveNodeInModel(CurveModel& model, int index, juce::Po
 int CurveEditorComponent::applyNodeTarget(int index, juce::Point<double> target) {
     const int newIndex = moveNodeInModel(model_, index, target);
 
-    if (selectedIndex_ == index)
-        selectedIndex_ = newIndex;
+    if (newIndex != index)
+        remapSelectionForMove(index, newIndex);
     if (onNodeChanged)
         onNodeChanged(newIndex);
     if (newIndex != index && onPointsChanged)
@@ -222,10 +227,13 @@ bool CurveEditorComponent::removeNode(int index) {
     beginGesture();
     const bool removed = model_.removePoint(index);
     if (removed) {
-        if (selectedIndex_ == index)
-            setSelectedIndex(-1);
-        else if (selectedIndex_ > index)
-            setSelectedIndex(selectedIndex_ - 1);
+        std::vector<int> kept;
+        for (const int j : selection_)
+            if (j != index)
+                kept.push_back(j > index ? j - 1 : j);
+        const auto shift = [index](int j) { return j > index ? j - 1 : j; };
+        setSelection(std::move(kept), selectedIndex_ == index ? -1 : shift(selectedIndex_),
+                     anchorIndex_ == index ? -1 : shift(anchorIndex_));
         if (onPointsChanged)
             onPointsChanged();
     }
@@ -274,7 +282,18 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
         // stood right now (before any state changes) -- see `dragFrozenRange_`'s doc comment.
         // Never frozen for a bend-handle drag: bend never moves x, nothing to freeze against.
         dragFrozenRange_ = currentGeometry().getVisibleRange();
-        setSelectedIndex(hit.index);
+        pendingToggleIndex_ = -1;
+        pendingCollapseIndex_ = -1;
+        const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
+        if (additive && isSelected(hit.index))
+            pendingToggleIndex_ = hit.index; // a click removes it; a drag keeps it and moves the group
+        else if (additive)
+            toggleSelected(hit.index);
+        else if (isSelected(hit.index) && selection_.size() > 1) {
+            pendingCollapseIndex_ = hit.index; // a click collapses to it; a drag moves the group
+            setSelection(selection_, hit.index, anchorIndex_);
+        } else
+            setSelectedIndex(hit.index);
     }
     if (dragKind_ != DragKind::None)
         repaint();
@@ -290,7 +309,10 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (dragKind_ == DragKind::Node) {
-        dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
+        if (selection_.size() > 1 && isSelected(dragIndex_))
+            dragSelectionTo(dragIndex_, e.position, e.mods.isShiftDown());
+        else
+            dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
     } else if (dragKind_ == DragKind::Bend) {
         const float deltaY = e.position.y - lastDragPos_.y;
         dragBendBy(dragIndex_, deltaY);
@@ -299,6 +321,14 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
+    if (!gestureActive_) {
+        if (pendingToggleIndex_ >= 0)
+            toggleSelected(pendingToggleIndex_);
+        else if (pendingCollapseIndex_ >= 0)
+            setSelectedIndex(pendingCollapseIndex_);
+    }
+    pendingToggleIndex_ = -1;
+    pendingCollapseIndex_ = -1;
     if (gestureActive_) {
         endGesture();
         gestureActive_ = false;

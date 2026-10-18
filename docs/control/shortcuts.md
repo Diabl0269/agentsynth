@@ -51,7 +51,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
-| Cmd+D | Duplicate (Selected Modules, the selected clips/notes, or the focused automation lane: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
+| Cmd+D | Duplicate (Selected Modules, the selected clips/notes, the selected points of the focused automation lane, or the focused automation lane itself: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R (macOS) / Ctrl+Shift+R (Windows, Linux) | Repeat — off the Mac Cmd is Ctrl, and Ctrl+R belongs to Record. Prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |

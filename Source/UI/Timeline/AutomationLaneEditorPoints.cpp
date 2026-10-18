@@ -236,6 +236,10 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
         return stepCursor(-1);
     if (isPlain(key, K::rightKey, juce::ModifierKeys::altModifier))
         return stepCursor(1);
+    if (isPlain(key, K::leftKey, juce::ModifierKeys::shiftModifier))
+        return extendSelection(-1);
+    if (isPlain(key, K::rightKey, juce::ModifierKeys::shiftModifier))
+        return extendSelection(1);
     if (isPlain(key, K::leftKey) || isPlain(key, K::rightKey)) {
         const int direction = key.getKeyCode() == K::rightKey ? 1 : -1;
         if (selection_.isEmpty()) // Tabbing in: the first press picks the nearest end
@@ -311,6 +315,42 @@ bool AutomationLaneEditor::stepCursor(int direction) {
     return true;
 }
 
+// Adds the next point past the selection on `direction`'s side and moves the cursor onto it; with one point selected
+// the walk starts from the cursor. Nothing selected: the first press picks the nearest end like a plain arrow. Consumed
+// at the last point too.
+bool AutomationLaneEditor::extendSelection(int direction) {
+    const auto* points = lanePoints();
+    if (points == nullptr || points->empty())
+        return false;
+    if (selection_.isEmpty())
+        return stepCursor(direction);
+
+    const auto selected = selection_.getSelected();
+    double from = direction > 0 ? selected.back() : selected.front();
+    if (selected.size() == 1 && selection_.getCursor().has_value())
+        from = *selection_.getCursor();
+    const LaneBreakpoint* next = nullptr;
+    if (direction > 0) {
+        for (const auto& p : *points)
+            if (p.beat > from) {
+                next = &p;
+                break;
+            }
+    } else {
+        for (auto it = points->rbegin(); it != points->rend(); ++it)
+            if (it->beat < from) {
+                next = &*it;
+                break;
+            }
+    }
+    if (next == nullptr)
+        return true;
+    selection_.add(next->beat);
+    selection_.setCursor(next->beat);
+    showBubbleAt(next->beat, next->value);
+    return true;
+}
+
 bool AutomationLaneEditor::selectAllPoints() {
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
@@ -336,6 +376,25 @@ bool AutomationLaneEditor::copySelectedPoints() {
         return false;
     *clipboard_ = copyPoints(selection_.selectedPoints(*points));
     return !clipboard_->isEmpty();
+}
+
+// Copies the selection one grid step past its last point as ONE undo step, leaving the clipboard alone; the copies
+// become the selection.
+bool AutomationLaneEditor::duplicateSelectedPoints() {
+    const auto* points = lanePoints();
+    if (points == nullptr || selection_.isEmpty())
+        return false;
+    const auto picked = selection_.selectedPoints(*points);
+    if (picked.empty())
+        return false;
+    const auto& range = doc_->getLane(laneId_)->range;
+    const auto copies =
+        pastedPoints(copyPoints(picked), picked.back().beat + gridStepBeats(), range.minValue, range.maxValue);
+    if (!commitPointEdit(editTarget(), {}, copies))
+        return false;
+    selection_.setSelection(beatsOf(copies));
+    selection_.setCursor(copies.back().beat);
+    return true;
 }
 
 bool AutomationLaneEditor::cutSelectedPoints() { return copySelectedPoints() && deleteSelectedPoints(); }

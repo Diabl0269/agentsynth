@@ -19,7 +19,6 @@ constexpr double kTimeStepFraction = 1.0 / 50.0;
 constexpr double kLevelStep = 0.05;
 constexpr double kFineDivisor = 5.0;
 
-bool isSelectable(const CurveNode& node) { return node.xMovable || node.yMovable; }
 } // namespace
 
 juce::Point<double> CurveEditorComponent::keyboardStep() const {
@@ -31,34 +30,24 @@ juce::Point<double> CurveEditorComponent::keyboardStep() const {
     return {currentGeometry().getVisibleRange() * kTimeStepFraction, kLevelStep};
 }
 
-void CurveEditorComponent::setSelectedIndex(int index) {
-    if (selectedIndex_ == index)
-        return;
-    selectedIndex_ = index;
-    refreshAccessibilityValue();
-}
-
-int CurveEditorComponent::selectNodeRelative(int delta) {
-    const int count = model_.getNumNodes();
-    const bool fromStart = selectedIndex_ < 0;
-    const int step = (fromStart || delta > 0) ? 1 : -1;
-    for (int candidate = fromStart ? 0 : selectedIndex_ + step; candidate >= 0 && candidate < count;
-         candidate += step) {
-        if (isSelectable(model_.getNode(candidate))) {
-            setSelectedIndex(candidate);
-            repaint();
-            return candidate;
-        }
-    }
-    return selectedIndex_;
-}
-
 bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSnap) {
     if (selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes())
         return false;
     const CurveNode before = model_.getNode(selectedIndex_);
     const juce::Point<double> target{before.x + dx, (double)juce::jlimit(before.minY, before.maxY, before.y + dy)};
     const auto snapped = snapModelPoint(currentGeometry(), target, bypassSnap);
+
+    if (selection_.size() > 1) {
+        // Snapping aligns the cursor point; the rest of the group keeps its offsets from it.
+        std::vector<int> changed;
+        CurveModel moved = modelWithSelectionMoved(snapped.x - before.x, snapped.y - before.y, changed);
+        if (changed.empty())
+            return false;
+        beginGesture();
+        commitSelectionMove(std::move(moved), changed);
+        endGesture();
+        return true;
+    }
 
     // Try the move on a copy first: a press that changes nothing (a pinned axis, a clamped end) must
     // not open a gesture, or the host would record an empty undo step.
@@ -80,7 +69,8 @@ juce::String CurveEditorComponent::getAccessibilityValueText() const {
     if (selectedIndex_ < 0 || selectedIndex_ >= count)
         return describeCurveSummary(count);
     const auto& node = model_.getNode(selectedIndex_);
-    return describeCurvePoint(selectedIndex_, count, node.x, node.y);
+    const auto point = describeCurvePoint(selectedIndex_, count, node.x, node.y);
+    return selection_.size() > 1 ? juce::String((int)selection_.size()) + " points selected, " + point : point;
 }
 
 void CurveEditorComponent::refreshAccessibilityValue() {
@@ -105,10 +95,28 @@ void CurveEditorComponent::focusGained(FocusChangeType cause) {
 
 void CurveEditorComponent::focusLost(FocusChangeType) { repaint(); }
 
+bool CurveEditorComponent::handleChord(const juce::KeyPress& key) {
+    const auto mods = key.getModifiers();
+    if (mods.isShiftDown() || mods.isAltDown())
+        return false;
+    switch (key.getKeyCode()) {
+    case 'A':
+        return selectAllMovable();
+    case 'C':
+        return copySelection();
+    case 'V':
+        return pasteAtCursor();
+    case 'D':
+        return duplicateSelection();
+    default:
+        return false;
+    }
+}
+
 bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown())
-        return false;
+        return handleChord(key);
     const int code = key.getKeyCode();
     const bool left = code == juce::KeyPress::leftKey;
     const bool right = code == juce::KeyPress::rightKey;
@@ -116,7 +124,10 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     const bool down = code == juce::KeyPress::downKey;
 
     if ((left || right) && !mods.isAltDown()) {
-        selectNodeRelative(left ? -1 : 1);
+        if (mods.isShiftDown())
+            extendSelectionRelative(left ? -1 : 1);
+        else
+            selectNodeRelative(left ? -1 : 1);
         return true;
     }
     if ((left || right || up || down) && mods.isAltDown()) {
@@ -130,8 +141,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     }
     if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) &&
         model_.getMode() == CurveMode::Free) {
-        if (selectedIndex_ >= 0)
-            removeNode(selectedIndex_);
+        removeSelectedNodes();
         return true;
     }
     return false;

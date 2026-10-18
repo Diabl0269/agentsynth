@@ -356,7 +356,7 @@ TEST(CurveEditorKeyboard, DeleteRemovesTheSelectedPointInFreeModeOnly) {
     ASSERT_EQ(rig.editor.getModel().getNumNodes(), 4);
     EXPECT_TRUE(rig.press(juce::KeyPress::deleteKey));
     EXPECT_EQ(rig.editor.getModel().getNumNodes(), 3);
-    EXPECT_EQ(rig.editor.getSelectedIndex(), -1);
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 1) << "the cursor moves to the next remaining point";
     EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"}));
 
     CurveRig fixed(test::buildEnvelopeModel());

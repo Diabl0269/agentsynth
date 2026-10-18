@@ -724,6 +724,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.h
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorSelection.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorClipboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
     Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.h
     Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.cpp

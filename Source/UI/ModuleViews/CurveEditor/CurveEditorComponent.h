@@ -25,10 +25,15 @@ namespace synth::ui {
  *  Tests/UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp).
  *
  *  Keyboard (a Tab stop with the accent focus ring): Left/Right select the previous/next movable point
- *  (clamped at the ends), Alt+Left/Right move it in time and Alt+Up/Down in level (one grid cell while
- *  snap-to-grid is on, else a small step; Shift: a fifth of the step, unsnapped), Delete/Backspace remove
- *  it in Free mode. Every press is one gesture bracket, so one undo step, and runs the same callbacks a
- *  drag does. A screen reader reads the selected point, e.g. "Point 3 of 5, time 0.25, level 0.80".
+ *  (clamped at the ends), Shift+Left/Right extend or shrink the selection toward that side, Alt+Left/Right
+ *  move every selected point in time and Alt+Up/Down in level (one grid cell while snap-to-grid is on, else a
+ *  small step; Shift: a fifth of the step, unsnapped), Delete/Backspace remove them in Free mode. Cmd+A selects
+ *  every movable point, Cmd+C copies the selection, and in Free mode Cmd+V pastes it after the cursor point and
+ *  Cmd+D duplicates it. Every press is one gesture bracket, so one undo step, and runs the same callbacks a
+ *  drag does. A screen reader reads the cursor point, e.g. "Point 3 of 5, time 0.25, level 0.80", led by
+ *  "3 points selected" when several are.
+ *
+ *  Mouse selection: Shift- or Cmd-click toggles a point; dragging a selected point moves the whole selection.
  *
  *  No `juce::Timer` — repaints only when state actually changes; the playhead is a plain setter
  *  (`setPlayhead`), not an animation. A later change adds a gated animation driving it during
@@ -139,16 +144,48 @@ public:
      *  outside Free mode. */
     bool removeNode(int index);
 
-    /** Moves the selected point by `dx` model units in time and `dy` in level as one gesture, through
-     *  the same path as a drag (snapping included unless `bypassSnap`). False when no point is selected
-     *  or the move changes nothing. */
+    /** Moves every selected point by `dx` model units in time and `dy` in level as one gesture, through
+     *  the same path as a drag (snapping included unless `bypassSnap`). With several selected the move is
+     *  rigid: the delta is clamped so no point leaves the range or crosses an unselected neighbour, and a
+     *  pinned axis stays put. False when no point is selected or the move changes nothing. */
     bool nudgeSelectedNode(double dx, float dy, bool bypassSnap = false);
 
-    /** Selects the previous (-1) or next (+1) movable point; the first one when none is selected.
-     *  Returns the selected index, or -1 when no point can be selected. */
+    /** Selects the previous (-1) or next (+1) movable point, collapsing the selection to it; the first
+     *  one when none is selected. Returns the cursor index, or -1 when no point can be selected. */
     int selectNodeRelative(int delta);
 
+    /** Moves the cursor one movable point toward `delta`'s side and selects every movable point between
+     *  it and the anchor (the point the selection started from). Returns the cursor index. */
+    int extendSelectionRelative(int delta);
+
+    /** Adds `index` to the selection and makes it the cursor, or removes it when already selected. False
+     *  for a pinned or out-of-range node. */
+    bool toggleSelected(int index);
+
+    /** Selects every movable point. False when there is none. */
+    bool selectAllMovable();
+
+    /** Free mode only: removes every selected point that can go (one gesture), then puts the cursor on the
+     *  next remaining movable point. False when nothing was removed. */
+    bool removeSelectedNodes();
+
+    /** Copies the selected points (spacing relative to the first, level, bend) to a process-wide clipboard
+     *  shared by all curve editors. False when nothing is selected. */
+    bool copySelection();
+
+    /** Free mode only: pastes the clipboard so the group starts just after the cursor point, clamped to the
+     *  curve's range and the room left; the pasted points become the selection. One gesture. False when the
+     *  clipboard is empty, the curve is full, or the mode is not Free. */
+    bool pasteAtCursor();
+
+    /** Free mode only: pastes a copy of the selection just after its last point without touching the
+     *  clipboard. False when nothing is selected. */
+    bool duplicateSelection();
+
+    /** The cursor point: where Left/Right continue from and what a screen reader reads. -1 when none. */
     int getSelectedIndex() const noexcept { return selectedIndex_; }
+    /** Every selected point, ascending. */
+    const std::vector<int>& getSelectedIndices() const noexcept { return selection_; }
 
     /** The selected point as spoken, e.g. "Point 3 of 5, time 0.25, level 0.80"; a summary when none is. */
     juce::String getAccessibilityValueText() const;
@@ -183,7 +220,29 @@ private:
     int applyNodeTarget(int index, juce::Point<double> target);
     /** The model edit alone (movable flags honoured), returning the node's index afterwards. */
     static int moveNodeInModel(CurveModel& model, int index, juce::Point<double> target);
+    /** Collapses the selection to `index` (-1 clears it). */
     void setSelectedIndex(int index);
+    void setSelection(std::vector<int> indices, int cursor, int anchor);
+    bool isSelected(int index) const;
+    /** Re-points the selection after node `from` was re-sorted to `to`. */
+    void remapSelectionForMove(int from, int to);
+    /** The model with the selection moved by (dx, dy), clamped; `changed` lists the nodes that differ. */
+    CurveModel modelWithSelectionMoved(double dx, double dy, std::vector<int>& changed) const;
+    /** Installs a model from `modelWithSelectionMoved` and fires the change callbacks. */
+    void commitSelectionMove(CurveModel moved, const std::vector<int>& changed);
+    /** Drags the whole selection so node `index` follows `point`. */
+    void dragSelectionTo(int index, juce::Point<float> point, bool bypassSnap);
+    bool handleChord(const juce::KeyPress& key);
+
+    struct ClipPoint {
+        double dx = 0.0;
+        float y = 0.0f;
+        float bend = 0.0f;
+        bool hasBend = false;
+    };
+    static std::vector<ClipPoint>& clipboard();
+    std::vector<ClipPoint> selectionAsClip() const;
+    bool insertClip(const std::vector<ClipPoint>& points, double startX);
     /** Posts a value-changed event when the spoken text differs from the last one handed out. */
     void refreshAccessibilityValue();
     /** One keyboard step along each axis, in model units: a grid cell while snapping, else a fixed
@@ -237,6 +296,11 @@ private:
     CurveHitKind hoveredKind_ = CurveHitKind::None;
     int hoveredIndex_ = -1;
     int selectedIndex_ = -1;
+    int anchorIndex_ = -1;
+    std::vector<int> selection_;
+    /** A press on an already-selected point settles on release when no drag followed: -1 none. */
+    int pendingToggleIndex_ = -1;
+    int pendingCollapseIndex_ = -1;
     juce::String announcedValueText_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurveEditorComponent)

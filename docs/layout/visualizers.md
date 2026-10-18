@@ -288,20 +288,36 @@ are not rebindable actions.
 
 | Key | Effect |
 |---|---|
-| Left / Right | Select the previous / next point that can move (a pinned origin is skipped; stops at the ends). Tabbing in selects the first |
-| Alt+Left / Alt+Right | Move the selected point in time |
-| Alt+Up / Alt+Down | Move the selected point in level |
+| Left / Right | Select the previous / next point that can move (a pinned origin is skipped; stops at the ends), collapsing any selection to it. Tabbing in selects the first |
+| Shift+Left / Shift+Right | Extend or shrink the selection toward that side, like text selection: the cursor moves one point and everything between it and the anchor is selected. A fully pinned point is never selected |
+| Alt+Left / Alt+Right | Move every selected point in time |
+| Alt+Up / Alt+Down | Move every selected point in level |
 | Shift added to those | A fifth of the step, and no snapping |
-| Delete / Backspace | Remove the selected point (Free mode only; a Fixed curve leaves the key to the app) |
+| Delete / Backspace | Remove every selected point (Free mode only; a Fixed curve leaves the key to the app). The cursor goes to the next remaining movable point |
+| Cmd+A | Select every movable point |
+| Cmd+C | Copy the selected points (spacing from the first, level, the bend between neighbours) to one process-wide curve clipboard; with nothing selected the key falls through to the app |
+| Cmd+V | Free mode only: paste the clipboard so the group starts just after the cursor point, keeping its spacing, clamped to the curve's range and the room left (the curve holds at most `CurveModel::kMaxNodes`); the pasted points become the selection |
+| Cmd+D | Free mode only: paste a copy of the selection just after its last point, leaving the clipboard alone |
+
+**Selection.** The selection is a set of point indices (`getSelectedIndices()`) plus a cursor
+(`getSelectedIndex()`, what Left/Right continue from and what a screen reader reads) and an anchor
+(where a Shift range began). With the mouse, Shift- or Cmd-click toggles a point without moving it, a
+plain click on an unselected point collapses to it, and dragging a point of a multi-selection moves the
+whole selection (a plain click on one of them without a drag collapses to it on release). A group move
+is rigid: the delta is clamped so no point leaves the curve's range or crosses an unselected neighbour,
+and a point's pinned axis stays put while the others move; in a Fixed curve the earliest selected point
+carries the later ones along, as a single drag does. Every selected point is painted in the selected
+style. The logic is in `CurveEditorSelection.cpp` (selection, group move, remove) and
+`CurveEditorClipboard.cpp` (copy, paste, duplicate).
 
 A step is one grid cell while snap-to-grid is on (the LFO card) and otherwise a fiftieth of the
 visible time range (a twentieth of the level range). A key move goes through the same
-`applyNodeTarget` a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` /
+rules a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` (once per moved point) /
 `onPointsChanged`, and is wrapped in exactly one `onGestureStart` / `onGestureEnd`, so the envelope
-and LFO cards record one undo step per press. A press that changes nothing (a pinned axis, a limit)
-opens no gesture. A screen reader reads the selected point, e.g. "Point 3 of 5, time 0.25, level
-0.80" ("Curve with 5 points" before one is picked). The keys and handler live in
-`CurveEditorKeyboard.cpp`.
+and LFO cards record one undo step per press, whatever the number of points. A press that changes
+nothing (a pinned axis, a limit) opens no gesture. A screen reader reads the cursor point, e.g. "Point 3
+of 5, time 0.25, level 0.80", led by "3 points selected" when several are ("Curve with 5 points" before
+one is picked). The keys and handler live in `CurveEditorKeyboard.cpp`.
 
 Five display and interaction rules:
 
