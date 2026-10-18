@@ -225,7 +225,8 @@ untrusted path reads only `mode` and `smoothness`, never the key map ([patch for
 
 The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
 <module name>" that grows out of the card's centre and shrinks back into it
-([animation](../layout/animation.md#popup-windows)); Esc or Done closes it. Left a large
+([animation](../layout/animation.md#popup-windows)); Esc or Done closes it, and the keyboard focus starts on the map (Tab works at once; asking for the window again
+brings it back with the focus there). Left a large
 [morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
 editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
 blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always

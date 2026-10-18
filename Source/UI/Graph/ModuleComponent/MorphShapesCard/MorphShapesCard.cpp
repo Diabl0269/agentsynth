@@ -130,7 +130,7 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply) {
 /** One window per card; asking again selects the shape in the open one. The adapter's title follows a rename. */
 juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
     if (window_ != nullptr) {
-        window_->toFront(true);
+        focusShapeEditorWindow(*window_);
         if (auto* editor = dynamic_cast<ShapeListEditor*>(window_->getContentComponent()))
             editor->setSelected(shapeIndex);
         return window_.getComponent();

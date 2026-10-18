@@ -454,6 +454,27 @@ TEST(MorphMapKeyboard, DeleteFocusesTheNextDotAndTheNewLastWhenTheLastWasDeleted
     EXPECT_TRUE(map.getDotStop(0)->hasKeyboardFocus(false)) << "deleting the last dot focuses the new last";
 }
 
+// Regression test for FRO945: a freshly opened shape window had nothing focused, so Tab did nothing.
+TEST(MorphMapKeyboard, FocusFirstControlPutsTheKeyboardOnTheMapSoTabStartsThere) {
+    ShownEditor shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    shown.editor.getDoneButton().grabKeyboardFocus();
+    ASSERT_FALSE(shown.editor.getMap().hasKeyboardFocus(true));
+
+    shown.editor.focusFirstControl();
+
+    EXPECT_TRUE(shown.editor.getMap().hasKeyboardFocus(false));
+    EXPECT_EQ(juce::Component::getCurrentlyFocusedComponent(), &shown.editor.getMap());
+}
+
+TEST(MorphMapKeyboard, FocusFirstControlDoesNothingWhileTheEditorIsNotOnScreen) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.focusFirstControl();
+    EXPECT_FALSE(editor.getMap().hasKeyboardFocus(true));
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The glide model
 // ---------------------------------------------------------------------------------------------------------------

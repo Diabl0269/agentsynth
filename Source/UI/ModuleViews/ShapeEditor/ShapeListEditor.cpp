@@ -151,6 +151,12 @@ void ShapeListEditor::refresh() {
     syncAll();
 }
 
+/** Focus can only move to a component that is on screen, so a window still opening is retried by its owner. */
+void ShapeListEditor::focusFirstControl() {
+    if (map_.isShowing())
+        map_.grabKeyboardFocus();
+}
+
 /** Picks up a change made elsewhere (undo, redo, the card's map, a preset load). Our own writes update
     lastGeneration_ as they go, and nothing is reloaded while a curve gesture is open. */
 void ShapeListEditor::timerCallback() {
