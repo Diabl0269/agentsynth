@@ -141,6 +141,21 @@ TEST_F(ModuleComponentTest, ShowMorphMapToggleHasThePillStyle) {
     EXPECT_TRUE((bool)rig.custom().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
 }
 
+// Regression test for FRO954: Shift and Depth share a cell with the hidden Cutoff and Resonance; a drop on
+// them lands on the visible knob.
+TEST_F(ModuleComponentTest, CableOverCustomShiftAndDepthLandsOnThem) {
+    CardRig rig;
+    ASSERT_FALSE(rig.knobShown("Cutoff"));
+    for (const auto& [name, channel] : {std::pair<const char*, int>{"Shift", FilterModule::kShiftCVChannel},
+                                        std::pair<const char*, int>{"Depth", FilterModule::kDepthCVChannel}}) {
+        auto* knob = rig.knob(name);
+        ASSERT_TRUE(knob != nullptr && knob->isVisible());
+        const auto port = rig.card->getModTargetPortForPoint(knob->getBounds().getCentre());
+        ASSERT_TRUE(port.has_value()) << name;
+        EXPECT_EQ(port->index, channel) << name;
+    }
+}
+
 TEST_F(ModuleComponentTest, MorphMapPillIsInTheFooterOnlyInCustom) {
     CardRig rig(false);
     EXPECT_FALSE(rig.custom().getToggle().isVisible());

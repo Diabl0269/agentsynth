@@ -409,10 +409,14 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
     // Only knobs and card faders are modulation targets (showsModulation); other sliders are not addressed this way
     // and neither is anything without a matching CV jack. A knob on an unselected tab keeps its
     // last bounds, so a hidden one (sliderIndexForModTarget says -1) must not swallow a drop.
-    for (const auto& t : targets) {
-        const int si = sliderIndexForModTarget(t);
-        if (si >= 0 && sliders[si]->getBounds().contains(localPoint))
-            return Port{sliders[si]->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
+    // A visible knob wins: a swapped-out sibling shares its cell's bounds and may be listed first; it only
+    // takes the drop (the BPM / Div swap) when no visible target matches.
+    for (const bool wantVisible : {true, false}) {
+        for (const auto& t : targets) {
+            const int si = sliderIndexForModTarget(t);
+            if (si >= 0 && sliders[si]->isVisible() == wantVisible && sliders[si]->getBounds().contains(localPoint))
+                return Port{sliders[si]->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
+        }
     }
 
     // The Filter's morph map shows its Morph X / Y sliders in place of those knobs: a drop on one lands on it.

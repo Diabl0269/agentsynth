@@ -15,6 +15,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -84,6 +85,8 @@ struct Rig {
 };
 
 constexpr float kEps = 0.01f; // alpha is stored in 8 bits
+// The scope panel and the gap that keeps it off the controls above it.
+constexpr int kScopeRoom = 100 + synth::cardbody::kPanelGap;
 
 } // namespace
 
@@ -101,26 +104,28 @@ TEST(CardFades, ShowScopeFadesInWhileTheCardGrowsAndTheNeighbourMakesRoomOnce) {
     EXPECT_TRUE(scope->isVisible());
     EXPECT_NEAR(scope->getAlpha(), 0.0f, kEps) << "frame 0 is already the first fade frame";
     EXPECT_EQ(rig.card->getHeight(), closed) << "the card starts at its old height";
-    EXPECT_GE(rig.neighbourY(), rig.card->getY() + closed + 100) << "the neighbour made room for the final size, once";
+    EXPECT_GE(rig.neighbourY(), rig.card->getY() + closed + kScopeRoom)
+        << "the neighbour made room for the final size, once";
 
     FadeVisibility::stepAllForTest(0.5f);
     EXPECT_NEAR(scope->getAlpha(), 0.5f, kEps);
     EXPECT_GT(rig.card->getHeight(), closed);
-    EXPECT_LT(rig.card->getHeight(), closed + 100) << "the card grows with the fade, it does not jump";
-    EXPECT_EQ(scope->getHeight(), rig.card->getHeight() - closed) << "the panel is as tall as the room it has taken";
+    EXPECT_LT(rig.card->getHeight(), closed + kScopeRoom) << "the card grows with the fade, it does not jump";
+    EXPECT_NEAR(scope->getHeight(), rig.card->getHeight() - closed, synth::cardbody::kPanelGap)
+        << "the panel is as tall as the room it has taken, less its fading gap";
 
     FadeVisibility::stepAllForTest(1.0f);
     EXPECT_NEAR(scope->getAlpha(), 1.0f, kEps);
-    EXPECT_EQ(rig.card->getHeight(), closed + 100);
+    EXPECT_EQ(rig.card->getHeight(), closed + kScopeRoom);
     EXPECT_EQ(scope->getHeight(), 100);
 
     toggle->setToggleState(false, juce::sendNotificationSync);
     EXPECT_TRUE(scope->isVisible()) << "still there while it fades out";
-    EXPECT_EQ(rig.card->getHeight(), closed + 100);
+    EXPECT_EQ(rig.card->getHeight(), closed + kScopeRoom);
     FadeVisibility::stepAllForTest(0.5f);
     EXPECT_GT(rig.card->getHeight(), closed);
-    EXPECT_LT(rig.card->getHeight(), closed + 100);
-    EXPECT_GE(rig.neighbourY(), rig.card->getY() + closed + 100) << "the neighbour waits for the fade to end";
+    EXPECT_LT(rig.card->getHeight(), closed + kScopeRoom);
+    EXPECT_GE(rig.neighbourY(), rig.card->getY() + closed + kScopeRoom) << "the neighbour waits for the fade to end";
 
     FadeVisibility::stepAllForTest(1.0f);
     EXPECT_FALSE(scope->isVisible());
@@ -139,7 +144,7 @@ TEST(CardFades, ShowScopeLandsAtOnceWhenTheCardIsNotOnScreen) {
     toggle->setToggleState(true, juce::sendNotificationSync);
     EXPECT_TRUE(scope->isVisible());
     EXPECT_NEAR(scope->getAlpha(), 1.0f, kEps);
-    EXPECT_EQ(rig.card->getHeight(), closed + 100);
+    EXPECT_EQ(rig.card->getHeight(), closed + kScopeRoom);
     toggle->setToggleState(false, juce::sendNotificationSync);
     EXPECT_FALSE(scope->isVisible());
     EXPECT_EQ(rig.card->getHeight(), closed);
