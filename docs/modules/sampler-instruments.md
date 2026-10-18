@@ -42,7 +42,7 @@ Instrument mode saves exactly one source next to the Sampler's `sampleFile` (bot
 | Source | Keys |
 | :-- | :-- |
 | SFZ | `instrumentFolder` (absolute folder of the `.sfz`) and `instrumentSfz` (the `.sfz` path relative to that folder, `/` separators) |
-| Sound pack | `instrumentPack` = `<packId>/<instrumentId>`; no path is saved, the pack library resolves it at load |
+| Sound pack | `instrumentPack` = `<packId>/<instrumentId>`; no path is saved, the pack library resolves it at load. `instrumentGainDb` (dB, only when not 0) is added to every recording's volume when it is decoded; only the song build and the swap after a download set it |
 | Own recordings (dropped files, or an edited instrument) | `instrumentFiles` (array of absolute paths), `instrumentRegions` (array of `{file, lokey, hikey, key, lovel, hivel}` plus, only when not the default, `tune`, `volume`, `loop` (0 none, 1 one shot, 2 continuous, 3 sustain), `loopstart`, `loopend`, `seqlength`, `seqposition`, `release`, `ampeg_release`; `file` indexes `instrumentFiles`, `key` is the root) and, once edited, `instrumentName` |
 
 `instrumentFolder` and `instrumentFiles` are registered in `synth::ModuleFileRefs`: inside a saved project they become bundle-relative refs, and Collect & Archive copies the SFZ folder tree (the `.sfz` files and audio below it) into `Instruments/` and the dropped files into `Samples/` (see [`project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)). Samples an SFZ names outside its own folder are not collected. A list element that is missing or escapes the bundle becomes empty, so the indices in `instrumentRegions` stay valid; regions pointing at an empty element are skipped.

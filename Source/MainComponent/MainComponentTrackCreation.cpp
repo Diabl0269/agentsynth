@@ -296,10 +296,12 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 // already moved on pre-existing nodes (a reused Master) are not rewound; the enclosing
 // transaction's snapshot still covers them for undo. On success it hands back the uuids it minted
 // for the Track In, the instrument, each insert (in op order) and the envelope's ADSR (empty for a
-// Sampler), for in-response references.
-std::optional<synth::InstrumentTrackBuildResult> MainComponent::buildInstrumentTrackBody(
-    std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument, const juce::String& trackName, bool poly,
-    const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams) {
+// Sampler unless `envelopeShapeType` names a type that has one), for in-response references.
+std::optional<synth::InstrumentTrackBuildResult>
+MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
+                                        const juce::String& trackName, bool poly,
+                                        const std::vector<synth::InstrumentTrackInsert>& inserts,
+                                        const juce::var& envelopeParams, const juce::String& envelopeShapeType) {
     auto& graph = audioEngine.getGraph();
     const int index = (int)timelineDoc.getTracks().size();
     std::set<juce::AudioProcessorGraph::NodeID> nodesBefore;
@@ -307,6 +309,7 @@ std::optional<synth::InstrumentTrackBuildResult> MainComponent::buildInstrumentT
         nodesBefore.insert(node->nodeID);
 
     InstrumentChainBuild build;
+    build.envelopeShapeType = envelopeShapeType;
     bool built = createTrackInForInstrumentChain(trackName, build) &&
                  adoptInstrumentNodeForChain(stagedInstrument, index, poly, build);
     if (built) {
@@ -491,10 +494,13 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     const bool isOscOrWavetable = synth::TimelineOps::instrumentSupportsPolyTrack(build.instrumentModuleType);
     // An authorable instrument that does not shape its own amplitude (Oscillator, Wavetable, Noise) gets an
     // ADSR + VCA. A hosted plugin is not in that list: it has its own envelope.
+    // A track built for a stand-in's role (a core sound on a Sampler) gets the envelope stage that stand-in would.
+    const juce::String& shapeType =
+        build.envelopeShapeType.isNotEmpty() ? build.envelopeShapeType : build.instrumentModuleType;
     const bool needsRawEnvelope = std::any_of(synth::TimelineOps::kAuthorableInstrumentTypes.begin(),
                                               synth::TimelineOps::kAuthorableInstrumentTypes.end(),
-                                              [&](const char* type) { return build.instrumentModuleType == type; }) &&
-                                  !synth::TimelineOps::instrumentOwnsItsEnvelope(build.instrumentModuleType);
+                                              [&](const char* type) { return shapeType == type; }) &&
+                                  !synth::TimelineOps::instrumentOwnsItsEnvelope(shapeType);
     const bool instrumentIsPoly = synth::isProcessorPoly(build.instrumentNode->getProcessor());
     const int instrumentX = static_cast<int>(build.instrumentNode->properties.getWithDefault("x", 0));
 

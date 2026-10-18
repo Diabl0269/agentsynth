@@ -71,13 +71,17 @@ track is built from the synth alone.
 
 What a track gets depends on the pack (`MainComponentTimelineOpsHostSounds.cpp`):
 
-- **Installed, melodic:** a Sampler in Instrument mode loaded with the pack instrument, with the track's name and
-  notes unchanged. The stand-in's params are dropped except Level, and so are its envelope and poly flag (the Sampler
-  has neither).
+- **Installed, melodic:** a Sampler in Instrument mode loaded with the pack instrument and the sound's level trim
+  (`trimDb` in the table, see [sound pack downloads](../modules/sound-pack-downloads.md#levels)), with the track's name
+  and notes unchanged. The track body is the stand-in's: a Wavetable stand-in's ADSR and VCA are built with the op's
+  `envelope` params, so the envelope id the ops address exists (the Sampler is built mono, whatever `poly` said). The
+  stand-in's instrument params are dropped except Level.
 - **Installed, acoustic kit:** the usual Drum Kit with the core kit loaded.
 - **Missing:** the stand-in exactly as built before, plus the module's `pendingSound` (`Modules/PendingSound.h`) (a Drum Kit instead names the core
   kit, which it plays as synth drums until the pack exists). The swap after the download is in
   [sound pack downloads](../modules/sound-pack-downloads.md#song-builds-and-the-core-instruments).
+
+A patch written for the stand-in can name a part the Sampler does not have (a Wavetable's `detune`, `pan`, `position`). `runPlan` (`AIIntegrationServiceProjectEditRun.cpp`) drops each such modulation, with a plan note, before `validatePatch` sees the patch: only a modulation onto a node the app built as a pack Sampler (`InstrumentTrackBuildResult::substitutedSampler`) and whose `destParam` or `destPort` that Sampler has no jack for. `level`, `pitch`, `attack` and the rest stay, every other node is still validated as sent, and `validatePatch` itself is unchanged. The preview's `StandInHost` builds the same Sampler, so a preview never passes what the apply would refuse.
 
 The song path with Ollama never uses any of this. The plan card offers the download first when a plan names sounds and
 the pack is missing.

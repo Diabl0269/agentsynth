@@ -68,6 +68,7 @@ add_executable(Tests
     Modules/Sampler/SoundPackLibraryTests.cpp
     SoundPacks/SoundPackIndexTests.cpp
     SoundPacks/CoreSoundsTests.cpp
+    SoundPacks/CoreSoundLevelTests.cpp
     SoundPacks/SoundPackInstallerTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
@@ -978,6 +979,8 @@ target_compile_definitions(Tests PRIVATE
     # AIPatchFixtureReplayTests.cpp — no live model, no network. See
     # Tools/AIPatchHarness/README.md "Recording the fixture corpus".
     AI_PATCH_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-patches"
+    # A recorded song answer that names a core pack sound, replayed through the real app host.
+    AI_PLAN_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-plans"
 )
 
 # JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers and

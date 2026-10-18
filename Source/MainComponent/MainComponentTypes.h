@@ -50,6 +50,7 @@ struct InstrumentChainBuild {
     juce::Point<int> trackInPosition, trackInSize;
     juce::AudioProcessorGraph::Node* instrumentNode = nullptr;
     juce::String instrumentModuleType, instrumentUuid;
+    juce::String envelopeShapeType; // the module type whose envelope stage the track gets; empty = instrumentModuleType
     juce::AudioProcessorGraph::Node* chainSource = nullptr;
     int sourceRightChannel = 1;
     juce::String chainSourceType;

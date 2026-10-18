@@ -462,7 +462,8 @@ private:
     std::optional<synth::InstrumentTrackBuildResult>
     buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
                              const juce::String& trackName, bool poly,
-                             const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams);
+                             const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                             const juce::String& envelopeShapeType = {});
 
     using InstrumentChainBuild = synth::maincomponent::InstrumentChainBuild;
     using LaneEnd = synth::maincomponent::LaneEnd;

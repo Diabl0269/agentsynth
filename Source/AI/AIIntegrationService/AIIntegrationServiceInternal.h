@@ -32,14 +32,15 @@ struct PlanNote {
     enum class Kind {
         Skipped, // an op was dropped
         Ignored, // an id that clashed was left out
-        Clamped  // a value was moved into its range
+        Clamped, // a value was moved into its range
+        Repaired // a part was dropped because the app built a different instrument than the plan named
     };
     Kind kind = Kind::Skipped;
     juce::String error; // the rejection a model would have been given, for when the plan is refused after all
     juce::String text;  // plain words for the chat card
 };
 
-/** True when `notes` hold more bad details than a plan may carry (clamps are repairs, not bad details). */
+/** True when `notes` hold more bad details than a plan may carry (clamps and repairs are not bad details). */
 bool exceedsBadDetailLimit(const std::vector<PlanNote>& notes);
 
 /** The first rejection among `notes` that counts as a bad detail, worded for the model. */
@@ -90,12 +91,20 @@ public:
                                                                  const std::vector<InstrumentTrackInsert>& inserts,
                                                                  const juce::var& envelopeParams,
                                                                  const juce::var& instrumentParams) override;
+    std::optional<InstrumentTrackBuildResult>
+    addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams, const juce::String& sound) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     TimelineDoc* editableTimelineDoc() override { return &doc_; }
     bool canSetTempo() const override { return true; }
     bool setTempo(double bpm) override;
 
 private:
+    std::optional<InstrumentTrackBuildResult>
+    buildStandIns(const juce::String& name, const juce::String& instrumentType, const juce::String& envelopeShapeType,
+                  const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                  const juce::var& instrumentParams);
     TimelineDoc& doc_;
     juce::AudioProcessorGraph& graph_;
 };
