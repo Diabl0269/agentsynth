@@ -90,7 +90,9 @@ TEST(SamplerVoicePoolTest, VelocityPicksTheMatchingLayer) {
 }
 
 TEST(SamplerVoicePoolTest, PitchFollowsTheKeyAndTheLiveOffset) {
-    auto sine = makeSample(88200, 1, kRate, [](int, int i) { return (float)std::sin(2.0 * M_PI * 440.0 * i / kRate); });
+    auto sine = makeSample(88200, 1, kRate, [](int, int i) {
+        return (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * i / kRate);
+    });
     Rig rig(makeInstrument({makeRegion(sine, 0, 127, 1, 127, 69)}));
     auto p = defaults();
     const int frames = 11025;
@@ -299,8 +301,9 @@ TEST(SamplerVoicePoolTest, AllNotesOffReleasesEveryVoice) {
 }
 
 TEST(SamplerVoicePoolTest, StealingAtTheVoiceLimitDoesNotClick) {
-    auto sine =
-        makeSample(88200, 1, kRate, [](int, int i) { return 0.8f * (float)std::sin(2.0 * M_PI * 220.0 * i / kRate); });
+    auto sine = makeSample(88200, 1, kRate, [](int, int i) {
+        return 0.8f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * i / kRate);
+    });
     Rig rig(makeInstrument({makeRegion(sine, 0, 127, 1, 127, 57)}));
     auto p = defaults();
     p.maxVoices = 2;
@@ -315,7 +318,8 @@ TEST(SamplerVoicePoolTest, StealingAtTheVoiceLimitDoesNotClick) {
     for (const auto& out : {before.left, after.left})
         for (size_t i = 1; i < out.size(); ++i)
             maxStep = std::max(maxStep, std::fabs(out[i] - out[i - 1]));
-    const float ownStep = 0.8f * 2.0f * (float)M_PI * (220.0f + 329.6f * 1.0f + 440.0f) / (float)kRate * 1.0f;
+    const float ownStep =
+        0.8f * 2.0f * juce::MathConstants<float>::pi * (220.0f + 329.6f * 1.0f + 440.0f) / (float)kRate * 1.0f;
     EXPECT_LT(maxStep, ownStep);
     float seam = std::fabs(after.left[0] - before.left.back());
     EXPECT_LT(seam, ownStep);
