@@ -6,6 +6,7 @@
 #include "Modules/FilterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentModBand.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace synth::ui;
 
@@ -205,4 +206,27 @@ TEST_F(ModuleComponentTest, TheMorphSliderBarShowsTheReachableRangeAndTheLiveMod
     rig.engine.getGraph().removeNode(rig.attenId);
     rig.refresh();
     EXPECT_TRUE(rig.map().getStripModulation(MorphMap::Axis::X).empty()) << "no cable, no bar";
+}
+
+// Opt-in visual check of the Custom Filter card with a cable on Morph X: the footer pill and the
+// slider's landing dot and amount bar. Set FILTER_CUSTOM_CARD_PNG=<path> to write it.
+TEST_F(ModuleComponentTest, CustomFilterCardRendersToPngForVisualInspection) {
+    const char* pngPath = std::getenv("FILTER_CUSTOM_CARD_PNG");
+    if (pngPath == nullptr || juce::String(pngPath).isEmpty())
+        GTEST_SKIP() << "set FILTER_CUSTOM_CARD_PNG=<path> to write the rendered card for visual inspection";
+    MorphRig rig;
+    synth::theme::AppLookAndFeel lf;
+    rig.editor->setLookAndFeel(&lf);
+    rig.editor->setSize(2400, 2000);
+    rig.refresh();
+    rig.card->setSize(rig.card->getWidth(), rig.map().getBottom() + 60); // the test helper's fixed height cuts it
+    rig.editor->timerCallback();
+    const auto area = rig.card->getBounds().expanded(60).getIntersection(rig.editor->getLocalBounds());
+    const auto img = rig.editor->createComponentSnapshot(area, true, 2.0f);
+    rig.editor->setLookAndFeel(nullptr);
+    juce::File outFile(pngPath);
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    ASSERT_TRUE(stream.openedOk());
+    ASSERT_TRUE(juce::PNGImageFormat().writeImageToStream(img, stream));
 }
