@@ -95,7 +95,7 @@ TEST(SplitBlockDualIO, CollapsingDoesNotDisturbTheCVChannelMap) {
         OscillatorModule osc;
         setBoolParam(osc, "dualIO", dual);
         auto oscTargets = osc.getModulationTargets();
-        ASSERT_EQ(oscTargets.size(), 11u); // includes Unison/Detune/Pulse Width/Glide
+        ASSERT_EQ(oscTargets.size(), 13u); // includes Unison/Detune/Pulse Width/Glide/Blend/Width
         EXPECT_EQ(oscTargets[1].channelIndex, 1) << "Waveform CV, dual=" << dual;
         EXPECT_EQ(oscTargets[6].channelIndex, 6) << "Pan CV, dual=" << dual;
         EXPECT_EQ(oscTargets[7].channelIndex, 14) << "Unison CV, dual=" << dual;

@@ -42,7 +42,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
 
     cachePolyModCV(buffer, numSamples);
 
-    // Unison/Detune/Pulse Width/Glide CV (ch14-17) alias the Audio R output block -- must be read
+    // Unison/Detune/Pulse Width/Glide/Blend/Width CV (ch14-19) alias the Audio R output block -- must be read
     // before the clear below writes to those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
 
@@ -58,7 +58,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numChannels; ++ch)
         buffer.clear(ch, 0, numSamples);
 
-    prepareUnisonMix(global.unisonCount, numSamples);
+    prepareUnisonMix(global.unisonCount, numSamples, global.blend, global.width);
     const bool rightWanted = unisonMix.stereo;
 
     const PolyVoiceSettings settings{global.unisonCount, global.detuneCents, global.glideSeconds};
@@ -80,7 +80,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
         voices[v].active = true;
 
         // A silent voice keeps its last pitch, so the next note on it slides from there.
-        voices[v].glide.retarget(basePitchHz, settings.glideSeconds, currentSampleRate);
+        voices[v].glide.retarget(basePitchHz, settings.glideSeconds, currentSampleRate, glideTime(), glideCurve());
         float* outputR =
             (rightWanted && kRightBase + v < numChannels) ? buffer.getWritePointer(kRightBase + v) : nullptr;
         renderPolyVoice(v, buffer.getWritePointer(v), outputR, numSamples, basePitchHz, settings);

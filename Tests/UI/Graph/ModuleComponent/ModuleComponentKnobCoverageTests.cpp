@@ -101,7 +101,7 @@ bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParam
 // Oscillator knobs that deliberately have no CV jack yet. Phase and Rand are read once, when a note starts, so a
 // continuous input would have nothing to modulate; Blend and Width are unison voicing knobs whose jacks are not
 // added yet (the Oscillator's declared inputs are fixed by saved routings, and a new jack is its own change).
-const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand", "Blend", "Width"};
+const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand"};
 
 // Every visible rotary knob's componentID, when it is bound to a Float/Int parameter that ISN'T
 // the shared output Level stage. Choice/Bool knobs (waveform pickers, on/off toggles) are excluded

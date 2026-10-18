@@ -14,9 +14,10 @@ void OscillatorModule::fillUnisonRatios(float* ratios, int unisonCount, float de
 // Blend or Width glides instead of stepping at a block boundary. With a static Blend 1 / Width 0
 // the start equals the end, every step is exactly 0 and every weight exactly 1, which keeps the
 // render bit-identical to a plain unweighted average.
-void OscillatorModule::prepareUnisonMix(int unisonCount, int numSamples) {
-    smoothedBlend.setTargetValue(blendParam->get());
-    smoothedWidth.setTargetValue(widthParam->get());
+// `blend` and `width` are the knob values after their CV.
+void OscillatorModule::prepareUnisonMix(int unisonCount, int numSamples, float blend, float width) {
+    smoothedBlend.setTargetValue(blend);
+    smoothedWidth.setTargetValue(width);
     const float blendStart = smoothedBlend.getCurrentValue();
     const float widthStart = smoothedWidth.getCurrentValue();
     const float blendEnd = numSamples > 0 ? smoothedBlend.skip(numSamples) : blendStart;

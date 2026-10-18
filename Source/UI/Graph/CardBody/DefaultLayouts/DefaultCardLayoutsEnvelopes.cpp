@@ -32,7 +32,7 @@ std::vector<CardItem> stage(const juce::String& time, const juce::String& divisi
 
 // Envelope view open; Time/Tempo switch; A H D S R as faders in one row (each time swaps for its division in
 // Tempo mode); Velocity and the threshold view; footer (Poly joins it by itself, with Show Envelope Graph
-// and Show Scope).
+// and Show Scope). Legato waits in the More row: a footer toggle would wrap the footer and grow the card.
 CardLayout adsrLayout() {
     std::vector<CardItem> stages;
     for (const auto& pair :

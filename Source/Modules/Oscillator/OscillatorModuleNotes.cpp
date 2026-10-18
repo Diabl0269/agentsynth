@@ -4,11 +4,10 @@
 
 #include "Modules/OscillatorModule.h"
 
-// A note-on restarts the voice by default, overlapping or not. This is the one place a legato or
-// mono-retrigger mode decides that an overlapping note-on carries the phase on instead.
+// A note-on restarts the voice, except that in mono with Legato on an overlapping note-on carries the
+// phase on. This is the one place that decision is made.
 bool OscillatorModule::shouldRestartOnNoteOn(bool overlapping) const {
-    juce::ignoreUnused(overlapping);
-    return true;
+    return !(overlapping && legatoParam->get() && !polyParam->get());
 }
 
 // The held-note stack follows every note-on/off even while the module is muted or bypassed, so a
@@ -26,6 +25,7 @@ void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bo
             if (!audible)
                 continue;
             voices[0].lastMidiNote = (float)note;
+            noteJumps = legatoParam->get() && !polyParam->get() && !overlapping;
             if (!shouldRestartOnNoteOn(overlapping))
                 continue;
             voice0RestartPending = true;
@@ -36,6 +36,12 @@ void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bo
                 restartOffsets[(size_t)numRestarts++] = offset;
         } else if (msg.isNoteOff()) {
             heldNotes.release(msg.getNoteNumber());
+            // Mono legato: letting go of the sounding note while others are held returns to the newest one.
+            if (audible && legatoParam->get() && !polyParam->get() && !heldNotes.empty() &&
+                msg.getNoteNumber() == (int)voices[0].lastMidiNote) {
+                voices[0].lastMidiNote = (float)heldNotes.newest();
+                noteJumps = false;
+            }
         } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
             heldNotes.clear();
         }
@@ -64,5 +70,6 @@ void OscillatorModule::resetNoteState() {
 
 void OscillatorModule::clearPendingRestarts() {
     numRestarts = 0;
+    noteJumps = false;
     voice0RestartPending = false;
 }

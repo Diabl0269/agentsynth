@@ -3,7 +3,7 @@
 
 #include "Modules/OscillatorModule.h"
 
-// Modulated Unison/Detune/Pulse Width/Glide, shared by both voice modes. Their CV (ch14-17) aliases
+// Modulated Unison/Detune/Pulse Width/Glide/Blend/Width, shared by both voice modes. Their CV (ch14-17) aliases
 // the Audio R output block (kRightBase = 14) in both voice modes, so the caller MUST read this
 // before it clears/writes those channels -- the same "read before this module overwrites its own
 // input channel" rule ch0's Pitch-CV/Audio-L sharing relies on. Block-level only (first sample).
@@ -25,6 +25,8 @@ OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::
     result.pulseWidthPercent =
         modulateNormalised(*pulseWidthParam, pulseWidthParam->get(), first(kPulseWidthCVChannel));
     result.glideSeconds = 0.001f * modulateNormalised(*glideParam, glideParam->get(), first(kGlideCVChannel));
+    result.blend = modulateNormalised(*blendParam, blendParam->get(), first(kBlendCVChannel));
+    result.width = modulateNormalised(*widthParam, widthParam->get(), first(kWidthCVChannel));
     return result;
 }
 
@@ -54,7 +56,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     const float* cvLevelCh = activeCV(5);
     const float* cvPanCh = activeCV(modCVChannelFor(kJackPan, /*poly*/ false));
 
-    // Unison/Detune/Pulse Width/Glide CV (ch14-17) alias the Audio R output block -- must be read
+    // Unison/Detune/Pulse Width/Glide/Blend/Width CV (ch14-19) alias the Audio R output block -- must be read
     // before the clear below touches those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
 
@@ -74,7 +76,10 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     voices[0].smoothedFreq.setTargetValue(targetFreq);
     // Glide 0 leaves the pitch on the plain 5 ms frequency smoother (today's behaviour); above 0 the
     // voice slides in pitch over the set time instead and hands its pitch back to the smoother.
-    voices[0].glide.retarget(targetFreq, global.glideSeconds, currentSampleRate);
+    // Legato: a note that is not overlapping another jumps to its pitch instead of sliding.
+    voices[0].glide.retarget(targetFreq, noteJumps ? 0.0f : global.glideSeconds, currentSampleRate, glideTime(),
+                             glideCurve());
+    noteJumps = false;
     const bool gliding = global.glideSeconds > 0.0f;
     float lastBaseFreq = targetFreq;
 
@@ -88,7 +93,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     const int levelLen = std::max(1, std::min(numSamples, 4096));
     fillLevelRamp(levelLen);
     fillPulseWidthRamp(levelLen, global.pulseWidthPercent);
-    prepareUnisonMix(unisonCount, numSamples);
+    prepareUnisonMix(unisonCount, numSamples, global.blend, global.width);
 
     // Each unison voice's detune ratio is a block constant: computed once here, not per sample.
     float detuneRatios[MAX_UNISON];
