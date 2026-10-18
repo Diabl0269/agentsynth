@@ -264,6 +264,46 @@ TEST(AutomationLanesPointSelectionTest, TheKeyboardCursorStepsFromPointToPointAn
     EXPECT_EQ(f.beats(), Beats({1.0, 3.0})) << "Delete removes the cursor point";
 }
 
+TEST(AutomationLanesPointSelectionTest, ShiftRightAndLeftExtendTheSelectionOnePointAtATime) {
+    SelectLane f;
+    const auto shift = juce::ModifierKeys::shiftModifier;
+    f.click(f.at(2.0, 60.0));
+    ASSERT_EQ(f.selected(), Beats({2.0}));
+    const auto rev = f.doc.getRevision();
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, shift, 0)));
+    EXPECT_EQ(f.selected(), Beats({2.0, 3.0}));
+    EXPECT_EQ(f.editor->getPointSelection().getCursor(), std::optional<double>(3.0));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, shift, 0))) << "consumed at the last point too";
+    EXPECT_EQ(f.selected(), Beats({2.0, 3.0}));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::leftKey, shift, 0)));
+    EXPECT_EQ(f.selected(), Beats({1.0, 2.0, 3.0})) << "it reaches past the selection's left end";
+    EXPECT_EQ(f.editor->getPointSelection().getCursor(), std::optional<double>(1.0));
+    EXPECT_EQ(f.doc.getRevision(), rev) << "selecting never touches the doc";
+}
+
+TEST(AutomationLanesPointSelectionTest, ShiftRightWithNothingSelectedPicksTheFirstPoint) {
+    SelectLane f;
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.selected(), Beats({1.0}));
+}
+
+TEST(AutomationLanesPointSelectionTest, DuplicateCopiesTheSelectionPastItsLastPointAsOneUndoStep) {
+    SelectLane f;
+    EXPECT_FALSE(f.editor->duplicateSelectedPoints()) << "nothing selected, nothing duplicated";
+    f.editor->getPointSelection().setSelection({2.0, 3.0});
+    const auto rev = f.doc.getRevision();
+
+    ASSERT_TRUE(f.editor->duplicateSelectedPoints());
+    EXPECT_EQ(f.doc.getRevision(), rev + 1);
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 4.0, 5.0}));
+    EXPECT_EQ(f.values(), (std::vector<double>{20.0, 60.0, 40.0, 60.0, 40.0}));
+    EXPECT_EQ(f.selected(), Beats({4.0, 5.0})) << "the copies become the selection";
+
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0})) << "one undo takes both copies back";
+}
+
 TEST(AutomationLanesPointSelectionTest, ArrowKeysFallThroughOnALaneWithNoPoints) {
     SelectLane f;
     f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});

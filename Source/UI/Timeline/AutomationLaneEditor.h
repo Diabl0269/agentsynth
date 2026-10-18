@@ -166,6 +166,8 @@ public:
     bool selectAllPoints();
     bool copySelectedPoints();
     bool cutSelectedPoints();
+    // Copies the selected points one grid step past the last one (one undo step) and selects the copies.
+    bool duplicateSelectedPoints();
     bool canPastePoints() const;
     // Pastes at the transport position (snapped), or at `beat` (snapped); the pasted points become the selection.
     bool pasteAtPlayhead();
@@ -277,6 +279,7 @@ private:
     double gridStepBeats() const;
     bool nudgePoints(double beatDirection, double valueDirection, bool coarse);
     bool stepCursor(int direction);
+    bool extendSelection(int direction);
     bool handleSelectionKey(const juce::KeyPress& key);
     void selectionChanged();
     void syncToDoc();

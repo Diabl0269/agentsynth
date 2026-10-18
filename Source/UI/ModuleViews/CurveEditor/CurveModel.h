@@ -24,6 +24,9 @@ struct CurveNode {
     double maxSegment = std::numeric_limits<double>::infinity();
     float minY = 0.0f;
     float maxY = 1.0f;
+
+    /** False for a fully pinned node (neither axis can move): it is never selected. */
+    bool isMovable() const noexcept { return xMovable || yMovable; }
 };
 
 /** Editing topology for a CurveModel. */

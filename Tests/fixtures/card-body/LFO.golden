@@ -29,7 +29,7 @@ type LFO size 280x391
   child 27 label id="cardSectionHeader" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 28 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 29 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
-  child 30 component id="" at 0,0 0x0 visible=0 title="LFO custom wave" tip="Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points and bend handles, double-click to add or remove a point" focusOrder=0 wantsFocus=1
+  child 30 component id="" at 0,0 0x0 visible=0 title="LFO custom wave" tip="Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them, Delete removes them, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: drag points and bend handles, Shift-click adds a point to the selection, double-click to add or remove a point" focusOrder=0 wantsFocus=1
   child 31 combo id="" at 0,0 0x0 visible=0 title="LFO custom wave grid" tip="Grid: the snap grid of the custom wave editor" focusOrder=0 wantsFocus=1
   child 32 textButton id="" at 0,0 0x0 visible=0 title="Shapes" tip="Shapes" focusOrder=0 wantsFocus=1
   child 33 textButton id="" at 0,0 0x0 visible=0 title="Tools" tip="Tools" focusOrder=0 wantsFocus=1
