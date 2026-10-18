@@ -1,6 +1,7 @@
 // SamplerVoicePoolTests.cpp -- the polyphonic renderer: voices, stealing, layers, pitch, envelope, pedal, tone.
 #include "Modules/Sampler/SamplerVoicePool.h"
 #include "SamplerTestWavs.h"
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -323,4 +324,120 @@ TEST(SamplerVoicePoolTest, StealingAtTheVoiceLimitDoesNotClick) {
     EXPECT_LT(maxStep, ownStep);
     float seam = std::fabs(after.left[0] - before.left.back());
     EXPECT_LT(seam, ownStep);
+}
+
+// ---- Glide and mono ----
+
+namespace {
+
+// A looping sine that sounds at about 441 Hz when played at its root (C3 = 60).
+Instrument::Ptr sineInstrument() {
+    auto sample = makeSample(88200, 1, 44100.0, [](int, int i) { return 0.5f * std::sin(0.0628319f * (float)i); });
+    auto region = makeRegion(sample);
+    region.loop = RegionSpec::Loop::Continuous;
+    return makeInstrument({region});
+}
+
+std::vector<float> slice(const std::vector<float>& x, size_t from, size_t count) {
+    return std::vector<float>(x.begin() + (long)from, x.begin() + (long)(from + count));
+}
+
+// The note struck after a finished one, rendered for `frames`.
+Out strikeAfterAnother(float glideSeconds, int frames) {
+    Rig rig(sineInstrument());
+    auto p = defaults();
+    p.glideSeconds = glideSeconds;
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 512, p);
+    rig.pool.noteOff(60, p);
+    render(rig.pool, 8192, p);
+    rig.pool.noteOn(72, 0.8f, p);
+    return render(rig.pool, frames, p);
+}
+
+} // namespace
+
+TEST(SamplerVoicePoolTest, GlideSlidesTheNewNoteFromThePreviousPitch) {
+    const auto glided = strikeAfterAnother(0.2f, 14000);
+    const auto jumped = strikeAfterAnother(0.0f, 14000);
+    // Without glide the note is an octave up from the start: 20 cycles per 1000 frames.
+    EXPECT_GE(upwardZeroCrossings(slice(jumped.left, 0, 1000)), 19);
+    // With glide it starts at the old pitch (10 cycles), is in between half way and ends an octave up.
+    EXPECT_LE(upwardZeroCrossings(slice(glided.left, 0, 1000)), 12);
+    const int middle = upwardZeroCrossings(slice(glided.left, 4000, 1000));
+    EXPECT_GE(middle, 13);
+    EXPECT_LE(middle, 18);
+    EXPECT_GE(upwardZeroCrossings(slice(glided.left, 12000, 1000)), 19);
+}
+
+TEST(SamplerVoicePoolTest, TheFirstNoteOfAFreshPoolDoesNotGlide) {
+    Rig rig(sineInstrument());
+    auto p = defaults();
+    p.glideSeconds = 0.5f;
+    rig.pool.noteOn(72, 0.8f, p);
+    EXPECT_GE(upwardZeroCrossings(slice(render(rig.pool, 1000, p).left, 0, 1000)), 19);
+}
+
+TEST(SamplerVoicePoolTest, MonoKeepsOneVoiceAndStartsNoNewAttack) {
+    Rig rig(dcInstrument());
+    auto p = defaults();
+    p.mono = true;
+    p.attackSeconds = 0.05f;
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 4096, p);
+    rig.pool.noteOn(64, 0.8f, p);
+    const auto out = render(rig.pool, 1024, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 1);
+    EXPECT_TRUE(rig.pool.soundingNotes().test(64));
+    EXPECT_FALSE(rig.pool.soundingNotes().test(60));
+    EXPECT_NEAR(*std::min_element(out.left.begin(), out.left.end()), 0.5f, 1.0e-3f) << "no dip, no second attack";
+}
+
+TEST(SamplerVoicePoolTest, WithoutMonoASecondHeldNoteAddsAVoice) {
+    Rig rig(dcInstrument());
+    auto p = defaults();
+    rig.pool.noteOn(60, 0.8f, p);
+    rig.pool.noteOn(64, 0.8f, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 2);
+}
+
+TEST(SamplerVoicePoolTest, MonoGoesBackToTheHeldKeyWhenTheNewerOneLifts) {
+    Rig rig(dcInstrument());
+    auto p = defaults();
+    p.mono = true;
+    rig.pool.noteOn(60, 0.8f, p);
+    rig.pool.noteOn(64, 0.8f, p);
+    rig.pool.noteOff(64, p);
+    render(rig.pool, 512, p);
+    EXPECT_TRUE(rig.pool.soundingNotes().test(60));
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 1);
+    rig.pool.noteOff(60, p);
+    render(rig.pool, 8192, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 0);
+}
+
+TEST(SamplerVoicePoolTest, MonoGlidesToTheSecondNoteWithoutRestartingTheSound) {
+    Rig rig(sineInstrument());
+    auto p = defaults();
+    p.mono = true;
+    p.glideSeconds = 0.2f;
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 4096, p);
+    rig.pool.noteOn(72, 0.8f, p);
+    const auto out = render(rig.pool, 14000, p);
+    EXPECT_LE(upwardZeroCrossings(slice(out.left, 0, 1000)), 12);
+    EXPECT_GE(upwardZeroCrossings(slice(out.left, 12000, 1000)), 19);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 1);
+}
+
+TEST(SamplerVoicePoolTest, MonoStrikesAFreshNoteWhenTheKeyIsOutsideTheSoundingRecording) {
+    Rig rig(makeInstrument({makeRegion(dcSample(0.3f), 0, 71), makeRegion(dcSample(0.6f), 72, 127)}));
+    auto p = defaults();
+    p.mono = true;
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 2048, p);
+    rig.pool.noteOn(80, 0.8f, p);
+    const auto out = render(rig.pool, 8192, p);
+    EXPECT_NEAR(out.left.back(), 0.6f, 1.0e-3f) << "the old recording faded out, the new one plays alone";
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 1);
 }

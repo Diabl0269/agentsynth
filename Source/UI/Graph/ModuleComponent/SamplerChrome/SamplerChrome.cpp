@@ -12,6 +12,8 @@ constexpr int kCaptionHeight = 16;
 constexpr int kStripGap = 2;
 constexpr int kSectionGap = 8;
 constexpr float kCaptionFontSize = 11.0f;
+constexpr int kEditMapWidth = 72;
+constexpr int kEditMapGap = 6;
 
 using synth::cardbody::kRowHeight;
 using synth::cardbody::kWaveformHeight;
@@ -32,10 +34,15 @@ SamplerChrome::SamplerChrome(Host host, SamplerModule& sampler)
     caption_.setFont(juce::Font(juce::FontOptions(kCaptionFontSize)));
     caption_.setMinimumHorizontalScale(0.7f);
     picker_.onClick = [this] { openPicker(); };
+    editMapButton_.setTitle("Edit map");
+    editMapButton_.setTooltip("Edit map: see every recording on the keys and velocity layers, and change them");
+    editMapButton_.onClick = [this] { openMap(); };
+    strip_.onDoubleClick = [this] { openMap(); };
 
     for (juce::Component* part :
          {(juce::Component*)&waveform_, (juce::Component*)&loadButton_, (juce::Component*)&nameLabel_,
-          (juce::Component*)&picker_, (juce::Component*)&caption_, (juce::Component*)&strip_})
+          (juce::Component*)&picker_, (juce::Component*)&editMapButton_, (juce::Component*)&caption_,
+          (juce::Component*)&strip_})
         card.addChildComponent(*part);
 
     if (auto* mode = findParameterByID(&sampler_, "playMode"))
@@ -47,8 +54,10 @@ SamplerChrome::SamplerChrome(Host host, SamplerModule& sampler)
 
 SamplerChrome::~SamplerChrome() {
     modeAttachment_.reset();
+    closeMap();
     for (auto* part : {(juce::Component*)&waveform_, (juce::Component*)&loadButton_, (juce::Component*)&nameLabel_,
-                       (juce::Component*)&picker_, (juce::Component*)&caption_, (juce::Component*)&strip_})
+                       (juce::Component*)&picker_, (juce::Component*)&editMapButton_, (juce::Component*)&caption_,
+                       (juce::Component*)&strip_})
         if (auto* parent = part->getParentComponent())
             parent->removeChildComponent(part);
 }
@@ -85,7 +94,8 @@ int SamplerChrome::layout(int y, int contentX, int contentW, int narrowX, int na
     loadButton_.setBounds(narrowX, loadY, buttonWidth, kRowHeight);
     nameLabel_.setBounds(narrowX + buttonWidth + 6, loadY, narrowW - buttonWidth - 6, kRowHeight);
 
-    picker_.setBounds(contentX, y, contentW, kRowHeight);
+    editMapButton_.setBounds(contentX + contentW - kEditMapWidth, y, kEditMapWidth, kRowHeight);
+    picker_.setBounds(contentX, y, contentW - kEditMapWidth - kEditMapGap, kRowHeight);
     const int captionY = y + kRowHeight + kCaptionGap;
     caption_.setBounds(contentX, captionY, contentW, kCaptionHeight);
     const int stripY = captionY + kCaptionHeight + kStripGap;
@@ -100,6 +110,8 @@ void SamplerChrome::poll() {
     }
     if (strip_.isVisible())
         strip_.poll();
+    if (mapView_ != nullptr)
+        mapView_->poll();
 }
 
 void SamplerChrome::refreshLoaded() {

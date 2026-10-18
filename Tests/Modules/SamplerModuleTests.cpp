@@ -126,9 +126,9 @@ TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
     // bypassed, dualIO, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level,
-    // end, fine, reverse, muted, attack, release, tone, feel, voices, releaseSound  (dualIO only changes the
-    // jack layout — the module always emits a real stereo pair)
-    EXPECT_EQ(module->getParameters().size(), 21);
+    // end, fine, reverse, muted, attack, release, tone, feel, voices, releaseSound, glide, mono  (dualIO only changes
+    // the jack layout — the module always emits a real stereo pair)
+    EXPECT_EQ(module->getParameters().size(), 23);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getTotalNumOutputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getVisibleInputPortCount(), SamplerModule::kNumChannels);
@@ -146,7 +146,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 14u); // Root Note, End and Fine CV are the 7th-9th; Instrument knobs the 10th-14th
+    EXPECT_EQ(targets.size(), 15u); // Root Note, End and Fine CV are the 7th-9th; Instrument knobs the 10th-15th
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 

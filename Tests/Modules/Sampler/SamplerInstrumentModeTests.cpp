@@ -122,11 +122,11 @@ TEST(SamplerInstrumentMode, TheModeIsAppendedAndTheNewParametersComeLast) {
     for (auto* p : module.getParameters())
         if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
             ids.add(withId->paramID);
-    ASSERT_GE(ids.size(), 6);
-    juce::StringArray lastSix;
-    for (int i = ids.size() - 6; i < ids.size(); ++i)
-        lastSix.add(ids[i]);
-    EXPECT_EQ(lastSix.joinIntoString(","), "attack,release,tone,feel,voices,releaseSound");
+    ASSERT_GE(ids.size(), 8);
+    juce::StringArray lastEight;
+    for (int i = ids.size() - 8; i < ids.size(); ++i)
+        lastEight.add(ids[i]);
+    EXPECT_EQ(lastEight.joinIntoString(","), "attack,release,tone,feel,voices,releaseSound,glide,mono");
     EXPECT_LT(ids.indexOf("reverse"), ids.indexOf("muted"));
     EXPECT_NEAR(actual(module, "attack"), 0.002f, 1.0e-5f);
     EXPECT_NEAR(actual(module, "release"), 0.6f, 1.0e-4f);
@@ -134,6 +134,8 @@ TEST(SamplerInstrumentMode, TheModeIsAppendedAndTheNewParametersComeLast) {
     EXPECT_NEAR(actual(module, "feel"), 0.7f, 1.0e-5f);
     EXPECT_FLOAT_EQ(actual(module, "voices"), 16.0f);
     EXPECT_FLOAT_EQ(actual(module, "releaseSound"), 1.0f);
+    EXPECT_FLOAT_EQ(actual(module, "glide"), 0.0f);
+    EXPECT_FLOAT_EQ(actual(module, "mono"), 0.0f);
 }
 
 TEST(SamplerInstrumentMode, ALoadSelectsInstrumentModeAndNeverMakesASound) {
@@ -590,12 +592,11 @@ TEST(SamplerInstrumentMode, ApplyingAGranularPatchStillSelectsGranular) {
 
 TEST(SamplerInstrumentMode, TheInstrumentCvInputsAreAppendedAfterFineAndReachTheirKnobs) {
     SamplerModule module;
-    EXPECT_EQ(SamplerModule::kNumChannels, 15);
-    const std::vector<std::pair<juce::String, int>> expected = {{"attack", SamplerModule::kAttackCVCh},
-                                                                {"release", SamplerModule::kReleaseCVCh},
-                                                                {"tone", SamplerModule::kToneCVCh},
-                                                                {"feel", SamplerModule::kFeelCVCh},
-                                                                {"voices", SamplerModule::kVoicesCVCh}};
+    EXPECT_EQ(SamplerModule::kNumChannels, 16);
+    const std::vector<std::pair<juce::String, int>> expected = {
+        {"attack", SamplerModule::kAttackCVCh}, {"release", SamplerModule::kReleaseCVCh},
+        {"tone", SamplerModule::kToneCVCh},     {"feel", SamplerModule::kFeelCVCh},
+        {"voices", SamplerModule::kVoicesCVCh}, {"glide", SamplerModule::kGlideCVCh}};
     EXPECT_EQ(SamplerModule::kAttackCVCh, SamplerModule::kFineCVCh + 1);
     const auto targets = module.getModulationTargets();
     for (const auto& [paramId, channel] : expected) {

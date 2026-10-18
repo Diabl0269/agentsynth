@@ -14,6 +14,7 @@ inline constexpr const char* kInstrumentSfz = "instrumentSfz";
 inline constexpr const char* kInstrumentPack = "instrumentPack";
 inline constexpr const char* kInstrumentFiles = "instrumentFiles";
 inline constexpr const char* kInstrumentRegions = "instrumentRegions";
+inline constexpr const char* kInstrumentName = "instrumentName";
 
 inline constexpr const char* kWavetableType = "Wavetable";
 inline constexpr const char* kWavetableFile = "wavetableFile";

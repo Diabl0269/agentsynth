@@ -71,15 +71,24 @@ size_t Instrument::memoryBytes() const {
 }
 
 Instrument::Ptr buildInstrument(const juce::String& name, const std::vector<RegionSpec>& specs,
-                                juce::StringArray& errors, size_t memoryBudgetBytes) {
+                                juce::StringArray& errors, size_t memoryBudgetBytes, const Instrument* reuse) {
     std::map<juce::String, SampleData::Ptr> decoded;
     size_t total = 0;
+    const auto reusable = [reuse](const juce::String& path) -> SampleData::Ptr {
+        if (reuse != nullptr)
+            for (const auto& r : reuse->regions)
+                if (r.samplePath == path)
+                    return r.sample;
+        return nullptr;
+    };
     Instrument::Ptr inst = new Instrument();
     inst->name = name;
     for (const auto& spec : specs) {
         auto it = decoded.find(spec.samplePath);
         if (it == decoded.end()) {
-            SampleData::Ptr sample = decodeSampleFile(juce::File(spec.samplePath), kMaxSecondsPerSample);
+            SampleData::Ptr sample = reusable(spec.samplePath);
+            if (sample == nullptr)
+                sample = decodeSampleFile(juce::File(spec.samplePath), kMaxSecondsPerSample);
             if (sample == nullptr)
                 errors.add("Could not read " + spec.samplePath);
             else

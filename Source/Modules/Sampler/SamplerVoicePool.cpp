@@ -16,6 +16,9 @@ constexpr double kQuietWindowSeconds = 0.5;
 constexpr float kFilterBypassHz = 18000.0f;
 constexpr float kMinCutoffHz = 200.0f;
 constexpr float kMaxCutoffHz = 20000.0f;
+constexpr int kGlideChunkFrames = 32; // the pitch of a gliding voice is recomputed this often
+
+bool isHeldKeyVoice(const auto& v) { return v.active && v.keyDown && !v.releaseVoice && v.held; }
 
 float dbToGain(float db) { return std::pow(10.0f, db / 20.0f); }
 
@@ -54,6 +57,8 @@ void VoicePool::stopAll() {
         v = Voice{};
     noteDown_.reset();
     pedalDown_ = false;
+    monoCount_ = 0;
+    lastNote_ = -1;
 }
 
 int VoicePool::activeVoiceCount() const {
@@ -106,6 +111,11 @@ void VoicePool::startVoices(int note, float velocity01, int velocity127, bool re
         v->releaseVoice = releaseTrigger;
         v->keyDown = !releaseTrigger;
         v->semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0;
+        if (!releaseTrigger && p.glideSeconds > 0.0f && lastNote_ >= 0 && lastNote_ != note) {
+            v->glideFrames = std::max(1, (int)(p.glideSeconds * sampleRate_));
+            v->glideOffset = (double)(lastNote_ - note);
+            v->glideStep = v->glideOffset / (double)v->glideFrames;
+        }
         v->rateRatio = region.sample->sourceSampleRate / sampleRate_;
         v->velocity01 = velocity01;
         const float feel = juce::jlimit(0.0f, 1.0f, p.feel);
@@ -120,14 +130,93 @@ void VoicePool::noteOn(int note, float velocity01, const VoiceParams& p) {
     if (instrument_ == nullptr || note < 0 || note > 127)
         return;
     lastReleaseSeconds_ = p.releaseSeconds;
-    for (auto& v : voices_)
-        if (v.active && v.note == note && v.held && !v.releaseVoice)
-            beginRelease(v, kRetriggerReleaseSeconds);
     const float vel = juce::jlimit(0.0f, 1.0f, velocity01);
     const int velocity127 = juce::jlimit(1, 127, (int)std::lround(vel * 127.0f));
     noteDown_.set((size_t)note);
     pressedVelocity_[(size_t)note] = velocity127;
+    if (p.mono) {
+        pushMonoKey(note);
+        if (retargetHeldVoices(note, p)) {
+            lastNote_ = note;
+            return;
+        }
+        for (auto& v : voices_)
+            if (isHeldKeyVoice(v)) {
+                v.keyDown = false;
+                beginRelease(v, kRetriggerReleaseSeconds);
+            }
+    } else {
+        monoCount_ = 0;
+    }
+    for (auto& v : voices_)
+        if (v.active && v.note == note && v.held && !v.releaseVoice)
+            beginRelease(v, kRetriggerReleaseSeconds);
     startVoices(note, (float)velocity127 / 127.0f, velocity127, false, p);
+    lastNote_ = note;
+}
+
+void VoicePool::pushMonoKey(int note) {
+    removeMonoKey(note);
+    if (monoCount_ == kMonoStack) {
+        std::copy(monoStack_.begin() + 1, monoStack_.end(), monoStack_.begin());
+        --monoCount_;
+    }
+    monoStack_[(size_t)monoCount_++] = note;
+}
+
+void VoicePool::removeMonoKey(int note) {
+    const auto end = monoStack_.begin() + monoCount_;
+    monoCount_ = (int)(std::remove(monoStack_.begin(), end, note) - monoStack_.begin());
+}
+
+// Every held voice slides to `note` without a new attack, unless `note` lies outside the keys of one of their
+// recordings (then a fresh note is struck instead, so a leap never stretches a sample across the keyboard).
+bool VoicePool::retargetHeldVoices(int note, const VoiceParams& p) {
+    bool any = false;
+    for (const auto& v : voices_) {
+        if (!isHeldKeyVoice(v))
+            continue;
+        const Region& region = instrument_->regions[(size_t)v.regionIndex];
+        if (note < region.loKey || note > region.hiKey)
+            return false;
+        any = true;
+    }
+    if (!any)
+        return false;
+    for (auto& v : voices_)
+        if (isHeldKeyVoice(v))
+            retarget(v, note, p);
+    return true;
+}
+
+void VoicePool::retarget(Voice& v, int note, const VoiceParams& p) {
+    const Region& region = instrument_->regions[(size_t)v.regionIndex];
+    const double soundingSemis = v.semis + v.glideOffset;
+    v.note = note;
+    v.semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0;
+    v.glideFrames = 0;
+    v.glideOffset = 0.0;
+    if (p.glideSeconds > 0.0f) {
+        v.glideFrames = std::max(1, (int)(p.glideSeconds * sampleRate_));
+        v.glideOffset = soundingSemis - v.semis;
+        v.glideStep = v.glideOffset / (double)v.glideFrames;
+    }
+}
+
+// Mono: letting go of the sounding key while an older one is still down returns to that older key.
+bool VoicePool::returnToHeldKey(int note, const VoiceParams& p) {
+    removeMonoKey(note);
+    if (monoCount_ == 0)
+        return false;
+    const int back = monoStack_[(size_t)monoCount_ - 1];
+    for (const auto& v : voices_)
+        if (isHeldKeyVoice(v) && v.note == back)
+            return true; // the sounding key is still down: nothing changes
+    if (!retargetHeldVoices(back, p)) {
+        monoCount_ = 0;
+        return false;
+    }
+    return true;
 }
 
 float VoicePool::releaseSecondsFor(const Voice& v, const VoiceParams& p) const {
@@ -158,6 +247,8 @@ void VoicePool::noteOff(int note, const VoiceParams& p) {
     lastReleaseSeconds_ = p.releaseSeconds;
     const bool wasDown = noteDown_.test((size_t)note);
     noteDown_.reset((size_t)note);
+    if (p.mono && wasDown && returnToHeldKey(note, p))
+        return;
     for (auto& v : voices_) {
         if (!v.active || v.note != note || !v.keyDown)
             continue;
@@ -191,12 +282,25 @@ void VoicePool::allNotesOff() {
     p.releaseSeconds = lastReleaseSeconds_;
     noteDown_.reset();
     pedalDown_ = false;
+    monoCount_ = 0;
     for (auto& v : voices_) {
         if (!v.active)
             continue;
         v.keyDown = v.pedalHeld = false;
         releaseKey(v, p);
     }
+}
+
+void VoicePool::stepGlide(Voice& v, int frames) const {
+    if (v.glideFrames <= 0 || frames <= 0)
+        return;
+    if (frames >= v.glideFrames) {
+        v.glideFrames = 0;
+        v.glideOffset = 0.0;
+        return;
+    }
+    v.glideOffset -= v.glideStep * (double)frames;
+    v.glideFrames -= frames;
 }
 
 // Renders one voice's frames; false when the voice has ended.
@@ -207,7 +311,11 @@ bool VoicePool::renderVoice(Voice& v, const BlockContext& ctx, float* left, floa
     const float* srcL = audio.getReadPointer(0);
     const float* srcR = audio.getNumChannels() > 1 ? audio.getReadPointer(1) : srcL;
 
-    const double inc = std::exp2((v.semis + ctx.pitchSemis) / 12.0) * v.rateRatio;
+    const auto incrementNow = [&] {
+        return std::exp2((v.semis + v.glideOffset + ctx.pitchSemis) / 12.0) * v.rateRatio;
+    };
+    double inc = incrementNow();
+    int glided = 0;
     float cutoff = kMinCutoffHz * std::pow(kMaxCutoffHz / kMinCutoffHz, ctx.tone);
     cutoff *= std::exp2(ctx.feel * (v.velocity01 - 0.5f) * 2.0f);
     const bool filtered = cutoff < kFilterBypassHz;
@@ -224,6 +332,11 @@ bool VoicePool::renderVoice(Voice& v, const BlockContext& ctx, float* left, floa
     const double fadeSpan = (double)kEndFadeFrames * inc;
 
     for (int i = start; i < end; ++i) {
+        if (v.glideFrames > 0 && i > start && (i - start) % kGlideChunkFrames == 0) {
+            stepGlide(v, kGlideChunkFrames);
+            glided += kGlideChunkFrames;
+            inc = incrementNow();
+        }
         if (v.stage == Stage::Attack) {
             v.env += v.attackStep;
             if (v.env >= 1.0f) {
@@ -261,6 +374,7 @@ bool VoicePool::renderVoice(Voice& v, const BlockContext& ctx, float* left, floa
             return false;
         v.position += inc;
     }
+    stepGlide(v, end - start - glided);
     return true;
 }
 

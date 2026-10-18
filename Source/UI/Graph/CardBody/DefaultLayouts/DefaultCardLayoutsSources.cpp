@@ -16,8 +16,8 @@ using namespace cardlayout;
 
 constexpr int kRevision = 1;
 
-// The Sampler layout changed (Instrument mode): a user layout based on revision 1 is stale.
-constexpr int kSamplerRevision = 2;
+// The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
+constexpr int kSamplerRevision = 3;
 
 // A row of four knobs (Oscillator Pitch, LFO shaping) on one line.
 constexpr int kQuadColumns = 4;
@@ -57,7 +57,7 @@ CardLayout noiseLayout() {
 // The Sampler's three modes share one card. The waveform (or the Instrument picker and key strip) and the load row
 // are chrome drawn above the body. Each mode's controls fill the same cells, so a mode switch never resizes the card:
 // Start and End swap for Attack and Release, the Grains section for the Sound section, and Loop and Reverse for
-// Release Sound. Root Note stays in its cell and leaves it empty in Instrument mode. The grain controls stay on the
+// Release Sound and Mono. Root Note's cell holds Glide in Instrument mode. The grain controls stay on the
 // card in Sample mode (their CV jacks are bound to them) and dim until the mode is Granular.
 CardLayout samplerLayout() {
     const juce::StringArray sampled{"Sample", "Granular"};
@@ -78,11 +78,12 @@ CardLayout samplerLayout() {
                  showWhen(param("end"), "playMode", sampled), showWhen(param("release"), "playMode", instrument),
                  param("level")}),
         section("pitch", juce::String("Pitch"),
-                {param("pitch"), showWhen(param("rootNote"), "playMode", sampled), param("fine")}),
+                {param("pitch"), showWhen(param("rootNote"), "playMode", sampled),
+                 showWhen(param("glide"), "playMode", instrument), param("fine")}),
         grains,
         sound,
-        footer({showWhen(param("loop"), "playMode", sampled), showWhen(param("reverse"), "playMode", sampled),
-                showWhen(param("releaseSound"), "playMode", instrument)}),
+        footer({showWhen(param("loop"), "playMode", sampled), showWhen(param("releaseSound"), "playMode", instrument),
+                showWhen(param("reverse"), "playMode", sampled), showWhen(param("mono"), "playMode", instrument)}),
     };
     return layout;
 }

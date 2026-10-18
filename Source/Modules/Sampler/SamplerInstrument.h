@@ -39,10 +39,12 @@ inline constexpr size_t kDefaultMemoryBudget = 512u * 1024u * 1024u;
 inline constexpr int kMaxHitsPerNote = 4;
 inline constexpr int kVelocityCrossfade = 8;
 
-/** Decodes every distinct sample once (60 s cap each). Undecodable regions are dropped with a line in `errors`;
-    null when nothing survives or the audio exceeds `memoryBudgetBytes`. Message thread. */
+/** Decodes every distinct sample once (60 s cap each), except those `reuse` already holds under the same path.
+    Undecodable regions are dropped with a line in `errors`; null when nothing survives or the audio exceeds
+    `memoryBudgetBytes`. Message thread. */
 Instrument::Ptr buildInstrument(const juce::String& name, const std::vector<RegionSpec>& specs,
-                                juce::StringArray& errors, size_t memoryBudgetBytes = kDefaultMemoryBudget);
+                                juce::StringArray& errors, size_t memoryBudgetBytes = kDefaultMemoryBudget,
+                                const Instrument* reuse = nullptr);
 
 struct RegionHit {
     int regionIndex = 0;

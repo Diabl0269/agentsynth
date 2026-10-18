@@ -15,6 +15,9 @@ target_sources(Core PRIVATE
     Source/Modules/Sampler/SamplerInstrumentPlayer.h
     Source/Modules/Sampler/SamplerInstrumentSlot.cpp
     Source/Modules/Sampler/SamplerInstrumentSlot.h
+    Source/Modules/Sampler/SamplerRegionEdit.cpp
+    Source/Modules/Sampler/SamplerRegionEdit.h
+    Source/Modules/Sampler/SamplerModuleInstrument.cpp
     Source/Modules/Sampler/SoundPackLibrary.cpp
     Source/Modules/Sampler/SoundPackLibrary.h
 )
