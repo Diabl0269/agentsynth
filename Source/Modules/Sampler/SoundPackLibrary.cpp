@@ -20,14 +20,6 @@ juce::File bundledRoot() {
 #endif
 }
 
-juce::File userRoot() {
-    auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
-#if JUCE_MAC
-    base = base.getChildFile("Application Support"); // where the settings file lives (UserSettings.h)
-#endif
-    return base.getChildFile(branding::kSettingsFolderName).getChildFile("SoundPacks");
-}
-
 // A pack-relative path that stays inside the pack folder, or an invalid File.
 juce::File resolveInsidePack(const juce::File& packDir, const juce::String& relative) {
     if (relative.isEmpty() || juce::File::isAbsolutePath(relative))
@@ -84,6 +76,14 @@ bool readPack(const juce::File& packDir, std::set<juce::String>& seenIds, std::v
 }
 
 } // namespace
+
+juce::File SoundPackLibrary::userRoot() {
+    auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+#if JUCE_MAC
+    base = base.getChildFile("Application Support"); // where the settings file lives (UserSettings.h)
+#endif
+    return base.getChildFile(branding::kSettingsFolderName).getChildFile("SoundPacks");
+}
 
 std::vector<juce::File> SoundPackLibrary::roots() {
     if (rootsOverride().has_value())

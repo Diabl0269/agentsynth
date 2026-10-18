@@ -1,6 +1,7 @@
 #include "Auth/KeychainTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
+#include "SoundPacks/SoundPackFetch.h"
 #include "UserSettings.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -54,6 +55,9 @@ int main(int argc, char** argv) {
         settingsDirOverride = ownedSettingsDir.getFullPathName();
     }
     synth::setSettingsDirOverrideForTests(settingsDirOverride);
+
+    // No test may reach the real sound pack host: the default fetcher answers "offline" (tests inject their own).
+    synth::soundpacks::setHttpBlockedForTesting(true);
 
     // Every MainComponent's MidiLearnController gets a temp ControllerProfileStore instead
     // of the developer's real folder -- set once so ~50 MainComponent*Tests.cpp files don't have

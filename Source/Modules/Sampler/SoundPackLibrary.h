@@ -24,6 +24,9 @@ public:
     /** The folders searched, in order: the app's bundled SoundPacks, then the user's. */
     static std::vector<juce::File> roots();
 
+    /** The user's folder: where downloaded packs are installed. */
+    static juce::File userRoot();
+
     /** Test-only: searches `roots` instead; nullopt restores the normal roots. Set before any lookup runs. */
     static void setRootsForTests(std::optional<std::vector<juce::File>> roots);
 
