@@ -102,6 +102,9 @@ std::optional<synth::InstrumentTrackBuildResult> MainComponentTimelineOpsHost::a
     auto staged = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(instrument));
     // A Sampler has no poly mode, so the track is built mono; the rest of the body is the stand-in's (its envelope
     // stage and params included), which is also what the swap after a download leaves behind.
-    return owner_.buildInstrumentTrackBody(staged, name, isSampler ? false : poly, inserts, envelopeParams,
-                                           isSampler ? instrumentType : juce::String());
+    auto result = owner_.buildInstrumentTrackBody(staged, name, isSampler ? false : poly, inserts, envelopeParams,
+                                                  isSampler ? instrumentType : juce::String());
+    if (result.has_value())
+        result->substitutedSampler = isSampler;
+    return result;
 }

@@ -39,6 +39,7 @@ struct InstrumentTrackBuildResult {
     juce::String instrumentUuid;
     std::vector<juce::String> insertUuids; // one per insert, in op order
     juce::String envelopeUuid;             // the track's own ADSR; empty for a Sampler (it has none)
+    bool substitutedSampler = false;       // a pack Sampler was built in place of the planned stand-in
 };
 
 /** What the app supplies so a batch can build graph-side tracks. */

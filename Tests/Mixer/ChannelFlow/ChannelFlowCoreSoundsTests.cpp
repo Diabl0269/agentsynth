@@ -369,3 +369,77 @@ TEST_F(ChannelFlowTest, TheSoundsTrimIsAppliedWhenTheTrackIsBuiltAndWhenTheStand
     EXPECT_EQ(firstRegionVolumeDb(*plain), 0.0f);
     EXPECT_FALSE(plain->getExtraState().getProperty("instrumentGainDb", {}).isDouble());
 }
+
+namespace {
+
+// The recorded song's plan with the entries of `modulationsJson` (a list inside a list) added to its modulations.
+juce::var planWithModulations(const juce::String& modulationsJson) {
+    auto plan = recordedPlan();
+    juce::Array<juce::var> all = *plan.getProperty("modulations", {}).getArray();
+    const auto added = juce::JSON::parse(modulationsJson)[0];
+    for (const auto& entry : *added.getArray())
+        all.add(entry);
+    plan.getDynamicObject()->setProperty("modulations", juce::var(all));
+    return plan;
+}
+
+const char* kStandInOnlyAndShared =
+    R"([[{"source": 110, "dest": 100, "amount": 0.3, "destParam": "detune"},
+        {"source": 110, "dest": 100, "amount": 0.2, "destParam": "level"}]])";
+
+int attenuverterCount(juce::AudioProcessorGraph& graph) { return countNamed(graph, "Attenuverter"); }
+
+} // namespace
+
+// Regression test for the recorded-strings songs: the plan modulated the Wavetable stand-in's "detune", which the
+// Sampler the app builds in its place does not have, and validatePatch refused the whole patch.
+TEST_F(ChannelFlowTest, AModulationOnAStandInOnlyParamIsDroppedWhenThePackBuildsASampler) {
+    SoundsRig rig(true);
+    const auto plan = planWithModulations(kStandInOnlyAndShared);
+    const int before = attenuverterCount(rig.graph());
+    const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+    ASSERT_NE(firstOf<SamplerModule>(rig.graph(), "Sampler"), nullptr);
+    int dropped = 0;
+    for (const auto& note : applied.notes)
+        dropped += note.contains("detune") ? 1 : 0;
+    EXPECT_EQ(dropped, 1) << "the detune modulation is dropped with a note";
+    EXPECT_EQ(applied.notes.size(), 1) << "and nothing else is";
+    EXPECT_EQ(attenuverterCount(rig.graph()) - before, 2) << "the filter's LFO and the level modulation stay";
+}
+
+TEST_F(ChannelFlowTest, ThePreviewBuildsTheSamplerTooAndDropsTheSameModulation) {
+    SoundsRig rig(true);
+    const auto preview = rig.mc.getAiServiceForTest().previewProjectEdit(planWithModulations(kStandInOnlyAndShared));
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_EQ(preview.notes.size(), 1);
+}
+
+TEST_F(ChannelFlowTest, WithoutThePackTheStandInKeepsItsDetuneModulation) {
+    SoundsRig rig(false);
+    const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(planWithModulations(kStandInOnlyAndShared));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    EXPECT_EQ(applied.notes.size(), 0);
+}
+
+TEST_F(ChannelFlowTest, ABadDestParamOnAnyOtherNodeIsStillRefusedWithThePackInstalled) {
+    SoundsRig rig(true);
+    // Node 103 is the strings' Reverb, a normal insert, not the substituted instrument.
+    const auto plan = planWithModulations(R"([[{"source": 110, "dest": 103, "amount": 0.3, "destParam": "nope"}]])");
+    EXPECT_FALSE(rig.mc.getAiServiceForTest().previewProjectEdit(plan).ok);
+    const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(plan);
+    EXPECT_FALSE(applied.ok);
+    EXPECT_TRUE(applied.message.contains("nope")) << applied.message;
+    // An id no node has stays refused too.
+    const auto unknown =
+        planWithModulations(R"([[{"source": 110, "dest": 999, "amount": 0.3, "destParam": "level"}]])");
+    EXPECT_FALSE(rig.mc.getAiServiceForTest().applyProjectEdit(unknown).ok);
+}
+
+TEST_F(ChannelFlowTest, ABadDestParamOnTheStandInIsStillRefusedWhenThePackIsMissing) {
+    SoundsRig rig(false);
+    const auto plan = planWithModulations(R"([[{"source": 110, "dest": 100, "amount": 0.3, "destParam": "nope"}]])");
+    const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(plan);
+    EXPECT_FALSE(applied.ok);
+    EXPECT_TRUE(applied.message.contains("nope")) << applied.message;
+}

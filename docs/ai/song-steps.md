@@ -81,5 +81,7 @@ What a track gets depends on the pack (`MainComponentTimelineOpsHostSounds.cpp`)
   kit, which it plays as synth drums until the pack exists). The swap after the download is in
   [sound pack downloads](../modules/sound-pack-downloads.md#song-builds-and-the-core-instruments).
 
+A patch written for the stand-in can name a part the Sampler does not have (a Wavetable's `detune`, `pan`, `position`). `runPlan` (`AIIntegrationServiceProjectEditRun.cpp`) drops each such modulation, with a plan note, before `validatePatch` sees the patch: only a modulation onto a node the app built as a pack Sampler (`InstrumentTrackBuildResult::substitutedSampler`) and whose `destParam` or `destPort` that Sampler has no jack for. `level`, `pitch`, `attack` and the rest stay, every other node is still validated as sent, and `validatePatch` itself is unchanged. The preview's `StandInHost` builds the same Sampler, so a preview never passes what the apply would refuse.
+
 The song path with Ollama never uses any of this. The plan card offers the download first when a plan names sounds and
 the pack is missing.

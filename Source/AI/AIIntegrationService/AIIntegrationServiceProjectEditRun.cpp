@@ -8,6 +8,8 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "Modules/ModuleBase.h"
+#include "SoundPacks/CoreSounds.h"
 #include "Timeline/TimelineOps.h"
 #include "Timeline/TimelineOpsLaneRepair.h"
 
@@ -17,16 +19,23 @@
 
 namespace synth::projectedit {
 
+namespace {
+// A clamp or a repair is the app mending something, not the model's mistake.
+bool isBadDetail(const PlanNote& note) {
+    return note.kind != PlanNote::Kind::Clamped && note.kind != PlanNote::Kind::Repaired;
+}
+} // namespace
+
 bool exceedsBadDetailLimit(const std::vector<PlanNote>& notes) {
     int bad = 0;
     for (const auto& note : notes)
-        bad += note.kind == PlanNote::Kind::Clamped ? 0 : 1;
+        bad += isBadDetail(note) ? 1 : 0;
     return bad > kMaxBadDetails;
 }
 
 juce::String firstBadDetailError(const std::vector<PlanNote>& notes) {
     for (const auto& note : notes)
-        if (note.kind != PlanNote::Kind::Clamped)
+        if (isBadDetail(note))
             return note.error;
     return {};
 }
@@ -401,6 +410,83 @@ juce::String bindReservations(const Plan& plan, const RecordingHost& recorder, j
     return {};
 }
 
+// True when `module` has a modulation jack on channel `port`.
+bool hasModulationChannel(const ModuleBase& module, int port) {
+    for (const auto& target : module.getModulationTargets())
+        if (target.channelIndex == port)
+            return true;
+    return false;
+}
+
+// True when the modulation entry names a destination the real node cannot take: a "destParam" that resolves to no
+// jack, or - with no "destParam" - a "destPort" no jack sits on. An entry validatePatch is to judge (a malformed
+// one, or one whose param and port disagree) is not touched.
+bool modulationMissesNode(const juce::DynamicObject& modulation, const ModuleBase& module) {
+    if (modulation.hasProperty("destParam")) {
+        const auto param = modulation.getProperty("destParam");
+        return param.isString() && param.toString().isNotEmpty() && module.modulationChannelForParam(param) < 0;
+    }
+    return modulation.hasProperty("destPort") && (int)modulation.getProperty("destPort") >= 0 &&
+           !hasModulationChannel(module, (int)modulation.getProperty("destPort"));
+}
+
+// The nodes a build made as a pack Sampler in place of the stand-in the plan named, keyed by the plan's id.
+std::map<juce::uint32, juce::AudioProcessorGraph::NodeID>
+substitutedSamplers(const Plan& plan, const RecordingHost& recorder, const PatchIdScope& scope) {
+    std::map<juce::uint32, juce::AudioProcessorGraph::NodeID> found;
+    for (const auto& reservation : plan.reservations) {
+        if (reservation.insertIndex != Reservation::kInstrument ||
+            reservation.buildIndex >= (int)recorder.results.size())
+            continue;
+        if (!recorder.results[(size_t)reservation.buildIndex].substitutedSampler)
+            continue;
+        if (auto bound = scope.boundIds.find(reservation.id); bound != scope.boundIds.end())
+            found[reservation.id] = bound->second;
+    }
+    return found;
+}
+
+// The model wrote the patch for the stand-in synth (say a Wavetable's detune), but the app built the recorded
+// instrument as a Sampler, which has no such jack. validatePatch would refuse the whole patch for it, so a
+// modulation onto such a Sampler that the Sampler cannot take is dropped here, before validation, with a note.
+// Every other modulation, and every modulation onto any other node, is left for validatePatch exactly as sent.
+// Returns the patch to run: `root` itself when nothing was dropped, else a copy without those entries.
+juce::var dropStandInModulations(const juce::var& root, const Plan& plan, const RecordingHost& recorder,
+                                 const PatchIdScope& scope, juce::AudioProcessorGraph& graph,
+                                 std::vector<PlanNote>& notes) {
+    const auto samplers = substitutedSamplers(plan, recorder, scope);
+    const juce::var modulations = root.getProperty("modulations", {});
+    const auto* list = modulations.getArray();
+    if (samplers.empty() || list == nullptr)
+        return root;
+    juce::Array<juce::var> kept;
+    for (const auto& entry : *list) {
+        auto* modulation = entry.getDynamicObject();
+        juce::uint32 dest = 0;
+        auto sampler = samplers.end();
+        if (modulation != nullptr && readPlanId(modulation->getProperty("dest"), dest))
+            sampler = samplers.find(dest);
+        auto* node = sampler != samplers.end() ? graph.getNodeForId(sampler->second) : nullptr;
+        auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (module == nullptr || !modulationMissesNode(*modulation, *module)) {
+            kept.add(entry);
+            continue;
+        }
+        const juce::String what = modulation->hasProperty("destParam")
+                                      ? modulation->getProperty("destParam").toString()
+                                      : "input " + modulation->getProperty("destPort").toString();
+        notes.push_back({PlanNote::Kind::Repaired,
+                         "Patch: Modulation onto node " + juce::String(dest) + " names \"" + what +
+                             "\", which that node cannot be modulated on.",
+                         "a modulation on the stand-in's " + what + ", which the recorded instrument doesn't have"});
+    }
+    if (kept.size() == list->size())
+        return root;
+    juce::var repaired = root.clone();
+    repaired.getDynamicObject()->setProperty("modulations", juce::var(kept));
+    return repaired;
+}
+
 // Phase 2. Mode: the plan's, or - with no "mode" and no track ops - applyPatch's one-directional
 // repair (a replace that is rejected but validates as a merge runs as a merge). The structural gate
 // is applyPatch's too (a merge may not take a sounding patch silent; a replace must sound), run only
@@ -523,6 +609,7 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
 
     // 1. Track-creating ops, in list order.
     PatchIdScope scope;
+    juce::var patchRoot = root;
     if (!plan.trackOps.isVoid()) {
         const auto before = nodeIdsOf(graph);
         RecordingHost recorder(buildHost);
@@ -531,12 +618,13 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
             return fail(error);
         if (const auto error = bindReservations(plan, recorder, graph, before, scope); error.isNotEmpty())
             return fail(error);
+        patchRoot = dropStandInModulations(root, plan, recorder, scope, graph, out.notes);
     }
 
     // 2. The patch, its namespace widened by the ids phase 1 bound.
     std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
     if (plan.hasPatch)
-        if (const auto error = runPatch(plan, root, graph, scope, checkStructure, idMap, out); error.isNotEmpty())
+        if (const auto error = runPatch(plan, patchRoot, graph, scope, checkStructure, idMap, out); error.isNotEmpty())
             return fail(error);
 
     // 3. Every other op, in list order, with nodeId references resolved to uuids.
@@ -579,6 +667,15 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
                                 const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
                                 const juce::var& instrumentParams) {
     juce::ignoreUnused(poly);
+    return buildStandIns(name, instrumentType, instrumentType, inserts, envelopeParams, instrumentParams);
+}
+
+// `instrumentType` is the node built; `envelopeShapeType` decides whether the track has its own ADSR, which is the
+// planned stand-in's rule in the app too (a Sampler built for a Wavetable plan keeps the Wavetable's envelope).
+std::optional<InstrumentTrackBuildResult>
+StandInHost::buildStandIns(const juce::String& name, const juce::String& instrumentType,
+                           const juce::String& envelopeShapeType, const std::vector<InstrumentTrackInsert>& inserts,
+                           const juce::var& envelopeParams, const juce::var& instrumentParams) {
     if (!doc_.addTrack(TrackKind::Midi, name).isValid())
         return std::nullopt;
     auto addStandIn = [this](const juce::String& type, const juce::var& params) -> juce::String {
@@ -592,10 +689,31 @@ StandInHost::addInstrumentTrack(const juce::String& name, const juce::String& in
     };
     InstrumentTrackBuildResult result;
     result.instrumentUuid = addStandIn(instrumentType, instrumentParams);
-    if (!TimelineOps::instrumentOwnsItsEnvelope(instrumentType))
+    if (!TimelineOps::instrumentOwnsItsEnvelope(envelopeShapeType))
         result.envelopeUuid = addStandIn("ADSR", envelopeParams);
     for (const auto& insert : inserts)
         result.insertUuids.push_back(addStandIn(insert.type, insert.params));
+    return result;
+}
+
+// A core sound the pack provides is built as a Sampler by the app (MainComponentTimelineOpsHost), so the preview
+// builds the same type: a patch that passes here is judged on the node the apply will have, never on the stand-in.
+// Anything the app builds as the stand-in (pack missing, a drum kit, a sound that does not match) builds as one here.
+std::optional<InstrumentTrackBuildResult>
+StandInHost::addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,
+                                         const std::vector<InstrumentTrackInsert>& inserts,
+                                         const juce::var& envelopeParams, const juce::var& instrumentParams,
+                                         const juce::String& sound) {
+    const auto* core = synth::soundpacks::findCoreSound(sound);
+    if (core == nullptr || core->drumKit || instrumentType != core->standIn ||
+        !synth::soundpacks::coreSoundInstalled(*core))
+        return addInstrumentTrack(name, instrumentType, poly, inserts, envelopeParams, instrumentParams);
+    auto sampler = AIStateMapper::createModule("Sampler");
+    if (sampler == nullptr || !synth::soundpacks::loadCoreSoundIntoSampler(*sampler, *core))
+        return addInstrumentTrack(name, instrumentType, poly, inserts, envelopeParams, instrumentParams);
+    auto result = buildStandIns(name, "Sampler", instrumentType, inserts, envelopeParams, {});
+    if (result.has_value())
+        result->substitutedSampler = true;
     return result;
 }
 
