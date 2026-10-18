@@ -198,7 +198,7 @@ TEST_F(ModuleComponentTest, LfoMorphCablesLandOnTheSlidersWhileTheMapShowsAndOnT
         const auto anchor = rig.card->getModTargetKnobAnchor(channel);
         ASSERT_TRUE(anchor.has_value());
         const auto strip = rig.map().getStripBounds(axis).translated((float)rig.map().getX(), (float)rig.map().getY());
-        EXPECT_TRUE(strip.expanded(6.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
+        EXPECT_TRUE(strip.expanded(16.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
     }
     rig.card->setModDropTargetChannel(LFOModule::kMorphYChannel);
     EXPECT_EQ(rig.card->getModDropTargetChannel(), LFOModule::kMorphYChannel);

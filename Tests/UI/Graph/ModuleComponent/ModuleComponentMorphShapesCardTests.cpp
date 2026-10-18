@@ -104,7 +104,7 @@ TEST_F(ModuleComponentTest, MorphMapIsShownByDefaultWithSeveralShapesAndHidesThe
     EXPECT_FALSE(rig.knobShown("Morph Y"));
     EXPECT_TRUE(rig.card->getLocalBounds().contains(rig.map().getBounds()));
     EXPECT_EQ(rig.map().getWidth(), 252);
-    EXPECT_EQ(rig.map().getHeight(), 150);
+    EXPECT_EQ(rig.map().getHeight(), 159);
 }
 
 TEST_F(ModuleComponentTest, MorphMapIsHiddenByDefaultWithOneShapeAndTheKnobsShow) {
@@ -279,7 +279,7 @@ TEST_F(ModuleComponentTest, MorphCablesLandOnTheMapSlidersWhileItShowsAndOnTheKn
         const auto anchor = rig.card->getModTargetKnobAnchor(channel);
         ASSERT_TRUE(anchor.has_value());
         const auto strip = rig.map().getStripBounds(axis).translated((float)rig.map().getX(), (float)rig.map().getY());
-        EXPECT_TRUE(strip.expanded(6.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
+        EXPECT_TRUE(strip.expanded(16.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
     }
     // Hiding the map hands the landing back to the knobs.
     rig.custom().getToggle().setToggleState(false, juce::sendNotificationSync);

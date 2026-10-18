@@ -46,6 +46,9 @@ void MorphMap::refreshStopNames() {
 
 juce::String MorphMap::tooltipAt(juce::Point<int> point) const {
     const auto p = point.toFloat();
+    if (extraTooltip)
+        if (const auto text = extraTooltip(p); text.isNotEmpty())
+            return text;
     if (cursorAt(p))
         return cursorStop_->getTooltip();
     if (const Axis strip = stripAt(p); strip != Axis::None && cursorVisible_)

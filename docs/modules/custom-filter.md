@@ -294,7 +294,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   and the knobs; no cutoff marker. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
-- **Morph map** (252 x 150, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
+- **Morph map** (252 x 159, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
   hugging it; the right edge is left free. The slider thumbs sit at the cursor; a drag, a click or the arrow keys set
   that one parameter (one host gesture and one undo step). **Show Morph Map** is a footer pill, shown only in Custom;
   the choice is remembered on the module (`CardViewState::showMorphMap`, saved as `"cardView"."morphMap"`); with no
@@ -304,6 +304,16 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   a landing widget. A cable dropped on a slider drives that parameter and lands on the slider; with the map hidden it
   lands on the knob's ring as before (`ModuleComponent::getModTargetPortForPoint` / `getModTargetKnobAnchor` ask
   `MorphShapesCard` first).
+- **A slider's modulation is a fader's.** Beside each slider runs a 3 px modulation bar and, past it, the cable's landing
+  dot (`MorphMap::stripAnchor`: the dot's radius and a 2 px gap beyond the bar, so it clears both; the map's insets leave
+  room for it). While a cable lands there the bar shows the reachable range faintly (`modDepthBandRange`) and the live
+  value-to-value-plus-CV bar over it, painted with the fader's `paintCardFaderModBar`; `MorphShapesCard::poll` reads
+  them on the card's gated tick. The dot gets the same `ModDotButton` a knob's has (named "Morph X modulation, 1
+  source", tooltip, Up/Down steps the amount, Return opens the menu), on the slider's Tab stop. A press on the bar or
+  the dot is offered to `MorphMap::pressGesture` first, which runs the fader's `CardControlGestures`: a drag on the bar
+  changes the amount of the chosen source, a click or drag on the dot opens or drags it, Cmd-press picks the cable up,
+  Alt-press on the slider drags the amount; each is one undo step and never moves the cursor. A plain press on the
+  slider itself still sets the cursor.
 - **Motion.** The map and the Edit shapes row fade and take their height with the shared `CardBlockFade`; the Morph
   knobs fade through the card body's conditional-section fade and the Cutoff / Resonance swap through its swap motion;
   the card's height eases and the neighbours make room once per direction. Reduce Motion is the short plain fade and

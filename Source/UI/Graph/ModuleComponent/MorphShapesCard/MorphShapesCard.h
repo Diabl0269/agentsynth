@@ -6,6 +6,7 @@
 #include "Modules/CardViewState.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
+#include "UI/Graph/CardWidgets/CardControlGestures.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
@@ -29,6 +30,11 @@ public:
         juce::String mapPlace;               ///< where the map sits, for the pill's tooltip ("under the response view")
         std::function<bool()> customActive;  ///< the module is on its Custom type / shape
         std::function<juce::String()> title; ///< the card's title, for the window
+        /** The modulation each routing on raw channel `channel` brings (empty for none); unset shows none. */
+        std::function<std::vector<MorphMap::StripModulation>(int channel)> stripModulation;
+        /** The tooltip of the mod dot of `channel` (empty when it has none); unset gives the map's own. */
+        std::function<juce::String(int channel)> modDotTooltip;
+        float landingDotDiameter = 7.0f; ///< the dot the canvas paints where a cable lands on a slider
     };
 
     /** The card, module and adapter must outlive this (detach() first). Message thread only for every member. */
@@ -61,6 +67,14 @@ public:
     juce::Rectangle<int> stripBoundsFor(int channel) const;
     /** Lights the slider of `channel` as the pending drop target (-1 clears it). */
     void setDropChannel(int channel);
+    /** The slider of raw channel `channel`, which stands in for the hidden knob; null unless the map is shown. */
+    juce::Component* stripControlFor(int channel) const;
+    /** The gestures a press on that slider's modulation bar or landing dot runs, for the card to wire as it does a
+     *  fader's (CardControlGestures); the coordinates are the map's. */
+    CardControlGestures& stripGestures(int channel);
+    MorphMap::Axis axisForChannel(int channel) const;
+    /** The raw CV channel of the slider of `axis` (-1 for none). */
+    int axisChannel(MorphMap::Axis axis) const noexcept;
 
     MorphMap& getMap() noexcept { return map_; }
     juce::TextButton& getEditButton() noexcept { return editButton_; }
@@ -69,8 +83,18 @@ public:
     ModuleShapesAdapter& getAdapter() noexcept { return *adapter_; }
 
 private:
+    class StripGestures : public CardControlGestures {
+    public:
+        bool press(const juce::MouseEvent& e) { return claimMouseDown(e); }
+        bool forward(const juce::MouseEvent& e, int phase) { return forwardClaimed(e, phase); }
+        void hover(bool entered) { notifyHover(entered); }
+    };
+
     bool mapWanted() const;
-    MorphMap::Axis axisForChannel(int channel) const;
+    bool routeMapPress(const juce::MouseEvent& e, int phase);
+    void routeStripHover(MorphMap::Axis axis);
+    void pushStripModulation();
+    juce::String stripTooltipAt(juce::Point<float> point) const;
 
     Host host_;
     ModuleBase& module_;
@@ -83,6 +107,8 @@ private:
     std::unique_ptr<ShapeMapController> controller_;
     synth::CardBlockFade editFade_;
     synth::CardBlockFade mapFade_;
+    StripGestures stripGestures_[2]; // X, Y
+    int pressedStrip_ = -1;          // the strip whose gesture owns the press in flight
     juce::Component::SafePointer<juce::DialogWindow> window_;
     int lastGeneration_ = -1;
     bool lastCustom_ = false; // the type as of the last sync

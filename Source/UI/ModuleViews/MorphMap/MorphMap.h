@@ -27,6 +27,9 @@ class ReorderFramePump;
  *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same
  *  callbacks, one coordinate at a time) and the landing widgets of the card's Morph X / Morph Y cables
  *  (`stripAt`, `stripAnchor`, `setDropHighlight`). Their Tab stops follow the cursor's; the arrows move them.
+ *  Beside each slider runs a thin modulation bar, like a card fader's, that shows the modulation a cable
+ *  brings (`setStripModulation`); the cable's landing dot sits just past it. A press on the bar or the dot is
+ *  offered to `pressGesture` first, so the owner can turn it into the modulation gestures of a fader.
  */
 class MorphMap
     : public juce::Component
@@ -44,6 +47,20 @@ public:
     static constexpr float kStep = 0.02f;
     static constexpr float kBigStep = 0.1f;
     static constexpr int kStripThickness = 10;
+    /** The modulation bar's thickness, px. */
+    static constexpr float kModBarThickness = 3.0f;
+
+    /** One routing's modulation of a slider, as the bar shows it (all 0..1 along the slider). */
+    struct StripModulation {
+        float baseNorm = 0.0f;  ///< where the slider sits
+        float modNorm = 0.0f;   ///< base plus the live CV
+        float bandStart = 0.0f; ///< the reachable range
+        float bandEnd = 0.0f;
+        bool positive = true;      ///< the live CV's sign
+        bool bandNegative = false; ///< the range is a pull down from rest
+        bool hovered = false;      ///< a cable landing here, or the bar, is hovered
+        bool operator==(const StripModulation&) const = default;
+    };
 
     MorphMap();
     ~MorphMap() override;
@@ -80,6 +97,13 @@ public:
     std::function<void(juce::PopupMenu&)> showMenu;
     /** Whether Delete may remove a dot; unset means yes. */
     std::function<bool()> canDeleteDot;
+    /** Offered every press first (`phase` 0, in this component's coordinates); true claims the whole press: the
+     *  drag and the release then go to it (phases 1 and 2) and the map does nothing with them. */
+    std::function<bool(const juce::MouseEvent&, int phase)> pressGesture;
+    /** The slider (or its bar) the pointer is over, Axis::None on leaving. */
+    std::function<void(Axis)> onStripHover;
+    /** A tooltip for a point the owner covers (a bar, a landing dot); empty leaves the map's own. */
+    std::function<juce::String(juce::Point<float>)> extraTooltip;
 
     // ---------- geometry and cables ----------
     juce::Rectangle<float> getPlotArea() const;
@@ -91,8 +115,19 @@ public:
     juce::Rectangle<float> getStripBounds(Axis axis) const;
     /** The slider under `point` (this component's coordinates), for a cable in flight or a press. */
     Axis stripAt(juce::Point<float> point) const;
-    /** Where a cable lands on the slider of `axis`: just outside the strip, at its middle. */
+    /** Where a cable lands on the slider of `axis`: past its modulation bar, at its middle, clear of both. */
     juce::Point<float> stripAnchor(Axis axis) const;
+    /** The diameter of the dot the canvas paints on `stripAnchor`; the map leaves room for it. */
+    void setLandingDotDiameter(float diameter);
+    /** The strip beside the slider of `axis` the modulation bar is drawn in, spanning the whole slider. */
+    juce::Rectangle<float> getModBarTrack(Axis axis) const;
+    /** The bar from `fromNorm` to `toNorm` (0..1 along the slider) inside `getModBarTrack`. */
+    juce::Rectangle<float> getModBarBetween(Axis axis, float fromNorm, float toNorm) const;
+    /** The slider whose modulation bar is under `point` (this component's coordinates). */
+    Axis modBarAt(juce::Point<float> point) const;
+    /** The modulation each routing on the slider of `axis` brings; empty for none. Repaints only on change. */
+    void setStripModulation(Axis axis, std::vector<StripModulation> modulation);
+    const std::vector<StripModulation>& getStripModulation(Axis axis) const;
     /** Lights the slider of `axis` as the pending drop target; Axis::None clears it. Returns true when it changed. */
     bool setDropHighlight(Axis axis);
 
@@ -132,6 +167,7 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
     bool keyStateChanged(bool isKeyDown) override;
     void focusGained(FocusChangeType cause) override;
@@ -160,6 +196,9 @@ private:
     void moveCursor(juce::Point<float> to);
     void moveToStrip(Axis axis, juce::Point<float> pixels);
     void paintStrips(juce::Graphics& g) const;
+    void paintStripModulation(juce::Graphics& g, Axis axis) const;
+    float stripReach() const;
+    void setHoveredAxis(Axis axis);
     void endRename(bool commit);
     void select(int index);
     void takeFocus(juce::Component& target);
@@ -170,6 +209,10 @@ private:
     bool showLabels_ = false;
     int selected_ = -1;
     Axis dropAxis_ = Axis::None;
+    Axis hoverAxis_ = Axis::None;
+    float landingDot_ = 7.0f;
+    std::vector<StripModulation> stripModulation_[2]; // X, Y
+    bool pressClaimed_ = false;
 
     Drag drag_ = Drag::None;
     int dragIndex_ = -1;
