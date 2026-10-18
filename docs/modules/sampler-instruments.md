@@ -57,7 +57,7 @@ Restoring state decodes through `synth::DeferredAssetLoads` while a project open
  "instruments": [{"id": "grand", "name": "Grand Piano", "sfz": "grand/grand.sfz", "category": "Keys"}]}
 ```
 
-`sfz` is relative to the pack folder and must stay inside it. Roots, in order: the app's bundled packs (macOS: `<app>/Contents/Resources/SoundPacks`; elsewhere a `SoundPacks` folder beside the executable), then the user's `<user app data>/Agent Synth/SoundPacks`. A later root never overrides an earlier one for the same pack id. A malformed `pack.json` or entry is skipped with a log line. Tests redirect the roots with `SoundPackLibrary::setRootsForTests`.
+`sfz` is relative to the pack folder and must stay inside it. Roots, in order: the app's bundled packs (macOS: `<app>/Contents/Resources/SoundPacks`; elsewhere a `SoundPacks` folder beside the executable), then the user's `SoundPacks` folder in the app's settings folder (macOS: `~/Library/Application Support/Agent Synth/SoundPacks`; elsewhere `<user app data>/Agent Synth/SoundPacks`). A later root never overrides an earlier one for the same pack id. A malformed `pack.json` or entry is skipped with a log line. Tests redirect the roots with `SoundPackLibrary::setRootsForTests`.
 
 ## The card
 

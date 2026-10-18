@@ -94,9 +94,9 @@ int SamplerChrome::layout(int y, int contentX, int contentW, int narrowX, int na
 }
 
 void SamplerChrome::poll() {
-    if (sampler_.getInstrumentGeneration() != shownGeneration_) {
-        loadMessages_.clear(); // the instrument changed behind our back (undo, a project load)
-        refreshInstrument();
+    if (sampler_.getInstrumentLoadSerial() != shownLoadSerial_ ||
+        sampler_.getInstrumentGeneration() != shownGeneration_) {
+        refreshInstrument(); // the instrument changed behind our back (undo, a project load, a restore that failed)
     }
     if (strip_.isVisible())
         strip_.poll();
@@ -124,6 +124,12 @@ juce::String SamplerChrome::currentPackKey() const {
 
 void SamplerChrome::refreshInstrument() {
     shownGeneration_ = sampler_.getInstrumentGeneration();
+    // A load attempt this card has not shown yet (one that landed before the card was built included) brings its
+    // messages; the card's own loads set them in reportLoad first.
+    if (const int serial = sampler_.getInstrumentLoadSerial(); serial != shownLoadSerial_) {
+        loadMessages_ = sampler_.getInstrumentMessages();
+        shownLoadSerial_ = serial;
+    }
     const juce::String name = sampler_.getInstrumentName();
     picker_.setInstrument(name, currentPackKey().isNotEmpty() ? "built in" : "your files");
     strip_.refresh();

@@ -90,3 +90,12 @@ TEST(SoundPackLibraryTest, MissingRootsAreIgnoredAndTheDefaultRootsAreBundledThe
     EXPECT_EQ(roots[1].getFileName(), "SoundPacks");
     EXPECT_EQ(roots[1].getParentDirectory().getFileName(), "Agent Synth");
 }
+
+#if JUCE_MAC
+TEST(SoundPackLibraryTest, TheUserRootLivesBesideTheSettingsUnderApplicationSupport) {
+    const auto roots = SoundPackLibrary::roots();
+    ASSERT_EQ(roots.size(), 2u);
+    EXPECT_TRUE(roots[1].getFullPathName().endsWith("/Library/Application Support/Agent Synth/SoundPacks"))
+        << roots[1].getFullPathName();
+}
+#endif

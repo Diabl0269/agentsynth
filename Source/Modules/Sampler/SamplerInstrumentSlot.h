@@ -68,11 +68,14 @@ public:
     /** What a save should hold: the source still decoding if there is one, else the loaded one. */
     const InstrumentSource& sourceToSave() const noexcept { return pending_ ? pendingSource_ : loaded_; }
 
+    /** Bumped on every install attempt (success or failure) and on clear(), so a UI can notice a failed restore. */
+    int loadSerial() const noexcept { return loadSerial_; }
+
     /** Errors and warnings of the last load. */
     const juce::StringArray& messages() const noexcept { return messages_; }
 
 private:
-    bool install(const InstrumentSource& source, InstrumentLoad&& result);
+    bool install(const InstrumentSource& source, InstrumentLoad&& result, bool isRestore);
     bool deferRestore(const InstrumentSource& source);
 
     InstrumentPlayer& player_;
@@ -81,6 +84,7 @@ private:
     juce::StringArray messages_;
     bool pending_ = false;
     int serial_ = 0;
+    int loadSerial_ = 0;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(InstrumentSlot)
 };

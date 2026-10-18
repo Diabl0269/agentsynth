@@ -21,9 +21,11 @@ juce::File bundledRoot() {
 }
 
 juce::File userRoot() {
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile(branding::kSettingsFolderName)
-        .getChildFile("SoundPacks");
+    auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+#if JUCE_MAC
+    base = base.getChildFile("Application Support"); // where the settings file lives (UserSettings.h)
+#endif
+    return base.getChildFile(branding::kSettingsFolderName).getChildFile("SoundPacks");
 }
 
 // A pack-relative path that stays inside the pack folder, or an invalid File.

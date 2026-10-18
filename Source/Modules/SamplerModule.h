@@ -259,6 +259,9 @@ public:
     /** For drawing: null when none is loaded or a publish is in flight. */
     synth::sampler::Instrument::Ptr getInstrument() const { return instrumentPlayer.current(); }
 
+    /** Bumped on every instrument load attempt (success or failure) and clear. */
+    int getInstrumentLoadSerial() const noexcept { return instrumentSlot.loadSerial(); }
+
     /** Errors and "warning: " lines of the last load. */
     juce::StringArray getInstrumentMessages() const { return instrumentSlot.messages(); }
 

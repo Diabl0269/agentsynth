@@ -138,6 +138,7 @@ bool SamplerChrome::loadUndoably(const std::function<bool(SamplerModule&)>& load
 // label; the tooltip holds every line.
 void SamplerChrome::reportLoad(bool ok) {
     loadMessages_ = sampler_.getInstrumentMessages();
+    shownLoadSerial_ = sampler_.getInstrumentLoadSerial();
     if (!ok && loadMessages_.isEmpty())
         loadMessages_.add("Could not load that instrument");
     refreshInstrument();

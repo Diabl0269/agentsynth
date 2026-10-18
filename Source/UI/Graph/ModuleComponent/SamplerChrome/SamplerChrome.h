@@ -98,6 +98,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     juce::StringArray loadMessages_;
     int shownGeneration_ = -1;
+    int shownLoadSerial_ = -1;
     int dragFileCount_ = 0;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerChrome)

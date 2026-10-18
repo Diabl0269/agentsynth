@@ -608,3 +608,39 @@ TEST(SamplerInstrumentMode, VoicesCvLimitsTheNotesThatSound) {
     EXPECT_EQ(sounding(0.0f), 3u);
     EXPECT_EQ(sounding(-1.0f), 1u) << "Voices CV of -1 takes the cap from 16 down to 1";
 }
+
+TEST(SamplerInstrumentMode, AFailedRestoreKeepsTheSourceForSaving) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("instrumentPack", "missing/thing");
+    const juce::var state(obj.get());
+    SamplerModule module;
+    const int before = module.getInstrumentLoadSerial();
+    module.setExtraState(state);
+    EXPECT_EQ(stateOf(module)["instrumentPack"].toString(), "missing/thing");
+    EXPECT_EQ(module.getInstrument(), nullptr);
+    ASSERT_FALSE(module.getInstrumentMessages().isEmpty());
+    EXPECT_TRUE(module.getInstrumentMessages()[0].contains("not found"));
+    EXPECT_NE(module.getInstrumentLoadSerial(), before) << "a failed restore is visible to the UI";
+    module.clearInstrument();
+    EXPECT_FALSE(stateOf(module).hasProperty("instrumentPack"));
+}
+
+TEST(SamplerInstrumentMode, AFailedDeferredRestoreKeepsTheSourceForSaving) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("instrumentPack", "missing/thing");
+    const juce::var state(obj.get());
+    synth::DeferredAssetLoads loads;
+    loads.holdDecodesForTest(true);
+    SamplerModule module;
+    {
+        const synth::DeferredAssetLoads::Scope scope(&loads);
+        module.setExtraState(state);
+    }
+    EXPECT_TRUE(module.isInstrumentLoadPending());
+    loads.finishAllForTest();
+    EXPECT_FALSE(module.isInstrumentLoadPending());
+    EXPECT_EQ(stateOf(module)["instrumentPack"].toString(), "missing/thing");
+    EXPECT_EQ(module.getInstrument(), nullptr);
+    ASSERT_FALSE(module.getInstrumentMessages().isEmpty());
+    EXPECT_TRUE(module.getInstrumentMessages()[0].contains("not found"));
+}

@@ -228,10 +228,18 @@ InstrumentLoad decodeInstrument(const InstrumentSource& source) {
     return {};
 }
 
-bool InstrumentSlot::install(const InstrumentSource& source, InstrumentLoad&& result) {
+// A failed restore still keeps `source` for saving (silent player, messages say why); a failed explicit load keeps
+// what was loaded.
+bool InstrumentSlot::install(const InstrumentSource& source, InstrumentLoad&& result, bool isRestore) {
+    ++loadSerial_;
     messages_ = std::move(result.messages);
-    if (result.instrument == nullptr)
+    if (result.instrument == nullptr) {
+        if (isRestore) {
+            loaded_ = source;
+            player_.publish(nullptr);
+        }
         return false;
+    }
     loaded_ = source;
     player_.publish(result.instrument);
     return true;
@@ -240,7 +248,7 @@ bool InstrumentSlot::install(const InstrumentSource& source, InstrumentLoad&& re
 bool InstrumentSlot::load(const InstrumentSource& source) {
     ++serial_; // a decode still pending for an earlier choice no longer applies
     pending_ = false;
-    return install(source, decodeInstrument(source));
+    return install(source, decodeInstrument(source), false);
 }
 
 // Inside a project open on screen the decode runs on a worker and installs here later, unless something loaded or
@@ -260,7 +268,7 @@ bool InstrumentSlot::deferRestore(const InstrumentSource& source) {
             if (slot == nullptr || slot->serial_ != serial)
                 return;
             slot->pending_ = false;
-            slot->install(source, std::move(*decoded));
+            slot->install(source, std::move(*decoded), true);
         });
     });
     return true;
@@ -269,11 +277,16 @@ bool InstrumentSlot::deferRestore(const InstrumentSource& source) {
 bool InstrumentSlot::restore(const InstrumentSource& source) {
     if (source.kind == InstrumentSource::Kind::None)
         return false;
-    return deferRestore(source) || load(source);
+    if (deferRestore(source))
+        return true;
+    ++serial_;
+    pending_ = false;
+    return install(source, decodeInstrument(source), true);
 }
 
 void InstrumentSlot::clear() {
     ++serial_;
+    ++loadSerial_;
     pending_ = false;
     loaded_ = {};
     messages_.clear();

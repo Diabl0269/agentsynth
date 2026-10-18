@@ -292,6 +292,32 @@ TEST(SamplerInstrumentCard, AFailedLoadShowsItsMessageOnTheCaptionAndKeepsTheMod
     EXPECT_FALSE(scene.chrome().getCaption().getTooltip().isEmpty());
 }
 
+TEST(SamplerInstrumentCard, AFailedRestoreShowsItsMessageOnTheCaption) {
+    Scene scene;
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("instrumentPack", "missing/thing");
+    scene.sampler().setExtraState(juce::var(obj.get()));
+    scene.chrome().poll();
+    ASSERT_FALSE(scene.chrome().getLoadMessages().isEmpty());
+    EXPECT_TRUE(scene.chrome().getCaption().getText().contains("not found"));
+}
+
+// The card is built after the failed restore landed (a project opening with a pack that is not installed).
+TEST(SamplerInstrumentCard, ACardBuiltAfterAFailedRestoreShowsItsMessage) {
+    CardCanvas canvas;
+    auto module = std::make_unique<SamplerModule>();
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("instrumentPack", "missing/thing");
+    module->setExtraState(juce::var(obj.get()));
+    auto* mode = findParameterByID(module.get(), "playMode");
+    mode->setValueNotifyingHost(mode->convertTo0to1((float)SamplerModule::kModeInstrument));
+    const auto id = canvas.add(std::move(module), 0, 0);
+    canvas.editor.updateComponents();
+    auto* chrome = canvas.card(id)->getSamplerChrome();
+    ASSERT_NE(chrome, nullptr);
+    EXPECT_TRUE(chrome->getCaption().getText().contains("not found"));
+}
+
 TEST(SamplerInstrumentCard, TheStripLightsASoundingNoteAndDimsItWhenItEnds) {
     PackRoot packs;
     Scene scene;
