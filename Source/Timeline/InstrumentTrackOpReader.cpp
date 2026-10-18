@@ -5,6 +5,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
+#include "SoundPacks/CoreSounds.h"
 
 #include <cstdint>
 #include <initializer_list>
@@ -232,6 +233,12 @@ juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrac
     if (out.poly && !TimelineOps::instrumentSupportsPolyTrack(out.instrument))
         return "asks for a poly " + out.instrument + ". Only \"Oscillator\" and \"Wavetable\" have a poly mode.";
 
+    // A core pack sound is a hint on top of a valid stand-in: an unknown id, or one paired with another instrument,
+    // is ignored and the track is built from the stand-in alone.
+    if (const juce::var soundVar = op.getProperty("sound");
+        soundVar.isString() && synth::soundpacks::coreSoundMatchesInstrument(soundVar.toString(), out.instrument))
+        out.sound = soundVar.toString();
+
     // An in-response node reference: inert here, resolved by AIIntegrationService's edit plan
     // (which also requires it, like an insert's "id", to be a non-negative id distinct from every
     // other id in the response).
@@ -275,6 +282,8 @@ juce::String describeInstrumentTrack(const InstrumentTrackOpFields& fields) {
     const bool addsEnvelope = !TimelineOps::instrumentOwnsItsEnvelope(fields.instrument);
     juce::String text = (fields.poly ? "poly " : "") + fields.instrument +
                         (addsEnvelope ? " with envelope and channel strip" : " with channel strip");
+    if (const auto* sound = synth::soundpacks::findCoreSound(fields.sound))
+        text << ", real instrument: " << sound->name;
     if (const auto own = describeParams(fields.instrumentParams, {}); own.isNotEmpty())
         text << ", instrument: " << own;
     if (!fields.inserts.empty()) {

@@ -67,6 +67,7 @@ add_executable(Tests
     Modules/Sampler/SamplerMapEditTests.cpp
     Modules/Sampler/SoundPackLibraryTests.cpp
     SoundPacks/SoundPackIndexTests.cpp
+    SoundPacks/CoreSoundsTests.cpp
     SoundPacks/SoundPackInstallerTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
@@ -172,6 +173,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowVcaSignalPathTests.cpp
     Mixer/ChannelFlow/PolyVoiceGraphTests.cpp
     Mixer/ChannelFlow/ChannelFlowTimelineOpsHostTests.cpp
+    Mixer/ChannelFlow/ChannelFlowCoreSoundsTests.cpp
     Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp
     Mixer/ChannelFlow/ChannelFlowProjectEditPlacementTests.cpp
     Mixer/ChannelFlow/ChannelFlowDualIOPreferenceTests.cpp
@@ -381,6 +383,7 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatComponentUpgradeTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentWaitingTests.cpp
     UI/Assistant/AIChatComponent/SongCardsTests.cpp
+    UI/Assistant/AIChatComponent/SongPlanCardSoundsTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentSongTests.cpp
     UI/Assistant/EntitlementWatcherTests.cpp
     UI/Assistant/PlanBadgeTests.cpp

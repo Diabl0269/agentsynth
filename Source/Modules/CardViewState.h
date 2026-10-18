@@ -20,9 +20,13 @@ struct CardViewState {
     /** The morph map of the Filter's Custom type and the LFO's Custom shape: unset follows the card default, shown
      *  from two shapes up. */
     std::optional<bool> showMorphMap;
+    /** Not a panel: the core pack sound ("core/flute") this module stands in for until the pack is installed. It rides
+     *  here because this is the module's one saved non-parameter field that is neither a file nor model input. */
+    juce::String pendingSound;
 
     bool isDefault() const noexcept {
-        return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value();
+        return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
+               pendingSound.isEmpty();
     }
 
     /** A void var when everything is at its default, so an untouched card adds no JSON. */
@@ -38,6 +42,8 @@ struct CardViewState {
             obj->setProperty("spectrum", *showSpectrum);
         if (showMorphMap.has_value())
             obj->setProperty("morphMap", *showMorphMap);
+        if (pendingSound.isNotEmpty())
+            obj->setProperty("pendingSound", pendingSound);
         return juce::var(obj);
     }
 
@@ -56,6 +62,7 @@ struct CardViewState {
             const auto morphMap = obj->getProperty("morphMap");
             if (morphMap.isBool())
                 out.showMorphMap = static_cast<bool>(morphMap);
+            out.pendingSound = obj->getProperty("pendingSound").toString();
         }
         return out;
     }

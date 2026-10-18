@@ -8,8 +8,11 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentInternal.h
     Source/MainComponent/MainComponentRemoteActionInvoker.h
     Source/MainComponent/MainComponentRemoteActionInvoker.cpp
+    Source/MainComponent/CoreSoundSwapper.cpp
+    Source/MainComponent/CoreSoundSwapper.h
     Source/MainComponent/MainComponentTimelineOpsHost.h
     Source/MainComponent/MainComponentTimelineOpsHost.cpp
+    Source/MainComponent/MainComponentTimelineOpsHostSounds.cpp
     Source/MainComponent/MainComponentSetup.cpp
     Source/MainComponent/MainComponentSetupToolbar.cpp
     Source/MainComponent/MainComponentSetupTimeline.cpp
@@ -410,6 +413,7 @@ set(APPUI_SOURCES
     Source/UI/Assistant/AIChatComponent/SongCardBase.cpp
     Source/UI/Assistant/AIChatComponent/SongPlanCard.h
     Source/UI/Assistant/AIChatComponent/SongPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/SongPlanCardSounds.cpp
     Source/UI/Assistant/AIChatComponent/BuildStepsCard.h
     Source/UI/Assistant/AIChatComponent/BuildStepsCard.cpp
     Source/UI/Assistant/AIChatComponent/SongSession.h

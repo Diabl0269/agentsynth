@@ -1,5 +1,6 @@
 #include "SongPlanCard.h"
 #include "AIChatComponent.h"
+#include "SoundPacks/CoreSounds.h"
 #include "UI/Layout/FocusRing.h"
 #include <cmath>
 #include <numeric>
@@ -14,6 +15,7 @@ constexpr int kButtonHeight = 30;
 constexpr int kLinkHeight = 20;
 constexpr int kChipHeight = 20;
 constexpr int kChipGap = 6;
+constexpr int kBarHeight = 6;
 
 juce::String dot() { return juce::String::fromUTF8(" \xC2\xB7 "); }
 
@@ -259,6 +261,16 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     for (auto* l : {&headerLabel, &titleLabel, &metaLabel, &specialLabel, &noticeLabel, &usesLabel, &detailsLabel,
                     &lengthLabel, &detailLabel})
         addAndMakeVisible(*l);
+    addChildComponent(soundsLabel);
+    addChildComponent(soundsProgress);
+    addChildComponent(continueLink);
+    styleLabel(soundsLabel, 12.0f, false);
+    soundsLabel.setTitle("Real instruments");
+    soundsProgress.setSubject("Downloading the core instruments");
+    continueLink.setTitle("Continue with synths");
+    continueLink.setTooltip("Build now with synth sounds; they switch to the real instruments once the core "
+                            "instruments are installed");
+    continueLink.onClick = [this] { continueWithSynths(); };
     styleLabel(headerLabel, 12.0f, true, false);
     headerLabel.setText("Song plan", juce::dontSendNotification);
     styleLabel(titleLabel, 15.0f, true);
@@ -287,13 +299,19 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
 
     addAndMakeVisible(buildButton);
     buildButton.onClick = [this] {
-        if (actions.onBuild)
+        if (offerNeeded())
+            startDownload();
+        else if (actions.onBuild)
             actions.onBuild();
     };
     addAndMakeVisible(cancelLink);
     cancelLink.setTitle("Cancel song plan");
     cancelLink.setTooltip("Dismiss this plan; nothing is spent");
     cancelLink.onClick = [this] {
+        if (session.buildAfterDownload) {
+            session.buildAfterDownload = false;
+            installer_->cancel(synth::soundpacks::kCorePackId);
+        }
         if (actions.onCancel)
             actions.onCancel();
     };
@@ -318,10 +336,22 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     controlsFade_->onFrame = [this] { layoutChanged(); };
     detailsFade_.onFrame = [this] { layoutChanged(); };
     noticeFade_.onFrame = [this] { layoutChanged(); };
+    soundsFade_.onFrame = [this] { layoutChanged(); };
+    soundsBarFade_.onFrame = [this] { layoutChanged(); };
+    installer_->addListener(this);
     refresh();
+    // Download first was pressed on an earlier card of this session (the chat rebuilt its bubbles) and the pack has
+    // landed since: build now, after the chat has taken this card.
+    if (session.buildAfterDownload && coreInstalled()) {
+        session.buildAfterDownload = false;
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<SongPlanCard>(this)] {
+            if (safe != nullptr && safe->actions.onBuild)
+                safe->actions.onBuild();
+        });
+    }
 }
 
-SongPlanCard::~SongPlanCard() = default;
+SongPlanCard::~SongPlanCard() { installer_->removeListener(this); }
 
 juce::String SongPlanCard::detailsText() const {
     const auto& plan = session.reply.plan;
@@ -361,6 +391,7 @@ void SongPlanCard::refresh() {
     buildButton.setButtonText("Build song" + dot() + usesText(units));
     buildButton.setTitle("Build song, " + usesText(units));
     buildButton.setTooltip("Spend " + usesText(units) + " to build this song step by step");
+    refreshOffer();
     usesLabel.setText(session.usesLeft >= 0 && session.usesLimit > 0
                           ? juce::String(session.usesLeft) + " of " + juce::String(session.usesLimit) + " left"
                           : juce::String(),
@@ -377,7 +408,7 @@ void SongPlanCard::applyPhase() {
     const bool active = session.phase == SongSession::Phase::ready;
     lengthChoice->setEnabledAll(active);
     detailChoice->setEnabledAll(active);
-    buildButton.setEnabled(active);
+    buildButton.setEnabled(active && !downloadBusy());
 
     juce::String notice = session.notice;
     if (replanning)
@@ -391,6 +422,7 @@ void SongPlanCard::applyPhase() {
     else
         noticeFade_.setShown(false);
     controlsFade_->setShown(!dismissed);
+    soundsFade_.setShown(offerNeeded() && !dismissed);
     if (dismissed && detailsOpen) {
         detailsOpen = false;
         detailsFade_.setShown(false);
@@ -430,6 +462,20 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         stack(specialLabel, wrapped(specialLabel.getFont(), specialLabel.getText(), inner));
     else if (apply)
         specialLabel.setBounds(0, 0, 0, 0);
+    // The offer fades in and out, so each row's height follows its fade.
+    {
+        const int line = wrapped(soundsLabel.getFont(), soundsLabel.getText(), inner);
+        const int lineNow = juce::roundToInt((float)(line + kGap) * soundsFade_.progress());
+        if (apply)
+            soundsLabel.setBounds(kPadding, by, inner, line);
+        by += lineNow;
+        block += lineNow;
+        const int barNow = juce::roundToInt((float)(kBarHeight + kGap) * soundsBarFade_.progress());
+        if (apply)
+            soundsProgress.setBounds(kPadding, by, inner, kBarHeight);
+        by += barNow;
+        block += barNow;
+    }
     const int labelW = 52;
     for (auto [label, choice] : {std::pair<juce::Label*, Choice*>{&lengthLabel, lengthChoice.get()},
                                  std::pair<juce::Label*, Choice*>{&detailLabel, detailChoice.get()}}) {
@@ -441,6 +487,13 @@ int SongPlanCard::layoutFor(int width, bool apply) {
         block += kRowHeight + kGap;
     }
     stack(buildButton, kButtonHeight);
+    {
+        const int linkNow = juce::roundToInt((float)(kLinkHeight + kGap) * soundsFade_.progress());
+        if (apply)
+            continueLink.setBounds(kPadding, by, 150, kLinkHeight);
+        by += linkNow;
+        block += linkNow;
+    }
     {
         const int half = inner / 2;
         if (apply) {

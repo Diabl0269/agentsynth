@@ -233,11 +233,18 @@ RemoteProvider::HttpResult streamHttpWithWinHttp(const juce::String& url, const 
 }
 #endif
 
+// A host typed with a trailing slash ("https://host/") would make every URL "//v1/...", which the server 404s.
+juce::String withoutTrailingSlashes(juce::String host) {
+    while (host.endsWithChar('/'))
+        host = host.dropLastCharacters(1);
+    return host;
+}
+
 } // namespace
 
 RemoteProvider::RemoteProvider(const juce::String& host)
     : Thread("RemoteProviderThread")
-    , remoteHost(host)
+    , remoteHost(withoutTrailingSlashes(host))
     // DeviceIdStore() (no explicit path) resolves to the app's standard settings-folder
     // convention and persists on first read — see Source/Auth/DeviceIdStore.h.
     , deviceId(DeviceIdStore().getDeviceId())
@@ -256,7 +263,7 @@ RemoteProvider::RemoteProvider(const juce::String& host)
 RemoteProvider::RemoteProvider(const juce::String& host, HttpPerformer performer, juce::String deviceIdIn,
                                StreamPerformer streamPerformer)
     : Thread("RemoteProviderThread")
-    , remoteHost(host)
+    , remoteHost(withoutTrailingSlashes(host))
     , deviceId(std::move(deviceIdIn))
     , performHttp(std::move(performer))
     , performStream(std::move(streamPerformer)) {

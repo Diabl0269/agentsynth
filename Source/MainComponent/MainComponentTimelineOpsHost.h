@@ -17,6 +17,11 @@ public:
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
                        const std::vector<synth::InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
                        const juce::var& instrumentParams) override;
+    std::optional<synth::InstrumentTrackBuildResult>
+    addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,
+                                const std::vector<synth::InstrumentTrackInsert>& inserts,
+                                const juce::var& envelopeParams, const juce::var& instrumentParams,
+                                const juce::String& sound) override;
     bool recordBatch(const std::function<void()>& mutation) override;
     synth::TimelineDoc* editableTimelineDoc() override;
     void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override;

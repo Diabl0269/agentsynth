@@ -7,6 +7,7 @@
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "AudioEngine/NodeUuidCache.h"
 #include "Branding.h"
+#include "MainComponent/CoreSoundSwapper.h"
 #include "MainComponentCollectArchiveSeams.h"
 #include "MainComponentExportMidiSeams.h"
 #include "MainComponentRemoteActionInvoker.h"
@@ -340,6 +341,7 @@ public:
     bool saveProjectForTest(const juce::File& file);
     void newPatchForTest();
     bool openProjectForTest(const juce::File& file);
+    synth::CoreSoundSwapper& getCoreSoundSwapperForTest() { return *coreSoundSwapper_; }
     bool openPatchForTest(const juce::File& file, bool append);
     void runAutosaveTickForTest();
     void pollTransportEditsForTest(juce::uint32 nowMs);
@@ -850,6 +852,7 @@ private:
 
     juce::String currentPatchName_{"Default"}; // declared before statusBar
     StatusBarComponent statusBar;
+    std::unique_ptr<synth::CoreSoundSwapper> coreSoundSwapper_;   // before projectLoad_: dies after it
     std::unique_ptr<synth::ui::ProjectLoadPipeline> projectLoad_; // after the canvas, dock and status bar: dies first
     bool isDirty_ = false;    // recomputed from savedEditSerial_; never write false directly (use markDocumentClean())
     int savedEditSerial_ = 0; // AppUndoManager edit serial at the last save/load/new document

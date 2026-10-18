@@ -44,6 +44,7 @@ AIProvider::RequestId AIIntegrationService::planSong(const juce::String& text, c
     body->setProperty("userPrompt", text);
     body->setProperty("stepsVersion", kStepsVersion);
     body->setProperty("instruments", buildableInstruments());
+    body->setProperty("sounds", true);
     if (length.isNotEmpty())
         body->setProperty("length", length);
     if (detail.isNotEmpty())
@@ -92,6 +93,7 @@ AIProvider::RequestId AIIntegrationService::buildSong(const juce::String& reques
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
     body->setProperty("stepsVersion", kStepsVersion);
     body->setProperty("instruments", buildableInstruments());
+    body->setProperty("sounds", true);
     body->setProperty("plan", reply.plan.raw);
     body->setProperty("token", reply.token);
 

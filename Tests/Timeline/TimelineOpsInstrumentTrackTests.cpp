@@ -87,6 +87,15 @@ public:
         return result;
     }
 
+    std::optional<synth::InstrumentTrackBuildResult>
+    addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams, const juce::String& sound) override {
+        lastSound = sound;
+        ++soundCalls;
+        return addInstrumentTrack(name, instrumentType, poly, inserts, envelopeParams, instrumentParams);
+    }
+
     bool recordBatch(const std::function<void()>& mutation) override {
         ++recordCalls;
         insideRecordBatch = true;
@@ -101,6 +110,8 @@ public:
     synth::MacroSet macros;
 
     int addCalls = 0;
+    int soundCalls = 0;
+    juce::String lastSound;
     int recordCalls = 0;
     bool insideRecordBatch = false;
     bool calledInsideRecordBatch = false;
@@ -517,4 +528,34 @@ TEST(TimelineOpsInstrumentTypesTest, AuthorableInstrumentTypesAreAuthorableMidiI
         // Noise is the one authorable instrument that takes no MIDI: the build gates its ADSR instead.
         EXPECT_TRUE(isMidiInstrumentType(module->getModuleType()) || !module->acceptsMidi());
     }
+}
+
+// =============================================================================
+// 7. A core pack sound rides on a valid stand-in
+// =============================================================================
+
+TEST_F(TimelineOpsInstrumentTrackTest, ACoreSoundPairedWithItsStandInReachesTheHost) {
+    const auto result = apply(envelopeOf(
+        R"([{"op": "addInstrumentTrack", "name": "Keys", "instrument": "Mallet", "sound": "core/upright-piano"}])"));
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(host.lastSound, "core/upright-piano");
+    EXPECT_EQ(host.lastType, "Mallet");
+}
+
+TEST_F(TimelineOpsInstrumentTrackTest, AnUnknownCoreSoundIsIgnoredAndTheTrackIsStillBuilt) {
+    const auto result = apply(envelopeOf(
+        R"([{"op": "addInstrumentTrack", "name": "Keys", "instrument": "Mallet", "sound": "core/theremin"}])"));
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(host.addCalls, 1);
+    EXPECT_EQ(host.lastSound, "");
+    EXPECT_EQ(host.lastType, "Mallet");
+}
+
+TEST_F(TimelineOpsInstrumentTrackTest, ACoreSoundWithTheWrongStandInIsIgnoredAndTheTrackIsStillBuilt) {
+    const auto result = apply(envelopeOf(
+        R"([{"op": "addInstrumentTrack", "name": "Keys", "instrument": "Oscillator", "sound": "core/upright-piano"}])"));
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(host.addCalls, 1);
+    EXPECT_EQ(host.lastSound, "");
+    EXPECT_EQ(host.lastType, "Oscillator");
 }

@@ -42,6 +42,7 @@ struct PlanTrack {
     juce::String role;
     juce::String instrument;
     juce::String sound;
+    juce::String coreSound; // one of the nine core pack ids, or empty
     juce::StringArray sections;
 };
 
@@ -58,6 +59,8 @@ struct SongPlan {
     juce::var raw;
 
     int totalBars() const;
+    /** The core pack sounds the tracks ask for, in track order (may repeat). */
+    std::vector<juce::String> coreSounds() const;
     /** 4/4 bars at `bpm`; 0 without a tempo. */
     double seconds() const;
     /** "3:20". */
