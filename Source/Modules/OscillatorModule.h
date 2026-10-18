@@ -76,7 +76,10 @@ public:
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
-        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
+        // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
+        juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
+        detuneRange.setSkewForCentre(25.0f);
+        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
@@ -91,13 +94,15 @@ public:
         // default overrides it for newly dropped modules.
         addMuteParameter();
         // Appended after the mute parameter so no earlier parameter moves. Phase and Rand are the
-        // start phase of each unison voice on a new note.
+        // start phase of each unison voice on a new note; Blend and Width shape the unison stack.
         addParameter(phaseParam =
                          new juce::AudioParameterFloat("phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f),
                                                        0.0f, synth::degreesAttributes()));
         addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
                                                                       juce::NormalisableRange<float>(0.0f, 100.0f),
                                                                       0.0f, synth::percentAttributes()));
+        addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 1.0f));
+        addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
         enableVisualBuffer(true);
     }
 
@@ -123,6 +128,10 @@ public:
         smoothedPan.setCurrentAndTargetValue(panParam->get());
         smoothedPulseWidth.reset(sampleRate, 0.01);
         smoothedPulseWidth.setCurrentAndTargetValue(pulseWidthParam->get() * 0.01f);
+        smoothedBlend.reset(sampleRate, 0.01);
+        smoothedBlend.setCurrentAndTargetValue(blendParam->get());
+        smoothedWidth.reset(sampleRate, 0.01);
+        smoothedWidth.setCurrentAndTargetValue(widthParam->get());
         for (auto& v : voices) {
             v.glide.reset();
             v.active = false;
@@ -600,6 +609,8 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPan;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPulseWidth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBlend;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedWidth;
 
     // Note tracking. Fixed-size so the audio thread never allocates.
     static constexpr int kMaxRestartsPerBlock = 16;
@@ -622,5 +633,7 @@ private:
     juce::AudioParameterFloat* glideParam = nullptr;
     juce::AudioParameterFloat* phaseParam = nullptr;
     juce::AudioParameterFloat* randomPhaseParam = nullptr;
+    juce::AudioParameterFloat* blendParam = nullptr;
+    juce::AudioParameterFloat* widthParam = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };

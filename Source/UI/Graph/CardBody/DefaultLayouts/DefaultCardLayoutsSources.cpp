@@ -20,7 +20,8 @@ constexpr int kRevision = 1;
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
 
-// The Oscillator layout gained the Phase section: a stored layout based on an older revision is stale and picks it up.
+// The Oscillator layout gained the Phase section and the Unison Blend and Width: a stored layout based on an older
+// revision is stale and picks the new controls up.
 constexpr int kOscillatorRevision = 2;
 
 // The Drum Kit layout gained the Recorded switches (a recorded kit).
@@ -36,7 +37,8 @@ CardLayout oscillatorLayout() {
         section("pitch", juce::String("Pitch"), {param("octave"), param("coarse"), param("fine"), param("glide")},
                 kQuadColumns),
         section("unison", juce::String("Unison"),
-                {param("unison"), param("detune"), dimUnless(param("pulseWidth"), "waveform", {"Square"})}),
+                {param("unison"), param("detune"), dimUnless(param("pulseWidth"), "waveform", {"Square"}),
+                 param("blend"), param("width")}),
         section("phase", juce::String("Phase"), {param("phase"), param("randomPhase")}),
         section("output", juce::String("Output"), {param("level"), param("pan")}),
         footer({}),
@@ -44,7 +46,7 @@ CardLayout oscillatorLayout() {
     return layout;
 }
 
-// Detune does nothing with one voice; the rule is numeric, so it lives in code, not in the stored
+// Detune, Blend and Width do nothing with one voice; the rule is numeric, so it lives in code, not in the stored
 // layout.
 CardDimRule dimAtOneVoice(const juce::String& paramId) {
     return CardDimRule{paramId, {"unison"}, [](juce::AudioProcessor& module) {
@@ -233,7 +235,8 @@ CardLayout wavetableLayout() {
 } // namespace
 
 void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Oscillator", oscillatorLayout(), kOscillatorRevision, {dimAtOneVoice("detune")});
+    defaults.add("Oscillator", oscillatorLayout(), kOscillatorRevision,
+                 {dimAtOneVoice("detune"), dimAtOneVoice("blend"), dimAtOneVoice("width")});
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kSamplerRevision);
     defaults.add("Drum Kit", drumKitLayout(), kDrumKitRevision, drumKitRules());

@@ -116,7 +116,7 @@ not the sustain — so their CV is read at the block's first sample rather than 
 - **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`,
   `Major`, `Minor`. Voice 0 always stays at the root so `Blend` has an unshifted centre to fade
   against.
-- The pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
+- **Detune** is a skewed knob (centre at 25 cents) that stores cents. The stacking, Blend gain, pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
 - **Blend** (0–1) fades the detuned/stacked voices against that always-present centre voice, so
   thinning the chorus does not change the fundamental's level.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square

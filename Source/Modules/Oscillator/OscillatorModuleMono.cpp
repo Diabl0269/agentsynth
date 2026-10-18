@@ -8,8 +8,10 @@
 // before it clears/writes those channels -- the same "read before this module overwrites its own
 // input channel" rule ch0's Pitch-CV/Audio-L sharing relies on. Block-level only (first sample).
 // Detune is a frequency RATIO, not a level: a step in it changes each unison oscillator's phase
-// increment while the phase itself stays continuous, so it cannot click and is not smoothed. Pulse
-// Width is smoothed downstream (fillPulseWidthRamp); Glide only sets the time of the next slide.
+// increment while the phase itself stays continuous, so it cannot click and is not smoothed. Its CV
+// adds cents linearly (+1.0 = 100 cents) whatever the knob's skew, so a patched CV sounds the same
+// as before the knob was skewed. Pulse Width is smoothed downstream (fillPulseWidthRamp); Glide only
+// sets the time of the next slide.
 OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::AudioBuffer<float>& buffer,
                                                                     int numSamples) const {
     auto first = [&](int channel) {
@@ -19,7 +21,7 @@ OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::
     GlobalParamCV result;
     result.unisonCount = juce::jlimit(
         1, 8, (int)std::round(modulateNormalised(*unisonParam, (float)unisonParam->get(), first(kUnisonCVChannel))));
-    result.detuneCents = modulateNormalised(*detuneParam, detuneParam->get(), first(kDetuneCVChannel));
+    result.detuneCents = juce::jlimit(0.0f, 100.0f, detuneParam->get() + first(kDetuneCVChannel) * 100.0f);
     result.pulseWidthPercent =
         modulateNormalised(*pulseWidthParam, pulseWidthParam->get(), first(kPulseWidthCVChannel));
     result.glideSeconds = 0.001f * modulateNormalised(*glideParam, glideParam->get(), first(kGlideCVChannel));

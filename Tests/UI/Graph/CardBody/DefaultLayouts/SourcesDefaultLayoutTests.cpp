@@ -103,6 +103,7 @@ TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
     expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
     expectOnOneRow(osc, {"unison", "detune", "pulseWidth"});
+    expectOnOneRow(osc, {"blend", "width"});
     expectOnOneRow(osc, {"phase", "randomPhase"});
     expectOnOneRow(osc, {"level", "pan"});
     EXPECT_FALSE(osc.body->hasMoreRow()) << "every parameter is placed";
@@ -117,11 +118,15 @@ TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSqua
     const auto pulse = widget(osc, "pulseWidth")->getBounds();
     const auto size = osc.card->getBounds();
     expectDimmedAndOperable(osc, "detune", true);
+    expectDimmedAndOperable(osc, "blend", true);
+    expectDimmedAndOperable(osc, "width", true);
     expectDimmedAndOperable(osc, "pulseWidth", true);
     expectDimmedAndOperable(osc, "phase", false);
 
     flip(canvas, osc, "unison", 3.0f);
     expectDimmedAndOperable(osc, "detune", false);
+    expectDimmedAndOperable(osc, "blend", false);
+    expectDimmedAndOperable(osc, "width", false);
     expectDimmedAndOperable(osc, "pulseWidth", true);
     flip(canvas, osc, "waveform", 1.0f); // Square
     expectDimmedAndOperable(osc, "pulseWidth", false);

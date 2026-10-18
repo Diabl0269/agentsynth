@@ -1,8 +1,12 @@
-// Oscillator voice feel: Phase and Rand restart every unison voice on a note.
+// Oscillator voice feel: Phase and Rand restart every unison voice on a note, and Blend and Width
+// shape the unison stack. The defaults (Phase 0, Rand 0, Blend 1, Width 0) leave the stack a plain
+// average of the detuned voices.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/Oscillator/HeldNotes.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/UnisonVoicing.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -55,6 +59,9 @@ struct Rig {
             setActual(osc, "poly", 1.0f);
     }
 
+    // Blend and Width are smoothed; restart the smoothers at the knob values so a test starts settled.
+    void settle() { osc.prepareToPlay(kSampleRate, kBlock); }
+
     void renderBlock(int blockIndex, const std::vector<NoteEvent>& events, float hz) {
         juce::AudioBuffer<float> buf(OscillatorModule::kNumOutputs, kBlock);
         buf.clear();
@@ -98,8 +105,24 @@ TEST(OscillatorVoiceFeel, NewParametersExistWithNeutralDefaults) {
     OscillatorModule osc;
     EXPECT_NEAR(actualOf(osc, "phase"), 0.0f, 1e-4f);
     EXPECT_NEAR(actualOf(osc, "randomPhase"), 0.0f, 1e-4f);
+    EXPECT_NEAR(actualOf(osc, "blend"), 1.0f, 1e-4f);
+    EXPECT_NEAR(actualOf(osc, "width"), 0.0f, 1e-4f);
     EXPECT_NEAR(param(osc, "phase")->convertFrom0to1(1.0f), 360.0f, 1e-3f);
     EXPECT_NEAR(param(osc, "randomPhase")->convertFrom0to1(1.0f), 100.0f, 1e-3f);
+}
+
+TEST(OscillatorVoiceFeel, DetuneKnobIsSkewedButStaysInCents) {
+    OscillatorModule osc;
+    WavetableOscillatorModule wt;
+    for (juce::AudioProcessor* m :
+         {static_cast<juce::AudioProcessor*>(&osc), static_cast<juce::AudioProcessor*>(&wt)}) {
+        auto* detune = param(*m, "detune");
+        ASSERT_NE(detune, nullptr);
+        EXPECT_NEAR(detune->convertFrom0to1(0.5f), 25.0f, 0.01f) << "the knob's middle is a musical 25 cents";
+        EXPECT_NEAR(detune->convertFrom0to1(1.0f), 100.0f, 1e-3f);
+        setActual(*m, "detune", 37.0f);
+        EXPECT_NEAR(actualOf(*m, "detune"), 37.0f, 0.01f);
+    }
 }
 
 TEST(OscillatorVoiceFeel, NewParametersSurviveSaveAndLoad) {
@@ -109,6 +132,9 @@ TEST(OscillatorVoiceFeel, NewParametersSurviveSaveAndLoad) {
     auto& module = *node->getProcessor();
     setActual(module, "phase", 123.0f);
     setActual(module, "randomPhase", 40.0f);
+    setActual(module, "blend", 0.25f);
+    setActual(module, "width", 0.75f);
+    setActual(module, "detune", 37.0f);
 
     const juce::var json = synth::AIStateMapper::graphToJSON(source);
     juce::AudioProcessorGraph restored;
@@ -117,12 +143,17 @@ TEST(OscillatorVoiceFeel, NewParametersSurviveSaveAndLoad) {
     auto& back = *restored.getNodes().getFirst()->getProcessor();
     EXPECT_NEAR(actualOf(back, "phase"), 123.0f, 0.05f);
     EXPECT_NEAR(actualOf(back, "randomPhase"), 40.0f, 0.05f);
+    EXPECT_NEAR(actualOf(back, "blend"), 0.25f, 1e-4f);
+    EXPECT_NEAR(actualOf(back, "width"), 0.75f, 1e-4f);
+    EXPECT_NEAR(actualOf(back, "detune"), 37.0f, 0.05f) << "saved cents load as the same cents";
 
     juce::MemoryBlock state;
     module.getStateInformation(state);
     OscillatorModule viaBinary;
     viaBinary.setStateInformation(state.getData(), (int)state.getSize());
     EXPECT_NEAR(actualOf(viaBinary, "phase"), 123.0f, 0.05f);
+    EXPECT_NEAR(actualOf(viaBinary, "width"), 0.75f, 1e-4f);
+    EXPECT_NEAR(actualOf(viaBinary, "detune"), 37.0f, 0.05f);
 }
 
 // ---- HeldNotes ------------------------------------------------------------------------------------
@@ -152,6 +183,21 @@ TEST(HeldNotes, FullStackDropsTheOldest) {
         held.press(n);
     EXPECT_EQ(held.size(), synth::HeldNotes::kCapacity);
     EXPECT_EQ(held.newest(), synth::HeldNotes::kCapacity + 2);
+}
+
+// ---- Shared unison helpers ------------------------------------------------------------------------
+
+TEST(UnisonVoicing, CentreVoicesAreTheOnesNearestTheRoot) {
+    for (int count = 1; count <= 8; ++count) {
+        int centres = 0;
+        for (int u = 0; u < count; ++u)
+            centres += synth::isUnisonCentreVoice(u, count) ? 1 : 0;
+        EXPECT_EQ(centres, (count % 2 == 1) ? 1 : 2) << count;
+    }
+    EXPECT_TRUE(synth::isUnisonCentreVoice(1, 3));
+    EXPECT_TRUE(synth::isUnisonCentreVoice(1, 4));
+    EXPECT_TRUE(synth::isUnisonCentreVoice(2, 4));
+    EXPECT_FALSE(synth::isUnisonCentreVoice(0, 4));
 }
 
 // ---- Mono restart ---------------------------------------------------------------------------------
@@ -292,4 +338,133 @@ TEST(OscillatorVoiceFeel, PolyVoiceRestartsWhenItGoesFromSilentToSounding) {
     // A voice that keeps sounding is not restarted: the phase runs on across the block boundary.
     const size_t seam = (size_t)(2 * kBlock);
     EXPECT_NEAR(rig.left[seam], std::sin(kTwoPi * (0.25 + (double)kBlock * dt)), 2e-3);
+}
+
+// ---- Blend and Width ------------------------------------------------------------------------------
+
+namespace {
+
+// The mean of the sines of the unison voices selected by `keep`, started at phase 0.
+std::vector<double> expectedStack(int count, double cents, double blend, bool useBlend, size_t numSamples) {
+    std::vector<double> out(numSamples, 0.0);
+    double sumGain = 0.0;
+    for (int u = 0; u < count; ++u) {
+        const double gain = (!useBlend || synth::isUnisonCentreVoice(u, count)) ? 1.0 : blend;
+        sumGain += gain;
+        const double ratio = std::pow(2.0, cents * synth::unisonOffsetFraction(u, count) / 1200.0);
+        for (size_t i = 0; i < numSamples; ++i)
+            out[i] += gain * std::sin(kTwoPi * (double)i * dtFor(440.0) * ratio);
+    }
+    for (auto& v : out)
+        v /= sumGain;
+    return out;
+}
+
+} // namespace
+
+TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsThePlainAverage) {
+    Rig rig;
+    setActual(rig.osc, "unison", 4.0f);
+    setActual(rig.osc, "detune", 30.0f);
+    rig.render(4, {{0, 0, 69, true}});
+    const auto expected = expectedStack(4, 30.0, 1.0, /*useBlend*/ false, rig.left.size());
+    for (size_t i = 0; i < rig.left.size(); ++i)
+        ASSERT_NEAR(rig.left[i], expected[i], 1e-3) << "sample " << i;
+    EXPECT_EQ(rig.left, rig.right) << "Audio R stays a bit-identical copy at Width 0";
+}
+
+TEST(OscillatorVoiceFeel, BlendZeroLeavesOnlyTheCentreVoices) {
+    for (const int count : {3, 4}) {
+        Rig rig;
+        setActual(rig.osc, "unison", (float)count);
+        setActual(rig.osc, "detune", 50.0f);
+        setActual(rig.osc, "blend", 0.0f);
+        rig.settle();
+        rig.render(4, {{0, 0, 69, true}});
+        const auto expected = expectedStack(count, 50.0, 0.0, /*useBlend*/ true, rig.left.size());
+        for (size_t i = 0; i < rig.left.size(); ++i)
+            ASSERT_NEAR(rig.left[i], expected[i], 1e-3) << count << " voices, sample " << i;
+    }
+}
+
+TEST(OscillatorVoiceFeel, WidthSpreadsTheStackAcrossBothLegsWithoutAddingGain) {
+    auto run = [](float width, bool poly) {
+        Rig rig(poly);
+        setActual(rig.osc, "unison", 4.0f);
+        setActual(rig.osc, "detune", 30.0f);
+        setActual(rig.osc, "width", width);
+        rig.settle();
+        if (poly)
+            rig.render(4);
+        else
+            rig.render(4, {{0, 0, 69, true}});
+        return std::make_pair(rig.left, rig.right);
+    };
+
+    for (const bool poly : {false, true}) {
+        const auto narrow = run(0.0f, poly);
+        const auto wide = run(1.0f, poly);
+        EXPECT_EQ(narrow.first, narrow.second) << "Width 0: both legs identical";
+
+        double maxDiff = 0.0;
+        for (size_t i = 0; i < wide.first.size(); ++i)
+            maxDiff = std::max(maxDiff, (double)std::abs(wide.first[i] - wide.second[i]));
+        EXPECT_GT(maxDiff, 0.05) << "Width 1: the legs differ";
+
+        const size_t n = wide.first.size();
+        const double mono = energy(narrow.first, 0, n) + energy(narrow.second, 0, n);
+        const double spread = energy(wide.first, 0, n) + energy(wide.second, 0, n);
+        EXPECT_LE(spread, mono * 1.001) << "spreading the voices never adds level";
+        EXPECT_GT(spread, mono * 0.2) << "and does not lose the signal";
+        for (size_t i = 0; i < n; ++i) {
+            ASSERT_LE(std::abs(wide.first[i]), 1.001f);
+            ASSERT_LE(std::abs(wide.second[i]), 1.001f);
+        }
+    }
+}
+
+TEST(OscillatorVoiceFeel, PanScalesTheWiderStackOnTop) {
+    Rig rig;
+    setActual(rig.osc, "unison", 4.0f);
+    setActual(rig.osc, "detune", 30.0f);
+    setActual(rig.osc, "width", 1.0f);
+    setActual(rig.osc, "pan", 1.0f); // hard right
+    rig.settle();
+    rig.render(4, {{0, 0, 69, true}});
+    EXPECT_LT(energy(rig.left, (size_t)kBlock, rig.left.size()), 1e-9);
+    EXPECT_GT(energy(rig.right, (size_t)kBlock, rig.right.size()), 1.0);
+}
+
+TEST(OscillatorVoiceFeel, AnAutomatedBlendAndWidthGlideInsteadOfStepping) {
+    Rig rig;
+    setActual(rig.osc, "unison", 8.0f);
+    setActual(rig.osc, "detune", 40.0f);
+    rig.render(2, {{0, 0, 69, true}});
+    setActual(rig.osc, "blend", 0.0f);
+    setActual(rig.osc, "width", 1.0f);
+    rig.renderBlock(2, {}, 440.0f);
+    rig.renderBlock(3, {}, 440.0f);
+    float worst = 0.0f;
+    for (size_t i = (size_t)(2 * kBlock) - 1; i + 1 < rig.left.size(); ++i)
+        worst = std::max({worst, std::abs(rig.left[i + 1] - rig.left[i]), std::abs(rig.right[i + 1] - rig.right[i])});
+    EXPECT_LT(worst, 0.2f);
+}
+
+TEST(OscillatorVoiceFeel, SourcePeakStaysUnderUnityAcrossBlendAndWidth) {
+    for (const float blend : {0.0f, 0.5f, 1.0f}) {
+        for (const float width : {0.0f, 1.0f}) {
+            Rig rig;
+            setActual(rig.osc, "unison", 8.0f);
+            setActual(rig.osc, "detune", 60.0f);
+            setActual(rig.osc, "waveform", 2.0f); // Saw: the hottest of the four
+            setActual(rig.osc, "blend", blend);
+            setActual(rig.osc, "width", width);
+            rig.settle();
+            rig.render(6, {{0, 0, 60, true}});
+            float peak = 0.0f;
+            for (size_t i = (size_t)kBlock; i < rig.left.size(); ++i)
+                peak = std::max({peak, std::abs(rig.left[i]), std::abs(rig.right[i])});
+            EXPECT_LE(peak, 1.05f) << "blend " << blend << " width " << width;
+        }
+    }
 }

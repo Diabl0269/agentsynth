@@ -268,7 +268,10 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
     addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
     addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
-    addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
+    // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
+    juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
+    detuneRange.setSkewForCentre(25.0f);
+    addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f));
 
     // ---- Phase 2: warp ----
     addParameter(warpParam = new juce::AudioParameterChoice("warp", "Warp",
