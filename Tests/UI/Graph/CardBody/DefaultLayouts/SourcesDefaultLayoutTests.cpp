@@ -97,16 +97,14 @@ void expectDimmedAndOperable(const Card& card, const juce::String& paramId, bool
 TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     CardCanvas canvas;
     const auto osc = build(canvas, "Oscillator");
-    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Phase", "Output"}));
+    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Output"}));
     EXPECT_EQ(kindOf(osc, "waveform"), synth::CardBodyItem::Kind::Segmented);
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(widget(osc, "waveform")), nullptr);
     expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
     expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
-    expectOnOneRow(osc, {"unison", "detune", "pulseWidth"});
-    expectOnOneRow(osc, {"blend", "width"});
-    expectOnOneRow(osc, {"phase", "randomPhase"});
+    expectOnOneRow(osc, {"unison", "detune", "blend", "width"});
     expectOnOneRow(osc, {"level", "pan"});
-    EXPECT_FALSE(osc.body->hasMoreRow()) << "every parameter is placed";
+    EXPECT_TRUE(osc.body->hasMoreRow()) << "Phase and Rand wait in the More controls row";
     ASSERT_TRUE(osc.body->hasFooter());
     EXPECT_TRUE(isPill(widget(osc, "poly"))) << "Poly joins the footer on its own";
 }
@@ -121,7 +119,6 @@ TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSqua
     expectDimmedAndOperable(osc, "blend", true);
     expectDimmedAndOperable(osc, "width", true);
     expectDimmedAndOperable(osc, "pulseWidth", true);
-    expectDimmedAndOperable(osc, "phase", false);
 
     flip(canvas, osc, "unison", 3.0f);
     expectDimmedAndOperable(osc, "detune", false);

@@ -286,7 +286,7 @@ TEST(MacroDragTransfer, JoinScanSkipsTheMacroBeingLeftEvenWhenItsLiveHullIsTheSm
 
     // Expanding B makes room by pushing A clear of it; put A's members back so the two hulls overlap the way a
     // drag can leave them, which is the case this test is about.
-    for (auto [id, y] : {std::pair{a1, 700}, std::pair{a2, 1170}}) {
+    for (auto [id, y] : {std::pair{a1, 700}, std::pair{a2, 1090}}) {
         findComponent(editor, id)->setTopLeftPosition(1000, y);
         auto* node = engine.getGraph().getNodeForId(id);
         node->properties.set("x", 1000);

@@ -13,6 +13,7 @@
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
+#include <algorithm>
 
 using namespace cardbody_test;
 using synth::CardQuickEdit;
@@ -191,8 +192,13 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
     const auto id = canvas.add(std::make_unique<OscillatorModule>(), 0, 0);
     canvas.editor.updateComponents();
     auto* card = canvas.card(id);
-    for (const auto& item : card->getCardBody()->getPlan().items) {
+    const auto& plan = card->getCardBody()->getPlan();
+    for (const auto& item : plan.items) {
         if (item.param == nullptr || item.widget == nullptr)
+            continue;
+        // Parameters folded into the More row (Phase, Rand, Glide Mode, Glide Curve, Legato) are already off the card.
+        const int index = int(&item - plan.items.data());
+        if (std::find(plan.more.begin(), plan.more.end(), index) != plan.more.end())
             continue;
         SCOPED_TRACE(item.param->paramID.toStdString());
         const auto menu = rightClickOnCard(*card, *item.widget);

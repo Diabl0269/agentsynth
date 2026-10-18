@@ -20,8 +20,8 @@ constexpr int kRevision = 1;
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
 
-// The Oscillator layout gained the Phase section and the Unison Blend and Width: a stored layout based on an older
-// revision is stale and picks the new controls up.
+// The Oscillator layout gained the Unison Blend and Width (Phase and Rand sit in the More controls row): a stored
+// layout based on an older revision is stale and picks the new controls up.
 constexpr int kOscillatorRevision = 2;
 
 // The Drum Kit layout gained the Recorded switches (a recorded kit).
@@ -37,9 +37,9 @@ CardLayout oscillatorLayout() {
         section("pitch", juce::String("Pitch"), {param("octave"), param("coarse"), param("fine"), param("glide")},
                 kQuadColumns),
         section("unison", juce::String("Unison"),
-                {param("unison"), param("detune"), dimUnless(param("pulseWidth"), "waveform", {"Square"}),
-                 param("blend"), param("width")}),
-        section("phase", juce::String("Phase"), {param("phase"), param("randomPhase")}),
+                {param("unison"), param("detune"), param("blend"), param("width"),
+                 dimUnless(param("pulseWidth"), "waveform", {"Square"})},
+                kQuadColumns),
         section("output", juce::String("Output"), {param("level"), param("pan")}),
         footer({}),
     };

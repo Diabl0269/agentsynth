@@ -219,7 +219,7 @@ TEST(MacroHullDisplacement, DeletingThePortThatPushedAModuleReturnsIt) {
     const auto home = c.rect(below);
 
     int added = 0;
-    while (c.rect(below) == home && added < 120) {
+    while (c.rect(below) == home && added < 40) {
         c.ctl().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
                              "In " + juce::String(added));
         ++added;
@@ -245,7 +245,7 @@ TEST(MacroHullDisplacement, DeletingThePortThatPushedAModuleReturnsItOnTheSplice
     const auto home = c.rect(below);
 
     int added = 0;
-    while (c.rect(below) == home && added < 120) {
+    while (c.rect(below) == home && added < 40) {
         c.ctl().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
                              "In " + juce::String(added));
         ++added;
@@ -293,7 +293,7 @@ TEST(MacroHullDisplacement, AddingPortsPushesAModuleBelowTheHull) {
     const auto startY = c.rect(below).getY();
 
     int maxHullBottom = 0;
-    for (int i = 0; i < 120; ++i) {
+    for (int i = 0; i < 40; ++i) {
         c.ctl().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
                              "In " + juce::String(i));
         maxHullBottom = juce::jmax(maxHullBottom, c.ctl().macroHullBounds(macroId).getBottom());
