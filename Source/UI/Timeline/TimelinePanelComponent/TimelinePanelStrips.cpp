@@ -8,6 +8,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSnapNames.h"
 
 namespace synth::ui {
 
@@ -173,16 +174,10 @@ void TimelinePanelComponent::closePianoRoll() {
 void TimelinePanelComponent::initSnapCombo() {
     addAndMakeVisible(snapCombo_);
     snapCombo_.setComponentID("timelineSnapCombo");
-    snapCombo_.addItem("Off", 1);
-    snapCombo_.addItem("Bar", 2);
-    snapCombo_.addItem("1", 3);
-    snapCombo_.addItem("1/2", 4);
-    snapCombo_.addItem("1/4", 5);
-    snapCombo_.addItem("1/8", 6);
-    snapCombo_.addItem("1/16", 7);
-    snapCombo_.addItem("1/32", 8);
-    snapCombo_.addItem("1/64", 9);
-    snapCombo_.addItem("1/128", 10);
+    // Items in enum order, so the item id is the snap value's int plus one and a persisted value maps straight back.
+    snapCombo_.setChoices(snapValueNames());
+    snapCombo_.setTitle("Snap grid");
+    snapCombo_.setTooltip("Snap grid: straight, triplet or dotted note values");
     snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
     // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
     // grid cycle and this menu therefore share ONE writer (which is also the one place the choice

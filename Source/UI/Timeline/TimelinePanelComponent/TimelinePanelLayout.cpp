@@ -81,7 +81,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     ruler_.setPropertiesFile(appProperties_->getUserSettings());
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
-    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::HundredTwentyEighth, saved);
+    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::kLastSnap, saved);
     // setSnap (not a bare assignment) so a restored musical division is also where cycleSnapValue's
     // from-Off rule resumes — a restored Snap::Off leaves lastMusicalSnap at its default, which is
     // exactly the documented fallback.
@@ -171,12 +171,10 @@ bool TimelinePanelComponent::cycleSnapValue(int direction) {
         return setSnapValue(entry);
     }
 
-    // Snap is declared coarsest -> finest (see TimelineViewState), so the step is a clamped +-1 on
-    // the enum's own int. CLAMPED, never wrapped: parking on 1/128 under a held key is far less
-    // surprising than silently landing back on Bar.
-    const int stepped =
-        juce::jlimit((int)Snap::Bar, (int)Snap::HundredTwentyEighth, (int)viewState_.snap + (direction > 0 ? 1 : -1));
-    return setSnapValue((Snap)stepped);
+    // Each kind is declared coarsest -> finest (see TimelineViewState), so the step stays inside the current
+    // kind -- a triplet grid cycles through the triplets, a dotted one through the dotted values. CLAMPED, never
+    // wrapped: parking on 1/128 under a held key is far less surprising than silently landing back on Bar.
+    return setSnapValue(TimelineViewState::stepWithinKind(viewState_.snap, direction));
 }
 
 void TimelinePanelComponent::setSnapEnabled(bool enabled) {
@@ -674,7 +672,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         // are showing. Same split PianoRollComponent draws with (see its own note: magnetism reads
         // divisionBeats, drawing reads divisionBeatsRaw).
         const double division = viewState_.divisionBeatsRaw(beatsPerBar);
-        const bool drawSubdivisionLines = drawBeatLines && division > 0.0 && division < 1.0 &&
+        const bool drawSubdivisionLines = drawBeatLines && TimelineViewState::linesFallOffBeats(division) &&
                                           synth::ui::gridLevelIsReadable(division, viewState_.pixelsPerBeat);
 
         const auto barColour = synth::ui::gridLineColourFor(synth::ui::GridLineLevel::Bar, border, bg);
@@ -706,12 +704,18 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 
             if (drawSubdivisionLines) {
                 g.setColour(subColour);
-                for (double beatInBar = division; beatInBar < beatsPerBar - division * 0.5; beatInBar += division) {
+                // Lines sit at whole multiples of the division counted from beat 0 (the snap grid), each worked out as
+                // k * division rather than by adding up steps, so a triplet third never drifts; a dotted grid does not
+                // restart at every bar.
+                const auto firstStep = (juce::int64)std::ceil(barBeat / division - 1e-9);
+                for (juce::int64 step = firstStep; (double)step * division < barBeat + beatsPerBar - division * 0.5;
+                     ++step) {
+                    const double beatAbs = (double)step * division;
                     // Skip positions that already got a bar/beat line — a subdivision line under
                     // a stronger one would just anti-alias the stronger line's edge.
-                    if (std::abs(beatInBar - (double)std::llround(beatInBar)) < division * 0.25)
+                    if (std::abs(beatAbs - std::round(beatAbs)) < 1e-6)
                         continue;
-                    const double subX = viewState_.beatToX(barBeat + beatInBar);
+                    const double subX = viewState_.beatToX(beatAbs);
                     if (subX < 0.0 || subX > widthPx)
                         continue;
                     g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);

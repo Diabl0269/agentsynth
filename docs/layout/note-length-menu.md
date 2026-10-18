@@ -83,3 +83,10 @@ full name centred in the cell's width in the plain label size. The cell is as wi
 row tall and sits in the middle of the fader's height, its caption on the cell's top edge. The default layout therefore
 no longer promotes a division beside a fader to a stepped fader (a 24-step fader would run straight, then triplet, then
 dotted, which is not monotonic in time).
+
+## The timeline Snap
+
+The timeline's Snap box (`TimelinePanelComponent::getSnapCombo`) is a `NoteLengthBox` filled with `snapValueNames()`
+(`UI/Timeline/TimelineSnapNames.h`): `Off`, `Bar`, then `1/1` to `1/128` and the 16 triplet and dotted names, in the
+order of `TimelineViewState::Snap`, so item id = snap int + 1. `Off` and `Bar` are the leading chips; all three kinds
+are available. See [the view doc](../timeline/view.md#keyboard-zoom-and-grid-commands) for the grid maths and the saved ints.

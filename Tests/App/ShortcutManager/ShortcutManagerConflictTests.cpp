@@ -211,3 +211,17 @@ TEST_F(ShortcutManagerTest, FinerGridCommandsContinueTheDigitRow) {
 // "charactersIgnoringModifiers does not ignore the shift key" — it only upper-cases LETTERS. So a
 // real Ctrl+Shift+1 reaches keyPressed as KeyPress('!', ctrl|shift) and never equalled the stored
 // '1'. Every test in this file used to construct the binding's own key code directly, which is
+
+// The triplet and dotted grid values each have a Set Grid command, none of them taking an existing chord.
+TEST_F(ShortcutManagerTest, EveryTripletAndDottedValueHasAnUnboundSetGridCommand) {
+    for (const char* kind : {"Triplet", "Dotted"})
+        for (const char* note : {"Whole", "Half", "Quarter", "Eighth", "Sixteenth", "ThirtySecond", "SixtyFourth",
+                                 "HundredTwentyEighth"}) {
+            const juce::String id = juce::String("snapSet") + note + kind;
+            EXPECT_NE(AppCommands::getCommandForAction(id), AppCommands::kNoCommand) << id;
+            EXPECT_FALSE(ShortcutManager::getActionDescription(id).isEmpty()) << id;
+            EXPECT_EQ(manager.getBinding(id).getKeyCode(), 0) << id << " must not take an existing chord";
+        }
+    EXPECT_EQ(ShortcutManager::getActionDescription("snapSetEighthTriplet"), "Set Grid to 1/8T");
+    EXPECT_EQ(ShortcutManager::getActionDescription("snapSetSixteenthDotted"), "Set Grid to 1/16D");
+}

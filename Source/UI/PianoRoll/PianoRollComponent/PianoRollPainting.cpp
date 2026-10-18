@@ -101,7 +101,7 @@ void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColo
     // are magnetic; it has no business deciding what the canvas shows. Only Snap::Off (no division
     // chosen at all) has no sub-beat level, which is what the > 0.0 test still covers.
     const double division = drawnGridBeats();
-    if (division > 0.0 && division < 1.0)
+    if (TimelineViewState::linesFallOffBeats(division))
         drawLevel(division, GridLineLevel::Subdivision);
     drawLevel(1.0, GridLineLevel::Beat);
     drawLevel(currentBeatsPerBar(), GridLineLevel::Bar);

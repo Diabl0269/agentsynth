@@ -1,6 +1,7 @@
 // Concern: AppCommands::getCommandForAction's action-id -> CommandID mapping. Kept out of
 // AppCommands.h so adding a command action does not recompile every file that includes that header.
 #include "AppCommands.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
 
 namespace AppCommands {
 /** Maps an action id to the command it dispatches. Rationale per command, for whoever adds or
@@ -218,6 +219,9 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return snapSetSixtyFourth;
     if (actionId == "snapSetHundredTwentyEighth")
         return snapSetHundredTwentyEighth;
+    for (const auto& action : snapNoteValueActions())
+        if (actionId == action.actionId)
+            return action.command;
     if (actionId == "snapCyclePrev")
         return snapCyclePrev;
     if (actionId == "snapCycleNext")

@@ -81,9 +81,100 @@ struct TimelineViewState {
         Sixteenth,
         ThirtySecond,
         SixtyFourth,
-        HundredTwentyEighth
+        HundredTwentyEighth,
+        // Triplet and dotted values, appended after every older value so a saved int keeps its meaning. Each
+        // group runs Whole..HundredTwentyEighth, coarsest to finest.
+        WholeTriplet,
+        HalfTriplet,
+        QuarterTriplet,
+        EighthTriplet,
+        SixteenthTriplet,
+        ThirtySecondTriplet,
+        SixtyFourthTriplet,
+        HundredTwentyEighthTriplet,
+        WholeDotted,
+        HalfDotted,
+        QuarterDotted,
+        EighthDotted,
+        SixteenthDotted,
+        ThirtySecondDotted,
+        SixtyFourthDotted,
+        HundredTwentyEighthDotted
     };
     Snap snap = Snap::Quarter;
+
+    enum class SnapKind { straight, triplet, dotted };
+    static constexpr Snap kLastSnap = Snap::HundredTwentyEighthDotted;
+
+    // True for a note value (Whole and finer, in any kind); false for Off and Bar.
+    static constexpr bool isNoteValue(Snap value) noexcept { return (int)value >= (int)Snap::Whole; }
+    static constexpr SnapKind kindOf(Snap value) noexcept {
+        if ((int)value >= (int)Snap::WholeDotted)
+            return SnapKind::dotted;
+        return (int)value >= (int)Snap::WholeTriplet ? SnapKind::triplet : SnapKind::straight;
+    }
+    // The bottom number of a note value (1 for Whole ... 128); 0 for Off and Bar.
+    static constexpr int denominatorOf(Snap value) noexcept {
+        if (!isNoteValue(value))
+            return 0;
+        const int base = kindOf(value) == SnapKind::dotted    ? (int)Snap::WholeDotted
+                         : kindOf(value) == SnapKind::triplet ? (int)Snap::WholeTriplet
+                                                              : (int)Snap::Whole;
+        return 1 << ((int)value - base);
+    }
+    // The note value of a kind and a bottom number (a power of two from 1 to 128); Off for any other number.
+    static constexpr Snap noteValue(SnapKind kind, int denominator) noexcept {
+        for (int i = 0; i < 8; ++i)
+            if ((1 << i) == denominator)
+                return (Snap)((kind == SnapKind::dotted    ? (int)Snap::WholeDotted
+                               : kind == SnapKind::triplet ? (int)Snap::WholeTriplet
+                                                           : (int)Snap::Whole) +
+                              i);
+        return Snap::Off;
+    }
+    // One step finer (direction > 0) or coarser, staying in the value's own kind and clamped at both ends. Straight
+    // values include Bar as their coarsest stop; Off stays Off.
+    static constexpr Snap stepWithinKind(Snap value, int direction) noexcept {
+        if (value == Snap::Off || direction == 0)
+            return value;
+        const SnapKind kind = kindOf(value);
+        const int first = kind == SnapKind::dotted    ? (int)Snap::WholeDotted
+                          : kind == SnapKind::triplet ? (int)Snap::WholeTriplet
+                                                      : (int)Snap::Bar;
+        const int last = kind == SnapKind::dotted    ? (int)Snap::HundredTwentyEighthDotted
+                         : kind == SnapKind::triplet ? (int)Snap::HundredTwentyEighthTriplet
+                                                     : (int)Snap::HundredTwentyEighth;
+        const int stepped = (int)value + (direction > 0 ? 1 : -1);
+        return (Snap)(stepped < first ? first : (stepped > last ? last : stepped));
+    }
+    // True when a grid of this many beats puts lines between the beat lines: finer than a beat, or a longer step that
+    // is not a whole number of beats (a dotted quarter).
+    static bool linesFallOffBeats(double divisionBeats) noexcept {
+        return divisionBeats > 0.0 &&
+               (divisionBeats < 1.0 - 1e-9 || std::abs(divisionBeats - std::round(divisionBeats)) > 1e-9);
+    }
+    // A note value's length as the exact fraction num/den of a beat (a triplet is two thirds of the straight value, a
+    // dotted one 3/2 of it). False for Off and Bar, whose length depends on the time signature.
+    static constexpr bool exactStep(Snap value, long long& num, long long& den) noexcept {
+        if (!isNoteValue(value))
+            return false;
+        const long long d = denominatorOf(value);
+        switch (kindOf(value)) {
+        case SnapKind::triplet:
+            num = 8;
+            den = 3 * d;
+            break;
+        case SnapKind::dotted:
+            num = 12;
+            den = 2 * d;
+            break;
+        default:
+            num = 4;
+            den = d;
+            break;
+        }
+        return true;
+    }
 
     // The last non-Off division that was chosen, so "cycle the grid finer/coarser" has somewhere
     // musical to land when the current value is Off — see cycleSnapValue's from-Off rule.
@@ -113,29 +204,11 @@ struct TimelineViewState {
     // action, which feeds TimelineDoc::quantiseNotes a gridBeats value rather than snapping a
     // single beat — doesn't duplicate this switch.
     double divisionBeatsRaw(double beatsPerBar) const noexcept {
-        switch (snap) {
-        case Snap::Off:
-            return 0.0;
-        case Snap::Bar:
-            return beatsPerBar;
-        case Snap::Whole:
-            return 4.0;
-        case Snap::Half:
-            return 2.0;
-        case Snap::Quarter:
-            return 1.0;
-        case Snap::Eighth:
-            return 0.5;
-        case Snap::Sixteenth:
-            return 0.25;
-        case Snap::ThirtySecond:
-            return 0.125;
-        case Snap::SixtyFourth:
-            return 0.0625;
-        case Snap::HundredTwentyEighth:
-            return 0.03125;
-        }
-        return 0.0;
+        long long num = 0;
+        long long den = 1;
+        if (exactStep(snap, num, den))
+            return (double)num / (double)den;
+        return snap == Snap::Bar ? beatsPerBar : 0.0;
     }
 
     // The EFFECTIVE snap division (0.0 when snap is off — either Snap::Off or snapEnabled false).
@@ -148,11 +221,33 @@ struct TimelineViewState {
     // TransportService's tsNum * 4 / tsDen). Off passes `beat` through unchanged. Ties (exactly
     // halfway between two grid lines) round up (toward +infinity) — deterministic and simple;
     // beats are never negative in practice so this is also "away from zero".
-    double snapBeat(double beat, double beatsPerBar) const noexcept {
+    double snapBeat(double beat, double beatsPerBar) const noexcept { return onGrid(beat, beatsPerBar, 0.5); }
+
+    // The grid line at or before / at or after `beat` (a beat a rounding error short of a line is on it). Off passes
+    // `beat` through.
+    double floorToGrid(double beat, double beatsPerBar) const noexcept {
+        return onGrid(beat, beatsPerBar, kLineTolerance);
+    }
+    double ceilToGrid(double beat, double beatsPerBar) const noexcept {
+        return onGrid(beat, beatsPerBar, 1.0 - kLineTolerance);
+    }
+
+private:
+    static constexpr double kLineTolerance = 1e-9;
+
+    // floor(beat / step + offset) * step, with the step an exact fraction of a beat when it has one so a triplet
+    // step (a third of a beat) never drifts.
+    double onGrid(double beat, double beatsPerBar, double offset) const noexcept {
+        if (!snapEnabled)
+            return beat;
+        long long num = 0;
+        long long den = 1;
+        if (exactStep(snap, num, den))
+            return std::floor(beat * (double)den / (double)num + offset) * (double)num / (double)den;
         const double division = divisionBeats(beatsPerBar);
         if (division <= 0.0)
             return beat;
-        return std::floor(beat / division + 0.5) * division;
+        return std::floor(beat / division + offset) * division;
     }
 };
 

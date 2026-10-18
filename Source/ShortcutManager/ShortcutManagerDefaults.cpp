@@ -4,6 +4,7 @@
 // (ShortcutManager.h) clears the map and runs all four in category order.
 
 #include "ShortcutManager.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
 
 void ShortcutManager::addGeneralDefaultBindings() {
     const bool isMac = defaultsPlatform == DefaultsPlatform::Mac;
@@ -171,6 +172,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["selectNextModule"] = juce::KeyPress();
     bindings["selectPreviousModule"] = juce::KeyPress();
     bindings["selectNextTrack"] = juce::KeyPress();
+    // The triplet and dotted Set Grid values are unbound so no existing chord changes.
+    for (const auto& action : snapNoteValueActions())
+        bindings[action.actionId] = juce::KeyPress();
     bindings["selectPreviousTrack"] = juce::KeyPress();
 
     // "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own

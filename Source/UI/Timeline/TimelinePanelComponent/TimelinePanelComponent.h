@@ -7,6 +7,7 @@
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FadeOutPicture.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -376,7 +377,7 @@ public:
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
-    juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
+    NoteLengthBox& getSnapCombo() noexcept { return snapCombo_; }
     juce::TextButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
@@ -821,7 +822,7 @@ private:
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
-    juce::ComboBox snapCombo_;
+    NoteLengthBox snapCombo_;
     // Toggles TimelineViewState::snapEnabled from the panel chrome, so the switch is discoverable
     // without opening a clip. Toggle STATE mirrors the shared flag via setSnapEnabled() — the
     // button never owns it. Labelled "Snap" rather than with its key: the key moved from Q to J

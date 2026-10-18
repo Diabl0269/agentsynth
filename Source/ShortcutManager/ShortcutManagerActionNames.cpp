@@ -3,6 +3,7 @@
 // (scripts/file-size-baseline.txt) as new actions are added -- see the header's own doc comment
 // on the declaration.
 #include "ShortcutManager.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
 
 namespace {
 
@@ -229,6 +230,9 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
+    for (const auto& action : snapNoteValueActions())
+        if (actionId == action.actionId)
+            return juce::String("Set Grid to ") + action.label;
     if (actionId == "openSettings")
         return "Open Settings";
     if (actionId == "savePreset")
@@ -370,7 +374,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
     // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
     if (actionId == "snapSetWhole")
-        return "Set Grid to 1";
+        return "Set Grid to 1/1";
     if (actionId == "snapSetHalf")
         return "Set Grid to 1/2";
     if (actionId == "snapSetQuarter")

@@ -28,6 +28,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTestSeams.cpp
     Source/MainComponent/MainComponentCommands.cpp
     Source/MainComponent/MainComponentCommandTable.cpp
+    Source/MainComponent/MainComponentSnapCommands.cpp
     Source/MainComponent/MainComponentFocusCommandRows.cpp
     Source/MainComponent/MainComponentViewSwapCommandRows.cpp
     Source/MainComponent/MainComponentCommandPredicates.cpp

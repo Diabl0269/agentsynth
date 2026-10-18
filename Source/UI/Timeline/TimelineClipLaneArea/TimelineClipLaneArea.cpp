@@ -222,19 +222,13 @@ double TimelineClipLaneArea::snappedBeatAt(double rawBeat) const {
 // What a created clip starts on, so a double-click always lands inside the bar/beat cell it was
 // aimed at rather than the next one. Same grid every drag uses (TimelineViewState::divisionBeats).
 double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
-    const double division = viewState_.divisionBeats(currentBeatsPerBar());
-    if (division <= 0.0)
-        return std::max(0.0, rawBeat); // Snap::Off — no grid to floor onto
-    return std::max(0.0, std::floor(rawBeat / division) * division);
+    return std::max(0.0, viewState_.floorToGrid(rawBeat, currentBeatsPerBar())); // Snap::Off passes through
 }
 
 // What the Draw tool's drag end uses so a drag that has crossed into a cell always includes that
 // whole cell.
 double TimelineClipLaneArea::ceilSnappedBeatAt(double rawBeat) const {
-    const double division = viewState_.divisionBeats(currentBeatsPerBar());
-    if (division <= 0.0)
-        return std::max(0.0, rawBeat); // Snap::Off — no grid to reach up to
-    return std::max(0.0, std::ceil(rawBeat / division) * division);
+    return std::max(0.0, viewState_.ceilToGrid(rawBeat, currentBeatsPerBar())); // Snap::Off passes through
 }
 
 // When the grid is off there is no cell to fill, so this falls back to the same floor

@@ -142,6 +142,23 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "selectPreviousModule",
         "selectNextTrack",
         "selectPreviousTrack",
+        // The triplet and dotted Set Grid values.
+        "snapSetWholeTriplet",
+        "snapSetHalfTriplet",
+        "snapSetQuarterTriplet",
+        "snapSetEighthTriplet",
+        "snapSetSixteenthTriplet",
+        "snapSetThirtySecondTriplet",
+        "snapSetSixtyFourthTriplet",
+        "snapSetHundredTwentyEighthTriplet",
+        "snapSetWholeDotted",
+        "snapSetHalfDotted",
+        "snapSetQuarterDotted",
+        "snapSetEighthDotted",
+        "snapSetSixteenthDotted",
+        "snapSetThirtySecondDotted",
+        "snapSetSixtyFourthDotted",
+        "snapSetHundredTwentyEighthDotted",
     };
     return ids;
 }
