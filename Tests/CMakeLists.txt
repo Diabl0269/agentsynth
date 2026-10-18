@@ -982,11 +982,11 @@ target_compile_definitions(Tests PRIVATE
     # A recorded song answer that names a core pack sound, replayed through the real app host.
     AI_PLAN_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-plans"
 )
-
 # JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers and
 # definitions only, with the module code taken from libJuceModules.a. Linking juce::juce_* here
 # would compile a second copy of those modules into this target.
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/ClickAuditTests.cmake) # the headless click audit of module edges
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
