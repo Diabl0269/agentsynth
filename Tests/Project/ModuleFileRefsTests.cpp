@@ -168,3 +168,75 @@ TEST_F(ModuleFileRefsTest, SampleOutsideTheBundleStaysAbsoluteAndOldProjectsLoad
     ASSERT_NE(sampler, nullptr);
     EXPECT_EQ(sampler->getSampleFilePath(), outside.getFullPathName());
 }
+
+namespace {
+
+// A Sampler node whose state holds an instrument folder and a list of dropped files.
+juce::var patchWithInstrument(const juce::String& folder, const juce::StringArray& files) {
+    auto* state = new juce::DynamicObject();
+    state->setProperty("instrumentFolder", folder);
+    state->setProperty("instrumentSfz", "piano.sfz");
+    juce::Array<juce::var> list;
+    for (const auto& f : files)
+        list.add(f);
+    state->setProperty("instrumentFiles", list);
+    auto* node = new juce::DynamicObject();
+    node->setProperty("type", "Sampler");
+    node->setProperty("state", juce::var(state));
+    juce::Array<juce::var> nodes;
+    nodes.add(juce::var(node));
+    auto* root = new juce::DynamicObject();
+    root->setProperty("nodes", nodes);
+    return juce::var(root);
+}
+
+juce::String listElement(const juce::var& patch, int index) {
+    return (*patch["nodes"][0]["state"]["instrumentFiles"].getArray())[index].toString();
+}
+
+} // namespace
+
+TEST_F(ModuleFileRefsTest, TheInstrumentFolderAndFileListAreRegistered) {
+    bool folder = false, list = false;
+    for (const auto& key : ModuleFileRefs::keys()) {
+        if (juce::String(key.stateKey) == "instrumentFolder")
+            folder = key.isFolder && key.wholeTree;
+        if (juce::String(key.stateKey) == "instrumentFiles")
+            list = key.isList && !key.isFolder;
+    }
+    EXPECT_TRUE(folder);
+    EXPECT_TRUE(list);
+    auto patch = patchWithInstrument("/a/b", {"/x/1.wav", "", "/x/2.wav"});
+    int seen = 0;
+    ModuleFileRefs::forEachFileValue("Sampler", patch["nodes"][0]["state"],
+                                     [&](const synth::ModuleFileKey&, const juce::String&) { ++seen; });
+    EXPECT_EQ(seen, 3) << "the folder and the two non-empty list elements";
+}
+
+TEST_F(ModuleFileRefsTest, InstrumentPathsInsideTheBundleAreRelativizedAndResolvedBack) {
+    const auto folder = bundle.getChildFile("Instruments/Piano");
+    const auto inside = bundle.getChildFile("Samples/a.wav");
+    const auto outside = root.getChildFile("Elsewhere/b.wav");
+    auto patch = patchWithInstrument(folder.getFullPathName(), {inside.getFullPathName(), outside.getFullPathName()});
+
+    ModuleFileRefs::relativizeForSave(patch, bundle);
+    EXPECT_EQ(patch["nodes"][0]["state"]["instrumentFolder"].toString(), "Instruments/Piano");
+    EXPECT_EQ(listElement(patch, 0), "Samples/a.wav");
+    EXPECT_EQ(listElement(patch, 1), outside.getFullPathName()) << "outside the bundle stays absolute";
+
+    ModuleFileRefs::resolveOnLoad(patch, bundle);
+    EXPECT_EQ(patch["nodes"][0]["state"]["instrumentFolder"].toString(), folder.getFullPathName());
+    EXPECT_EQ(listElement(patch, 0), inside.getFullPathName());
+    EXPECT_EQ(listElement(patch, 1), outside.getFullPathName());
+}
+
+TEST_F(ModuleFileRefsTest, AnEscapingListElementIsBlankedSoTheIndicesStayValid) {
+    auto patch = patchWithInstrument("../outside", {"Samples/ok.wav", "../../etc/passwd", "Samples/also.wav"});
+    ModuleFileRefs::resolveOnLoad(patch, bundle);
+    EXPECT_TRUE(patch["nodes"][0]["state"]["instrumentFolder"].toString().isEmpty() ||
+                !patch["nodes"][0]["state"].hasProperty("instrumentFolder"));
+    ASSERT_EQ(patch["nodes"][0]["state"]["instrumentFiles"].size(), 3);
+    EXPECT_EQ(listElement(patch, 0), bundle.getChildFile("Samples/ok.wav").getFullPathName());
+    EXPECT_EQ(listElement(patch, 1), "");
+    EXPECT_EQ(listElement(patch, 2), bundle.getChildFile("Samples/also.wav").getFullPathName());
+}

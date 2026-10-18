@@ -3,6 +3,7 @@
 #include "ProjectCollector.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/SamplerModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "Project/ModuleFileRefs.h"
 #include "ProjectBundle.h"
@@ -63,6 +64,29 @@ public:
                 addFile(entry.getFile(), dest);
     }
 
+    // The whole tree, subfolders included, because an SFZ names its samples by path relative to itself. Only the
+    // SFZ files and the audio they can use are taken.
+    void addTree(const juce::File& folder, const char* subdir) {
+        if (folderDests.count(folder.getFullPathName()) != 0)
+            return;
+        if (!folder.isDirectory()) {
+            plan.missing.addIfNotAlreadyThere(folder.getFullPathName());
+            return;
+        }
+        const auto dest = uniqueFolderDest(bundleDir.getChildFile(subdir), folder.getFileName());
+        folderDests[folder.getFullPathName()] = dest;
+        plan.folders.emplace_back(folder, dest);
+        for (const auto& entry : juce::RangedDirectoryIterator(folder, true, "*", juce::File::findFiles)) {
+            const auto file = entry.getFile();
+            if (file.getFileName().startsWithChar('.') ||
+                !(file.hasFileExtension("sfz;sfzh") || SamplerModule::isSupportedAudioFile(file)))
+                continue;
+            const auto parent = file.getParentDirectory();
+            const auto destParent = parent == folder ? dest : dest.getChildFile(parent.getRelativePathFrom(folder));
+            plan.copies.push_back({file, destParent, true});
+        }
+    }
+
     // A file inside a folder being collected lands in that folder's copy, so the browser cursor
     // still finds it; anything else goes to `defaultDir`.
     void addFileValue(const juce::File& file, const juce::File& defaultDir) {
@@ -107,6 +131,15 @@ bool shouldArchive(const juce::File& file, const juce::File& bundleDir, const ju
     return atRoot || !excludedDirs.contains(relative.upToFirstOccurrenceOf("/", false, false));
 }
 
+// Copies one file of a folder tree; the folder itself is what a module is pointed at, so no rewrite is recorded.
+void copyVerbatim(const CollectCopyJob& job, CollectResult& result) {
+    if (!job.destDir.createDirectory().wasOk() ||
+        !job.source.copyFileTo(job.destDir.getChildFile(job.source.getFileName())))
+        result.failures.add(job.source.getFullPathName() + ": could not copy into " + job.destDir.getFullPathName());
+    else
+        ++result.filesCopied;
+}
+
 } // namespace
 
 // Folders are planned before files so a Wavetable's loaded table can be routed into its folder's
@@ -119,7 +152,9 @@ CollectPlan ProjectCollector::plan(juce::AudioProcessorGraph& graph, const juce:
             ModuleFileRefs::forEachFileValue(ms.type, ms.state, [&](const ModuleFileKey& key, const juce::String& v) {
                 if (key.isFolder != folders || builder.isInternalOrInvalid(v))
                     return;
-                if (folders)
+                if (folders && key.wholeTree)
+                    builder.addTree(juce::File(v), key.bundleSubdir);
+                else if (folders)
                     builder.addFolder(juce::File(v), key.bundleSubdir);
                 else
                     builder.addFileValue(juce::File(v), bundleDir.getChildFile(key.bundleSubdir));
@@ -141,6 +176,10 @@ CollectResult ProjectCollector::copy(const CollectPlan& plan, const ProgressFn& 
             return result;
         }
         const auto& job = plan.copies[i];
+        if (job.verbatim) {
+            copyVerbatim(job, result);
+            continue;
+        }
         juce::String error;
         const auto name = AssetManager::importAudioFileToDirectory(job.source, job.destDir, &error);
         if (name.isEmpty()) {
@@ -162,13 +201,15 @@ int ProjectCollector::apply(juce::AudioProcessorGraph& graph, const CollectResul
     int changed = 0;
     for (auto& ms : moduleStates(graph)) {
         bool touched = false;
-        ModuleFileRefs::forEachFileValue(ms.type, ms.state, [&](const ModuleFileKey& key, const juce::String& v) {
-            const auto it = result.rewrites.find(v);
-            if (it == result.rewrites.end())
-                return;
-            ms.state.getDynamicObject()->setProperty(key.stateKey, it->second);
-            touched = true;
-        });
+        ModuleFileRefs::rewriteFileValues(
+            ms.type, *ms.state.getDynamicObject(),
+            [&](const ModuleFileKey&, const juce::String& v) -> std::optional<juce::String> {
+                const auto it = result.rewrites.find(v);
+                if (it == result.rewrites.end())
+                    return std::nullopt;
+                touched = true;
+                return it->second;
+            });
         if (touched) {
             ms.module->setExtraState(ms.state);
             ++changed;

@@ -58,6 +58,12 @@ add_executable(Tests
     Modules/Pluck/PluckModuleTests.cpp
     Modules/Mallet/MalletModuleTests.cpp
     Modules/Sampler/SamplerRegionTests.cpp
+    Modules/Sampler/SamplerNoteNamesTests.cpp
+    Modules/Sampler/SamplerInstrumentTests.cpp
+    Modules/Sampler/SfzReaderTests.cpp
+    Modules/Sampler/SamplerVoicePoolTests.cpp
+    Modules/Sampler/SamplerInstrumentModeTests.cpp
+    Modules/Sampler/SoundPackLibraryTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp
@@ -332,6 +338,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
+    UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp

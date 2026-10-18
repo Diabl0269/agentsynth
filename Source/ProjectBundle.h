@@ -109,6 +109,8 @@ public:
      *  `Audio/` so `AssetManager::cleanUnusedAssets` (clip-refs only) can never sweep them. */
     static constexpr const char* kSamplesSubdirName = "Samples";
     static constexpr const char* kWavetablesSubdirName = "Wavetables";
+    /** Where Collect & Archive copies a Sampler instrument's SFZ folder (the folder tree, kept as it is). */
+    static constexpr const char* kInstrumentsSubdirName = "Instruments";
 
     /** True if `dir` exists, is a directory, has the `.agsproj` extension, and contains a
      *  `project.json` file. Does not parse or validate that file's contents. */

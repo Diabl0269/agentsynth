@@ -246,10 +246,7 @@ void ModuleComponent::detachFromProcessor() {
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped.
-    sampleWaveform.reset();
-    loadSampleButton.reset();
-    sampleNameLabel.reset();
-    sampleChooser.reset();
+    samplerChrome_.reset();
 
     // Same reason: the wavetable display holds a module reference and its own timer, and the
     // load button's onClick lambda reaches back into this component.
@@ -457,6 +454,8 @@ void ModuleComponent::timerCallback() {
     updateLfoWavePlayhead();
     if (morphCard_ != nullptr)
         morphCard_->poll();
+    if (samplerChrome_ != nullptr)
+        samplerChrome_->poll();
 
     // Gate repaint: only invalidate the buffered image when something has
     // visually changed.  Idle modules (no signal, no modulation) produce no

@@ -126,9 +126,9 @@ TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
     // bypassed, dualIO, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level,
-    // end, fine, reverse, muted  (dualIO only changes the jack layout — the module always emits a real
-    // stereo pair)
-    EXPECT_EQ(module->getParameters().size(), 15);
+    // end, fine, reverse, muted, attack, release, tone, feel, voices, releaseSound  (dualIO only changes the
+    // jack layout — the module always emits a real stereo pair)
+    EXPECT_EQ(module->getParameters().size(), 21);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getTotalNumOutputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getVisibleInputPortCount(), SamplerModule::kNumChannels);
@@ -146,7 +146,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 9u); // Root Note, End and Fine CV are the 7th-9th targets
+    EXPECT_EQ(targets.size(), 14u); // Root Note, End and Fine CV are the 7th-9th; Instrument knobs the 10th-14th
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 
@@ -517,7 +517,7 @@ TEST_F(SamplerModuleTest, GranularModeProducesBoundedAudio) {
         return 0.6f * std::sin(juce::MathConstants<float>::twoPi * 220.0f * (float)i / (float)kRate);
     });
     ASSERT_TRUE(module->loadSampleFile(file));
-    playMode()->setValueNotifyingHost(1.0f);
+    playMode()->setValueNotifyingHost(playMode()->convertTo0to1(1.0f));
     ASSERT_EQ(playMode()->getIndex(), 1); // Granular
     density()->setValueNotifyingHost(density()->getNormalisableRange().convertTo0to1(40.0f));
     grainSize()->setValueNotifyingHost(grainSize()->getNormalisableRange().convertTo0to1(60.0f));

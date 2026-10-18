@@ -12,12 +12,15 @@ namespace synth {
 struct CollectCopyJob {
     juce::File source;
     juce::File destDir;
+    /** A plain copy of any file, as a folder tree needs; otherwise the source must read as audio and gets a free name.
+     */
+    bool verbatim = false;
 };
 
 /** What Collect will copy, worked out on the message thread from the live graph. */
 struct CollectPlan {
     std::vector<CollectCopyJob> copies;
-    /** Wavetable folders to point at their copy once their files are in: source -> dest. */
+    /** Wavetable and instrument folders to point at their copy once their files are in: source -> dest. */
     std::vector<std::pair<juce::File, juce::File>> folders;
     /** Paths a module refers to that are not on disk; left untouched. */
     juce::StringArray missing;

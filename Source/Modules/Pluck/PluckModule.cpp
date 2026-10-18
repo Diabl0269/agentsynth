@@ -75,6 +75,7 @@ void PluckModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
 }
 
 void PluckModule::stopAll() noexcept {
+    publishedVoices_.store(0, std::memory_order_relaxed);
     for (auto& v : voices_)
         v.stop();
     for (auto& band : body_)
@@ -186,6 +187,8 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     renderTo(numSamples);
     if (activeVoiceCount() > 0)
         bodyTail_ = std::max(bodyTail_, static_cast<int>(sampleRate_));
+
+    publishedVoices_.store(activeVoiceCount(), std::memory_order_relaxed);
 
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(left, numSamples);

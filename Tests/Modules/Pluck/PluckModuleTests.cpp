@@ -183,6 +183,7 @@ TEST(PluckModule, TwoNotesBothSound) {
     auto m = makeBareString();
     const auto both = render(*m, {on(0, 57), on(0, 64)}, 1.0, kRate);
     EXPECT_EQ(m->activeVoiceCount(), 2);
+    EXPECT_EQ(m->displayVoiceCount(), 2) << "the status bar count follows the sounding voices";
     EXPECT_GT(magnitudeAt(both, 0.1, 0.9, noteHz(57), kRate), 0.3 * magnitudeAt(a, 0.1, 0.9, noteHz(57), kRate));
     EXPECT_GT(magnitudeAt(both, 0.1, 0.9, noteHz(64), kRate), 0.3 * magnitudeAt(b, 0.1, 0.9, noteHz(64), kRate));
 }
@@ -216,6 +217,7 @@ TEST(PluckModule, StringsFadeToSilenceAndFreeTheirVoices) {
     setParam(*m, "release", 0.01f);
     render(*m, {on(0, 60), on(100, 64), off(4000, 60), off(4000, 64)}, 3.0, kRate);
     EXPECT_EQ(m->activeVoiceCount(), 0);
+    EXPECT_EQ(m->displayVoiceCount(), 0) << "back to zero once the release finishes";
 }
 
 TEST(PluckModule, VelocityScalesTheLevel) {
@@ -254,6 +256,7 @@ TEST(PluckModule, BypassAndMuteAreSilentAndStopRingingStrings) {
         auto m = makePluck();
         render(*m, {on(0, 57)}, 0.1, kRate);
         EXPECT_EQ(m->activeVoiceCount(), 1);
+        EXPECT_EQ(m->displayVoiceCount(), 1);
         if (bypass)
             m->setBypassed(true);
         else
@@ -261,6 +264,7 @@ TEST(PluckModule, BypassAndMuteAreSilentAndStopRingingStrings) {
         const auto out = render(*m, {on(0, 60)}, 0.3, kRate);
         EXPECT_EQ(peakOf(out, 0, 1, kRate), 0.0f);
         EXPECT_EQ(m->activeVoiceCount(), 0);
+        EXPECT_EQ(m->displayVoiceCount(), 0);
         if (bypass)
             m->setBypassed(false);
         else

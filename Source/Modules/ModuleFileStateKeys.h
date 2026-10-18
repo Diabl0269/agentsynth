@@ -7,6 +7,13 @@ namespace synth::module_file_keys {
 
 inline constexpr const char* kSamplerType = "Sampler";
 inline constexpr const char* kSampleFile = "sampleFile";
+// The Sampler's Instrument mode saves exactly one source: an SFZ (folder + path inside it), a sound pack entry, or
+// dropped files (paths + the placement of each).
+inline constexpr const char* kInstrumentFolder = "instrumentFolder";
+inline constexpr const char* kInstrumentSfz = "instrumentSfz";
+inline constexpr const char* kInstrumentPack = "instrumentPack";
+inline constexpr const char* kInstrumentFiles = "instrumentFiles";
+inline constexpr const char* kInstrumentRegions = "instrumentRegions";
 
 inline constexpr const char* kWavetableType = "Wavetable";
 inline constexpr const char* kWavetableFile = "wavetableFile";

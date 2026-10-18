@@ -51,13 +51,13 @@ struct SnapshotTargetConnection {
 // disk from it — so a restore that re-applied it unconditionally would reload every sample and every
 // wavetable on every single Cmd+Z.
 void applyExtraStateIfChanged(juce::AudioProcessor* processor, const juce::DynamicObject* nObj) {
-    if (!nObj->hasProperty("state"))
-        return;
     auto* mb = dynamic_cast<ModuleBase*>(processor);
     if (mb == nullptr)
         return;
 
-    const juce::var target = nObj->getProperty("state");
+    // A node saved with no "state" had none to save: a module that has gained some since (a Sampler's first
+    // instrument) goes back to nothing.
+    const juce::var target = nObj->hasProperty("state") ? nObj->getProperty("state") : juce::var();
     if (juce::JSON::toString(mb->getExtraState()) == juce::JSON::toString(target))
         return;
 

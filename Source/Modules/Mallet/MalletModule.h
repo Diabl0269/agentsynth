@@ -2,7 +2,9 @@
 
 #include "MalletVoices.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/VoiceCountSource.h"
 #include <array>
+#include <atomic>
 
 /**
  * Struck-bar instrument: modal synthesis with eight voices (marimba, vibraphone, xylophone, glockenspiel,
@@ -15,7 +17,9 @@
  * needed in front of it. Output is mono-summed onto a stereo pair (Declared, ships SPLIT like the Drum Kit).
  * The partial tables and formulas are in docs/modules/pluck-mallet.md.
  */
-class MalletModule : public ModuleBase {
+class MalletModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
 public:
     static constexpr int kNumChannels = 2;
     static constexpr float kTremoloHz = 5.5f;
@@ -39,7 +43,10 @@ public:
     /** Bars still sounding (held or ringing out); exposed for tests. */
     int activeVoiceCount() const noexcept;
 
+    int displayVoiceCount() const noexcept override { return publishedVoices_.load(std::memory_order_relaxed); }
+
 private:
+    std::atomic<int> publishedVoices_{0}; // activeVoiceCount() as of the end of the last block
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
                                         float skew = 1.0f);
     void noteOn(int note, float velocity);

@@ -49,6 +49,7 @@ void MalletModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
 }
 
 void MalletModule::stopAll() noexcept {
+    publishedVoices_.store(0, std::memory_order_relaxed);
     for (auto& v : voices_)
         v.stop();
 }
@@ -150,6 +151,8 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             noteOff(message.getNoteNumber());
     }
     renderTo(numSamples);
+
+    publishedVoices_.store(activeVoiceCount(), std::memory_order_relaxed);
 
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(left, numSamples);

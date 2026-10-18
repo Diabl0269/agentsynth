@@ -81,9 +81,10 @@ TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
     SamplerModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
+    // The Instrument-mode knobs (Attack, Release, Tone, Feel, Voices) exist but stay hidden in Sample mode.
     std::map<juce::String, juce::Slider*> knobs;
     for (auto* child : moduleComponent.getChildren())
-        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+        if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->isVisible())
             knobs[slider->getTitle()] = slider;
 
     ASSERT_EQ(knobs.size(), 9u);

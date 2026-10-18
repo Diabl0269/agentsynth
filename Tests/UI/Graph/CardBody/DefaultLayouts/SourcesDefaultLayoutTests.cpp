@@ -151,7 +151,7 @@ TEST(SourcesDefaultLayout, NoiseHasATypeSwitchThenColorAndLevelThenTheFooter) {
 TEST(SourcesDefaultLayout, SamplerHasItsWaveformThenModeRegionPitchAndAFooterWithLoopAndReverse) {
     CardCanvas canvas;
     const auto sampler = build(canvas, "Sampler");
-    EXPECT_EQ(sectionTitles(sampler), (std::vector<juce::String>{"", "", "Pitch", "Grains"}));
+    EXPECT_EQ(sectionTitles(sampler), (std::vector<juce::String>{"", "", "Pitch", "Grains", "Sound"}));
     EXPECT_EQ(kindOf(sampler, "playMode"), synth::CardBodyItem::Kind::Segmented);
     expectTopToBottom(sampler, {"playMode", "start", "pitch"});
     expectOnOneRow(sampler, {"start", "end", "level"});
@@ -342,7 +342,7 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(entry->defaultRevision, 1);
+        EXPECT_EQ(entry->defaultRevision, type == "Sampler" ? 2 : 1);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)
             for (const auto& item : section.items)
