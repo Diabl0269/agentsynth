@@ -8,17 +8,6 @@ namespace {
 constexpr int kSustainPedalController = 64;
 constexpr float kLimiterKnee = 0.9f;
 
-// Mean of one CV channel over the block; 0 for a channel that is absent.
-float blockMean(const juce::AudioBuffer<float>& buffer, int channel) {
-    if (channel < 0 || channel >= buffer.getNumChannels() || buffer.getNumSamples() <= 0)
-        return 0.0f;
-    const float* data = buffer.getReadPointer(channel);
-    float sum = 0.0f;
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
-        sum += data[i];
-    return sum / (float)buffer.getNumSamples();
-}
-
 // A chord of loud notes sums past full scale; only the excess above the knee is rounded, so one note stays as is.
 float softLimit(float x) {
     const float mag = std::fabs(x);
@@ -32,6 +21,16 @@ bool isInstrumentMessage(const juce::MidiMessage& m) {
 }
 
 } // namespace
+
+float blockMean(const juce::AudioBuffer<float>& buffer, int channel) {
+    if (channel < 0 || channel >= buffer.getNumChannels() || buffer.getNumSamples() <= 0)
+        return 0.0f;
+    const float* data = buffer.getReadPointer(channel);
+    float sum = 0.0f;
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        sum += data[i];
+    return sum / (float)buffer.getNumSamples();
+}
 
 void InstrumentPlayer::prepare(double sampleRate, float level) {
     sampleRate_ = sampleRate > 0.0 ? sampleRate : 44100.0;

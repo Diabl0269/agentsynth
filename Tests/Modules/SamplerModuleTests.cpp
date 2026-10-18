@@ -146,7 +146,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 9u); // Root Note, End and Fine CV are the 7th-9th targets
+    EXPECT_EQ(targets.size(), 14u); // Root Note, End and Fine CV are the 7th-9th; Instrument knobs the 10th-14th
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 

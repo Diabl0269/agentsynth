@@ -445,6 +445,7 @@ void ModMatrixPicker::lookAndFeelChanged() { applyColours(); }
 // only become real once this component has a parent.
 void ModMatrixPicker::parentHierarchyChanged() {
     applyColours();
+    reveal_.startIfInCallout(); // eases in when it opens in a call-out
     if (isShowing())
         searchEditor_->grabKeyboardFocus();
 }

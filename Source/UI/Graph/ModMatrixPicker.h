@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
@@ -101,6 +102,7 @@ public:
     bool isFilterFadingForTest() const noexcept { return fades_.anyFading(); }
 
 private:
+    CalloutReveal reveal_{*this};
     class Row;
 
     void rebuildRows();

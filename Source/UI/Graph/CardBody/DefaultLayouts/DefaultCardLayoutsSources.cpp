@@ -16,6 +16,9 @@ using namespace cardlayout;
 
 constexpr int kRevision = 1;
 
+// The Sampler layout changed (Instrument mode): a user layout based on revision 1 is stale.
+constexpr int kSamplerRevision = 2;
+
 // A row of four knobs (Oscillator Pitch, LFO shaping) on one line.
 constexpr int kQuadColumns = 4;
 
@@ -51,19 +54,35 @@ CardLayout noiseLayout() {
     return layout;
 }
 
-// The waveform view and the load row are the card's chrome, drawn above the body. The grain controls
-// stay on the card (their CV jacks are bound to them) and dim until the mode is Granular.
+// The Sampler's three modes share one card. The waveform (or the Instrument picker and key strip) and the load row
+// are chrome drawn above the body. Each mode's controls fill the same cells, so a mode switch never resizes the card:
+// Start and End swap for Attack and Release, the Grains section for the Sound section, and Loop and Reverse for
+// Release Sound. Root Note stays in its cell and leaves it empty in Instrument mode. The grain controls stay on the
+// card in Sample mode (their CV jacks are bound to them) and dim until the mode is Granular.
 CardLayout samplerLayout() {
+    const juce::StringArray sampled{"Sample", "Granular"};
+    const juce::StringArray instrument{"Instrument"};
+    auto grains = section("grains", juce::String("Grains"),
+                          {dimUnless(param("grainSize"), "playMode", {"Granular"}),
+                           dimUnless(param("density"), "playMode", {"Granular"}),
+                           dimUnless(param("spray"), "playMode", {"Granular"})});
+    grains.visibleWhen = CardCondition{"playMode", sampled, CardConditionEffect::Show};
+    auto sound = section("sound", juce::String("Sound"), {param("tone"), param("feel"), param("voices")});
+    sound.visibleWhen = CardCondition{"playMode", instrument, CardConditionEffect::Show};
+
     CardLayout layout;
     layout.sections = {
         section("mode", std::nullopt, {param("playMode", CardWidget::Segmented)}),
-        section("region", std::nullopt, {param("start"), param("end"), param("level")}),
-        section("pitch", juce::String("Pitch"), {param("pitch"), param("rootNote"), param("fine")}),
-        section("grains", juce::String("Grains"),
-                {dimUnless(param("grainSize"), "playMode", {"Granular"}),
-                 dimUnless(param("density"), "playMode", {"Granular"}),
-                 dimUnless(param("spray"), "playMode", {"Granular"})}),
-        footer({param("loop"), param("reverse")}),
+        section("region", std::nullopt,
+                {showWhen(param("start"), "playMode", sampled), showWhen(param("attack"), "playMode", instrument),
+                 showWhen(param("end"), "playMode", sampled), showWhen(param("release"), "playMode", instrument),
+                 param("level")}),
+        section("pitch", juce::String("Pitch"),
+                {param("pitch"), showWhen(param("rootNote"), "playMode", sampled), param("fine")}),
+        grains,
+        sound,
+        footer({showWhen(param("loop"), "playMode", sampled), showWhen(param("reverse"), "playMode", sampled),
+                showWhen(param("releaseSound"), "playMode", instrument)}),
     };
     return layout;
 }
@@ -171,7 +190,7 @@ CardLayout wavetableLayout() {
 void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Oscillator", oscillatorLayout(), kRevision, {detuneAtOneVoice()});
     defaults.add("Noise", noiseLayout(), kRevision);
-    defaults.add("Sampler", samplerLayout(), kRevision);
+    defaults.add("Sampler", samplerLayout(), kSamplerRevision);
     defaults.add("Drum Kit", drumKitLayout(), kRevision);
     defaults.add("Pluck", pluckLayout(), kRevision);
     defaults.add("Mallet", malletLayout(), kRevision);

@@ -42,15 +42,21 @@
  *   | 7      | Root Note CV      | silent pass-through        |
  *   | 8      | End CV            | silent pass-through        |
  *   | 9      | Fine CV           | silent pass-through        |
+ *   | 10     | Attack CV (**)    | silent pass-through        |
+ *   | 11     | Release CV (**)   | silent pass-through        |
+ *   | 12     | Tone CV (**)      | silent pass-through        |
+ *   | 13     | Feel CV (**)      | silent pass-through        |
+ *   | 14     | Voices CV (**)    | silent pass-through        |
  *
  * (*) ignored in Instrument mode, which plays from MIDI only.
+ * (**) Instrument mode only: read once per block over the knob's own span, like Root Note CV.
  *
  * 8 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
  * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7), End CV (ch8) and
- * Fine CV (ch9) were APPENDED after every other channel rather than inserted earlier, so no
- * existing saved-patch routing shifts.
+ * Fine CV (ch9) and the Instrument CVs (ch10-14) were APPENDED after every other channel rather than inserted
+ * earlier, so no existing saved-patch routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
@@ -71,7 +77,12 @@ public:
     static constexpr int kRootNoteCVCh = 7; // Appended last, see the class comment above
     static constexpr int kEndCVCh = 8;
     static constexpr int kFineCVCh = 9;
-    static constexpr int kNumChannels = 10;
+    static constexpr int kAttackCVCh = 10; // the Instrument-mode CVs, read only there
+    static constexpr int kReleaseCVCh = 11;
+    static constexpr int kToneCVCh = 12;
+    static constexpr int kFeelCVCh = 13;
+    static constexpr int kVoicesCVCh = 14;
+    static constexpr int kNumChannels = 15;
 
     // ---- Limits --------------------------------------------------------------
     static constexpr int kMaxGrains = 24;
@@ -282,6 +293,8 @@ public:
             if (path.isNotEmpty() && !deferSampleLoad(juce::File(path)))
                 loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
             instrumentSlot.restore(synth::sampler::readInstrumentState(*obj));
+        } else {
+            instrumentSlot.clear(); // a state saved with no instrument: undo of the first load
         }
     }
 
@@ -506,12 +519,19 @@ public:
                 {"Level", kLevelCVCh},
                 {"Root Note", kRootNoteCVCh, "rootNote"},
                 {"End", kEndCVCh, "end"},
-                {"Fine", kFineCVCh, "fine"}};
+                {"Fine", kFineCVCh, "fine"},
+                // Reached through their knobs only: the knobs show in Instrument mode, so no gutter jacks.
+                {"Attack", kAttackCVCh, "attack", true},
+                {"Release", kReleaseCVCh, "release", true},
+                {"Tone", kToneCVCh, "tone", true},
+                {"Feel", kFeelCVCh, "feel", true},
+                {"Voices", kVoicesCVCh, "voices", true}};
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Trig",  "Pitch", "Start",     "Grain Size", "Density",
-                                       "Spray", "Level", "Root Note", "End",        "Fine"};
+        const juce::String labels[] = {"Trig",   "Pitch",   "Start",     "Grain Size", "Density",
+                                       "Spray",  "Level",   "Root Note", "End",        "Fine",
+                                       "Attack", "Release", "Tone",      "Feel",       "Voices"};
         return (i >= 0 && i < kNumChannels) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
@@ -602,11 +622,14 @@ private:
 
     void processInstrumentMode(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages) {
         synth::sampler::PlayerBlockParams p;
-        p.voice.attackSeconds = attackParam->get();
-        p.voice.releaseSeconds = releaseParam->get();
-        p.voice.tone = toneParam->get();
-        p.voice.feel = feelParam->get();
-        p.voice.maxVoices = voicesParam->get();
+        const auto knob = [&](const juce::RangedAudioParameter& param, float base, int channel) {
+            return modulateNormalised(param, base, synth::sampler::blockMean(buffer, channel));
+        };
+        p.voice.attackSeconds = knob(*attackParam, attackParam->get(), kAttackCVCh);
+        p.voice.releaseSeconds = knob(*releaseParam, releaseParam->get(), kReleaseCVCh);
+        p.voice.tone = knob(*toneParam, toneParam->get(), kToneCVCh);
+        p.voice.feel = knob(*feelParam, feelParam->get(), kFeelCVCh);
+        p.voice.maxVoices = juce::roundToInt(knob(*voicesParam, (float)voicesParam->get(), kVoicesCVCh));
         p.voice.releaseSound = releaseSoundParam->get();
         p.voice.pitchSemis = (double)pitchParam->get() + (double)fineParam->get() / 100.0;
         p.level = levelParam->get();

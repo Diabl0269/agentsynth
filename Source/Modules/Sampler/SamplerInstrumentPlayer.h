@@ -18,6 +18,9 @@ struct PlayerBlockParams {
     int levelCvChannel = -1;
 };
 
+/** The mean of one CV channel over the block; 0 for a channel the buffer does not have. */
+float blockMean(const juce::AudioBuffer<float>& buffer, int channel);
+
 class InstrumentPlayer {
 public:
     /** Stops every voice and snaps the level smoother to `level`. */

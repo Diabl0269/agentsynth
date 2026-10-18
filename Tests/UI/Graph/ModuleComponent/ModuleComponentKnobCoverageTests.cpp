@@ -174,7 +174,12 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
 const std::map<juce::String, std::pair<juce::String, juce::String>> kModeChoices = {
     {"Filter", {"filterType", "Custom"}},
     {"LFO", {"shape", "Custom"}},
+    {"Sampler", {"playMode", "Instrument"}},
 };
+
+// Types whose modes each hide knobs the other modes show: the sweep skips a hidden knob in every pass, since the
+// pass where its mode is on checks it.
+const std::set<juce::String> kModesHideKnobs = {"Sampler"};
 
 void setChoiceByName(ModuleBase& mb, const juce::String& paramId, const juce::String& choiceName) {
     for (auto* p : mb.getParameters())
@@ -243,8 +248,8 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
                 for (const auto& target : mb->getModulationTargets()) {
                     if (targetHasNoGenericKnobByDesign(*mb, target))
                         continue;
-                    if (choiceMode.isEmpty() && kModeChoices.count(typeName) > 0 &&
-                        knobHiddenInThisMode(*mb, card, target))
+                    if ((choiceMode.isEmpty() || kModesHideKnobs.count(typeName) > 0) &&
+                        kModeChoices.count(typeName) > 0 && knobHiddenInThisMode(*mb, card, target))
                         continue;
                     SCOPED_TRACE(target.name.toStdString());
                     // The Filter's morph map shows slider strips in place of the Morph X / Y knobs: they land the

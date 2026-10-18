@@ -160,19 +160,9 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     // --- Hosted Plugin chrome: the Open Editor / Edit Layout... row (no-op on every other module) ---
     y = layoutHostedPluginChrome(y, narrowX, narrowW, apply);
 
-    // --- Sampler chrome: waveform overview, then the load button + file-name row ---
-    if (sampleWaveform) {
-        if (apply)
-            sampleWaveform->setBounds(contentX, y, contentW, kWaveformHeight);
-        y += kWaveformHeight + 8;
-
-        if (apply) {
-            const int buttonWidth = juce::jmax(96, narrowW / 2);
-            loadSampleButton->setBounds(narrowX, y, buttonWidth, kRowHeight);
-            sampleNameLabel->setBounds(narrowX + buttonWidth + 6, y, narrowW - buttonWidth - 6, kRowHeight);
-        }
-        y += kRowHeight + 8;
-    }
+    // --- Sampler chrome: the waveform and load row, or the instrument picker and key strip ---
+    if (samplerChrome_ != nullptr)
+        y = samplerChrome_->layout(y, contentX, contentW, narrowX, narrowW, apply);
 
     // --- Wavetable chrome: the scanned frame view, the Table selector, the load row, the file caption ---
     if (wavetableDisplay != nullptr && loadWavetableButton != nullptr)

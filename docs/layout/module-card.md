@@ -62,7 +62,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
 | `kFaderVHeight` | 96 | a vertical fader's travel plus its text box (40 px wide, centred in its cell) |
 | `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
-| `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kWaveformHeight` | 72 | Sampler waveform overview (Instrument mode: picker, caption and key strip fill the same 112 px with the load row) |
 | `kSectionHeaderHeight` | 18 | a titled section's header row |
 | `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |

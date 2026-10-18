@@ -563,3 +563,48 @@ TEST(SamplerInstrumentMode, ApplyingAGranularPatchStillSelectsGranular) {
         sampler = dynamic_cast<SamplerModule*>(node->getProcessor());
     EXPECT_EQ(actual(*sampler, "playMode"), (float)SamplerModule::kModeInstrument);
 }
+
+TEST(SamplerInstrumentMode, TheInstrumentCvInputsAreAppendedAfterFineAndReachTheirKnobs) {
+    SamplerModule module;
+    EXPECT_EQ(SamplerModule::kNumChannels, 15);
+    const std::vector<std::pair<juce::String, int>> expected = {{"attack", SamplerModule::kAttackCVCh},
+                                                                {"release", SamplerModule::kReleaseCVCh},
+                                                                {"tone", SamplerModule::kToneCVCh},
+                                                                {"feel", SamplerModule::kFeelCVCh},
+                                                                {"voices", SamplerModule::kVoicesCVCh}};
+    EXPECT_EQ(SamplerModule::kAttackCVCh, SamplerModule::kFineCVCh + 1);
+    const auto targets = module.getModulationTargets();
+    for (const auto& [paramId, channel] : expected) {
+        const auto found = std::find_if(targets.begin(), targets.end(),
+                                        [channel = channel](const auto& t) { return t.channelIndex == channel; });
+        ASSERT_NE(found, targets.end()) << paramId;
+        EXPECT_EQ(found->paramId, paramId);
+        EXPECT_TRUE(found->knobOnly) << "the knobs show in Instrument mode only, so no gutter jack";
+        EXPECT_EQ(module.mapInputChannel(channel).visibleJackIndex, channel);
+        EXPECT_EQ(module.getInputPortLabel(channel).toLowerCase(), paramId);
+    }
+}
+
+TEST(SamplerInstrumentMode, ToneCvReadsOverTheKnobSpan) {
+    Fixture f;
+    const auto peakWith = [&](float cv) {
+        Rig rig;
+        EXPECT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("sine.sfz")));
+        setActual(rig.module, "tone", 1.0f);
+        return run(rig.module, 24, noteOnAt({60}), SamplerModule::kToneCVCh, cv).peak(8 * kBlock);
+    };
+    EXPECT_LT(peakWith(-1.0f), 0.8f * peakWith(0.0f)) << "Tone CV of -1 closes the filter from fully open";
+}
+
+TEST(SamplerInstrumentMode, VoicesCvLimitsTheNotesThatSound) {
+    Fixture f;
+    const auto sounding = [&](float cv) {
+        Rig rig;
+        EXPECT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
+        setActual(rig.module, "voices", 16.0f);
+        run(rig.module, 2, noteOnAt({60, 62, 64}), SamplerModule::kVoicesCVCh, cv);
+        return rig.module.getSoundingNotes().count();
+    };
+    EXPECT_EQ(sounding(0.0f), 3u);
+    EXPECT_EQ(sounding(-1.0f), 1u) << "Voices CV of -1 takes the cap from 16 down to 1";
+}

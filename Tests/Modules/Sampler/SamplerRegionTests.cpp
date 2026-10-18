@@ -104,9 +104,9 @@ TEST(SamplerRegion, ParametersJacksAndNeutralDefaults) {
     EXPECT_EQ(module.mapInputChannel(SamplerModule::kFineCVCh).role, PortRole::ModCV);
 
     const auto targets = module.getModulationTargets();
-    ASSERT_GE(targets.size(), 2u);
-    EXPECT_EQ(targets[targets.size() - 2].paramId, "end");
-    EXPECT_EQ(targets[targets.size() - 1].paramId, "fine");
+    ASSERT_GE(targets.size(), 7u);
+    EXPECT_EQ(targets[targets.size() - 7].paramId, "end");
+    EXPECT_EQ(targets[targets.size() - 6].paramId, "fine");
     // The reverse switch is a bool, and none of the module's other bools has a jack.
     for (const auto& t : targets)
         EXPECT_NE(t.paramId, "reverse");

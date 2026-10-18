@@ -6,6 +6,7 @@
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/SplitButton.h"
@@ -13,7 +14,6 @@
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
-#include "UI/ModuleViews/SampleWaveformComponent.h"
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
@@ -250,6 +250,8 @@ public:
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
     synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
+    /** Null unless the module is a Sampler. */
+    synth::ui::SamplerChrome* getSamplerChrome() const noexcept { return samplerChrome_.get(); }
 
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
@@ -644,11 +646,8 @@ private:
     // plan skips the parameter). Its combo and label are bespoke widgets; the attachment goes first.
     std::unique_ptr<juce::ComboBoxParameterAttachment> wavetableTableAttachment;
 
-    // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
-    std::unique_ptr<SampleWaveformComponent> sampleWaveform;
-    std::unique_ptr<juce::TextButton> loadSampleButton;
-    std::unique_ptr<juce::Label> sampleNameLabel;
-    std::unique_ptr<juce::FileChooser> sampleChooser;
+    // Sampler-only chrome: waveform and load row, or the Instrument picker and key strip (SamplerChrome).
+    std::unique_ptr<synth::ui::SamplerChrome> samplerChrome_;
     bool fileDragHighlight = false;
     // Channel index of the knob currently highlighted as a modulation drop target, or -1.
     int modDropTargetChannel = -1;
