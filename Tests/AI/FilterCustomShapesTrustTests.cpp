@@ -103,6 +103,21 @@ TEST(FilterCustomShapesTrustTest, AnUntrustedPatchSetsTheShapes) {
     EXPECT_FALSE(shapes.isDefault());
 }
 
+// Regression test for FRO953: model-authored curves carry no "version"; each shape keeps its own points.
+TEST(FilterCustomShapesTrustTest, VersionlessCurvesLoadDistinct) {
+    auto versionless = [](const juce::Array<juce::var>& points) {
+        auto* c = new juce::DynamicObject();
+        c->setProperty("points", juce::var(points));
+        return juce::var(c);
+    };
+    const auto shapes =
+        untrustedShapes(shapeList({shape("a", {0.1, 0.2}, versionless({point(0.0, 0.1), point(1.0, 0.1)})),
+                                   shape("b", {0.9, 0.7}, versionless({point(0.0, 0.8), point(1.0, 0.8)}))}));
+    ASSERT_EQ(shapes.shapes.size(), 2u);
+    EXPECT_NEAR(shapes.shapes[0].curve.evaluate(0.3f), 0.1f, 1e-4f);
+    EXPECT_NEAR(shapes.shapes[1].curve.evaluate(0.3f), 0.8f, 1e-4f);
+}
+
 TEST(FilterCustomShapesTrustTest, OutOfRangeValuesAreClamped) {
     const auto shapes = untrustedShapes(shapeList(
         {shape("wild", {-5.0, 9.0, 4.0}, curve({point(-3.0, 7.0, 9.0), point(0.5, -3.0, -9.0), point(4.0, 2.0)}))}));
