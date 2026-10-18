@@ -71,9 +71,11 @@ track is built from the synth alone.
 
 What a track gets depends on the pack (`MainComponentTimelineOpsHostSounds.cpp`):
 
-- **Installed, melodic:** a Sampler in Instrument mode loaded with the pack instrument, with the track's name and
-  notes unchanged. The stand-in's params are dropped except Level, and so are its envelope and poly flag (the Sampler
-  has neither).
+- **Installed, melodic:** a Sampler in Instrument mode loaded with the pack instrument and the sound's level trim
+  (`trimDb` in the table, see [sound pack downloads](../modules/sound-pack-downloads.md#levels)), with the track's name
+  and notes unchanged. The track body is the stand-in's: a Wavetable stand-in's ADSR and VCA are built with the op's
+  `envelope` params, so the envelope id the ops address exists (the Sampler is built mono, whatever `poly` said). The
+  stand-in's instrument params are dropped except Level.
 - **Installed, acoustic kit:** the usual Drum Kit with the core kit loaded.
 - **Missing:** the stand-in exactly as built before, plus the module's `pendingSound` (`Modules/PendingSound.h`) (a Drum Kit instead names the core
   kit, which it plays as synth drums until the pack exists). The swap after the download is in

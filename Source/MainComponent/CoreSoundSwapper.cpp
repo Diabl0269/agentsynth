@@ -39,9 +39,20 @@ ModuleComponent* componentFor(GraphEditor& editor, const juce::AudioProcessor* p
     return nullptr;
 }
 
-void loadPackInstrument(juce::AudioProcessor& processor, const juce::String& instrumentId) {
-    if (auto* host = dynamic_cast<synth::sampler::InstrumentHost*>(&processor))
-        host->loadInstrumentFromPack(kCorePackId, instrumentId);
+// The stand-in's Level, which the AI set against that synth's loudness; the Sampler gets it as a song build gives it.
+float levelOf(const juce::AudioProcessor& processor) {
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter); ranged && ranged->paramID == "level")
+            return ranged->convertFrom0to1(ranged->getValue());
+    return -1.0f;
+}
+
+void loadPackInstrument(juce::AudioProcessor& processor, const synth::soundpacks::CoreSound& sound, float level) {
+    synth::soundpacks::loadCoreSoundIntoSampler(processor, sound);
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter); ranged && ranged->paramID == "level")
+            if (level >= 0.0f)
+                ranged->setValueNotifyingHost(ranged->convertTo0to1(level));
 }
 
 } // namespace
@@ -73,7 +84,12 @@ void CoreSoundSwapper::soundPacksChanged() {
 
 int CoreSoundSwapper::swapNow() {
     auto& graph = engine_.getGraph();
-    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::String>> standIns; // node, pack instrument id
+    struct StandIn {
+        juce::AudioProcessorGraph::NodeID nodeId;
+        const synth::soundpacks::CoreSound* sound;
+        float level;
+    };
+    std::vector<StandIn> standIns;
     std::vector<std::pair<DrumKitModule*, juce::String>> kits;
     for (auto* node : graph.getNodes()) {
         auto* processor = node->getProcessor();
@@ -83,20 +99,22 @@ int CoreSoundSwapper::swapNow() {
         if (auto* module = dynamic_cast<ModuleBase*>(processor))
             if (const auto* sound = findCoreSound(synth::pendingSoundOf(*module));
                 sound != nullptr && !sound->drumKit && coreSoundInstalled(*sound))
-                standIns.emplace_back(node->nodeID, coreInstrumentId(*sound));
+                standIns.push_back({node->nodeID, sound, levelOf(*processor)});
     }
 
     // One undo step for every replacement: each replace records its own change, the group folds them.
     int swapped = 0;
     if (!standIns.empty()) {
         const AppUndoManager::ScopedUndoGroup group(undo_);
-        for (const auto& [nodeId, instrumentId] : standIns) {
+        for (const auto& standIn : standIns) {
+            const auto nodeId = standIn.nodeId;
             auto* node = graph.getNodeForId(nodeId);
             auto* component = node != nullptr ? componentFor(editor_, node->getProcessor()) : nullptr;
             if (component == nullptr)
                 continue;
-            editor_.replaceModule(component, "Sampler",
-                                  [instrumentId](juce::AudioProcessor& p) { loadPackInstrument(p, instrumentId); });
+            editor_.replaceModule(component, "Sampler", [standIn](juce::AudioProcessor& p) {
+                loadPackInstrument(p, *standIn.sound, standIn.level);
+            });
             swapped += graph.getNodeForId(nodeId) == nullptr ? 1 : 0;
         }
     }

@@ -28,8 +28,7 @@
  *   • **Instrument** — polyphonic, MIDI-only playback of the loaded multi-sample instrument (an SFZ, a sound
  *                    pack entry or dropped files; see docs/modules/sampler-instruments.md). `pitch`, `fine`,
  *                    the Pitch / Fine / Level CV inputs and `level` apply; `attack`, `release`, `tone`, `feel`,
- *                    `voices`, `releaseSound`, `glide` and `mono` apply in this mode only. The Trigger input (ch0) is
- * ignored.
+ *                    `voices`, `releaseSound`, `glide` and `mono` apply in this mode only. Trigger (ch0) is ignored.
  *
  * Channel layout (mono module — there is no poly mode):
  *
@@ -59,8 +58,7 @@
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
  * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7), End CV (ch8) and
- * Fine CV (ch9) and the Instrument CVs (ch10-15) were APPENDED after every other channel rather than inserted
- * earlier, so no existing saved-patch routing shifts.
+ * Fine CV (ch9) and the Instrument CVs (ch10-15) were APPENDED, not inserted, so no saved routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
@@ -248,6 +246,8 @@ public:
      *  loaded instrument; getInstrumentMessages() says why. Loading never makes a sound by itself. */
     bool loadInstrumentFromSfz(const juce::File& sfz) override;
     bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId) override;
+    /** As above, with `gainDb` added to every recording's volume (0 plays the pack as recorded). */
+    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId, float gainDb);
     bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths) override;
 
     /** The loaded instrument's recordings, to edit and hand back to editInstrumentRegions (empty when none). */

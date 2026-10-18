@@ -6,7 +6,13 @@ bool SamplerModule::loadInstrumentFromSfz(const juce::File& sfz) {
 }
 
 bool SamplerModule::loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId) {
-    return loadInstrument(synth::sampler::InstrumentSource::fromPack(packId, instrumentId));
+    return loadInstrumentFromPack(packId, instrumentId, 0.0f);
+}
+
+bool SamplerModule::loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId, float gainDb) {
+    auto source = synth::sampler::InstrumentSource::fromPack(packId, instrumentId);
+    source.gainDb = gainDb;
+    return loadInstrument(source);
 }
 
 bool SamplerModule::loadInstrumentFromFiles(const juce::StringArray& absolutePaths) {

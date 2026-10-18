@@ -13,7 +13,9 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/PendingSound.h"
 #include "Modules/SamplerModule.h"
+#include "SoundPacks/CoreSounds.h"
 #include <gtest/gtest.h>
+#include <map>
 
 namespace {
 
@@ -268,4 +270,102 @@ TEST_F(ChannelFlowTest, TheInstallerFinishingTheCorePackSwapsTheStandInsWithoutA
     }
     synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
     installer->setFetcherForTesting(synth::soundpacks::makeHttpFetcher());
+}
+
+namespace {
+
+std::map<juce::String, int> moduleTypeCounts(juce::AudioProcessorGraph& graph) {
+    std::map<juce::String, int> counts;
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->getProcessor() != nullptr)
+            ++counts[synth::AIStateMapper::getFactoryTypeName(node->getProcessor())];
+    return counts;
+}
+
+juce::var recordedPlan() {
+    return juce::JSON::parse(juce::File(AI_PLAN_FIXTURES_DIR).getChildFile("orchestral-core-sound.json"));
+}
+
+float firstRegionVolumeDb(SamplerModule& sampler) {
+    const auto& regions = sampler.getInstrumentRegions();
+    return regions.empty() ? -999.0f : regions.front().volumeDb;
+}
+
+} // namespace
+
+// Regression test for FRO1016: a recorded song answer whose Wavetable track names a core sound and an envelope id was
+// rejected with "has no envelope" when the pack was installed, because the Sampler track was built without the ADSR.
+TEST_F(ChannelFlowTest, ARecordedSongWithAnEnvelopeOnACoreSoundBuildsWithThePackInstalled) {
+    std::map<juce::String, int> installedTypes, missingTypes;
+    {
+        SoundsRig rig(true);
+        const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(recordedPlan());
+        ASSERT_TRUE(applied.ok) << applied.message;
+        installedTypes = moduleTypeCounts(rig.graph());
+        auto* sampler = firstOf<SamplerModule>(rig.graph(), "Sampler");
+        ASSERT_NE(sampler, nullptr);
+        EXPECT_EQ(sampler->getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack);
+        auto* adsr = firstOf<ModuleBase>(rig.graph(), "ADSR");
+        ASSERT_NE(adsr, nullptr) << "the envelope the song's ops address exists";
+        EXPECT_NEAR(paramValue(*adsr, "attack"), 1.2, 0.01) << "and carries the op's params";
+    }
+    {
+        SoundsRig rig(false);
+        const auto applied = rig.mc.getAiServiceForTest().applyProjectEdit(recordedPlan());
+        ASSERT_TRUE(applied.ok) << applied.message;
+        missingTypes = moduleTypeCounts(rig.graph());
+        EXPECT_EQ(countNamed(rig.graph(), "Wavetable"), 1) << "the pack missing still builds the stand-in";
+        EXPECT_EQ(synth::pendingSoundOf(*firstOf<ModuleBase>(rig.graph(), "Wavetable")), "core/string-section");
+        EXPECT_EQ(countNamed(rig.graph(), "ADSR"), 1);
+    }
+    // The track body is the stand-in's, whichever instrument plays: only Wavetable and Sampler differ, and the poly
+    // stand-in's Poly MIDI stage, which a Sampler (no poly mode) does without.
+    missingTypes["Sampler"] += missingTypes["Wavetable"];
+    missingTypes["Wavetable"] = 0;
+    missingTypes["Poly MIDI"] = 0;
+    installedTypes["Poly MIDI"] = 0;
+    installedTypes["Wavetable"] = 0;
+    EXPECT_EQ(installedTypes, missingTypes);
+}
+
+TEST_F(ChannelFlowTest, TheTrimsAreOnTheMeasuredSoundsAndTheKitHasNone) {
+    for (const char* id : {"core/upright-piano", "core/string-section", "core/trumpet", "core/french-horn",
+                           "core/flute", "core/clarinet"}) {
+        const auto* sound = synth::soundpacks::findCoreSound(id);
+        ASSERT_NE(sound, nullptr);
+        EXPECT_GT(sound->trimDb, 0.0f) << id;
+        EXPECT_LE(sound->trimDb, 24.0f) << id;
+    }
+    EXPECT_EQ(synth::soundpacks::findCoreSound("core/acoustic-kit")->trimDb, 0.0f);
+}
+
+TEST_F(ChannelFlowTest, TheSoundsTrimIsAppliedWhenTheTrackIsBuiltAndWhenTheStandInIsSwapped) {
+    const auto* sound = synth::soundpacks::findCoreSound("core/clarinet");
+    ASSERT_NE(sound, nullptr);
+    {
+        SoundsRig rig(true);
+        ASSERT_TRUE(rig.apply(trackOp("Reed", "Wavetable", "core/clarinet")));
+        auto* sampler = firstOf<SamplerModule>(rig.graph(), "Sampler");
+        ASSERT_NE(sampler, nullptr);
+        EXPECT_NEAR(firstRegionVolumeDb(*sampler), sound->trimDb, 0.001f) << "at build, pack installed";
+    }
+    SoundsRig rig(false);
+    ASSERT_TRUE(rig.apply(trackOp("Reed", "Wavetable", "core/clarinet", R"(, "instrumentParams": {"level": 0.37})")));
+    rig.pack.install();
+    ASSERT_EQ(rig.mc.getCoreSoundSwapperForTest().swapNow(), 1);
+    auto* sampler = firstOf<SamplerModule>(rig.graph(), "Sampler");
+    ASSERT_NE(sampler, nullptr);
+    EXPECT_NEAR(firstRegionVolumeDb(*sampler), sound->trimDb, 0.001f) << "in the swap after the download";
+    EXPECT_NEAR(paramValue(*sampler, "level"), 0.37, 0.01) << "the stand-in's Level comes along, as at build";
+
+    // The trim is saved with the instrument and comes back; an instrument picked by hand carries none.
+    auto restored = synth::AIStateMapper::createModule("Sampler");
+    auto* copy = dynamic_cast<SamplerModule*>(restored.get());
+    copy->setExtraState(sampler->getExtraState());
+    EXPECT_NEAR(firstRegionVolumeDb(*copy), sound->trimDb, 0.001f);
+    auto picked = synth::AIStateMapper::createModule("Sampler");
+    auto* plain = dynamic_cast<SamplerModule*>(picked.get());
+    ASSERT_TRUE(plain->loadInstrumentFromPack("core", "clarinet"));
+    EXPECT_EQ(firstRegionVolumeDb(*plain), 0.0f);
+    EXPECT_FALSE(plain->getExtraState().getProperty("instrumentGainDb", {}).isDouble());
 }

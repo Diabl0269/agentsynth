@@ -13,6 +13,7 @@ inline constexpr const char* kSampleFile = "sampleFile";
 inline constexpr const char* kInstrumentFolder = "instrumentFolder";
 inline constexpr const char* kInstrumentSfz = "instrumentSfz";
 inline constexpr const char* kInstrumentPack = "instrumentPack";
+inline constexpr const char* kInstrumentGainDb = "instrumentGainDb";
 inline constexpr const char* kInstrumentFiles = "instrumentFiles";
 inline constexpr const char* kInstrumentRegions = "instrumentRegions";
 inline constexpr const char* kInstrumentName = "instrumentName";

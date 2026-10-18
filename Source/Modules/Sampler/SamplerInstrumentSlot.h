@@ -29,6 +29,7 @@ struct InstrumentSource {
     juce::File sfzFolder;
     juce::String sfzRelative; // '/'-separated, inside sfzFolder
     juce::String packId, instrumentId;
+    float gainDb = 0.0f;     // Kind::Pack: added to every region's volume when decoded; 0 plays the pack as recorded
     juce::StringArray files; // an entry may be empty (a file a bundle no longer holds); indices stay valid
     std::vector<DroppedRegion> regions;
     juce::String name; // Kind::Files only; empty = named after the files

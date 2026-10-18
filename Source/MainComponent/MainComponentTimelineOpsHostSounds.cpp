@@ -31,12 +31,10 @@ void applyParams(juce::AudioProcessor& processor, const juce::var& params) {
         synth::AIStateMapper::applyUntrustedParams(&processor, paramsObj);
 }
 
-// A Sampler holding the pack's instrument, or null when it will not load.
+// A Sampler holding the pack's instrument at its level trim, or null when it will not load.
 std::unique_ptr<juce::AudioProcessor> makePackSampler(const CoreSound& core, const juce::var& instrumentParams) {
     auto sampler = synth::AIStateMapper::createModule("Sampler");
-    auto* host = dynamic_cast<synth::sampler::InstrumentHost*>(sampler.get());
-    if (host == nullptr ||
-        !host->loadInstrumentFromPack(synth::soundpacks::kCorePackId, synth::soundpacks::coreInstrumentId(core)))
+    if (sampler == nullptr || !synth::soundpacks::loadCoreSoundIntoSampler(*sampler, core))
         return nullptr;
     applyParams(*sampler, genericParams(instrumentParams));
     return sampler;
@@ -102,7 +100,8 @@ std::optional<synth::InstrumentTrackBuildResult> MainComponentTimelineOpsHost::a
         return std::nullopt;
 
     auto staged = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(instrument));
-    // A Sampler has no poly mode and owns its envelope, so the stand-in's poly flag and envelope params do not apply.
-    return owner_.buildInstrumentTrackBody(staged, name, isSampler ? false : poly, inserts,
-                                           isSampler ? juce::var() : envelopeParams);
+    // A Sampler has no poly mode, so the track is built mono; the rest of the body is the stand-in's (its envelope
+    // stage and params included), which is also what the swap after a download leaves behind.
+    return owner_.buildInstrumentTrackBody(staged, name, isSampler ? false : poly, inserts, envelopeParams,
+                                           isSampler ? instrumentType : juce::String());
 }

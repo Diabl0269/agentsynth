@@ -104,8 +104,12 @@ InstrumentLoad decodePack(const InstrumentSource& source) {
         return out;
     }
     out = decodeSfz(found->sfz);
-    if (out.instrument != nullptr)
-        out.instrument->name = found->name;
+    if (out.instrument == nullptr)
+        return out;
+    out.instrument->name = found->name;
+    if (source.gainDb != 0.0f)
+        for (auto& region : out.instrument->regions)
+            region.volumeDb += source.gainDb;
     return out;
 }
 
@@ -242,6 +246,8 @@ void writeInstrumentState(const InstrumentSource& s, juce::DynamicObject& state)
         break;
     case InstrumentSource::Kind::Pack:
         state.setProperty(fk::kInstrumentPack, s.packId + "/" + s.instrumentId);
+        if (s.gainDb != 0.0f)
+            state.setProperty(fk::kInstrumentGainDb, (double)s.gainDb);
         break;
     case InstrumentSource::Kind::Files: {
         juce::Array<juce::var> files, regions;
@@ -269,9 +275,13 @@ InstrumentSource readInstrumentState(const juce::DynamicObject& state) {
         s.sfzRelative = sfz;
         return s;
     }
-    if (pack.contains("/"))
-        return InstrumentSource::fromPack(pack.upToFirstOccurrenceOf("/", false, false),
-                                          pack.fromFirstOccurrenceOf("/", false, false));
+    if (pack.contains("/")) {
+        auto s = InstrumentSource::fromPack(pack.upToFirstOccurrenceOf("/", false, false),
+                                            pack.fromFirstOccurrenceOf("/", false, false));
+        if (state.hasProperty(fk::kInstrumentGainDb))
+            s.gainDb = juce::jlimit(-24.0f, 24.0f, (float)state.getProperty(fk::kInstrumentGainDb));
+        return s;
+    }
     if (const auto* list = state.getProperty(fk::kInstrumentFiles).getArray(); list != nullptr && !list->isEmpty()) {
         InstrumentSource s;
         s.kind = InstrumentSource::Kind::Files;
