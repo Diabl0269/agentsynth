@@ -36,12 +36,8 @@ public:
         auto* audioData = buffer.getWritePointer(0);
         const float* cvAmountData = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
 
-        bool cvAmountActive = false;
-        if (cvAmountData) {
-            // Whole block: an envelope that idles at 0 and fires mid-block must not be missed.
-            for (int i = 0; i < numSamples && !cvAmountActive; ++i)
-                cvAmountActive = cvAmountData[i] != 0.0f;
-        }
+        // Whole block: an envelope that idles at 0 and fires mid-block must not be missed.
+        const bool cvAmountActive = hasAnyNonZero(cvAmountData, numSamples);
         smoothedAmount.setTargetValue(*amountParam);
 
         if (!cvAmountActive && !smoothedAmount.isSmoothing()) {

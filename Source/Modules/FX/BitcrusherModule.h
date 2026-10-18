@@ -163,15 +163,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Bitcrusher; }
 
 private:
-    static bool isChannelActive(const float* channel, int numSamples) {
-        if (!channel)
-            return false;
-        for (int i = 0; i < numSamples; ++i) {
-            if (channel[i] != 0.0f)
-                return true;
-        }
-        return false;
-    }
+    static bool isChannelActive(const float* channel, int numSamples) { return hasAnyNonZero(channel, numSamples); }
 
     double currentSampleRate = 44100.0;
     juce::AudioBuffer<float> dryBuffer;
