@@ -161,8 +161,8 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     y = layoutHostedPluginChrome(y, narrowX, narrowW, apply);
 
     // --- Sampler chrome: the waveform and load row, or the instrument picker and key strip ---
-    if (samplerChrome_ != nullptr)
-        y = samplerChrome_->layout(y, contentX, contentW, narrowX, narrowW, apply);
+    if (instrumentChrome_ != nullptr)
+        y = instrumentChrome_->layout(y, contentX, contentW, narrowX, narrowW, apply);
 
     // --- Wavetable chrome: the scanned frame view, the Table selector, the load row, the file caption ---
     if (wavetableDisplay != nullptr && loadWavetableButton != nullptr)

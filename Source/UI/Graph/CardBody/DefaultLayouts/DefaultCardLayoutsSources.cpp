@@ -5,6 +5,7 @@
 // selector and load row, and the LFO's custom-wave editor are card chrome (ModuleComponent) that already
 // draws where the design puts them, so a registered copy would be a second, unbound panel.
 // docs/layout/module-card-layout.md#default-layouts.
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 
@@ -18,6 +19,9 @@ constexpr int kRevision = 1;
 
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
+
+// The Drum Kit layout gained the Recorded switches (a recorded kit).
+constexpr int kDrumKitRevision = 2;
 
 // A row of four knobs (Oscillator Pitch, LFO shaping) on one line.
 constexpr int kQuadColumns = 4;
@@ -89,22 +93,57 @@ CardLayout samplerLayout() {
 }
 
 // The master Level stays above a strip of seven tabs, one per drum group (level, tune, decay; the hats add
-// their two decays), so the card is no taller than a Noise card plus one row of knobs.
+// their two decays, each with the group's Recorded switch under the knobs), so the card is no taller than a Noise
+// card plus two rows of knobs.
 CardLayout drumKitLayout() {
     CardLayout layout;
     layout.sections = {
         section("output", std::nullopt, {param("level")}, 1),
-        tab("kick", "Kick", {param("kickLevel"), param("kickTune"), param("kickDecay")}),
-        tab("snare", "Snare", {param("snareLevel"), param("snareTune"), param("snareDecay")}),
-        tab("clap", "Clap", {param("clapLevel"), param("clapTune"), param("clapDecay")}),
-        tab("hats", "Hats", {param("hatLevel"), param("hatTune"), param("closedDecay"), param("openDecay")},
+        tab("kick", "Kick", {param("kickLevel"), param("kickTune"), param("kickDecay"), param("kickRecorded")}),
+        tab("snare", "Snare", {param("snareLevel"), param("snareTune"), param("snareDecay"), param("snareRecorded")}),
+        tab("clap", "Clap", {param("clapLevel"), param("clapTune"), param("clapDecay"), param("clapRecorded")}),
+        tab("hats", "Hats",
+            {param("hatLevel"), param("hatTune"), param("closedDecay"), param("openDecay"), param("hatRecorded")},
             kQuadColumns),
-        tab("toms", "Toms", {param("tomLevel"), param("tomTune"), param("tomDecay")}),
-        tab("cymbals", "Cym", {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay")}),
-        tab("cowbell", "Bell", {param("cowbellLevel"), param("cowbellTune"), param("cowbellDecay")}),
+        tab("toms", "Toms", {param("tomLevel"), param("tomTune"), param("tomDecay"), param("tomRecorded")}),
+        tab("cymbals", "Cym",
+            {param("cymbalLevel"), param("cymbalTune"), param("cymbalDecay"), param("cymbalRecorded")}),
+        tab("cowbell", "Bell",
+            {param("cowbellLevel"), param("cowbellTune"), param("cowbellDecay"), param("cowbellRecorded")}),
         footer({}),
     };
     return layout;
+}
+
+// A Decay knob greys out while every note it shapes plays a recording; a Recorded switch is on the card only while a
+// kit is loaded (the card re-reads the rules when the kit changes).
+std::vector<CardDimRule> drumKitRules() {
+    std::vector<CardDimRule> rules;
+    const auto decayRule = [&rules](const char* decayId, const char* recordedId) {
+        const juce::String id(decayId);
+        rules.push_back({id, {recordedId}, [id](juce::AudioProcessor& module) {
+                             auto* kit = dynamic_cast<DrumKitModule*>(&module);
+                             return kit != nullptr && kit->decayIsMoot(id);
+                         }});
+    };
+    decayRule("kickDecay", "kickRecorded");
+    decayRule("snareDecay", "snareRecorded");
+    decayRule("clapDecay", "clapRecorded");
+    decayRule("closedDecay", "hatRecorded");
+    decayRule("openDecay", "hatRecorded");
+    decayRule("tomDecay", "tomRecorded");
+    decayRule("cymbalDecay", "cymbalRecorded");
+    decayRule("cowbellDecay", "cowbellRecorded");
+    for (const char* id : {"kickRecorded", "snareRecorded", "clapRecorded", "hatRecorded", "tomRecorded",
+                           "cymbalRecorded", "cowbellRecorded"})
+        rules.push_back({id,
+                         {},
+                         [](juce::AudioProcessor& module) {
+                             auto* kit = dynamic_cast<DrumKitModule*>(&module);
+                             return kit != nullptr && !kit->hasRecordedKit();
+                         },
+                         true});
+    return rules;
 }
 
 // Level stays above three tabs: the string (how long and how bright it rings), the pick (how it is
@@ -192,7 +231,7 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Oscillator", oscillatorLayout(), kRevision, {detuneAtOneVoice()});
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kSamplerRevision);
-    defaults.add("Drum Kit", drumKitLayout(), kRevision);
+    defaults.add("Drum Kit", drumKitLayout(), kDrumKitRevision, drumKitRules());
     defaults.add("Pluck", pluckLayout(), kRevision);
     defaults.add("Mallet", malletLayout(), kRevision);
     defaults.add("LFO", lfoLayout(), kRevision);

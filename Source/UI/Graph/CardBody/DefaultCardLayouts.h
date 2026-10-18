@@ -9,12 +9,13 @@ namespace synth {
 
 /**
  * A dim rule a stored layout cannot express (a numeric test, such as Detune while Unison is 1):
- * `paramId`'s control greys out while `dims` returns true, on any layout of the type.
+ * `paramId`'s control greys out (or, with `hides`, goes) while `dims` returns true, on any layout of the type.
  */
 struct CardDimRule {
     juce::String paramId;
     juce::StringArray watched; ///< The parameter ids whose change re-evaluates `dims`.
     std::function<bool(juce::AudioProcessor& module)> dims;
+    bool hides = false; ///< The control leaves the card (its cell stays) while `dims` returns true, instead of greying.
 };
 
 /**

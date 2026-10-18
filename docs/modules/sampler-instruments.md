@@ -85,3 +85,9 @@ Restoring state decodes through `synth::DeferredAssetLoads` while a project open
 ## Threading
 
 The message thread decodes and publishes an `Instrument` under a `SpinLock`; the audio thread takes a try-lock once per block and renders silence on contention. Replaced instruments stay in a message-thread array until the audio thread has let go of them, so no destructor runs on the audio thread. The notes sounding at the end of each block are published as two atomic 64-bit words for the UI key strip (`SamplerModule::getSoundingNotes`).
+
+## Drum Kit
+
+The Drum Kit loads the same instruments (`Instrument`, `InstrumentSlot`, `VoicePool`, the SFZ reader, `SoundPackLibrary`) through the shared `InstrumentHost` interface that `SamplerModule` and `DrumKitModule` both implement; saved state uses the same extra-state keys and `ModuleFileRefs` entries, registered for the "Drum Kit" type. Each drum group has a `Recorded` toggle; a note plays a recording when its group is on and the kit has a region for it, otherwise the synth voice. Group Level and Tune (`2^(semitones / 12)`) apply to recordings, velocity weights the level as `0.5 + 0.5 * velocity^1.6`, and recordings sum with the synth drums at full level before the module Level and the soft limiter: no -9 dB voice-sum headroom, since only a few hits overlap (with it a recorded kit played about 14 dB below the synth kit). Note-Off is ignored, and a closed or pedal hat fades the open hat's recording out over 12 ms.
+
+The card shows the same picker and caption (`InstrumentPickerRow`, shared with `SamplerChrome` through `InstrumentChrome`) above the knobs, with the Built in list filtered to Drums and a "Synth drums" first row that clears the kit. The Recorded toggles hide with an animated fade while no kit is loaded (`CardDimRule::hides`). Not covered: dropping one file onto one pad, per-pad sample editing, a pack download offer.

@@ -95,7 +95,8 @@ VoicePool::Voice* VoicePool::allocateVoice(const VoiceParams& p, bool allowSteal
     return &voices_[synth::voices::pickVoice(voices_)];
 }
 
-void VoicePool::startVoices(int note, float velocity01, int velocity127, bool releaseTrigger, const VoiceParams& p) {
+void VoicePool::startVoices(int note, float velocity01, int velocity127, bool releaseTrigger, const VoiceParams& p,
+                            float gain, double extraSemis) {
     std::array<RegionHit, kMaxHitsPerNote> hits;
     const int count = selectRegions(*instrument_, note, velocity127, releaseTrigger, roundRobin_++, hits);
     for (int h = 0; h < count; ++h) {
@@ -110,7 +111,7 @@ void VoicePool::startVoices(int note, float velocity01, int velocity127, bool re
         v->regionIndex = hits[(size_t)h].regionIndex;
         v->releaseVoice = releaseTrigger;
         v->keyDown = !releaseTrigger;
-        v->semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0;
+        v->semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0 + extraSemis;
         if (!releaseTrigger && p.glideSeconds > 0.0f && lastNote_ >= 0 && lastNote_ != note) {
             v->glideFrames = std::max(1, (int)(p.glideSeconds * sampleRate_));
             v->glideOffset = (double)(lastNote_ - note);
@@ -119,14 +120,14 @@ void VoicePool::startVoices(int note, float velocity01, int velocity127, bool re
         v->rateRatio = region.sample->sourceSampleRate / sampleRate_;
         v->velocity01 = velocity01;
         const float feel = juce::jlimit(0.0f, 1.0f, p.feel);
-        v->gain =
-            hits[(size_t)h].gain * dbToGain(region.volumeDb) * ((1.0f - feel) + feel * std::pow(velocity01, 1.6f));
+        v->gain = gain * hits[(size_t)h].gain * dbToGain(region.volumeDb) *
+                  ((1.0f - feel) + feel * std::pow(velocity01, 1.6f));
         v->attackStep = 1.0f / (float)std::max(1.0, std::max(p.attackSeconds, kMinAttackSeconds) * sampleRate_);
         v->watch.reset((int)(kQuietWindowSeconds * sampleRate_));
     }
 }
 
-void VoicePool::noteOn(int note, float velocity01, const VoiceParams& p) {
+void VoicePool::noteOn(int note, float velocity01, const VoiceParams& p, float gain, double extraSemis) {
     if (instrument_ == nullptr || note < 0 || note > 127)
         return;
     lastReleaseSeconds_ = p.releaseSeconds;
@@ -151,8 +152,14 @@ void VoicePool::noteOn(int note, float velocity01, const VoiceParams& p) {
     for (auto& v : voices_)
         if (v.active && v.note == note && v.held && !v.releaseVoice)
             beginRelease(v, kRetriggerReleaseSeconds);
-    startVoices(note, (float)velocity127 / 127.0f, velocity127, false, p);
+    startVoices(note, (float)velocity127 / 127.0f, velocity127, false, p, gain, extraSemis);
     lastNote_ = note;
+}
+
+void VoicePool::chokeNote(int note, float seconds) {
+    for (auto& v : voices_)
+        if (v.active && v.note == note && v.stage != Stage::Release)
+            beginRelease(v, seconds);
 }
 
 void VoicePool::pushMonoKey(int note) {

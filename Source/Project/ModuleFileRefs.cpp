@@ -35,6 +35,8 @@ const std::vector<ModuleFileKey>& ModuleFileRefs::keys() {
         {fk::kWavetableType, fk::kWavetableFolder, true, ProjectBundle::kWavetablesSubdirName},
         {fk::kSamplerType, fk::kInstrumentFolder, true, ProjectBundle::kInstrumentsSubdirName, false, true},
         {fk::kSamplerType, fk::kInstrumentFiles, false, ProjectBundle::kSamplesSubdirName, true},
+        {fk::kDrumKitType, fk::kInstrumentFolder, true, ProjectBundle::kInstrumentsSubdirName, false, true},
+        {fk::kDrumKitType, fk::kInstrumentFiles, false, ProjectBundle::kSamplesSubdirName, true},
     };
     return registry;
 }

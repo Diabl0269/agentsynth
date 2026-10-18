@@ -32,6 +32,10 @@ public:
     /** Message thread. The published instrument, or null when none is loaded or a publish is in flight. */
     Instrument::Ptr current() const;
 
+    /** Audio thread. Points `held` at the published instrument with a try-lock; false (leaving `held`) while a publish
+        is in flight. The caller keeps `held` until it next acquires, so a replaced instrument is never freed here. */
+    bool tryAcquire(Instrument::Ptr& held) const;
+
     /** Message thread. */
     juce::String name() const { return name_; }
 

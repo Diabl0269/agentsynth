@@ -1,18 +1,26 @@
-// ModuleComponentAudioDrop.cpp -- the Sampler's chrome creation (SamplerChrome) plus audio-file drag-and-drop for both
-// the Sampler and the Wavetable oscillator's file targets. ModuleComponent is declared in ModuleComponent.h; the rest
-// of its implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+// ModuleComponentAudioDrop.cpp -- the Sampler's and Drum Kit's chrome creation (SamplerChrome, DrumKitChrome) plus
+// audio-file drag-and-drop for both the Sampler and the Wavetable oscillator's file targets. ModuleComponent is
+// declared in ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp units next to
+// this one.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "Modules/SamplerModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 
 void ModuleComponent::createSamplerControls() {
-    auto* sampler = dynamic_cast<SamplerModule*>(module);
-    if (sampler == nullptr)
-        return;
-
-    samplerChrome_ = std::make_unique<synth::ui::SamplerChrome>(
-        synth::ui::SamplerChrome::Host{this, undoManager, &owner.getAudioEngine().getGraph()}, *sampler);
+    synth::ui::InstrumentChrome::Host host{this, undoManager, &owner.getAudioEngine().getGraph(), {}};
+    if (auto* sampler = dynamic_cast<SamplerModule*>(module)) {
+        instrumentChrome_ = std::make_unique<synth::ui::SamplerChrome>(host, *sampler);
+    } else if (auto* kit = dynamic_cast<DrumKitModule*>(module)) {
+        // The Recorded switches come and go with the kit: the body re-reads its rules when the instrument changes.
+        host.kitChanged = [this] {
+            if (cardBody_ != nullptr)
+                cardBody_->refreshConditions();
+        };
+        instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
+    }
 }
 
 bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {
@@ -27,12 +35,12 @@ bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {
         return false;
     }
 
-    return samplerChrome_ != nullptr && samplerChrome_->isInterestedInDrop(files);
+    return instrumentChrome_ != nullptr && instrumentChrome_->isInterestedInDrop(files);
 }
 
 void ModuleComponent::fileDragEnter(const juce::StringArray& files, int, int) {
-    if (samplerChrome_ != nullptr)
-        samplerChrome_->dragEntered(files);
+    if (instrumentChrome_ != nullptr)
+        instrumentChrome_->dragEntered(files);
     if (!fileDragHighlight) {
         fileDragHighlight = true;
         repaint();
@@ -40,8 +48,8 @@ void ModuleComponent::fileDragEnter(const juce::StringArray& files, int, int) {
 }
 
 void ModuleComponent::fileDragExit(const juce::StringArray&) {
-    if (samplerChrome_ != nullptr)
-        samplerChrome_->dragLeft();
+    if (instrumentChrome_ != nullptr)
+        instrumentChrome_->dragLeft();
     if (fileDragHighlight) {
         fileDragHighlight = false;
         repaint();
@@ -79,7 +87,7 @@ void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
     // An .sfz, or two or more recordings, become an instrument (SamplerChrome::dropFiles). One recording is a
     // sample: the first playable file is used. Dropping several onto the canvas (rather than onto a module)
     // creates one Sampler each; that path lives in GraphEditor.
-    if (samplerChrome_ != nullptr && samplerChrome_->dropFiles(files)) {
+    if (instrumentChrome_ != nullptr && instrumentChrome_->dropFiles(files)) {
         repaint();
         return;
     }
@@ -99,14 +107,14 @@ void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
 }
 
 void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
-    if (samplerChrome_ != nullptr)
-        samplerChrome_->refreshSampleLabel(fallbackMessage);
+    if (instrumentChrome_ != nullptr)
+        instrumentChrome_->refreshSampleLabel(fallbackMessage);
 }
 
 // A project opened on screen decodes its samples and wavetables after the cards exist (DeferredAssetLoads.h): the
 // waveform and frame views follow the module on their own ticks, but the file-name labels are only ever set here.
 void ModuleComponent::refreshLoadedFileLabels() {
-    if (samplerChrome_ != nullptr)
-        samplerChrome_->refreshLoaded();
+    if (instrumentChrome_ != nullptr)
+        instrumentChrome_->refreshLoaded();
     refreshWavetableLabel();
 }

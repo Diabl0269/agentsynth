@@ -250,8 +250,8 @@ public:
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
     synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
-    /** Null unless the module is a Sampler. */
-    synth::ui::SamplerChrome* getSamplerChrome() const noexcept { return samplerChrome_.get(); }
+    /** A SamplerChrome or DrumKitChrome; null unless the module is a Sampler or a Drum Kit. */
+    synth::ui::InstrumentChrome* getInstrumentChrome() const noexcept { return instrumentChrome_.get(); }
 
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
@@ -646,8 +646,8 @@ private:
     // plan skips the parameter). Its combo and label are bespoke widgets; the attachment goes first.
     std::unique_ptr<juce::ComboBoxParameterAttachment> wavetableTableAttachment;
 
-    // Sampler-only chrome: waveform and load row, or the Instrument picker and key strip (SamplerChrome).
-    std::unique_ptr<synth::ui::SamplerChrome> samplerChrome_;
+    // Instrument chrome: the Sampler's waveform and picker (SamplerChrome), the Drum Kit's picker (DrumKitChrome).
+    std::unique_ptr<synth::ui::InstrumentChrome> instrumentChrome_;
     bool fileDragHighlight = false;
     // Channel index of the knob currently highlighted as a modulation drop target, or -1.
     int modDropTargetChannel = -1;
@@ -898,7 +898,7 @@ private:
     int layoutWavetableChrome(int y, int contentX, int contentW, bool apply);
     int layoutChromeRows(int y, int contentX, int contentW, bool apply);
 
-    // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
+    // Builds the Sampler's or Drum Kit's instrument chrome. No-op for other modules.
     void createSamplerControls();
 
     // Repoints the file-name label at whatever the module currently holds.

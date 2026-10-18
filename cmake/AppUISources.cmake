@@ -611,6 +611,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentMorphCard.cpp
     Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h
     Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentPickerRow.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentPickerRow.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChromeLoad.cpp

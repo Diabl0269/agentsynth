@@ -4,7 +4,8 @@
 namespace synth {
 
 juce::StringArray PresetManager::getPresetNames() {
-    return {"Default", "Simple Lead", "Ambient Pad", "Modulated Bass", "Step Sequence", "Electric Keys", "Poly Pad"};
+    return {"Default",       "Simple Lead",   "Ambient Pad", "Modulated Bass",
+            "Step Sequence", "Electric Keys", "Poly Pad",    "Acoustic Kit"};
 }
 
 juce::Array<PresetInfo> PresetManager::getPresetList() {
@@ -16,10 +17,13 @@ juce::Array<PresetInfo> PresetManager::getPresetList() {
     presets.add({"Step Sequence", "Sequence"});
     presets.add({"Electric Keys", "Keys"});
     presets.add({"Poly Pad", "Pad"});
+    presets.add({"Acoustic Kit", "Drums"});
     return presets;
 }
 
-juce::StringArray PresetManager::getCategories() { return {"Init", "Lead", "Pad", "Bass", "Sequence", "Keys"}; }
+juce::StringArray PresetManager::getCategories() {
+    return {"Init", "Lead", "Pad", "Bass", "Sequence", "Keys", "Drums"};
+}
 
 bool PresetManager::loadPreset(int index, juce::AudioProcessorGraph& graph) {
     juce::String jsonStr = getPresetJSON(index);
@@ -33,6 +37,24 @@ bool PresetManager::loadPreset(int index, juce::AudioProcessorGraph& graph) {
 }
 
 bool PresetManager::loadDefaultPreset(juce::AudioProcessorGraph& graph) { return loadPreset(0, graph); }
+
+namespace {
+// The Drum Kit playing the core pack's recorded kit; it plays the synth drums while the pack is missing.
+const char* acousticKitPresetJSON() {
+    return R"({
+  "nodes": [
+    {"id": 1, "type": "Audio Output", "position": {"x": 650, "y": 10}},
+    {"id": 2, "type": "Drum Kit", "position": {"x": 350, "y": 10}, "state": {"instrumentPack": "core/acoustic-kit"}},
+    {"id": 3, "type": "MIDI Keyboard", "position": {"x": 10, "y": 1000}}
+  ],
+  "connections": [
+    {"src": 3, "srcPort": -1, "dst": 2, "dstPort": -1},
+    {"src": 2, "srcPort": 0, "dst": 1, "dstPort": 0},
+    {"src": 2, "srcPort": 1, "dst": 1, "dstPort": 1}
+  ]
+})";
+}
+} // namespace
 
 juce::String PresetManager::getPresetJSON(int index) {
     // UI Layout Strategy — Column/Row Model (canvas pixels, kCollisionGap = 12):
@@ -411,7 +433,7 @@ juce::String PresetManager::getPresetJSON(int index) {
 })";
 
     default:
-        return "";
+        return index == 7 ? acousticKitPresetJSON() : "";
     }
 }
 

@@ -15,6 +15,9 @@ public:
     void setInstrument(const juce::String& name, const juce::String& origin);
     juce::String getInstrumentName() const { return name_; }
 
+    /** What the picker says while nothing is loaded (`shown` on the button, `spoken` after "Instrument, "). */
+    void setNoneLabel(const juce::String& shown, const juce::String& spoken);
+
     /** True while the list is open: the caret points down. */
     void setListOpen(bool open) { caret_.setOpen(open); }
 
@@ -23,7 +26,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
-    juce::String name_, origin_;
+    juce::String name_, origin_, noneShown_{"Choose an instrument"}, noneSpoken_{"none"};
     ChevronTurn caret_{*this, false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerInstrumentPicker)

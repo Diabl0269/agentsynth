@@ -33,8 +33,12 @@ public:
     /** Audio thread, once per block before render. Null = silence; a different instrument stops all voices. */
     void setInstrument(const Instrument* inst);
 
-    /** Audio thread. `velocity01` is mapped to MIDI velocity 1..127. */
-    void noteOn(int note, float velocity01, const VoiceParams& params);
+    /** Audio thread. `velocity01` is mapped to MIDI velocity 1..127. `gain` scales and `extraSemis` repitches the
+        voices this note starts (a drum's Level and Tune); both are fixed for the voice's life. */
+    void noteOn(int note, float velocity01, const VoiceParams& params, float gain = 1.0f, double extraSemis = 0.0);
+
+    /** Audio thread. Fades every sounding voice of `note` out over `seconds`, whatever its key state. */
+    void chokeNote(int note, float seconds);
     void noteOff(int note, const VoiceParams& params);
     void sustainPedal(bool down, const VoiceParams& params);
 
@@ -86,7 +90,8 @@ private:
     void pushMonoKey(int note);
     void removeMonoKey(int note);
     void stepGlide(Voice& v, int frames) const;
-    void startVoices(int note, float velocity01, int velocity127, bool releaseTrigger, const VoiceParams& p);
+    void startVoices(int note, float velocity01, int velocity127, bool releaseTrigger, const VoiceParams& p,
+                     float gain = 1.0f, double extraSemis = 0.0);
     Voice* allocateVoice(const VoiceParams& p, bool allowSteal);
     void beginRelease(Voice& v, float seconds);
     void releaseKey(Voice& v, const VoiceParams& p);

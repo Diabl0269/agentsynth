@@ -137,10 +137,11 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
-        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapTune, closedDecay, cowbellDecay, cowbellLevel, "
-                     "cowbellTune, cymbalDecay, cymbalLevel, cymbalTune, dualIO, hatLevel, hatTune, kickDecay, "
-                     "kickLevel, kickTune, level, muted, openDecay, "
-                     "snareDecay, snareLevel, snareTune, tomDecay, tomLevel, tomTune"},
+        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapRecorded, clapTune, closedDecay, cowbellDecay, "
+                     "cowbellLevel, cowbellRecorded, cowbellTune, cymbalDecay, cymbalLevel, cymbalRecorded, "
+                     "cymbalTune, dualIO, hatLevel, hatRecorded, hatTune, kickDecay, kickLevel, kickRecorded, "
+                     "kickTune, level, muted, openDecay, snareDecay, snareLevel, snareRecorded, snareTune, "
+                     "tomDecay, tomLevel, tomRecorded, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, morphX, morphY, muted, outputLevel, "
