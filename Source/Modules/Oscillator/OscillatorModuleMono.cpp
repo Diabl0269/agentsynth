@@ -39,7 +39,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
 
     // The mod-CV inputs (ch1-5, Pan on ch6) share raw channels with outputs this module must leave
     // silent. The render below writes only ch0 and the Audio R block (ch14+), so it reads the CV in
-    // place and clears ch1-6 afterwards; an unpatched jack (the 64-sample RMS guard) reads as null,
+    // place and clears ch1-6 afterwards; an unpatched jack (the whole-block guard) reads as null,
     // which every consumer treats exactly like a block of zeros. No per-block copy or allocation.
     int numCh = buffer.getNumChannels();
     const auto activeCV = [&](int ch) -> const float* {

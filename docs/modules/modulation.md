@@ -31,7 +31,7 @@ modules already work.
 
 Two consequences worth stating explicitly:
 
-- **"Is a CV input patched?" probes scan the whole block, never the first 64 samples.** An envelope idles at exactly 0 between notes and fires mid-block, so a head-of-block probe reads it as unpatched, drops the attack and steps the note in a block later (an audible click at every note onset). VCA and Attenuverter probe every sample; the probes still in Oscillator, Noise, Wavetable and Envelope Follower have the same shape and want the same change when touched.
+- **"Is a CV input patched?" probes scan the whole block, never the first 64 samples.** An envelope idles at exactly 0 between notes and fires mid-block, so a head-of-block probe reads it as unpatched, drops the attack and steps the note in a block later (an audible click at every note onset). Every module scans the whole block through the one shared `hasAnyNonZero` (`Source/Modules/PortRole.h`) (exits on the first live sample): VCA, Attenuverter, Oscillator, Noise, Wavetable, Envelope Follower, Sampler, Ring Modulator, Pitch Shifter and Bitcrusher. A new CV probe uses it too.
 - **Automation is visible to the user as a moved knob**, because it really is one. That is why the
   applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per
   automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection

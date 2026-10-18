@@ -744,14 +744,7 @@ void WavetableOscillatorModule::unisonPanGains(int u, int unisonCount, float wid
 }
 
 bool WavetableOscillatorModule::isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
-    if (ch >= buffer.getNumChannels())
-        return false;
-    const float* data = buffer.getReadPointer(ch);
-    const int checkLen = std::min(numSamples, 64);
-    float energy = 0.0f;
-    for (int i = 0; i < checkLen; ++i)
-        energy += data[i] * data[i];
-    return (energy / (float)checkLen) > 1.0e-6f;
+    return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
 }
 
 void WavetableOscillatorModule::fillParameterRamps(int numSamples) {

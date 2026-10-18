@@ -49,13 +49,6 @@ public:
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }
 
-    static bool hasAnyNonZero(const float* data, int numSamples) noexcept {
-        for (int s = 0; s < numSamples; ++s)
-            if (data[s] != 0.0f)
-                return true;
-        return false;
-    }
-
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches

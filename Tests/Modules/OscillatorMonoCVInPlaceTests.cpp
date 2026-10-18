@@ -2,7 +2,7 @@
 //
 // Mono mode reads its mod-CV inputs (ch1-5, Pan on ch6) straight from the buffer and clears them only after the
 // render. These pin what that must preserve: the CV still acts, the CV channels still leave the module silent, and a
-// jack the 64-sample guard calls unpatched is still read as zeros.
+// CV that starts mid-block still acts from that sample on.
 
 #include "Modules/OscillatorModule.h"
 #include <cmath>
@@ -56,17 +56,24 @@ TEST(OscillatorMonoCVInPlaceTest, PatchedCVActsAndItsChannelsLeaveSilent) {
     EXPECT_LT(left, 0.75f * right) << "the Pan CV moved the voice right";
 }
 
-TEST(OscillatorMonoCVInPlaceTest, CVThatStartsAfterTheGuardWindowReadsAsUnpatched) {
+TEST(OscillatorMonoCVInPlaceTest, CVThatStartsMidBlockActsFromThatSampleOn) {
     auto osc = playingOscillator();
     juce::AudioBuffer<float> buffer(kChannels, kBlock);
     buffer.clear();
-    for (int i = 100; i < kBlock; ++i) // silent through the 64-sample guard: treated as an empty jack
+    for (int i = 100; i < kBlock; ++i) // silent for the first 100 samples, then Pan fully right
         buffer.setSample(kPanCV, i, 1.0f);
     juce::MidiBuffer midi;
     osc->processBlock(buffer, midi);
 
     EXPECT_TRUE(channelSilent(buffer, kPanCV));
-    for (int i = 0; i < kBlock; ++i)
+    for (int i = 0; i < 100; ++i)
         ASSERT_EQ(buffer.getSample(OscillatorModule::kRightBase, i), buffer.getSample(0, i))
-            << "centred and unpatched: Audio R is a bit-identical copy of Audio L (sample " << i << ")";
+            << "centred before the CV starts: Audio R is a bit-identical copy of Audio L (sample " << i << ")";
+    float left = 0.0f, right = 0.0f;
+    for (int i = 100; i < kBlock; ++i) {
+        left += std::abs(buffer.getSample(0, i));
+        right += std::abs(buffer.getSample(OscillatorModule::kRightBase, i));
+    }
+    EXPECT_GT(right, 0.0f);
+    EXPECT_LT(left, 0.75f * right) << "the Pan CV moved the voice right once it started";
 }

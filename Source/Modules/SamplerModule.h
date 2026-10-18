@@ -357,11 +357,10 @@ public:
 
         midiWired = midiInputWired.load(std::memory_order_relaxed) || restoredFromState.load(std::memory_order_relaxed);
         // ---- 1. Cache CV inputs before the buffer is cleared --------------------------------
-        // The trigger channel is probed over the WHOLE block, not just the first 64 samples like the
-        // CV channels: a gate that rises at sample 100 would otherwise read as an unpatched jack and
-        // hand that block to the free-running fallback, firing a note nobody asked for.
-        const bool trigConnected =
-            cacheChannel(buffer, kTriggerCh, ns, numSamples, triggerCache, /*probeWholeBlock*/ true);
+        // Every channel is probed over the whole block: a gate that rises at sample 100 would
+        // otherwise read as an unpatched jack and hand that block to the free-running fallback,
+        // firing a note nobody asked for.
+        const bool trigConnected = cacheChannel(buffer, kTriggerCh, ns, numSamples, triggerCache);
         if (trigConnected)
             triggerEverConnected = true;
         const bool hasPitchCV = cacheChannel(buffer, kPitchCVCh, ns, numSamples, pitchCache);
@@ -893,25 +892,15 @@ private:
     }
 
     /** Copies `ch` into `dest` and reports whether it carried anything. A channel that is all-zero
-     *  over the probed span is treated as unpatched (the same heuristic NoiseModule uses).
-     *  `probeWholeBlock` widens the probe from the first 64 samples to every sample — worth the
-     *  extra pass for the gate, where a missed rising edge is an audible wrong note. */
+     *  over the whole block is treated as unpatched (the same heuristic NoiseModule uses). */
     static bool cacheChannel(const juce::AudioBuffer<float>& buffer, int ch, int ns, int numSamples,
-                             std::array<float, kMaxBlock>& dest, bool probeWholeBlock = false) {
+                             std::array<float, kMaxBlock>& dest) {
         std::fill_n(dest.data(), ns, 0.0f);
         if (ch >= buffer.getNumChannels())
             return false;
 
         const float* data = buffer.getReadPointer(ch);
-        bool active = false;
-        const int probe = probeWholeBlock ? numSamples : juce::jmin(numSamples, 64);
-        for (int i = 0; i < probe; ++i) {
-            if (data[i] != 0.0f) {
-                active = true;
-                break;
-            }
-        }
-        if (!active)
+        if (!hasAnyNonZero(data, numSamples))
             return false;
 
         std::copy_n(data, ns, dest.data());
