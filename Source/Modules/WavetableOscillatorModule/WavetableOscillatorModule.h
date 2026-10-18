@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "../UnisonVoicing.h"
 #include "WavetableTableBuilder.h"
 #include <algorithm>
 #include <array>
@@ -345,9 +346,7 @@ private:
                 float p = startPhase;
                 if (count > 1)
                     p += spread * (float)u / (float)count;
-                if (randomAmount > 0.0f)
-                    p += randomAmount * rng.nextFloat();
-                p -= std::floor(p);
+                p = synth::unisonRestartPhase(p, randomAmount, rng);
                 phase[u] = p;
                 masterPhase[u] = p;
             }
@@ -711,9 +710,6 @@ private:
     /** Semitone offset of unison voice `u` for the selected stack mode. Voice 0 always stays
         at the root so Blend can fade the stack against an unshifted centre. */
     static float stackSemitones(Stack mode, int u, int unisonCount);
-
-    /** Equal-power stereo placement for unison voice `u`. width 0 collapses to centre. */
-    static void unisonPanGains(int u, int unisonCount, float width, float& gainL, float& gainR);
 
     // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter have
     // Audio L/R blocks of their own too, and all three modules must place a signal identically.

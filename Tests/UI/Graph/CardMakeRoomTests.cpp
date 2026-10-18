@@ -6,6 +6,7 @@
 
 #include "../../Macros/MacroContainer/MacroContainerTestHelpers.h"
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/OscillatorModule.h"
@@ -29,7 +30,10 @@ struct Canvas {
         setCount(*module, count);
         return addModuleAt(editor, engine, std::move(module), x, y);
     }
-    NodeID osc(int x, int y) { return addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), x, y); }
+    // A short card (a Noise module), so a full bank can cover all of it.
+    NodeID neighbourCard(int x, int y) {
+        return addModuleAt(editor, engine, synth::AIStateMapper::createModule("Noise"), x, y);
+    }
 
     juce::Rectangle<int> rect(NodeID id) { return findComponent(editor, id)->getBounds(); }
 
@@ -72,7 +76,7 @@ struct Scene {
 
     Scene() {
         bank = c.bank(400, 300, kSmall);
-        neighbour = c.osc(504, 620);
+        neighbour = c.neighbourCard(504, 620);
         neighbourHome = c.rect(neighbour);
     }
 };
@@ -150,7 +154,7 @@ TEST(CardMakeRoom, ANeighbourWhoseHomeIsNowTakenStaysPut) {
     Scene s;
     s.c.resizeBank(s.bank, kLarge);
     const auto pushed = s.c.rect(s.neighbour);
-    const auto squatter = s.c.osc(2000, 1200);
+    const auto squatter = s.c.neighbourCard(2000, 1200);
     s.c.moveByHand(squatter, s.neighbourHome.getPosition());
 
     s.c.resizeBank(s.bank, kSmall);
@@ -235,8 +239,8 @@ TEST(CardMakeRoom, LoadingNeverPushesAndForgetsEarlierPushes) {
 // the neighbour below it aside, closing it brings the neighbour home.
 TEST(CardMakeRoom, TheScopeToggleMakesRoomAndGivesItBack) {
     Canvas c;
-    const auto osc = c.osc(400, 300);
-    const auto neighbour = c.osc(400, c.rect(osc).getBottom() + synth::LayoutUtil::kCollisionGap);
+    const auto osc = c.neighbourCard(400, 300);
+    const auto neighbour = c.neighbourCard(400, c.rect(osc).getBottom() + synth::LayoutUtil::kCollisionGap);
     const auto home = c.rect(neighbour);
     auto* card = findComponent(c.editor, osc);
     juce::ToggleButton* toggle = nullptr;

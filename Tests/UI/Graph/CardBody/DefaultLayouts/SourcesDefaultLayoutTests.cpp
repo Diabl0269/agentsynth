@@ -97,12 +97,13 @@ void expectDimmedAndOperable(const Card& card, const juce::String& paramId, bool
 TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     CardCanvas canvas;
     const auto osc = build(canvas, "Oscillator");
-    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Output"}));
+    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Phase", "Output"}));
     EXPECT_EQ(kindOf(osc, "waveform"), synth::CardBodyItem::Kind::Segmented);
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(widget(osc, "waveform")), nullptr);
     expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
     expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
     expectOnOneRow(osc, {"unison", "detune", "pulseWidth"});
+    expectOnOneRow(osc, {"phase", "randomPhase"});
     expectOnOneRow(osc, {"level", "pan"});
     EXPECT_FALSE(osc.body->hasMoreRow()) << "every parameter is placed";
     ASSERT_TRUE(osc.body->hasFooter());
@@ -117,6 +118,7 @@ TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSqua
     const auto size = osc.card->getBounds();
     expectDimmedAndOperable(osc, "detune", true);
     expectDimmedAndOperable(osc, "pulseWidth", true);
+    expectDimmedAndOperable(osc, "phase", false);
 
     flip(canvas, osc, "unison", 3.0f);
     expectDimmedAndOperable(osc, "detune", false);
@@ -342,7 +344,7 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" ? 2 : 1);
+        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" || type == "Oscillator" ? 2 : 1);
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)

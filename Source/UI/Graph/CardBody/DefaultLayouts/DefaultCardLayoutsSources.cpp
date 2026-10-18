@@ -20,6 +20,9 @@ constexpr int kRevision = 1;
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
 
+// The Oscillator layout gained the Phase section: a stored layout based on an older revision is stale and picks it up.
+constexpr int kOscillatorRevision = 2;
+
 // The Drum Kit layout gained the Recorded switches (a recorded kit).
 constexpr int kDrumKitRevision = 2;
 
@@ -34,15 +37,17 @@ CardLayout oscillatorLayout() {
                 kQuadColumns),
         section("unison", juce::String("Unison"),
                 {param("unison"), param("detune"), dimUnless(param("pulseWidth"), "waveform", {"Square"})}),
+        section("phase", juce::String("Phase"), {param("phase"), param("randomPhase")}),
         section("output", juce::String("Output"), {param("level"), param("pan")}),
         footer({}),
     };
     return layout;
 }
 
-// Detune does nothing with one voice; the rule is numeric, so it lives in code, not in the stored layout.
-CardDimRule detuneAtOneVoice() {
-    return CardDimRule{"detune", {"unison"}, [](juce::AudioProcessor& module) {
+// Detune does nothing with one voice; the rule is numeric, so it lives in code, not in the stored
+// layout.
+CardDimRule dimAtOneVoice(const juce::String& paramId) {
+    return CardDimRule{paramId, {"unison"}, [](juce::AudioProcessor& module) {
                            auto* unison = findParameterByID(&module, "unison");
                            return unison != nullptr && unison->getValue() <= 0.0f;
                        }};
@@ -228,7 +233,7 @@ CardLayout wavetableLayout() {
 } // namespace
 
 void registerSourceCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Oscillator", oscillatorLayout(), kRevision, {detuneAtOneVoice()});
+    defaults.add("Oscillator", oscillatorLayout(), kOscillatorRevision, {dimAtOneVoice("detune")});
     defaults.add("Noise", noiseLayout(), kRevision);
     defaults.add("Sampler", samplerLayout(), kSamplerRevision);
     defaults.add("Drum Kit", drumKitLayout(), kDrumKitRevision, drumKitRules());

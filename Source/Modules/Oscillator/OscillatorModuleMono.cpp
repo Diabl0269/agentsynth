@@ -81,23 +81,29 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     const float* cvPitchCh = nullptr; // Mono mode ignores pitch CV
     auto* ch0 = buffer.getWritePointer(0);
 
-    // modulateNormalised is a no-op when cv == 0.0f, so an unpatched jack reproduces the
-    // plain behaviour exactly.
     const int unisonCount = global.unisonCount;
-    const float detuneCents = global.detuneCents;
 
     const int levelLen = std::max(1, std::min(numSamples, 4096));
     fillLevelRamp(levelLen);
     fillPulseWidthRamp(levelLen, global.pulseWidthPercent);
+    prepareUnisonMix(unisonCount, numSamples);
 
     // Each unison voice's detune ratio is a block constant: computed once here, not per sample.
-    float detuneMultipliers[MAX_UNISON];
-    for (int u = 0; u < unisonCount; ++u) {
-        const float detuneOffset = (unisonCount > 1) ? detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
-        detuneMultipliers[u] = std::pow(2.0f, detuneOffset / 1200.0f);
-    }
+    float detuneRatios[MAX_UNISON];
+    fillUnisonRatios(detuneRatios, unisonCount, global.detuneCents);
+
+    // With Width above 0 the stack renders to Audio R as well; Pan then scales both legs in place.
+    const bool rightRendered = unisonMix.stereo && numCh > kRightBase;
+    float* chR = rightRendered ? buffer.getWritePointer(kRightBase) : nullptr;
+    int nextRestart = 0;
 
     for (int i = 0; i < numSamples; ++i) {
+        // A note-on restarts the phases at its own sample.
+        while (nextRestart < numRestarts && restartOffsets[(size_t)nextRestart] <= i) {
+            restartVoice(voices[0], /*fadeFromOld*/ true);
+            ++nextRestart;
+        }
+
         float baseFreq = gliding ? voices[0].glide.nextFrequency() : voices[0].smoothedFreq.getNextValue();
         lastBaseFreq = baseFreq;
 
@@ -149,33 +155,19 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
         if (cvLevelCh)
             level = juce::jlimit(0.0f, 1.0f, level + cvLevelCh[i]);
 
-        // Unison generation
-        float sample = 0.0f;
-        for (int u = 0; u < unisonCount; ++u) {
-            float uniDt = dt * detuneMultipliers[u];
-
-            float uniSample;
-            if (voices[0].crossfadeSamplesRemaining > 0) {
-                float alpha = static_cast<float>(voices[0].crossfadeSamplesRemaining) / CROSSFADE_SAMPLES;
-                float oldSample =
-                    generateSample(voices[0].fadingFromWaveform, voices[0].unisonOscs[u].phase, uniDt, pulseWidth);
-                float newSample = generateSample(waveform, voices[0].unisonOscs[u].phase, uniDt, pulseWidth);
-                uniSample = oldSample * alpha + newSample * (1.0f - alpha);
-            } else {
-                uniSample = generateSample(waveform, voices[0].unisonOscs[u].phase, uniDt, pulseWidth);
-            }
-
-            sample += uniSample;
-            voices[0].unisonOscs[u].phase += uniDt;
-            if (voices[0].unisonOscs[u].phase >= 1.0f)
-                voices[0].unisonOscs[u].phase -= 1.0f;
-        }
-        sample /= (float)unisonCount;
+        const float waveformAlpha = voices[0].crossfadeSamplesRemaining > 0
+                                        ? static_cast<float>(voices[0].crossfadeSamplesRemaining) / CROSSFADE_SAMPLES
+                                        : 0.0f;
+        const StackContext stack{detuneRatios,  unisonCount, dt, waveform, voices[0].fadingFromWaveform,
+                                 waveformAlpha, pulseWidth};
+        const StackSample stackOut = renderStack(voices[0], stack, i);
 
         if (voices[0].crossfadeSamplesRemaining > 0)
             --voices[0].crossfadeSamplesRemaining;
 
-        ch0[i] = sample * level;
+        ch0[i] = stackOut.left * level;
+        if (chR != nullptr)
+            chR[i] = stackOut.right * level;
     }
 
     if (gliding)
@@ -184,7 +176,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // Place the finished mono voice across Audio L / Audio R. Done as a post-pass rather than
     // inside the render loop so the generator stays byte-identical to the plain mono path.
     fillPanRamp(numSamples);
-    placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanCh, numSamples);
+    placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanCh, numSamples, rightRendered);
     for (int ch = 1; ch <= lastCVChannel && ch < numCh; ++ch)
         buffer.clear(ch, 0, numSamples);
 
@@ -205,9 +197,10 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
 
     The balance law (ModuleBase::panGains) leaves both legs at unity when centred, so at the
     default Pan of 0 Audio L carries exactly what it carried while this module was mono and
-    Audio R is a bit-identical copy of it. */
+    Audio R is a bit-identical copy of it. When `rightRendered` the stack already wrote its own right
+    leg (Width above 0), so Pan scales the two legs in place instead of splitting one. */
 void OscillatorModule::placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int voiceIndex, int numSamples,
-                                          const float* panCV, int panCVLength) {
+                                          const float* panCV, int panCVLength, bool rightRendered) {
     const int rightCh = kRightBase + voiceIndex;
     if (voiceIndex >= buffer.getNumChannels() || rightCh >= buffer.getNumChannels())
         return;
@@ -220,7 +213,8 @@ void OscillatorModule::placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int 
     const int rampLast = std::min(std::max(0, numSamples - 1), (int)panRamp.size() - 1);
     const bool hasCV = (panCV != nullptr && panCVLength > 0);
     if (!hasCV && panRamp[0] == 0.0f && panRamp[(size_t)rampLast] == 0.0f) {
-        juce::FloatVectorOperations::copy(right, left, numSamples);
+        if (!rightRendered)
+            juce::FloatVectorOperations::copy(right, left, numSamples);
         return;
     }
 
@@ -229,8 +223,8 @@ void OscillatorModule::placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int 
         float gainR = 1.0f;
         panGains(panRamp[(size_t)std::min(i, rampLast)] + (hasCV ? panCV[std::min(i, panCVLength - 1)] : 0.0f), gainL,
                  gainR);
-        const float sample = left[i];
-        left[i] = sample * gainL;
-        right[i] = sample * gainR;
+        const float sampleRight = rightRendered ? right[i] : left[i];
+        left[i] = left[i] * gainL;
+        right[i] = sampleRight * gainR;
     }
 }

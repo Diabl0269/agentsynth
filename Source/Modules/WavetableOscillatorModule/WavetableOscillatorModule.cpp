@@ -736,13 +736,6 @@ float WavetableOscillatorModule::stackSemitones(Stack mode, int u, int unisonCou
     }
 }
 
-void WavetableOscillatorModule::unisonPanGains(int u, int unisonCount, float width, float& gainL, float& gainR) {
-    float pan = 0.0f;
-    if (unisonCount > 1)
-        pan = width * (2.0f * (float)u / (float)(unisonCount - 1) - 1.0f);
-    panGains(pan, gainL, gainR);
-}
-
 bool WavetableOscillatorModule::isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
     return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
 }
@@ -788,8 +781,7 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
 
     float gainSum = 0.0f;
     for (int u = 0; u < bs.unisonCount; ++u) {
-        const float cents =
-            (bs.unisonCount > 1) ? bs.detuneCents * (2.0f * (float)u / (float)(bs.unisonCount - 1) - 1.0f) : 0.0f;
+        const float cents = bs.detuneCents * synth::unisonOffsetFraction(u, bs.unisonCount);
         const float semis = stackSemitones(bs.stack, u, bs.unisonCount);
         bs.uniRatio[u] = std::pow(2.0f, semis / 12.0f + cents / 1200.0f);
 
@@ -797,7 +789,7 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
         // turning it down thins the chorus without changing the fundamental's level.
         const float voiceGain = (u == 0) ? 1.0f : blend;
         float gl, gr;
-        unisonPanGains(u, bs.unisonCount, width, gl, gr);
+        synth::unisonPanGains(u, bs.unisonCount, width, gl, gr);
         bs.uniGainL[u] = gl * voiceGain;
         bs.uniGainR[u] = gr * voiceGain;
         gainSum += voiceGain;

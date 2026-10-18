@@ -1,0 +1,7 @@
+# Oscillator voice feel
+
+How each unison voice of the [Oscillator](modules.md#oscillator-module) starts a note and sits in the stack. Code: `Source/Modules/Oscillator/` and `Source/Modules/UnisonVoicing.h`.
+
+## Phase and Rand
+
+**Phase and Rand** (`phase` 0-360 degrees, `randomPhase` 0-100 %, defaults 0): on every note start each unison voice restarts at `frac(Phase / 360 + Rand x random)`, the random drawn independently per voice from a seeded generator (`phaseRandom`, reseeded in `prepareToPlay`) so a render repeats exactly. They are sampled at the note start, so they have no CV jack. Between notes the oscillator still free-runs. **Mono** is MIDI driven: `scanMidi` records each note-on's sample offset and `processMonoMode` restarts the phases at that exact sample (`OscillatorModuleNotes.cpp`). A restart may land while the previous note still sounds, so the old phases keep running in a fade copy and are blended out over 64 samples (`CROSSFADE_SAMPLES`); with no restart the output is byte-identical. Held notes are tracked in `synth::HeldNotes`; an overlapping note-on restarts today, and `shouldRestartOnNoteOn(overlapping)` is the one place a legato mode gates that. **Poly** restarts a voice when its pitch CV goes from silent (below 20 Hz) to sounding, the Wavetable's rule, and voice 0 also on a MIDI note-on (at the block start, fading out of the old phases only if it was already sounding). Known limitation: Poly MIDI holds a voice's pitch after release, so a later note on the same voice is not seen as new and does not restart.

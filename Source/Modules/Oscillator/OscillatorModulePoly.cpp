@@ -58,18 +58,32 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numChannels; ++ch)
         buffer.clear(ch, 0, numSamples);
 
+    prepareUnisonMix(global.unisonCount, numSamples);
+    const bool rightWanted = unisonMix.stereo;
+
     const PolyVoiceSettings settings{global.unisonCount, global.detuneCents, global.glideSeconds};
     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
         // Voice 0 falls back to the MIDI pitch when no pitch CV is patched; a voice below 20 Hz is off.
         float basePitchHz = pitchCVCache[v][0];
         if (basePitchHz < 20.0f && v == 0)
             basePitchHz = getTargetFrequency();
-        if (basePitchHz < 20.0f)
+        if (basePitchHz < 20.0f) {
+            voices[v].active = false;
             continue;
+        }
+
+        // A voice going from silent to sounding is a new note and restarts its phases; voice 0 also
+        // restarts on a MIDI note-on, and only that one has an earlier note to fade out of.
+        const bool wasActive = voices[v].active;
+        if (!wasActive || (v == 0 && voice0RestartPending))
+            restartVoice(voices[v], /*fadeFromOld*/ wasActive);
+        voices[v].active = true;
 
         // A silent voice keeps its last pitch, so the next note on it slides from there.
         voices[v].glide.retarget(basePitchHz, settings.glideSeconds, currentSampleRate);
-        renderPolyVoice(v, buffer.getWritePointer(v), numSamples, basePitchHz, settings);
+        float* outputR =
+            (rightWanted && kRightBase + v < numChannels) ? buffer.getWritePointer(kRightBase + v) : nullptr;
+        renderPolyVoice(v, buffer.getWritePointer(v), outputR, numSamples, basePitchHz, settings);
     }
 
     // Clear the shared CV channels so they do not leak downstream as audio. The Audio R block sits
@@ -81,7 +95,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     // Place each rendered voice across its Audio L / Audio R pair. Voices that were skipped above
     // are still silent on both legs from the up-front clear.
     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v)
-        placeVoiceInStereo(buffer, v, numSamples, panCVCache.data(), ns);
+        placeVoiceInStereo(buffer, v, numSamples, panCVCache.data(), ns, rightWanted);
 
     // Push voice 0 to visual buffer
     if (auto* vb = getVisualBuffer()) {
@@ -89,18 +103,18 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     }
 }
 
-void OscillatorModule::renderPolyVoice(int voice, float* output, int numSamples, float basePitchHz,
+void OscillatorModule::renderPolyVoice(int voice, float* output, float* outputR, int numSamples, float basePitchHz,
                                        const PolyVoiceSettings& set) {
     const bool gliding = set.glideSeconds > 0.0f;
     const bool pitchMod = polyCV.octave || polyCV.coarse || polyCV.fine;
     if (!pitchMod && !gliding)
-        renderPolyVoiceSteady(voice, output, numSamples, basePitchHz, set);
+        renderPolyVoiceSteady(voice, output, outputR, numSamples, basePitchHz, set);
     else
-        renderPolyVoiceModulated(voice, output, numSamples, basePitchHz, set, gliding);
+        renderPolyVoiceModulated(voice, output, outputR, numSamples, basePitchHz, set, gliding);
 }
 
 // FAST PATH (no pitch CV, no glide): the phase increments are computed once per block.
-void OscillatorModule::renderPolyVoiceSteady(int v, float* output, int numSamples, float basePitchHz,
+void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* outputR, int numSamples, float basePitchHz,
                                              const PolyVoiceSettings& set) {
     const int ns = std::min(numSamples, 4096);
     const float freq = juce::jlimit(20.0f, 20000.0f, basePitchHz);
@@ -110,12 +124,8 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, int numSample
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
 
-    // Pre-compute unison dt values (avoid pow in sample loop)
-    float uniDts[MAX_UNISON];
-    for (int u = 0; u < unisonCount; ++u) {
-        const float offset = (unisonCount > 1) ? set.detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
-        uniDts[u] = baseDt * std::pow(2.0f, offset / 1200.0f);
-    }
+    float ratios[MAX_UNISON];
+    fillUnisonRatios(ratios, unisonCount, set.detuneCents);
 
     // Seed previousWaveform before the loop so the first sample doesn't spuriously trigger a
     // crossfade from the default-initialised value 0.
@@ -133,34 +143,25 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, int numSample
             voices[v].previousWaveform = wfS;
         }
 
-        float sample = 0.0f;
-        for (int u = 0; u < unisonCount; ++u) {
-            float g;
-            if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0) {
-                const float alpha = (float)voices[v].crossfadeSamplesRemaining / (float)CROSSFADE_SAMPLES;
-                g = generateSample(voices[v].fadingFromWaveform, voices[v].unisonOscs[u].phase, uniDts[u], pulseWidth) *
-                        alpha +
-                    generateSample(wfS, voices[v].unisonOscs[u].phase, uniDts[u], pulseWidth) * (1.0f - alpha);
-            } else {
-                g = generateSample(wfS, voices[v].unisonOscs[u].phase, uniDts[u], pulseWidth);
-            }
-            sample += g;
-            voices[v].unisonOscs[u].phase += uniDts[u];
-            if (voices[v].unisonOscs[u].phase >= 1.0f)
-                voices[v].unisonOscs[u].phase -= 1.0f;
-        }
+        const bool waveFading = hasWaveCV && voices[v].crossfadeSamplesRemaining > 0;
+        const float waveAlpha =
+            waveFading ? (float)voices[v].crossfadeSamplesRemaining / (float)CROSSFADE_SAMPLES : 0.0f;
+        const StackContext stack{ratios, unisonCount, baseDt, wfS, voices[v].fadingFromWaveform, waveAlpha, pulseWidth};
+        const StackSample stackOut = renderStack(voices[v], stack, s);
 
-        if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
+        if (waveFading)
             --voices[v].crossfadeSamplesRemaining;
 
         const float level = levelRamp[(size_t)idx];
         const float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
-        output[s] = (sample / (float)unisonCount) * lv;
+        output[s] = stackOut.left * lv;
+        if (outputR != nullptr)
+            outputR[s] = stackOut.right * lv;
     }
 }
 
 // PER-SAMPLE PATH (pitch CV or glide active): the phase increment is recomputed every sample.
-void OscillatorModule::renderPolyVoiceModulated(int v, float* output, int numSamples, float basePitchHz,
+void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* outputR, int numSamples, float basePitchHz,
                                                 const PolyVoiceSettings& set, bool gliding) {
     const int ns = std::min(numSamples, 4096);
     const int wf = waveformParam->getIndex();
@@ -168,12 +169,9 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, int numSam
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
 
-    // Pre-compute each unison voice's detune ratio (a block constant, so never per sample)
-    float uniMultipliers[MAX_UNISON];
-    for (int u = 0; u < unisonCount; ++u) {
-        const float offsetCents = (unisonCount > 1) ? set.detuneCents * (2.0f * u / (unisonCount - 1) - 1.0f) : 0.0f;
-        uniMultipliers[u] = std::pow(2.0f, offsetCents / 1200.0f);
-    }
+    // Each unison voice's detune ratio is a block constant, so never per sample
+    float ratios[MAX_UNISON];
+    fillUnisonRatios(ratios, unisonCount, set.detuneCents);
 
     if (hasWaveCV)
         voices[v].previousWaveform = wf;
@@ -203,29 +201,19 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, int numSam
             voices[v].previousWaveform = wfS;
         }
 
-        float sample = 0.0f;
-        for (int u = 0; u < unisonCount; ++u) {
-            const float uniDtS = dtS * uniMultipliers[u];
-            float g;
-            if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0) {
-                const float alpha = (float)voices[v].crossfadeSamplesRemaining / (float)CROSSFADE_SAMPLES;
-                g = generateSample(voices[v].fadingFromWaveform, voices[v].unisonOscs[u].phase, uniDtS, pulseWidth) *
-                        alpha +
-                    generateSample(wfS, voices[v].unisonOscs[u].phase, uniDtS, pulseWidth) * (1.0f - alpha);
-            } else {
-                g = generateSample(wfS, voices[v].unisonOscs[u].phase, uniDtS, pulseWidth);
-            }
-            sample += g;
-            voices[v].unisonOscs[u].phase += uniDtS;
-            if (voices[v].unisonOscs[u].phase >= 1.0f)
-                voices[v].unisonOscs[u].phase -= 1.0f;
-        }
+        const bool waveFading = hasWaveCV && voices[v].crossfadeSamplesRemaining > 0;
+        const float waveAlpha =
+            waveFading ? (float)voices[v].crossfadeSamplesRemaining / (float)CROSSFADE_SAMPLES : 0.0f;
+        const StackContext stack{ratios, unisonCount, dtS, wfS, voices[v].fadingFromWaveform, waveAlpha, pulseWidth};
+        const StackSample stackOut = renderStack(voices[v], stack, s);
 
-        if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
+        if (waveFading)
             --voices[v].crossfadeSamplesRemaining;
 
         const float level = levelRamp[(size_t)idx];
         const float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
-        output[s] = (sample / (float)unisonCount) * lv;
+        output[s] = stackOut.left * lv;
+        if (outputR != nullptr)
+            outputR[s] = stackOut.right * lv;
     }
 }
