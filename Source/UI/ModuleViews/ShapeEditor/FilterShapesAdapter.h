@@ -5,11 +5,20 @@
 // share one.
 #include "ModuleShapesAdapter.h"
 #include "Modules/FilterModule.h"
+#include <functional>
 
 namespace synth::ui {
 
 class FilterShapesAdapter : public ModuleShapesAdapter {
 public:
+    /** What the adapter cannot do itself (it knows no GraphEditor): the card supplies them. */
+    struct PitchHooks {
+        /** The Filter's Pitch input state. Unset: Connected. */
+        std::function<PitchInput()> state;
+        /** Cables the voice chain's Pitch source to the Filter's Pitch input; called inside the undo step. */
+        std::function<void()> connect;
+    };
+
     /** `undo` may be null (no undo steps). The module and graph must outlive the adapter. */
     FilterShapesAdapter(FilterModule& module, AppUndoManager* undo, juce::AudioProcessorGraph& graph,
                         juce::AudioProcessorGraph::NodeID nodeId, juce::String moduleName);
@@ -27,10 +36,17 @@ public:
     bool hasPerNote() const override { return true; }
     CustomFilterPerNote getPerNote() const override;
     void setPerNote(const CustomFilterPerNote& perNote) override;
+    PitchInput pitchInput() const override;
+    bool setPerNoteConnectingPitch(const CustomFilterPerNote& perNote) override;
     float getReferenceLevel() const override;
+
+    void setPitchHooks(PitchHooks hooks) { hooks_ = std::move(hooks); }
 
 private:
     FilterModule& filter_;
+    AppUndoManager* undo_;
+    juce::AudioProcessorGraph& graph_;
+    PitchHooks hooks_;
 };
 
 } // namespace synth::ui

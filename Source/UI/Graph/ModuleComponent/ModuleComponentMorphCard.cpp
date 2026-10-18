@@ -3,6 +3,8 @@
 // Morph Map pill, which live in MorphShapesCard. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ConnectionIndex.h"
+#include "Mixer/ChannelFlows/UpstreamPitchSource.h"
 #include "ModuleComponent.h"
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
@@ -16,6 +18,31 @@ namespace {
 bool lfoShapeIsCustom(juce::AudioProcessor* module) {
     auto* shape = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module, "shape"));
     return shape != nullptr && shape->getIndex() == LFOModule::kCustomShapeIndex;
+}
+
+/** The Filter's Pitch input for the per-note modes: whether it is cabled, and a way to cable it from the Pitch source
+    of the voice chain feeding the card (by the same path as a hand-drawn cable, so a poly fan is all 8 edges). */
+synth::ui::FilterShapesAdapter::PitchHooks filterPitchHooks(GraphEditor& owner, juce::AudioProcessorGraph& graph,
+                                                            juce::AudioProcessorGraph::NodeID nodeId,
+                                                            FilterModule& filter) {
+    synth::ui::FilterShapesAdapter::PitchHooks hooks;
+    hooks.state = [&graph, nodeId] {
+        const synth::ConnectionIndex cables(graph);
+        if (synth::hasPitchCable(cables, graph, nodeId))
+            return synth::ui::PitchInput::Connected;
+        return synth::upstreamPitchSource(cables, graph, nodeId) ? synth::ui::PitchInput::Missing
+                                                                 : synth::ui::PitchInput::MissingNoSource;
+    };
+    hooks.connect = [&owner, &graph, &filter, nodeId] {
+        const synth::ConnectionIndex cables(graph);
+        const auto source = synth::upstreamPitchSource(cables, graph, nodeId);
+        if (!source)
+            return;
+        const int pitchJack = filter.mapInputChannel(FilterModule::kPitchBase).visibleJackIndex;
+        owner.connectPorts(source->node, source->visibleJack, nodeId, pitchJack, false, false);
+        owner.notifyModuleContentChanged();
+    };
+    return hooks;
 }
 } // namespace
 
@@ -47,10 +74,12 @@ void ModuleComponent::createMorphShapesCard() {
     host.mapPlace = filter != nullptr ? "under the response view" : "under the curve editor";
     if (filter != nullptr) {
         host.customActive = [filter] { return filter->getCurrentFilterType() == FilterModule::kCustomTypeIndex; };
-        morphCard_ = std::make_unique<synth::ui::MorphShapesCard>(
-            std::move(host), *filter,
-            std::make_shared<synth::ui::FilterShapesAdapter>(*filter, undoManager, graph, nodeId, cardTitle()),
-            FilterModule::kMorphXCVChannel, FilterModule::kMorphYCVChannel);
+        auto adapter =
+            std::make_shared<synth::ui::FilterShapesAdapter>(*filter, undoManager, graph, nodeId, cardTitle());
+        adapter->setPitchHooks(filterPitchHooks(owner, graph, nodeId, *filter));
+        morphCard_ = std::make_unique<synth::ui::MorphShapesCard>(std::move(host), *filter, std::move(adapter),
+                                                                  FilterModule::kMorphXCVChannel,
+                                                                  FilterModule::kMorphYCVChannel);
         freqResponseComponent->onCustomDoubleClick = [this] {
             if (morphCard_ != nullptr)
                 morphCard_->openEditor(morphCard_->nearestShapeToCursor());

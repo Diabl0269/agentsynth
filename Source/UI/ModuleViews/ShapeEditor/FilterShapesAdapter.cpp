@@ -1,5 +1,6 @@
 // FilterShapesAdapter.cpp -- the Filter's Custom shapes behind the generic shape list interface.
 #include "FilterShapesAdapter.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 
 namespace synth::ui {
@@ -14,7 +15,9 @@ ShapeItem toItem(const CustomFilterShape& shape) { return {shape.name, shape.cur
 FilterShapesAdapter::FilterShapesAdapter(FilterModule& module, AppUndoManager* undo, juce::AudioProcessorGraph& graph,
                                          juce::AudioProcessorGraph::NodeID nodeId, juce::String moduleName)
     : ModuleShapesAdapter(module, undo, graph, nodeId, std::move(moduleName))
-    , filter_(module) {}
+    , filter_(module)
+    , undo_(undo)
+    , graph_(graph) {}
 
 std::vector<ShapeItem> FilterShapesAdapter::getShapes() const {
     std::vector<ShapeItem> out;
@@ -78,6 +81,25 @@ CustomFilterPerNote FilterShapesAdapter::getPerNote() const { return filter_.get
 
 /** The settings are part of the module's extra state, so beginEdit/endEdit record them like a shape edit. */
 void FilterShapesAdapter::setPerNote(const CustomFilterPerNote& perNote) { filter_.setCustomPerNote(perNote); }
+
+PitchInput FilterShapesAdapter::pitchInput() const {
+    if (!synth::isProcessorPoly(&filter_))
+        return PitchInput::NotPoly;
+    return hooks_.state ? hooks_.state() : PitchInput::Connected;
+}
+
+/** The mode write and the cable are one structural undo step, so one undo takes both back. */
+bool FilterShapesAdapter::setPerNoteConnectingPitch(const CustomFilterPerNote& perNote) {
+    const bool wantsPitch =
+        perNote.mode == CustomFilterPerNote::Mode::ByHand || perNote.mode == CustomFilterPerNote::Mode::ByPitch;
+    if (!wantsPitch || undo_ == nullptr || !hooks_.connect || pitchInput() != PitchInput::Missing)
+        return ShapeListAdapter::setPerNoteConnectingPitch(perNote);
+    undo_->recordStructuralChange(graph_, [this, &perNote] {
+        filter_.setCustomPerNote(perNote);
+        hooks_.connect();
+    });
+    return true;
+}
 
 juce::String FilterShapesAdapter::getWindowTitle() const { return "Filter shapes: " + moduleName_; }
 

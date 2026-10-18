@@ -41,8 +41,13 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
                      "hand, by pitch or at random (Off: every note shares the cursor)");
     mode_.setExplicitFocusOrder(1);
     mode_.onChange = [this](int index) {
-        write([index](CustomFilterPerNote& p) { p.mode = static_cast<Mode>(index); }, true);
+        auto p = adapter_.getPerNote();
+        p.mode = static_cast<Mode>(index);
+        adapter_.setPerNoteConnectingPitch(p);
         showKeyRow(index == (int)Mode::ByHand);
+        updateHint(p);
+        if (onEdited)
+            onEdited();
     };
     addAndMakeVisible(mode_);
 
@@ -86,6 +91,14 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
         addChildComponent(c);
     keyRowFade_ =
         std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{&octaveDown_, &keys_, &octaveUp_});
+
+    hint_.setFont(juce::Font(juce::FontOptions(12.0f)));
+    hint_.setJustificationType(juce::Justification::centredLeft);
+    hint_.setInterceptsMouseClicks(false, false);
+    hint_.setTitle("Per-note hint");
+    addChildComponent(hint_);
+    hintFade_ = std::make_unique<FadeVisibility>(std::initializer_list<juce::Component*>{&hint_});
+    startTimerHz(10);
 }
 
 PerNoteBar::~PerNoteBar() = default;
@@ -100,7 +113,43 @@ void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
         names.add(s.name.isEmpty() ? juce::String("unnamed") : s.name);
     keys_.setKeys(p.keys, names);
     showKeyRow(p.mode == Mode::ByHand);
+    updateHint(p);
     refreshed_ = true;
+}
+
+void PerNoteBar::timerCallback() {
+    if (!refreshed_)
+        return;
+    const auto p = adapter_.getPerNote();
+    if (p.mode != Mode::Off || hintFade_->isShown())
+        updateHint(p);
+}
+
+void PerNoteBar::lookAndFeelChanged() {
+    hint_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+}
+
+/** One line saying why the mode cannot work yet: a mono Filter first (nothing else matters until it is Poly), then a
+    missing Pitch cable that has no source to take. A Pitch cable that can still be made is made on the next click. */
+void PerNoteBar::updateHint(const CustomFilterPerNote& perNote) {
+    juce::String text;
+    if (perNote.mode != Mode::Off) {
+        const auto input = adapter_.pitchInput();
+        const bool needsPitch = perNote.mode == Mode::ByHand || perNote.mode == Mode::ByPitch;
+        if (input == PitchInput::NotPoly)
+            text = "Per-note works in Poly: turn on the Filter's Poly.";
+        else if (needsPitch && input != PitchInput::Connected)
+            text = "Needs a Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input.";
+    }
+    if (text.isNotEmpty() && hint_.getText() != text) {
+        hint_.setText(text, juce::dontSendNotification);
+        hint_.setTitle(text);
+        lookAndFeelChanged();
+    }
+    if (!laidOut_ || !refreshed_)
+        hintFade_->snapTo(text.isNotEmpty());
+    else
+        hintFade_->setShown(text.isNotEmpty());
 }
 
 /** The first refresh shows what the window opens on, so it lands at once; later changes fade. */
@@ -134,6 +183,7 @@ void PerNoteBar::resized() {
     smoothness_.setBounds(row.removeFromLeft(kSliderWidth));
     smoothArea_ = row.removeFromLeft(kEndLabelWidth + 8);
 
+    hint_.setBounds(area.removeFromTop(kHintHeight).withTrimmedLeft(kLabelWidth));
     area.removeFromTop(kGap);
     auto keyRow = area.removeFromTop(kKeyRowHeight).withTrimmedLeft(kLabelWidth);
     octaveDown_.setBounds(keyRow.removeFromLeft(kOctaveButtonWidth).withSizeKeepingCentre(kOctaveButtonWidth, 26));

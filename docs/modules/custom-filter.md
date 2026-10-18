@@ -153,6 +153,15 @@ so moving a shape (or Morph X/Y, for a note with no shape) moves held notes with
 yet stays on the shared kernel, so turning a mode on changes nothing until notes arrive; switching back to Off puts
 every voice on the shared kernel at once.
 
+**The Pitch cable is made for you.** Picking **By hand** or **By pitch** in the window, with the Filter in Poly and
+its Pitch input uncabled, cables that input from the Pitch source of the voice chain feeding the Filter (the Poly MIDI
+Pitch that drives the Oscillator upstream; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
+all 8 voices, in the same undo step as the mode change, so one undo takes both back. An input that is already cabled
+gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
+Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input." (By hand or By pitch, Pitch uncabled, and
+no source to take it from, or the cable was removed later) and "Per-note works in Poly: turn on the Filter's Poly."
+(any mode but Off on a mono Filter). The line fades in and out and follows the cabling at 10 Hz.
+
 **How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26)
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
 than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below

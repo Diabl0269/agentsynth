@@ -992,6 +992,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shor
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
+include(${CMAKE_CURRENT_SOURCE_DIR}/PerNotePitchTests.cmake) # the Custom filter's Pitch cable for per-note modes
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # the curve editor multi-select tests
 include(GoogleTest)
