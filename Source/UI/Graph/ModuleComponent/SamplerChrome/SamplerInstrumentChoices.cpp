@@ -1,5 +1,6 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -8,12 +9,28 @@ namespace {
 const char* const kBuiltIn = "Built in";
 const char* const kYourFiles = "Your files";
 
-void addBuiltIn(InstrumentChoices& result, const juce::String& currentPack) {
-    const auto instruments = synth::sampler::SoundPackLibrary::listInstruments();
+void addSynthDrums(InstrumentChoices& result, bool ticked) {
+    ModMatrixPicker::Item row;
+    row.id = (int)result.choices.size() + 1;
+    row.category = kBuiltIn;
+    row.text = "Synth drums";
+    row.searchText = "drums synthesized electronic";
+    row.ticked = ticked;
+    result.items.push_back(row);
+    result.choices.push_back({InstrumentChoice::Kind::SynthDrums, {}, {}});
+}
+
+void addBuiltIn(InstrumentChoices& result, const juce::String& currentPack, const juce::String& category) {
+    auto instruments = synth::sampler::SoundPackLibrary::listInstruments();
+    if (category.isNotEmpty())
+        instruments.erase(std::remove_if(instruments.begin(), instruments.end(),
+                                         [&category](const auto& i) { return !i.category.equalsIgnoreCase(category); }),
+                          instruments.end());
     if (instruments.empty()) {
         ModMatrixPicker::Item note;
         note.category = kBuiltIn;
-        note.text = "No instruments installed yet";
+        note.text =
+            category.isEmpty() ? "No instruments installed yet" : "No " + category.toLowerCase() + " installed yet";
         note.enabled = false;
         result.items.push_back(note);
         return;
@@ -47,9 +64,11 @@ void addYourFiles(InstrumentChoices& result) {
 } // namespace
 
 // New groups ("Downloaded", "Get more") join here, between the built-in rows and the user's own files.
-InstrumentChoices collectInstrumentChoices(const juce::String& currentPack) {
+InstrumentChoices collectInstrumentChoices(const juce::String& currentPack, const InstrumentChoiceOptions& options) {
     InstrumentChoices result;
-    addBuiltIn(result, currentPack);
+    if (options.offerSynthDrums)
+        addSynthDrums(result, options.noKitLoaded);
+    addBuiltIn(result, currentPack, options.category);
     addYourFiles(result);
     return result;
 }

@@ -106,6 +106,7 @@ struct CardBodyPlan {
         int item = -1;
         std::vector<juce::RangedAudioParameter*> watched;
         std::function<bool(juce::AudioProcessor&)> dims;
+        bool hides = false; ///< Hides the item (CardBodyItem::shown) instead of dimming it.
     };
 
     /** What a re-evaluation changed: any result at all, and whether a section appeared or went. */

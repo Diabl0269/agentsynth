@@ -144,6 +144,9 @@ bool CardBody::isSwapGoverned(int item) const {
         return false;
     if (planned.swapGroup >= 0 || !planned.alsoIn.empty())
         return true;
+    for (const auto& rule : plan_.dimRules)
+        if (rule.hides && rule.item == item)
+            return true; // a code rule shows and hides it
     // A conditional section that fades in or out when it comes or goes (CardBodyFades.cpp) is not a swap.
     if (planned.section >= 0 && (size_t)planned.section < sectionFades_.size() &&
         sectionFades_[(size_t)planned.section].isAttached() && ui::FadeVisibility::canAnimateIn(&card_))

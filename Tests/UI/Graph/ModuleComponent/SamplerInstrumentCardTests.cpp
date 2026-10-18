@@ -54,7 +54,7 @@ struct Scene {
     }
     SamplerModule& sampler() { return *dynamic_cast<SamplerModule*>(canvas.processor(id)); }
     ModuleComponent& card() { return *canvas.card(id); }
-    SamplerChrome& chrome() { return *card().getSamplerChrome(); }
+    SamplerChrome& chrome() { return *dynamic_cast<SamplerChrome*>(card().getInstrumentChrome()); }
 
     void setMode(int index) {
         auto* mode = findParameterByID(&sampler(), "playMode");
@@ -318,7 +318,7 @@ TEST(SamplerInstrumentCard, ACardBuiltAfterAFailedRestoreShowsItsMessage) {
     mode->setValueNotifyingHost(mode->convertTo0to1((float)SamplerModule::kModeInstrument));
     const auto id = canvas.add(std::move(module), 0, 0);
     canvas.editor.updateComponents();
-    auto* chrome = canvas.card(id)->getSamplerChrome();
+    auto* chrome = dynamic_cast<SamplerChrome*>(canvas.card(id)->getInstrumentChrome());
     ASSERT_NE(chrome, nullptr);
     EXPECT_TRUE(chrome->getCaption().getText().contains("not found"));
 }

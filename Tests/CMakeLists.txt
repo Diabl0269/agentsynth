@@ -55,6 +55,7 @@ add_executable(Tests
     Modules/MacroControlModuleTests.cpp
     Modules/SamplerModuleTests.cpp
     Modules/DrumKit/DrumKitModuleTests.cpp
+    Modules/DrumKit/DrumKitRecordedTests.cpp
     Modules/Pluck/PluckModuleTests.cpp
     Modules/Mallet/MalletModuleTests.cpp
     Modules/Sampler/SamplerRegionTests.cpp
@@ -340,6 +341,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
+    UI/Graph/ModuleComponent/DrumKitCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp

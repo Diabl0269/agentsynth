@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "ModuleFileStateKeys.h"
+#include "Modules/Sampler/SamplerInstrumentHost.h"
 #include "Modules/Sampler/SamplerInstrumentSlot.h"
 #include "Modules/Sampler/SamplerSampleData.h"
 #include "Modules/VoiceCountSource.h"
@@ -69,7 +70,8 @@
  */
 class SamplerModule
     : public ModuleBase
-    , public synth::VoiceCountSource {
+    , public synth::VoiceCountSource
+    , public synth::sampler::InstrumentHost {
 public:
     // ---- Channel indices -----------------------------------------------------
     static constexpr int kTriggerCh = 0;
@@ -244,9 +246,9 @@ public:
 
     /** Each load* decodes now and, on success, replaces the instrument and selects Instrument mode. False keeps the
      *  loaded instrument; getInstrumentMessages() says why. Loading never makes a sound by itself. */
-    bool loadInstrumentFromSfz(const juce::File& sfz);
-    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId);
-    bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths);
+    bool loadInstrumentFromSfz(const juce::File& sfz) override;
+    bool loadInstrumentFromPack(const juce::String& packId, const juce::String& instrumentId) override;
+    bool loadInstrumentFromFiles(const juce::StringArray& absolutePaths) override;
 
     /** The loaded instrument's recordings, to edit and hand back to editInstrumentRegions (empty when none). */
     const std::vector<synth::sampler::RegionSpec>& getInstrumentRegions() const;
@@ -259,24 +261,24 @@ public:
     synth::sampler::InstrumentSource::Kind getInstrumentKind() const;
 
     /** Drops the instrument; Instrument mode then renders silence. */
-    void clearInstrument() { instrumentSlot.clear(); }
+    void clearInstrument() override { instrumentSlot.clear(); }
 
-    juce::String getInstrumentName() const { return instrumentPlayer.name(); }
+    juce::String getInstrumentName() const override { return instrumentPlayer.name(); }
 
     /** Bumped on every publish or clear so UI caches know to rebuild. */
-    int getInstrumentGeneration() const noexcept { return instrumentPlayer.generation(); }
+    int getInstrumentGeneration() const noexcept override { return instrumentPlayer.generation(); }
 
     /** For drawing: null when none is loaded or a publish is in flight. */
     synth::sampler::Instrument::Ptr getInstrument() const { return instrumentPlayer.current(); }
 
     /** Bumped on every instrument load attempt (success or failure) and clear. */
-    int getInstrumentLoadSerial() const noexcept { return instrumentSlot.loadSerial(); }
+    int getInstrumentLoadSerial() const noexcept override { return instrumentSlot.loadSerial(); }
 
     /** Errors and "warning: " lines of the last load. */
-    juce::StringArray getInstrumentMessages() const { return instrumentSlot.messages(); }
+    juce::StringArray getInstrumentMessages() const override { return instrumentSlot.messages(); }
 
     /** True while a project open is still decoding this module's instrument. */
-    bool isInstrumentLoadPending() const noexcept { return instrumentSlot.isPending(); }
+    bool isInstrumentLoadPending() const noexcept override { return instrumentSlot.isPending(); }
 
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }

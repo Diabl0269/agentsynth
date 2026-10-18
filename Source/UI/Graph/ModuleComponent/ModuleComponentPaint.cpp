@@ -117,8 +117,8 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(getLocalBounds().toFloat(), 24.0f);
         g.setColour(dropColour);
         g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
-        if (samplerChrome_ != nullptr)
-            samplerChrome_->paintDropHint(g, getLocalBounds());
+        if (instrumentChrome_ != nullptr)
+            instrumentChrome_->paintDropHint(g, getLocalBounds());
     }
 
     // Highlight Active Step (Sequencer only) — recolored from theme accent when available.

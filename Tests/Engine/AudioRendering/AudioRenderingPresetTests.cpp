@@ -2,6 +2,17 @@
 // Poly Pad per-block note-injection/jitter determinism regression.
 
 #include "AudioRenderingTestHelpers.h"
+#include "Modules/DrumKit/DrumKitModule.h"
+
+namespace {
+// A drum preset answers on the kick note; middle C maps to no drum.
+int auditionNote(juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr)
+            return 36;
+    return 60;
+}
+} // namespace
 
 // ===========================================================================
 // Test 8: All factory presets render non-silent
@@ -86,7 +97,7 @@ TEST_P(PresetStereoTest, RendersBothChannels) {
 
     for (auto* node : graph.getNodes())
         if (auto* kb = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
-            kb->getKeyboardState().noteOn(1, 60, 1.0f);
+            kb->getKeyboardState().noteOn(1, auditionNote(graph), 1.0f);
 
     const int totalSamples = static_cast<int>(kSampleRate);
     juce::AudioBuffer<float> result(2, totalSamples);
@@ -124,7 +135,7 @@ TEST_P(PresetStereoTest, RendersBothChannels) {
 }
 
 INSTANTIATE_TEST_SUITE_P(EveryFactoryPreset, PresetStereoTest,
-                         ::testing::Range(0, 7)); // PresetManager::getPresetNames().size()
+                         ::testing::Range(0, 8)); // PresetManager::getPresetNames().size()
 
 TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
     // Configure graph headlessly — do NOT call engine.initialise() as it opens the audio
@@ -145,7 +156,7 @@ TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
         // Find the MidiKeyboardModule in the preset and inject a note
         for (auto* node : graph.getNodes()) {
             if (auto* kb = dynamic_cast<MidiKeyboardModule*>(node->getProcessor())) {
-                kb->getKeyboardState().noteOn(1, 60, 1.0f);
+                kb->getKeyboardState().noteOn(1, auditionNote(graph), 1.0f);
                 break;
             }
         }

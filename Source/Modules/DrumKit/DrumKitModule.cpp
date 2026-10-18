@@ -1,5 +1,5 @@
 // DrumKitModule: parameters, the MIDI note map, sample-accurate triggering and the per-sample mix.
-// The drum sounds themselves are in DrumVoices.h.
+// The drum sounds themselves are in DrumVoices.h; the recorded kit side is in DrumKitModuleRecorded.cpp.
 
 #include "DrumKitModule.h"
 
@@ -81,6 +81,7 @@ DrumKitModule::DrumKitModule()
     cowbellDecay = addFloat("cowbellDecay", "Cowbell decay", 0.1f, 0.6f, 0.25f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.7f);
     addMuteParameter();
+    addRecordedParameters(); // after the mute switch, so every older parameter keeps its index
     enableVisualBuffer(true);
 }
 
@@ -88,6 +89,7 @@ void DrumKitModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
     sampleRate_ = sampleRate > 0.0 ? sampleRate : 44100.0;
     smoothedLevel_.reset(sampleRate_, 0.01);
     smoothedLevel_.setCurrentAndTargetValue(levelParam->get());
+    recordedPool_.prepare(sampleRate_);
     stopAll();
 }
 
@@ -103,6 +105,7 @@ void DrumKitModule::stopAll() noexcept {
     cowbell_.stop();
     for (auto& tom : toms_)
         tom.stop();
+    recordedPool_.stopAll();
 }
 
 DrumKitModule::Hit DrumKitModule::hitFor(juce::AudioParameterFloat* level, juce::AudioParameterFloat* tune,
@@ -117,6 +120,10 @@ DrumKitModule::Hit DrumKitModule::hitFor(juce::AudioParameterFloat* level, juce:
 
 void DrumKitModule::trigger(int note, float velocity) {
     using synth::drums::MetallicKind;
+    if (recordedNow(note)) {
+        triggerRecorded(note, velocity);
+        return;
+    }
     switch (drumForNote(note)) {
     case Drum::Kick:
         kick_.trigger(hitFor(kickLevel, kickTune, kickDecay->get(), velocity), sampleRate_);
@@ -136,7 +143,7 @@ void DrumKitModule::trigger(int note, float velocity) {
         auto hit = hitFor(hatLevel, hatTune, closedDecay->get() * (pedal ? 0.8f : 1.0f), velocity);
         if (pedal)
             hit.gain *= 0.8f;
-        openHat_.choke(sampleRate_);
+        chokeOpenHat();
         closedHat_.trigger(hit, MetallicKind::ClosedHat, sampleRate_);
         break;
     }
@@ -163,7 +170,7 @@ void DrumKitModule::trigger(int note, float velocity) {
     }
 }
 
-float DrumKitModule::renderSample() noexcept {
+float DrumKitModule::synthSample() noexcept {
     float sum = 0.0f;
     if (kick_.active())
         sum += kick_.tick(sampleRate_, noise_);
@@ -186,8 +193,11 @@ float DrumKitModule::renderSample() noexcept {
     for (auto& tom : toms_)
         if (tom.active())
             sum += tom.tick(sampleRate_);
-    sum *= smoothedLevel_.getNextValue();
-    // Several drums at full velocity can sum past full scale: round only the excess above 0.9.
+    return sum;
+}
+
+// Several drums at full velocity can sum past full scale: round only the excess above 0.9.
+float DrumKitModule::limited(float sum) noexcept {
     const float mag = std::fabs(sum);
     if (mag > 0.9f)
         sum = std::copysign(0.9f + 0.08f * std::tanh((mag - 0.9f) * 12.5f), sum);
@@ -204,26 +214,26 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (isBypassed()) {
         buffer.clear();
         stopAll();
+        releaseKit();
         return;
     }
     if (isMuted()) {
         buffer.clear();
         stopAll();
+        releaseKit();
         return;
     }
 
     smoothedLevel_.setTargetValue(levelParam->get());
+    acquireKit();
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
     int position = 0;
     const auto renderTo = [&](int end) {
-        for (int i = position; i < end; ++i) {
-            const float s = renderSample();
-            left[i] = s;
-            if (right != nullptr)
-                right[i] = s;
-        }
+        for (; position < end; position += kRenderChunk)
+            renderChunk(left + position, right != nullptr ? right + position : nullptr,
+                        juce::jmin(kRenderChunk, end - position));
         position = end;
     };
     for (const auto metadata : midiMessages) {

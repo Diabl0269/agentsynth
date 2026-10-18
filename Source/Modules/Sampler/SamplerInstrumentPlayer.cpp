@@ -68,12 +68,18 @@ Instrument::Ptr InstrumentPlayer::current() const {
 
 // Try-lock only: a block that races a publish renders silence rather than waiting.
 bool InstrumentPlayer::acquireInstrument() {
+    if (!tryAcquire(audioHeld_))
+        return false;
+    pool_.setInstrument(audioHeld_.get());
+    return true;
+}
+
+bool InstrumentPlayer::tryAcquire(Instrument::Ptr& held) const {
     const juce::SpinLock::ScopedTryLockType lock(lock_);
     if (!lock.isLocked())
         return false;
-    if (active_.get() != audioHeld_.get())
-        audioHeld_ = active_;
-    pool_.setInstrument(audioHeld_.get());
+    if (active_.get() != held.get())
+        held = active_;
     return true;
 }
 

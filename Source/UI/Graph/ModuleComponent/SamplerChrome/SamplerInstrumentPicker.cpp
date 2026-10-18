@@ -21,9 +21,15 @@ SamplerInstrumentPicker::SamplerInstrumentPicker()
 void SamplerInstrumentPicker::setInstrument(const juce::String& name, const juce::String& origin) {
     name_ = name;
     origin_ = name.isEmpty() ? juce::String() : origin;
-    setTitle(name.isEmpty() ? juce::String("Instrument, none") : "Instrument, " + name);
+    setTitle("Instrument, " + (name.isEmpty() ? noneSpoken_ : name));
     setTooltip("Choose an instrument (Enter)");
     repaint();
+}
+
+void SamplerInstrumentPicker::setNoneLabel(const juce::String& shown, const juce::String& spoken) {
+    noneShown_ = shown;
+    noneSpoken_ = spoken;
+    setInstrument(name_, origin_);
 }
 
 // A closed combo's look: the shared chip with the name at the left and the shared caret at the right.
@@ -40,8 +46,7 @@ void SamplerInstrumentPicker::paintButton(juce::Graphics& g, bool highlighted, b
     text.setWordWrap(juce::AttributedString::none);
     text.setJustification(juce::Justification::centredLeft);
     const juce::Font font{juce::FontOptions(kFontSize)};
-    text.append(empty ? juce::String("Choose an instrument") : name_, font,
-                empty ? theme.colors.textMuted : theme.colors.textPrimary);
+    text.append(empty ? noneShown_ : name_, font, empty ? theme.colors.textMuted : theme.colors.textPrimary);
     if (origin_.isNotEmpty())
         text.append(juce::String(" ") + juce::String(juce::CharPointer_UTF8("\xc2\xb7")) + " " + origin_, font,
                     theme.colors.textMuted);

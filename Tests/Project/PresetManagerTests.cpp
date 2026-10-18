@@ -12,7 +12,7 @@
 
 TEST(PresetManagerTest, ListPresets) {
     auto names = synth::PresetManager::getPresetNames();
-    ASSERT_EQ(names.size(), 7);
+    ASSERT_EQ(names.size(), 8);
     EXPECT_EQ(names[0], "Default");
     EXPECT_EQ(names[1], "Simple Lead");
 }
@@ -114,6 +114,8 @@ juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {560, 150}; // kDoubleWidth
+    if (typeName.containsIgnoreCase("Drum Kit"))
+        return {280, 380};
     if (typeName.containsIgnoreCase("ADSR") || typeName.containsIgnoreCase("Amp Env") ||
         typeName.containsIgnoreCase("Filter Env"))
         return {280, 351};
@@ -124,7 +126,7 @@ juce::Point<int> estimateModuleSize(const juce::String& typeName) {
 } // namespace
 
 TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
-    const int kNumPresets = 7;
+    const int kNumPresets = 8;
     const int kGap = synth::LayoutUtil::kCollisionGap;
 
     for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {

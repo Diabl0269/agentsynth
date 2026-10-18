@@ -405,6 +405,7 @@ void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& 
         CardBodyPlan::DimRule bound;
         bound.item = index;
         bound.dims = rule.dims;
+        bound.hides = rule.hides;
         for (const auto& id : rule.watched)
             if (auto* param = findParameterByID(&module, id))
                 bound.watched.push_back(param);

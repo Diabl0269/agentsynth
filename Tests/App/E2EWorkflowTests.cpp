@@ -810,7 +810,7 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
     constexpr double kSampleRate = 44100.0;
     constexpr int kBlockSize = 512;
     constexpr int kNumBlocks = 50;
-    constexpr int kNumPresets = 7; // Default..Poly Pad
+    constexpr int kNumPresets = 8; // Default..Acoustic Kit
 
     for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {
         loadPreset(presetIdx);
@@ -860,7 +860,7 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
 // Loads each factory preset, reads getBoundsInParent() of every ModuleComponent, dumps the
 // geometry, and asserts no pairwise overlap at kCollisionGap. This is the true visual check.
 TEST_F(E2EWorkflowTest, AllPresetsLoadWithoutOverlapAsAuthored) {
-    constexpr int kNumPresets = 7;
+    constexpr int kNumPresets = 8;
     const int gap = synth::LayoutUtil::kCollisionGap;
 
     for (int p = 0; p < kNumPresets; ++p) {

@@ -60,9 +60,9 @@ void describeDimmed(juce::Component& widget, bool dimmed) {
         tip->setTooltip(tooltip.dropLastCharacters((int)juce::String(kDimmedTooltipSuffix).length()));
 }
 
-bool ruleDims(const std::vector<CardBodyPlan::DimRule>& rules, int item, juce::AudioProcessor& module) {
+bool ruleApplies(const std::vector<CardBodyPlan::DimRule>& rules, int item, bool hides, juce::AudioProcessor& module) {
     for (const auto& rule : rules)
-        if (rule.item == item && rule.dims(module))
+        if (rule.item == item && rule.hides == hides && rule.dims(module))
             return true;
     return false;
 }
@@ -80,8 +80,8 @@ CardBodyPlan::ConditionChange CardBodyPlan::evaluateConditions(juce::AudioProces
         auto& item = items[(size_t)i];
         const bool holds = !item.when.has_value() || cardConditionHolds(*item.when, module);
         const bool show = item.when.has_value() && item.when->effect == CardConditionEffect::Show;
-        change.any |= assign(item.shown, !show || holds);
-        change.any |= assign(item.dimmed, (!show && !holds) || ruleDims(dimRules, i, module));
+        change.any |= assign(item.shown, (!show || holds) && !ruleApplies(dimRules, i, true, module));
+        change.any |= assign(item.dimmed, (!show && !holds) || ruleApplies(dimRules, i, false, module));
     }
     change.any |= change.sections;
     return change;
@@ -170,13 +170,16 @@ bool CardBodyPlan::hasFooter() const {
 // cell and stays enabled, so it is still a Tab stop, in the accessibility tree and operable.
 void CardBody::applyVisibility() {
     const std::set<int> inMore(plan_.more.begin(), plan_.more.end());
-    std::set<int> dimmable;
-    for (const auto& rule : plan_.dimRules)
+    std::set<int> dimmable, ruleHidden;
+    for (const auto& rule : plan_.dimRules) {
         dimmable.insert(rule.item);
+        if (rule.hides)
+            ruleHidden.insert(rule.item);
+    }
     for (int i = 0; i < (int)plan_.items.size(); ++i) {
         auto& item = plan_.items[(size_t)i];
         const bool folded = inMore.count(i) > 0;
-        const bool governed = folded || item.swapGroup >= 0 || plan_.isTabbed(i) ||
+        const bool governed = folded || item.swapGroup >= 0 || plan_.isTabbed(i) || ruleHidden.count(i) > 0 ||
                               (item.section >= 0 && plan_.sections[(size_t)item.section].visibleWhen.has_value());
         bool visible = folded ? moreUnfolded_ : plan_.isOnCard(i) && item.shown;
         if (item.kind == CardBodyItem::Kind::View)

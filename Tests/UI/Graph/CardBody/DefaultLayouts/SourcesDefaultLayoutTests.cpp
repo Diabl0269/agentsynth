@@ -342,7 +342,8 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(entry->defaultRevision, type == "Sampler" ? 3 : 1);
+        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" ? 2 : 1);
+        EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)
             for (const auto& item : section.items)

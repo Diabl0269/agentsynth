@@ -9,11 +9,13 @@
 #include "CardBodyMeasure.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyLayoutWalk.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <map>
 
@@ -147,6 +149,8 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     int y = contentTopY(plan, module, width);
     if (dynamic_cast<SamplerModule*>(&module) != nullptr)
         y += kWaveformHeight + 8 + kRowHeight + 8;
+    if (dynamic_cast<DrumKitModule*>(&module) != nullptr)
+        y += ui::DrumKitChrome::height();
     if (module.getModuleType() == ModuleType::Wavetable) // beside the jack gutter on its double-width card
         y = std::max(y, ModuleComponent::wavetableChromeBottomY());
     y = layoutCardBodySections(plan, module, y, g, /*apply*/ false);

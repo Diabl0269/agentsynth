@@ -6,7 +6,8 @@
 namespace synth::ui {
 
 bool SamplerChrome::editRegionsUndoably(const std::vector<synth::sampler::RegionSpec>& specs) {
-    return loadUndoably([specs](SamplerModule& s) { return s.editInstrumentRegions(specs); });
+    return loadUndoably(
+        [this, specs](synth::sampler::InstrumentHost&) { return sampler_.editInstrumentRegions(specs); });
 }
 
 void SamplerChrome::openMap() {
