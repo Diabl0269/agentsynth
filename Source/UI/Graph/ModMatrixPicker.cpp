@@ -401,17 +401,42 @@ int ModMatrixPicker::preferredHeight() const {
     int rowsHeight = 0;
     for (const auto& row : rows_)
         rowsHeight += row->preferredHeight();
-    const int content = kOuterPadding + kSearchHeight + 4 + juce::jmax(rowsHeight, kRowHeight) + kOuterPadding;
-    return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + 4, kMaxHeight, content);
+    const int footer = footerHeight_ > 0 ? footerHeight_ + 4 : 0;
+    const int content = kOuterPadding + kSearchHeight + 4 + juce::jmax(rowsHeight, kRowHeight) + footer + kOuterPadding;
+    return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + 4 + footer, kMaxHeight + footer, content);
 }
 
 void ModMatrixPicker::resized() {
     auto bounds = getLocalBounds().reduced(kOuterPadding);
     searchEditor_->setBounds(bounds.removeFromTop(kSearchHeight));
     bounds.removeFromTop(4);
+    if (footer_ != nullptr) {
+        footer_->setBounds(bounds.removeFromBottom(footerHeight_));
+        bounds.removeFromBottom(4);
+    }
     viewport_.setBounds(bounds);
     layoutRowColumn();
 }
+
+void ModMatrixPicker::setItems(std::vector<Item> items) {
+    items_ = std::move(items);
+    rebuildRows();
+    applyColours();
+    setSize(kWidth, preferredHeight());
+    listFade_.snapTo(false);
+    listFade_.setShown(true);
+}
+
+void ModMatrixPicker::setFooter(std::unique_ptr<juce::Component> footer, int height) {
+    footer_ = std::move(footer);
+    footerHeight_ = footer_ != nullptr ? height : 0;
+    if (footer_ != nullptr)
+        addAndMakeVisible(*footer_);
+    setSize(kWidth, preferredHeight());
+    resized();
+}
+
+void ModMatrixPicker::clearFooter() { setFooter(nullptr, 0); }
 
 void ModMatrixPicker::paint(juce::Graphics& g) {
     const auto p = paletteFor(*this);

@@ -60,6 +60,10 @@ Restoring state decodes through `synth::DeferredAssetLoads` while a project open
 
 `sfz` is relative to the pack folder and must stay inside it. Roots, in order: the app's bundled packs (macOS: `<app>/Contents/Resources/SoundPacks`; elsewhere a `SoundPacks` folder beside the executable), then the user's `SoundPacks` folder in the app's settings folder (macOS: `~/Library/Application Support/Agent Synth/SoundPacks`; elsewhere `<user app data>/Agent Synth/SoundPacks`). A later root never overrides an earlier one for the same pack id. A malformed `pack.json` or entry is skipped with a log line. Tests redirect the roots with `SoundPackLibrary::setRootsForTests`.
 
+### Downloading packs
+
+No pack ships inside the app. The core instruments are the first optional download (see [`sound-pack-downloads.md`](sound-pack-downloads.md)). While no installed pack lists an instrument, the picker's list carries an offer strip under it ("Get the core instruments (33 MB)", `SamplerPackOffer`): Download runs in place with a bar and Cancel, the list fills when the pack lands (no reopening), and the strip fades away. Progress is the app's shared installer's, so the same download shows in Settings > Sound packs. The offer lives in its own file and joins the picker through `ModMatrixPicker::setFooter`/`setItems` and one `attachPackOffer` call.
+
 ## The card
 
 `SamplerChrome` (`Source/UI/Graph/ModuleComponent/SamplerChrome/`) owns everything the Sampler card draws above its knobs. In Sample and Granular mode that is the waveform and the Load Sample row, exactly as before. In Instrument mode two sets of components share the same 112 px and cross-fade when the mode changes (`FadeVisibility`; a card that is not on screen switches at once), so the card never changes height:

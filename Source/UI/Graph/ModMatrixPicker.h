@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/CalloutReveal.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
@@ -70,6 +71,14 @@ public:
      *  "Search <what>s...". */
     void setSearchPlaceholder(const juce::String& text);
 
+    /** Replaces the rows (the list can fill after a download); the new rows fade in and the search text stays. */
+    void setItems(std::vector<Item> items);
+    /** Puts `footer` in a strip `height` tall under the list and grows the popup to fit; replaces an earlier one. */
+    void setFooter(std::unique_ptr<juce::Component> footer, int height);
+    /** Removes the footer and shrinks the popup back. */
+    void clearFooter();
+    juce::Component* getFooter() const noexcept { return footer_.get(); }
+
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();
 
@@ -126,6 +135,9 @@ private:
     std::unique_ptr<NavigationSearchField> searchEditor_;
     juce::Viewport viewport_;
     juce::Component rowColumn_;
+    FadeVisibility listFade_{&rowColumn_};
+    std::unique_ptr<juce::Component> footer_;
+    int footerHeight_ = 0;
     std::vector<std::unique_ptr<Row>> rows_;
     FilteredRowFades fades_; // index-aligned with rows_, declared after it so it goes first
     int highlighted_ = 0;    // index among the visible item rows

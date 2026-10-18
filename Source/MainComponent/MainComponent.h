@@ -27,6 +27,7 @@
 #include "RecentProjects.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
+#include "SoundPacks/SoundPackInstaller.h"
 #include "Telemetry/TelemetryDay.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/MidiRecorder.h"
@@ -812,6 +813,8 @@ private:
     MainComponentTimelineOpsHost timelineOpsHost_{*this}; // before aiService, which holds a pointer to it
     synth::AIIntegrationService aiService;
     synth::AccountService accountService{synth::branding::resolveApiBaseUrl()}; // before aiChatComponent
+    // The app-wide sound pack installer; the Sampler picker shares it, so a download shows in both places.
+    juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> soundPackInstaller_;
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};

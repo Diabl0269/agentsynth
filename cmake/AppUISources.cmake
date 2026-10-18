@@ -272,6 +272,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
+    Source/UI/Layout/ProgressStrip.cpp
+    Source/UI/Layout/ProgressStrip.h
     Source/UI/Layout/AppTooltipWindow.h
     Source/UI/Layout/AppTooltipWindow.cpp
     Source/UI/Layout/HelperTooltip.h
@@ -623,6 +625,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChromeMap.cpp
@@ -820,6 +824,12 @@ set(APPUI_SOURCES
     Source/UI/Settings/LeavingSurveyPanel.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
+    Source/UI/Settings/SoundPacks/SoundPackCredit.cpp
+    Source/UI/Settings/SoundPacks/SoundPackCredit.h
+    Source/UI/Settings/SoundPacks/SoundPackRow.cpp
+    Source/UI/Settings/SoundPacks/SoundPackRow.h
+    Source/UI/Settings/SoundPacks/SoundPacksSettingsTab.cpp
+    Source/UI/Settings/SoundPacks/SoundPacksSettingsTab.h
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp

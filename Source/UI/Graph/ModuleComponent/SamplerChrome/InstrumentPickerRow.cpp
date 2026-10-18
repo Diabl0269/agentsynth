@@ -5,6 +5,7 @@
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h"
 
 namespace synth::ui {
 
@@ -67,6 +68,7 @@ void InstrumentPickerRow::openPicker() {
     });
     popup->setAccessibleNames("Choose an instrument", "Search instruments");
     popup->setSearchPlaceholder("Search instruments...");
+    attachPackOffer(*popup, choices, currentPackKey(), options);
     popup->onClosed = [weak] {
         if (weak != nullptr)
             weak->picker_.setListOpen(false);

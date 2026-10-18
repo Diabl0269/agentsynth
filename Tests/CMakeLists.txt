@@ -66,6 +66,8 @@ add_executable(Tests
     Modules/Sampler/SamplerInstrumentModeTests.cpp
     Modules/Sampler/SamplerMapEditTests.cpp
     Modules/Sampler/SoundPackLibraryTests.cpp
+    SoundPacks/SoundPackIndexTests.cpp
+    SoundPacks/SoundPackInstallerTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp
@@ -342,6 +344,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
     UI/Graph/ModuleComponent/DrumKitCardTests.cpp
+    UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp
@@ -480,6 +483,7 @@ add_executable(Tests
     UI/Settings/SettingsWindowReopenTests.cpp
     UI/Settings/SettingsWindowTabStripTests.cpp
     UI/Settings/SettingsWindowShortcutHintsTests.cpp
+    UI/Settings/SoundPacksSettingsTabTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
     App/ShortcutManager/ShortcutManagerApiTests.cpp
     App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp

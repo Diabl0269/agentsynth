@@ -49,6 +49,10 @@ constexpr const char* kWebsiteUrl = "https://agentsynth.app";
 // URL so the payment providers behind it can change without touching the binary.
 constexpr const char* kContributeUrl = "https://agentsynth.app/contribute";
 
+// The hosted list of downloadable sound packs (index.json); each entry carries its zip url and checksum.
+constexpr const char* kSoundPackIndexUrl =
+    "https://raw.githubusercontent.com/Diabl0269/agentsynth-sound-packs/main/index.json";
+
 // Support contact address, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kSupportEmail = "support@agentsynth.app";
 

@@ -11,6 +11,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
+#include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
 //==============================================================================
 // AISettingsTab - AI configuration interface
@@ -468,7 +469,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
-                               juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames)
+                               juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames,
+                               synth::soundpacks::SoundPackInstaller* soundPacks)
     : appProperties(appProperties)
     , shortcutManager(shortcutManager)
     , themeManager(themeManager) {
@@ -501,6 +503,10 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     // it doesn't shift the tab indices every other test in SettingsWindowTests.cpp hardcodes.
     auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
+
+    // Optional instrument downloads and their credits. After Feedback for the same reason Feedback is last.
+    if (soundPacks != nullptr)
+        tabs.addTab("Sound packs", juce::Colours::transparentBlack, new SoundPacksSettingsTab(*soundPacks), true);
 
     addAndMakeVisible(tabs);
     // The strip is one Tab stop (SettingsTabs::getStripFocus), ahead of the open tab's controls; its
