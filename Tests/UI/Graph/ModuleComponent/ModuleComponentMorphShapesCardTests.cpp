@@ -135,6 +135,12 @@ TEST_F(ModuleComponentTest, ShowMorphMapToggleSwapsTheMapForTheKnobsAndIsRemembe
     EXPECT_FALSE(rebuilt.getMorphCard()->getMap().isVisible()) << "a rebuilt card keeps the choice";
 }
 
+// Regression test for FRO943: the toggle is drawn as a pill, not a tick box.
+TEST_F(ModuleComponentTest, ShowMorphMapToggleHasThePillStyle) {
+    CardRig rig;
+    EXPECT_TRUE((bool)rig.custom().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
+}
+
 TEST_F(ModuleComponentTest, MorphMapPillIsInTheFooterOnlyInCustom) {
     CardRig rig(false);
     EXPECT_FALSE(rig.custom().getToggle().isVisible());

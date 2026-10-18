@@ -7,6 +7,7 @@
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
@@ -38,6 +39,11 @@ void ModuleComponent::createMorphShapesCard() {
     };
     host.title = [this] { return cardTitle(); };
     auto& graph = owner.getAudioEngine().getGraph();
+    // The constructor styles the footer toggles before this card exists, so its pill is styled here.
+    const auto stylePill = [this] {
+        if (cardBody_ != nullptr && cardBody_->hasFooter())
+            synth::ui::setTogglePillStyle(morphCard_->getToggle(), true);
+    };
     host.mapPlace = filter != nullptr ? "under the response view" : "under the curve editor";
     if (filter != nullptr) {
         host.customActive = [filter] { return filter->getCurrentFilterType() == FilterModule::kCustomTypeIndex; };
@@ -49,6 +55,7 @@ void ModuleComponent::createMorphShapesCard() {
             if (morphCard_ != nullptr)
                 morphCard_->openEditor(morphCard_->nearestShapeToCursor());
         };
+        stylePill();
         return;
     }
     host.customActive = [this] { return lfoShapeIsCustom(module); };
@@ -56,6 +63,7 @@ void ModuleComponent::createMorphShapesCard() {
         std::move(host), *lfo,
         std::make_shared<synth::ui::LfoShapesAdapter>(*lfo, undoManager, graph, nodeId, cardTitle()),
         LFOModule::kMorphXChannel, LFOModule::kMorphYChannel);
+    stylePill();
 }
 
 /** Opens (or raises) the shape list editor of this card's module on `shapeIndex`. */

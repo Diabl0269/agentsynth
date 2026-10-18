@@ -91,6 +91,12 @@ struct WindowCapture {
 
 } // namespace
 
+// Regression test for FRO943: the toggle is drawn as a pill, not a tick box.
+TEST_F(ModuleComponentTest, LfoShowMorphMapToggleHasThePillStyle) {
+    LfoCardRig rig;
+    EXPECT_TRUE((bool)rig.morph().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
+}
+
 TEST_F(ModuleComponentTest, LfoMorphMapAppearsWithSeveralShapesAndNotWithOne) {
     LfoCardRig several(3);
     EXPECT_TRUE(several.map().isVisible());
