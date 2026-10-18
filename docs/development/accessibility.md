@@ -169,7 +169,8 @@ held, and the whole hold is one undo step), Return on a dot edits it, Delete or 
 next dot (the last shape stays), F2 renames it, the open-context-menu key opens its menu
 (`KeyboardContextMenuProvider`), Escape returns focus to the map. In the window Tab continues through the shape chips
 (named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
-window with the shared fade (`closeHostingWindow`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
+window with the shared fade (`closeHostingWindow`); the window opens with focus on the map, and the app shortcuts that make
+sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 ## Verifying for real
 

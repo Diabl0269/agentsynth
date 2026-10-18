@@ -1,5 +1,6 @@
 // ShapeEditorWindow.cpp -- the shape editor's window and its grow-out-of-the-card motion.
 #include "ShapeEditorWindow.h"
+#include "ShapeEditorAppShortcuts.h"
 #include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
@@ -57,6 +58,7 @@ void focusShapeEditorWindow(juce::DialogWindow& window) {
 juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adapter, int selected,
                                           juce::Component* anchor) {
     auto content = std::make_unique<ShapeListEditor>(std::move(adapter), selected);
+    content->onAppShortcut = makeAppShortcutRelay(anchor);
     if (auto& hook = test_hooks::shapeEditorWindowHookForTest()) {
         hook(std::move(content));
         return nullptr;

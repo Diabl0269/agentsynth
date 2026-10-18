@@ -3,7 +3,11 @@
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "ShapeEditorTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
@@ -313,4 +317,133 @@ TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
         ASSERT_NE(tip, nullptr) << c->getTitle();
         EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// App shortcuts while the window has the keyboard
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+/** Stands in for MainComponent: the command target above the canvas, recording the keys handed to it. */
+struct RecordingTarget
+    : juce::Component
+    , juce::ApplicationCommandTarget {
+    std::vector<juce::KeyPress> received;
+    bool keyPressed(const juce::KeyPress& k) override {
+        received.push_back(k);
+        return true;
+    }
+    ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
+    void getAllCommands(juce::Array<juce::CommandID>&) override {}
+    void getCommandInfo(juce::CommandID, juce::ApplicationCommandInfo&) override {}
+    bool perform(const InvocationInfo&) override { return false; }
+};
+
+void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
+
+} // namespace
+
+TEST(ShapeEditor, KeysTheEditorDoesNotUseAreOfferedToTheAppShortcutHookButEscapeCloses) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    std::vector<int> offered;
+    editor.onAppShortcut = [&](const juce::KeyPress& k) {
+        offered.push_back(k.getKeyCode());
+        return k.getKeyCode() == ' ';
+    };
+    int closed = 0;
+    editor.onDone = [&] { ++closed; };
+
+    EXPECT_TRUE(editor.keyPressed(key(' ')));
+    EXPECT_FALSE(editor.keyPressed(key('z', juce::ModifierKeys::commandModifier)));
+    EXPECT_TRUE(editor.keyPressed(key(juce::KeyPress::escapeKey)));
+
+    EXPECT_EQ(closed, 1);
+    ASSERT_EQ(offered.size(), 2u) << "Escape is never offered";
+    EXPECT_EQ(offered[0], ' ');
+    EXPECT_EQ(offered[1], 'z');
+}
+
+TEST(ShapeEditor, KeysTheMapAndTheCurveEditorUseNeverReachTheAppShortcutHook) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    int offered = 0;
+    editor.onAppShortcut = [&](const juce::KeyPress&) {
+        ++offered;
+        return true;
+    };
+
+    EXPECT_TRUE(editor.getMap().getDotStop(0)->keyPressed(key(juce::KeyPress::backspaceKey)));
+    EXPECT_TRUE(editor.getMap().getDotStop(0)->keyPressed(key(juce::KeyPress::rightKey)));
+    EXPECT_EQ(offered, 0) << "the stop took them, so they never bubble to the editor";
+}
+
+TEST(ShapeEditor, TheRelayHandsSpaceAndUndoToTheMainWindowLaterAndLeavesEditingKeysAlone) {
+    AudioEngine engine;
+    RecordingTarget target;
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target.addAndMakeVisible(canvas);
+    juce::Component anchor;
+    canvas.addAndMakeVisible(anchor);
+    auto relay = makeAppShortcutRelay(&anchor);
+    const auto cmd = juce::ModifierKeys::commandModifier;
+
+    EXPECT_TRUE(relay(key(' ')));
+    EXPECT_TRUE(relay(key('z', cmd)));
+    EXPECT_TRUE(relay(key('z', cmd | juce::ModifierKeys::shiftModifier)));
+    EXPECT_TRUE(target.received.empty()) << "delivered a turn later, outside the window's own key handler";
+    pumpMessages();
+    ASSERT_EQ(target.received.size(), 3u);
+    EXPECT_EQ(target.received[0].getKeyCode(), ' ');
+    EXPECT_EQ(target.received[1].getKeyCode(), 'z');
+
+    target.received.clear();
+    for (const auto& k :
+         {key(juce::KeyPress::backspaceKey), key(juce::KeyPress::deleteKey), key(juce::KeyPress::leftKey),
+          key(juce::KeyPress::tabKey), key('c', cmd), key('v', cmd), key('a', cmd), key('x')})
+        EXPECT_FALSE(relay(k)) << k.getTextDescription();
+    pumpMessages();
+    EXPECT_TRUE(target.received.empty());
+}
+
+TEST(ShapeEditor, TheRelayDoesNothingWithoutACanvasOrAfterTheAnchorIsGone) {
+    EXPECT_FALSE(makeAppShortcutRelay(nullptr)(key(' ')));
+
+    juce::Component lonely;
+    juce::Component anchor;
+    lonely.addAndMakeVisible(anchor);
+    EXPECT_FALSE(makeAppShortcutRelay(&anchor)(key(' '))) << "no canvas above the anchor";
+
+    AudioEngine engine;
+    RecordingTarget target;
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target.addAndMakeVisible(canvas);
+    auto anchorOnCanvas = std::make_unique<juce::Component>();
+    canvas.addAndMakeVisible(*anchorOnCanvas);
+    auto relay = makeAppShortcutRelay(anchorOnCanvas.get());
+    anchorOnCanvas.reset();
+    EXPECT_FALSE(relay(key(' ')));
+}
+
+TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
+    AudioEngine engine;
+    auto target = std::make_unique<RecordingTarget>();
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target->addAndMakeVisible(canvas);
+    juce::Component anchor;
+    canvas.addAndMakeVisible(anchor);
+    auto relay = makeAppShortcutRelay(&anchor);
+
+    EXPECT_TRUE(relay(key(' ')));
+    target->removeChildComponent(&canvas);
+    target.reset();
+    pumpMessages(); // must not touch the deleted target
+    SUCCEED();
 }

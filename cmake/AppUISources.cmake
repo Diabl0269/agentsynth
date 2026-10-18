@@ -756,6 +756,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.cpp
     Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h
     Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h
     Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp
     Source/UI/ModuleViews/WavetableDisplayComponent.h

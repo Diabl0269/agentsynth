@@ -247,7 +247,7 @@ void ShapeListEditor::openDrawFlyout() {
 
 bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
     if (key != juce::KeyPress::escapeKey)
-        return false;
+        return onAppShortcut && onAppShortcut(key);
     if (onDone)
         onDone();
     else
