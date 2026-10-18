@@ -40,6 +40,16 @@ T* firstOf(juce::AudioProcessorGraph& graph, const juce::String& name) {
     return nullptr;
 }
 
+// The module of `type` that waits for `sound`.
+ModuleBase* pendingOf(juce::AudioProcessorGraph& graph, const juce::String& type, const juce::String& sound) {
+    for (auto* node : graph.getNodes())
+        if (auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+            module != nullptr && synth::AIStateMapper::getFactoryTypeName(module) == type &&
+            synth::pendingSoundOf(*module) == sound)
+            return module;
+    return nullptr;
+}
+
 double paramValue(juce::AudioProcessor& processor, const juce::String& id) {
     for (auto* p : processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p); ranged != nullptr && ranged->paramID == id)
@@ -88,6 +98,31 @@ TEST_F(ChannelFlowTest, ACoreSoundTrackWithThePackInstalledPlaysThePackInstrumen
     for (const auto& track : rig.mc.getTimelineDoc().getTracks())
         named = named || track.name == "Keys";
     EXPECT_TRUE(named) << "the track keeps the name the op gave it";
+}
+
+TEST_F(ChannelFlowTest, AnAnimalSoundTrackBuildsTheWhaleSamplerWhenTheAnimalsPackIsInstalledAndCoreIsNot) {
+    SoundsRig rig(false);
+    rig.pack.installAnimals();
+    const int oscillators = countNamed(rig.graph(), "Oscillator");
+    ASSERT_TRUE(rig.apply(trackOp("Call", "Oscillator", "animals/whale")));
+
+    auto* sampler = firstOf<SamplerModule>(rig.graph(), "Sampler");
+    ASSERT_NE(sampler, nullptr);
+    EXPECT_EQ(sampler->getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack);
+    EXPECT_EQ(countNamed(rig.graph(), "Oscillator"), oscillators) << "no stand-in was built";
+    EXPECT_EQ(synth::pendingSoundOf(*sampler), "");
+}
+
+TEST_F(ChannelFlowTest, AnAnimalSoundTrackWithoutTheAnimalsPackBuildsTheOscillatorAndTheSwapWaitsForThePack) {
+    SoundsRig rig(true); // core installed, animals not
+    ASSERT_TRUE(rig.apply(trackOp("Call", "Oscillator", "animals/whale")));
+    EXPECT_NE(pendingOf(rig.graph(), "Oscillator", "animals/whale"), nullptr);
+    EXPECT_EQ(countNamed(rig.graph(), "Sampler"), 0);
+    EXPECT_EQ(rig.mc.getCoreSoundSwapperForTest().swapNow(), 0) << "core does not provide the whale";
+
+    rig.pack.installAnimals();
+    EXPECT_EQ(rig.mc.getCoreSoundSwapperForTest().swapNow(), 1);
+    EXPECT_EQ(countNamed(rig.graph(), "Sampler"), 1);
 }
 
 TEST_F(ChannelFlowTest, ACoreDrumKitWithThePackInstalledHasTheKitLoaded) {
@@ -207,23 +242,24 @@ TEST_F(ChannelFlowTest, TheSwapAfterTheDownloadReplacesEveryStandInInOneUndoStep
 
 namespace {
 
-// A core pack zip whose instrument plays a real (tiny) WAV, so the Sampler that replaces a stand-in can load it.
-juce::MemoryBlock corePackZipWithAudio() {
+// A pack zip whose instrument plays a real (tiny) WAV, so the Sampler that replaces a stand-in can load it.
+juce::MemoryBlock packZipWithAudio(const juce::String& packId, const juce::String& instrumentId) {
     sampler_test::TempDir scratch;
     const auto wavFile = scratch.file("x.wav");
     sampler_test::writeWav(wavFile, 2000, 1, 44100.0, [](int, int i) { return 0.01f * (float)(i % 10); });
     juce::MemoryBlock wav;
     wavFile.loadFileAsData(wav);
     const juce::String sfz = "<region> sample=x.wav";
-    const juce::String manifest =
-        R"({"id":"core","name":"Core","version":"1.0.0","instruments":[{"id":"upright-piano","name":"Upright piano",)"
-        R"("sfz":"x.sfz","category":"Keys"}]})";
+    const juce::String manifest = R"({"id":")" + packId +
+                                  R"(","name":"Pack","version":"1.0.0","instruments":[{"id":")" + instrumentId +
+                                  R"(","name":"Sound","sfz":"x.sfz","category":"Keys"}]})";
     juce::ZipFile::Builder builder;
     const auto now = juce::Time::getCurrentTime();
     builder.addEntry(new juce::MemoryInputStream(manifest.toRawUTF8(), manifest.getNumBytesAsUTF8(), true), 5,
-                     "core/pack.json", now);
-    builder.addEntry(new juce::MemoryInputStream(sfz.toRawUTF8(), sfz.getNumBytesAsUTF8(), true), 5, "core/x.sfz", now);
-    builder.addEntry(new juce::MemoryInputStream(wav.getData(), wav.getSize(), true), 0, "core/x.wav", now);
+                     packId + "/pack.json", now);
+    builder.addEntry(new juce::MemoryInputStream(sfz.toRawUTF8(), sfz.getNumBytesAsUTF8(), true), 5, packId + "/x.sfz",
+                     now);
+    builder.addEntry(new juce::MemoryInputStream(wav.getData(), wav.getSize(), true), 0, packId + "/x.wav", now);
     juce::MemoryBlock block;
     juce::MemoryOutputStream out(block, false);
     builder.writeToStream(out, nullptr);
@@ -231,6 +267,46 @@ juce::MemoryBlock corePackZipWithAudio() {
 }
 
 } // namespace
+
+TEST_F(ChannelFlowTest, TheInstallerFinishingTheAnimalsPackSwapsAnAnimalStandInWhileCoreIsNotInstalled) {
+    juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer;
+    sound_pack_test::TempDir dir;
+    sound_pack_test::FakeServer server;
+    installer->setInstallRootForTesting(dir.path());
+    installer->setIndexUrlForTesting(sound_pack_test::kIndexUrl);
+    installer->setFetcherForTesting(server.fetcher());
+    installer->setRunInlineForTesting(true);
+    const auto zip = packZipWithAudio("animals", "whale");
+    const auto index = sound_pack_test::indexJson("animals", "1.0.0", zip);
+    server.bodies[sound_pack_test::kIndexUrl] = juce::MemoryBlock(index.toRawUTF8(), index.getNumBytesAsUTF8());
+    server.bodies["https://example.test/animals-1.0.0.zip"] = zip;
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{dir.path()});
+
+    {
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        const auto applied = mc.getAiServiceForTest().applyTimelineOps(
+            juce::JSON::parse(trackOp("Call", "Oscillator", "animals/whale")));
+        ASSERT_TRUE(applied.ok) << applied.message;
+        auto& graph = mc.getAudioEngine().getGraph();
+        ASSERT_NE(pendingOf(graph, "Oscillator", "animals/whale"), nullptr);
+        const int oscillators = countNamed(graph, "Oscillator");
+        int toldTracks = 0;
+        mc.getCoreSoundSwapperForTest().onSwapped = [&](int tracks, bool) { toldTracks = tracks; };
+
+        installer->refreshIndex();
+        ASSERT_TRUE(installer->install("animals"));
+
+        EXPECT_EQ(countNamed(graph, "Oscillator"), oscillators - 1);
+        EXPECT_EQ(toldTracks, 1);
+        auto* sampler = firstOf<SamplerModule>(graph, "Sampler");
+        ASSERT_NE(sampler, nullptr);
+        EXPECT_EQ(sampler->getInstrumentKind(), synth::sampler::InstrumentSource::Kind::Pack);
+    }
+    synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
+    installer->setFetcherForTesting(synth::soundpacks::makeHttpFetcher());
+}
 
 TEST_F(ChannelFlowTest, TheInstallerFinishingTheCorePackSwapsTheStandInsWithoutAnyCallFromTheTest) {
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer;
@@ -240,7 +316,7 @@ TEST_F(ChannelFlowTest, TheInstallerFinishingTheCorePackSwapsTheStandInsWithoutA
     installer->setIndexUrlForTesting(sound_pack_test::kIndexUrl);
     installer->setFetcherForTesting(server.fetcher());
     installer->setRunInlineForTesting(true);
-    const auto zip = corePackZipWithAudio();
+    const auto zip = packZipWithAudio("core", "upright-piano");
     const auto index = sound_pack_test::indexJson("core", "1.0.0", zip);
     server.bodies[sound_pack_test::kIndexUrl] = juce::MemoryBlock(index.toRawUTF8(), index.getNumBytesAsUTF8());
     server.bodies["https://example.test/core-1.0.0.zip"] = zip;

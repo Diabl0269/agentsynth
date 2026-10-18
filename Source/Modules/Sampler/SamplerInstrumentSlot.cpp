@@ -31,6 +31,8 @@ juce::var regionToVar(const DroppedRegion& r) {
         o->setProperty("tune", r.tuneCents);
     if (r.volumeDb != defaults.volumeDb)
         o->setProperty("volume", r.volumeDb);
+    if (r.keytrackCents != defaults.keytrackCents)
+        o->setProperty("keytrack", r.keytrackCents);
     if (r.loop != defaults.loop)
         o->setProperty("loop", (int)r.loop);
     if (r.loopStart != defaults.loopStart)
@@ -58,6 +60,7 @@ DroppedRegion regionFromVar(const juce::var& v) {
     r.hiVel = juce::jlimit(1, 127, (int)v.getProperty("hivel", 127));
     r.tuneCents = (float)v.getProperty("tune", 0.0);
     r.volumeDb = (float)v.getProperty("volume", 0.0);
+    r.keytrackCents = (float)v.getProperty("keytrack", 100.0);
     r.loop = (RegionSpec::Loop)juce::jlimit(0, kLoopKinds - 1, (int)v.getProperty("loop", 0));
     r.loopStart = (juce::int64)v.getProperty("loopstart", (juce::int64)-1);
     r.loopEnd = (juce::int64)v.getProperty("loopend", (juce::int64)-1);
@@ -141,6 +144,7 @@ std::vector<RegionSpec> specsFor(const InstrumentSource& source) {
         spec.hiVel = r.hiVel;
         spec.tuneCents = r.tuneCents;
         spec.volumeDb = r.volumeDb;
+        spec.keytrackCents = r.keytrackCents;
         spec.loop = r.loop;
         spec.loopStart = r.loopStart;
         spec.loopEnd = r.loopEnd;
@@ -172,6 +176,7 @@ InstrumentSource sourceFromSpecs(const std::vector<RegionSpec>& specs, const juc
         r.hiVel = spec.hiVel;
         r.tuneCents = spec.tuneCents;
         r.volumeDb = spec.volumeDb;
+        r.keytrackCents = spec.keytrackCents;
         r.loop = spec.loop;
         r.loopStart = spec.loopStart;
         r.loopEnd = spec.loopEnd;

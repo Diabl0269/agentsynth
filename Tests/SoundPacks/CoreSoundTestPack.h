@@ -1,9 +1,10 @@
 #pragma once
 
-// A tiny fake "core" sound pack in a temp folder: every instrument the song planner can name, each one region over a
-// short WAV, with the sound pack library pointed at it for the life of the object.
+// A tiny fake "core" (and, on request, "animals") sound pack in a temp folder: every instrument the song planner can
+// name, each one region over a short WAV, with the sound pack library pointed at it for the life of the object.
 #include "../Modules/Sampler/SamplerTestWavs.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
+#include <initializer_list>
 
 namespace core_sound_test {
 
@@ -17,25 +18,32 @@ public:
     }
     ~FakeCorePack() { synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt); }
 
-    /** Writes the pack, as if the download had finished. */
+    /** Writes the core pack, as if the download had finished. */
     void install() {
-        const auto pack = root_.file("core");
-        sampler_test::writeWav(pack.getChildFile("x.wav"), 2000, 1, 44100.0,
-                               [](int, int i) { return 0.01f * (float)(i % 10); });
-        pack.getChildFile("x.sfz").replaceWithText("<region> sample=x.wav");
-        juce::String instruments;
-        for (const char* id : {"upright-piano", "string-section", "trumpet", "french-horn", "flute", "clarinet",
-                               "double-bass-plucked", "electric-guitar", "acoustic-kit"})
-            instruments += juce::String(instruments.isEmpty() ? "" : ",") + "{\"id\":\"" + id + "\",\"name\":\"" + id +
-                           "\",\"sfz\":\"x.sfz\",\"category\":\"Test\"}";
-        pack.getChildFile("pack.json")
-            .replaceWithText("{\"id\":\"core\",\"name\":\"Core\",\"version\":\"1.0.0\",\"instruments\":[" +
-                             instruments + "]}");
+        installPack("core", {"upright-piano", "string-section", "trumpet", "french-horn", "flute", "clarinet",
+                             "double-bass-plucked", "electric-guitar", "acoustic-kit"});
     }
+
+    /** Writes the animals pack next to it. */
+    void installAnimals() { installPack("animals", {"whale", "crow", "owl", "frog", "wolf"}); }
 
     const juce::File& path() const { return root_.path(); }
 
 private:
+    void installPack(const juce::String& packId, std::initializer_list<const char*> ids) {
+        const auto pack = root_.file(packId);
+        sampler_test::writeWav(pack.getChildFile("x.wav"), 2000, 1, 44100.0,
+                               [](int, int i) { return 0.01f * (float)(i % 10); });
+        pack.getChildFile("x.sfz").replaceWithText("<region> sample=x.wav");
+        juce::String instruments;
+        for (const char* id : ids)
+            instruments += juce::String(instruments.isEmpty() ? "" : ",") + "{\"id\":\"" + id + "\",\"name\":\"" + id +
+                           "\",\"sfz\":\"x.sfz\",\"category\":\"Test\"}";
+        pack.getChildFile("pack.json")
+            .replaceWithText("{\"id\":\"" + packId + "\",\"name\":\"" + packId +
+                             "\",\"version\":\"1.0.0\",\"instruments\":[" + instruments + "]}");
+    }
+
     sampler_test::TempDir root_;
 };
 

@@ -21,6 +21,22 @@ constexpr const char* kSoundsPlan =
     "lanes":[]},"price":{"units":5,"estimatedUsd":0.02},
     "steps":[{"id":"sections","kind":"sections","label":"Laying out 1 sections"}],"token":"tok"})";
 
+constexpr const char* kAnimalsPlan =
+    R"({"plan":{"title":"Night calls","bpm":80,"key":"A minor","special":"",
+    "sections":[{"name":"Head","bars":16,"energy":3,"chords":"Am","description":"theme"}],
+    "tracks":[{"name":"Whale","role":"lead","instrument":"Oscillator","sound":"x","coreSound":"animals/whale","sections":["Head"]},
+              {"name":"Wolf","role":"fx","instrument":"Oscillator","sound":"y","coreSound":"animals/wolf","sections":["Head"]}],
+    "lanes":[]},"price":{"units":5,"estimatedUsd":0.02},
+    "steps":[{"id":"sections","kind":"sections","label":"Laying out 1 sections"}],"token":"tok"})";
+
+constexpr const char* kMixedPlan =
+    R"({"plan":{"title":"Forest jazz","bpm":96,"key":"C major","special":"",
+    "sections":[{"name":"Head","bars":16,"energy":3,"chords":"C","description":"theme"}],
+    "tracks":[{"name":"Piano","role":"keys","instrument":"Mallet","sound":"x","coreSound":"core/upright-piano","sections":["Head"]},
+              {"name":"Whale","role":"lead","instrument":"Oscillator","sound":"y","coreSound":"animals/whale","sections":["Head"]}],
+    "lanes":[]},"price":{"units":5,"estimatedUsd":0.02},
+    "steps":[{"id":"sections","kind":"sections","label":"Laying out 1 sections"}],"token":"tok"})";
+
 constexpr const char* kPlainPlan =
     R"({"plan":{"title":"Plain","bpm":96,"key":"C major","special":"",
     "sections":[{"name":"Head","bars":16,"energy":3,"chords":"C","description":"theme"}],
@@ -41,6 +57,7 @@ struct OfferRig {
     TempDir dir;
     FakeServer server;
     juce::MemoryBlock zip = goodPackZip("core", "1.0.0");
+    juce::MemoryBlock animalsZip = goodPackZip("animals", "1.0.0");
 
     OfferRig() {
         synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{dir.path()});
@@ -48,9 +65,11 @@ struct OfferRig {
         shared->setIndexUrlForTesting(kIndexUrl);
         shared->setFetcherForTesting(server.fetcher());
         shared->setRunInlineForTesting(true);
-        const auto json = indexJson("core", "1.0.0", zip);
+        const auto json =
+            indexJsonOf({packEntryJson("core", "1.0.0", zip), packEntryJson("animals", "1.0.0", animalsZip)});
         server.bodies[kIndexUrl] = juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8());
         server.bodies["https://example.test/core-1.0.0.zip"] = zip;
+        server.bodies["https://example.test/animals-1.0.0.zip"] = animalsZip;
         shared->refreshIndex(); // a fresh list for every test, whatever the last one left
     }
     ~OfferRig() {
@@ -58,16 +77,22 @@ struct OfferRig {
         shared->setFetcherForTesting(synth::soundpacks::makeHttpFetcher());
     }
 
-    void installAlready() {
-        const auto pack = dir.path().getChildFile("core");
+    void installAlready(const juce::String& id = "core") {
+        const auto pack = dir.path().getChildFile(id);
         pack.createDirectory();
-        pack.getChildFile("pack.json").replaceWithText(manifestJson("core", "1.0.0"));
+        pack.getChildFile("pack.json").replaceWithText(manifestJson(id, "1.0.0"));
         pack.getChildFile("piano").createDirectory();
         pack.getChildFile("piano/piano.sfz").replaceWithText("<region> sample=x.wav");
         shared->refreshIndex();
     }
 
     juce::String sizeText() const { return synth::soundpacks::formatPackSize((juce::int64)zip.getSize()); }
+    juce::String animalsSizeText() const {
+        return synth::soundpacks::formatPackSize((juce::int64)animalsZip.getSize());
+    }
+    juce::String bothSizeText() const {
+        return synth::soundpacks::formatPackSize((juce::int64)(zip.getSize() + animalsZip.getSize()));
+    }
 };
 
 struct Counter {
@@ -190,4 +215,79 @@ TEST(SongPlanCardSounds, EveryControlOfTheOfferHasANameAndATooltip) {
     for (const auto& gap : synth::test::auditAccessibility(card))
         ADD_FAILURE() << (gap.kind == synth::test::Gap::Kind::MissingName ? "missing name " : "missing tooltip ")
                       << gap.path;
+}
+
+TEST(SongPlanCardSounds, APlanNamingOnlyAnimalSoundsOffersTheAnimalsPack) {
+    OfferRig rig;
+    auto session = sessionFor(kAnimalsPlan);
+    SongPlanCard card(session, {});
+    size(card);
+    EXPECT_TRUE(card.soundsOfferShownForTesting());
+    EXPECT_EQ(card.soundsLineForTesting(),
+              "Uses real sounds: Whale call, Wolf howl. Download Pack animals (" + rig.animalsSizeText() + ") first?");
+    EXPECT_EQ(card.buildButtonText(), juce::String::fromUTF8("Download first \xC2\xB7 5 uses"));
+}
+
+TEST(SongPlanCardSounds, AnInstalledCorePackDoesNotSatisfyAnAnimalsPlan) {
+    OfferRig rig;
+    rig.installAlready("core");
+    Counter counter;
+    auto session = sessionFor(kAnimalsPlan);
+    SongPlanCard card(session, counter.actions());
+    size(card);
+    EXPECT_TRUE(card.soundsOfferShownForTesting());
+
+    card.pressBuildForTesting();
+
+    EXPECT_EQ(counter.builds, 1);
+    EXPECT_TRUE(rig.shared->row("animals")->state == SoundPackInstaller::State::Installed);
+}
+
+TEST(SongPlanCardSounds, APlanNamingCoreAndAnimalsOffersBothAndOnlyOffersTheMissingOne) {
+    OfferRig rig;
+    auto session = sessionFor(kMixedPlan);
+    {
+        SongPlanCard card(session, {});
+        size(card);
+        EXPECT_EQ(card.soundsLineForTesting(), "Uses real sounds: Upright piano, Whale call. Download Pack core and "
+                                               "Pack animals (" +
+                                                   rig.bothSizeText() + ") first?");
+    }
+    rig.installAlready("core");
+    SongPlanCard card(session, {});
+    size(card);
+    EXPECT_EQ(card.soundsLineForTesting(), "Uses real sounds: Upright piano, Whale call. Download Pack animals (" +
+                                               rig.animalsSizeText() + ") first?");
+}
+
+TEST(SongPlanCardSounds, DownloadFirstInstallsBothPacksAndBuildsOnlyAfterTheLastOne) {
+    OfferRig rig;
+    Counter counter;
+    auto session = sessionFor(kMixedPlan);
+    SongPlanCard card(session, counter.actions());
+    size(card);
+    int buildsWhileDownloading = 0;
+    rig.server.onChunk = [&] { buildsWhileDownloading += counter.builds; };
+
+    card.pressBuildForTesting();
+
+    EXPECT_EQ(buildsWhileDownloading, 0) << "no build while a pack is still arriving";
+    EXPECT_EQ(counter.builds, 1);
+    EXPECT_TRUE(rig.shared->row("core")->state == SoundPackInstaller::State::Installed);
+    EXPECT_TRUE(rig.shared->row("animals")->state == SoundPackInstaller::State::Installed);
+}
+
+TEST(SongPlanCardSounds, CancellingThePlanCancelsEveryPackItWasDownloading) {
+    OfferRig rig;
+    Counter counter;
+    auto session = sessionFor(kMixedPlan);
+    SongPlanCard card(session, counter.actions());
+    size(card);
+    rig.server.onChunk = [&] { card.cancelLinkForTesting().onClick(); };
+
+    card.pressBuildForTesting();
+
+    EXPECT_EQ(counter.builds, 0);
+    EXPECT_FALSE(session.buildAfterDownload);
+    EXPECT_TRUE(rig.shared->row("animals")->state != SoundPackInstaller::State::Installed);
 }

@@ -15,6 +15,7 @@ struct RegionSpec {
     juce::String samplePath;
     int loKey = 0, hiKey = 127, rootKey = 60, loVel = 1, hiVel = 127;
     float tuneCents = 0.0f, volumeDb = 0.0f;
+    float keytrackCents = 100.0f; // cents of pitch per key from the root key; 0 plays every key as recorded
     Loop loop = Loop::None;
     juce::int64 loopStart = -1, loopEnd = -1; // frames; -1 = whole file
     int seqLength = 1, seqPosition = 1;       // round robin: plays when seqPosition == slot + 1

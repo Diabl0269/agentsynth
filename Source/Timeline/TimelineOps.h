@@ -52,7 +52,7 @@ struct TimelineOpsHost {
     addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
                        const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
                        const juce::var& instrumentParams) = 0;
-    /** As addInstrumentTrack, for an op that named a core pack `sound` (one of the nine ids, whose stand-in is
+    /** As addInstrumentTrack, for an op that named a core pack `sound` (one of the CoreSounds.h ids, whose stand-in is
      * `instrumentType`). The default ignores the sound and builds the stand-in. */
     virtual std::optional<InstrumentTrackBuildResult>
     addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,

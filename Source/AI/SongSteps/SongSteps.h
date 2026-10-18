@@ -42,7 +42,7 @@ struct PlanTrack {
     juce::String role;
     juce::String instrument;
     juce::String sound;
-    juce::String coreSound; // one of the nine core pack ids, or empty
+    juce::String coreSound; // one of the sound ids in CoreSounds.h, or empty
     juce::StringArray sections;
 };
 

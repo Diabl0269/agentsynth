@@ -48,6 +48,19 @@ TEST(SfzReaderTest, OpcodesInheritDownTheHierarchyAndGroupsReset) {
     EXPECT_FLOAT_EQ(r.regions[3].volumeDb, -3.0f);
 }
 
+TEST(SfzReaderTest, PitchKeytrackIsReadPerRegionAndDefaultsToOneSemitonePerKey) {
+    const auto r = parse("<group> pitch_keytrack=0\n"
+                         "<region> sample=a.wav\n"
+                         "<group>\n"
+                         "<region> sample=b.wav pitch_keytrack=50\n"
+                         "<region> sample=c.wav\n");
+    ASSERT_EQ(r.regions.size(), 3u);
+    EXPECT_FLOAT_EQ(r.regions[0].keytrackCents, 0.0f);
+    EXPECT_FLOAT_EQ(r.regions[1].keytrackCents, 50.0f);
+    EXPECT_FLOAT_EQ(r.regions[2].keytrackCents, 100.0f);
+    EXPECT_FALSE(anyWarningContains(r, "pitch_keytrack")) << "it is a known opcode";
+}
+
 TEST(SfzReaderTest, SamplePathsKeepSpacesAndFlipBackslashes) {
     const auto r = parse("<region> sample=Piano C4 soft.wav lokey=60 hikey=62\n"
                          "<region> sample=sub\\dir\\x.wav key=61\n");

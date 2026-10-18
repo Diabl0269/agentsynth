@@ -24,6 +24,27 @@ TEST(CoreSounds, TheNineIdsAreKnownWithTheirStandIns) {
     EXPECT_FALSE(findCoreSound("core/flute")->drumKit);
 }
 
+TEST(CoreSounds, TheFiveAnimalSoundsAreInTheAnimalsPackWithAnOscillatorStandIn) {
+    for (const char* id : {"animals/whale", "animals/crow", "animals/owl", "animals/frog", "animals/wolf"}) {
+        const auto* sound = findCoreSound(id);
+        ASSERT_NE(sound, nullptr) << id;
+        EXPECT_EQ(packIdOf(*sound), "animals") << id;
+        EXPECT_EQ(juce::String(id), "animals/" + coreInstrumentId(*sound));
+        EXPECT_TRUE(coreSoundMatchesInstrument(id, "Oscillator")) << id;
+        EXPECT_FALSE(sound->drumKit) << id;
+    }
+    EXPECT_EQ(packIdOf(*findCoreSound("core/flute")), "core");
+    EXPECT_EQ(coreSoundNames({"animals/whale", "core/flute", "animals/wolf"}), "Whale call, Flute, Wolf howl");
+}
+
+TEST(CoreSounds, InstalledIsPerPack) {
+    core_sound_test::FakeCorePack pack; // core only
+    EXPECT_TRUE(coreSoundInstalled(*findCoreSound("core/flute")));
+    EXPECT_FALSE(coreSoundInstalled(*findCoreSound("animals/whale")));
+    pack.installAnimals();
+    EXPECT_TRUE(coreSoundInstalled(*findCoreSound("animals/whale")));
+}
+
 TEST(CoreSounds, NamesAreListedOnceInOrderAndUnknownIdsAreLeftOut) {
     EXPECT_EQ(coreSoundNames({"core/upright-piano", "core/nope", "core/double-bass-plucked", "core/upright-piano",
                               "core/acoustic-kit"}),

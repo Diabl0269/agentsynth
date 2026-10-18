@@ -53,7 +53,7 @@ std::unique_ptr<juce::AudioProcessor> makeStandIn(const CoreSound& core, const j
     if (core.drumKit) {
         juce::DynamicObject::Ptr state = new juce::DynamicObject();
         synth::sampler::writeInstrumentState(
-            synth::sampler::InstrumentSource::fromPack(synth::soundpacks::kCorePackId,
+            synth::sampler::InstrumentSource::fromPack(synth::soundpacks::packIdOf(core),
                                                        synth::soundpacks::coreInstrumentId(core)),
             *state);
         module->setExtraState(juce::var(state.get()));
@@ -71,7 +71,7 @@ std::unique_ptr<juce::AudioProcessor> makeKit(const CoreSound& core, const juce:
         return nullptr;
     applyParams(*kit, instrumentParams);
     if (auto* host = dynamic_cast<synth::sampler::InstrumentHost*>(kit.get()))
-        host->loadInstrumentFromPack(synth::soundpacks::kCorePackId, synth::soundpacks::coreInstrumentId(core));
+        host->loadInstrumentFromPack(synth::soundpacks::packIdOf(core), synth::soundpacks::coreInstrumentId(core));
     return kit;
 }
 

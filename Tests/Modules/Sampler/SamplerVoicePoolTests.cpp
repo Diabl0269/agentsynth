@@ -113,6 +113,27 @@ TEST(SamplerVoicePoolTest, PitchFollowsTheKeyAndTheLiveOffset) {
     EXPECT_NEAR(shifted, 2 * base, 3);
 }
 
+TEST(SamplerVoicePoolTest, ZeroKeytrackPlaysEveryKeyAtTheRecordedPitchAndHalfTracksHalfAnOctave) {
+    auto sine = makeSample(88200, 1, kRate, [](int, int i) {
+        return (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * i / kRate);
+    });
+    auto flat = makeRegion(sine, 0, 127, 1, 127, 60);
+    flat.keytrackCents = 0.0f;
+    auto half = makeRegion(sine, 0, 127, 1, 127, 60);
+    half.keytrackCents = 50.0f;
+    const auto p = defaults();
+    const int frames = 11025;
+    auto crossingsAt = [&](Region region, int note) {
+        Rig rig(makeInstrument({std::move(region)}));
+        rig.pool.noteOn(note, 1.0f, p);
+        return upwardZeroCrossings(render(rig.pool, frames, p).left);
+    };
+
+    EXPECT_NEAR(crossingsAt(flat, 36), 110, 2);
+    EXPECT_NEAR(crossingsAt(flat, 96), 110, 2) << "the same rate on every key";
+    EXPECT_NEAR(crossingsAt(half, 72), 155.6, 4) << "an octave up plays half an octave higher";
+}
+
 TEST(SamplerVoicePoolTest, ReleaseDecaysToSilenceWithinTheReleaseTime) {
     Rig rig(dcInstrument());
     auto p = defaults();

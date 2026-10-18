@@ -56,14 +56,25 @@ inline juce::MemoryBlock goodPackZip(const juce::String& id, const juce::String&
                     {id + "/marker-" + version + ".txt", "marker"}});
 }
 
-inline juce::String indexJson(const juce::String& id, const juce::String& version, const juce::MemoryBlock& zip,
-                              const juce::String& sha = {}) {
+/** One pack's entry for the hosted list. */
+inline juce::String packEntryJson(const juce::String& id, const juce::String& version, const juce::MemoryBlock& zip,
+                                  const juce::String& sha = {}) {
     const juce::String hash = sha.isNotEmpty() ? sha : synth::soundpacks::sha256Hex(zip.getData(), zip.getSize());
-    return R"({"format":1,"packs":[{"id":")" + id + R"(","name":"Pack )" + id + R"(","version":")" + version +
+    return R"({"id":")" + id + R"(","name":"Pack )" + id + R"(","version":")" + version +
            R"(","url":"https://example.test/)" + id + "-" + version + R"(.zip","sha256":")" + hash +
            R"(","downloadBytes":)" + juce::String((juce::int64)zip.getSize()) + R"(,"installedBytes":1000,
         "licence":"CC0 1.0","licenceUrl":"https://example.test/licence","credit":"Made by someone.",
-        "instruments":[{"id":"piano","name":"Grand","category":"Keys"}]}]})";
+        "instruments":[{"id":"piano","name":"Grand","category":"Keys"}]})";
+}
+
+/** A hosted list holding the given packs' entries (from packEntryJson). */
+inline juce::String indexJsonOf(const juce::StringArray& entries) {
+    return R"({"format":1,"packs":[)" + entries.joinIntoString(",") + "]}";
+}
+
+inline juce::String indexJson(const juce::String& id, const juce::String& version, const juce::MemoryBlock& zip,
+                              const juce::String& sha = {}) {
+    return indexJsonOf({packEntryJson(id, version, zip, sha)});
 }
 
 /** Serves bodies by URL, in three chunks so progress is reported; an unknown URL answers 404 like the real fetcher. */

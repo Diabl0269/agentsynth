@@ -15,10 +15,10 @@ enum class Section { None, Control, Global, Master, Group, Region, Ignored };
 
 // Opcodes this reader understands; anything else is reported once.
 bool isKnownOpcode(const juce::String& name) {
-    static const char* const known[] = {"sample",     "lokey",        "hikey",     "key",           "pitch_keycenter",
-                                        "lovel",      "hivel",        "tune",      "transpose",     "volume",
-                                        "loop_mode",  "loop_start",   "loopstart", "loop_end",      "loopend",
-                                        "seq_length", "seq_position", "trigger",   "ampeg_release", "default_path"};
+    static const char* const known[] = {
+        "sample",  "lokey",      "hikey",        "key",       "pitch_keycenter", "lovel",        "hivel",
+        "tune",    "transpose",  "volume",       "loop_mode", "loop_start",      "loopstart",    "loop_end",
+        "loopend", "seq_length", "seq_position", "trigger",   "ampeg_release",   "default_path", "pitch_keytrack"};
     for (const char* k : known)
         if (name == k)
             return true;
@@ -226,6 +226,7 @@ void Parser::applyOpcodes(RegionSpec& spec, const OpcodeMap& m) {
     };
     spec.tuneCents = (float)(number("tune", 0.0) + 100.0 * number("transpose", 0.0));
     spec.volumeDb = (float)number("volume", 0.0);
+    spec.keytrackCents = (float)number("pitch_keytrack", 100.0);
     spec.seqLength = juce::jmax(1, (int)number("seq_length", 1));
     spec.seqPosition = juce::jmax(1, (int)number("seq_position", 1));
     spec.ampReleaseSeconds = (float)number("ampeg_release", -1.0);

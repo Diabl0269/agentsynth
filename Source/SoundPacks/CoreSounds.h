@@ -1,7 +1,7 @@
 #pragma once
 
-// The nine instruments the song planner may name from the core sound pack, and the synth each one stands in for
-// while the pack is not installed.
+// The instruments the song planner may name from the downloadable sound packs (core and animals), and the synth each
+// one stands in for while its pack is not installed.
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -10,6 +10,7 @@
 namespace synth::soundpacks {
 
 inline constexpr const char* kCorePackId = "core";
+inline constexpr const char* kAnimalsPackId = "animals";
 
 struct CoreSound {
     const char* id;      ///< "core/upright-piano": pack id, a slash, the pack's instrument id.
@@ -19,10 +20,13 @@ struct CoreSound {
     float trimDb;        ///< Added to the recordings when a Sampler plays it, so it sits level with its stand-in.
 };
 
-/** The sound `id` names; null for anything that is not one of the nine. */
+/** The sound `id` names; null for anything that is not in the table. */
 const CoreSound* findCoreSound(const juce::String& id);
 
-/** The part of the id after "core/": the instrument id inside the pack. */
+/** The part of the id before the slash: the pack the sound is in ("core", "animals"). */
+juce::String packIdOf(const CoreSound& sound);
+
+/** The part of the id after the slash: the instrument id inside the pack. */
 juce::String coreInstrumentId(const CoreSound& sound);
 
 /** True when the op's `instrument` is the stand-in the id is paired with. */
