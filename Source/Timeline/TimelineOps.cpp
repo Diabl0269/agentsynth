@@ -236,12 +236,12 @@ TimelineOpsResult runAddTrack(const juce::String& where, juce::DynamicObject& op
 TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
                                         const TimelineOpsHost* host, TimelineOpsHost* applyHost,
                                         juce::StringArray& parts) {
-    if (const auto bad = unknownKey(
-            op, {"op", "name", "instrument", "poly", "instrumentId", "inserts", "envelope", "instrumentParams"});
+    if (const auto bad = unknownKey(op, {"op", "name", "instrument", "poly", "instrumentId", "inserts", "envelope",
+                                         "instrumentParams", "sound"});
         bad.isNotEmpty())
         return fail(where + "has an unknown field \"" + bad +
                     "\". An addInstrumentTrack op accepts only \"name\", \"instrument\", \"poly\", "
-                    "\"instrumentId\", \"inserts\", \"envelope\" and \"instrumentParams\".");
+                    "\"instrumentId\", \"inserts\", \"envelope\", \"instrumentParams\" and \"sound\".");
 
     juce::String name;
     if (const auto result = checkName(where, op.getProperty("name"), "name", /*required=*/true, name); !result.ok)
@@ -269,8 +269,8 @@ TimelineOpsResult runAddInstrumentTrack(const juce::String& where, juce::Dynamic
         // "instrumentId") resolve against; the plan reads them through a recording host, so this
         // batch runner itself never needs them.
         if (!applyHost
-                 ->addInstrumentTrack(name, fields.instrument, fields.poly, fields.inserts, fields.envelopeParams,
-                                      fields.instrumentParams)
+                 ->addInstrumentTrackWithSound(name, fields.instrument, fields.poly, fields.inserts,
+                                               fields.envelopeParams, fields.instrumentParams, fields.sound)
                  .has_value())
             return fail(where + "could not build the instrument track.");
     } else if (!doc.addTrack(TrackKind::Midi, name).isValid()) {

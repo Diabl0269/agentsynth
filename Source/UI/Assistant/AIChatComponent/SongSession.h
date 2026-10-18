@@ -34,8 +34,9 @@ struct SongSession {
     juce::uint32 buildStartMs = 0;
     juce::uint32 buildEndMs = 0;
     AIProvider::RequestId requestId;
-    int turnIndex = -1;        // the ChatTranscript turn this session's plan and build are recorded in
-    bool fadeInPending = true; // the card that takes this phase fades in once
+    int turnIndex = -1;              // the ChatTranscript turn this session's plan and build are recorded in
+    bool fadeInPending = true;       // the card that takes this phase fades in once
+    bool buildAfterDownload = false; // Download first was pressed: build as soon as the core instruments are installed
 
     static const char* lengthName(int index) {
         static const char* names[] = {"short", "medium", "long"};

@@ -1,5 +1,6 @@
 #include "SongSteps.h"
 
+#include "SoundPacks/CoreSounds.h"
 #include <algorithm>
 #include <cmath>
 
@@ -67,6 +68,14 @@ int SongPlan::totalBars() const {
 
 double SongPlan::seconds() const { return bpm > 0 ? (double)totalBars() * 4.0 * 60.0 / (double)bpm : 0.0; }
 
+std::vector<juce::String> SongPlan::coreSounds() const {
+    std::vector<juce::String> ids;
+    for (const auto& track : tracks)
+        if (track.coreSound.isNotEmpty())
+            ids.push_back(track.coreSound);
+    return ids;
+}
+
 juce::String SongPlan::durationText() const {
     const int whole = (int)std::lround(seconds());
     return juce::String(whole / 60) + ":" + juce::String(whole % 60).paddedLeft('0', 2);
@@ -87,7 +96,9 @@ bool parseSongPlan(const juce::var& planVar, SongPlan& out) {
     if (auto* tracks = planVar.getProperty("tracks", {}).getArray())
         for (const auto& t : *tracks) {
             PlanTrack track{
-                stringOf(t, "name"), stringOf(t, "role"), stringOf(t, "instrument"), stringOf(t, "sound"), {}};
+                stringOf(t, "name"), stringOf(t, "role"), stringOf(t, "instrument"), stringOf(t, "sound"), {}, {}};
+            if (const auto core = stringOf(t, "coreSound"); synth::soundpacks::findCoreSound(core) != nullptr)
+                track.coreSound = core;
             if (auto* names = t.getProperty("sections", {}).getArray())
                 for (const auto& n : *names)
                     track.sections.add(n.toString());

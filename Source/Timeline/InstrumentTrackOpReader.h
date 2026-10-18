@@ -18,6 +18,7 @@ struct InstrumentTrackOpFields {
     std::vector<InstrumentTrackInsert> inserts; // at most TimelineOps::kMaxInstrumentInserts
     juce::var envelopeParams;                   // the envelope's params object, or void for the module defaults
     juce::var instrumentParams;                 // the instrument's own params object, or void for its defaults
+    juce::String sound;                         // a core pack sound id whose stand-in is `instrument`, or empty
 };
 
 /** Reads `op`'s instrument/poly/instrumentId/instrumentParams/inserts/envelope. Empty on success, else the failure

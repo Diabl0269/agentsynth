@@ -58,3 +58,26 @@ Both are standalone components in `Source/UI/Assistant/AIChatComponent/` (design
 the chat rebuilds its bubbles on a redraw. Step icons (`StepIcons.h`) move only while their step runs; see
 [animation](../layout/animation.md#song-steps). A song message has the build card as its **only** card (no edit-plan card): once built, the card adds "Show details" (`songsteps::buildSongDetailsText`, `SongDetailsText.h`: a line per track with its sound modules and note count, the sections with their bars, a line per automation lane; stored in `SongSession::detailsText`) and the thumbs feedback. Undo is the project's own (one step, as the card says). The edit-plan card's rows carry the same kind icons, still before Apply,
 animated once in order on Apply.
+
+## Real instruments
+
+Both requests carry `sounds: true`, which lets the service name an instrument from the core sound pack on a track: a
+plan track may carry `coreSound`, and the build's `addInstrumentTrack` op `sound`. The value is one of nine ids
+(`core/upright-piano`, `string-section`, `trumpet`, `french-horn`, `flute`, `clarinet`, `double-bass-plucked`,
+`electric-guitar`, `acoustic-kit`); `SoundPacks/CoreSounds.h` is the table, with the stand-in synth each one comes
+with (Mallet, Wavetable, Pluck or Drum Kit). The plan parser keeps a `coreSound` only when it is one of the nine, and
+the op reader accepts a `sound` only when the op's `instrument` is its stand-in; otherwise the sound is ignored and the
+track is built from the synth alone.
+
+What a track gets depends on the pack (`MainComponentTimelineOpsHostSounds.cpp`):
+
+- **Installed, melodic:** a Sampler in Instrument mode loaded with the pack instrument, with the track's name and
+  notes unchanged. The stand-in's params are dropped except Level, and so are its envelope and poly flag (the Sampler
+  has neither).
+- **Installed, acoustic kit:** the usual Drum Kit with the core kit loaded.
+- **Missing:** the stand-in exactly as built before, plus the module's `pendingSound` (`Modules/PendingSound.h`) (a Drum Kit instead names the core
+  kit, which it plays as synth drums until the pack exists). The swap after the download is in
+  [sound pack downloads](../modules/sound-pack-downloads.md#song-builds-and-the-core-instruments).
+
+The song path with Ollama never uses any of this. The plan card offers the download first when a plan names sounds and
+the pack is missing.

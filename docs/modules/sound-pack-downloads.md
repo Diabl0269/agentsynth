@@ -39,6 +39,14 @@ A download is restarted from the beginning after an interruption; HTTP Range res
 
 Accessibility: every button and link is a Tab stop with a name and tooltip naming the pack; a row reads "<pack>, downloading, 42 percent"; the bar's name carries the percentage.
 
+## Song builds and the core instruments
+
+A song plan may name core instruments (see [song steps](../ai/song-steps.md#real-instruments)). While the pack is missing:
+
+- **The plan card** (`SongPlanCard`, `SongPlanCardSounds.cpp`) adds a line, "Uses real instruments: ... Download the core instruments (33 MB) first?" (the size comes from the loaded list and is left out when the list is not loaded). The Build button reads **Download first**: it starts the shared installer's `install("core")`, the line turns into the pack's progress text with a bar, and the song is built as soon as the pack is installed (`SongSession::buildAfterDownload` carries the intent across the chat rebuilding its bubbles). **Continue with synths** builds at once. A failed download says "Couldn't download the instruments." and keeps both choices. With the pack installed, or no sounds in the plan, the card is as before.
+- **The build** makes the stand-in synth and stores `pendingSound` (e.g. `core/flute`) on the module. It is kept in the module's `CardViewState` (`Modules/PendingSound.h`), so it is saved in the node's `cardView` key, restored on the trusted path only, never sent to a model, and survives a save and an undo.
+- **The swap** (`CoreSoundSwapper`, owned by `MainComponent`) listens to the shared installer. When the core pack becomes installed, and once when a project finishes loading, it replaces every module whose `pendingSound` the pack provides with a Sampler in Instrument mode loaded with that instrument, through the same code as Replace with (`GraphEditor::replaceModule`, which keeps cables, macro membership and the track), inside one `AppUndoManager::ScopedUndoGroup`: one undo puts all the stand-ins back, `pendingSound` included. A Wavetable stand-in's ADSR and VCA stay in the chain after the swap (the Sampler already shapes its notes, so they add a second, gentle envelope). A toast says "N tracks now play the real instruments", with Undo. A Drum Kit that names the core kit but has none loaded gets its kit loaded at the same moment (not part of the undo step; the kit reference is unchanged).
+
 ## Tests
 
 No test reaches the network: the installer takes a `Fetcher`, an index URL and an install root, and `setRunInlineForTesting` runs its worker steps on the calling thread. `Tests/SoundPacks/SoundPackTestKit.h` builds small zips with `juce::ZipFile::Builder` and serves them from a fake. The test binary also blocks the real fetcher (`setHttpBlockedForTesting`).

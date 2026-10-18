@@ -121,6 +121,7 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     // The instruments this app can build, so the service offers only those.
     ASSERT_TRUE(provider->lastPlanBody["instruments"].isArray());
     EXPECT_TRUE(provider->lastPlanBody["instruments"].getArray()->contains(juce::var("Noise")));
+    EXPECT_TRUE((bool)provider->lastPlanBody["sounds"]) << "the plan may name core pack instruments";
 
     provider->lines = {R"({"type":"steps","steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"}]})",
                        R"({"type":"step","id":"track:Kit","status":"running"})",
@@ -137,6 +138,7 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     EXPECT_EQ(provider->routes[1], juce::String("/v1/song/build"));
     ASSERT_TRUE(provider->lastBuildBody["instruments"].isArray());
     EXPECT_TRUE(provider->lastBuildBody["instruments"].getArray()->contains(juce::var("Noise")));
+    EXPECT_TRUE((bool)provider->lastBuildBody["sounds"]) << "the build may carry a sound per instrument track";
     EXPECT_EQ(provider->lastBuildBody["token"].toString(), juce::String("tok"));
     EXPECT_EQ(provider->lastBuildBody["plan"]["title"].toString(), juce::String("Dark drum and bass"));
     EXPECT_EQ(graph->getNumNodes(), 2) << "the envelope went through the ordinary apply path";

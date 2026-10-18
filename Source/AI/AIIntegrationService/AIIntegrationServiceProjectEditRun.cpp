@@ -334,6 +334,16 @@ public:
             results.push_back(*result);
         return result;
     }
+    std::optional<InstrumentTrackBuildResult>
+    addInstrumentTrackWithSound(const juce::String& name, const juce::String& type, bool poly,
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams, const juce::String& sound) override {
+        auto result =
+            inner_.addInstrumentTrackWithSound(name, type, poly, inserts, envelopeParams, instrumentParams, sound);
+        if (result.has_value())
+            results.push_back(*result);
+        return result;
+    }
     bool recordBatch(const std::function<void()>& mutation) override { return inner_.recordBatch(mutation); }
     TimelineDoc* editableTimelineDoc() override { return inner_.editableTimelineDoc(); }
     void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) override {

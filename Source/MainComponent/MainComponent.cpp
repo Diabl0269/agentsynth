@@ -248,7 +248,21 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         [this](bool blocked, const std::function<void()>& onRefused) {
             bottomDock.setDetachedEditsBlocked(blocked, onRefused);
         });
-    projectLoad_->onBusyChanged = [this](bool busy) { aiChatComponent.setProjectLoading(busy); };
+    projectLoad_->onBusyChanged = [this](bool busy) {
+        aiChatComponent.setProjectLoading(busy);
+        if (!busy && coreSoundSwapper_ != nullptr)
+            coreSoundSwapper_->swapNow(); // a project made elsewhere may wait for instruments this machine has
+    };
+    coreSoundSwapper_ = std::make_unique<synth::CoreSoundSwapper>(audioEngine, graphEditor, undoManager);
+    coreSoundSwapper_->onGraphChanged = [this] { reconcileTimelineAfterGraphChange(); };
+    coreSoundSwapper_->onSwapped = [this](int tracks, bool undoable) {
+        const juce::String message = tracks == 1 ? juce::String("1 track now plays the real instrument")
+                                                 : juce::String(tracks) + " tracks now play the real instruments";
+        if (undoable)
+            toast_->show(message, "Undo", [this] { undoManager.undo(); }, "Put the synth sounds back");
+        else
+            toast_->show(message);
+    };
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
     // ordered step here because it is standalone-only and never a top-level call site.
