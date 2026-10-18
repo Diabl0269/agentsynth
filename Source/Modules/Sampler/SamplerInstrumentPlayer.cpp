@@ -115,6 +115,7 @@ void InstrumentPlayer::publishSoundingNotes() {
     }
     soundingLow_.store(low, std::memory_order_relaxed);
     soundingHigh_.store(high, std::memory_order_relaxed);
+    activeVoices_.store(pool_.activeVoiceCount(), std::memory_order_relaxed);
 }
 
 std::bitset<128> InstrumentPlayer::getSoundingNotes() const {

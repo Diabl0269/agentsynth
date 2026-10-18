@@ -48,6 +48,9 @@ public:
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const;
 
+    /** Any thread. The voices sounding (held or releasing) at the end of the last block. */
+    int activeVoiceCount() const noexcept { return activeVoices_.load(std::memory_order_relaxed); }
+
 private:
     bool acquireInstrument();
     void applyMessage(const juce::MidiMessage& message, const VoiceParams& voice);
@@ -67,6 +70,7 @@ private:
     bool running_ = false;
     std::atomic<std::uint64_t> soundingLow_{0};
     std::atomic<std::uint64_t> soundingHigh_{0};
+    std::atomic<int> activeVoices_{0};
 };
 
 } // namespace synth::sampler

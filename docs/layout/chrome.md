@@ -247,6 +247,7 @@ guard (`statusBarTickCount_`), and repaints only itself.
 
 - `formatCpu(float fraction)` — fraction is 0..1; `0.756f` becomes `"75.6%"`
 - `formatVoices(int n)` — `0` becomes `"0 voices"`, `1` becomes `"1 voice"`, `8` becomes `"8 voices"`
+  The count (`AudioEngine::getDisplayVoiceCount`) sums Poly MIDI voices plus every module implementing `synth::VoiceCountSource` (Sampler Instrument mode, Pluck, Mallet), each reading a count its audio thread published per block.
 - `formatPatch(const juce::String& s)` — empty or whitespace-only becomes `"Untitled"`
 - `formatRoundTrip(double ms, bool available)` — `(12.34, true)` becomes `"RT 12.3 ms"`;
   `(anything, false)` becomes `"RT --"`; negative input clamps to `0.0`

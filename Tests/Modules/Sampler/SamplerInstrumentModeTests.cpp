@@ -170,6 +170,14 @@ TEST(SamplerInstrumentMode, AChordPlaysThreeVoicesOnBothChannels) {
     EXPECT_NEAR(out.tail(), 0.6f, 0.01f) << "three voices of the 0.2 layer";
     EXPECT_FLOAT_EQ(out.left.back(), out.right.back());
     EXPECT_EQ(rig.module.getSoundingNotes().count(), 3u);
+    EXPECT_EQ(rig.module.displayVoiceCount(), 3);
+
+    run(rig.module, 40, [](int b, juce::MidiBuffer& m) {
+        if (b == 0)
+            for (int n : {60, 64, 67})
+                m.addEvent(juce::MidiMessage::noteOff(1, n), 0);
+    });
+    EXPECT_EQ(rig.module.displayVoiceCount(), 0) << "back to zero once the releases finish";
 }
 
 TEST(SamplerInstrumentMode, VelocityPicksTheSoftOrLoudLayer) {
@@ -215,6 +223,7 @@ TEST(SamplerInstrumentMode, BypassAndMuteSilenceTheOutputAndStopTheVoices) {
         setActual(rig.module, param, 1.0f);
         EXPECT_EQ(run(rig.module, 2).peak(), 0.0f) << param;
         EXPECT_EQ(rig.module.getSoundingNotes().count(), 0u) << param;
+        EXPECT_EQ(rig.module.displayVoiceCount(), 0) << param;
 
         setActual(rig.module, param, 0.0f);
         EXPECT_EQ(run(rig.module, 4).peak(), 0.0f) << param << ": the stopped note does not come back";
@@ -230,6 +239,7 @@ TEST(SamplerInstrumentMode, LeavingInstrumentModeStopsTheVoices) {
     setActual(rig.module, "playMode", 0.0f);
     run(rig.module, 1);
     EXPECT_EQ(rig.module.getSoundingNotes().count(), 0u);
+    EXPECT_EQ(rig.module.displayVoiceCount(), 0);
     setActual(rig.module, "playMode", (float)SamplerModule::kModeInstrument);
     EXPECT_EQ(run(rig.module, 4).peak(), 0.0f) << "back in Instrument mode nothing is left sounding";
 }

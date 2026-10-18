@@ -3,6 +3,7 @@
 
 #include "AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
+#include "Modules/VoiceCountSource.h"
 #include <bit>
 
 AudioEngine::VoiceInfo AudioEngine::getActiveVoiceInfo() const {
@@ -11,6 +12,8 @@ AudioEngine::VoiceInfo AudioEngine::getActiveVoiceInfo() const {
         if (auto* pm = dynamic_cast<PolyMidiModule*>(node->getProcessor())) {
             info.maxVoices += 8;
             info.activeVoices += static_cast<int>(std::popcount(static_cast<unsigned>(pm->getActiveVoiceMask())));
+        } else if (auto* source = dynamic_cast<synth::VoiceCountSource*>(node->getProcessor())) {
+            info.activeVoices += source->displayVoiceCount();
         }
     }
     return info;

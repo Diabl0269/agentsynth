@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include "Modules/VoiceCountSource.h"
 #include "PluckVoices.h"
 #include <array>
+#include <atomic>
 
 /**
  * Plucked-string instrument: an extended Karplus-Strong string with eight voices (guitar, harp, koto).
@@ -15,7 +17,9 @@
  * onto a stereo pair (Declared, ships SPLIT like the Drum Kit). The algorithm and the formulas are in
  * docs/modules/pluck-mallet.md.
  */
-class PluckModule : public ModuleBase {
+class PluckModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
 public:
     static constexpr int kNumChannels = 2;
     static constexpr double kDecayReferenceHz = 130.8128; // C3: where Decay is exactly the T60
@@ -39,7 +43,10 @@ public:
     /** Strings still sounding (held or ringing out); exposed for tests. */
     int activeVoiceCount() const noexcept;
 
+    int displayVoiceCount() const noexcept override { return publishedVoices_.load(std::memory_order_relaxed); }
+
 private:
+    std::atomic<int> publishedVoices_{0}; // activeVoiceCount() as of the end of the last block
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
                                         float skew = 1.0f);
     void noteOn(int note, float velocity);

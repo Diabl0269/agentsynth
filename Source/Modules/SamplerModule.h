@@ -4,6 +4,7 @@
 #include "ModuleFileStateKeys.h"
 #include "Modules/Sampler/SamplerInstrumentSlot.h"
 #include "Modules/Sampler/SamplerSampleData.h"
+#include "Modules/VoiceCountSource.h"
 #include "Project/DeferredAssetLoads.h"
 #include <array>
 #include <bitset>
@@ -64,7 +65,9 @@
  * `retainedSamples` so the audio thread's refcount release can never run a destructor. The instrument is
  * published the same way by synth::sampler::InstrumentPlayer.
  */
-class SamplerModule : public ModuleBase {
+class SamplerModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
 public:
     // ---- Channel indices -----------------------------------------------------
     static constexpr int kTriggerCh = 0;
@@ -270,6 +273,8 @@ public:
 
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }
+
+    int displayVoiceCount() const noexcept override { return instrumentPlayer.activeVoiceCount(); }
 
     // =========================================================================
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)
