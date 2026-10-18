@@ -12,7 +12,9 @@
 #include "Modules/Shapes/MorphShapes.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
 using namespace detail;
@@ -34,10 +36,28 @@ constexpr int kLfoToolbarGap = 6;
 const char* const kLfoPresetNames[] = {"Triangle",  "Ramp Up",   "Ramp Down", "Square",
                                        "Pulse 1/4", "Steps (4)", "Soft Sine"};
 const char* const kLfoToolNames[] = {"Invert", "Reverse", "Straighten", "Clear", "Reset to Default"};
-// Grid combo entries: divisions-per-axis (0 == Off), index-parallel to the display label.
-const int kLfoGridDivisions[] = {0, 4, 8, 16, 32, 64, 128};
-const char* const kLfoGridLabels[] = {"Grid Off",  "Grid 1/4",  "Grid 1/8",  "Grid 1/16",
-                                      "Grid 1/32", "Grid 1/64", "Grid 1/128"};
+// The grid box lists "Off", then the straight steps 1/4 .. 1/128, then the triplets 1/4T .. 1/128T (a dotted step does
+// not divide the cycle evenly, so the box offers none). A step "1/N" is N divisions per axis; a triplet "1/NT" packs
+// three steps into two straight ones, so it is N * 3 / 2.
+const char* const kLfoGridStraightNames[] = {"1/4", "1/8", "1/16", "1/32", "1/64", "1/128"};
+const juce::String kLfoGridDefaultName = "1/8";
+const char* const kLfoGridOffName = "Off";
+
+juce::StringArray lfoGridNames() {
+    juce::StringArray names{kLfoGridOffName};
+    for (const char* name : kLfoGridStraightNames)
+        names.add(name);
+    for (const char* name : kLfoGridStraightNames)
+        names.add(juce::String(name) + "T");
+    return names;
+}
+
+int lfoGridDivisionsFor(const juce::String& name) {
+    const auto note = synth::parseNoteLength(name);
+    if (!note.has_value())
+        return 0; // "Off"
+    return note->kind == synth::NoteKind::triplet ? note->denominator * 3 / 2 : note->denominator;
+}
 
 LFOModule* asLfo(juce::AudioProcessor* module) { return dynamic_cast<LFOModule*>(module); }
 
@@ -96,18 +116,16 @@ void ModuleComponent::createLfoCardControls() {
         showLfoWaveContextMenu(e, hit);
     };
 
-    lfoGridCombo = std::make_unique<juce::ComboBox>();
-    for (int i = 0; i < (int)std::size(kLfoGridLabels); ++i)
-        lfoGridCombo->addItem(kLfoGridLabels[i], i + 1);
-    lfoGridCombo->setSelectedId(3, juce::dontSendNotification); // 1/8, the default
+    lfoGridCombo = std::make_unique<synth::ui::NoteLengthBox>();
+    lfoGridCombo->setChoices(lfoGridNames(), "Grid ");
+    lfoGridCombo->setCurrentName(kLfoGridDefaultName, juce::dontSendNotification); // 1/8, the default
+    lfoGridCombo->setKindUnavailableTip(synth::NoteKind::dotted,
+                                        "No dotted grid: a dotted step does not divide the cycle evenly");
     lfoGridCombo->setTitle("LFO custom wave grid");
     lfoGridCombo->setTooltip("Grid: the snap grid of the custom wave editor");
     lfoGridCombo->onChange = [this] {
-        if (lfoGridCombo == nullptr)
-            return;
-        const int i = lfoGridCombo->getSelectedId() - 1;
-        if (i >= 0 && i < (int)std::size(kLfoGridDivisions))
-            setLfoGridDivisions(kLfoGridDivisions[i]);
+        if (lfoGridCombo != nullptr)
+            setLfoGridDivisions(lfoGridDivisionsFor(lfoGridCombo->getCurrentName()));
     };
     addChildComponent(lfoGridCombo.get()); // the custom section's fade shows it
 
@@ -287,13 +305,12 @@ void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitRe
         });
 
     juce::PopupMenu gridMenu;
-    for (int i = 0; i < (int)std::size(kLfoGridLabels); ++i) {
-        const int divisions = kLfoGridDivisions[i];
-        gridMenu.addItem(juce::String(kLfoGridLabels[i]).fromFirstOccurrenceOf("Grid ", false, false),
-                         [safeThis, divisions] {
-                             if (safeThis != nullptr)
-                                 safeThis->setLfoGridDivisions(divisions);
-                         });
+    for (const auto& name : lfoGridNames()) {
+        const int divisions = lfoGridDivisionsFor(name);
+        gridMenu.addItem(name, [safeThis, divisions] {
+            if (safeThis != nullptr)
+                safeThis->setLfoGridDivisions(divisions);
+        });
     }
     menu.addSubMenu("Grid", gridMenu);
 
@@ -331,12 +348,17 @@ int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int content
     // Each part takes its height in step with the fade, so the rows under the section slide.
     if (apply) {
         const int rowH = blockHeight(lfoFade_, kRowHeight);
+        // The grid box is as wide as its longest name ("Grid 1/128T"); the two buttons share what is left.
+        const int gridWidth =
+            juce::jmax(kLfoGridComboWidth, synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(*lfoGridCombo));
+        const int buttonWidth =
+            juce::jlimit(40, kLfoToolbarButtonWidth, (contentW - gridWidth - 2 * kLfoToolbarGap) / 2);
         int x = contentX;
-        lfoGridCombo->setBounds(x, y, kLfoGridComboWidth, rowH);
-        x += kLfoGridComboWidth + kLfoToolbarGap;
-        lfoShapesButton->setBounds(x, y, kLfoToolbarButtonWidth, rowH);
-        x += kLfoToolbarButtonWidth + kLfoToolbarGap;
-        lfoToolsButton->setBounds(x, y, kLfoToolbarButtonWidth, rowH);
+        lfoGridCombo->setBounds(x, y, gridWidth, rowH);
+        x += gridWidth + kLfoToolbarGap;
+        lfoShapesButton->setBounds(x, y, buttonWidth, rowH);
+        x += buttonWidth + kLfoToolbarGap;
+        lfoToolsButton->setBounds(x, y, buttonWidth, rowH);
     }
     y += blockHeight(lfoFade_, kRowHeight + 2);
 

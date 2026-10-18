@@ -93,9 +93,15 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
                          .withSizeKeepingCentre(std::min(bounds.getWidth(), synth::ui::CardFader::kVerticalWidth),
                                                 bounds.getHeight())
                          .withY(bounds.getY());
+        // A one-row member sits in the middle of a taller cell; its caption stays on the cell's top edge like the
+        // taller member's.
+        const int captionY = bounds.getY();
+        if (plan.swapGroups[(size_t)cell.group].cellKind == Kind::FaderV && item.kind != Kind::FaderV &&
+            area.getHeight() > bounds.getHeight())
+            bounds.setY(area.getY() + (area.getHeight() - bounds.getHeight()) / 2);
         item.widget->setBounds(bounds);
         if (item.label != nullptr)
-            item.label->setBounds(bounds.getX(), bounds.getY() - cardbody::kLabelHeight, bounds.getWidth(),
+            item.label->setBounds(bounds.getX(), captionY - cardbody::kLabelHeight, bounds.getWidth(),
                                   cardbody::kLabelHeight);
     }
 }

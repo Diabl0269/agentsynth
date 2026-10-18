@@ -107,6 +107,12 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
 
+    /** "timeDiv" gained triplets and dotted values at its end; plugin-host blobs saved before that hold a value
+     *  normalised over the old eight choices. */
+    int legacyChoiceCount(const juce::String& paramId) const override {
+        return paramId == "timeDiv" ? synth::kLegacyNoteDivisionCount : ModuleBase::legacyChoiceCount(paramId);
+    }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::Delay; }
 

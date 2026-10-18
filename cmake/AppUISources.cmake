@@ -308,6 +308,12 @@ set(APPUI_SOURCES
     Source/UI/Layout/MainViewSwapMotion.cpp
     Source/UI/Layout/ArrowKeyNavigation.h
     Source/UI/Layout/ArrowKeyNavigation.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthMenuModel.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthMenuModel.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthBox.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthBox.cpp
     Source/UI/Layout/FoldAllButton.h
     Source/UI/Layout/FoldAllButton.cpp
     Source/UI/Layout/NavigationSearchField.h

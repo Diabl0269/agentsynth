@@ -14,6 +14,7 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -267,19 +268,22 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
 }
 
 // tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo switch is a segmented
-// switch (not a toggle), and each division is a stepped fader that shares its stage's cell, so a fresh card has
-// exactly the four division faders, no division combo and no generic toggle for tempoSync.
-TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreSteppedFadersInTheStageCells) {
+// switch (not a toggle), and each division is a compact note-length box that shares its stage's cell, so a fresh
+// card has the four division boxes, no plain combo and no generic toggle for tempoSync.
+TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLengthBoxesInTheStageCells) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    EXPECT_EQ(countChildrenOfType(moduleComponent, /*wantToggle*/ false), 0) << "no division is a combo";
     auto* body = moduleComponent.getCardBody();
     ASSERT_NE(body, nullptr);
-    for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
-        EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(body->findWidget(division)), nullptr) << division;
+    for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}) {
+        auto* box = dynamic_cast<synth::ui::NoteLengthBox*>(body->findWidget(division));
+        ASSERT_NE(box, nullptr) << division;
+        EXPECT_TRUE(box->isCompact()) << division << " fits the narrow stage cell";
+        EXPECT_EQ(box->getNumItems(), 24) << division;
+    }
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(body->findWidget("tempoSync")), nullptr);
 }
 

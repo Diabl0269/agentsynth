@@ -35,6 +35,7 @@ class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImag
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
 class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
+class NoteLengthBox;         // Forward declaration — see UI/Layout/NoteLengthMenu/NoteLengthBox.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -621,7 +622,7 @@ private:
 
     // --- LFO custom-waveform card -- see ModuleComponentLfoCard.cpp ---
     std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
-    std::unique_ptr<juce::ComboBox> lfoGridCombo;
+    std::unique_ptr<synth::ui::NoteLengthBox> lfoGridCombo;          // the snap grid of the custom wave editor
     std::unique_ptr<juce::TextButton> lfoShapesButton;
     std::unique_ptr<juce::TextButton> lfoToolsButton;
     synth::CardBlockFade lfoFade_;      // editor + toolbar, fading with their height

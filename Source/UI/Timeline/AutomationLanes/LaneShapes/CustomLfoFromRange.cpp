@@ -172,8 +172,10 @@ synth::LfoCustomWave buildWave(const std::vector<Reading>& readings, double star
     return wave;
 }
 
+// The smallest straight division that holds the range: the triplets and dotted values sit after the straight ones in
+// the list, and a drawn range keeps becoming a straight cycle.
 int divisionFor(double rangeBeats) {
-    const int count = synth::lfoRateDivisions().size();
+    const int count = synth::kLfoStraightRateDivisionCount;
     for (int i = 0; i < count; ++i)
         if ((double)synth::lfoRateDivisionBeats(i) >= rangeBeats - 1e-6)
             return i;

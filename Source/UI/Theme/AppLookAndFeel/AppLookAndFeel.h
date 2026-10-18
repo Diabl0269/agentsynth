@@ -153,6 +153,8 @@ public:
     void drawComboBoxTextWhenNothingSelected(juce::Graphics&, juce::ComboBox&, juce::Label&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
     juce::Font getComboBoxFont(juce::ComboBox&) override;
+    // A combo carrying this property (true) draws without a chevron, with its text centred in the full width.
+    static constexpr const char* kCompactComboProperty = "compactCombo";
     // Narrowest width at which every item's text shows unclipped, for any look-and-feel.
     static int comboBoxWidthToFitItems(juce::ComboBox&);
     // Popup motion (AppLookAndFeelWindowMotion.cpp): every popup menu / dropdown window,

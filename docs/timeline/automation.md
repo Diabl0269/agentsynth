@@ -800,8 +800,8 @@ It always adds an LFO (a lane that already has modulators gets another row). One
 amount lane and puts the lane's points back; Redo re-applies all of it, the wave included (it rides the node's saved
 state).
 
-- **What it makes.** An LFO on Custom, Sync, Retrig off, unipolar. Its rate is the smallest of the LFO's rates (1/128
-  up to 8/1, i.e. 8 bars) that fits the range, so 1 bar is 1/1, 3 beats is also 1/1 (the drawn part fills the first
+- **What it makes.** An LFO on Custom, Sync, Retrig off, unipolar. Its rate is the smallest of the LFO's straight rates (1/128
+  up to 8/1, i.e. 8 bars; the triplets and dotted values are never chosen) that fits the range, so 1 bar is 1/1, 3 beats is also 1/1 (the drawn part fills the first
   three quarters of the cycle and the last value holds to the end), 2 bars is 2/1. Its Level is the drawn movement's
   height in the parameter's own normalised range (skew included), rounded up to the knob's 0.01 step with the wave drawn
   that much lower so the product is exact, and the lane is flattened inside the range at the

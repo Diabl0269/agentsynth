@@ -170,5 +170,20 @@ TEST_F(TimelinePanelIntegrationTest, SyncRateComboListsTheSharedDivisionsShortes
         EXPECT_EQ(combo.getItemId(i), i + 1);
     }
     EXPECT_EQ(combo.getItemText(0), "1/128") << "shortest first";
-    EXPECT_EQ(combo.getItemText(divisions.size() - 1), "8/1");
+    EXPECT_EQ(combo.getItemText(10), "8/1") << "the bar lengths follow the straight values";
+    EXPECT_EQ(combo.getItemText(divisions.size() - 1), "1/1D") << "triplets and dotted values come last";
+    EXPECT_EQ(combo.getCurrentName(), "1/4") << "the default";
+}
+
+// Picking a triplet in the row's box writes that name's index to the LFO.
+TEST_F(TimelinePanelIntegrationTest, SyncRateBoxPicksATripletAndWritesIt) {
+    Scene s;
+    s.addLfoFromLaneMenu();
+    const auto lfo = onlyLfoUuid(s);
+    ASSERT_TRUE(lfo.isNotEmpty());
+    auto& box = s.row()->getSyncRateCombo();
+    box.setCurrentName("1/8T", juce::sendNotificationSync);
+    EXPECT_FLOAT_EQ(s.parameter(lfo, "rateSync"), (float)synth::lfoRateDivisions().indexOf("1/8T"));
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(box.getCurrentName(), "1/4") << "the row follows the undo";
 }

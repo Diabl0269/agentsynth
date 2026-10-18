@@ -10,6 +10,7 @@
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -29,10 +30,10 @@ CurveEditorComponent* findLfoCurveEditor(ModuleComponent& comp) {
     return nullptr;
 }
 
-juce::ComboBox* findLfoGridCombo(ModuleComponent& comp) {
+synth::ui::NoteLengthBox* findLfoGridCombo(ModuleComponent& comp) {
     for (auto* child : comp.getChildren())
-        if (auto* combo = dynamic_cast<juce::ComboBox*>(child))
-            if (combo->getNumItems() == 7 && combo->getItemText(0) == "Grid Off")
+        if (auto* combo = dynamic_cast<synth::ui::NoteLengthBox*>(child))
+            if (combo->getItemText(0) == "Grid Off")
                 return combo;
     return nullptr;
 }
@@ -237,6 +238,51 @@ TEST_F(ModuleComponentTest, SnapOnCardDefaultsToEighthsAndOffDisablesIt) {
     curve->mouseDrag(curveMouseEvent(*curve, off, true, midPos));
     const double x = curve->getModel().getNode(1).x;
     EXPECT_NE(std::fmod(x * 4.0, 1.0), 0.0) << "Off disables snap entirely";
+}
+
+TEST_F(ModuleComponentTest, GridBoxOffersTripletsButNoDottedValues) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    LFOModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    selectShape(processor, LFOModule::kCustomShapeIndex);
+
+    auto* box = findLfoGridCombo(moduleComponent);
+    ASSERT_NE(box, nullptr);
+    EXPECT_EQ(box->getNumItems(), 13) << "Off, six straight steps, six triplets";
+    EXPECT_EQ(box->getItemText(7), "Grid 1/4T");
+    EXPECT_EQ(box->getItemText(12), "Grid 1/128T");
+
+    synth::ui::NoteLengthPopup::setSkipDesktopForTest(true);
+    box->showPopup();
+    auto* popup = box->getPopup();
+    ASSERT_NE(popup, nullptr);
+    EXPECT_TRUE(popup->kindButton(synth::NoteKind::triplet).isEnabled());
+    EXPECT_FALSE(popup->kindButton(synth::NoteKind::dotted).isEnabled()) << "a dotted step does not divide the cycle";
+    EXPECT_NE(popup->kindButton(synth::NoteKind::dotted).getTooltip().indexOf("evenly"), -1);
+    EXPECT_EQ(popup->model().leading().size(), 1u) << "Grid Off is the one extra chip";
+    popup->close();
+    synth::ui::NoteLengthPopup::setSkipDesktopForTest(false);
+}
+
+TEST_F(ModuleComponentTest, GridTripletOfAnEighthSnapsToTwelfthsOfTheCycle) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    LFOModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    selectShape(processor, LFOModule::kCustomShapeIndex);
+    auto* box = findLfoGridCombo(moduleComponent);
+    auto* curve = findLfoCurveEditor(moduleComponent);
+    ASSERT_NE(box, nullptr);
+    ASSERT_NE(curve, nullptr);
+    box->setCurrentName("1/8T", juce::sendNotificationSync);
+    const CurveEditorGeometry geometry = lfoGeometry(*curve);
+    const auto midPos = geometry.nodePosition(1);
+    const auto off = midPos + juce::Point<float>(3.0f, 3.0f);
+    curve->mouseDown(curveMouseEvent(*curve, midPos, false, midPos));
+    curve->mouseDrag(curveMouseEvent(*curve, off, true, midPos));
+    const double x = curve->getModel().getNode(1).x * 12.0;
+    EXPECT_NEAR(x, std::round(x), 1e-6) << "1/8T is 12 divisions: the node snaps to twelfths of the cycle";
 }
 
 TEST_F(ModuleComponentTest, GridComboOffersTheFinerSixtyFourthAndHundredTwentyEighth) {

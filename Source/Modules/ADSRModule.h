@@ -66,15 +66,14 @@ public:
                                                                        juce::NormalisableRange<float>(-1.0f, 1.0f),
                                                                        0.65f, adsrCurveAttributes()));
         // Tempo sync: BPM mode is REAL sync, not a display-only snap -- each timed stage
-        // gets its own note-division choice, sharing `envelopeNoteDivisions()` (the same six
-        // entries/order as LFOModule's rateSync). `tempoSync` off (default) leaves the ms params
-        // above in sole control, unchanged; the four *Div params still exist and round-trip in
-        // every patch either way, so flipping the toggle later never loses a prior sync setting.
-        // Defaults are the closest available division to each ms default at 120 BPM -- decay's
-        // 1.0 s default lands on "1/2" exactly (2 beats @ 120 BPM); attack/hold/release all want
-        // something far shorter than the coarsest division below "1/32" gets them (62.5 ms vs.
-        // 1/0/15 ms), which is an accepted tradeoff of sync's coarser resolution, not a bug.
-        // The text is what the card's Time/Tempo switch shows for off and on.
+        // gets its own note-division choice, sharing `envelopeNoteDivisions()` (the same
+        // names/order as LFOModule's rateSync, whose list adds the bar lengths). `tempoSync` off (default) leaves the
+        // ms params above in sole control, unchanged; the four *Div params still exist and round-trip in every patch
+        // either way, so flipping the toggle later never loses a prior sync setting. Defaults are the closest available
+        // division to each ms default at 120 BPM -- decay's 1.0 s default lands on "1/2" exactly (2 beats @ 120 BPM);
+        // attack/hold/release all want something far shorter than the coarsest division below "1/32" gets them (62.5 ms
+        // vs. 1/0/15 ms), which is an accepted tradeoff of sync's coarser resolution, not a bug. The text is what the
+        // card's Time/Tempo switch shows for off and on.
         addParameter(tempoSyncParam = new juce::AudioParameterBool(
                          "tempoSync", "Tempo Sync", false,
                          juce::AudioParameterBoolAttributes().withStringFromValueFunction(
@@ -323,6 +322,14 @@ public:
     // input) but never writes to the MIDI buffer.
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
+
+    /** The four *Div lists gained triplets and dotted values at their end; plugin-host blobs saved before that hold
+     *  a value normalised over the old eight choices. */
+    int legacyChoiceCount(const juce::String& paramId) const override {
+        const bool isDivision =
+            paramId == "attackDiv" || paramId == "holdDiv" || paramId == "decayDiv" || paramId == "releaseDiv";
+        return isDivision ? synth::kLegacyNoteDivisionCount : ModuleBase::legacyChoiceCount(paramId);
+    }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
     // An envelope rises from 0, it never swings negative -- the depth band is [base, base+amount].

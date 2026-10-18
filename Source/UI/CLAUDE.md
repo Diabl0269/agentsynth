@@ -40,6 +40,7 @@ One rule per bullet; mechanism and history live in the linked docs.
 - **Every new control: keyboard path, `paintFocusRing`, `setTitle` name, tooltip; dialogs Tab in visual order and close on Escape.** → [accessibility](../../docs/development/accessibility.md)
 - **One shared component per control kind** (`AppLookAndFeel`, `IconLibrary`, `Layout/` widgets); colours from theme tokens (`themeOf(component)`), never literals. → [theming](../../docs/layout/theming.md#themed-widgets)
 - **UI text is never all caps** (`scripts/check-ui-caps.sh`); list arrow keys come from `synth::ui::ArrowKeyNavigation`. → [accessibility](../../docs/development/accessibility.md#arrow-keys-in-lists-of-controls)
+- **A note-length choice uses `Layout/NoteLengthMenu` (`NoteLengthBox`), never a plain `juce::ComboBox`.** → [note-length-menu](../../docs/layout/note-length-menu.md)
 - **A "don't ask again" question is `showConfirmDontAsk`** (`Chrome/ConfirmDontAskDialog.h`). → [animation](../../docs/layout/animation.md#popup-windows) · [tracks](../../docs/timeline/tracks.md#row-context-menu)
 - **A jack click opens the port panel via `PortPanelController`** (`GraphEditor::getPortPanel()`), never a per-card popup. → [cables](../../docs/layout/cables.md#port-connections-panel)
 - **A canvas edit changing the graph more than once uses `UpdateKind::none` inside one `synth::GraphRebuildScope`.** → [graph-queries](../../docs/architecture/graph-queries.md#one-audio-graph-rebuild-per-edit)

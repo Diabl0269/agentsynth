@@ -175,21 +175,6 @@ void applyFooterKind(CardBodyItem& item) {
         item.kind = CardBodyItem::Kind::FaderH;
 }
 
-// A choice that swaps with a vertical fader in one cell (the ADSR's note division in place of its time) is
-// drawn as a vertical stepped fader over the choice's steps: a combo has no room in a 40 px wide, tall fader
-// cell (its text truncates), while a fader's value box shows the choice's text whole. Called as each member
-// joins the group, so the order of fader and choice does not matter.
-void promoteChoicesBesideFaders(CardBodyPlan& plan, const CardBodyPlan::SwapGroup& group) {
-    bool hasFader = false;
-    for (int member : group.members)
-        hasFader = hasFader || plan.items[(size_t)member].kind == CardBodyItem::Kind::FaderV;
-    if (!hasFader)
-        return;
-    for (int member : group.members)
-        if (auto& item = plan.items[(size_t)member]; item.kind == CardBodyItem::Kind::Choice)
-            item.kind = CardBodyItem::Kind::FaderV;
-}
-
 // Placement state while one section is read: consecutive `show` items testing the same parameter join
 // one swap group.
 struct SectionPlacer {
@@ -231,7 +216,6 @@ struct SectionPlacer {
         }
         auto& group = plan.swapGroups.back();
         group.members.push_back(index);
-        promoteChoicesBesideFaders(plan, group);
         group.span = std::max(group.span, juce::jlimit(1, 6, source.span));
         if (group.members.size() == 1 || cellHeight(planned.kind) > cellHeight(group.cellKind))
             group.cellKind = planned.kind;
@@ -287,8 +271,8 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         // The widget applies to a hidden parameter too: it shows that way in the More row.
         auto& planned = plan.items[(size_t)index];
         planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
-        // A choice in a look of an alternative group (the ADSR's note division in its Tempo look) may be a stepped
-        // fader, as it is beside its time in a swap cell; a fader on a choice anywhere else falls back.
+        // A choice in a look of an alternative group may be asked for as a stepped fader; a fader on a choice anywhere
+        // else falls back.
         if (p->widget == CardWidget::FaderV && planned.kind == CardBodyItem::Kind::Choice &&
             placer.section.visibleWhen.has_value() &&
             dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)

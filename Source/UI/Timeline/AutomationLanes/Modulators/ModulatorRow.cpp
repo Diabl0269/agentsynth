@@ -86,9 +86,7 @@ void ModulatorRow::initLfoControls() {
     const juce::StringArray shapes{"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"};
     for (int i = 0; i < shapes.size(); ++i)
         shape_.addItem(shapes[i], i + 1);
-    const juce::StringArray& rates = synth::lfoRateDivisions();
-    for (int i = 0; i < rates.size(); ++i)
-        syncRate_.addItem(rates[i], i + 1);
+    syncRate_.setChoices(synth::lfoRateDivisions());
 
     rateHz_.setSliderStyle(juce::Slider::LinearBar);
     rateHz_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -246,7 +244,7 @@ void ModulatorRow::moved() {
 // Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
 // rate in what is left. Line 3: Sync, then the amount. Nothing is clipped at the default column width.
 void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine) {
-    // The rate combo's longest name ("1/128") is reserved first, so the shape never takes its room.
+    // The rate combo's longest name ("1/128D") is reserved first, so the shape never takes its room.
     const int rateFit = synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(syncRate_);
     const int shapeWidth = juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(shape_),
                                       shapeLine.getWidth() * 3 / 5, shapeLine.getWidth() - rateFit - kGap);

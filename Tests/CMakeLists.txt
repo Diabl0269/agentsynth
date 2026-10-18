@@ -668,6 +668,8 @@ add_executable(Tests
     App/FocusArbitration/FocusArbitrationMixerSurfaceTests.cpp
     UI/Layout/FocusRegionTests.cpp
     UI/Layout/ArrowKeyNavigationTests.cpp
+    UI/Layout/NoteLengthMenu/NoteLengthMenuTests.cpp
+    UI/Graph/CardBody/NoteLengthChoiceTests.cpp
     UI/Layout/DisclosureChevronTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
