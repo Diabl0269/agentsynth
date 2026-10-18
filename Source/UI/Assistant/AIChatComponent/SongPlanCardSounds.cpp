@@ -122,7 +122,7 @@ void SongPlanCard::refreshOffer() {
                                       : juce::String();
         const int units = session.reply.units;
         const juce::String uses = juce::String(units) + (units == 1 ? " use" : " uses");
-        buildButton.setButtonText("Download first");
+        buildButton.setButtonText("Download first" + juce::String::fromUTF8(" \xC2\xB7 ") + uses);
         buildButton.setTitle("Download first, then build song, " + uses);
         buildButton.setTooltip("Download the core instruments" + size + ", then spend " + uses + " to build this song");
     }

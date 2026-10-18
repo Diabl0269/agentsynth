@@ -112,7 +112,7 @@ TEST(SongPlanCardSounds, OffersTheDownloadNamingTheInstrumentsAndTheSize) {
               "Uses real instruments: Upright piano, Plucked double bass, Acoustic drum kit. Download the core "
               "instruments (" +
                   rig.sizeText() + ") first?");
-    EXPECT_EQ(card.buildButtonText(), "Download first");
+    EXPECT_EQ(card.buildButtonText(), juce::String::fromUTF8("Download first \xC2\xB7 5 uses"));
     EXPECT_TRUE(card.continueWithSynthsForTesting().isVisible());
 }
 
@@ -171,7 +171,7 @@ TEST(SongPlanCardSounds, AFailedDownloadSaysSoAndKeepsBothChoices) {
 
     EXPECT_EQ(card.soundsLineForTesting(), "Couldn't download the instruments.");
     EXPECT_EQ(counter.builds, 0);
-    EXPECT_EQ(card.buildButtonText(), "Download first");
+    EXPECT_EQ(card.buildButtonText(), juce::String::fromUTF8("Download first \xC2\xB7 5 uses"));
     EXPECT_TRUE(card.continueWithSynthsForTesting().isEnabled());
 
     rig.server.offline = false;
@@ -186,7 +186,7 @@ TEST(SongPlanCardSounds, EveryControlOfTheOfferHasANameAndATooltip) {
     size(card);
     EXPECT_EQ(card.continueWithSynthsForTesting().getTitle(), "Continue with synths");
     EXPECT_TRUE(card.continueWithSynthsForTesting().getTooltip().isNotEmpty());
-    EXPECT_TRUE(card.buildButtonText() == "Download first");
+    EXPECT_TRUE(card.buildButtonText() == juce::String::fromUTF8("Download first \xC2\xB7 5 uses"));
     for (const auto& gap : synth::test::auditAccessibility(card))
         ADD_FAILURE() << (gap.kind == synth::test::Gap::Kind::MissingName ? "missing name " : "missing tooltip ")
                       << gap.path;
