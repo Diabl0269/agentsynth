@@ -7,8 +7,12 @@ namespace {
 
 constexpr int kSustainPedalController = 64;
 constexpr float kLimiterKnee = 0.9f;
+// Recordings are mastered near full scale, so the voices sum with fixed headroom: a ten-note fortissimo piano chord
+// measured +7.5 dBFS before it, about -1.5 dBFS after it. A fixed trim keeps one note's level independent of how
+// many others sound (no pumping); the limiter below is only the last resort.
+constexpr float kVoiceSumHeadroom = 0.35481339f; // -9 dB
 
-// A chord of loud notes sums past full scale; only the excess above the knee is rounded, so one note stays as is.
+// A chord past even that headroom is rounded above the knee only, so anything quieter passes untouched.
 float softLimit(float x) {
     const float mag = std::fabs(x);
     if (mag <= kLimiterKnee)
@@ -100,7 +104,8 @@ void InstrumentPlayer::applyLevelAndLimit(float* left, float* right, int numSamp
                                           float level) {
     level_.setTargetValue(level);
     for (int i = 0; i < numSamples; ++i) {
-        const float gain = juce::jlimit(0.0f, 1.0f, level_.getNextValue() + (levelCv != nullptr ? levelCv[i] : 0.0f));
+        const float gain = kVoiceSumHeadroom *
+                           juce::jlimit(0.0f, 1.0f, level_.getNextValue() + (levelCv != nullptr ? levelCv[i] : 0.0f));
         left[i] = softLimit(left[i] * gain);
         right[i] = softLimit(right[i] * gain);
     }

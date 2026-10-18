@@ -84,6 +84,9 @@ struct Rig {
     SamplerModule module;
 };
 
+// The fixed -9 dB the player applies to the summed voices before Level.
+constexpr float kHeadroom = 0.35481339f;
+
 // Two DC layers on C3: soft up to velocity 64, loud above; plus a sine sample for pitch checks.
 struct Fixture {
     explicit Fixture(float soft = 0.2f, float loud = 0.6f) {
@@ -167,7 +170,7 @@ TEST(SamplerInstrumentMode, AChordPlaysThreeVoicesOnBothChannels) {
     Rig rig;
     ASSERT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
     const auto out = run(rig.module, 12, noteOnAt({60, 64, 67}));
-    EXPECT_NEAR(out.tail(), 0.6f, 0.01f) << "three voices of the 0.2 layer";
+    EXPECT_NEAR(out.tail(), 0.6f * kHeadroom, 0.01f) << "three voices of the 0.2 layer";
     EXPECT_FLOAT_EQ(out.left.back(), out.right.back());
     EXPECT_EQ(rig.module.getSoundingNotes().count(), 3u);
     EXPECT_EQ(rig.module.displayVoiceCount(), 3);
@@ -185,8 +188,8 @@ TEST(SamplerInstrumentMode, VelocityPicksTheSoftOrLoudLayer) {
     Rig soft, loud;
     ASSERT_TRUE(soft.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
     ASSERT_TRUE(loud.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
-    EXPECT_NEAR(run(soft.module, 12, noteOnAt({60}, 30)).tail(), 0.2f, 0.01f);
-    EXPECT_NEAR(run(loud.module, 12, noteOnAt({60}, 110)).tail(), 0.6f, 0.01f);
+    EXPECT_NEAR(run(soft.module, 12, noteOnAt({60}, 30)).tail(), 0.2f * kHeadroom, 0.01f);
+    EXPECT_NEAR(run(loud.module, 12, noteOnAt({60}, 110)).tail(), 0.6f * kHeadroom, 0.01f);
 }
 
 TEST(SamplerInstrumentMode, SampleAndGranularStayAsTheyWereWithAnInstrumentLoaded) {
@@ -258,7 +261,7 @@ TEST(SamplerInstrumentMode, TheSustainPedalHoldsReleasedNotesUntilItLifts) {
             m.addEvent(juce::MidiMessage::controllerEvent(1, 64, 0), 0);
     });
     const size_t heldEnd = 19 * kBlock;
-    EXPECT_NEAR(out.left[heldEnd], 0.6f, 0.01f) << "still sounding after the key came up";
+    EXPECT_NEAR(out.left[heldEnd], 0.6f * kHeadroom, 0.01f) << "still sounding after the key came up";
     EXPECT_NEAR(out.tail(), 0.0f, 0.001f) << "released once the pedal lifted";
 }
 
@@ -310,9 +313,20 @@ TEST(SamplerInstrumentMode, ALoudSingleNoteIsNotClipped) {
     Fixture f(0.2f, 0.85f);
     Rig rig;
     ASSERT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
-    EXPECT_NEAR(run(rig.module, 12, noteOnAt({60}, 127)).tail(), 0.85f, 0.005f);
+    EXPECT_NEAR(run(rig.module, 12, noteOnAt({60}, 127)).tail(), 0.85f * kHeadroom, 0.005f);
     EXPECT_LT(run(rig.module, 12, noteOnAt({60, 62, 64, 65}, 127)).peak(), 1.0f)
         << "a loud chord is rounded, not clipped";
+}
+
+// Regression test: summed voices had no headroom, so a loud chord of full-level recordings drove the limiter into
+// audible distortion.
+TEST(SamplerInstrumentMode, AFiveNoteChordOfLoudRecordingsStaysUnderTheLimiter) {
+    Fixture f(0.2f, 0.5f);
+    Rig rig;
+    ASSERT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
+    const auto out = run(rig.module, 12, noteOnAt({60, 62, 64, 65, 67}, 127));
+    EXPECT_NEAR(out.tail(), 2.5f * kHeadroom, 0.01f) << "linear sum, untouched by the limiter";
+    EXPECT_LT(out.peak(), 0.9f);
 }
 
 TEST(SamplerInstrumentMode, SoundingNotesFollowTheKeysAndClearAfterTheRelease) {
