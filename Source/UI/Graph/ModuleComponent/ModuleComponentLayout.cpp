@@ -201,7 +201,10 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     }
 
     // The panels below fade in and out and take their height in step (blockHeight), so what is under them slides.
+    // With a footer there is no toggle row above a panel, so a gap keeps it off the knob value labels above.
     if (freqResponseComponent && freqResponseComponent->isVisible()) {
+        if (footer)
+            y += blockHeight(responseFade_, synth::cardbody::kPanelGap);
         if (apply)
             freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
         y += blockHeight(responseFade_, 128);
@@ -223,6 +226,8 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     }
 
     if (scopeComponent && scopeComponent->isVisible()) {
+        if (footer)
+            y += blockHeight(scopeFade_, synth::cardbody::kPanelGap);
         if (apply)
             scopeComponent->setBounds(contentX, y, contentW, blockHeight(scopeFade_, 100));
         y += blockHeight(scopeFade_, 100);

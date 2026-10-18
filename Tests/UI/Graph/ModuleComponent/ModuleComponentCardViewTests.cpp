@@ -6,6 +6,7 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -133,6 +134,27 @@ TEST_F(ModuleComponentTest, FilterCardRestoresItsResponseAndSpectrum) {
     EXPECT_TRUE(spectrumToggle->isVisible());
     EXPECT_TRUE(spectrumToggle->getToggleState());
     EXPECT_TRUE(response->getShowSpectrum());
+}
+
+// Regression test for FRO944: the response panel starts below the knobs' value labels, not on them.
+TEST_F(ModuleComponentTest, FilterResponsePanelClearsTheKnobsAbove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    FilterModule filter;
+    synth::CardViewState state;
+    state.showResponse = true;
+    filter.setCardViewState(state);
+    ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    auto* response = findChildOfType<FrequencyResponseComponent>(card);
+    ASSERT_NE(response, nullptr);
+    ASSERT_TRUE(response->isVisible());
+    int lowestKnob = 0;
+    for (auto* child : card.getChildren())
+        if (dynamic_cast<juce::Slider*>(child) != nullptr && child->isVisible())
+            lowestKnob = std::max(lowestKnob, child->getBottom());
+    ASSERT_GT(lowestKnob, 0);
+    EXPECT_GE(response->getY(), lowestKnob + synth::cardbody::kPanelGap);
 }
 
 TEST_F(ModuleComponentTest, FilterSpectrumIsIgnoredWhileTheResponseIsClosed) {
