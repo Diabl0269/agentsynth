@@ -20,6 +20,7 @@
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -78,6 +79,13 @@ void applyLayoutRange(juce::Slider& slider, const juce::RangedAudioParameter& pa
 bool isWaveformChoice(const juce::StringArray& choices) {
     return choices.size() == 4 && choices[0] == "Sine" && choices[1] == "Square" && choices[2] == "Saw" &&
            choices[3] == "Triangle";
+}
+
+// The parameters whose choices are note lengths ("1/8", "1/8T", "1/8D"): the ADSR stage divisions, the Delay's time
+// division and the LFO's sync rate.
+bool isNoteLengthParameter(const juce::String& paramId) {
+    return paramId == "attackDiv" || paramId == "holdDiv" || paramId == "decayDiv" || paramId == "releaseDiv" ||
+           paramId == "timeDiv" || paramId == "rateSync";
 }
 
 void fillWaveformItems(juce::ComboBox& combo, const juce::StringArray& choices, juce::LookAndFeel& lnf) {
@@ -220,11 +228,22 @@ static void nameRenamedCaption(juce::Label& label, const CardBodyItem& item, juc
 
 // juce::ComboBox::mouseDown already refuses to open its popup on a right click, so a plain combo takes
 // the card as a mouse listener for right-click MIDI Learn without a right-click-safe subclass.
+//
+// A note-length choice (a stage's division, the Delay time, the LFO sync rate) is a NoteLengthBox: it is a ComboBox, so
+// the attachment, MIDI Learn and the card's bookkeeping below treat it as one, but it opens the S/T/D chip popup.
 void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& param) {
-    auto* combo = new juce::ComboBox();
+    juce::ComboBox* combo = nullptr;
+    if (isNoteLengthParameter(param.paramID))
+        combo = new synth::ui::NoteLengthBox();
+    else
+        combo = new juce::ComboBox();
     widgets_.add(combo);
     card_.comboBoxes.add(combo);
-    if (isWaveformChoice(param.choices))
+    if (auto* noteLength = dynamic_cast<synth::ui::NoteLengthBox*>(combo)) {
+        noteLength->setChoices(param.choices);
+        noteLength->setCompact(item.swapGroup >= 0 &&
+                               plan_.swapGroups[(size_t)item.swapGroup].cellKind == CardBodyItem::Kind::FaderV);
+    } else if (isWaveformChoice(param.choices))
         fillWaveformItems(*combo, param.choices, card_.getLookAndFeel());
     else
         combo->addItemList(param.choices, 1);
@@ -333,10 +352,9 @@ juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter
 
 // Everything a knob has -- the sliders/sliderParams entry (Automate, value reflection, modulation-target
 // lookup), MIDI Learn, the card gestures, the attachment and the ADSR display skew -- plus the default
-// a Cmd-click or double-click returns to. The painter picks the look from the fader's size. A choice drawn
-// as a fader (a division swapping with its time, promoteChoicesBesideFaders) is a stepped one: the
-// attachment gives it the choice's integer steps, its value box the step's text, and its default is the
-// choice's default.
+// a Cmd-click or double-click returns to. The painter picks the look from the fader's size. A choice a layout
+// draws as a fader is a stepped one: the attachment gives it the choice's integer steps, its value box the
+// step's text, and its default is the choice's default.
 void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
     const bool vertical = item.kind == CardBodyItem::Kind::FaderV;
     auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical

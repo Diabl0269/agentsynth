@@ -495,7 +495,7 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 
 ## Popup windows
 
-Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, alert boxes and
+Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, the note-length popup ([note-length-menu](note-length-menu.md)), alert boxes and
 dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. One kind of call-out is
 the exception: a popover that JUCE launches and dismisses itself (`CallOutBox::launchAsynchronously`, today the
 colour picker) only eases in, through [`CalloutReveal`](#popup-reveal), because it dismisses synchronously and has no

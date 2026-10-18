@@ -649,15 +649,15 @@ stops playback wrapping (the same rule `TimelineRulerComponent::braceStateFor` f
 
 | Shortcut | Action |
 |----------|--------|
-| Ctrl+Shift+1 | Set Grid to 1 (whole bar) |
+| Ctrl+Shift+1 | Set Grid to 1/1 (whole bar) |
 | Ctrl+Shift+2 | Set Grid to 1/2 |
 | Ctrl+Shift+3 | Set Grid to 1/4 |
 | Ctrl+Shift+4 | Set Grid to 1/8 |
 | Ctrl+Shift+5 | Set Grid to 1/16 |
 | Ctrl+Shift+6 | Set Grid to 1/32 |
 | Ctrl+Shift+7 | Set Grid to 1/64 |
-| Ctrl+Shift+8 | Set Grid to 1/128 |
-| Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
+| Ctrl+Shift+8 | Set Grid to 1/128 (the 16 triplet and dotted values, `snapSetEighthTriplet` ... `snapSetHundredTwentyEighthDotted`, are rebindable and unbound) |
+| Ctrl+Shift+Left | Grid Coarser (step toward Bar; stays inside the current kind) |
 | Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
 
 **Four Timeline families share the digit row**, separated only by their modifier set: **bare** =

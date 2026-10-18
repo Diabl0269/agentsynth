@@ -189,9 +189,24 @@ cursor position, and is routed per focused surface by `MainComponent::resolveEdi
 Graph-is-horizontal-only exception.
 
 **The grid division** is likewise reachable from the keyboard, alongside the snap combo:
-Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, `1` through `1/128`), and
+Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, `1/1` through `1/128`), and
 Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`), clamped coarsest↔finest and never wrapped
-— holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around.
+— holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around. The
+step stays inside the current kind: from a triplet it goes to the next triplet, from a dotted value to
+the next dotted one. The triplet and dotted values each have a rebindable "Set Grid to 1/8T" style
+command (`snapSetEighthTriplet`, `snapSetQuarterDotted`, ...), unbound by default so no existing
+chord changes.
+
+**The Snap box is the shared [note-length menu](../layout/note-length-menu.md#the-timeline-snap)**:
+it shows the full name ("1/8T"), and its popup has S / T / D letters over one row with `Off` and
+`Bar` in front. `TimelineViewState::Snap` is saved as a raw int, so the 16 triplet and dotted values
+were appended after `HundredTwentyEighth` (ints 10 to 25) and no older value moved; an old project
+opens with the snap it saved. A triplet or dotted step is not a power of two (1/8T is a third of a
+beat, 1/8D three sixteenths), so the grid maths treats a step as an exact fraction of a beat
+(`TimelineViewState::exactStep`): `snapBeat` rounds to the nearest multiple, `floorToGrid` and
+`ceilToGrid` land on a line a rounding error short of it, and the ruler and lanes draw each line as
+`k * step` from beat 0 (the snap grid), so thirds never drift and a dotted grid does not restart at
+each bar.
 From `Off`, both directions re-enter at the last musical division the user actually chose. Real
 Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](../control/shortcuts.md#timeline) for why that is
 deliberate.

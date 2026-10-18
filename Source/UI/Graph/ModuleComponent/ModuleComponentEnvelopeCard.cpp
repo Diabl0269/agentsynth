@@ -25,25 +25,6 @@ using synth::ui::CurvePlayhead;
 
 namespace {
 
-// Nearest note-division index to `seconds` at `bpm`, compared in log-time so e.g. a duration
-// halfway (on a musical, not linear, scale) between 1/4 and 1/8 rounds to whichever it is
-// actually closer to perceptually. `seconds` is floored well above 0 so a degenerate (0 ms)
-// duration never takes log() of zero.
-int nearestEnvelopeDivisionIndex(double seconds, double bpm) {
-    const double logSeconds = std::log(juce::jmax(1.0e-6, seconds));
-    int best = 0;
-    double bestDist = std::numeric_limits<double>::infinity();
-    for (int i = 0; i < synth::envelopeNoteDivisions().size(); ++i) {
-        const double candidate = (double)synth::envelopeNoteDivisionSeconds(i, bpm);
-        const double dist = std::abs(logSeconds - std::log(juce::jmax(1.0e-6, candidate)));
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = i;
-        }
-    }
-    return best;
-}
-
 // BPM-mode tick-label formatter: the model's x axis stays in seconds either way (see
 // buildEnvelopeCurveModel), so this only changes how a time is WORDED — in beats at `bpm`, not
 // seconds. Kept simple per the design brief: whole beats read "N beat(s)"; anything else falls
@@ -78,7 +59,7 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
     double attack, hold, decay, release;
     // Each movable node's maxSegment (below) mirrors the ceiling the current mode can actually
     // reach: ADSRModule's own attack/hold/decay/release NormalisableRange (5.0, see ADSRModule.h)
-    // in MS mode, or the coarsest division ("1/1") at the module's last-seen tempo in BPM mode --
+    // in MS mode, or the longest division ("1/1D") at the module's last-seen tempo in BPM mode --
     // either way, a graph drag can never request a duration the mode itself could not represent.
     double maxStageSeconds = 5.0;
     if (bpmMode) {
@@ -93,8 +74,7 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
         hold = divSeconds("holdDiv");
         decay = divSeconds("decayDiv");
         release = divSeconds("releaseDiv");
-        maxStageSeconds = (double)synth::envelopeNoteDivisionSeconds(synth::envelopeNoteDivisions().size() - 1,
-                                                                     bpm); // "1/1", the coarsest
+        maxStageSeconds = (double)synth::envelopeLongestDivisionBeats() * 60.0 / juce::jmax(1.0, bpm); // the longest
     } else {
         attack = (double)floatParam("attack");
         hold = (double)floatParam("hold");
@@ -238,7 +218,7 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
             auto* p = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module, paramID));
             if (p == nullptr)
                 return;
-            const int newIndex = nearestEnvelopeDivisionIndex(seconds, bpm);
+            const int newIndex = synth::nearestEnvelopeDivisionIndex(seconds, bpm, p->getIndex());
             if (p->getIndex() == newIndex)
                 return;
             p->setValueNotifyingHost(p->getNormalisableRange().convertTo0to1((float)newIndex));

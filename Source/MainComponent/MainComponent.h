@@ -388,6 +388,7 @@ private:
     static std::vector<CommandSpec> buildGeneralCommandRows();
     static std::vector<CommandSpec> buildEditAndGraphCommandRows();
     static std::vector<CommandSpec> buildTimelineAndPanelCommandRows();
+    static std::vector<CommandSpec> buildSnapNoteValueCommandRows(); // the triplet and dotted Set Grid commands
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
     static std::vector<CommandSpec> buildTransportCommandRows();
     static std::vector<CommandSpec> buildSelectionStepCommandRows();

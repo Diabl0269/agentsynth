@@ -2,6 +2,7 @@
 
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h"
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h"
@@ -96,7 +97,7 @@ public:
     void moved() override;
 
     juce::ComboBox& getShapeCombo() noexcept { return shape_; }
-    juce::ComboBox& getSyncRateCombo() noexcept { return syncRate_; }
+    NoteLengthBox& getSyncRateCombo() noexcept { return syncRate_; }
     juce::Slider& getRateSlider() noexcept { return rateHz_; }
     juce::ToggleButton& getSyncToggle() noexcept { return sync_; }
     ModulatorShapeIcon& getShapeIcon() noexcept { return shapeIcon_; }
@@ -152,7 +153,7 @@ private:
     juce::String parameterName_;
 
     juce::ComboBox shape_;
-    juce::ComboBox syncRate_;
+    NoteLengthBox syncRate_;
     juce::Slider rateHz_;
     juce::ToggleButton sync_;
     ModulatorShapeIcon shapeIcon_;

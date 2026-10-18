@@ -294,3 +294,17 @@ TEST(CustomLfoFromRangeTest, ADenseSineOnASkewedRangeKeepsItsExtremesToo) {
     EXPECT_NEAR(plan.baseValue, 200.0, 1e-6);
     EXPECT_GE(plan.level, skewed()(800.0) - skewed()(200.0) - 1e-9);
 }
+
+// A drawn range always becomes a straight cycle: a triplet or dotted rate that holds the range more tightly (0.75 beat
+// for 0.7, 1.5 for 1.4) is never chosen.
+TEST(CustomLfoFromRangeTest, ARangeNeverBecomesATripletOrDottedRate) {
+    const auto lane = makeLane({{0.0, 0.0, 0.0f, kLinear}, {40.0, 100.0, 0.0f, kLinear}});
+    for (const double length : {0.3, 0.7, 1.4, 2.9, 5.0, 20.0}) {
+        const auto plan = planCustomLfoFromRange(lane, 0.0, length, straight());
+        ASSERT_TRUE(plan.ok()) << length;
+        const auto name = synth::lfoRateDivisions()[plan.divisionIndex];
+        EXPECT_FALSE(name.endsWithChar('T') || name.endsWithChar('D')) << length << " -> " << name;
+        EXPECT_LT(plan.divisionIndex, synth::kLfoStraightRateDivisionCount) << length;
+    }
+    EXPECT_EQ(synth::lfoRateDivisions()[planCustomLfoFromRange(lane, 0.0, 0.7, straight()).divisionIndex], "1/4");
+}

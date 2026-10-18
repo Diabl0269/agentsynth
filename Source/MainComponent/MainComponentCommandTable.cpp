@@ -4,41 +4,15 @@
 // order below IS getAllCommands()'s order (menu order).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
 #include "Transport/MarkerJump.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/TimelineSnapNames.h"
+#include <algorithm>
+#include <iterator>
 
 namespace {
-
-// The note-value name for a grid division -- the SAME strings TimelinePanelComponent's snap combo
-// shows ("Off", "Bar", "1", "1/2", ...), so the status-bar report after a grid shortcut and the
-// selector the user can see never disagree about what the grid is called.
-juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
-    using Snap = synth::ui::TimelineViewState::Snap;
-    switch (snap) {
-    case Snap::Off:
-        return "Off";
-    case Snap::Bar:
-        return "Bar";
-    case Snap::Whole:
-        return "1";
-    case Snap::Half:
-        return "1/2";
-    case Snap::Quarter:
-        return "1/4";
-    case Snap::Eighth:
-        return "1/8";
-    case Snap::Sixteenth:
-        return "1/16";
-    case Snap::ThirtySecond:
-        return "1/32";
-    case Snap::SixtyFourth:
-        return "1/64";
-    case Snap::HundredTwentyEighth:
-        return "1/128";
-    }
-    return "Off";
-}
 
 // The current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
 // already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
@@ -298,21 +272,33 @@ bool MainComponent::applySnapCommand(juce::CommandID commandID) {
         timelinePanel.cycleSnapValue(direction);
         // Reports where the grid ENDED UP, not which way it was asked to move: the cycle clamps at
         // both ends, so a held key parked on 1/16 says so instead of implying it moved again.
-        statusBar.showMessage("Grid: " + snapDivisionLabel(timelinePanel.getViewState().snap));
+        statusBar.showMessage("Grid: " + synth::ui::snapValueName(timelinePanel.getViewState().snap));
         return true;
     }
 
     using Snap = synth::ui::TimelineViewState::Snap;
-    const Snap value = commandID == AppCommands::snapSetWhole          ? Snap::Whole
-                       : commandID == AppCommands::snapSetHalf         ? Snap::Half
-                       : commandID == AppCommands::snapSetQuarter      ? Snap::Quarter
-                       : commandID == AppCommands::snapSetEighth       ? Snap::Eighth
-                       : commandID == AppCommands::snapSetSixteenth    ? Snap::Sixteenth
-                       : commandID == AppCommands::snapSetThirtySecond ? Snap::ThirtySecond
-                       : commandID == AppCommands::snapSetSixtyFourth  ? Snap::SixtyFourth
-                                                                       : Snap::HundredTwentyEighth;
+    static const std::pair<juce::CommandID, Snap> kSetCommands[] = {
+        {AppCommands::snapSetWhole, Snap::Whole},
+        {AppCommands::snapSetHalf, Snap::Half},
+        {AppCommands::snapSetQuarter, Snap::Quarter},
+        {AppCommands::snapSetEighth, Snap::Eighth},
+        {AppCommands::snapSetSixteenth, Snap::Sixteenth},
+        {AppCommands::snapSetThirtySecond, Snap::ThirtySecond},
+        {AppCommands::snapSetSixtyFourth, Snap::SixtyFourth},
+        {AppCommands::snapSetHundredTwentyEighth, Snap::HundredTwentyEighth},
+    };
+    Snap value = Snap::HundredTwentyEighth;
+    const auto& noteValueActions = snapNoteValueActions();
+    for (size_t i = 0; i < noteValueActions.size(); ++i)
+        if (noteValueActions[i].command == commandID)
+            value = synth::ui::TimelineViewState::noteValue(i < 8 ? synth::ui::TimelineViewState::SnapKind::triplet
+                                                                  : synth::ui::TimelineViewState::SnapKind::dotted,
+                                                            1 << (i % 8));
+    for (const auto& [id, snap] : kSetCommands)
+        if (id == commandID)
+            value = snap;
     timelinePanel.setSnapValue(value);
-    statusBar.showMessage("Grid: " + snapDivisionLabel(value));
+    statusBar.showMessage("Grid: " + synth::ui::snapValueName(value));
     return true;
 }
 
@@ -681,7 +667,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
 }
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelCommandRows() {
-    return {
+    std::vector<CommandSpec> rows{
         // ---- Grid division: registered in every build, inactive whenever the panel is off screen ----
         {AppCommands::snapSetWhole, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetWhole",
          [](const MainComponent& m) { return m.isTimelineReachable(); },
@@ -795,6 +781,12 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              return true;
          }},
     };
+    // The triplet and dotted Set Grid rows sit just before the grid cycle.
+    const auto cycle = std::find_if(rows.begin(), rows.end(),
+                                    [](const CommandSpec& row) { return row.id == AppCommands::snapCyclePrev; });
+    auto snapRows = buildSnapNoteValueCommandRows();
+    rows.insert(cycle, std::make_move_iterator(snapRows.begin()), std::make_move_iterator(snapRows.end()));
+    return rows;
 }
 
 // ---- Transport: promoted to command-dispatched actions (docs/control/midi-remote.md#action-targets's

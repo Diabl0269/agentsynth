@@ -128,7 +128,24 @@ enum CommandIDs {
     swapTimelineToMain,
     swapMixerToMain,
     swapMidiRemoteToMain,
-    swapCanvasToMain
+    swapCanvasToMain,
+    // Grid division set outright to a triplet or dotted value; unbound by default.
+    snapSetWholeTriplet,
+    snapSetHalfTriplet,
+    snapSetQuarterTriplet,
+    snapSetEighthTriplet,
+    snapSetSixteenthTriplet,
+    snapSetThirtySecondTriplet,
+    snapSetSixtyFourthTriplet,
+    snapSetHundredTwentyEighthTriplet,
+    snapSetWholeDotted,
+    snapSetHalfDotted,
+    snapSetQuarterDotted,
+    snapSetEighthDotted,
+    snapSetSixteenthDotted,
+    snapSetThirtySecondDotted,
+    snapSetSixtyFourthDotted,
+    snapSetHundredTwentyEighthDotted
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

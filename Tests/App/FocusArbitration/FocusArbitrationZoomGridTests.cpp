@@ -42,6 +42,17 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHundredTwentyEighth, false));
     EXPECT_EQ(view.snap, Snap::HundredTwentyEighth);
 
+    // The triplet and dotted values are set the same way, and the cycle then stays inside their kind.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetEighthTriplet, false));
+    EXPECT_EQ(view.snap, Snap::EighthTriplet);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
+    EXPECT_EQ(view.snap, Snap::SixteenthTriplet);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetQuarterDotted, false));
+    EXPECT_EQ(view.snap, Snap::QuarterDotted);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
+    EXPECT_EQ(view.snap, Snap::HalfDotted);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHundredTwentyEighth, false));
+
     // Cycle: +1 goes FINER, -1 COARSER, and both CLAMP rather than wrapping. The finest division is
     // now 1/128, so that is where a held key parks.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
@@ -145,7 +156,8 @@ TEST_F(FocusArbitrationTest, GridAndTimelineZoomCommandsAreInactiveWhileThePanel
     for (auto cmdId :
          {AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter, AppCommands::snapSetEighth,
           AppCommands::snapSetSixteenth, AppCommands::snapSetThirtySecond, AppCommands::snapSetSixtyFourth,
-          AppCommands::snapSetHundredTwentyEighth, AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
+          AppCommands::snapSetHundredTwentyEighth, AppCommands::snapSetEighthTriplet, AppCommands::snapSetEighthDotted,
+          AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
         EXPECT_FALSE(commandIsActive(mc, cmdId)) << "command " << (int)cmdId;
         EXPECT_FALSE(cm.invokeDirectly(cmdId, false)) << "command " << (int)cmdId;
     }

@@ -10,9 +10,9 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "UI/Graph/CardBody/CardBody.h"
-#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -39,10 +39,9 @@ juce::Slider* findSliderByCaption(ModuleComponent& comp, const juce::String& cap
     return nullptr;
 }
 
-// The division control of a stage: the body's widget for its parameter, a stepped vertical fader over the
-// choice's steps (a combo would not fit the 40 px stage cell).
-juce::Slider* findDivisionCombo(ModuleComponent& comp, const juce::String& paramId) {
-    return dynamic_cast<synth::ui::CardFader*>(comp.getCardBody()->findWidget(paramId));
+// The division control of a stage: the body's widget for its parameter, a compact note-length box.
+synth::ui::NoteLengthBox* findDivisionCombo(ModuleComponent& comp, const juce::String& paramId) {
+    return dynamic_cast<synth::ui::NoteLengthBox*>(comp.getCardBody()->findWidget(paramId));
 }
 
 // Writes tempoSync as automation or a preset load would, then runs the queued condition re-read.
@@ -53,9 +52,9 @@ void setTempoSync(ModuleComponent& comp, juce::AudioProcessor& processor, bool o
     comp.getCardBody()->flushPendingConditionUpdate();
 }
 
-// The division fills exactly the cell of the time fader it replaces: nothing moves on a swap.
+// The division sits in the cell of the time fader it replaces (centred on it), so nothing else moves on a swap.
 bool sharesCellWith(const juce::Component& combo, const juce::Component& fader) {
-    return combo.getBounds() == fader.getBounds();
+    return fader.getBounds().contains(combo.getBounds().getCentre());
 }
 
 CurveEditorComponent* findEnvelopeCurveEditor(ModuleComponent& comp) {
@@ -223,10 +222,7 @@ TEST_F(ModuleComponentTest, ComboPickWritesTheDivParamAsOneUndoStepAndExternalWr
     const int target = (before + 1) % attackDivParam->choices.size();
 
     const int serialBefore = undoManager.getEditSerial();
-    { // a fader's drag or key step is one gesture: the card's undo bracketing sees one change
-        juce::Slider::ScopedDragNotification gesture(*attackCombo);
-        attackCombo->setValue((double)target, juce::sendNotificationSync);
-    }
+    attackCombo->setCurrentName(attackDivParam->choices[target], juce::sendNotificationSync);
 
     EXPECT_EQ(attackDivParam->getIndex(), target) << "the pick must write the param";
     EXPECT_EQ(undoManager.getEditSerial(), serialBefore + 1) << "one pick must cost exactly one undo step";
@@ -234,7 +230,7 @@ TEST_F(ModuleComponentTest, ComboPickWritesTheDivParamAsOneUndoStepAndExternalWr
     // External write (undo/preset/automation): the combo must follow it back.
     const int externalTarget = (target + 2) % attackDivParam->choices.size();
     attackDivParam->setValueNotifyingHost(attackDivParam->getNormalisableRange().convertTo0to1((float)externalTarget));
-    EXPECT_EQ((int)attackCombo->getValue(), externalTarget);
+    EXPECT_EQ(attackCombo->getCurrentName(), attackDivParam->choices[externalTarget]);
 }
 
 // buildEnvelopeCurveModel's BPM-mode stage durations must equal envelopeNoteDivisionSeconds at

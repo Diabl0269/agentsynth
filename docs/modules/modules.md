@@ -413,8 +413,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   unsmoothed — `EnvelopeGenerator` turns a time change mid-ramp into a slope change on its own.
 - **Tempo sync (FRO113, BPM | MS toggle)**: `tempoSync` (bool, default false/MS mode) is REAL
   sync, not a display-only snap — each timed stage keeps its own note-division choice parameter
-  (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing one six-entry division list, "1/1"
-  down to "1/32", the same entries and order as [LFO](#lfo-module)'s `rateSync`, which then appends "2/1", "4/1", "8/1") and the
+  (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing one 24-entry division list: the eight straight values "1/128" up to "1/1", then the triplets "1/128T" up to "1/1T", then the dotted "1/128D" up to "1/1D"; the same names and order as [LFO](#lfo-module)'s `rateSync`, which has "2/1", "4/1", "8/1" after the straight values; the card picks them in the [note-length menu](../layout/note-length-menu.md); dragging a stage in the envelope graph snaps among the divisions of the stage's own kind and the graph's ceiling is the longest entry, "1/1D"; the four lists keep `legacyChoiceCount` 8 for plugin-host blobs saved before the triplets were added) and the
   effective stage time is recomputed from that division and the current tempo **every block**,
   so it follows a live tempo change rather than snapping once. The ms parameters
   (`attack`/`hold`/`decay`/`release`) are untouched and stay in sole control whenever `tempoSync`
@@ -494,7 +493,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
     the layout; only the three curve amounts are edited elsewhere (`isEditedElsewhere` in
     `Source/UI/Graph/CardBody/CardBodyPlan.cpp`).
   - **Tempo-mode divisions (FRO118)**: in Tempo mode, each of the Attack/Hold/Decay/Release faders is
-    replaced — in its own cell, caption kept — by a `juce::ComboBox` bound to its matching `*Div` param
+    replaced — in its own cell, caption kept — by a compact `NoteLengthBox` (a `juce::ComboBox` that opens the straight / triplet / dotted chip popup) bound to its matching `*Div` param
     via a plain `juce::ComboBoxParameterAttachment` (the same binding/undo idiom the generic per-param
     combos use — a combo pick is one `beginChangeGesture`/`setValueNotifyingHost`/`endChangeGesture`,
     so `ModuleComponent`'s existing `parameterGestureChanged` capture gives it one undo step for free,

@@ -15,6 +15,12 @@ void paintComboChevron(juce::Graphics& g, juce::Point<float> centre, juce::Colou
     g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
+namespace {
+bool isCompactCombo(const juce::ComboBox& box) {
+    return (bool)box.getProperties().getWithDefault(AppLookAndFeel::kCompactComboProperty, false);
+}
+} // namespace
+
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
                                   int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
@@ -38,8 +44,9 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
 
     // Chevron: dimmed when disabled.
     auto arrowCol = box.findColour(juce::ComboBox::arrowColourId);
-    paintComboChevron(g, {(float)width - 14.0f, (float)height * 0.5f},
-                      enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
+    if (!isCompactCombo(box))
+        paintComboChevron(g, {(float)width - 14.0f, (float)height * 0.5f},
+                          enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
 
     // Waveform icon: if the selected item carries a Drawable icon, render it inside the closed
     // combo box to the left of the text label (which positionComboBoxText positions at x=8).
@@ -95,12 +102,19 @@ void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& labe
             }
         }
     }
+    if (isCompactCombo(box)) {
+        label.setBounds(1, 1, box.getWidth() - 2, box.getHeight() - 2);
+        label.setJustificationType(juce::Justification::centred);
+        label.setBorderSize(juce::BorderSize<int>(0));
+        label.setFont(getComboBoxFont(box));
+        return;
+    }
     label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - kComboTextRightInset, box.getHeight() - 2);
     label.setFont(getComboBoxFont(box));
 }
 
-juce::Font AppLookAndFeel::getComboBoxFont(juce::ComboBox&) {
-    return juce::Font(juce::FontOptions(theme.type.label + 2.0f));
+juce::Font AppLookAndFeel::getComboBoxFont(juce::ComboBox& box) {
+    return juce::Font(juce::FontOptions(theme.type.label + (isCompactCombo(box) ? -1.5f : 2.0f)));
 }
 
 // Width = widest item text + the label's insets, which are whatever the active look-and-feel's
