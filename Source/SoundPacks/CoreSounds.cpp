@@ -1,4 +1,4 @@
-// CoreSounds.cpp -- the fixed table of core pack instruments the song planner can ask for.
+// CoreSounds.cpp -- the fixed table of sound pack instruments the song planner can ask for.
 #include "SoundPacks/CoreSounds.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
 #include "Modules/SamplerModule.h"
@@ -18,6 +18,13 @@ constexpr CoreSound kSounds[] = {
     {"core/double-bass-plucked", "Plucked double bass", "Pluck", false, 0.0f},
     {"core/electric-guitar", "Electric guitar", "Pluck", false, 0.0f},
     {"core/acoustic-kit", "Acoustic drum kit", "Drum Kit", true, 0.0f},
+    // One-shots that play at their recorded pitch; trims measured from the real pack
+    // (docs/modules/sound-pack-downloads.md#levels).
+    {"animals/whale", "Whale call", "Oscillator", false, 22.0f},
+    {"animals/crow", "Crow caw", "Oscillator", false, 18.0f},
+    {"animals/owl", "Owl hoot", "Oscillator", false, 23.0f},
+    {"animals/frog", "Frog call", "Oscillator", false, 19.5f},
+    {"animals/wolf", "Wolf howl", "Oscillator", false, 19.0f},
 };
 
 } // namespace
@@ -27,6 +34,10 @@ const CoreSound* findCoreSound(const juce::String& id) {
         if (id == sound.id)
             return &sound;
     return nullptr;
+}
+
+juce::String packIdOf(const CoreSound& sound) {
+    return juce::String(sound.id).upToFirstOccurrenceOf("/", false, false);
 }
 
 juce::String coreInstrumentId(const CoreSound& sound) {
@@ -48,11 +59,11 @@ juce::String coreSoundNames(const std::vector<juce::String>& ids) {
 
 bool loadCoreSoundIntoSampler(juce::AudioProcessor& sampler, const CoreSound& sound) {
     auto* module = dynamic_cast<SamplerModule*>(&sampler);
-    return module != nullptr && module->loadInstrumentFromPack(kCorePackId, coreInstrumentId(sound), sound.trimDb);
+    return module != nullptr && module->loadInstrumentFromPack(packIdOf(sound), coreInstrumentId(sound), sound.trimDb);
 }
 
 bool coreSoundInstalled(const CoreSound& sound) {
-    return synth::sampler::SoundPackLibrary::find(kCorePackId, coreInstrumentId(sound)).has_value();
+    return synth::sampler::SoundPackLibrary::find(packIdOf(sound), coreInstrumentId(sound)).has_value();
 }
 
 } // namespace synth::soundpacks

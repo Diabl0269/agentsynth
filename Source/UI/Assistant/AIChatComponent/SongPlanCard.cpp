@@ -310,7 +310,8 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     cancelLink.onClick = [this] {
         if (session.buildAfterDownload) {
             session.buildAfterDownload = false;
-            installer_->cancel(synth::soundpacks::kCorePackId);
+            for (const auto& id : planPacks())
+                installer_->cancel(id);
         }
         if (actions.onCancel)
             actions.onCancel();
@@ -342,7 +343,7 @@ SongPlanCard::SongPlanCard(SongSession& sessionIn, Actions actionsIn)
     refresh();
     // Download first was pressed on an earlier card of this session (the chat rebuilt its bubbles) and the pack has
     // landed since: build now, after the chat has taken this card.
-    if (session.buildAfterDownload && coreInstalled()) {
+    if (session.buildAfterDownload && packsInstalled()) {
         session.buildAfterDownload = false;
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<SongPlanCard>(this)] {
             if (safe != nullptr && safe->actions.onBuild)

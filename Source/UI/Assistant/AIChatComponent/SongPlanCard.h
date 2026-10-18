@@ -38,6 +38,7 @@ public:
     void pressBuildForTesting();
     juce::String soundsLineForTesting() const;
     bool soundsOfferShownForTesting() const;
+    juce::Button& cancelLinkForTesting() { return cancelLink; }
     juce::Button& continueWithSynthsForTesting() { return continueLink; }
     juce::Component& soundsProgressForTesting() { return soundsProgress; }
 
@@ -51,10 +52,14 @@ private:
     void applyPhase();
     juce::String detailsText() const;
 
-    // The offer to download the core instruments first, shown while the plan names some and the pack is missing.
+    // The offer to download the sound packs first, shown while the plan names sounds from a pack that is missing.
     void soundPacksChanged() override;
     bool offerNeeded() const;
-    bool coreInstalled() const;
+    std::vector<juce::String> planPacks() const;
+    std::vector<juce::String> neededPacks() const;
+    bool packsInstalled() const;
+    juce::String packsPhrase(const std::vector<juce::String>& packs) const;
+    void installAll(const std::vector<juce::String>& packs);
     bool downloadBusy() const;
     void startDownload();
     void refreshOffer();

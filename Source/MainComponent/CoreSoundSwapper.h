@@ -1,11 +1,12 @@
 #pragma once
 
-// Gives the synth stand-ins a song build left for core pack instruments their real sound once the pack is installed
+// Gives the synth stand-ins a song build left for sound pack instruments their real sound once the pack is installed
 // (see docs/modules/sound-pack-downloads.md#song-builds-and-the-core-instruments).
 
 #include "SoundPacks/SoundPackInstaller.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <set>
 
 class AudioEngine;
 class AppUndoManager;
@@ -29,13 +30,13 @@ public:
 
 private:
     void soundPacksChanged() override;
-    bool coreInstalled() const;
+    std::set<juce::String> installedPacks() const;
 
     AudioEngine& engine_;
     GraphEditor& editor_;
     AppUndoManager& undo_;
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> installer_;
-    bool coreWasInstalled_ = false;
+    std::set<juce::String> installedPacks_; ///< The packs installed at the last change, to spot a new one.
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CoreSoundSwapper)
 };

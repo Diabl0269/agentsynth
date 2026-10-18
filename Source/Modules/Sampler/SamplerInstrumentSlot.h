@@ -14,7 +14,7 @@ namespace synth::sampler {
 struct DroppedRegion {
     int file = 0;
     int loKey = 0, hiKey = 127, key = 60, loVel = 1, hiVel = 127;
-    float tuneCents = 0.0f, volumeDb = 0.0f;
+    float tuneCents = 0.0f, volumeDb = 0.0f, keytrackCents = 100.0f;
     RegionSpec::Loop loop = RegionSpec::Loop::None;
     juce::int64 loopStart = -1, loopEnd = -1;
     int seqLength = 1, seqPosition = 1;

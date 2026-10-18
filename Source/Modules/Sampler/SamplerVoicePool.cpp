@@ -20,6 +20,11 @@ constexpr int kGlideChunkFrames = 32; // the pitch of a gliding voice is recompu
 
 bool isHeldKeyVoice(const auto& v) { return v.active && v.keyDown && !v.releaseVoice && v.held; }
 
+// Semitones from the region's root key to `note`, scaled by its keytrack (0 = every key plays the recording as is).
+double keytracked(const RegionSpec& region, int note) {
+    return (double)(note - region.rootKey) * (double)region.keytrackCents / 100.0;
+}
+
 float dbToGain(float db) { return std::pow(10.0f, db / 20.0f); }
 
 // Stand-in used to steal among active voices only: pickVoice prefers free voices, so inactive ones are made
@@ -111,10 +116,10 @@ void VoicePool::startVoices(int note, float velocity01, int velocity127, bool re
         v->regionIndex = hits[(size_t)h].regionIndex;
         v->releaseVoice = releaseTrigger;
         v->keyDown = !releaseTrigger;
-        v->semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0 + extraSemis;
+        v->semis = keytracked(region, note) + (double)region.tuneCents / 100.0 + extraSemis;
         if (!releaseTrigger && p.glideSeconds > 0.0f && lastNote_ >= 0 && lastNote_ != note) {
             v->glideFrames = std::max(1, (int)(p.glideSeconds * sampleRate_));
-            v->glideOffset = (double)(lastNote_ - note);
+            v->glideOffset = (double)(lastNote_ - note) * (double)region.keytrackCents / 100.0;
             v->glideStep = v->glideOffset / (double)v->glideFrames;
         }
         v->rateRatio = region.sample->sourceSampleRate / sampleRate_;
@@ -200,7 +205,7 @@ void VoicePool::retarget(Voice& v, int note, const VoiceParams& p) {
     const Region& region = instrument_->regions[(size_t)v.regionIndex];
     const double soundingSemis = v.semis + v.glideOffset;
     v.note = note;
-    v.semis = (double)(note - region.rootKey) + (double)region.tuneCents / 100.0;
+    v.semis = keytracked(region, note) + (double)region.tuneCents / 100.0;
     v.glideFrames = 0;
     v.glideOffset = 0.0;
     if (p.glideSeconds > 0.0f) {

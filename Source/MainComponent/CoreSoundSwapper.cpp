@@ -1,4 +1,4 @@
-// CoreSoundSwapper.cpp -- swaps pending stand-ins for the core pack's instruments, and gives waiting Drum Kits their
+// CoreSoundSwapper.cpp -- swaps pending stand-ins for the sound packs' instruments, and gives waiting Drum Kits their
 // kit.
 #include "MainComponent/CoreSoundSwapper.h"
 
@@ -13,6 +13,8 @@
 #include "SoundPacks/CoreSounds.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <algorithm>
+#include <set>
 
 namespace synth {
 
@@ -21,7 +23,7 @@ namespace {
 using synth::soundpacks::coreInstrumentId;
 using synth::soundpacks::coreSoundInstalled;
 using synth::soundpacks::findCoreSound;
-using synth::soundpacks::kCorePackId;
+using synth::soundpacks::packIdOf;
 
 // The core sound a Drum Kit's saved kit names but has not loaded (the pack was missing when the kit was set).
 const synth::soundpacks::CoreSound* waitingKitSound(DrumKitModule& kit) {
@@ -61,23 +63,26 @@ CoreSoundSwapper::CoreSoundSwapper(AudioEngine& engine, GraphEditor& editor, App
     : engine_(engine)
     , editor_(editor)
     , undo_(undo) {
-    coreWasInstalled_ = coreInstalled();
+    installedPacks_ = installedPacks();
     installer_->addListener(this);
 }
 
 CoreSoundSwapper::~CoreSoundSwapper() { installer_->removeListener(this); }
 
-bool CoreSoundSwapper::coreInstalled() const {
-    const auto row = installer_->row(kCorePackId);
-    return row && (row->state == synth::soundpacks::SoundPackInstaller::State::Installed ||
-                   row->state == synth::soundpacks::SoundPackInstaller::State::UpdateAvailable);
+std::set<juce::String> CoreSoundSwapper::installedPacks() const {
+    std::set<juce::String> installed;
+    for (const auto& row : installer_->rows())
+        if (row.state == synth::soundpacks::SoundPackInstaller::State::Installed ||
+            row.state == synth::soundpacks::SoundPackInstaller::State::UpdateAvailable)
+            installed.insert(row.id);
+    return installed;
 }
 
-// Every progress tick lands here; only the moment the core pack becomes installed does any work.
+// Every progress tick lands here; only the moment a pack becomes installed does any work.
 void CoreSoundSwapper::soundPacksChanged() {
-    const bool installed = coreInstalled();
-    const bool justInstalled = installed && !coreWasInstalled_;
-    coreWasInstalled_ = installed;
+    auto now = installedPacks();
+    const bool justInstalled = !std::includes(installedPacks_.begin(), installedPacks_.end(), now.begin(), now.end());
+    installedPacks_ = std::move(now);
     if (justInstalled)
         swapNow();
 }
@@ -90,12 +95,12 @@ int CoreSoundSwapper::swapNow() {
         float level;
     };
     std::vector<StandIn> standIns;
-    std::vector<std::pair<DrumKitModule*, juce::String>> kits;
+    std::vector<std::pair<DrumKitModule*, const synth::soundpacks::CoreSound*>> kits;
     for (auto* node : graph.getNodes()) {
         auto* processor = node->getProcessor();
         if (auto* kit = dynamic_cast<DrumKitModule*>(processor))
             if (const auto* sound = waitingKitSound(*kit))
-                kits.emplace_back(kit, coreInstrumentId(*sound));
+                kits.emplace_back(kit, sound);
         if (auto* module = dynamic_cast<ModuleBase*>(processor))
             if (const auto* sound = findCoreSound(synth::pendingSoundOf(*module));
                 sound != nullptr && !sound->drumKit && coreSoundInstalled(*sound))
@@ -118,8 +123,8 @@ int CoreSoundSwapper::swapNow() {
             swapped += graph.getNodeForId(nodeId) == nullptr ? 1 : 0;
         }
     }
-    for (const auto& [kit, instrumentId] : kits)
-        kit->loadInstrumentFromPack(kCorePackId, instrumentId);
+    for (const auto& [kit, sound] : kits)
+        kit->loadInstrumentFromPack(packIdOf(*sound), coreInstrumentId(*sound));
 
     const int total = swapped + (int)kits.size();
     if (swapped > 0 && onGraphChanged)

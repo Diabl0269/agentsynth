@@ -62,10 +62,11 @@ animated once in order on Apply.
 ## Real instruments
 
 Both requests carry `sounds: true`, which lets the service name an instrument from the core sound pack on a track: a
-plan track may carry `coreSound`, and the build's `addInstrumentTrack` op `sound`. The value is one of nine ids
-(`core/upright-piano`, `string-section`, `trumpet`, `french-horn`, `flute`, `clarinet`, `double-bass-plucked`,
-`electric-guitar`, `acoustic-kit`); `SoundPacks/CoreSounds.h` is the table, with the stand-in synth each one comes
-with (Mallet, Wavetable, Pluck or Drum Kit). The plan parser keeps a `coreSound` only when it is one of the nine, and
+plan track may carry `coreSound`, and the build's `addInstrumentTrack` op `sound`. The value is one of the ids in `SoundPacks/CoreSounds.h`: nine in the `core` pack (`core/upright-piano`,
+`string-section`, `trumpet`, `french-horn`, `flute`, `clarinet`, `double-bass-plucked`, `electric-guitar`,
+`acoustic-kit`) and five one-shot animal sounds in the `animals` pack (`animals/whale`, `crow`, `owl`, `frog`, `wolf`,
+all standing in for an Oscillator and played at their recorded pitch on every key). The table gives the stand-in synth
+each one comes with (Mallet, Wavetable, Pluck, Oscillator or Drum Kit). The plan parser keeps a `coreSound` only when it is in the table, and
 the op reader accepts a `sound` only when the op's `instrument` is its stand-in; otherwise the sound is ignored and the
 track is built from the synth alone.
 
@@ -84,4 +85,4 @@ What a track gets depends on the pack (`MainComponentTimelineOpsHostSounds.cpp`)
 A patch written for the stand-in can name a part the Sampler does not have (a Wavetable's `detune`, `pan`, `position`). `runPlan` (`AIIntegrationServiceProjectEditRun.cpp`) drops each such modulation, with a plan note, before `validatePatch` sees the patch: only a modulation onto a node the app built as a pack Sampler (`InstrumentTrackBuildResult::substitutedSampler`) and whose `destParam` or `destPort` that Sampler has no jack for. `level`, `pitch`, `attack` and the rest stay, every other node is still validated as sent, and `validatePatch` itself is unchanged. The preview's `StandInHost` builds the same Sampler, so a preview never passes what the apply would refuse.
 
 The song path with Ollama never uses any of this. The plan card offers the download first when a plan names sounds and
-the pack is missing.
+a pack it names is missing.
