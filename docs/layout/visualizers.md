@@ -414,8 +414,10 @@ and the shape editor window's map behave identically. The behaviour is in
 [`custom-filter.md`](../modules/custom-filter.md#morph-map). Pointer: drag a dot or the cursor, click empty space to
 add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete. Keyboard: the map,
 then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` children carrying the name, tooltip and
-focus ring over the painted dots, the `PianoRollHeaderChip` idea); the arrows move the focused dot or cursor (Shift for a
-bigger step), Return edits a dot, Delete removes it, F2 renames it, Shift+F10 opens its menu, Escape returns to the map.
+focus ring over the painted dots, the `PianoRollHeaderChip` idea); an arrow moves the focused dot or cursor one step (Shift for a
+bigger one) and, held, glides it on (`MorphMapGlide`, the timeline cursor glide's curve at 0.15 to 1.2 map units a
+second; two arrows are diagonal; one gesture for the whole hold; a refresh keeps the existing `Stop`s so the focused one
+survives), Return edits a dot, Delete removes it and focuses the next dot, F2 renames it, Shift+F10 opens its menu, Escape returns to the map.
 These keys belong to the focused control, so they are documented here and not rebindable actions
 ([accessibility](../development/accessibility.md#the-rule)). Thin sliders hug the bottom edge (Morph X) and the left edge
 (Morph Y), 10 px thick with the thumb at the cursor; a press, drag or arrow key sets that one coordinate, through the

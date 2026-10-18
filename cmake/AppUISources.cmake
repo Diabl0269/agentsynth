@@ -734,6 +734,9 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/MorphMap/MorphMapPalette.h
     Source/UI/ModuleViews/MorphMap/MorphMap.cpp
     Source/UI/ModuleViews/MorphMap/MorphMapKeyboard.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapArrowGlide.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapGlide.h
+    Source/UI/ModuleViews/MorphMap/MorphMapGlide.cpp
     Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeListAdapter.h
     Source/UI/ModuleViews/ShapeEditor/ShapeMapController.h

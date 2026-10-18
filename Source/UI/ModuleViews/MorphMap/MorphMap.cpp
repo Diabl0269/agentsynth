@@ -2,6 +2,7 @@
 // keyboard stops, menu, rename and screen-reader names are MorphMapKeyboard.cpp.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -22,6 +23,7 @@ MorphMap::MorphMap() {
     setTitle("Morph map");
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
+    glideHost_ = makeDefaultGlideHost();
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
@@ -33,7 +35,10 @@ MorphMap::MorphMap() {
     refreshStopNames();
 }
 
-MorphMap::~MorphMap() = default;
+MorphMap::~MorphMap() {
+    if (glidePump_ != nullptr)
+        glidePump_->stop();
+}
 
 /** The plot is inset so a dot or the cursor at 0 or 1 is not clipped and the sliders sit outside it. */
 juce::Rectangle<float> MorphMap::getPlotArea() const {
@@ -125,10 +130,21 @@ void MorphMap::setShowLabels(bool show) {
     repaint();
 }
 
-/** One stop per dot, in dot order (their explicit focus orders put them before the cursor's). */
+/** One stop per dot, in dot order (their explicit focus orders put them before the cursor's). The stops that are
+    already there are kept: a key step refreshes the map, and replacing the focused stop would drop keyboard focus
+    after every step. Only the missing ones are created and the surplus ones removed from the end; if the focused
+    stop is one of those, focus moves to the nearest dot that remains (or the map when none does). */
 void MorphMap::rebuildStops() {
-    dotStops_.clear();
-    for (int i = 0; i < (int)dots_.size(); ++i) {
+    int focusedIndex = -1;
+    for (int i = 0; i < (int)dotStops_.size(); ++i)
+        if (dotStops_[(size_t)i]->hasKeyboardFocus(false))
+            focusedIndex = i;
+    const int wanted = (int)dots_.size();
+    if (glide_.isHeld() && glideStopIndex_ >= wanted)
+        endGlide();
+    while ((int)dotStops_.size() > wanted)
+        dotStops_.pop_back();
+    for (int i = (int)dotStops_.size(); i < wanted; ++i) {
         auto stop = std::make_unique<Stop>(*this, i);
         stop->setExplicitFocusOrder(i + 1);
         addAndMakeVisible(*stop);
@@ -136,6 +152,8 @@ void MorphMap::rebuildStops() {
     }
     layoutStops();
     refreshStopNames();
+    if (focusedIndex >= wanted)
+        takeFocus(wanted > 0 ? *dotStops_.back() : static_cast<juce::Component&>(*this));
 }
 
 void MorphMap::layoutStops() {

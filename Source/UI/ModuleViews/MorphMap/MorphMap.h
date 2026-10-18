@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MorphMapGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -8,15 +9,19 @@
 
 namespace synth::ui {
 
+class ReorderFramePump;
+
 /** The Filter's morph map: one coloured dot per shape and a dark cursor dot, all on a square map whose
  *  coordinates run 0..1 (x to the right, y downwards). It edits nothing itself; every change is reported
  *  through the callbacks, so the module card and the shape editor window drive it the same way.
  *
  *  Pointer: drag a dot to move it, drag the cursor to blend, click empty space to add a shape there,
  *  double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete.
- *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor the arrows move it
- *  (Shift for a bigger step), Return on a dot edits it, Delete removes it, F2 renames it, Shift+F10 opens its
- *  menu; Escape returns focus to the map. Every key step is one gesture bracket, like a drag.
+ *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
+ *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
+ *  move diagonally, Shift is faster). Return on a dot edits it, Delete removes it and focuses the next dot, F2
+ *  renames it, Shift+F10 opens its menu; Escape returns focus to the map. A key step or a whole hold is one gesture
+ *  bracket, like a drag.
  *
  *  Sliders: a thin Morph X slider hugs the bottom edge and a Morph Y slider the left edge, each with its thumb at
  *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same
@@ -91,6 +96,20 @@ public:
     /** Lights the slider of `axis` as the pending drop target; Axis::None clears it. Returns true when it changed. */
     bool setDropHighlight(Axis axis);
 
+    // ---------- arrow hold ----------
+    /** What the arrow hold reads from the outside world; a test replaces it to supply a clock and the keys. */
+    struct GlideHost {
+        std::function<double()> nowMs;
+        /** Whether the arrow with this juce::KeyPress code is physically down right now. */
+        std::function<bool(int)> isArrowDown;
+        std::function<bool()> isShiftDown;
+    };
+    void setGlideHostForTest(GlideHost host);
+    /** True while an arrow is held on a stop (frames are requested only then). */
+    bool isGliding() const noexcept { return glide_.isHeld(); }
+    /** One hold frame: the frame pump calls it each VBlank, a test calls it with its own clock. */
+    void glideTickForTest() { glideTick(); }
+
     // ---------- inspection ----------
     /** The text a tooltip shows with the pointer at `point`. */
     juce::String tooltipAt(juce::Point<int> point) const;
@@ -114,6 +133,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
+    bool keyStateChanged(bool isKeyDown) override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     juce::String getTooltip() override;
@@ -130,6 +150,12 @@ private:
     void refreshStopNames();
     bool handleStopKey(Stop& stop, const juce::KeyPress& key);
     bool stepStop(Stop& stop, float dx, float dy);
+    bool pressArrow(Stop& stop, int keyCode, bool shift);
+    void glideTick();
+    void endGlide();
+    void moveGlideTarget(juce::Point<float> to);
+    GlideHost makeDefaultGlideHost() const;
+    juce::Point<float> stopPosition(int stopIndex) const;
     void moveDot(int index, juce::Point<float> to);
     void moveCursor(juce::Point<float> to);
     void moveToStrip(Axis axis, juce::Point<float> pixels);
@@ -156,6 +182,13 @@ private:
     std::unique_ptr<Stop> stripStops_[2]; // X, Y
     std::unique_ptr<juce::TextEditor> renameEditor_;
     int renameIndex_ = -1;
+
+    MorphMapGlide glide_;
+    GlideHost glideHost_;
+    std::unique_ptr<ReorderFramePump> glidePump_;
+    int glideStopIndex_ = -1; // the held stop, by its Stop index
+    bool glideGestureOpen_ = false;
+    bool glideEnding_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MorphMap)
 };

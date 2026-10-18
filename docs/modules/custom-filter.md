@@ -268,7 +268,13 @@ One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph
 drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
 points), double-click a dot (or press Return on it) to open the editor on it, right-click a dot for Edit, Duplicate,
-Rename and Delete. Delete on a focused dot removes it; the last shape never goes. Tooltips: "<name> - drag to move,
+Rename and Delete. Delete on a focused dot removes it and focuses the next dot; the last shape never goes. On a
+focused dot, the cursor or a slider an arrow moves it one step (Shift: a bigger one) and, held, glides it on:
+slowly at first (about 0.15 map units a second), faster the longer it is held (about 1.2 a second after two seconds),
+Shift faster still; two arrows held move it diagonally, a slider moves only along its own axis, and the whole hold is
+one gesture and one undo step. The curve is the timeline cursor's (`synth::CursorGlide`); the map's own model is
+`MorphMapGlide`, driven by a frame pump that runs only while an arrow is down. A refresh of the map (every key
+step causes one) keeps the dot stops it has, so the focused dot stays focused. Tooltips: "<name> - drag to move,
 double-click to edit", "Morph cursor - drag to blend shapes". Two sliders hugging the map set Morph X and Y alone. Keys and focus order are in
 [visualizers.md](../layout/visualizers.md#morphmap).
 
