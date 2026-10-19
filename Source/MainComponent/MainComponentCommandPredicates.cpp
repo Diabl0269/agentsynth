@@ -4,7 +4,12 @@
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 // ---- Named isActive predicates shared by more than one row ----
 
@@ -31,6 +36,65 @@ synth::ui::AutomationLaneEditor* MainComponent::activeLaneEditor() const {
 synth::LaneId MainComponent::activeLane() const {
     const auto focused = timelinePanel.getAutomationLanes().focusedLane();
     return focused.isValid() ? focused : timelinePanel.getSelectedAutomationLane();
+}
+
+// The module Replace Module acts on when the timeline owns focus: a focused modulator row's source (the LFO), else
+// the focused lane's target module. Empty when neither (the canvas selection then decides).
+juce::String MainComponent::replaceModuleTargetUuid() const {
+    const auto& lanes = timelinePanel.getAutomationLanes();
+    const auto* focused = getFocusedComponentForMenu();
+    if (!bottomDock.isTimelineShowing() || focused == nullptr)
+        return {};
+    if (const auto source = lanes.modulatorSourceOwning(focused); source.isNotEmpty())
+        return source;
+    if (const auto* lane = timelineDoc.getLane(lanes.laneOwning(focused)))
+        return lane->nodeUuid;
+    return {};
+}
+
+bool MainComponent::canReplaceModuleFromShortcut() const {
+    const auto uuid = replaceModuleTargetUuid();
+    if (uuid.isEmpty())
+        return graphEditor.getCardKeyboard().canReplaceSelectedModule();
+    const auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return false;
+    for (auto* card : graphEditor.getModuleComponents())
+        if (card != nullptr && card->getNodeId() == node->nodeID)
+            return card->canReplace(); // a member of a collapsed group is revealed on perform
+    return false;
+}
+
+bool MainComponent::replaceModuleFromShortcut() {
+    const auto uuid = replaceModuleTargetUuid();
+    if (uuid.isEmpty())
+        return graphEditor.getCardKeyboard().replaceSelectedModule();
+    if (!canReplaceModuleFromShortcut())
+        return false;
+    // A module inside a collapsed macro (every instrument track's modules, by default) has no visible card: unfold
+    // each collapsed ancestor, outermost first, through the same undoable setMacroCollapsed the card's expand button
+    // uses, so the picker has a card to sit on.
+    auto& macros = graphEditor.getMacros();
+    std::vector<juce::String> collapsedAncestors;
+    for (const auto* macro = macros.findByMember(uuid); macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros.find(macro->parentId))
+        if (macro->collapsed)
+            collapsedAncestors.insert(collapsedAncestors.begin(), macro->id);
+    for (const auto& id : collapsedAncestors)
+        graphEditor.getMacroController().setMacroCollapsed(id, false);
+    showNodeOnCanvas(uuid); // switches to the canvas and selects the card, so the picker opens where it can be seen
+    // The unfold holds the module's card back until its glide lands, and a hidden card cannot take the picker: wait
+    // for the fold to settle (at once when nothing animates).
+    auto open = [safe = juce::Component::SafePointer<MainComponent>(this)] {
+        if (safe == nullptr)
+            return false;
+        safe->graphEditor.grabKeyboardFocus();
+        return safe->graphEditor.getCardKeyboard().replaceSelectedModule();
+    };
+    if (!graphEditor.getCardGlide().fold().isLive())
+        return open();
+    graphEditor.getCardGlide().fold().whenSettled([open] { open(); });
+    return true;
 }
 
 // True while the active lane editor has a point selected.

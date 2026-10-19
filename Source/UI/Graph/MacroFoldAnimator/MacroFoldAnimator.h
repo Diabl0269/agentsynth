@@ -101,6 +101,8 @@ public:
     bool wouldAnimate() const;
     /** Shows every held card, drops all state and repaints. */
     void land() noexcept;
+    /** Runs `fn` once every held card is shown again: at once when no fold runs, else when the fold lands. */
+    void whenSettled(std::function<void()> fn);
 
     /** Advances the clock to `ms` (what the driver does each frame) and lands when everything has settled. */
     void applyAtMs(double ms);
@@ -177,5 +179,6 @@ private:
     double total_ = 0.0;
     bool reduced_ = false;
     bool forceAnimate_ = false;
+    std::vector<std::function<void()>> settled_;
     juce::Rectangle<int> lastDrawn_;
 };

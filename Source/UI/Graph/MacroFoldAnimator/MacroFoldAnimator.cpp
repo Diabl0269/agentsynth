@@ -442,6 +442,13 @@ void MacroFoldAnimator::stepFrameForTest(float t) { frameAt(t); }
 
 void MacroFoldAnimator::land() noexcept { release(true); }
 
+void MacroFoldAnimator::whenSettled(std::function<void()> fn) {
+    if (lives_.empty())
+        fn();
+    else
+        settled_.push_back(std::move(fn));
+}
+
 // `stopDriver` is false from the driver's own callbacks: it ends itself after its last frame, and stopping it from
 // inside one would destroy the animator that is calling.
 void MacroFoldAnimator::release(bool stopDriver) noexcept {
@@ -473,4 +480,8 @@ void MacroFoldAnimator::release(bool stopDriver) noexcept {
     lastDrawn_ = {};
     if (hooks_.repaint)
         hooks_.repaint();
+    auto settled = std::move(settled_);
+    settled_.clear();
+    for (auto& fn : settled)
+        fn();
 }

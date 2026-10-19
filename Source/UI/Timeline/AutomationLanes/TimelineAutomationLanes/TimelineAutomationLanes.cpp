@@ -286,11 +286,28 @@ AutomationLaneEditor* TimelineAutomationLanes::focusedEditor() const {
 }
 
 synth::LaneId TimelineAutomationLanes::focusedLane() const {
-    if (const auto* editor = focusedEditor())
-        return editor->getActiveLane();
+    return laneOwning(juce::Component::getCurrentlyFocusedComponent());
+}
+
+static bool isOrContains(const juce::Component& owner, const juce::Component* c) {
+    return c != nullptr && (&owner == c || owner.isParentOf(c));
+}
+
+synth::LaneId TimelineAutomationLanes::laneOwning(const juce::Component* focused) const {
+    for (const auto& [id, editor] : editors_)
+        if (isOrContains(*editor, focused))
+            return editor->getActiveLane();
     for (const auto& [id, header] : headers_)
-        if (header->hasKeyboardFocus(true))
+        if (isOrContains(*header, focused))
             return id;
+    return {};
+}
+
+juce::String TimelineAutomationLanes::modulatorSourceOwning(const juce::Component* focused) const {
+    for (const auto& [id, entry] : modulators_)
+        for (const auto& row : entry.rows)
+            if (row != nullptr && isOrContains(*row, focused))
+                return row->getInfo().sourceUuid;
     return {};
 }
 
