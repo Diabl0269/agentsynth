@@ -52,7 +52,9 @@ int InstrumentPickerRow::layout(int y, int x, int pickerW, int captionW, bool ap
 // ---- Picker list ----
 
 juce::String InstrumentPickerRow::currentPackKey() const {
-    if (auto* state = module_.getExtraState().getDynamicObject())
+    // getExtraState() builds a fresh object each call: keep the var alive, or `state` dangles.
+    const auto extra = module_.getExtraState();
+    if (auto* state = extra.getDynamicObject())
         return state->getProperty(synth::module_file_keys::kInstrumentPack).toString();
     return {};
 }
