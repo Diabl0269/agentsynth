@@ -33,9 +33,9 @@ bool sameRoutingSet(const std::vector<ModulatorInfo>& a, const std::vector<Modul
 }
 } // namespace
 
-int TimelineAutomationLanes::modulatorRowHeight() const {
-    return std::max(kMinModulatorRowHeight,
-                    (int)std::llround((double)ModulatorRow::kBaseHeight * viewState_.rowHeightScale));
+int TimelineAutomationLanes::modulatorRowHeight(synth::LaneId lane) const {
+    return std::max(kMinModulatorRowHeight, (int)std::llround((double)ModulatorRow::kBaseHeight *
+                                                              viewState_.rowHeightScale * laneHeightScale(lane)));
 }
 
 // Asks the graph, once per sync, what routes into every lane's CV jack, and from that which lanes are only

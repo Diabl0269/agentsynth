@@ -14,12 +14,14 @@ constexpr int kDefaultLaneRowHeight = 40; // headless fallback for Metrics::time
 constexpr int kMinLaneRowHeight = 12;
 } // namespace
 
-// Scaled by the same vertical zoom as the clip rows, so a lane keeps its proportion to its track.
-int TimelineAutomationLanes::laneRowHeight() const {
+// Scaled by the same vertical zoom as the clip rows, so a lane keeps its proportion to its track, and by the lane's
+// own height scale (AutomationLane::heightScale, or the drag preview).
+int TimelineAutomationLanes::laneRowHeight(synth::LaneId lane) const {
     int base = kDefaultLaneRowHeight;
     if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&headerParent_.getLookAndFeel()))
         base = lf->getTheme().metrics.timelineAutomationLaneRowHeight;
-    return std::max(kMinLaneRowHeight, (int)std::llround((double)base * viewState_.rowHeightScale));
+    return std::max(kMinLaneRowHeight,
+                    (int)std::llround((double)base * viewState_.rowHeightScale * laneHeightScale(lane)));
 }
 
 int TimelineAutomationLanes::addRowHeight() const {
@@ -34,7 +36,7 @@ int TimelineAutomationLanes::addRowHeight() const {
 int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) const {
     if (isAmountLane(lane.id))
         return 0;
-    return laneRowHeight() + modulatorOffset(lane.id, modulatorCount(lane.id));
+    return laneRowHeight(lane.id) + modulatorOffset(lane.id, modulatorCount(lane.id));
 }
 
 // A track with lanes gets its "+" in the gutter of its last lane header; only a track with none needs a whole row.
@@ -85,12 +87,13 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
         return;
     rowOrigin_[track] = firstRowY;
     rowWidth_ = width;
-    const int rowHeight = laneRowHeight();
-    const int modHeight = modulatorRowHeight();
     const bool reordering = laneDrag_.isReordering() && track == dragTrack_;
     int staticY = firstRowY;
     int lastLaneY = -1;
+    int lastRowHeight = 0;
     for (const auto& lane : t->lanes) {
+        const int rowHeight = laneRowHeight(lane.id);
+        const int modHeight = modulatorRowHeight(lane.id);
         int y = staticY;
         float lift = 0.0f;
         const auto found = std::find(dragLaneIds_.begin(), dragLaneIds_.end(), lane.id);
@@ -105,6 +108,8 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             header->setBounds(0, y, width, rowHeight);
             header->setLift(lift);
             lastLaneY = staticY;
+            lastRowHeight = rowHeight;
+            placeHeightHandle(lane.id, *t, y + laneBlockHeight(lane), width);
         }
         int modY = y + rowHeight + trayExtentOf(lane.id);
         for (int i = 0; i < modulatorCount(lane.id); ++i) {
@@ -131,9 +136,9 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
         row->setCompact(compact);
         if (compact) {
             // The empty gutter left of the last lane's colour stripe, centred on that lane's own row.
-            const int size = std::min(AddAutomationRow::kCompactSize, rowHeight);
-            row->setBounds(AutomationLaneHeaderComponent::kIndent - size - 1, lastLaneY + (rowHeight - size) / 2, size,
-                           size);
+            const int size = std::min(AddAutomationRow::kCompactSize, lastRowHeight);
+            row->setBounds(AutomationLaneHeaderComponent::kIndent - size - 1, lastLaneY + (lastRowHeight - size) / 2,
+                           size, size);
             row->toFront(false);
         } else {
             row->setBounds(0, staticY, width, addRowHeight());
@@ -146,7 +151,6 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
     if (doc_ == nullptr)
         return {};
     const auto& tracks = doc_->getTracks();
-    const int rowHeight = laneRowHeight();
     for (int i = 0; i < (int)tracks.size(); ++i) {
         const auto& track = tracks[(size_t)i];
         if (!isVisibleLane(track))
@@ -155,7 +159,7 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
         for (const auto& candidate : track.lanes) {
             if (candidate.id == lane)
                 return isAmountLane(lane) ? juce::Rectangle<int>()
-                                          : juce::Rectangle<int>(0, y, bodies_->getWidth(), rowHeight);
+                                          : juce::Rectangle<int>(0, y, bodies_->getWidth(), laneRowHeight(lane));
             y += laneBlockHeight(candidate);
         }
     }

@@ -40,6 +40,9 @@ bool moveLaneOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth:
 bool setModulatorOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
                                std::vector<juce::String> order);
 
+/** Sets the lane's height scale (TimelineDoc::setLaneHeightScale) as one undo step; false when nothing changed. */
+bool setLaneHeightScaleUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, double scale);
+
 /** Deletes the lane, removing an Automation track it leaves empty in the same step. */
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane);
 

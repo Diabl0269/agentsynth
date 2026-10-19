@@ -42,7 +42,7 @@ float TimelineAutomationLanes::modulatorOpenness(const juce::String& key) const 
 // A folded row is one title line tall: the line its controls are laid out in (a third of the full height), but never
 // so small the title and the arrow are clipped.
 int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index) const {
-    const int full = modulatorRowHeight();
+    const int full = modulatorRowHeight(lane);
     const auto it = modulators_.find(lane);
     if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
         return full;

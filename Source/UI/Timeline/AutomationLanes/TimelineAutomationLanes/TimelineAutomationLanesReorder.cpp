@@ -24,7 +24,9 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
     header.onDragPress = [this, id](int screenY) { beginLaneDrag(id, screenY); };
     header.onDragMove = [this](int screenY) { dragLane(screenY); };
     header.onDragRelease = [this] { return endLaneDrag(); };
-    header.onLaneKey = [this, id](const juce::KeyPress& key) { return handleLaneKey(id, key); };
+    header.onLaneKey = [this, id](const juce::KeyPress& key) {
+        return handleLaneKey(id, key) || handleLaneHeightKey(id, key);
+    };
     header.onFocusMoveRequested = [this, &header](int direction) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(header, direction);

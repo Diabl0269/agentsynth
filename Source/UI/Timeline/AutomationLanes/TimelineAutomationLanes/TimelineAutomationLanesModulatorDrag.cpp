@@ -52,7 +52,7 @@ float TimelineAutomationLanes::laneBlockStartOf(synth::LaneId lane) const {
 
 // Where the lane's `index`th modulator row starts (`index` == count: the slot after the last row).
 float TimelineAutomationLanes::modulatorSlotStart(synth::LaneId lane, int index) const {
-    return laneBlockStartOf(lane) + static_cast<float>(laneRowHeight() + modulatorOffset(lane, index));
+    return laneBlockStartOf(lane) + static_cast<float>(laneRowHeight(lane) + modulatorOffset(lane, index));
 }
 
 std::vector<ReorderDragAnimator::Slot> TimelineAutomationLanes::modulatorSlotsFor(synth::LaneId lane) const {

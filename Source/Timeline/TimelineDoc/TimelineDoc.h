@@ -233,6 +233,11 @@ struct AutomationLane {
     // Routing keys of the lane's modulator rows, in display order (saved; empty = graph order).
     std::vector<juce::String> modulatorOrder;
 
+    // The lane's own height on top of the shared zoom (modulator rows scale with it); saved, omitted at 1.0.
+    static constexpr double kMinHeightScale = 0.5;
+    static constexpr double kMaxHeightScale = 4.0;
+    double heightScale = 1.0;
+
     // RUNTIME-ONLY: true when nodeUuid is non-empty but does not resolve to any live
     // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
     // is the only writer, driven by synth::TimelineReconciler against a real graph. NOT written by
@@ -586,6 +591,9 @@ public:
 
     // Replaces the lane's modulatorOrder; false when unchanged (see the .cpp).
     bool setModulatorOrder(LaneId id, std::vector<juce::String> order);
+
+    // Sets the lane's height scale (clamped); a user edit (see the .cpp).
+    bool setLaneHeightScale(LaneId id, double scale);
 
     // The value an automation lane holds while it has no breakpoints; a user edit (see the .cpp).
     bool setLaneConstantValue(LaneId id, double value);
