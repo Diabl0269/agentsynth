@@ -36,6 +36,8 @@ public:
         // way Compressor's makeupGain / Limiter's inputGain do — adopt the shared stage instead.
         addOutputLevelParameter();
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

@@ -19,6 +19,7 @@ public:
                                                                         1)); // default 2x preserves backward compat
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
     }

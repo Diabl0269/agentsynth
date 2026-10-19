@@ -103,6 +103,24 @@ bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParam
 // added yet (the Oscillator's declared inputs are fixed by saved routings, and a new jack is its own change).
 const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand"};
 
+// The shared `mix` / `pan` of ModuleBase's output stage (docs/modules/fx-modules.md#mix-and-pan-shared-stage), on
+// exactly the modules that opted in: like the shared Level they get no CV jack -- adding jacks to every FX is out of
+// scope -- and stay automatable and MIDI-learnable. A module's own `mix` (Delay, Reverb, ...) declares a target and is
+// not listed; a listed id the module also targets passes check (b) either way.
+bool isSharedMixOrPanParam(const ModuleBase& mb, const juce::RangedAudioParameter& param) {
+    static const std::map<juce::String, std::set<juce::String>> kShared = {
+        {"Filter", {"mix", "pan"}},  {"Compressor", {"mix", "pan"}},
+        {"Gate", {"mix", "pan"}},    {"Parametric EQ", {"mix", "pan"}},
+        {"Bitcrusher", {"pan"}},     {"Chorus", {"pan"}},
+        {"Delay", {"pan"}},          {"Distortion", {"pan"}},
+        {"Flanger", {"pan"}},        {"Phaser", {"pan"}},
+        {"Pitch Shifter", {"pan"}},  {"Reverb", {"pan"}},
+        {"Ring Modulator", {"pan"}}, {"Limiter", {"pan"}},
+    };
+    const auto it = kShared.find(mb.getName());
+    return it != kShared.end() && it->second.count(param.paramID) > 0;
+}
+
 // Every visible rotary knob's componentID, when it is bound to a Float/Int parameter that ISN'T
 // the shared output Level stage. Choice/Bool knobs (waveform pickers, on/off toggles) are excluded
 // by TYPE, not by an allow-list guess. No module has a known gap (Sampler "rootNote" is covered),
@@ -117,7 +135,7 @@ std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComp
         for (auto* p : mb.getParameters()) {
             auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p);
             if (ranged != nullptr && ranged->getName(100) == id && isContinuousParam(ranged) &&
-                !isSharedOutputLevelParam(mb, *ranged)) {
+                !isSharedOutputLevelParam(mb, *ranged) && !isSharedMixOrPanParam(mb, *ranged)) {
                 names.insert(id);
                 break;
             }

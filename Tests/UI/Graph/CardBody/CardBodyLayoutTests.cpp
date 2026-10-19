@@ -138,6 +138,13 @@ TEST(CardBodyLayout, MeasureAndApplyReturnTheSameHeight) {
 }
 
 TEST(CardBodyLayout, NoLibraryCardShowsAMoreRowWithoutAHiddenParameter) {
+    // Types whose card deliberately leaves rarely-touched parameters unplaced, so they sit in the More row: the
+    // shared output stage's Mix and/or Pan on the FX (docs/modules/fx-modules.md#mix-and-pan-shared-stage), and
+    // the voice-feel options (Oscillator: Phase, Rand, Glide Mode/Curve, Legato; ADSR: Legato).
+    static const std::set<juce::String> kMoreRowByDesign = {
+        "Compressor", "Gate",       "Parametric EQ", "Bitcrusher", "Chorus",         "Delay",   "Distortion",
+        "Flanger",    "Phaser",     "Pitch Shifter", "Reverb",     "Ring Modulator", "Limiter", "Oscillator",
+        "ADSR",       "Amp Env",    "Filter Env"};
     CardCanvas canvas;
     std::vector<NodeID> ids;
     int x = 0;
@@ -150,11 +157,7 @@ TEST(CardBodyLayout, NoLibraryCardShowsAMoreRowWithoutAHiddenParameter) {
     for (auto id : ids) {
         auto* card = canvas.card(id);
         ASSERT_NE(card, nullptr);
-        // Deliberate exceptions: rarely-touched parameters that wait in the More row so the card stays compact
-        // (Oscillator: Phase, Rand, Glide Mode/Curve, Legato; ADSR: Legato).
-        const auto name = card->getModule()->getName();
-        const bool deliberate = name == "Oscillator" || name == "ADSR" || name == "Amp Env" || name == "Filter Env";
-        if (deliberate)
+        if (kMoreRowByDesign.count(card->getModule()->getName()) > 0)
             continue;
         EXPECT_EQ(childWithId(*card, "cardMoreRow"), nullptr) << card->getModule()->getName();
         if (auto* body = card->getCardBody())

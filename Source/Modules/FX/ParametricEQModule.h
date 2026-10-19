@@ -76,6 +76,8 @@ public:
         addParameter(outputGainParam =
                          new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
         enableVisualBuffer(true);
     }
 

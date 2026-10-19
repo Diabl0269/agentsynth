@@ -34,6 +34,7 @@ public:
         // (it shipped stereo with no toggle back when the opt-in was per-module).
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
     }

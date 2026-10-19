@@ -297,8 +297,12 @@ TEST(OutputLevelModules, LevelParameterIsAddedLast) {
                     levelIndex = i;
 
         ASSERT_GE(levelIndex, 0) << testCase.name << " has no outputLevel parameter";
-        // "muted" is appended by addMuteParameter() after it, so allow that one trailing slot.
-        EXPECT_GE(levelIndex, params.size() - 2) << testCase.name << " added outputLevel too early";
+        // Only the base's own appended parameters may follow it: "muted" (addMuteParameter) and the shared
+        // "mix" / "pan" (addMixParameter / addPanParameter), all added after Level so no index moves.
+        for (int i = levelIndex + 1; i < params.size(); ++i)
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(params[i]))
+                EXPECT_TRUE(ranged->paramID == "muted" || ranged->paramID == "mix" || ranged->paramID == "pan")
+                    << testCase.name << " added outputLevel too early: " << ranged->paramID << " follows it";
     }
 }
 

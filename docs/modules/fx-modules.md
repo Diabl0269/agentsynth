@@ -286,13 +286,33 @@ Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, 
 Rules that make this safe:
 
 - **Opt-in, never in the `ModuleBase` ctor.** "Gain" is wrong on pitch/gate CV outputs — scaling a V/oct pitch CV transposes it, and scaling a gate drops it under the `> 0.5f` trigger threshold that ADSR uses. Sequencer, ADSR, LFO, Poly MIDI, MIDI Keyboard and External MIDI therefore do **not** adopt it. Attenuverter does not either — it already *is* a gain/polarity stage.
-- **Added last in the parameter list among value params.** Appending keeps every existing index pointing at the same parameter, so Level stays the last continuous control (only `muted` follows it). The Dual I/O toggle is *not* in this list any more — `ModuleBase`'s constructor adds it at index 1 (see § Stereo I/O), which is what made the repo-wide rule "look parameters up by ID, never `getParameters()[n]`" concrete. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
+- **Added last in the parameter list among value params.** Appending keeps every existing index pointing at the same parameter, so Level stays the last of the module's own controls (only `muted` and the base's shared `mix` / `pan` follow it). The Dual I/O toggle is *not* in this list any more — `ModuleBase`'s constructor adds it at index 1 (see § Stereo I/O), which is what made the repo-wide rule "look parameters up by ID, never `getParameters()[n]`" concrete. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
 - **Modules that already have a level/gain parameter do not get a second one** — Oscillator, LFO, Noise and Voice Mixer have `level`; VCA has `gain`; Limiter has `inputGain`; Compressor has `makeupGain`.
 - **`numAudioChannels` excludes CV.** Only the leading audio channels are scaled; CV input channels are left for the module's own clearing logic. Filter passes `8` in poly mode and `1` in mono.
 - **Bypass/mute contract is unchanged.** `applyOutputLevel` is never reached on the bypass branch (dry pass-through stays untouched, so Level cannot silence a bypassed module) nor on mute (already cleared). See [`architecture/module-base.md#bypassmute-contract`](../architecture/module-base.md#bypassmute-contract).
 - **It is an output stage, not an insert.** Delay applies it after the feedback write, so lowering Level does not starve the repeats; Reverb applies it after the wet/dry mix, so Wet/Dry still sets balance and Level sets absolute loudness.
 
 CV control of Level is deliberately **not** implemented — it would need a new input channel on every module, and CV channel indices are positional and hard-coded across `getModulationTargets`, `mapInputChannel`, the AI patch schema and the tests. Mono CV connections already route through an Attenuverter, which provides per-connection gain.
+
+## Mix and Pan (shared stage)
+
+Every audio-processing module can carry a `Mix` and a `Pan`, applied by `ModuleBase` after the module's own render (`Source/Modules/ModuleOutputStage.cpp`), in the same output stage as the [click-free bypass and mute transition](../architecture/module-base.md#the-transition-around-the-two-branches). Both are opt-in in the module's constructor, after `addMuteParameter()`, so existing parameter indices do not move:
+
+| Call | Parameter | Range | Default |
+|---|---|---|---|
+| `addMixParameter()` | `mix` ("Mix") | 0..1 | 1 (all wet) |
+| `addPanParameter()` | `pan` ("Pan") | -1..1 | 0 (centre) |
+
+- **Mix** blends the dry input of the audio legs back in: `out = dry * (1 - mix) + wet * mix`. It is carried by **Filter, Compressor, Gate and Parametric EQ**. Every FX that already has its own `mix` (Bitcrusher, Chorus, Delay, Distortion, Flanger, Phaser, Pitch Shifter, Reverb, Ring Modulator) keeps it and takes no second one. The **Limiter** has none: its lookahead latency would delay the wet against the dry and comb-filter the blend, and the same rule keeps Mix off any module that reports latency (`getLatencySamples()`).
+- **Pan** is a balance control on the left and right legs, using `ModuleBase::panGains` (centre leaves both legs at unity; moving away only attenuates the far leg). It is carried by the four modules above, every FX with its own Mix, and the Limiter. It acts only where the module has a right leg (`rightAudioLegChannel()`).
+- **Dual I/O collapsed.** A contiguous-pair FX (raw ch0/ch1) still balances its two legs, which travel together on the one Audio jack: a stereo destination hears the balance, a mono input sums or averages the pair and hears none. A split-block module (Filter) collapsed to one jack has no right jack to balance against, so its Pan rests.
+- **Smoothed** over 10 ms, so a knob move or an automation write never zippers.
+- **At rest it costs nothing and changes nothing**: Mix 1 and Pan 0 skip the stage, and the output is bit-identical to the module's own render. `ModuleMixPanTests.AtRestTheOutputIsBitIdenticalToTheModulesOwnRender` pins it.
+- **Bypass and mute win.** A bypassed module passes its dry input through untouched whatever Mix and Pan are, and a muted one stays silent at any Mix. During the bypass transition the wet signal carries Mix and Pan while it fades to the untouched dry.
+- **Not CV targets.** The shared `mix` and `pan` have no CV jack (adding jacks to every FX is out of scope, like the shared Level); they are automatable and MIDI-learnable, and `ComponentKnobCoverage` exempts them.
+- **Gain.** Both sit in `ModuleGainAudit`: neither can raise the output above the louder of dry and wet.
+
+On a card, Filter shows Mix and Pan in an Output section; on every other module they are not placed, so they sit in the card's "More controls" row.
 
 ## Distortion Module
 - **Algorithm**: Three waveshaper types selectable via the Type parameter:

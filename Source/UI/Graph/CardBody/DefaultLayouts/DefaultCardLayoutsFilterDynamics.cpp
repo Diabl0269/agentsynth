@@ -14,7 +14,8 @@ using namespace cardlayout;
 // with a footer they are pills in it; Poly joins it on its own. Key Track never dims: the card knows no
 // cable, so it cannot tell an unplugged Pitch input. In the Custom type Cutoff and Resonance (which it
 // ignores) swap in place for Shift and Depth, so the tone row keeps its size and Drive stays; the morph
-// knobs sit in their own section, which the card hides while its morph map stands in for them.
+// knobs sit in their own section, which the card hides while its morph map stands in for them. Mix and Pan
+// (the shared output stage) take one row of their own below Level.
 CardSection customSection() {
     auto custom = section("custom", "Custom", {param("morphX"), param("morphY")});
     custom.visibleWhen = CardCondition{"filterType", {"Custom"}, CardConditionEffect::Show};
@@ -32,6 +33,7 @@ CardLayout filterLayout() {
                  showWhen(param("resonance"), "filterType", ladderTypes),
                  showWhen(param("depth"), "filterType", {"Custom"}), param("drive")}),
         section("modulation", "Modulation", {param("keyTrack"), param("outputLevel")}),
+        section("output", std::nullopt, {param("mix"), param("pan")}),
         customSection(),
         footer({}),
     };
@@ -82,7 +84,7 @@ CardLayout gateLayout() {
 } // namespace
 
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults) {
-    defaults.add("Filter", filterLayout(), 3);
+    defaults.add("Filter", filterLayout(), 4);
     defaults.add("Compressor", compressorLayout(), 1);
     defaults.add("Limiter", limiterLayout(), 1);
     defaults.add("Gate", gateLayout(), 1);

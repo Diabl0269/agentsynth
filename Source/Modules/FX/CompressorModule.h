@@ -29,6 +29,8 @@ public:
         // Width of the soft knee centred on the threshold; 0 is the hard knee every patch had before.
         addParameter(kneeParam = new juce::AudioParameterFloat("knee", "Knee (dB)", 0.0f, 24.0f, 0.0f));
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

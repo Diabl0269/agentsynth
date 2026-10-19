@@ -24,6 +24,7 @@ public:
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

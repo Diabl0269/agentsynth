@@ -32,6 +32,7 @@ public:
                          new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
         addParameter(ceilingParam = new juce::AudioParameterFloat("ceiling", "Ceiling (dB)", -24.0f, 0.0f, 0.0f));
         addMuteParameter();
+        addPanParameter(); // no Mix: the lookahead latency would misalign the dry signal
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

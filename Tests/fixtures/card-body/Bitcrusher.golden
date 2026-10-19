@@ -1,4 +1,4 @@
-type Bitcrusher size 280x229
+type Bitcrusher size 280x255
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
   child 1 toggle id="" at 12,189 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
@@ -15,8 +15,11 @@ type Bitcrusher size 280x229
   child 13 label id="" at 12,153 35x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 slider id="Level" at 176,153 92x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 15 label id="" at 145,153 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 17 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 textButton id="cardMoreRow" at 12,217 256x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
+  child 19 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 20 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 122, 128
   in 2 37, 128

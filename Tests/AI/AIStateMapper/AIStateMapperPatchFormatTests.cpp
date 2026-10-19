@@ -126,17 +126,18 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // Output is still the graph's raw IO node and still has none.
         {"Audio Input", "bypassed"},
         {"Audio Output", ""},
-        {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
+        {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, pan, rate"},
         // The mixer's strip. Solo is deliberately NOT here: it is a render-time gate kept
         // in trusted extra state, never a parameter (docs/mixer/mixer.md#solo-is-a-render-time-gate).
         {"Channel Strip",
          "bypassed, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, send4Level, "
          "send4Pan"},
-        {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+        {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
-        {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, muted, ratio, release, threshold"},
-        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
-        {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
+        {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, mix, muted, pan, ratio, release, threshold"},
+        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pan, pingPong, tempoSync, time, "
+                  "timeDiv"},
+        {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, pan, type"},
         {"Drum Kit", "bypassed, clapDecay, clapLevel, clapRecorded, clapTune, closedDecay, cowbellDecay, "
                      "cowbellLevel, cowbellRecorded, cowbellTune, cymbalDecay, cymbalLevel, cymbalRecorded, "
                      "cymbalTune, dualIO, hatLevel, hatRecorded, hatTune, kickDecay, kickLevel, kickRecorded, "
@@ -144,18 +145,18 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                      "tomDecay, tomLevel, tomRecorded, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
-        {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, morphX, morphY, muted, outputLevel, "
-                   "poly, resonance, shift"},
+        {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, mix, morphX, morphY, "
+                   "muted, outputLevel, pan, poly, resonance, shift"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
                        "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
-        {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
-        {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
+        {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
+        {"Gate", "attack, bypassed, dualIO, hold, mix, muted, outputLevel, pan, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, dualIO, muted"},
         {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, morphX, morphY, muted, phase, rateHz, rateSync, "
                 "retrig, shape"},
-        {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, release, threshold"},
+        {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, pan, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         // The four Macro I/O port node types: pure pass-throughs, so the inherited
         // "bypassed" is the whole parameter set — same reasoning as Rec Tap/Track In/Track Audio,
@@ -178,12 +179,12 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Oscillator", "blend, bypassed, coarse, detune, dualIO, fine, glide, glideCurve, glideMode, legato, level, "
                        "muted, octave, pan, "
                        "phase, poly, pulseWidth, randomPhase, unison, waveform, width"},
-        {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
-                          "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
-                          "outputGain"},
-        {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
-        {"Pitch Shifter",
-         "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
+        {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, "
+                          "band3Freq, band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, "
+                          "dualIO, mix, muted, outputGain, pan"},
+        {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
+        {"Pitch Shifter", "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pan, pitch, shiftHz, "
+                          "shiftMode, window"},
         {"Pluck",
          "body, brightness, bypassed, decay, decayTrack, dualIO, fine, level, muted, pickHardness, pickPosition, "
          "release, stiffness, tune, velBright"},
@@ -196,8 +197,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                            "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
-        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, preDelay, roomSize, wet, width"},
-        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
+        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, pan, preDelay, roomSize, wet, width"},
+        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling, pan"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
          "attack, bypassed, density, dualIO, end, feel, fine, glide, grainSize, level, loop, mono, muted, pitch, "
