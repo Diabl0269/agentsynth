@@ -264,11 +264,17 @@ the reconcile pass:
 3. **Boundary cables.** A paste drops wires that left the selection; a duplicated track must not, so every cable between
    a copied module and a module that was not copied is re-created on the copy: into Master (the copy's channel is routed
    like a new track's), into a shared bus, and from a shared source. A modulation routing into a copied module from a
-   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A channel macro named after the
+   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A modulator (LFO, envelope)
+   that moves a copied module is copied with it and joins the copy's macro, so the copy is wrapped in its own macro
+   exactly like the original. A channel macro named after the
    track is renamed to the copy's name so two mixer columns never read the same.
 4. **Timeline.** `TimelineDoc::duplicateTrack` inserts the copy below the source with fresh ids on the track, clips, notes
-   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A lane whose module is
-   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The copy is named "<name> copy",
+   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A modulation
+   routing's amount lane (keyed by its hidden Attenuverter, which paste rebuilds) joins that map too, so a copied
+   modulator keeps the source track's drawn amount curve and the same undo step removes it. A lane whose module is
+   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The same goes for a lane, and
+   an LFO added on it, on the starter project's free-standing patch: that patch is not part of the track, so it has no
+   track macro to join and is not copied. The copy is named "<name> copy",
    takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
 
 Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row and the
