@@ -4,9 +4,11 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "Modules/LFOModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
 #include <map>
@@ -280,4 +282,114 @@ TEST_F(DuplicateTrackTest, UndoAndRedoRestoreTheExactDocumentAtAnySize) {
         ASSERT_TRUE(mc->getUndoManager().undo());
         EXPECT_EQ(state(), before) << tracks << " tracks";
     }
+}
+
+// A modulated parameter on the track: an LFO added the way the lane's "Add modulator" does (it joins the filter's
+// macro), with a drawn amount curve on the routing's hidden Attenuverter.
+class DuplicateTrackModulatorTest : public DuplicateTrackTest {
+protected:
+    struct Modulated {
+        synth::TrackId track;
+        juce::String attenuverterUuid;
+        std::vector<synth::AutomationLane::Breakpoint> points{{0.0, 0.25f}, {2.0, -0.5f}, {4.0, 1.0f}};
+    };
+
+    Modulated addModulatedCutoff(const juce::String& sourceType = "LFO") {
+        Modulated m;
+        m.track = addInstrumentTrack();
+        const auto start = nodeWithUuid(graph(), doc().getTrack(m.track)->bindingUuid);
+        // The first module of the track with a modulatable parameter (the starter instrument has no filter).
+        for (const auto uid : closureFrom(graph(), start)) {
+            auto* processor = graph().getNodeForId(NodeID(uid))->getProcessor();
+            for (auto* param : processor->getParameters()) {
+                const auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+                if (ranged == nullptr ||
+                    mc->getGraphEditor().modulationChannelFor(NodeID(uid), ranged->getParameterID()) < 0)
+                    continue;
+                juce::AudioProcessorGraph::NodeID atten;
+                const int raw = mc->getGraphEditor().modulationChannelFor(NodeID(uid), ranged->getParameterID());
+                if (sourceType == "LFO")
+                    mc->getGraphEditor().addLfoModulator(NodeID(uid), ranged->getParameterID(), /*recordUndo=*/true,
+                                                         1.0f, &atten);
+                else
+                    atten = mc->getGraphEditor().addModulationSourceModule(sourceType, 0, NodeID(uid), raw, 1.0f);
+                if (atten.uid == 0)
+                    continue;
+                m.attenuverterUuid = synth::AIStateMapper::ensureNodeUuid(graph().getNodeForId(atten));
+                synth::ui::writeAmountLane(doc(), m.track, m.attenuverterUuid, m.points);
+                return m;
+            }
+        }
+        return m;
+    }
+
+    int lfoCount(const juce::String& type = "LFO") {
+        int count = 0;
+        for (auto* node : graph().getNodes())
+            if (node->getProcessor()->getName().startsWith(type))
+                ++count;
+        return count;
+    }
+
+    // The amount lane of the (single) routing into the cutoff of the copy track's filter.
+    std::vector<synth::AutomationLane::Breakpoint> amountPointsOn(const synth::Track& track) {
+        for (const auto& lane : track.lanes)
+            if (lane.paramId == synth::ui::kAmountParamId)
+                return lane.points;
+        return {};
+    }
+};
+
+TEST_F(DuplicateTrackModulatorTest, ACopyOfATrackWithAModulatorIsWrappedInItsOwnMacroLikeTheOriginal) {
+    const auto m = addModulatedCutoff();
+    ASSERT_TRUE(m.attenuverterUuid.isNotEmpty()) << "the instrument track has a modulatable parameter";
+    const auto sourceName = doc().getTrack(m.track)->name;
+    const int macrosBefore = mc->getGraphEditor().getMacros().size();
+    ASSERT_EQ(lfoCount(), 1);
+
+    auto* header = mc->getTimelinePanel().getTrackHeaderAt(static_cast<int>(doc().getTracks().size()) - 1);
+    ASSERT_NE(header, nullptr);
+    ASSERT_TRUE(header->keyPressed(kCmdD));
+
+    EXPECT_EQ(lfoCount(), 2) << "the modulator is copied too";
+    EXPECT_EQ(mc->getGraphEditor().getMacros().size(), macrosBefore + 1);
+    ASSERT_EQ(macrosNamed(*mc, sourceName + " copy"), 1);
+    const synth::Macro* copyMacro = nullptr;
+    for (const auto& macro : mc->getGraphEditor().getMacros().getAll())
+        if (macro.name == sourceName + " copy")
+            copyMacro = &macro;
+    ASSERT_NE(copyMacro, nullptr);
+    int lfosInside = 0;
+    for (const auto& uuid : mc->getGraphEditor().getMacros().descendantMembers(copyMacro->id))
+        if (auto* node = graph().getNodeForId(nodeWithUuid(graph(), uuid));
+            node != nullptr && dynamic_cast<LFOModule*>(node->getProcessor()) != nullptr)
+            ++lfosInside;
+    EXPECT_EQ(lfosInside, 1) << "the copied LFO sits inside the copy's macro, as the original's does";
+}
+
+TEST_F(DuplicateTrackModulatorTest, AnEnvelopeModulatorAmongOtherTracksIsCopiedIntoTheCopysMacroToo) {
+    addInstrumentTrack();
+    const auto m = addModulatedCutoff("ADSR");
+    ASSERT_TRUE(m.attenuverterUuid.isNotEmpty());
+    const auto sourceName = doc().getTrack(m.track)->name;
+    const int envelopesBefore = lfoCount("ADSR");
+
+    auto* header = mc->getTimelinePanel().getTrackHeaderAt(static_cast<int>(doc().getTracks().size()) - 1);
+    ASSERT_NE(header, nullptr);
+    ASSERT_TRUE(header->keyPressed(kCmdD));
+
+    EXPECT_GT(lfoCount("ADSR"), envelopesBefore);
+    EXPECT_EQ(macrosNamed(*mc, sourceName + " copy"), 1);
+}
+
+TEST_F(DuplicateTrackModulatorTest, DuplicatingTheCopyAgainWrapsTheSecondCopyToo) {
+    const auto m = addModulatedCutoff();
+    ASSERT_TRUE(m.attenuverterUuid.isNotEmpty());
+    for (int round = 0; round < 2; ++round) {
+        auto* header = mc->getTimelinePanel().getTrackHeaderAt(static_cast<int>(doc().getTracks().size()) - 1 - round);
+        ASSERT_NE(header, nullptr);
+        ASSERT_TRUE(header->keyPressed(kCmdD));
+    }
+    EXPECT_EQ(lfoCount(), 3);
+    EXPECT_EQ(mc->getGraphEditor().getMacros().size(), 3);
 }

@@ -264,7 +264,9 @@ the reconcile pass:
 3. **Boundary cables.** A paste drops wires that left the selection; a duplicated track must not, so every cable between
    a copied module and a module that was not copied is re-created on the copy: into Master (the copy's channel is routed
    like a new track's), into a shared bus, and from a shared source. A modulation routing into a copied module from a
-   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A channel macro named after the
+   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A modulator (LFO, envelope)
+   that moves a copied module is copied with it and joins the copy's macro, so the copy is wrapped in its own macro
+   exactly like the original. A channel macro named after the
    track is renamed to the copy's name so two mixer columns never read the same.
 4. **Timeline.** `TimelineDoc::duplicateTrack` inserts the copy below the source with fresh ids on the track, clips, notes
    and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A lane whose module is
