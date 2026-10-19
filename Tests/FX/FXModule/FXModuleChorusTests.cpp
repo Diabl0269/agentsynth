@@ -1,4 +1,5 @@
 // FXModuleChorusTests.cpp — Chorus module coverage
+#include "../../ClickBoundHelpers.h"
 #include "Modules/FX/ChorusModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -74,4 +75,21 @@ TEST_F(ChorusModuleTest, PrepareToPlayAndProcessDoNotCrash) {
 TEST_F(ChorusModuleTest, ModuleTypeAndCategoryAreCorrect) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Chorus);
     EXPECT_EQ(module->getModulationCategory(), ModulationCategory::FX);
+}
+
+// ---------------------------------------------------------------------------
+// Click bound: a jump of Centre Delay
+// ---------------------------------------------------------------------------
+
+using namespace clickbound;
+
+// Regression test for FRO1022: Centre Delay reached the delay line once per block, so a jump of the knob
+// moved the read head by a whole block's share of the glide at every block edge.
+TEST(ChorusClickBound, CentreDelayJumpGlidesInsteadOfStepping) {
+    for (const bool up : {true, false}) {
+        ChorusModule m;
+        setActual(m, "centreDelay", up ? 1.0f : 30.0f);
+        const auto steps = measureEdge(m, {}, {0, 1}, [&] { setActual(m, "centreDelay", up ? 30.0f : 1.0f); });
+        EXPECT_NO_CLICK(steps) << (up ? "minimum to maximum" : "maximum to minimum");
+    }
 }

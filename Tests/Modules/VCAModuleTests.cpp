@@ -1,3 +1,4 @@
+#include "../ClickBoundHelpers.h"
 #include "Modules/VCAModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -139,4 +140,26 @@ TEST_F(VCAModuleTest, EnvelopeFiringLateInTheBlockStillGatesTheBlock) {
 
     EXPECT_FLOAT_EQ(buffer.getSample(0, 100), 0.0f);
     EXPECT_NEAR(buffer.getSample(0, 300), 0.5f, 1.0e-4f);
+}
+
+// ---------------------------------------------------------------------------
+// Click bound: bypass and mute fade the legacy ch1 copy of the output as well
+// ---------------------------------------------------------------------------
+
+// Regression test for FRO1022: mono VCA copies its output onto ch1; that copy is not an audio leg, so the
+// bypass/mute fade left it switching between the copy and the cleared CV block in one sample.
+TEST(VCAClickBound, Ch1CopyFadesWithBypassAndMute) {
+    for (const char* flag : {"bypassed", "muted"}) {
+        for (const bool turnOn : {true, false}) {
+            VCAModule vca;
+            if (!turnOn)
+                clickbound::setNormalised(vca, flag, 1.0f);
+            clickbound::Input in;
+            in.audioChannels = 1;
+            in.held = {{1, 1.0f}}; // gain CV
+            const auto steps = clickbound::measureEdge(
+                vca, in, {0, 1}, [&] { clickbound::setNormalised(vca, flag, turnOn ? 1.0f : 0.0f); });
+            EXPECT_NO_CLICK(steps) << flag << (turnOn ? " on" : " off");
+        }
+    }
 }

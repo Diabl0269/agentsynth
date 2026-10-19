@@ -228,6 +228,10 @@ public:
      */
     virtual bool bypassPassesInputThrough() const { return true; }
 
+    /** A raw output channel that carries a copy of an audio leg but is not an audio jack (VCA's legacy ch1), or
+        -1. The output stage fades it with the legs so the copy does not switch on and off by itself. */
+    virtual int duplicateOutputChannel() const { return -1; }
+
     /** Opt-in `mix` (0..1, default 1) and `pan` (-1..1, default 0) applied after processModuleBlock; add last. */
     void addMixParameter() { outputStage_.addMix(*this); }
     void addPanParameter() { outputStage_.addPan(*this); }

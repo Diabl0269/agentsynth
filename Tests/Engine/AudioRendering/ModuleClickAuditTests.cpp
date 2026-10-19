@@ -56,17 +56,8 @@ const std::vector<ProcessorCase>& processorCases() {
 
 // Audit findings that click today. Each names the module, the edge and why; the case still renders and
 // prints its step, is skipped while it clicks, and FAILS once it stops clicking so the entry gets removed.
-constexpr const char* kStaleLine =
-    "the delay line is not written while muted or bypassed, so coming back plays stale echoes that step against "
-    "the live signal; the fade ModuleBase adds cannot hide a step inside the module's own output";
-constexpr const char* kLegacyDuplicate =
-    "the vestigial ch1 duplicate of the mono output is not an audio leg, so ModuleBase cannot fade it and it "
-    "switches between a copy of the output and the cleared CV block";
-constexpr const char* kDelayJump = "the delay read position jumps with the parameter; the tap is not crossfaded";
-constexpr const char* kCeilingJump =
-    "the brickwall ceiling is applied unsmoothed (by design), so a drop clamps in one step";
-constexpr const char* kBlockRateGain = "the gain computer follows the parameter at block rate, so the gain steps";
-
+// Empty: every module passes the bound. A new finding goes here with a reason constant, never into a
+// looser limit.
 struct KnownClick {
     const char* module;
     const char* edge;
@@ -74,26 +65,7 @@ struct KnownClick {
 };
 
 const std::vector<KnownClick>& knownClicks() {
-    static const std::vector<KnownClick> clicks = {
-        {"VCA", "bypass_on", kLegacyDuplicate},
-        {"VCA", "bypass_off", kLegacyDuplicate},
-        {"VCA", "mute_on", kLegacyDuplicate},
-        {"VCA", "mute_off", kLegacyDuplicate},
-        {"Delay", "bypass_off", kStaleLine},
-        {"Delay", "mute_off", kStaleLine},
-        {"Delay", "time_min_to_max", kDelayJump},
-        {"Delay", "time_max_to_min", kDelayJump},
-        {"Chorus", "centreDelay_min_to_max", kDelayJump},
-        {"Chorus", "centreDelay_max_to_min", kDelayJump},
-        {"Flanger", "mute_off", kStaleLine},
-        {"Flanger", "centreDelay_min_to_max", kDelayJump},
-        {"Flanger", "centreDelay_max_to_min", kDelayJump},
-        {"Limiter", "ceiling_max_to_min", kCeilingJump},
-        {"Compressor", "threshold_min_to_max", kBlockRateGain},
-        {"Compressor", "threshold_max_to_min", kBlockRateGain},
-        {"Compressor", "ratio_min_to_max", kBlockRateGain},
-        {"Compressor", "attack_max_to_min", kBlockRateGain},
-    };
+    static const std::vector<KnownClick> clicks = {};
     return clicks;
 }
 

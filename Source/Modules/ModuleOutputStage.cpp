@@ -293,6 +293,7 @@ void ModuleBase::buildOutputLegs(synth::OutputLegs& legs, int bufferChannels) co
     // A collapsed jack owns both raw legs without marking the second one a head.
     for (int v = 0; right > 0 && v < rightSpan; ++v)
         add(right + v);
+    add(duplicateOutputChannel());
 }
 
 void ModuleBase::renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {

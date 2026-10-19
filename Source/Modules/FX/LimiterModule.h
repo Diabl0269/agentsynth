@@ -95,8 +95,7 @@ public:
         // Release (read above) is a detector time constant: stepping it changes how fast gain
         // recovers, never the current gain. Deliberately not smoothed.
         smoothedThreshold.skip(numSamples);
-        // Ceiling is not smoothed: the stage reacts to a lower ceiling the way it reacts to a louder
-        // peak (down at once), and a higher one is given back over the release time.
+        // Ceiling glides inside the stage (10 ms), so a jump of the setting is not a step in the output.
         const float ceilingDb = modulateNormalised(*ceilingParam, *ceilingParam, blockCV(buffer, kCeilingCvChannel));
 
         // Apply input gain per-sample (smoothed)

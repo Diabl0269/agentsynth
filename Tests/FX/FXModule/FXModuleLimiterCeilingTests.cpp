@@ -1,4 +1,5 @@
 // FXModuleLimiterCeilingTests.cpp -- Limiter Ceiling and the gain-reduction meter source.
+#include "../../ClickBoundHelpers.h"
 #include "Modules/FX/LimiterModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -206,4 +207,44 @@ TEST(LimiterGainReduction, CeilingReductionIsIncludedInTheReading) {
     ASSERT_NE(openSource, nullptr);
     ASSERT_NE(cappedSource, nullptr);
     EXPECT_GT(cappedSource->getGainReductionDb(), openSource->getGainReductionDb() + 10.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Click bound: a jump of Ceiling
+// ---------------------------------------------------------------------------
+
+// Regression test for FRO1022: a ceiling dropped from 0 to -24 dBFS clamped the signal in one step.
+TEST(LimiterCeilingClickBound, CeilingDropGlidesAndNeverPassesTheCurrentCeiling) {
+    LimiterModule m;
+    setActual(m, "ceiling", 0.0f);
+    const auto steps = clickbound::measureEdge(m, {}, {0, 1}, [&] { setActual(m, "ceiling", -24.0f); });
+    EXPECT_NO_CLICK(steps);
+}
+
+TEST(LimiterCeilingClickBound, OutputStaysUnderTheGlidingCeiling) {
+    LimiterModule m;
+    m.prepareToPlay(kRate, kBlock);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> buffer(kChannels, kBlock);
+    const auto fill = [&] {
+        buffer.clear();
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                buffer.setSample(ch, i, 0.9f * (float)std::sin(0.06 * i));
+    };
+    for (int b = 0; b < 4; ++b) {
+        fill();
+        m.processBlock(buffer, midi);
+    }
+    setActual(m, "ceiling", -24.0f);
+    fill();
+    m.processBlock(buffer, midi);
+    // The ceiling falls from 1.0 to 10^(-24/20) over 10 ms (441 samples), evenly in dB.
+    const float end = std::pow(10.0f, -24.0f / 20.0f);
+    for (int i = 0; i < kBlock; ++i) {
+        const float progress = std::min(1.0f, (float)(i + 1) / (0.01f * (float)kRate));
+        const float ceiling = std::pow(end, progress);
+        EXPECT_LE(std::abs(buffer.getSample(0, i)), ceiling + 1.0e-4f) << "sample " << i;
+        EXPECT_LE(std::abs(buffer.getSample(1, i)), ceiling + 1.0e-4f) << "sample " << i;
+    }
 }

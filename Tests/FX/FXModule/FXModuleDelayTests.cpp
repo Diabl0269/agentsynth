@@ -1,4 +1,5 @@
 // FXModuleDelayTests.cpp — Delay module coverage
+#include "../../ClickBoundHelpers.h"
 #include "Modules/FX/DelayModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -267,4 +268,90 @@ TEST(DelayPingPong, ASummedMonoInputBouncesAtTheSameLevel) {
     m.prepareToPlay(kDelaySr, kDelayBlock);
     const auto r = impulseResponse(m, 12000, 0.8f, /*bothLegs=*/true);
     EXPECT_NEAR(r[0][11025], 0.8f, 1e-5f) << "(L + R) / 2 of identical legs is the input itself";
+}
+
+// ---------------------------------------------------------------------------
+// Click bound: a jump of the delay time, and coming back from bypass or mute
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<int> delayLegs() { return {0, 1}; }
+
+} // namespace
+
+// Regression test for FRO1022: the read position jumped with the Time knob, a step in the output.
+TEST(DelayClickBound, TimeJumpCrossfadesTheTaps) {
+    for (const bool up : {true, false}) {
+        DelayModule m;
+        setDelayParam(m, "time", up ? 1.0f : 1000.0f);
+        const auto steps =
+            clickbound::measureEdge(m, {}, delayLegs(), [&] { setDelayParam(m, "time", up ? 1000.0f : 1.0f); });
+        EXPECT_NO_CLICK(steps) << (up ? "1 ms to 1000 ms" : "1000 ms to 1 ms");
+    }
+}
+
+// Regression test for FRO1022: a tempo-synced division change goes through the same crossfade.
+TEST(DelayClickBound, TempoSyncedDivisionChangeCrossfadesTheTaps) {
+    for (const bool up : {true, false}) {
+        DelayModule m;
+        FixedTempo tempo;
+        m.setPlayHead(&tempo);
+        setDelayParam(m, "tempoSync", 1.0f);
+        delayParam(m, "timeDiv")->setValueNotifyingHost(up ? 0.0f : 0.5f);
+        const auto steps = clickbound::measureEdge(
+            m, {}, delayLegs(), [&] { delayParam(m, "timeDiv")->setValueNotifyingHost(up ? 0.5f : 0.0f); });
+        EXPECT_NO_CLICK(steps);
+    }
+}
+
+// A small move of the time still glides (the read head speeds up a little) instead of crossfading, so
+// the repeats are one continuous sound that bends.
+TEST(DelayClickBound, SmallTimeMoveGlides) {
+    DelayModule m;
+    setDelayParam(m, "time", 250.0f);
+    const auto steps = clickbound::measureEdge(m, {}, delayLegs(), [&] { setDelayParam(m, "time", 260.0f); });
+    EXPECT_NO_CLICK(steps);
+}
+
+// Regression test for FRO1022: the line was not written while bypassed or muted, so coming back played
+// echoes of what it heard before.
+TEST(DelayClickBound, ComingBackFromBypassOrMuteStartsFromAnEmptyLine) {
+    for (const char* flag : {"bypassed", "muted"}) {
+        DelayModule m;
+        setDelayParam(m, "mix", 1.0f);
+        setDelayParam(m, "time", 100.0f);
+        m.prepareToPlay(kDelaySr, kDelayBlock);
+        juce::MidiBuffer midi;
+        juce::AudioBuffer<float> buf(5, kDelayBlock);
+        const auto feed = [&](float level) {
+            buf.clear();
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < kDelayBlock; ++i)
+                    buf.setSample(ch, i, level);
+            m.processBlock(buf, midi);
+        };
+        for (int b = 0; b < 12; ++b)
+            feed(0.5f);
+        delayParam(m, flag)->setValueNotifyingHost(1.0f);
+        for (int b = 0; b < 4; ++b)
+            feed(0.5f);
+        delayParam(m, flag)->setValueNotifyingHost(0.0f);
+        for (int b = 0; b < 3; ++b)
+            feed(0.0f); // silence in: only stale echoes could come out (mix is fully wet)
+        float loudest = 0.0f;
+        for (int i = 0; i < kDelayBlock; ++i)
+            loudest = std::max(loudest, std::abs(buf.getSample(0, i)));
+        EXPECT_EQ(loudest, 0.0f) << flag;
+    }
+}
+
+TEST(DelayClickBound, BypassAndMuteReturnStayWithinTheBound) {
+    for (const char* flag : {"bypassed", "muted"}) {
+        DelayModule m;
+        delayParam(m, flag)->setValueNotifyingHost(1.0f);
+        const auto steps =
+            clickbound::measureEdge(m, {}, delayLegs(), [&] { delayParam(m, flag)->setValueNotifyingHost(0.0f); });
+        EXPECT_NO_CLICK(steps) << flag;
+    }
 }
