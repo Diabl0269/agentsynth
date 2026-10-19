@@ -20,6 +20,9 @@ owner gives it `Actions` (run a control, can it act now, what the tooltip adds) 
 - **Names**: the accessible name is the control's name ("Read / Write", "Remove modulator" on a mod lane), the tooltip
   "Name: what it does" (Read / Write adds the current mode). Chips are Tab stops with the accent ring; Return and Space
   press; every other key (Up/Down, Cmd+Alt+Up/Down) bubbles to the header. A right-click on a chip opens the lane menu.
+- **Replace Module**: Cmd+Alt+R (Ctrl+Alt+R off the Mac) with a lane header focused replaces the lane's target module, and
+  with a modulator row focused the row's source module. The header and row leave the chord to the app; the canvas then
+  shows and selects the card and opens the "Replace with..." picker on it.
 - **Narrow header**: chips that do not fit the strip's width (the module note keeps 40 px, a mod row's name 40 px) are
   not drawn and are listed in the "+" row.
 - **The "+" row** (`LaneControlMoreRow`, "More actions for this lane"): a labelled button for every catalogue control

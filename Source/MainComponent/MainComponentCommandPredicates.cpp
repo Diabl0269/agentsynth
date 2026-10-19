@@ -4,7 +4,9 @@
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 // ---- Named isActive predicates shared by more than one row ----
 
@@ -31,6 +33,44 @@ synth::ui::AutomationLaneEditor* MainComponent::activeLaneEditor() const {
 synth::LaneId MainComponent::activeLane() const {
     const auto focused = timelinePanel.getAutomationLanes().focusedLane();
     return focused.isValid() ? focused : timelinePanel.getSelectedAutomationLane();
+}
+
+// The module Replace Module acts on when the timeline owns focus: a focused modulator row's source (the LFO), else
+// the focused lane's target module. Empty when neither (the canvas selection then decides).
+juce::String MainComponent::replaceModuleTargetUuid() const {
+    const auto& lanes = timelinePanel.getAutomationLanes();
+    const auto* focused = getFocusedComponentForMenu();
+    if (!bottomDock.isTimelineShowing() || focused == nullptr)
+        return {};
+    if (const auto source = lanes.modulatorSourceOwning(focused); source.isNotEmpty())
+        return source;
+    if (const auto* lane = timelineDoc.getLane(lanes.laneOwning(focused)))
+        return lane->nodeUuid;
+    return {};
+}
+
+bool MainComponent::canReplaceModuleFromShortcut() const {
+    const auto uuid = replaceModuleTargetUuid();
+    if (uuid.isEmpty())
+        return graphEditor.getCardKeyboard().canReplaceSelectedModule();
+    const auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return false;
+    for (auto* card : graphEditor.getModuleComponents())
+        if (card != nullptr && card->getNodeId() == node->nodeID)
+            return card->isVisible() && card->canReplace(); // a member of a collapsed group has no visible card
+    return false;
+}
+
+bool MainComponent::replaceModuleFromShortcut() {
+    const auto uuid = replaceModuleTargetUuid();
+    if (uuid.isEmpty())
+        return graphEditor.getCardKeyboard().replaceSelectedModule();
+    if (!canReplaceModuleFromShortcut())
+        return false;
+    showNodeOnCanvas(uuid); // switches to the canvas and selects the card, so the picker opens where it can be seen
+    graphEditor.grabKeyboardFocus();
+    return graphEditor.getCardKeyboard().replaceSelectedModule();
 }
 
 // True while the active lane editor has a point selected.

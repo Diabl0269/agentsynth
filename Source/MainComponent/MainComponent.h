@@ -413,6 +413,11 @@ private:
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
     synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
     synth::LaneId activeLane() const;                          // the lane the lane commands (Duplicate) act on
+    // Replace Module (Cmd/Ctrl+Alt+R): the canvas card's own verb, or -- with a lane header/editor or a modulator
+    // row focused -- the lane's target module / the row's source module, revealed on the canvas first.
+    juce::String replaceModuleTargetUuid() const;
+    bool canReplaceModuleFromShortcut() const;
+    bool replaceModuleFromShortcut();
     bool hasPointSelection() const;
     bool isTimelineReachable() const; // in the open dock or in the main area: the Timeline commands apply
     bool isZoomCommandActive(juce::CommandID id) const;
