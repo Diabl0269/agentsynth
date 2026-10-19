@@ -251,6 +251,8 @@ struct TrackHeaderHost {
         juce::String nodeUuid;
         juce::String paramId;
         int paramIndex = -1;
+        enum class Placement { Unspecified, InTrack, Shared }; // add-track.md: where the picker says the module lives
+        Placement placement = Placement::Unspecified;
         juce::String moduleTitle;   // the picker's group header
         juce::String parameterName; // the picker's row text
     };

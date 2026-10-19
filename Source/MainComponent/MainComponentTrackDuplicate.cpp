@@ -192,17 +192,15 @@ void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies,
 
 } // namespace
 
-// The graph half, then the timeline half, inside the caller's ONE undo transaction. Returns the new
-// track, or an invalid id when the copy failed (the caller checked kMaxTracks, so only a snippet
-// the insert path refuses can fail).
-synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const juce::String& copyName) {
+// The nodes Duplicate Track copies for `trackId`, and the add-automation picker calls the track's own: the nodes this
+// track plays and no other track does (the ownership rule automation lanes use), minus the shared output dock, that a
+// cable path through them links to the track's start.
+std::vector<juce::AudioProcessorGraph::NodeID> MainComponent::nodesAttachedToTrack(synth::TrackId trackId) {
     auto& graph = audioEngine.getGraph();
     const auto* source = timelineDoc.getTrack(trackId);
-    if (source == nullptr)
+    if (source == nullptr || source->bindingUuid.isEmpty())
         return {};
 
-    // The nodes this track plays and no other track does (the ownership rule automation lanes use),
-    // minus the shared output dock.
     const auto owners = resolveAutomationOwners();
     const synth::ui::ConnectionIndex cables(graph); // read-only walks below; the insert and rewire come after
     const auto dock = outputDockNodes(graph, cables);
@@ -214,8 +212,21 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
     }
     std::vector<NodeID> originals;
     for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == source->bindingUuid && source->bindingUuid.isNotEmpty())
+        if (node->properties["uuid"].toString() == source->bindingUuid)
             originals = attachedToTrack(graph, cables, node->nodeID, owned, dock);
+    return originals;
+}
+
+// The graph half, then the timeline half, inside the caller's ONE undo transaction. Returns the new
+// track, or an invalid id when the copy failed (the caller checked kMaxTracks, so only a snippet
+// the insert path refuses can fail).
+synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const juce::String& copyName) {
+    auto& graph = audioEngine.getGraph();
+    const auto* source = timelineDoc.getTrack(trackId);
+    if (source == nullptr)
+        return {};
+
+    const auto originals = nodesAttachedToTrack(trackId);
 
     std::map<juce::String, juce::String> uuidRemap;
     if (!originals.empty()) {

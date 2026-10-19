@@ -495,6 +495,7 @@ private:
     };
     /** duplicateTrack's graph + timeline work (MainComponentTrackDuplicate.cpp); the caller owns the undo step. */
     synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName);
+    std::vector<juce::AudioProcessorGraph::NodeID> nodesAttachedToTrack(synth::TrackId track);
     /** Shared insert path; opens NO undo transaction of its own -- the caller must. */
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
                                           const juce::String& trackNamePrefix);

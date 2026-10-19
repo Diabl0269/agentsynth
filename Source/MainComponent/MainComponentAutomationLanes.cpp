@@ -10,6 +10,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
+#include <set>
 
 namespace {
 
@@ -114,11 +115,26 @@ MainComponent::getAutomatableParameters(synth::TrackId track) {
         return unassigned ? owner == owners.end() : (owner != owners.end() && owner->second == track);
     };
 
+    // Which of those modules sit inside the track (Duplicate Track copies them) and which only feed it or are
+    // shared, so the picker can say so. The Automation track's list is all unowned modules: nothing to say.
+    std::set<juce::uint32> attached;
+    if (!unassigned)
+        for (const auto id : nodesAttachedToTrack(track))
+            attached.insert(id.uid);
+    using Placement = synth::ui::TrackHeaderHost::AutomatableParameter::Placement;
+    const auto placementOf = [&](juce::uint32 uid) {
+        return unassigned ? Placement::Unspecified
+                          : (attached.count(uid) != 0 ? Placement::InTrack : Placement::Shared);
+    };
+
     for (auto* node : audioEngine.getGraph().getNodes()) {
         auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
         if (module == nullptr || isHiddenHelperModule(*module) || !belongs(detail::ownershipKey(*node)))
             continue;
+        const auto first = result.size();
         appendModuleParameters(*node, *module, synth::moduleTitle(*node), timelineDoc, result);
+        for (auto i = first; i < result.size(); ++i)
+            result[i].placement = placementOf(node->nodeID.uid);
     }
 
     // Hosted-plugin instance parameters and Channel Strip send slots: the existing "Add lane..." sources,
@@ -129,6 +145,7 @@ MainComponent::getAutomatableParameters(synth::TrackId track) {
         synth::ui::TrackHeaderHost::AutomatableParameter entry;
         if (auto* node = findNodeByUuid(option.nodeUuid))
             entry.nodeUid = node->nodeID.uid;
+        entry.placement = placementOf(entry.nodeUid);
         entry.nodeUuid = option.nodeUuid;
         entry.paramId = option.paramId;
         entry.paramIndex = option.paramIndex;

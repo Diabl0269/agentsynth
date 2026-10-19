@@ -67,6 +67,16 @@ The track-preset lists follow the same build-time-snapshot rule
 (`audioTrackPresetMenuSnapshot_` / `instrumentTrackPresetMenuSnapshot_`), since a preset can be
 saved or deleted between the menu opening and the click landing.
 
+## Where the "Add automation..." picker says a module lives
+
+A track's "Add automation..." picker ([automation](automation.md#adding-a-lane-from-the-timeline)) groups its rows by
+module, and each group header says where the module is: "Oscillator · in Bass" for a module inside the track (the nodes
+Duplicate Track copies, `MainComponent::nodesAttachedToTrack`; `AutomatableParameter::placement` is `InTrack`) and
+"Oscillator · shared" for one the track only feeds from or adopts, such as the default project's free-standing starter
+patch (`Shared`); a lane on a shared module is not copied by Duplicate Track. The track's own groups come first, shared
+ones after, each set in its usual order. Search still matches parameter and module names, and the headings and rows read
+the same wording to a screen reader (`ModMatrixPicker::Item::accessibleName`). The Unassigned section's list has no labels.
+
 ## Left/right jacks preference
 
 Modules a new track builds follow **Preferences -> "Split Left/Right jacks on new modules"** and its

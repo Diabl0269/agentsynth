@@ -311,6 +311,8 @@ void ModMatrixPicker::rebuildRows() {
             }));
         rows_.back()->setSearchText(item.searchText);
         rows_.back()->setDetail(item.detail);
+        if (item.accessibleName.isNotEmpty())
+            rows_.back()->setTitle(item.accessibleName);
         rows_.back()->setPickable(item.enabled);
         rows_.back()->setMarks(item.ticked, item.isNew, gutter);
         rowColumn_.addAndMakeVisible(*rows_.back());
