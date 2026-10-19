@@ -346,25 +346,25 @@ TEST(OscillatorVoiceFeel, PolyVoiceRestartsWhenItGoesFromSilentToSounding) {
 
 namespace {
 
-// The mean of the sines of the unison voices selected by `keep`, started at phase 0.
+// The constant-power sum of the sines of the unison voices, started at phase 0.
 std::vector<double> expectedStack(int count, double cents, double blend, bool useBlend, size_t numSamples) {
     std::vector<double> out(numSamples, 0.0);
-    double sumGain = 0.0;
+    double sumPower = 0.0;
     for (int u = 0; u < count; ++u) {
         const double gain = (!useBlend || synth::isUnisonCentreVoice(u, count)) ? 1.0 : blend;
-        sumGain += gain;
+        sumPower += gain * gain;
         const double ratio = std::pow(2.0, cents * synth::unisonOffsetFraction(u, count) / 1200.0);
         for (size_t i = 0; i < numSamples; ++i)
             out[i] += gain * std::sin(kTwoPi * (double)i * dtFor(440.0) * ratio);
     }
     for (auto& v : out)
-        v /= sumGain;
+        v /= std::sqrt(sumPower);
     return out;
 }
 
 } // namespace
 
-TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsThePlainAverage) {
+TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsTheConstantPowerSum) {
     Rig rig;
     setActual(rig.osc, "unison", 4.0f);
     setActual(rig.osc, "detune", 30.0f);
@@ -418,9 +418,10 @@ TEST(OscillatorVoiceFeel, WidthSpreadsTheStackAcrossBothLegsWithoutAddingGain) {
         const double spread = energy(wide.first, 0, n) + energy(wide.second, 0, n);
         EXPECT_LE(spread, mono * 1.001) << "spreading the voices never adds level";
         EXPECT_GT(spread, mono * 0.2) << "and does not lose the signal";
+        // Four in-phase voices of a constant-power stack peak at sqrt(4); downstream stages own that headroom.
         for (size_t i = 0; i < n; ++i) {
-            ASSERT_LE(std::abs(wide.first[i]), 1.001f);
-            ASSERT_LE(std::abs(wide.second[i]), 1.001f);
+            ASSERT_LE(std::abs(wide.first[i]), 2.05f);
+            ASSERT_LE(std::abs(wide.second[i]), 2.05f);
         }
     }
 }
@@ -452,21 +453,52 @@ TEST(OscillatorVoiceFeel, AnAutomatedBlendAndWidthGlideInsteadOfStepping) {
     EXPECT_LT(worst, 0.2f);
 }
 
-TEST(OscillatorVoiceFeel, SourcePeakStaysUnderUnityAcrossBlendAndWidth) {
-    for (const float blend : {0.0f, 0.5f, 1.0f}) {
+// A constant-power stack can peak at sqrt(N) when its voices start in phase (the default Rand 0 does exactly
+// that); the headroom for it is handled downstream, so the source only has to stay within sqrt(N). Its loudness
+// is checked with decorrelated start phases, where uncorrelated voices must keep the level of one.
+TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
+    constexpr int kVoices = 8;
+    auto render = [](int unison, float blend, float width, float rand, std::vector<float>& left,
+                     std::vector<float>& right) {
+        Rig rig;
+        setActual(rig.osc, "unison", (float)unison);
+        setActual(rig.osc, "detune", 60.0f);
+        setActual(rig.osc, "waveform", 2.0f); // Saw: the hottest of the four
+        setActual(rig.osc, "blend", blend);
+        setActual(rig.osc, "width", width);
+        setActual(rig.osc, "randomPhase", rand);
+        rig.settle();
+        rig.render(40, {{0, 0, 60, true}});
+        left = rig.left;
+        right = rig.right;
+    };
+    auto rmsDb = [](const std::vector<float>& x) {
+        double e = 0.0;
+        for (size_t i = (size_t)kBlock; i < x.size(); ++i)
+            e += (double)x[i] * x[i];
+        return 10.0 * std::log10(e / (double)(x.size() - (size_t)kBlock));
+    };
+    std::vector<float> left, right;
+    render(1, 1.0f, 0.0f, 0.0f, left, right);
+    const double singleDb = rmsDb(left);
+    for (const float blend : {0.5f, 1.0f}) {
         for (const float width : {0.0f, 1.0f}) {
-            Rig rig;
-            setActual(rig.osc, "unison", 8.0f);
-            setActual(rig.osc, "detune", 60.0f);
-            setActual(rig.osc, "waveform", 2.0f); // Saw: the hottest of the four
-            setActual(rig.osc, "blend", blend);
-            setActual(rig.osc, "width", width);
-            rig.settle();
-            rig.render(6, {{0, 0, 60, true}});
+            render(kVoices, blend, width, 0.0f, left, right);
             float peak = 0.0f;
-            for (size_t i = (size_t)kBlock; i < rig.left.size(); ++i)
-                peak = std::max({peak, std::abs(rig.left[i]), std::abs(rig.right[i])});
-            EXPECT_LE(peak, 1.05f) << "blend " << blend << " width " << width;
+            for (size_t i = (size_t)kBlock; i < left.size(); ++i)
+                peak = std::max({peak, std::abs(left[i]), std::abs(right[i])});
+            EXPECT_LE(peak, std::sqrt((float)kVoices) * 1.05f) << "blend " << blend << " width " << width;
+
+            if (width == 0.0f) {
+                render(kVoices, blend, width, 100.0f, left, right);
+                EXPECT_NEAR(rmsDb(left), singleDb, 1.5) << "blend " << blend;
+            }
         }
     }
+    // Blend 0 keeps only the two centre voices, each at full level, so it peaks at sqrt(2) in phase.
+    render(kVoices, 0.0f, 0.0f, 0.0f, left, right);
+    float peak = 0.0f;
+    for (size_t i = (size_t)kBlock; i < left.size(); ++i)
+        peak = std::max(peak, std::abs(left[i]));
+    EXPECT_LE(peak, std::sqrt(2.0f) * 1.05f);
 }

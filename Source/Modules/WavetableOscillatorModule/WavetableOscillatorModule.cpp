@@ -784,25 +784,25 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
     const float width = juce::jlimit(0.0f, 1.0f, widthParam->get() + cvAt(kJackWidth, 0));
     const float blend = juce::jlimit(0.0f, 1.0f, blendParam->get() + cvAt(kJackBlend, 0));
 
-    float gainSum = 0.0f;
+    float powerSum = 0.0f;
     for (int u = 0; u < bs.unisonCount; ++u) {
         const float cents = bs.detuneCents * synth::unisonOffsetFraction(u, bs.unisonCount);
         const float semis = stackSemitones(bs.stack, u, bs.unisonCount);
         bs.uniRatio[u] = std::pow(2.0f, semis / 12.0f + cents / 1200.0f);
 
-        // Blend fades the detuned/stacked voices against an always-present centre, so
-        // turning it down thins the chorus without changing the fundamental's level.
-        const float voiceGain = (u == 0) ? 1.0f : blend;
+        // Blend fades the detuned/stacked voices against an always-present centre (the voices
+        // nearest the root), so turning it down thins the chorus without changing the fundamental's level.
+        const float voiceGain = synth::unisonBlendGain(u, bs.unisonCount, blend);
         float gl, gr;
         synth::unisonPanGains(u, bs.unisonCount, width, gl, gr);
         bs.uniGainL[u] = gl * voiceGain;
         bs.uniGainR[u] = gr * voiceGain;
-        gainSum += voiceGain;
+        powerSum += voiceGain * voiceGain;
     }
 
-    // At width 0 / blend 1 every unison voice contributes unity to both legs, so this
-    // reduces to the plain 1/unisonCount average — Audio L keeps its mono level.
-    bs.uniNormalise = (gainSum > 0.0f) ? (1.0f / gainSum) : 1.0f;
+    // Constant power: divide by the root of the summed squared gains, so a stack of uncorrelated
+    // voices keeps the loudness of one voice. A single voice divides by exactly 1.
+    bs.uniNormalise = (powerSum > 0.0f) ? (1.0f / std::sqrt(powerSum)) : 1.0f;
     return bs;
 }
 

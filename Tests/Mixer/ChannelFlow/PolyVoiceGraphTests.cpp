@@ -332,3 +332,29 @@ TEST(PolyVoiceGraphTests, PolyMidiHoldsAChordOnSeveralVoices) {
 
     EXPECT_EQ(std::popcount(static_cast<unsigned>(polyMidi->getActiveVoiceMask())), 3);
 }
+
+// Regression test for FRO848: a single note must be as loud in the default poly chain as in the mono one, so
+// both VCAs sit at gain 0.5 (-6 dB per-voice headroom) and the poly VCA sums its voices at unity.
+TEST(PolyVoiceGraphTests, DefaultInstrumentChainVcasShareTheSameHeadroomGain) {
+    PolyRig rig;
+    auto* trackIn = rig.add("Midi Input");
+    auto* osc = rig.add("Oscillator");
+    *dynamic_cast<juce::AudioParameterBool*>(findParameterByID(osc->getProcessor(), "poly")) = true;
+
+    const auto chain =
+        synth::addPolyEnvelopeAndVCAForInstrument(rig.graph(), *trackIn, *osc, {0, 0}, {300, 0}, {600, 0});
+    ASSERT_NE(chain.vca, nullptr);
+
+    auto* gain = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(chain.vca->getProcessor(), "gain"));
+    ASSERT_NE(gain, nullptr);
+    EXPECT_FLOAT_EQ(gain->get(), 0.5f);
+
+    // The mono ADSR + VCA path uses the same gain.
+    auto* monoOsc = rig.add("Oscillator");
+    const auto mono =
+        synth::addEnvelopeAndVCAForRawInstrument(rig.graph(), *trackIn, *monoOsc, 14, {0, 100}, {300, 100});
+    ASSERT_NE(mono.vca, nullptr);
+    auto* monoGain = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mono.vca->getProcessor(), "gain"));
+    ASSERT_NE(monoGain, nullptr);
+    EXPECT_FLOAT_EQ(monoGain->get(), 0.5f);
+}

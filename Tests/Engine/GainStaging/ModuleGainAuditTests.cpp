@@ -363,12 +363,12 @@ const std::vector<AllowEntry>& allowList() {
         {"Reverb", "wet", 9.5, "Measured worst case +8.91 dB (wet=max, hot square) — see the Reverb note above."},
         {"Reverb", "dry", 8.5, "Measured worst case +7.77 dB (dry=max, hot square) — see the Reverb note above."},
         // Voice Mixer: this audit's own worst-case probe (8 identical unison voices, Level at its
-        // max 1.0) sums to amplitude 8x before VoiceMixerModule's tanh soft-clip — the soft-clip is
+        // max 1.0) sums to amplitude 8x before VoiceMixerModule's soft limiter — the limiter is
         // exactly what keeps this bounded (it cannot run away further regardless of voice count or
         // how hot the input is), so it is a real but SELF-LIMITING gain, unlike a naive sum.
         {"Voice Mixer", "level", 9.0,
          "Measured worst case +8.25 dB (8 unison voices, Level=max, sine220); bounded by the "
-         "module's own tanh soft-clip — see VoiceMixerModule::processBlock."},
+         "module's own soft limiter (SoftLimit.h) — see VoiceMixerModule::processBlock."},
         // Math: this audit feeds the SAME tone into A and B (see the module-registry comment
         // above), so Sum (A+B) doubles by construction (+6.02 dB, exact arithmetic, not a bug) and
         // Mult (A*B) SQUARES an amplitude > 1 input (the "hot" square test signal is amplitude 4,

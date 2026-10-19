@@ -150,8 +150,9 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 //
 // The ADSR is left exactly as the module library creates it (stock defaults, and the new-module
 // hook's Dual I/O default), so a '+ Track' ADSR and a dragged-in one are the same card; the release
-// stage is what fixes the drone-after-note-off bug. VCA's gain (stock factory default 0.5) is overridden to 1.0 so the
-// envelope alone governs perceived level, not an extra silent 50% attenuation stacked under it.
+// stage is what fixes the drone-after-note-off bug. VCA's gain is set to 0.5 (-6 dB) in the mono and the poly chain
+// alike: a single note peaks about -6 dB below full scale, leaving headroom so a chord, which sums at unity, stays
+// mostly under the soft limiter's knee.
 //
 // The poly path supersedes this as the poly instrument's ONLY option: when the instrument is poly,
 // the caller now builds addPolyEnvelopeAndVCAForInstrument() below instead of this one (true
@@ -182,8 +183,8 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
         return result;
     }
     setBoolParam(*vca->getProcessor(), "poly", false);
-    // Overrides VCA's stock gain default (0.5) so the envelope alone governs level — see above.
-    setFloatParam(*vca->getProcessor(), "gain", 1.0f);
+    // The per-voice headroom of the default chain — see above.
+    setFloatParam(*vca->getProcessor(), "gain", 0.5f);
 
     // Track In's MIDI, fanned alongside its existing wire to the instrument, drives the ADSR's gate.
     graph.addConnection({{trackIn.nodeID, juce::AudioProcessorGraph::midiChannelIndex},
@@ -260,8 +261,8 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
         return result;
     }
     setBoolParam(*vca->getProcessor(), "poly", true);
-    // Same override as the non-poly path, same reason: the envelope alone should govern level.
-    setFloatParam(*vca->getProcessor(), "gain", 1.0f);
+    // Same per-voice headroom as the non-poly path, so a note is as loud in either mode.
+    setFloatParam(*vca->getProcessor(), "gain", 0.5f);
 
     // Track In's MIDI drives Poly MIDI, not a mono ADSR gate fallback.
     graph.addConnection({{trackIn.nodeID, juce::AudioProcessorGraph::midiChannelIndex},
