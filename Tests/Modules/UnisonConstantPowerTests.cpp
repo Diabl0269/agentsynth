@@ -9,6 +9,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -101,21 +102,22 @@ TEST(UnisonConstantPower, BlendZeroLeavesTheCentreVoiceAtTheSingleVoiceLevel) {
 // Documented measurement: C3, level 1, unison 1, mono. The Wavetable's tables are peak-normalised, so a saw
 // frame sits below the Oscillator's naive saw; the numbers are printed so a change shows in the test log.
 TEST(UnisonConstantPower, OscillatorAndWavetableLevelsAtUnisonOne) {
-    OscillatorModule oscSine;
-    setActual(oscSine, "level", 1.0f);
-    setActual(oscSine, "waveform", 0.0f);
-    WavetableOscillatorModule wtSine;
-    setActual(wtSine, "level", 1.0f);
-    setActual(wtSine, "position", 0.0f);
+    // On the heap: four oscillator modules at once overflow the 1 MB default stack on Windows.
+    auto oscSine = std::make_unique<OscillatorModule>();
+    setActual(*oscSine, "level", 1.0f);
+    setActual(*oscSine, "waveform", 0.0f);
+    auto wtSine = std::make_unique<WavetableOscillatorModule>();
+    setActual(*wtSine, "level", 1.0f);
+    setActual(*wtSine, "position", 0.0f);
 
-    OscillatorModule oscSaw;
-    setActual(oscSaw, "level", 1.0f);
-    setActual(oscSaw, "waveform", 2.0f);
-    WavetableOscillatorModule wtSaw;
-    setActual(wtSaw, "level", 1.0f);
-    setActual(wtSaw, "position", 0.67f);
+    auto oscSaw = std::make_unique<OscillatorModule>();
+    setActual(*oscSaw, "level", 1.0f);
+    setActual(*oscSaw, "waveform", 2.0f);
+    auto wtSaw = std::make_unique<WavetableOscillatorModule>();
+    setActual(*wtSaw, "level", 1.0f);
+    setActual(*wtSaw, "position", 0.67f);
 
-    const Level a = measure(oscSine), b = measure(wtSine), c = measure(oscSaw), d = measure(wtSaw);
+    const Level a = measure(*oscSine), b = measure(*wtSine), c = measure(*oscSaw), d = measure(*wtSaw);
     std::printf("[measurement] sine  Oscillator rms %.2f peak %.2f dBFS | Wavetable rms %.2f peak %.2f | diff rms %.2f "
                 "peak %.2f\n",
                 a.rmsDb, a.peakDb, b.rmsDb, b.peakDb, b.rmsDb - a.rmsDb, b.peakDb - a.peakDb);

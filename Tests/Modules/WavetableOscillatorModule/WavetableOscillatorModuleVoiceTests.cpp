@@ -2,6 +2,7 @@
 // Per-voice retrigger phase, unison stacking/spread/blend, sub-oscillator, and sync modes.
 
 #include "WavetableOscillatorModuleTestFixture.h"
+#include <memory>
 
 TEST_F(WavetableOscillatorModuleTest, RetriggerPhaseStartsTheWaveWhereAsked) {
     setFloat(*module, "position", 0.0f); // sine: phase is directly readable from sample 0
@@ -119,14 +120,14 @@ TEST_F(WavetableOscillatorModuleTest, BlendZeroInAStackModeLeavesOnlyTheRoot) {
     module->prepareToPlay(kSampleRate, kBlockSize);
     const auto single = renderNote(*module, 57, 2);
 
-    WavetableOscillatorModule stacked;
-    setFloat(stacked, "position", 0.0f);
-    setFloat(stacked, "detune", 0.0f);
-    setInt(stacked, "unison", 3);
-    setChoice(stacked, "stack", (int)WavetableOscillatorModule::Stack::Octave);
-    setFloat(stacked, "blend", 0.0f);
-    stacked.prepareToPlay(kSampleRate, kBlockSize);
-    const auto rootOnly = renderNote(stacked, 57, 2);
+    auto stacked = std::make_unique<WavetableOscillatorModule>(); // heap: the module is large for a Windows stack
+    setFloat(*stacked, "position", 0.0f);
+    setFloat(*stacked, "detune", 0.0f);
+    setInt(*stacked, "unison", 3);
+    setChoice(*stacked, "stack", (int)WavetableOscillatorModule::Stack::Octave);
+    setFloat(*stacked, "blend", 0.0f);
+    stacked->prepareToPlay(kSampleRate, kBlockSize);
+    const auto rootOnly = renderNote(*stacked, 57, 2);
 
     float diff = 0.0f;
     for (int i = 0; i < single.getNumSamples(); ++i)
