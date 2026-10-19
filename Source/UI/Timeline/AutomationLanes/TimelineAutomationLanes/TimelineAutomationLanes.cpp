@@ -186,9 +186,14 @@ void TimelineAutomationLanes::sync() {
     // Held (one edit or one undo step still on its way through several changes): the rows wait for the end of it.
     const bool held = modulatorsHeld();
     modulatorsPending_ = modulatorsPending_ || held;
+    const bool restoring = undo_ != nullptr && undo_->isRestoring();
+    restoredWhileHeld_ = restoredWhileHeld_ || (held && restoring);
     if (!held)
         deriveRoutings();
+    const auto before = shownBlocks_;
     syncPools();
+    if (restoring)
+        glideLanesReorderedByRestore(before);
     if (!held)
         syncModulators();
     refreshPooled();

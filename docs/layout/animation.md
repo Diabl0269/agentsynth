@@ -226,7 +226,7 @@ path); nothing else needs to know.
   `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
   `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
   drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
-  any other rebuild lands at once.
+  any other rebuild lands at once. A lane reorder within a track and a modulator row reorder glide back and forth the same way ([lane motion](../timeline/lane-motion.md#undo-and-redo-glide)).
 - **An added or duplicated track's row** grows in through the delete motion's mirror ([delete and undo animation](#delete-and-undo-animation));
   undoing it shrinks the row away and the rows below close the gap.
 - **Off-screen.** The timeline glide runs only while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so

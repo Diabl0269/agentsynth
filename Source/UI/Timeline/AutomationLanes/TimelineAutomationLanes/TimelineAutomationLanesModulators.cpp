@@ -162,6 +162,11 @@ bool TimelineAutomationLanes::syncModulators() {
                     rebuilt = true;
                     continue;
                 }
+                if (glideRestoredOrder_) {
+                    auto& oldYs = restoreGlides_[lane.id]; // where each row stands before the undo moves it
+                    for (size_t i = 0; i < entry.rows.size() && i < entry.infos.size(); ++i)
+                        oldYs[entry.infos[i].key()] = entry.rows[i]->getY();
+                }
                 permuteModulators(entry, infos); // only the order changed: the same rows take their new slots
                 rebuilt = true;
             }
@@ -340,6 +345,7 @@ void TimelineAutomationLanes::refreshModulators() {
         return;
     if (modulatorsHeld()) {
         modulatorsPending_ = true;
+        restoredWhileHeld_ = restoredWhileHeld_ || (undo_ != nullptr && undo_->isRestoring());
         return;
     }
     // A cable patched or removed by hand can turn an amount lane back into a lane row (or the reverse),
@@ -359,12 +365,16 @@ bool TimelineAutomationLanes::modulatorsHeld() const {
     return modulatorHolds_ > 0 || (undo_ != nullptr && undo_->isRestoring());
 }
 
-// The last hold went (or an undo step settled): one refresh for everything that came while held.
+// The last hold went (or an undo step settled): one refresh for everything that came while held. After an undo or redo
+// a lane whose rows only changed order glides them from where they stood, as the forward move did.
 void TimelineAutomationLanes::releaseHeldModulators() {
     if (modulatorsHeld() || !modulatorsPending_)
         return;
     modulatorsPending_ = false;
+    glideRestoredOrder_ = std::exchange(restoredWhileHeld_, false);
     refreshModulators();
+    glideRestoredOrder_ = false;
+    glideModulatorsReorderedByRestore();
 }
 
 TimelineAutomationLanes::ModulatorHold::ModulatorHold(TimelineAutomationLanes& lanes)

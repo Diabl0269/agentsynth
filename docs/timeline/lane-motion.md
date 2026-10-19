@@ -28,3 +28,17 @@ runs one shared grow / shrink tween for them (`TimelineAutomationLanesBlockMotio
   the timeline not showing (`canAnimateBlocks`).
 - Tests force the path with `FadeAnimateGuard` and step it with `stepBlockMotionForTest`
   (`AutomationLanesBlockMotionTests.cpp`).
+
+## Undo and redo glide
+
+Cmd+Z and Cmd+Shift+Z of a reorder glide like the move itself did ([the rule](../layout/animation.md#undo-and-redo-glide)):
+
+- **A lane moved within its track** (a header drag, Cmd+Alt+Up/Down). `sync()` sees `AppUndoManager::isRestoring()`, and
+  when a track's shown lanes are the same set in a new order, `glideLanesReorderedByRestore` starts each block where its
+  header stood and `release()`s the lane drag's `ReorderDragAnimator` to the restored slots (headers only, as a drop
+  does), mirroring the track rows' `glideTrackRowsFrom`.
+- **A modulator row moved within its lane** (Cmd+Alt+Up/Down, a drag). The rows are held during the restore and
+  re-derived once it has settled; that refresh notes where each row stood before `permuteModulators` puts it in its
+  restored slot, and `glideModulatorRows` then slides them there (160 ms `easeOutCubic`).
+- Both land at once under Reduce Motion, Animations Off or with the timeline not showing. Tests pin the lane glide's
+  clock (`setLaneGlideClockForTest`) and step the row glide by hand (`AutomationLanesUndoGlideTests.cpp`).

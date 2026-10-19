@@ -213,6 +213,14 @@ void TimelineAutomationLanes::glideModulatorRows(synth::LaneId lane, const std::
     frameModulatorGlide(0.0f); // the first frame already shows the rows where they stood
 }
 
+// An undo or redo of a row move: the held refresh permuted the rows (noting where each stood) and laid them out in
+// their restored slots; they glide there from their old ones, like Cmd+Alt+Up/Down glided them forward.
+void TimelineAutomationLanes::glideModulatorsReorderedByRestore() {
+    const auto glides = std::exchange(restoreGlides_, {});
+    for (const auto& [lane, oldYs] : glides)
+        glideModulatorRows(lane, oldYs);
+}
+
 void TimelineAutomationLanes::frameModulatorGlide(float t) {
     for (auto& [key, tween] : glideTweens_)
         tween.now = tween.from + (tween.to - tween.from) * t;

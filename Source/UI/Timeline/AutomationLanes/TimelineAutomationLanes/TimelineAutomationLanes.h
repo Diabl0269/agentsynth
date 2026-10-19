@@ -219,6 +219,10 @@ public:
     void stepBlockMotionForTest(float t);
     /** Lane blocks still shrinking away after their lane left an open track. */
     int leavingLaneCountForTest() const noexcept { return (int)leavingLanes_.size(); }
+    /** Pins the lane glide's clock (ms) so a test can step it; empty restores the real clock. */
+    void setLaneGlideClockForTest(std::function<double()> clock) { laneDrag_.animator().setClock(std::move(clock)); }
+    /** Re-places the gliding lanes from the clock now, as a frame would. */
+    void stepLaneGlideForTest();
 
     // ---- A lane's own height (TimelineAutomationLanesHeight.cpp) ----
     /** Each step of Taller / Shorter multiplies (or divides) the lane's height scale by this. */
@@ -343,6 +347,11 @@ private:
     std::vector<LeavingLane> leavingLanes_;
     std::map<synth::TrackId, std::vector<synth::LaneId>> shownBlocks_; // each open track's lane blocks, last synced
     std::map<synth::LaneId, int> placedBlockHeights_;                  // each lane block's height as last placed
+    void glideLanesReorderedByRestore(const std::map<synth::TrackId, std::vector<synth::LaneId>>& before);
+    void glideModulatorsReorderedByRestore();
+    std::map<synth::LaneId, std::map<juce::String, int>> restoreGlides_; // rows' old y per lane, for an undo's glide
+    bool restoredWhileHeld_ = false;  // the held refresh comes from an undo or redo step
+    bool glideRestoredOrder_ = false; // set while that refresh runs: a lane whose rows only changed order glides them
     bool blockDriverRunning_ = false;
     std::int64_t replaceCountSeen_ = -1; // the doc's getReplaceCount() at the last pool sync
     int modulatorGlideOffset(const juce::String& key) const;
