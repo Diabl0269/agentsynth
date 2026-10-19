@@ -18,8 +18,10 @@ TEST_F(WavetableOscillatorModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModulationCategory(), ModulationCategory::Oscillator);
 
     // The Audio R block has to clear the whole shared-CV block, or a stereo read would land
-    // on a mod-CV input channel.
-    EXPECT_GE(WT::kRightBase, WT::kNumInputs);
+    // on a mod-CV input channel. It sits exactly where the Gate fan starts, and never moves.
+    EXPECT_GE(WT::kRightBase, WT::kGateBase);
+    EXPECT_EQ(WT::kRightBase, 23);
+    EXPECT_GE(WT::kNumOutputs, WT::kNumInputs);
     EXPECT_GE(WT::kNumOutputs, WT::kRightBase + WT::kNumVoices);
 }
 
@@ -44,9 +46,10 @@ TEST_F(WavetableOscillatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(module->getOutputPortLabel(0), "Audio L");
     EXPECT_EQ(module->getOutputPortLabel(1), "Audio R");
 
-    // Mono lists every jack including Pitch; poly drives pitch from the fan instead.
+    // Mono lists every jack including Pitch but not Gate (a trigger, not a mod target); poly drives
+    // pitch from the fan instead.
     const auto mono = module->getModulationTargets();
-    ASSERT_EQ(mono.size(), (size_t)WT::kNumJacks);
+    ASSERT_EQ(mono.size(), (size_t)WT::kNumJacks - 1);
     EXPECT_EQ(mono[WT::kJackPosition].name, "Position");
     EXPECT_EQ(mono[WT::kJackPosition].channelIndex, WT::kJackPosition);
     EXPECT_EQ(mono[WT::kJackWarp].name, "Warp");
@@ -58,7 +61,7 @@ TEST_F(WavetableOscillatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(poly[0].name, "Position");
     EXPECT_EQ(poly[0].channelIndex, WT::kPolyModCVBase);
     EXPECT_EQ(poly.back().name, "Sync");
-    EXPECT_EQ(poly.back().channelIndex, WT::kNumInputs - 1);
+    EXPECT_EQ(poly.back().channelIndex, WT::kGateBase - 1);
 }
 
 // Channels that existed before issue #180 must not have moved: a patch saved against the old

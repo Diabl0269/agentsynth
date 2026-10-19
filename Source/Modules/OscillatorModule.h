@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GateEdges.h"
 #include "ModuleBase.h"
 #include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
@@ -13,7 +14,7 @@ public:
     // -------------------------------------------------------------------------
     // Channel map
     //
-    // Inputs (16): mono mode puts jack j on raw ch j for j 0-6 (Pitch, Waveform, Octave, Coarse,
+    // Inputs (28): mono mode puts jack j on raw ch j for j 0-6 (Pitch, Waveform, Octave, Coarse,
     // Fine, Level, Pan); poly mode fans Pitch across ch0-7 and puts the shared mod-CV block at
     // kPolyModCVBase, so jack j (1 <= j <= 6) lands on kPolyModCVBase + j - 1. Pan took the
     // channels that were already declared and unused — ch6 in mono, ch13 in poly — so every
@@ -25,6 +26,12 @@ public:
     // channels (kRightBase..kRightBase+5): exactly the same shared-channel pattern ch0 already
     // uses for Pitch CV in vs. Audio L out, so it is safe on the same condition — the CV must be
     // cached before this module writes any output to that channel (see readGlobalParamCV).
+    //
+    // Gate is appended last, at the SAME raw channel in both voice modes: mono reads one channel at
+    // kGateBase, poly an eight-wide fan at kGateBase..kGateBase+7, one per voice. A rising edge restarts
+    // that voice's phase at Phase/Rand on its own sample, so a held pitch CV (what Poly MIDI leaves after a
+    // note-off) still restarts on the next note. The fan's first two channels alias Audio R's last two
+    // (voices 6 and 7), so it is scanned before any write, like ch14-19.
     //
     // Outputs: Audio L on the voice block (ch0, or ch0-7 in poly) and Audio R on a dedicated
     // block at kRightBase. R deliberately does NOT live on ch1: that is the Waveform CV input,
@@ -38,10 +45,12 @@ public:
     static constexpr int kJackGlide = 10;
     static constexpr int kJackBlend = 11;
     static constexpr int kJackWidth = 12;
-    static constexpr int kNumJacks = kJackWidth + 1;  // Pitch..Width
-    static constexpr int kPolyModCVBase = kNumVoices; // poly shared-CV block start
-    static constexpr int kNumInputs = 20;             // 8 pitch fan + 6 shared mod CV + 6 global-param CV
-    static constexpr int kUnisonCVChannel = 14;       // same raw channel, mono and poly
+    static constexpr int kJackGate = 13;
+    static constexpr int kNumJacks = kJackGate + 1;           // Pitch..Gate
+    static constexpr int kPolyModCVBase = kNumVoices;         // poly shared-CV block start
+    static constexpr int kGateBase = 20;                      // mono: one channel; poly: 8-wide fan
+    static constexpr int kNumInputs = kGateBase + kNumVoices; // 8 pitch + 6 shared mod CV + 6 global CV + 8 gate
+    static constexpr int kUnisonCVChannel = 14;               // same raw channel, mono and poly
     static constexpr int kDetuneCVChannel = 15;
     static constexpr int kPulseWidthCVChannel = 16;
     static constexpr int kGlideCVChannel = 17;
@@ -52,7 +61,11 @@ public:
     // kNumInputs must never move it — every patch already routed FROM Audio R depends on raw
     // output channel 14 staying 14.
     static constexpr int kRightBase = 14;
-    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22
+    // Outputs must stay at or above every input channel (the Gate fan ends at kGateBase + 7): JUCE only
+    // copies a shared input buffer for channels below the output count, and the bypass/mute clear would
+    // otherwise wipe a Poly MIDI gate that also feeds the ADSR.
+    static constexpr int kNumOutputs = kGateBase + kNumVoices; // 28
+    static_assert(kNumOutputs >= kNumInputs, "outputs must cover every input channel");
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. Only valid for the
         original Pitch..Pan jacks (1 <= jack <= kJackPan) — Unison/Detune use the fixed
@@ -60,16 +73,16 @@ public:
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
 
     OscillatorModule()
-        // 20 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide/
-        // Blend/Width CV (14-19).
-        // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21. Declaring outputs
+        // 28 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide/
+        // Blend/Width CV (14-19) + Gate (20-27).
+        // 28 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21, silent on 22-27. Declaring outputs
         // ABOVE every CV input channel below kRightBase is what makes JUCE copy shared-mod-CV input
         // buffers when they fan out to several downstream nodes, so our post-render clear cannot
         // corrupt them — see the processPolyMode clear note. ch14-19 are the one exception (they
         // alias Audio R, see the channel-map comment above): those are cached before any write,
-        // exactly like ch0's Pitch-CV/Audio-L sharing. Do NOT reduce kNumOutputs below kRightBase + 1.
+        // exactly like ch0's Pitch-CV/Audio-L sharing. Do NOT reduce kNumOutputs below kNumInputs.
         //
-        // StereoAudio::Declared: with 22 outputs the Auto shape test cannot see the stereo pair —
+        // StereoAudio::Declared: with 28 outputs the Auto shape test cannot see the stereo pair —
         // Audio R is the kRightBase block, not ch1. Ships SPLIT.
         : ModuleBase("Oscillator", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(waveformParam = new juce::AudioParameterChoice("waveform", "Waveform",
@@ -213,13 +226,14 @@ public:
     }
     juce::String getInputPortLabel(int i) const override {
         const juce::String labels[] = {"Pitch",  "Waveform", "Octave",      "Coarse", "Fine",  "Level", "Pan",
-                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width"};
+                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width", "Gate"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
     int getVisibleInputPortCount() const override { return kNumJacks; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+    int polyGateInputChannel() const override { return kGateBase; }
 
     // processBlock consumes note-on for the mono-mode MIDI pitch fallback (see the loop at the
     // top of processBlock) but never writes to the MIDI buffer.
@@ -282,6 +296,13 @@ public:
                 p.polyVoiceSpan = 1;
                 return p;
             }
+            if (raw >= kGateBase && raw < kGateBase + kNumVoices) { // per-voice Gate fan
+                p.visibleJackIndex = kJackGate;
+                p.role = PortRole::Gate;
+                p.isPolyGroupHead = (raw == kGateBase);
+                p.polyVoiceSpan = (raw == kGateBase) ? kNumVoices : 1;
+                return p;
+            }
         } else {
             // Mono mode: raw 0-6 = ModCV jacks 0-6 (Pitch..Pan). Deliberately kJackPan + 1, not
             // kNumJacks: Unison/Detune (jacks 7-8) do NOT live at raw 7-8 in mono, they share
@@ -289,6 +310,21 @@ public:
             if (raw >= 0 && raw < kJackPan + 1) {
                 p.visibleJackIndex = raw;
                 p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == modCVChannelFor(kJackPan, /*poly*/ true)) {
+                // Mono raw 13 is unused; left to the default it would head the Gate jack as an audio input.
+                p.visibleJackIndex = kJackGate;
+                p.role = PortRole::Gate;
+                p.isPolyGroupHead = false;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == kGateBase) { // mono Gate is one channel; raw 21-27 fall through
+                p.visibleJackIndex = kJackGate;
+                p.role = PortRole::Gate;
                 p.isPolyGroupHead = true;
                 p.polyVoiceSpan = 1;
                 return p;
@@ -380,6 +416,7 @@ private:
         bool active = false; ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
+        GateEdges gateEdges; ///< this block's rising Gate edges, each a note that restarts the phases
         float lastMidiNote = 69.0f;
         int previousWaveform = 0;
         int fadingFromWaveform = 0;
@@ -463,6 +500,9 @@ private:
         return glideCurveParam->getIndex() == 1 ? synth::GlideCurve::Exponential : synth::GlideCurve::Linear;
     }
     void clearPendingRestarts();
+    /** Adds a restart at sample `offset`, keeping `restartOffsets` sorted and free of duplicates; past
+        kMaxRestartsPerBlock a further offset is dropped. */
+    void addRestartOffset(int offset);
 
     void processMonoMode(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples);

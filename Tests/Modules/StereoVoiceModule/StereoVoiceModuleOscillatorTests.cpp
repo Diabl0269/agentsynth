@@ -13,7 +13,7 @@
 
 TEST(OscillatorStereo, AudioRLivesAboveTheCVBlockNotOnChannelOne) {
     EXPECT_EQ(OscillatorModule::kRightBase, 14);
-    EXPECT_EQ(OscillatorModule::kNumOutputs, 22);
+    EXPECT_EQ(OscillatorModule::kNumOutputs, 28);
 
     OscillatorModule osc;
     // Grew 14 -> 16 (Unison/Detune CV, appended). kRightBase/kNumOutputs above are

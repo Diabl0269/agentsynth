@@ -224,7 +224,7 @@ TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     // midpoint-of-drawn jack share a row (only meaningful once there are enough drawn jacks to
     // actually fill two columns).
     if (drawn.size() > 10) {
-        const int mid = (int)drawn.size() / 2;
+        const int mid = ((int)drawn.size() + 1) / 2; // the first column takes the extra jack of an odd count
         EXPECT_EQ(moduleComponent.getPortCenter(drawn[0], true).y, moduleComponent.getPortCenter(drawn[mid], true).y);
         EXPECT_LT(moduleComponent.getPortCenter(drawn[0], true).x, moduleComponent.getPortCenter(drawn[mid], true).x);
     }

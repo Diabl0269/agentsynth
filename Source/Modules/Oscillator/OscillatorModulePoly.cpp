@@ -5,7 +5,8 @@
 
 // Copies every CV this mode reads out of the buffer BEFORE the buffer is cleared: ch0-7 carry both
 // the per-voice pitch CV (in) and the voice audio (out), and the shared mod CVs sit on channels the
-// clear also covers. Safe because the module declares more outputs than its highest CV input, so
+// clear also covers. The Gate fan (ch20-27) is scanned here too: its first two channels are Audio R of
+// voices 6 and 7. Safe because the module declares more outputs than its highest CV input, so
 // the graph hands it a private copy of any CV channel that fans out elsewhere (see the
 // constructor). Do NOT reduce kNumOutputs.
 void OscillatorModule::cachePolyModCV(const juce::AudioBuffer<float>& buffer, int numSamples) {
@@ -18,6 +19,10 @@ void OscillatorModule::cachePolyModCV(const juce::AudioBuffer<float>& buffer, in
         else
             std::fill_n(pitchCVCache[v].data(), ns, 0.0f);
     }
+
+    for (int v = 0; v < MAX_VOICES; ++v)
+        voices[v].gateEdges.scan(kGateBase + v < numChannels ? buffer.getReadPointer(kGateBase + v) : nullptr,
+                                 numSamples);
 
     // ch8 waveform, ch9 octave, ch10 coarse, ch11 fine, ch12 level, ch13 pan.
     auto cache = [&](int channel, std::array<float, 4096>& dest) {
@@ -73,7 +78,9 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
         }
 
         // A voice going from silent to sounding is a new note and restarts its phases; voice 0 also
-        // restarts on a MIDI note-on, and only that one has an earlier note to fade out of.
+        // restarts on a MIDI note-on, and only that one has an earlier note to fade out of. A rising
+        // Gate edge is one more new note, handled per sample in the render loops, so a voice whose
+        // pitch CV never drops (Poly MIDI holds it after a note-off) still restarts on the next note.
         const bool wasActive = voices[v].active;
         if (!wasActive || (v == 0 && voice0RestartPending))
             restartVoice(voices[v], /*fadeFromOld*/ wasActive);
@@ -133,6 +140,8 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* output
         voices[v].previousWaveform = wf;
 
     for (int s = 0; s < numSamples; ++s) {
+        if (voices[v].gateEdges.firesAt(s))
+            restartVoice(voices[v], /*fadeFromOld*/ true);
         const int idx = std::min(s, ns - 1);
         const int wfS = hasWaveCV ? juce::jlimit(0, 3, wf + (int)std::round(waveformCVCache[idx] * 3.0f)) : wf;
         const float pulseWidth = pulseWidthRamp[(size_t)idx];
@@ -177,6 +186,8 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
         voices[v].previousWaveform = wf;
 
     for (int s = 0; s < numSamples; ++s) {
+        if (voices[v].gateEdges.firesAt(s))
+            restartVoice(voices[v], /*fadeFromOld*/ true);
         const int idx = std::min(s, ns - 1);
 
         float extraPitchShift = 0.0f;

@@ -31,10 +31,11 @@ The module outgrew one file and is split by concern:
   Sub (0–1), Sub Oct (−1/−2), Sub Wave (Sine/Square), Pan (±1), Sync In (choice), Import (choice),
   Interp (choice).
 - **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), then ch1…ch15 = Position, Octave,
-  Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync. **16 visible
-  jacks.**
+  Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync, and ch16 =
+  Gate (see [Phase control](#phase-control)). **17 visible jacks.**
 - **Outputs**: two audio jacks, `Audio L` and `Audio R`. See [Stereo output](#stereo-output).
-- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8.
+- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8, and a per-voice
+  Gate fan on ch23-30 (`kGateBase`).
 - **Octave / Coarse / Fine apply in poly mode too** — they transpose the incoming pitch CV. (This
   differs from `OscillatorModule`, where the tuning parameters only affect the MIDI fallback voice.)
 - **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with
@@ -99,8 +100,14 @@ feature** — a new mode needs one of the two defences (a `warpRateFactor` entry
 
 ## Phase control
 
-Every sub-oscillator restarts on note-on (a MIDI note-on in mono; a voice going from silent to
-sounding in poly):
+Every sub-oscillator restarts on note-on: a MIDI note-on in mono, a rising edge on the **Gate**
+input in either mode (on that exact sample), and, in poly, a voice going from silent to sounding.
+Poly MIDI holds a voice's pitch after release, so in poly only the gate shows a later note on a voice
+that already played; the Poly switch and new poly instrument tracks wire Poly MIDI's Gate fan (ch8-15)
+to it. The edge detector (`GateEdges`, a Schmitt trigger at 0.1) is shared with the Oscillator
+([oscillator-voice.md](oscillator-voice.md#phase-and-rand)). The poly Gate fan (ch23-30) aliases the
+Audio R block, so it is read before anything is written; `kRightBase` stays 23 and the 31 outputs
+cover every input. An unpatched gate changes nothing. The restart point:
 
 - **Phase** (0–360°) — where in the cycle the wave restarts.
 - **Rand Phase** (0–1) — per-note jitter added on top.

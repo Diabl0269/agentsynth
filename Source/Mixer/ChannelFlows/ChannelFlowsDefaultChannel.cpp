@@ -272,6 +272,14 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{polyMidi->nodeID, voice}, {instrument.nodeID, voice}});
 
+    // The same Gate fan -> the instrument's Gate fan, when it has one (Oscillator, Wavetable): a new note
+    // restarts the voice's phase.
+    if (auto* instrumentProcessor = dynamic_cast<ModuleBase*>(instrument.getProcessor());
+        instrumentProcessor != nullptr && instrumentProcessor->polyGateInputChannel() >= 0)
+        for (int voice = 0; voice < 8; ++voice)
+            graph.addConnection({{polyMidi->nodeID, 8 + voice},
+                                 {instrument.nodeID, instrumentProcessor->polyGateInputChannel() + voice}});
+
     // Poly MIDI's Gate fan (ch8-15) -> ADSR's poly Gate CV in (ch0-7).
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{polyMidi->nodeID, 8 + voice}, {adsr->nodeID, voice}});

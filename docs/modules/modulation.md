@@ -341,7 +341,7 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
    - **Turning poly on:** for each MIDI source whose MIDI output feeds a module that just went poly (Oscillator,
      Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
      MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
-     gate, and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
+     gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
      MIDI cables stay: they are harmless in poly mode.
    - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
      gets a raw MIDI cable from the source that fed the Poly MIDI (if missing), and a Poly MIDI left with no outgoing

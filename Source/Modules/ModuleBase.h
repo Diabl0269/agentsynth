@@ -282,6 +282,10 @@ public:
         Defaults to the FX layout (ch1); split-block modules override it with their kRightBase. */
     virtual int rightAudioLegChannel() const { return hasDualIOParameter() ? 1 : -1; }
 
+    /** First raw input channel of the per-voice Gate fan that restarts a poly voice's phase on a new note
+        (an Oscillator or Wavetable), or -1 when the module has none. Poly MIDI's Gate fan feeds it. */
+    virtual int polyGateInputChannel() const { return -1; }
+
     /** True when the right leg sits on its own block rather than on ch1. Callers that want to wire
         or unwire a stereo pair must go through rightAudioLegChannel() rather than assuming ch1. */
     bool hasSplitBlockStereo() const { return rightAudioLegChannel() > 1; }
