@@ -195,15 +195,7 @@ private:
     }
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
-        if (ch >= buffer.getNumChannels())
-            return false;
-        const float* data = buffer.getReadPointer(ch);
-        int checkLen = std::min(numSamples, 64);
-        for (int i = 0; i < checkLen; ++i) {
-            if (data[i] != 0.0f)
-                return true;
-        }
-        return false;
+        return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
     }
 
     void processMonoMode(juce::AudioBuffer<float>& buffer) {

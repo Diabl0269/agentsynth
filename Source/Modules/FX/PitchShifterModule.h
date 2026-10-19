@@ -305,15 +305,7 @@ private:
     // than two samples behind the write head (both taps are windowed to ~0 gain there anyway).
     static constexpr float kMinReadDelay = 2.0f;
 
-    static bool isChannelActive(const float* channel, int numSamples) {
-        if (!channel)
-            return false;
-        for (int i = 0; i < numSamples; ++i) {
-            if (channel[i] != 0.0f)
-                return true;
-        }
-        return false;
-    }
+    static bool isChannelActive(const float* channel, int numSamples) { return hasAnyNonZero(channel, numSamples); }
 
     /** Reads the delay line `delaySamples` behind the write head with cubic Hermite
         interpolation — linear interpolation would audibly dull a transposed signal. */

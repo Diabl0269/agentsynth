@@ -288,14 +288,7 @@ private:
         vl = juce::jmap(character, 0.05f, 1.0f);
     }
 
-    static bool isChannelActive(const float* cv, int numSamples) {
-        if (cv == nullptr)
-            return false;
-        float rms = 0.0f;
-        for (int i = 0; i < numSamples; ++i)
-            rms += cv[i] * cv[i];
-        return (rms / static_cast<float>(numSamples)) > 1.0e-3f;
-    }
+    static bool isChannelActive(const float* cv, int numSamples) { return hasAnyNonZero(cv, numSamples); }
 
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplers[2]; // [0]=2x, [1]=4x
     juce::AudioBuffer<float> dryBuffer;

@@ -206,16 +206,12 @@ private:
     }
 
     /** Read pointer for a CV channel, or nullptr when the channel is absent or silent.
-        Mirrors the cheap first-64-sample probe the other CV-aware modules use. */
+        Scans the whole block, like the other CV-aware modules. */
     static const float* readPointerIfActive(const juce::AudioBuffer<float>& buffer, int channel, int numSamples) {
         if (channel >= buffer.getNumChannels())
             return nullptr;
         const float* data = buffer.getReadPointer(channel);
-        const int checkLen = std::min(numSamples, 64);
-        for (int i = 0; i < checkLen; ++i)
-            if (data[i] != 0.0f)
-                return data;
-        return nullptr;
+        return hasAnyNonZero(data, numSamples) ? data : nullptr;
     }
 
     Detector detector;

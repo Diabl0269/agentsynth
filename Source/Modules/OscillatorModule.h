@@ -377,16 +377,9 @@ private:
             pulseWidthRamp[(size_t)i] = smoothedPulseWidth.getNextValue();
     }
 
-    /** RMS-over-64-samples "is anything patched here" guard shared by both voice modes. */
+    /** Whole-block "is anything patched here" guard shared by both voice modes. */
     static bool channelHasSignal(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
-        if (ch >= buffer.getNumChannels())
-            return false;
-        auto* data = buffer.getReadPointer(ch);
-        float rms = 0.0f;
-        const int checkLen = std::min(numSamples, 64);
-        for (int i = 0; i < checkLen; ++i)
-            rms += data[i] * data[i];
-        return (rms / (float)checkLen) > 1e-6f;
+        return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
     }
 
     /** The four global (not per-voice) params after their CV, read once per block. Their CV
