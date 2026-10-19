@@ -244,7 +244,9 @@ void TimelineAutomationLanes::commitModulatorDrag() {
         return;
     }
     if (drop.lane != lane) {
+        droppedRoutingKey_ = info.key();
         const bool moved = host_ != nullptr && host_->moveModulatorToLane(info, drop.lane, drop.index);
+        droppedRoutingKey_.clear();
         if (moved)
             discardModulatorDrag(); // the host's refresh rebuilt the rows; nothing of the gesture is left to settle
         else

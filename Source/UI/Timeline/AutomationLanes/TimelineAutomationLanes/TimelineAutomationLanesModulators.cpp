@@ -313,6 +313,9 @@ void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::
         leaving->fade = std::make_unique<FadeVisibility>(
             std::initializer_list<juce::Component*>{leaving->row.get(), leaving->band.get()});
         leaving->fade->setShown(false);
+        // A row dropped on another lane is already drawn there (it grows in at its new slot): here only its gap closes.
+        if (entry.infos[i].key() == droppedRoutingKey_)
+            leaving->fade->snapTo(false);
         leaving_.push_back(std::move(leaving));
     }
     entry.rows.clear();

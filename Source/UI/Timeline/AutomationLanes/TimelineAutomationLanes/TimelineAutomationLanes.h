@@ -480,6 +480,7 @@ private:
     float dragModGrab_ = 0.0f;
     float dragModPointer_ = 0.0f;
     ModulatorDrop modDrop_;
+    juce::String droppedRoutingKey_; // the routing a drop is moving to another lane, while the host moves it
     std::unique_ptr<DropIndicator> dropIndicator_;
     std::unique_ptr<FadeVisibility> dropFade_; // declared after the component it drives
     AnimationDriver dropDriver_;

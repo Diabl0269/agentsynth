@@ -372,11 +372,11 @@ slots (`DropIndicator`).
   old depth, re-keys the amount lane to the new Attenuverter (same lane id, track and points) and cuts the old routing;
   then the destination lane's `modulatorOrder` gets the new routing's key at `index` and the old key leaves the order of
   every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back. The moved routing has a
-  new key, so its row fades in under the destination lane like any new routing.
+  new key, so its row fades and grows in under the destination lane like any new routing ([lane motion](lane-motion.md)).
 - Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
   carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
 - The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
-  another lane". Not done: no auto-scroll while dragging, and the lane the row leaves does not close its gap until the drop.
+  another lane". The row's old gap closes on the drop as it grows in where it landed. Not done: no auto-scroll while dragging.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: the marker, its card
 title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
