@@ -272,7 +272,9 @@ the reconcile pass:
    and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A modulation
    routing's amount lane (keyed by its hidden Attenuverter, which paste rebuilds) joins that map too, so a copied
    modulator keeps the source track's drawn amount curve and the same undo step removes it. A lane whose module is
-   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The copy is named "<name> copy",
+   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The same goes for a lane, and
+   an LFO added on it, on the starter project's free-standing patch: that patch is not part of the track, so it has no
+   track macro to join and is not copied. The copy is named "<name> copy",
    takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
 
 Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row and the

@@ -8,6 +8,8 @@
 #include "Modules/MasterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
@@ -423,4 +425,105 @@ TEST_F(DuplicateTrackModulatorTest, DuplicatingTheCopyAgainWrapsTheSecondCopyToo
     }
     EXPECT_EQ(lfoCount(), 3);
     EXPECT_EQ(mc->getGraphEditor().getMacros().size(), 3);
+}
+
+// The lane-header path a person takes: "Add automation..." on a parameter, then "Add modulator... -> New LFO" on that
+// lane, then a drawn amount curve. The starter project also holds a free-standing patch with its own Oscillator that
+// the lone track adopts for the picker, so `ownInstrument` picks which "Pulse Width" the person automates.
+class DuplicateTrackLaneHeaderTest : public DuplicateTrackModulatorTest {
+protected:
+    struct Setup {
+        synth::TrackId track;
+        juce::String sourceName;
+        juce::String paramId;
+        int lfosBefore = 0;
+        size_t lanesBefore = 0;
+        size_t amountPoints = 0;
+    };
+
+    Setup build(bool ownInstrument) {
+        Setup setup;
+        setup.track = addInstrumentTrack();
+        setup.sourceName = doc().getTrack(setup.track)->name;
+        synth::ui::TrackHeaderHost::AutomatableParameter pulseWidth;
+        for (const auto& parameter : mc->getAutomatableParametersForTest(setup.track))
+            if (parameter.parameterName == "Pulse Width" &&
+                (mc->getGraphEditor().getMacros().findByMember(parameter.nodeUuid) != nullptr) == ownInstrument)
+                pulseWidth = parameter;
+        EXPECT_TRUE(pulseWidth.nodeUuid.isNotEmpty());
+        setup.paramId = pulseWidth.paramId;
+        const auto lane = mc->addAutomationLaneForTest(setup.track, pulseWidth);
+        EXPECT_TRUE(lane.isValid());
+        mc->getTimelinePanel().setTrackAutomationExpanded(setup.track, true);
+        // "Add modulator..." on the lane header, "New LFO" (the picker's first row) picked with Return.
+        auto* laneHeader = mc->getTimelinePanel().laneHeaderForTest(lane);
+        EXPECT_NE(laneHeader, nullptr);
+        if (laneHeader == nullptr)
+            return setup;
+        std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+        laneHeader->applyMenuChoice(synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId);
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = nullptr;
+        EXPECT_NE(picker, nullptr);
+        if (picker == nullptr)
+            return setup;
+        picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+        setup.lfosBefore = lfoCount();
+        juce::String attenuverterUuid;
+        for (const auto& routing : mc->getAudioEngine().getModulationRoutings())
+            if (routing.attenuverterNodeID.uid != 0)
+                attenuverterUuid =
+                    synth::AIStateMapper::ensureNodeUuid(graph().getNodeForId(routing.attenuverterNodeID));
+        const std::vector<synth::AutomationLane::Breakpoint> points{{0.0, 0.25f}, {2.0, -0.5f}, {4.0, 1.0f}};
+        EXPECT_TRUE(synth::ui::writeAmountLane(doc(), setup.track, attenuverterUuid, points));
+        setup.amountPoints = points.size();
+        setup.lanesBefore = doc().getTrack(setup.track)->lanes.size();
+        return setup;
+    }
+
+    void duplicateLastTrack() {
+        auto* header = mc->getTimelinePanel().getTrackHeaderAt(static_cast<int>(doc().getTracks().size()) - 1);
+        ASSERT_NE(header, nullptr);
+        ASSERT_TRUE(header->keyPressed(kCmdD));
+    }
+
+    bool lfoInMacroNamed(const juce::String& name) {
+        for (const auto& macro : mc->getGraphEditor().getMacros().getAll())
+            if (macro.name == name)
+                for (const auto& uuid : mc->getGraphEditor().getMacros().descendantMembers(macro.id))
+                    if (auto* node = graph().getNodeForId(nodeWithUuid(graph(), uuid));
+                        node != nullptr && dynamic_cast<LFOModule*>(node->getProcessor()) != nullptr)
+                        return true;
+        return false;
+    }
+};
+
+TEST_F(DuplicateTrackLaneHeaderTest, ALaneOnTheTracksOwnInstrumentAndItsNewLfoAreCopiedWithTheTrack) {
+    const auto setup = build(/*ownInstrument=*/true);
+    ASSERT_TRUE(lfoInMacroNamed(setup.sourceName)) << "New LFO joins the macro of the knob it moves";
+    duplicateLastTrack();
+
+    const auto& copy = doc().getTracks().back();
+    EXPECT_EQ(copy.lanes.size(), setup.lanesBefore) << "the Pulse Width lane and the amount lane both come along";
+    bool pulseLane = false;
+    for (const auto& lane : copy.lanes)
+        pulseLane = pulseLane || lane.paramId == setup.paramId;
+    EXPECT_TRUE(pulseLane);
+    EXPECT_EQ(amountPointsOn(copy).size(), setup.amountPoints);
+    EXPECT_EQ(lfoCount(), setup.lfosBefore + 1);
+    EXPECT_TRUE(lfoInMacroNamed(setup.sourceName + " copy"));
+}
+
+// The starter patch is not part of the track: an LFO on its Oscillator lands loose (it has no macro to join), and a
+// duplicate leaves that patch, its lane and its LFO with the original instead of cloning the shared starter patch.
+TEST_F(DuplicateTrackLaneHeaderTest, ALaneOnTheFreeStandingStarterPatchStaysWithTheOriginalTrack) {
+    const auto setup = build(/*ownInstrument=*/false);
+    ASSERT_FALSE(lfoInMacroNamed(setup.sourceName)) << "the starter patch's Oscillator has no macro to join";
+    duplicateLastTrack();
+
+    const auto& copy = doc().getTracks().back();
+    EXPECT_TRUE(copy.lanes.empty());
+    EXPECT_EQ(doc().getTracks().size(), 2u);
+    EXPECT_EQ(lfoCount(), setup.lfosBefore);
+    EXPECT_EQ(doc().getTrack(setup.track)->lanes.size(), setup.lanesBefore);
 }
