@@ -118,7 +118,7 @@ TEST(EnvelopesDefaultLayout, TheAdsrCardHasTheDesignedSectionsInOrder) {
         for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
             EXPECT_EQ(kindOf(plan, division), Kind::Choice) << division << ": a note-length box beside its time";
         EXPECT_EQ(kindOf(plan, "velocity"), Kind::FaderH);
-        EXPECT_TRUE(plan.more.empty()) << "every parameter but the three curve amounts the graph edits is placed";
+        EXPECT_EQ(plan.more.size(), 1u) << "only Legato waits in the More row (the curve amounts belong to the graph)";
         EXPECT_EQ(plan.swapGroups.size(), 4u) << "one swap group per stage: time or its division";
     }
 }

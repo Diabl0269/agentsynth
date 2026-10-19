@@ -44,10 +44,10 @@ TEST(OscillatorStereo, ExistingCVTargetChannelsAreUnchangedAndPanIsAppended) {
     OscillatorModule osc;
 
     // Mono: every other target keeps its own raw channel; Pan takes ch6.
-    // Unison/Detune/Pulse Width/Glide are ch14-17, same raw channel in both voice modes).
+    // Unison/Detune/Pulse Width/Glide/Blend/Width are ch14-19, same raw channel in both voice modes).
     const std::vector<std::pair<juce::String, int>> expectedMono = {
-        {"Pitch", 0}, {"Waveform", 1}, {"Octave", 2},  {"Coarse", 3},       {"Fine", 4},  {"Level", 5},
-        {"Pan", 6},   {"Unison", 14},  {"Detune", 15}, {"Pulse Width", 16}, {"Glide", 17}};
+        {"Pitch", 0},   {"Waveform", 1}, {"Octave", 2},       {"Coarse", 3}, {"Fine", 4},   {"Level", 5}, {"Pan", 6},
+        {"Unison", 14}, {"Detune", 15},  {"Pulse Width", 16}, {"Glide", 17}, {"Blend", 18}, {"Width", 19}};
     auto mono = osc.getModulationTargets();
     ASSERT_EQ(mono.size(), expectedMono.size());
     for (size_t i = 0; i < mono.size(); ++i) {
@@ -57,8 +57,8 @@ TEST(OscillatorStereo, ExistingCVTargetChannelsAreUnchangedAndPanIsAppended) {
 
     setBoolParam(osc, "poly", true);
     const std::vector<std::pair<juce::String, int>> expectedPoly = {
-        {"Waveform", 8}, {"Octave", 9},  {"Coarse", 10}, {"Fine", 11},        {"Level", 12},
-        {"Pan", 13},     {"Unison", 14}, {"Detune", 15}, {"Pulse Width", 16}, {"Glide", 17}};
+        {"Waveform", 8}, {"Octave", 9},  {"Coarse", 10},      {"Fine", 11},  {"Level", 12}, {"Pan", 13},
+        {"Unison", 14},  {"Detune", 15}, {"Pulse Width", 16}, {"Glide", 17}, {"Blend", 18}, {"Width", 19}};
     auto poly = osc.getModulationTargets();
     ASSERT_EQ(poly.size(), expectedPoly.size());
     for (size_t i = 0; i < poly.size(); ++i) {

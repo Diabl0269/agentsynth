@@ -118,9 +118,9 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
         {"ADSR", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                 "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
+                 "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Amp Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                    "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
+                    "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Attenuverter", "amount, bypassed"},
         // Audio Input is a ModuleBase, so it has ModuleBase's bypass parameter. Audio
         // Output is still the graph's raw IO node and still has none.
@@ -147,7 +147,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, morphX, morphY, muted, outputLevel, "
                    "poly, resonance, shift"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                       "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
+                       "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
@@ -175,8 +175,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
-        {"Oscillator", "bypassed, coarse, detune, dualIO, fine, glide, level, muted, octave, pan, poly, pulseWidth, "
-                       "unison, waveform"},
+        {"Oscillator", "blend, bypassed, coarse, detune, dualIO, fine, glide, glideCurve, glideMode, legato, level, "
+                       "muted, octave, pan, "
+                       "phase, poly, pulseWidth, randomPhase, unison, waveform, width"},
         {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
                           "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
                           "outputGain"},

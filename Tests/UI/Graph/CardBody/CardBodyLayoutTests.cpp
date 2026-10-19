@@ -150,6 +150,12 @@ TEST(CardBodyLayout, NoLibraryCardShowsAMoreRowWithoutAHiddenParameter) {
     for (auto id : ids) {
         auto* card = canvas.card(id);
         ASSERT_NE(card, nullptr);
+        // Deliberate exceptions: rarely-touched parameters that wait in the More row so the card stays compact
+        // (Oscillator: Phase, Rand, Glide Mode/Curve, Legato; ADSR: Legato).
+        const auto name = card->getModule()->getName();
+        const bool deliberate = name == "Oscillator" || name == "ADSR" || name == "Amp Env" || name == "Filter Env";
+        if (deliberate)
+            continue;
         EXPECT_EQ(childWithId(*card, "cardMoreRow"), nullptr) << card->getModule()->getName();
         if (auto* body = card->getCardBody())
             EXPECT_FALSE(body->hasMoreRow());

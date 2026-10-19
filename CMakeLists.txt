@@ -395,9 +395,6 @@ add_library(Core STATIC
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
-    Source/Modules/Oscillator/OscillatorModuleMono.cpp
-    Source/Modules/Oscillator/OscillatorModulePoly.cpp
-    Source/Modules/Oscillator/PitchGlide.h
     Source/Modules/ADSRModule.h
     Source/Modules/FrequencyText.h
     Source/Modules/ParameterText.h
@@ -573,6 +570,7 @@ include(cmake/GraphQuerySources.cmake)
 include(cmake/ProjectLoadSources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/DrumKitSources.cmake)
+include(cmake/OscillatorSources.cmake)
 include(cmake/PluckMalletSources.cmake)
 include(cmake/SamplerInstrumentSources.cmake)
 include(cmake/SoundPackSources.cmake)

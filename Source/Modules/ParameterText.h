@@ -83,6 +83,25 @@ inline juce::AudioParameterFloatAttributes semitonesAttributes() {
         .withValueFromStringFunction([](const juce::String& t) { return semitonesFromText(t); });
 }
 
+/** "0.0 ct", "12.5 ct": one decimal, so a skewed knob's fine low range still reads exactly. */
+inline juce::String centsToText(float v) {
+    const float r = std::round(v * 10.0f) / 10.0f;
+    return juce::String(r == 0.0f ? 0.0f : r, 1) + " ct";
+}
+
+/** Reads "12.5 ct", "12ct" and a bare "12" back as cents. */
+inline float centsFromText(const juce::String& text) {
+    return text.trim().upToFirstOccurrenceOf("ct", false, true).getFloatValue();
+}
+
+/** Parameter attributes that format and parse a detune in cents. */
+inline juce::AudioParameterFloatAttributes centsAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("ct")
+        .withStringFromValueFunction([](float v, int) { return centsToText(v); })
+        .withValueFromStringFunction([](const juce::String& t) { return centsFromText(t); });
+}
+
 /** A 0..N multiplier shown as a percent: 1.0 reads "100%", 0.5 reads "50%". */
 inline juce::AudioParameterFloatAttributes multiplierPercentAttributes() {
     return juce::AudioParameterFloatAttributes()

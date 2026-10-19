@@ -102,9 +102,9 @@ TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(widget(osc, "waveform")), nullptr);
     expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
     expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
-    expectOnOneRow(osc, {"unison", "detune", "pulseWidth"});
+    expectOnOneRow(osc, {"unison", "detune", "blend", "width"});
     expectOnOneRow(osc, {"level", "pan"});
-    EXPECT_FALSE(osc.body->hasMoreRow()) << "every parameter is placed";
+    EXPECT_TRUE(osc.body->hasMoreRow()) << "Phase and Rand wait in the More controls row";
     ASSERT_TRUE(osc.body->hasFooter());
     EXPECT_TRUE(isPill(widget(osc, "poly"))) << "Poly joins the footer on its own";
 }
@@ -116,10 +116,14 @@ TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSqua
     const auto pulse = widget(osc, "pulseWidth")->getBounds();
     const auto size = osc.card->getBounds();
     expectDimmedAndOperable(osc, "detune", true);
+    expectDimmedAndOperable(osc, "blend", true);
+    expectDimmedAndOperable(osc, "width", true);
     expectDimmedAndOperable(osc, "pulseWidth", true);
 
     flip(canvas, osc, "unison", 3.0f);
     expectDimmedAndOperable(osc, "detune", false);
+    expectDimmedAndOperable(osc, "blend", false);
+    expectDimmedAndOperable(osc, "width", false);
     expectDimmedAndOperable(osc, "pulseWidth", true);
     flip(canvas, osc, "waveform", 1.0f); // Square
     expectDimmedAndOperable(osc, "pulseWidth", false);
@@ -342,7 +346,7 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" ? 2 : 1);
+        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" || type == "Oscillator" ? 2 : 1);
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)

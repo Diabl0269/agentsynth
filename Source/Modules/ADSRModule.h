@@ -95,6 +95,9 @@ public:
                                                                    juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
                                                                    synth::percentAttributes()));
         addMuteParameter();
+        // Appended after the mute parameter so no earlier parameter moves. Legato applies to MIDI note
+        // messages only; a Gate CV drives the envelope exactly as it always did.
+        addParameter(legatoParam = new juce::AudioParameterBool("legato", "Legato", false));
         enableVisualBuffer(true);
     }
 
@@ -199,7 +202,13 @@ public:
                         continue;
                     const auto message = metadata.getMessage();
                     if (message.isNoteOn()) {
-                        heldNotes.set(static_cast<size_t>(message.getNoteNumber()));
+                        const auto note = static_cast<size_t>(message.getNoteNumber());
+                        // Legato: a note-on while another note is still held keeps the envelope running.
+                        const bool overlapping = heldNotes.any() && !(heldNotes.count() == 1 && heldNotes.test(note));
+                        heldNotes.set(note);
+                        midiNoteOnThisSample = true;
+                        if (legatoParam->get() && overlapping)
+                            continue;
                         // The note-on EVENT drives the retrigger, not an edge in a held/not-held
                         // flag -- a note-off + note-on landing on the same sample (a gapless
                         // mono legato transition) nets out to "still held" on the flag, but must
@@ -208,7 +217,6 @@ public:
                         envelopes[0].noteOn();
                         lastTriggeredVoice = 0;
                         ++firedThisBlock;
-                        midiNoteOnThisSample = true;
                     } else if (message.isNoteOff()) {
                         heldNotes.reset(static_cast<size_t>(message.getNoteNumber()));
                     } else if (message.isAllNotesOff() || message.isAllSoundOff()) {
@@ -608,6 +616,7 @@ private:
     float velocitySlewStep = 0.01f;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
+    juce::AudioParameterBool* legatoParam = nullptr;
     std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic
     int lastTriggeredVoice = 0;
     juce::AudioParameterBool* polyParam = nullptr;

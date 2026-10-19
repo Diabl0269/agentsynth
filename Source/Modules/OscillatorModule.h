@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
 #include "ParameterText.h"
+#include "UnisonVoicing.h"
 #include <array>
 #include <cmath>
 
@@ -17,10 +19,10 @@ public:
     // channels that were already declared and unused — ch6 in mono, ch13 in poly — so every
     // older CV routing keeps its raw channel.
     //
-    // Unison, Detune, Pulse Width and Glide are appended AFTER the poly shared-CV block, at the
-    // SAME raw channel in both voice modes (ch14-17) — they are global params, not per-voice, so
-    // there is no separate poly variant to place. ch14-17 alias the Audio R output block's first
-    // channels (kRightBase..kRightBase+3): exactly the same shared-channel pattern ch0 already
+    // Unison, Detune, Pulse Width, Glide, Blend and Width are appended AFTER the poly shared-CV block, at the
+    // SAME raw channel in both voice modes (ch14-19) — they are global params, not per-voice, so
+    // there is no separate poly variant to place. ch14-19 alias the Audio R output block's first
+    // channels (kRightBase..kRightBase+5): exactly the same shared-channel pattern ch0 already
     // uses for Pitch CV in vs. Audio L out, so it is safe on the same condition — the CV must be
     // cached before this module writes any output to that channel (see readGlobalParamCV).
     //
@@ -34,13 +36,17 @@ public:
     static constexpr int kJackDetune = 8;
     static constexpr int kJackPulseWidth = 9;
     static constexpr int kJackGlide = 10;
-    static constexpr int kNumJacks = kJackGlide + 1;  // Pitch..Glide
+    static constexpr int kJackBlend = 11;
+    static constexpr int kJackWidth = 12;
+    static constexpr int kNumJacks = kJackWidth + 1;  // Pitch..Width
     static constexpr int kPolyModCVBase = kNumVoices; // poly shared-CV block start
-    static constexpr int kNumInputs = 18;             // 8 pitch fan + 6 shared mod CV + 4 global-param CV
+    static constexpr int kNumInputs = 20;             // 8 pitch fan + 6 shared mod CV + 6 global-param CV
     static constexpr int kUnisonCVChannel = 14;       // same raw channel, mono and poly
     static constexpr int kDetuneCVChannel = 15;
     static constexpr int kPulseWidthCVChannel = 16;
     static constexpr int kGlideCVChannel = 17;
+    static constexpr int kBlendCVChannel = 18;
+    static constexpr int kWidthCVChannel = 19;
     // Audio R's OUTPUT channel index. Deliberately a LITERAL, not derived from kNumInputs: it is a
     // different JUCE channel-index space (output channels vs. input channels), and growing
     // kNumInputs must never move it — every patch already routed FROM Audio R depends on raw
@@ -54,12 +60,12 @@ public:
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
 
     OscillatorModule()
-        // 18 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide
-        // CV (14-17).
+        // 20 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide/
+        // Blend/Width CV (14-19).
         // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21. Declaring outputs
         // ABOVE every CV input channel below kRightBase is what makes JUCE copy shared-mod-CV input
         // buffers when they fan out to several downstream nodes, so our post-render clear cannot
-        // corrupt them — see the processPolyMode clear note. ch14-17 are the one exception (they
+        // corrupt them — see the processPolyMode clear note. ch14-19 are the one exception (they
         // alias Audio R, see the channel-map comment above): those are cached before any write,
         // exactly like ch0's Pitch-CV/Audio-L sharing. Do NOT reduce kNumOutputs below kRightBase + 1.
         //
@@ -74,7 +80,11 @@ public:
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
-        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
+        // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
+        juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
+        detuneRange.setSkewForCentre(25.0f);
+        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f,
+                                                                 synth::centsAttributes()));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
@@ -88,6 +98,24 @@ public:
         // module is stereo, so showing both legs is the honest out-of-the-box state. The Preferences
         // default overrides it for newly dropped modules.
         addMuteParameter();
+        // Appended after the mute parameter so no earlier parameter moves. Phase and Rand are the
+        // start phase of each unison voice on a new note; Blend and Width shape the unison stack.
+        addParameter(phaseParam =
+                         new juce::AudioParameterFloat("phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f),
+                                                       0.0f, synth::degreesAttributes()));
+        addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
+                                                                      juce::NormalisableRange<float>(0.0f, 100.0f),
+                                                                      0.0f, synth::percentAttributes()));
+        addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 1.0f));
+        addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
+        // Mono voice feel. Glide Mode "Scaled" makes Glide the time per octave; Glide Curve "Exponential" is
+        // fast at the start and slow at the end; Legato (mono only) glides and keeps the phase only for
+        // overlapping notes.
+        addParameter(glideModeParam =
+                         new juce::AudioParameterChoice("glideMode", "Glide Mode", {"Always", "Scaled"}, 0));
+        addParameter(glideCurveParam =
+                         new juce::AudioParameterChoice("glideCurve", "Glide Curve", {"Linear", "Exponential"}, 0));
+        addParameter(legatoParam = new juce::AudioParameterBool("legato", "Legato", false));
         enableVisualBuffer(true);
     }
 
@@ -113,11 +141,22 @@ public:
         smoothedPan.setCurrentAndTargetValue(panParam->get());
         smoothedPulseWidth.reset(sampleRate, 0.01);
         smoothedPulseWidth.setCurrentAndTargetValue(pulseWidthParam->get() * 0.01f);
-        for (auto& v : voices)
+        smoothedBlend.reset(sampleRate, 0.01);
+        smoothedBlend.setCurrentAndTargetValue(blendParam->get());
+        smoothedWidth.reset(sampleRate, 0.01);
+        smoothedWidth.setCurrentAndTargetValue(widthParam->get());
+        for (auto& v : voices) {
             v.glide.reset();
+            v.active = false;
+            v.restartFadeRemaining = 0;
+        }
+        resetNoteState();
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+        // Held notes are tracked whatever the state, so a note released while muted is not left held.
+        scanMidi(midiMessages, buffer.getNumSamples(), /*audible*/ !isBypassed() && !isMuted());
+
         // Two separate branches, per docs/architecture/module-base.md#bypassmute-contract. A pure
         // source has no dry audio path to pass through, so bypass clears here rather than
         // returning early — but it stays its own branch so the two cases can never be conflated.
@@ -131,21 +170,11 @@ public:
             return;
         }
 
-        // Always process MIDI for voice 0 (fallback when no pitch CV connected)
-        for (const auto metadata : midiMessages) {
-            auto msg = metadata.getMessage();
-            if (msg.isNoteOn())
-                voices[0].lastMidiNote = (float)msg.getNoteNumber();
-        }
-
-        if (polyParam->get()) {
+        if (polyParam->get())
             processPolyMode(buffer, buffer.getNumSamples());
-        } else {
-            // Clear all channels except 0 at the start to prevent reading garbage
-            // but we need to save CV data first if we want to use it.
-            // Wait! In mono mode, channels 1-5 are CV inputs.
+        else
             processMonoMode(buffer, midiMessages);
-        }
+        clearPendingRestarts();
     }
 
     float getTargetFrequency() const {
@@ -165,7 +194,9 @@ public:
                     {"Unison", kUnisonCVChannel, "unison"},
                     {"Detune", kDetuneCVChannel, "detune"},
                     {"Pulse Width", kPulseWidthCVChannel, "pulseWidth"},
-                    {"Glide", kGlideCVChannel, "glide"}};
+                    {"Glide", kGlideCVChannel, "glide"},
+                    {"Blend", kBlendCVChannel, "blend"},
+                    {"Width", kWidthCVChannel, "width"}};
         return {{"Pitch", 0},
                 {"Waveform", 1, "waveform"},
                 {"Octave", 2, "octave"},
@@ -176,11 +207,13 @@ public:
                 {"Unison", kUnisonCVChannel, "unison"},
                 {"Detune", kDetuneCVChannel, "detune"},
                 {"Pulse Width", kPulseWidthCVChannel, "pulseWidth"},
-                {"Glide", kGlideCVChannel, "glide"}};
+                {"Glide", kGlideCVChannel, "glide"},
+                {"Blend", kBlendCVChannel, "blend"},
+                {"Width", kWidthCVChannel, "width"}};
     }
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse",      "Fine", "Level",
-                                       "Pan",   "Unison",   "Detune", "Pulse Width", "Glide"};
+        const juce::String labels[] = {"Pitch",  "Waveform", "Octave",      "Coarse", "Fine",  "Level", "Pan",
+                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
@@ -261,17 +294,16 @@ public:
                 return p;
             }
         }
-        // Unison/Detune/Pulse Width/Glide CV: same raw channel in both voice modes (see the
+        // Unison/Detune/Pulse Width/Glide/Blend/Width CV: same raw channel in both voice modes (see the
         // class-level channel-map comment) — checked after the mode-specific blocks so neither can
         // shadow it.
         struct GlobalJack {
             int channel;
             int jack;
         };
-        static constexpr GlobalJack kGlobalJacks[] = {{kUnisonCVChannel, kJackUnison},
-                                                      {kDetuneCVChannel, kJackDetune},
-                                                      {kPulseWidthCVChannel, kJackPulseWidth},
-                                                      {kGlideCVChannel, kJackGlide}};
+        static constexpr GlobalJack kGlobalJacks[] = {
+            {kUnisonCVChannel, kJackUnison}, {kDetuneCVChannel, kJackDetune}, {kPulseWidthCVChannel, kJackPulseWidth},
+            {kGlideCVChannel, kJackGlide},   {kBlendCVChannel, kJackBlend},   {kWidthCVChannel, kJackWidth}};
         for (const auto& jack : kGlobalJacks) {
             if (raw == jack.channel) {
                 p.visibleJackIndex = jack.jack;
@@ -343,6 +375,9 @@ private:
 
     struct VoiceState {
         UnisonOsc unisonOscs[MAX_UNISON];
+        UnisonOsc fadeOscs[MAX_UNISON]; ///< the phases before the last restart, running out
+        int restartFadeRemaining = 0;
+        bool active = false; ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
         float lastMidiNote = 69.0f;
@@ -382,21 +417,58 @@ private:
         return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
     }
 
-    /** The four global (not per-voice) params after their CV, read once per block. Their CV
-        channels (ch14-17) alias the Audio R output block, so a caller MUST read this before it
+    /** The six global (not per-voice) params after their CV, read once per block. Their CV
+        channels (ch14-19) alias the Audio R output block, so a caller MUST read this before it
         clears or writes those channels. */
     struct GlobalParamCV {
         int unisonCount;
         float detuneCents;
         float pulseWidthPercent;
         float glideSeconds;
+        float blend;
+        float width;
     };
     GlobalParamCV readGlobalParamCV(const juce::AudioBuffer<float>& buffer, int numSamples) const;
 
+    // ---- Unison mix (OscillatorModuleVoicing.cpp) ----
+    /** Per-voice weights of the unison stack for one block, ramped linearly from the block's start
+        to its end so an automated Blend or Width glides. At Blend 1 / Width 0 every left weight is
+        exactly 1 and the right side is unused. */
+    struct UnisonMix {
+        float leftStart[MAX_UNISON]{};
+        float leftStep[MAX_UNISON]{};
+        float rightStart[MAX_UNISON]{};
+        float rightStep[MAX_UNISON]{};
+        float sumStart = 1.0f; ///< sum of the Blend gains: the stack is divided by it
+        float sumStep = 0.0f;
+        bool stereo = false; ///< Width above 0: the stack renders to both legs
+    } unisonMix;
+    void prepareUnisonMix(int unisonCount, int numSamples, float blend, float width);
+    void fillUnisonRatios(float* ratios, int unisonCount, float detuneCents) const;
+
+    // ---- Notes and restart (OscillatorModuleNotes.cpp) ----
+    /** Reads the block's MIDI: tracks held notes and, when `audible`, the pitch and the sample offsets of
+        the note-ons that restart the voice. Never allocates. */
+    void scanMidi(const juce::MidiBuffer& midi, int numSamples, bool audible);
+    /** The single gate for restarting phase on a note-on; `overlapping` is true while another note is held. */
+    bool shouldRestartOnNoteOn(bool overlapping) const;
+    /** Restarts every unison oscillator of `voice`; with `fadeFromOld` the previous phases run out over
+     * CROSSFADE_SAMPLES. */
+    void restartVoice(VoiceState& voice, bool fadeFromOld);
+    void resetNoteState();
+    synth::GlideTime glideTime() const {
+        return glideModeParam->getIndex() == 1 ? synth::GlideTime::Scaled : synth::GlideTime::Always;
+    }
+    synth::GlideCurve glideCurve() const {
+        return glideCurveParam->getIndex() == 1 ? synth::GlideCurve::Exponential : synth::GlideCurve::Linear;
+    }
+    void clearPendingRestarts();
+
     void processMonoMode(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples);
+    /** `rightRendered`: Audio R already holds the stack's right leg, so Pan scales both legs in place. */
     void placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int voiceIndex, int numSamples, const float* panCV,
-                            int panCVLength);
+                            int panCVLength, bool rightRendered);
 
     /** Poly helpers (OscillatorModulePoly.cpp). */
     struct PolyModCVPresence {
@@ -408,11 +480,70 @@ private:
         float detuneCents;
         float glideSeconds;
     };
-    void renderPolyVoice(int voice, float* output, int numSamples, float basePitchHz, const PolyVoiceSettings& set);
-    void renderPolyVoiceSteady(int voice, float* output, int numSamples, float basePitchHz,
+    /** `outputR` is the voice's Audio R channel, or null when the stack renders to the left leg only. */
+    void renderPolyVoice(int voice, float* output, float* outputR, int numSamples, float basePitchHz,
+                         const PolyVoiceSettings& set);
+    void renderPolyVoiceSteady(int voice, float* output, float* outputR, int numSamples, float basePitchHz,
                                const PolyVoiceSettings& set);
-    void renderPolyVoiceModulated(int voice, float* output, int numSamples, float basePitchHz,
+    void renderPolyVoiceModulated(int voice, float* output, float* outputR, int numSamples, float basePitchHz,
                                   const PolyVoiceSettings& set, bool gliding);
+
+    // -------------------------------------------------------------------------
+    // Unison stack
+    // -------------------------------------------------------------------------
+    struct StackSample {
+        float left = 0.0f;
+        float right = 0.0f;
+    };
+
+    /** Everything one sample of a stack depends on besides its own phases. */
+    struct StackContext {
+        const float* ratio; ///< per-voice frequency ratio (detune)
+        int count;
+        float baseDt; ///< phase increment before detune
+        int waveform;
+        int fadingFromWaveform;
+        float waveformAlpha; ///< above 0 while crossfading from fadingFromWaveform
+        float pulseWidth;
+    };
+
+    /** Weighted sum of one stack at sample `i` of the block, advancing every phase. Not yet normalised. */
+    StackSample sumStack(UnisonOsc* oscs, const StackContext& c, int i) const {
+        StackSample s;
+        for (int u = 0; u < c.count; ++u) {
+            const float uniDt = c.baseDt * c.ratio[u];
+            float g;
+            if (c.waveformAlpha > 0.0f) {
+                g = generateSample(c.fadingFromWaveform, oscs[u].phase, uniDt, c.pulseWidth) * c.waveformAlpha +
+                    generateSample(c.waveform, oscs[u].phase, uniDt, c.pulseWidth) * (1.0f - c.waveformAlpha);
+            } else {
+                g = generateSample(c.waveform, oscs[u].phase, uniDt, c.pulseWidth);
+            }
+            s.left += (unisonMix.leftStart[u] + unisonMix.leftStep[u] * (float)i) * g;
+            if (unisonMix.stereo)
+                s.right += (unisonMix.rightStart[u] + unisonMix.rightStep[u] * (float)i) * g;
+            oscs[u].phase += uniDt;
+            if (oscs[u].phase >= 1.0f)
+                oscs[u].phase -= 1.0f;
+        }
+        return s;
+    }
+
+    /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
+    StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
+        StackSample s = sumStack(voice.unisonOscs, c, i);
+        if (voice.restartFadeRemaining > 0) {
+            const StackSample old = sumStack(voice.fadeOscs, c, i);
+            const float alpha = (float)voice.restartFadeRemaining / (float)CROSSFADE_SAMPLES;
+            s.left = old.left * alpha + s.left * (1.0f - alpha);
+            s.right = old.right * alpha + s.right * (1.0f - alpha);
+            --voice.restartFadeRemaining;
+        }
+        const float divisor = unisonMix.sumStart + unisonMix.sumStep * (float)i;
+        s.left /= divisor;
+        s.right /= divisor;
+        return s;
+    }
 
     // -------------------------------------------------------------------------
     // Waveform generators
@@ -502,6 +633,17 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPan;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPulseWidth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBlend;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedWidth;
+
+    // Note tracking. Fixed-size so the audio thread never allocates.
+    static constexpr int kMaxRestartsPerBlock = 16;
+    synth::HeldNotes heldNotes;
+    std::array<int, kMaxRestartsPerBlock> restartOffsets{}; ///< sample offsets of this block's restarting note-ons
+    int numRestarts = 0;
+    bool noteJumps = false;            ///< mono legato: the newest note-on was not overlapping, so its pitch jumps
+    bool voice0RestartPending = false; ///< poly: a MIDI note-on restarts voice 0 at the next block
+    juce::Random phaseRandom{0x5EED1234};
 
     juce::AudioParameterChoice* waveformParam = nullptr;
     juce::AudioParameterInt* octaveParam = nullptr;
@@ -514,5 +656,12 @@ private:
     juce::AudioParameterFloat* panParam = nullptr;
     juce::AudioParameterFloat* pulseWidthParam = nullptr;
     juce::AudioParameterFloat* glideParam = nullptr;
+    juce::AudioParameterFloat* phaseParam = nullptr;
+    juce::AudioParameterFloat* randomPhaseParam = nullptr;
+    juce::AudioParameterFloat* blendParam = nullptr;
+    juce::AudioParameterFloat* widthParam = nullptr;
+    juce::AudioParameterChoice* glideModeParam = nullptr;
+    juce::AudioParameterChoice* glideCurveParam = nullptr;
+    juce::AudioParameterBool* legatoParam = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };
