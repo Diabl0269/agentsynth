@@ -119,7 +119,8 @@ not the sustain — so their CV is read at the block's first sample rather than 
   after this).
 - **Detune** is a skewed knob (centre at 25 cents) that stores cents. The stacking, Blend gain (`unisonBlendGain`), pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
 - **Blend** (0–1) fades the voices away from the centre (the middle voice, or the middle two for an
-  even count, stay at full level), so thinning the chorus does not change the fundamental's level.
+  even count, stay at full level; in a Stack mode it is voice 0, the root pitch), so thinning the chorus does not
+  change the fundamental's level.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square
   (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated
   naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias

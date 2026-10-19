@@ -110,6 +110,30 @@ TEST_F(WavetableOscillatorModuleTest, BlendFadesTheStackAgainstTheCentreVoice) {
     EXPECT_GT(rms(centreOnly, 0), 0.05f) << "the centre voice must survive blend 0";
 }
 
+// Regression test for FRO848: moving Blend to the shared centre-voice helper kept the middle voices of a
+// Stack mode at full level, so Blend 0 left the stacked octaves and dropped the root.
+TEST_F(WavetableOscillatorModuleTest, BlendZeroInAStackModeLeavesOnlyTheRoot) {
+    setFloat(*module, "position", 0.0f);
+    setFloat(*module, "detune", 0.0f);
+    setInt(*module, "unison", 1);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto single = renderNote(*module, 57, 2);
+
+    WavetableOscillatorModule stacked;
+    setFloat(stacked, "position", 0.0f);
+    setFloat(stacked, "detune", 0.0f);
+    setInt(stacked, "unison", 3);
+    setChoice(stacked, "stack", (int)WavetableOscillatorModule::Stack::Octave);
+    setFloat(stacked, "blend", 0.0f);
+    stacked.prepareToPlay(kSampleRate, kBlockSize);
+    const auto rootOnly = renderNote(stacked, 57, 2);
+
+    float diff = 0.0f;
+    for (int i = 0; i < single.getNumSamples(); ++i)
+        diff = std::max(diff, std::abs(single.getReadPointer(0)[i] - rootOnly.getReadPointer(0)[i]));
+    EXPECT_LT(diff, 1.0e-4f) << "Blend 0 in a Stack mode must leave exactly the root voice";
+}
+
 TEST_F(WavetableOscillatorModuleTest, RingModMultipliesBySyncInput) {
     using WT = WavetableOscillatorModule;
     setFloat(*module, "position", 0.0f);

@@ -790,9 +790,11 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
         const float semis = stackSemitones(bs.stack, u, bs.unisonCount);
         bs.uniRatio[u] = std::pow(2.0f, semis / 12.0f + cents / 1200.0f);
 
-        // Blend fades the detuned/stacked voices against an always-present centre (the voices
-        // nearest the root), so turning it down thins the chorus without changing the fundamental's level.
-        const float voiceGain = synth::unisonBlendGain(u, bs.unisonCount, blend);
+        // Blend fades the other voices against an always-present root, so turning it down thins the
+        // chorus without changing the fundamental's level. Detune spreads the voices symmetrically, so
+        // the root is the middle voice(s) (the shared helper); a Stack mode keeps voice 0 at the root pitch.
+        const bool isRoot = bs.stack == Stack::Detune ? synth::isUnisonCentreVoice(u, bs.unisonCount) : u == 0;
+        const float voiceGain = isRoot ? 1.0f : blend;
         float gl, gr;
         synth::unisonPanGains(u, bs.unisonCount, width, gl, gr);
         bs.uniGainL[u] = gl * voiceGain;
