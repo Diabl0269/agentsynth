@@ -2,6 +2,7 @@
 
 #include "SchmittTrigger.h"
 #include <array>
+#include <cstddef>
 
 /** One voice's Gate input over a block: the samples where it rises, where the oscillator restarts the
  *  voice's phase (a new note). Shared by the Oscillator and the Wavetable.
@@ -26,13 +27,13 @@ struct GateEdges {
         }
         for (int s = 0; s < numSamples; ++s) {
             if (trigger.process(gate[s], kThreshold) == SchmittTrigger::Edge::Rising && count < kMaxEdges)
-                offsets[(size_t)count++] = s;
+                offsets[(std::size_t)count++] = s;
         }
     }
 
     /** True once per edge, on the sample it lands; call with ascending `sample` within a block. */
     bool firesAt(int sample) noexcept {
-        if (next < count && offsets[(size_t)next] == sample) {
+        if (next < count && offsets[(std::size_t)next] == sample) {
             ++next;
             return true;
         }
