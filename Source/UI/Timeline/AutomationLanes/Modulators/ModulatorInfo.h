@@ -3,6 +3,7 @@
 #include "UI/Theme/Theme.h"
 #include <algorithm>
 #include <juce_graphics/juce_graphics.h>
+#include <map>
 #include <vector>
 
 namespace synth::ui {
@@ -29,8 +30,8 @@ struct ModulatorInfo {
     }
 };
 
-/** The key a routing is stored under in a lane's modulatorOrder: the Attenuverter's uuid when it has one (it survives a
- *  source change, so the slot does), else key(). */
+/** The key a routing is stored under in a lane's modulatorOrder: the Attenuverter's uuid when it has one, else key().
+ *  An edit that replaces the Attenuverter (Change source, Change parameter) moves the slot to the new uuid itself. */
 inline juce::String modulatorOrderKey(const ModulatorInfo& info) {
     return info.attenuverterUuid.isNotEmpty() ? info.attenuverterUuid : info.key();
 }
@@ -52,6 +53,41 @@ inline std::vector<ModulatorInfo> sortedByModulatorOrder(std::vector<ModulatorIn
     for (auto& info : routings)
         sorted.push_back(std::move(info));
     return sorted;
+}
+
+/** The routings of one lane's rows (`before` -> `after`, row order) that one change replaced in place, old key() -> new
+ *  key(): a routing gone from `before` pairs with a newcomer from the same source output, then the rest pair in row
+ *  order when exactly as many went as came. Anything unpaired was really removed or added. */
+inline std::map<juce::String, juce::String> replacedRoutings(const std::vector<ModulatorInfo>& before,
+                                                             const std::vector<ModulatorInfo>& after) {
+    const auto has = [](const std::vector<ModulatorInfo>& infos, const juce::String& key) {
+        return std::any_of(infos.begin(), infos.end(), [&key](const ModulatorInfo& info) { return info.key() == key; });
+    };
+    std::vector<const ModulatorInfo*> gone;
+    std::vector<const ModulatorInfo*> came;
+    for (const auto& info : before)
+        if (!has(after, info.key()))
+            gone.push_back(&info);
+    for (const auto& info : after)
+        if (!has(before, info.key()))
+            came.push_back(&info);
+    std::map<juce::String, juce::String> pairs;
+    for (auto g = gone.begin(); g != gone.end();) {
+        const auto c = std::find_if(came.begin(), came.end(), [g](const ModulatorInfo* info) {
+            return info->sourceUuid == (*g)->sourceUuid && info->sourceChannel == (*g)->sourceChannel;
+        });
+        if (c == came.end()) {
+            ++g;
+            continue;
+        }
+        pairs[(*g)->key()] = (*c)->key();
+        came.erase(c);
+        g = gone.erase(g);
+    }
+    if (gone.size() == came.size())
+        for (size_t i = 0; i < gone.size(); ++i)
+            pairs[gone[i]->key()] = came[i]->key();
+    return pairs;
 }
 
 // Where a parameter edit from a modulator row is in its gesture: Begin opens the undo step, Change

@@ -5,9 +5,12 @@
 // (reading the channel the source catalogue gives it), keeps its drawn amount curve (re-keyed to the new routing's
 // Attenuverter) and the whole change is ONE graph + timeline undo step.
 
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
+#include "UI/Graph/CardBody/CardBodySwapMotion.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
@@ -549,4 +552,70 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRowsRealMenuOffersChangeSourceLis
     for (int i = 0; i < (int)names.size(); ++i)
         ticked += capture.picker->isVisibleItemTickedForTest(i) ? 1 : 0;
     EXPECT_EQ(ticked, 1);
+}
+
+// Regression test for FRO881: Change source on the first of two rows moved it to the bottom (its slot in the lane's
+// order was stored under the old Attenuverter) and rebuilt it. Its undo brings the same row back to its old place with
+// the same swap.
+TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowItsPlaceAndItsFoldAndUndoSwapsBack) {
+    AmountScene s;
+    // After the scene: building MainComponent applies the saved animation mode (Follow system), and a CI runner's
+    // system asks for Reduce Motion.
+    FadeAnimateGuard animate;
+    int adsrChannel = -1;
+    const auto adsrUuid = addEnvelopeRouting(s, adsrChannel);
+    auto spare = addNodeWithUuid(s.mc, "LFO");
+    const auto spareUuid = spare->properties["uuid"].toString();
+    s.mc.getGraphEditor().updateComponents();
+    s.flush();
+    s.undo().clearUndoHistory();
+
+    auto& lanes = s.panel().getAutomationLanes();
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    auto* first = s.row(0);
+    auto* second = s.row(1);
+    ASSERT_EQ(first->getInfo().sourceUuid, s.lfoUuid) << "the premise: the LFO is the first row";
+    ASSERT_EQ(second->getInfo().sourceUuid, adsrUuid);
+    ASSERT_TRUE(s.doc().getLane(s.lane)->modulatorOrder.empty()) << "the premise: never reordered";
+    clickButton(first->getFoldArrow());
+    lanes.stepModulatorFoldForTest(1.0f);
+    ASSERT_TRUE(lanes.isModulatorCollapsed(s.lane, 0));
+    const int foldedHeight = s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight();
+    const int openHeight = s.panel().modulatorRowBoundsForTest(s.lane, 1).getHeight();
+    ASSERT_LT(foldedHeight, openHeight);
+    first->setForceSwapMotionForTest(true);
+
+    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(first->getInfo(), spareUuid, 0));
+    s.flush();
+
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    EXPECT_EQ(s.row(0), first) << "the same row, re-bound in place";
+    EXPECT_EQ(s.row(1), second);
+    EXPECT_EQ(first->getInfo().sourceUuid, spareUuid);
+    EXPECT_EQ(second->getInfo().sourceUuid, adsrUuid);
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorOrder,
+              (std::vector<juce::String>{first->getInfo().attenuverterUuid, second->getInfo().attenuverterUuid}))
+        << "the new routing holds the old one's slot";
+    EXPECT_TRUE(first->isSwapMotionRunning()) << "the name swaps in place";
+    EXPECT_TRUE(lanes.isModulatorCollapsed(s.lane, 0)) << "and the fold stays";
+    EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(), foldedHeight);
+    EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 1).getHeight(), openHeight);
+    first->stepSwapMotionForTest(synth::SwapMotion::totalMs());
+    ASSERT_FALSE(first->isSwapMotionRunning());
+
+    ASSERT_TRUE(s.undo().undo());
+    s.flush();
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    EXPECT_EQ(s.row(0), first) << "the undo re-binds the same row back";
+    EXPECT_EQ(s.row(1), second);
+    EXPECT_EQ(first->getInfo().sourceUuid, s.lfoUuid);
+    EXPECT_TRUE(first->isSwapMotionRunning()) << "and swaps the name back the same way";
+    EXPECT_TRUE(s.doc().getLane(s.lane)->modulatorOrder.empty()) << "the order is part of the undo step";
+    EXPECT_TRUE(lanes.isModulatorCollapsed(s.lane, 0));
+    EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(), foldedHeight);
+
+    ASSERT_TRUE(s.undo().redo());
+    s.flush();
+    EXPECT_EQ(s.row(0), first);
+    EXPECT_EQ(first->getInfo().sourceUuid, spareUuid);
 }

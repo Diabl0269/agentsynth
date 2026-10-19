@@ -130,12 +130,24 @@ TEST(AutomationLanesModulatorFoldTest, ReturnAndSpaceOnTheArrowAndLeftAndRightOn
     EXPECT_FALSE(s.f().panel.getAutomationLanes().isModulatorCollapsed(s.cutoff, 0));
 }
 
-TEST(AutomationLanesModulatorFoldTest, ARoutingWhoseSourceChangedStartsOpenAndAFoldIsNeverSaved) {
+TEST(AutomationLanesModulatorFoldTest,
+     ARoutingWhoseSourceChangedStaysFoldedARemovedOneComesBackOpenAndAFoldIsNeverSaved) {
     ModScene s(1);
     s.row(0)->getFoldArrow().keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
     ASSERT_TRUE(s.row(0)->isCollapsed());
+    const int folded = s.rowBounds(0).getHeight();
 
-    s.h.host.modulators[0].sourceUuid = "lfo-9"; // Change source: a new key
+    s.h.host.modulators[0].sourceUuid = "lfo-9"; // Change source: a new key, in the same slot
+    s.f().panel.refreshModulators();
+    ASSERT_NE(s.row(0), nullptr);
+    EXPECT_TRUE(s.row(0)->isCollapsed()) << "the fold goes with the slot";
+    EXPECT_EQ(s.rowBounds(0).getHeight(), folded);
+
+    // Removed, then added back in a later change: a new routing, which starts open.
+    const auto routing = s.h.host.modulators[0];
+    s.h.host.modulators.clear();
+    s.f().panel.refreshModulators();
+    s.h.host.modulators.push_back(routing);
     s.f().panel.refreshModulators();
     ASSERT_NE(s.row(0), nullptr);
     EXPECT_FALSE(s.row(0)->isCollapsed());

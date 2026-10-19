@@ -121,6 +121,17 @@ public:
     // ---- Modulator rows (derived from the graph through the host; TimelineAutomationLanesModulators.cpp) ----
     /** Re-derives every visible lane's modulator rows. Call after any graph change. */
     void refreshModulators();
+    /** While one lives, graph and doc changes do not re-derive the modulator rows; the last to go re-derives them once,
+     *  so an edit that replaces routings in several steps reads as one change. An undo or redo step holds them too. */
+    class ModulatorHold {
+    public:
+        explicit ModulatorHold(TimelineAutomationLanes& lanes);
+        ~ModulatorHold();
+
+    private:
+        TimelineAutomationLanes& lanes_;
+        JUCE_DECLARE_NON_COPYABLE(ModulatorHold)
+    };
     /** A modulator row's full (three line) height at the current zoom and its lane's height scale, px. */
     int modulatorRowHeight(synth::LaneId lane) const;
     /** The height of the lane's `index`th modulator row now: full, one line when folded, between mid-tween. */
@@ -145,8 +156,8 @@ public:
     int hiddenLaneCount(synth::TrackId track) const;
 
     // ---- Folding and ordering modulator rows (TimelineAutomationLanesModulatorFold.cpp) ----
-    /** Fold state of a routing's row, by ModulatorInfo::key(). Runtime-only, never saved; a routing that gets a new key
-     *  (its source changed) starts expanded. */
+    /** Fold state of a routing's row, by ModulatorInfo::key(). Runtime-only, never saved; it follows a routing replaced
+     *  in place (Change source, Change parameter, their undo) to the routing that took its slot. */
     bool isModulatorCollapsed(const juce::String& key) const;
     bool isModulatorCollapsed(synth::LaneId lane, int index) const;
     /** Folds the row to its title line, or opens it, tweening the height unless the panel is not showing or Reduce
@@ -313,8 +324,13 @@ private:
     int trayExtentOf(synth::LaneId lane, int modulatorIndex) const;
     void repositionOverlays();
     bool deriveRoutings();
+    void noteReplacedRoutings();
+    bool modulatorsHeld() const;
+    void releaseHeldModulators();
     int routingDerivations_ = 0;
     bool syncModulators();
+    void rekeyModulators(LaneModulators& entry, synth::LaneId lane, const std::vector<ModulatorInfo>& infos,
+                         const juce::String& parameterName);
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
                            const juce::String& parameterName);
     void wireBand(ModulatorBand& band) const;
@@ -363,7 +379,13 @@ private:
     std::map<juce::String, FoldTween> glideTweens_; // rows sliding into a new slot: y offset left to travel, by key
     std::map<juce::String, FoldTween> foldTweens_;  // folds in flight, by routing key
     std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_; // what the graph routes into each open lane
-    std::set<synth::LaneId> amountLanes_;                          // lanes drawn as a modulator's amount band
+    std::map<synth::LaneId, std::vector<ModulatorInfo>>
+        shownRoutings_;                            // each lane's routings in row order, last derived
+    std::map<juce::String, juce::String> rekeyed_; // routings replaced in place by the last change: old key -> new key
+    int modulatorHolds_ = 0;                       // live ModulatorHolds
+    bool modulatorsPending_ = false;               // a refresh came while held
+    std::shared_ptr<void> restoreHook_;            // undo_'s restore-settled hook, live while held
+    std::set<synth::LaneId> amountLanes_;          // lanes drawn as a modulator's amount band
     double lastReadoutBeat_ = -1.0;
     ShortcutManager* shortcuts_ = nullptr;
     juce::VBlankAnimatorUpdater foldUpdater_; // drives the fold tween; declared before the driver that uses it

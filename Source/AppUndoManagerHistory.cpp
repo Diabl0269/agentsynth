@@ -26,6 +26,14 @@ bool AppUndoManager::applyHistoryStep(bool redoStep) {
         ge->getMacroController().foldChangedMacros(foldsBefore);
     }
     tracksLeavingFired_ = false;
+    // Before the track list settles, so the views it measures have caught up. A hook whose owner went is dropped.
+    restoreSettledHooks_.erase(std::remove_if(restoreSettledHooks_.begin(), restoreSettledHooks_.end(),
+                                              [](const auto& hook) { return hook.expired(); }),
+                               restoreSettledHooks_.end());
+    const auto settled = restoreSettledHooks_; // a hook may add another
+    for (const auto& weak : settled)
+        if (const auto hook = weak.lock())
+            (*hook)();
     if (trackListSettled_)
         trackListSettled_(); // a track the step removed shrinks away and one it brought back grows in
     return did;
@@ -124,6 +132,15 @@ bool timelineRestoreDropsTrack(const synth::TimelineDoc& doc, const juce::var& s
 void AppUndoManager::setTrackListHooks(std::function<void()> tracksLeaving, std::function<void()> trackListSettled) {
     tracksLeaving_ = std::move(tracksLeaving);
     trackListSettled_ = std::move(trackListSettled);
+}
+
+// A view that would re-derive itself from a half-restored document (the timeline restored, the graph not yet) holds its
+// refresh while isRestoring() and catches up here, once per step.
+// The owner keeps the handle; the manager holds it weakly, so neither has to outlive the other.
+std::shared_ptr<void> AppUndoManager::addRestoreSettledHook(std::function<void()> hook) {
+    auto handle = std::make_shared<std::function<void()>>(std::move(hook));
+    restoreSettledHooks_.push_back(handle);
+    return handle;
 }
 
 // Once per step: a combined step restores more than one timeline action, and the picture is of the state before the

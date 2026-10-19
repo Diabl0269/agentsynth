@@ -15,21 +15,31 @@ juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
 }
 
-// `lane`'s stored modulator order with every key a carried routing had swapped for its new routing's key, positions
-// kept (the order lives with the lane, but its keys are the routings' Attenuverter uuids, which a carry replaces). A
-// key that was not carried (a refused move, a stale key) stays as it is.
-void remapModulatorOrder(synth::TimelineDoc& doc, synth::LaneId lane,
+// `order` (a lane's rows as they showed before a carry, as modulatorOrder keys) with every key a carried routing had
+// swapped for its new routing's key, positions kept, written as `lane`'s stored order (the order lives with the lane,
+// but its keys are the routings' Attenuverter uuids, which a carry replaces). A key that was not carried (a refused
+// move, a stale key) stays as it is. Nothing is written when nothing was carried.
+void remapModulatorOrder(synth::TimelineDoc& doc, synth::LaneId lane, std::vector<juce::String> order,
                          const std::map<juce::String, juce::String>& newKeys) {
-    const auto* current = doc.getLane(lane);
-    if (current == nullptr || current->modulatorOrder.empty() || newKeys.empty())
+    if (doc.getLane(lane) == nullptr || newKeys.empty())
         return;
-    auto order = current->modulatorOrder;
     for (auto& key : order)
         if (const auto it = newKeys.find(key); it != newKeys.end())
             key = it->second;
     doc.setModulatorOrder(lane, std::move(order));
 }
 } // namespace
+
+// The order `lane`'s modulator rows show in now, as modulatorOrder keys: its stored order completed by graph order, so
+// an empty (never reordered) order is written out whole before a carry replaces the keys it would fall back on.
+std::vector<juce::String> MainComponent::shownModulatorOrder(synth::LaneId lane) {
+    std::vector<juce::String> order;
+    if (const auto* current = timelineDoc.getLane(lane))
+        for (const auto& info : synth::ui::sortedByModulatorOrder(getModulators(current->nodeUuid, current->paramId),
+                                                                  current->modulatorOrder))
+            order.push_back(synth::ui::modulatorOrderKey(info));
+    return order;
+}
 
 // Everything attached to the `from` lane follows it onto `to` (a Move takes it off `from`, a Copy leaves it there and
 // adds its own). Today a lane has one kind of attachment, the modulator routings into its parameter's CV jack with
@@ -129,6 +139,9 @@ bool MainComponent::retargetLaneWithAttachments(synth::LaneId lane, const synth:
     const LaneEnd from{current->nodeUuid, current->paramId};
     const LaneEnd to{target.nodeUuid, target.paramId};
     const auto track = owner->id;
+    auto order = shownModulatorOrder(lane); // read before the edit: the rows keep their places on the new parameter
+    // The rows see the retarget and the carry as one change: each re-binds in place, keeping its fold and height.
+    const synth::ui::TimelineAutomationLanes::ModulatorHold hold(timelinePanel.getAutomationLanes());
     bool retargeted = false;
     undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
         retargeted = timelineDoc.retargetLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
@@ -136,7 +149,7 @@ bool MainComponent::retargetLaneWithAttachments(synth::LaneId lane, const synth:
             return;
         std::map<juce::String, juce::String> newKeys;
         carryLaneAttachments(from, to, track, CarryMode::Move, &newKeys);
-        remapModulatorOrder(timelineDoc, lane, newKeys);
+        remapModulatorOrder(timelineDoc, lane, std::move(order), newKeys);
     });
     return retargeted;
 }
@@ -149,6 +162,7 @@ synth::LaneId MainComponent::duplicateLaneWithAttachments(synth::LaneId lane, co
         return {};
     const LaneEnd from{current->nodeUuid, current->paramId};
     const LaneEnd to{target.nodeUuid, target.paramId};
+    auto order = shownModulatorOrder(lane); // the copy shows its rows in the original's order
     synth::LaneId created;
     undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
         created = timelineDoc.duplicateLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
@@ -157,7 +171,7 @@ synth::LaneId MainComponent::duplicateLaneWithAttachments(synth::LaneId lane, co
             return;
         std::map<juce::String, juce::String> newKeys;
         carryLaneAttachments(from, to, owner->id, CarryMode::Copy, &newKeys);
-        remapModulatorOrder(timelineDoc, created, newKeys);
+        remapModulatorOrder(timelineDoc, created, std::move(order), newKeys);
     });
     return created;
 }

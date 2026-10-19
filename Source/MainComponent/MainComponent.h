@@ -606,6 +606,7 @@ private:
     // A lane's modulators following it through Change parameter / Duplicate (MainComponentLaneSubtree.cpp).
     bool retargetLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
     synth::LaneId duplicateLaneWithAttachments(synth::LaneId lane, const synth::ui::LaneTarget& target) override;
+    std::vector<juce::String> shownModulatorOrder(synth::LaneId lane);
     void carryLaneAttachments(const LaneEnd& from, const LaneEnd& to, synth::TrackId toTrack, CarryMode mode,
                               std::map<juce::String, juce::String>* newKeys = nullptr);
     bool moveModulatorRouting(const synth::ui::ModulatorInfo& modulator, const LaneEnd& to,

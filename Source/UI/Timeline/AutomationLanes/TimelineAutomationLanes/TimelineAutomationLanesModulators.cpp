@@ -3,6 +3,7 @@
 // which lanes are really a modulator's amount lane.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
+#include "AppUndoManager.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -30,6 +31,19 @@ bool sameRoutingSet(const std::vector<ModulatorInfo>& a, const std::vector<Modul
     return std::all_of(b.begin(), b.end(), [&a](const ModulatorInfo& info) {
         return std::any_of(a.begin(), a.end(), [&info](const ModulatorInfo& x) { return x.key() == info.key(); });
     });
+}
+
+template <typename Map>
+void renameKey(Map& map, const juce::String& from, const juce::String& to) {
+    auto node = map.extract(from);
+    if (node.empty())
+        return;
+    node.key() = to;
+    map.insert(std::move(node));
+}
+
+bool hasKey(const std::vector<ModulatorInfo>& infos, const juce::String& key) {
+    return std::any_of(infos.begin(), infos.end(), [&key](const ModulatorInfo& info) { return info.key() == key; });
 }
 } // namespace
 
@@ -67,7 +81,9 @@ bool TimelineAutomationLanes::deriveRoutings() {
                 amounts.insert(amount->id);
         }
     }
-    // A folded row's state goes with its routing: a routing that is gone (or re-keyed by a source change) starts open.
+    noteReplacedRoutings();
+    // A folded row's state goes with its routing (to the routing that replaced it in place, see noteReplacedRoutings):
+    // a routing that is gone starts open if it ever comes back.
     std::set<juce::String> live;
     for (const auto& [laneId, infos] : routings_)
         for (const auto& info : infos)
@@ -80,6 +96,31 @@ bool TimelineAutomationLanes::deriveRoutings() {
     const bool changed = amounts != amountLanes_;
     amountLanes_ = std::move(amounts);
     return changed;
+}
+
+// Each lane's routings in row order, against the same from the last derivation. Every edit that re-cables a routing
+// gives it a new Attenuverter and so a new key: Change parameter re-cables each routing from the same source, Change
+// source puts a new source into the old routing's slot, and an undo of either swaps them back. Seen by key alone that
+// is a row removed and another added; replacedRoutings pairs them instead, and the replaced routing hands its fold
+// state and glide to its successor here, and its row and band in syncModulators (rekeyed_), so nothing jumps or
+// re-fades.
+void TimelineAutomationLanes::noteReplacedRoutings() {
+    rekeyed_.clear();
+    std::map<synth::LaneId, std::vector<ModulatorInfo>> shown;
+    for (const auto& track : doc_->getTracks())
+        for (const auto& lane : track.lanes) {
+            auto& now = shown[lane.id] = sortedByModulatorOrder(routings_[lane.id], lane.modulatorOrder);
+            if (const auto last = shownRoutings_.find(lane.id); last != shownRoutings_.end())
+                for (const auto& [from, to] : replacedRoutings(last->second, now))
+                    rekeyed_[from] = to;
+        }
+    shownRoutings_ = std::move(shown);
+    for (const auto& [from, to] : rekeyed_) {
+        if (collapsedMods_.erase(from) > 0)
+            collapsedMods_.insert(to);
+        renameKey(foldTweens_, from, to);
+        renameKey(glideTweens_, from, to);
+    }
 }
 
 bool TimelineAutomationLanes::isAmountLane(synth::LaneId lane) const { return amountLanes_.count(lane) > 0; }
@@ -96,7 +137,8 @@ int TimelineAutomationLanes::hiddenLaneCount(synth::TrackId track) const {
 // The rows are not stored anywhere: the graph is the truth, so whatever routes into the lane's CV jack
 // -- added from the lane's menu or patched by hand on the canvas -- is a row. A refresh that finds the
 // same routings keeps the same rows (keyboard focus and an in-flight drag survive it) and only re-reads
-// their titles, colours, values and amounts; a changed set of routings rebuilds that lane's rows.
+// their titles, colours, values and amounts; a routing replaced in place re-binds its row (rekeyModulators); any other
+// change to the set of routings rebuilds that lane's rows.
 // Returns true when any lane's rows were rebuilt or dropped, i.e. when the layout must be redone.
 bool TimelineAutomationLanes::syncModulators() {
     sweepLeavingModulators();
@@ -112,6 +154,7 @@ bool TimelineAutomationLanes::syncModulators() {
             auto infos = sortedByModulatorOrder(routings_[lane.id], lane.modulatorOrder);
             const auto parameterName = laneLabelsFor(lane, host_).parameter;
             auto& entry = modulators_[lane.id];
+            rekeyModulators(entry, lane.id, infos, parameterName);
             if (!sameRoutings(entry.infos, infos)) {
                 if (!sameRoutingSet(entry.infos, infos)) {
                     rebuildModulators(entry, lane.id, std::move(infos), parameterName);
@@ -149,6 +192,25 @@ bool TimelineAutomationLanes::syncModulators() {
         it = modulators_.erase(it);
     }
     return rebuilt;
+}
+
+// A routing replaced in place keeps its row and band: they re-bind to the routing that took its slot (the row swaps its
+// name and icon in place) instead of one fading out while another fades in. Keyboard focus and a fold survive it.
+void TimelineAutomationLanes::rekeyModulators(LaneModulators& entry, synth::LaneId lane,
+                                              const std::vector<ModulatorInfo>& infos,
+                                              const juce::String& parameterName) {
+    for (size_t i = 0; i < entry.infos.size() && i < entry.rows.size(); ++i) {
+        const auto to = rekeyed_.find(entry.infos[i].key());
+        if (to == rekeyed_.end())
+            continue;
+        const auto now = std::find_if(infos.begin(), infos.end(),
+                                      [&to](const ModulatorInfo& info) { return info.key() == to->second; });
+        if (now == infos.end() || hasKey(entry.infos, now->key()))
+            continue;
+        entry.rows[i]->setRouting(*now, parameterName);
+        entry.bands[i]->setModulator(*now, lane, parameterName);
+        entry.infos[i] = *now;
+    }
 }
 
 void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
@@ -250,6 +312,10 @@ void TimelineAutomationLanes::sweepLeavingModulators() {
 void TimelineAutomationLanes::refreshModulators() {
     if (doc_ == nullptr)
         return;
+    if (modulatorsHeld()) {
+        modulatorsPending_ = true;
+        return;
+    }
     // A cable patched or removed by hand can turn an amount lane back into a lane row (or the reverse),
     // which the lane pools and the track's lane count must follow.
     const bool amountLanesChanged = deriveRoutings();
@@ -258,6 +324,31 @@ void TimelineAutomationLanes::refreshModulators() {
     const bool rebuilt = syncModulators();
     if ((amountLanesChanged || rebuilt) && onLayoutChanged)
         onLayoutChanged();
+}
+
+// Change source cables the new routing, re-keys the amount lane, writes the order and cuts the old routing; an undo
+// restores the timeline before the graph. Derived at any step in between, the rows would see a routing come and another
+// go in separate changes (a row fading in, another out, its fold dropped) instead of one routing replacing another.
+bool TimelineAutomationLanes::modulatorsHeld() const {
+    return modulatorHolds_ > 0 || (undo_ != nullptr && undo_->isRestoring());
+}
+
+// The last hold went (or an undo step settled): one refresh for everything that came while held.
+void TimelineAutomationLanes::releaseHeldModulators() {
+    if (modulatorsHeld() || !modulatorsPending_)
+        return;
+    modulatorsPending_ = false;
+    refreshModulators();
+}
+
+TimelineAutomationLanes::ModulatorHold::ModulatorHold(TimelineAutomationLanes& lanes)
+    : lanes_(lanes) {
+    ++lanes_.modulatorHolds_;
+}
+
+TimelineAutomationLanes::ModulatorHold::~ModulatorHold() {
+    --lanes_.modulatorHolds_;
+    lanes_.releaseHeldModulators();
 }
 
 // Rides the panel's existing transport poll; only rows on screen ask the host, and each control

@@ -17,6 +17,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 #include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
+#include <algorithm>
 #include <map>
 #include <set>
 
@@ -288,7 +289,8 @@ bool MainComponent::changeModulatorSourceToNew(const synth::ui::ModulatorInfo& m
 
 // The shared recipe: `makeRouting(depth)` cables the new source into the old routing's CV jack at the old depth and
 // returns the new routing's Attenuverter (invalid = nothing happened); the amount lane (keyed by the routing's hidden
-// Attenuverter) is re-keyed to it with its points untouched, and the old routing is cut.
+// Attenuverter) is re-keyed to it with its points untouched, it takes the old routing's slot in the modulator order of
+// every lane on the jack, and the old routing is cut -- all in the one recorded step, so an undo puts the order back.
 bool MainComponent::repointModulator(const synth::ui::ModulatorInfo& modulator,
                                      const std::function<juce::AudioProcessorGraph::NodeID(float)>& makeRouting) {
     const auto old = findAttenuverterRouting(audioEngine, modulator);
@@ -303,13 +305,29 @@ bool MainComponent::repointModulator(const synth::ui::ModulatorInfo& modulator,
     const bool hasLane = amountLane != nullptr;
     const auto laneId = hasLane ? amountLane->id : synth::LaneId{};
     const auto oldRouting = *old;
+    // Every lane on this jack, its rows as they show now: the new routing takes the old one's slot in each (the slot is
+    // stored under the Attenuverter's uuid, which the re-point replaces), so the row keeps its place.
+    std::vector<std::pair<synth::LaneId, std::vector<juce::String>>> orders;
+    for (const auto& track : timelineDoc.getTracks())
+        for (const auto& lane : track.lanes)
+            if (lane.nodeUuid == modulator.targetUuid && lane.paramId == modulator.paramId)
+                orders.emplace_back(lane.id, shownModulatorOrder(lane.id));
+    const auto oldKey = synth::ui::modulatorOrderKey(modulator);
+    // The modulator rows see the whole re-point as one change, so the row re-binds in place (it never fades out while
+    // another fades in).
+    const synth::ui::TimelineAutomationLanes::ModulatorHold hold(timelinePanel.getAutomationLanes());
     bool changed = false;
     undoManager.recordGraphTimelineAndMacroChange(graph, timelineDoc, graphEditor.getMacros(), [&, this] {
         const auto created = makeRouting(depth);
         if (created.uid == 0)
             return;
+        const auto newAtten = uuidOf(graph.getNodeForId(created));
         if (hasLane)
-            timelineDoc.rebindLane(laneId, uuidOf(graph.getNodeForId(created)));
+            timelineDoc.rebindLane(laneId, newAtten);
+        for (auto& [lane, order] : orders) {
+            std::replace(order.begin(), order.end(), oldKey, newAtten);
+            timelineDoc.setModulatorOrder(lane, std::move(order));
+        }
         graphEditor.removeModulator(oldRouting, /*removeLonelySource=*/false, /*recordUndo=*/false);
         changed = true;
     });

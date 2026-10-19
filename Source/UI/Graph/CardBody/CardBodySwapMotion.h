@@ -32,6 +32,8 @@ public:
 
     /** Starts the frames (a VBlank pump on the card); `onDone` runs once, after the controls have landed. */
     void run(std::function<void()> onDone);
+    /** Test seam: like run, but no frame arrives; the test steps the motion with setElapsed. */
+    void holdForTest(std::function<void()> onDone) { onDone_ = std::move(onDone); }
     /** Draws the frame `elapsedMs` into the motion (the pump's frame; tests step it by hand). */
     void setElapsed(double elapsedMs);
     /** Lands every control at once and ends the motion; runs `onDone` if it has not. */

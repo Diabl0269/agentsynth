@@ -331,8 +331,8 @@ tooltip adding the key ("Left arrow" / "Right arrow" on the row). A folded row i
 times the row zoom): the title and the amount readout stay (the readout moves up to the right end of the title line),
 the shape picture and the shape, rate and sync controls are hidden, and its band shrinks with it, the rows and lanes
 below closing up. Left on a focused open row folds it, Right on a folded row opens it. Fold state is runtime-only, never
-saved: `TimelineAutomationLanes` keeps a set of folded routing keys (`ModulatorInfo::key()`), so a routing whose source
-was changed (a new key) starts open, and a key whose routing is gone is dropped. The height change is a 160 ms
+saved: `TimelineAutomationLanes` keeps a set of folded routing keys (`ModulatorInfo::key()`); a routing replaced in
+place keeps its fold ([row identity](modulator-row-identity.md)), a gone one's key is dropped. The height change is a 160 ms
 `easeOutCubic` tween driven by `TimelineAutomationLanes` (the row shrinks to, and grows from, its title line; the controls
 leave when it lands and return as it starts); it lands at once when the timeline is not showing, under Reduce Motion or
 with Animations Off ([Motion rules](../layout/animation.md#motion-rules)).
@@ -373,8 +373,8 @@ slots (`DropIndicator`).
   then the destination lane's `modulatorOrder` gets the new routing's key at `index` and the old key leaves the order of
   every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back. The moved routing has a
   new key, so its row fades in under the destination lane like any new routing.
-- Change parameter and Duplicate carry the lane's `modulatorOrder` too: each carried routing's old key is replaced by its
-  new routing's key at the same position (`remapModulatorOrder` in `MainComponentLaneSubtree.cpp`).
+- Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
+  carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
 - The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
   another lane". Not done: no auto-scroll while dragging, and the lane the row leaves does not close its gap until the drop.
 
@@ -412,15 +412,15 @@ match, Down reaches New). The item is always enabled. "Add modulator..." stays L
 `TrackHeaderHost::changeModulatorSourceToNew(info, typeName, channel)` (type and channel from `newModuleSources()`:
 "LFO" and "ADSR"): `MainComponent::repointModulator` is the recipe below with the source made by
 `GraphEditor::addModulationSourceModule(..., recordUndo=false)` beside the target card, so create + cable + amount-lane
-re-key + cut of the old routing are still ONE undo step. The row's name and colour change by the routing's key changing:
-the old row fades out and the new one fades in (the usual new-routing fade). On a pick
+re-key + cut of the old routing are still ONE undo step. The new routing takes the old one's slot in the order of every
+lane on the jack and the row re-binds in place ([row identity](modulator-row-identity.md)). On a pick
 (the chosen output's channel comes from the catalogue, `LfoChoice::sourceChannel`), ONE
 `recordGraphTimelineAndMacroChange` step cables the new source in at the old routing's
 depth (`GraphEditor::connectModulationSource` with `recordUndo=false`, macro ports crossed as for "Add modulator..."),
 re-keys the amount lane to the new routing's Attenuverter with `TimelineDoc::rebindLane` (same lane id, track and
 points), and cuts the old routing (`removeModulator(..., removeLonelySource=false, recordUndo=false)`). There is no
 confirm dialog because nothing is deleted: the old source stays on the canvas, even when this was its last cable.
-Cmd+Z restores the old source and the lane's old key together.
+Cmd+Z restores the old source, the lane's old key and the old order together, and the same row swaps back.
 
 **Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
 whole, or a direct cable's edges), sweeps the macro ports the cable leaves empty, and removes the LFO too when

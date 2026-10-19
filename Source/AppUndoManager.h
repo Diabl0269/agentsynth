@@ -6,6 +6,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_data_structures/juce_data_structures.h>
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace synth {
 class TimelineDoc;          // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
@@ -310,6 +312,9 @@ public:
 
     void setTrackListHooks(std::function<void()> tracksLeaving, std::function<void()> trackListSettled);
     void fireTracksLeaving(); // called by the timeline snapshot action only
+    /** Runs `hook` after every undo()/redo() step, once all of it is restored (isRestoring() is false again), for as
+     *  long as the returned handle lives. */
+    [[nodiscard]] std::shared_ptr<void> addRestoreSettledHook(std::function<void()> hook);
 
 private:
     // Undo or redo one step, retracting the cables it takes away.
@@ -345,6 +350,7 @@ private:
     std::function<void()> tracksLeaving_;
     std::function<void()> trackListSettled_;
     bool tracksLeavingFired_ = false;
+    std::vector<std::weak_ptr<std::function<void()>>> restoreSettledHooks_;
 
     // Builds a graph SnapshotAction wired to graphEditor's detach/reattach lifecycle — the
     // pre/post-restore lambda plumbing recordStructuralChange, pushSnapshotFromCapture, and the
