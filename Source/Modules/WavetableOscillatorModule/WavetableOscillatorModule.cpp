@@ -3,6 +3,7 @@
 
 #include "WavetableOscillatorModule.h"
 #include "Modules/ModuleFileStateKeys.h"
+#include "Modules/ParameterText.h"
 #include "Project/DeferredAssetLoads.h"
 
 // ---- Built-in harmonic specs -------------------------------------------
@@ -271,7 +272,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
     juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
     detuneRange.setSkewForCentre(25.0f);
-    addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f));
+    addParameter(detuneParam =
+                     new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f, synth::centsAttributes()));
 
     // ---- Phase 2: warp ----
     addParameter(warpParam = new juce::AudioParameterChoice("warp", "Warp",

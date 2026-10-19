@@ -83,7 +83,8 @@ public:
         // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
         juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
         detuneRange.setSkewForCentre(25.0f);
-        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f));
+        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f,
+                                                                 synth::centsAttributes()));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).

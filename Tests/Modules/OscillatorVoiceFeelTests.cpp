@@ -122,6 +122,8 @@ TEST(OscillatorVoiceFeel, DetuneKnobIsSkewedButStaysInCents) {
         EXPECT_NEAR(detune->convertFrom0to1(1.0f), 100.0f, 1e-3f);
         setActual(*m, "detune", 37.0f);
         EXPECT_NEAR(actualOf(*m, "detune"), 37.0f, 0.01f);
+        EXPECT_EQ(detune->getText(detune->getValue(), 32), "37.0 ct") << "reads as cents, not a raw float";
+        EXPECT_NEAR(detune->convertFrom0to1(detune->getValueForText("12.5 ct")), 12.5f, 0.01f);
     }
 }
 
