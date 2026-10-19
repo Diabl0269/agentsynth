@@ -391,6 +391,8 @@ add_library(Core STATIC
     # Modules
     Source/Modules/CardViewState.h
     Source/Modules/ModuleBase.h
+    Source/Modules/ModuleOutputStage.h
+    Source/Modules/ModuleOutputStage.cpp
     Source/Modules/ModuleFileStateKeys.h
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h

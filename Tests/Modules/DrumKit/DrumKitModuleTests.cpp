@@ -384,6 +384,7 @@ TEST(DrumKitModule, BypassAndMuteAreSilentAndStopRingingDrums) {
             kit->setBypassed(true);
         else
             kit->setMuted(true);
+        render(*kit, {}, 0.01); // the toggle block fades out; the silent branch runs from the next one
         EXPECT_EQ(peakOf(render(*kit, {{36}, {38}}, 0.2)), 0.0f) << (bypass ? "bypassed" : "muted");
         if (bypass)
             kit->setBypassed(false);

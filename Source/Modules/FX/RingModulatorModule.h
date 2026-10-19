@@ -235,6 +235,8 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
+    // Bypassed, both legs carry the carrier (ch0): ch1 is the Modulator input, not a right-hand dry leg.
+    int bypassDryChannel(int /*outputChannel*/) const override { return 0; }
     ModuleType getModuleType() const override { return ModuleType::RingModulator; }
 
     double getLatencyInSamples() const {

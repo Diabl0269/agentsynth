@@ -32,6 +32,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
+        prepareOutputStage(sampleRate, samplesPerBlock);
         juce::dsp::ProcessSpec spec;
         spec.sampleRate = sampleRate;
         spec.maximumBlockSize = (juce::uint32)samplesPerBlock;

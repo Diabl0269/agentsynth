@@ -263,6 +263,8 @@ TEST(MixerSoloTest, SoloNeverTouchesAnyMuteParameter) {
     b->setMuted(true);
     ASSERT_TRUE(rig.engine.setChannelStripSoloed(rig.stripA, false));
     EXPECT_TRUE(b->isMuted());
+    for (int i = 0; i < 8; ++i)
+        rig.render(); // B's mute fades out over its first few milliseconds
     EXPECT_NEAR(rig.render(), 0.1f + 0.4f, 1.0e-5f) << "B's own mute still applies after un-solo";
 }
 

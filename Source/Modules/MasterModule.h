@@ -121,6 +121,8 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
 
+    // Bypass sums the inputs into the mix rather than leaving them in place, so it cannot be crossfaded.
+    bool bypassPassesInputThrough() const override { return false; }
     ModuleType getModuleType() const override { return ModuleType::Master; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
 

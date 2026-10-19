@@ -44,7 +44,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(samplesPerBlock);
+        prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedGain.reset(sampleRate, 0.01);
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }

@@ -121,6 +121,8 @@ TEST(HostedPluginTest, PassThroughUntilReady) {
     module.setBypassed(false);
     module.setMuted(true);
     fillRamp(buffer);
+    module.processBlock(buffer, midi); // the toggle block fades out; the clearing branch runs from the next one
+    fillRamp(buffer);
     module.processBlock(buffer, midi);
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         ASSERT_FLOAT_EQ(buffer.getSample(channel, 0), 0.0f) << "mute must clear (channel " << channel << ")";

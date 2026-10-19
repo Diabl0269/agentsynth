@@ -129,6 +129,8 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
 
     // Set bypass to true and process
     filter.setBypassed(true);
+    juce::AudioBuffer<float> fadeBlock(bypassBuffer);
+    filter.processBlock(fadeBlock, midiBuffer); // the toggle block crossfades wet to dry; dry runs from the next
     filter.processBlock(bypassBuffer, midiBuffer);
 
     // Verify that the output equals the input (passthrough)

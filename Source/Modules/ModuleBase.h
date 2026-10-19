@@ -2,6 +2,7 @@
 
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
+#include "ModuleOutputStage.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
@@ -196,6 +197,7 @@ public:
                               numOutputs > 0))
         , moduleName(name) {
         addParameter(bypassedParam = new juce::AudioParameterBool("bypassed", "Bypassed", false));
+        outputStage_.reserveDefault(numInputs > 0 && numOutputs > 0 ? std::min(numOutputs, 2) : 0);
 
         // Bus layout stays fixed for the module's lifetime (JUCE cannot renegotiate without dropping
         // graph connections), so Dual I/O only ever changes jack *visibility* and the logical-port
@@ -217,6 +219,18 @@ public:
         if (!mutedParam)
             addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
     }
+
+    /** The input channel a bypassed module leaves on output channel `outputChannel`, or -1 for none. Default:
+        the same index when the module's first input is audio; override when bypass routes differently. */
+    virtual int bypassDryChannel(int outputChannel) const;
+
+    /** False in a module whose bypassed output is not its input left in place (Master): its bypass stays a hard switch.
+     */
+    virtual bool bypassPassesInputThrough() const { return true; }
+
+    /** Opt-in `mix` (0..1, default 1) and `pan` (-1..1, default 0) applied after processModuleBlock; add last. */
+    void addMixParameter() { outputStage_.addMix(*this); }
+    void addPanParameter() { outputStage_.addPan(*this); }
 
     bool hasDualIOParameter() const { return dualIOParam != nullptr; }
     bool isDualIO() const { return dualIOParam != nullptr && dualIOParam->get(); }
@@ -582,7 +596,9 @@ public:
      *  getName() stays the type key either way. Message thread. */
     virtual juce::String getDefaultTitle() const { return getName(); }
 
-    bool isBypassed() const { return bypassedParam->get(); }
+    /** The user's choice from any thread but the render thread; during a click-free transition the render
+        thread (processModuleBlock) sees the state the module is still rendering, one transition behind. */
+    bool isBypassed() const { return outputStage_.bypassedForRender(bypassedParam->get()); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
     /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
@@ -593,7 +609,7 @@ public:
      *  unconditionally and are only safe once this returns true. */
     bool hasMuteParameter() const { return mutedParam != nullptr; }
 
-    bool isMuted() const { return mutedParam->get(); }
+    bool isMuted() const { return outputStage_.mutedForRender(mutedParam->get()); }
     void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
@@ -602,7 +618,10 @@ public:
         (applyInputDownMix) can never be forgotten by one module. Override processModuleBlock. */
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
         applyInputDownMix(buffer);
-        processModuleBlock(buffer, midiMessages);
+        if (outputStage_.isIdle(bypassedParam->get(), mutedParam != nullptr && mutedParam->get()))
+            processModuleBlock(buffer, midiMessages);
+        else
+            renderThroughOutputStage(buffer, midiMessages);
     }
 
     /** The module's own render. Runs after applyInputDownMix(), so a stereo pair summed into one
@@ -880,87 +899,19 @@ public:
     }
 
 protected:
-    // Call from prepareToPlay() when the module uses addOutputLevelParameter().
-    void prepareOutputLevel(double sampleRate) {
-        smoothedOutputLevel.reset(sampleRate, 0.01); // 10 ms ramp — anti-click on knob moves
-        smoothedOutputLevel.setCurrentAndTargetValue(getOutputLevel());
-    }
+    /** Call from prepareToPlay() when the module uses addOutputLevelParameter(); also prepares the output stage. */
+    void prepareOutputLevel(double sampleRate);
 
-    // Scales the first numAudioChannels channels by the smoothed output level.
-    //
-    // Call at the END of the normal processBlock path only. Never on the bypass branch
-    // (dry pass-through must stay untouched) and never on mute (already cleared) — see
-    // docs/architecture/module-base.md#bypassmute-contract. No-op when the module did not
-    // call addOutputLevelParameter().
-    void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels) {
-        if (outputLevelParam == nullptr)
-            return;
+    /** Call from prepareToPlay() in a module without an output level so the bypass crossfade has room for
+        every block and leg; without it a block past 1024 samples hard-switches. */
+    void prepareOutputStage(double sampleRate, int samplesPerBlock = 0);
 
-        const int numSamples = buffer.getNumSamples();
-        const int numChannels = juce::jmin(numAudioChannels, buffer.getNumChannels());
-        if (numSamples == 0 || numChannels <= 0)
-            return;
+    /** Scales the first numAudioChannels channels by the smoothed output level. Call at the END of the
+        normal path only: never on the bypass branch (dry stays untouched) nor on mute. */
+    void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels);
 
-        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
-
-        if (!smoothedOutputLevel.isSmoothing()) {
-            const float gain = smoothedOutputLevel.getCurrentValue();
-            if (gain != 1.0f)
-                for (int ch = 0; ch < numChannels; ++ch)
-                    buffer.applyGain(ch, 0, numSamples, gain);
-            return;
-        }
-
-        // getArrayOfWritePointers() avoids re-resolving the pointer per sample and
-        // allocates nothing — the per-sample walk keeps the ramp exact even when it
-        // completes mid-block.
-        auto* const* channels = buffer.getArrayOfWritePointers();
-        for (int i = 0; i < numSamples; ++i) {
-            const float gain = smoothedOutputLevel.getNextValue();
-            for (int ch = 0; ch < numChannels; ++ch)
-                channels[ch][i] *= gain;
-        }
-    }
-
-    // Two-block variant for modules whose Audio R block sits ABOVE the mod-CV inputs on a
-    // dedicated `kRightBase` block (Wavetable / Oscillator / Filter layouts) rather than on a
-    // contiguous ch0/ch1 pair. Scales [0, span) and [rightBase, rightBase + span) from ONE ramp:
-    // calling applyOutputLevel() twice would advance the smoother twice and leave the right leg
-    // a block behind the left, which reads as the image drifting while Level moves.
-    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase) {
-        if (outputLevelParam == nullptr)
-            return;
-
-        const int numSamples = buffer.getNumSamples();
-        const int bufChannels = buffer.getNumChannels();
-        const int leftCount = juce::jmin(span, bufChannels);
-        if (numSamples == 0 || leftCount <= 0)
-            return;
-
-        const int rightCount = juce::jlimit(0, span, bufChannels - rightBase);
-
-        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
-
-        if (!smoothedOutputLevel.isSmoothing()) {
-            const float gain = smoothedOutputLevel.getCurrentValue();
-            if (gain != 1.0f) {
-                for (int ch = 0; ch < leftCount; ++ch)
-                    buffer.applyGain(ch, 0, numSamples, gain);
-                for (int ch = 0; ch < rightCount; ++ch)
-                    buffer.applyGain(rightBase + ch, 0, numSamples, gain);
-            }
-            return;
-        }
-
-        auto* const* channels = buffer.getArrayOfWritePointers();
-        for (int i = 0; i < numSamples; ++i) {
-            const float gain = smoothedOutputLevel.getNextValue();
-            for (int ch = 0; ch < leftCount; ++ch)
-                channels[ch][i] *= gain;
-            for (int ch = 0; ch < rightCount; ++ch)
-                channels[rightBase + ch][i] *= gain;
-        }
-    }
+    /** applyOutputLevel for the split-block layouts: [0, span) and [rightBase, rightBase + span) share one ramp. */
+    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase);
 
     juce::AudioParameterBool* bypassedParam = nullptr;
     juce::AudioParameterBool* mutedParam = nullptr;
@@ -968,6 +919,10 @@ protected:
     juce::AudioParameterFloat* outputLevelParam = nullptr;
 
 private:
+    void renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    void buildOutputLegs(synth::OutputLegs& legs, int bufferChannels) const;
+
+    synth::ModuleOutputStage outputStage_;
     juce::String moduleName;
     // 64 bytes including the NUL — matches TimelineSnapshot::kMaxStringBytes, so the strcmp
     // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.

@@ -226,6 +226,7 @@ TEST(SamplerInstrumentMode, BypassAndMuteSilenceTheOutputAndStopTheVoices) {
         ASSERT_GT(rig.module.getSoundingNotes().count(), 0u);
 
         setActual(rig.module, param, 1.0f);
+        run(rig.module, 1); // the toggle block fades out; the silent branch runs from the next one
         EXPECT_EQ(run(rig.module, 2).peak(), 0.0f) << param;
         EXPECT_EQ(rig.module.getSoundingNotes().count(), 0u) << param;
         EXPECT_EQ(rig.module.displayVoiceCount(), 0) << param;

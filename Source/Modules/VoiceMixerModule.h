@@ -11,7 +11,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(samplesPerBlock);
+        prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedLevel.reset(sampleRate, 0.01); // 10ms smoothing for anti-click
         smoothedLevel.setCurrentAndTargetValue(*levelParam);
     }

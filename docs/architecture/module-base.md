@@ -117,6 +117,17 @@ if (isMuted()) {
 
 Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.
 
+#### The transition around the two branches
+
+A toggle used to be a hard cut: mute cleared the block in one step and bypass swapped wet for dry in one step. `ModuleBase::processBlock` now smooths that without touching any module's two branches (`Source/Modules/ModuleOutputStage.cpp`).
+
+- **The base keeps an effective bypass/mute state that lags the parameter by one transition.** On the block where a parameter changes, the module keeps rendering its ACTIVE branch (normal DSP) while the base ramps over about 5 ms (at least 64 samples; a ramp longer than the block continues into the next blocks). When the ramp ends the effective state reaches the parameter and the module's own bypass/mute branch takes over from the next block.
+- **Mute** fades the audio legs to 0 (mute on) or in from 0 (mute off). **Bypass** captures the dry input of the audio legs before `processModuleBlock`, renders the module wet, and crossfades wet to dry (bypass on) or dry to wet (bypass off). A leg with no dry path (a source, which clears on bypass) fades like mute.
+- **Only audio legs fade** (`mapOutputChannel` heads with `PortRole::Audio` plus `rightAudioLegChannel()`); CV and MIDI outputs switch as before.
+- **`isBypassed()` / `isMuted()` answer for the render thread.** Inside `processModuleBlock` they return the effective state; on every other thread (UI, macro fan-out) they return the parameter, so the user's choice shows at once.
+- **No cost when nothing changes**: with the effective state equal to the parameters, no fade and Mix/Pan at rest (below), `processBlock` takes one predictable branch and the output is bit-identical to calling `processModuleBlock` directly.
+- **Dry capture never allocates on the audio thread.** The base owns the storage: the constructor reserves two legs of 1024 samples, and `prepareOutputLevel()` / `prepareOutputStage()` (call it from `prepareToPlay` in a module without an output level) size it to the module's block size and leg count. A block or leg count past that falls back to the old hard switch for that block.
+
 ### Output Level Stage
 
 `ModuleBase` offers an opt-in output-level parameter for modules whose output is audio — `addOutputLevelParameter()` in the ctor, `prepareOutputLevel(sampleRate)` in `prepareToPlay`, `applyOutputLevel(buffer, numAudioChannels)` at the end of the **normal** `processBlock` path. It is a no-op on modules that never opt in.

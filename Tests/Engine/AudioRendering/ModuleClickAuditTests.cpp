@@ -56,8 +56,12 @@ const std::vector<ProcessorCase>& processorCases() {
 
 // Audit findings that click today. Each names the module, the edge and why; the case still renders and
 // prints its step, is skipped while it clicks, and FAILS once it stops clicking so the entry gets removed.
-constexpr const char* kHardMute = "mute clears or restores the block in one step with no gain ramp";
-constexpr const char* kHardBypass = "bypass switches between the wet and dry paths in one step with no crossfade";
+constexpr const char* kStaleLine =
+    "the delay line is not written while muted or bypassed, so coming back plays stale echoes that step against "
+    "the live signal; the fade ModuleBase adds cannot hide a step inside the module's own output";
+constexpr const char* kLegacyDuplicate =
+    "the vestigial ch1 duplicate of the mono output is not an audio leg, so ModuleBase cannot fade it and it "
+    "switches between a copy of the output and the cleared CV block";
 constexpr const char* kDelayJump = "the delay read position jumps with the parameter; the tap is not crossfaded";
 constexpr const char* kCeilingJump =
     "the brickwall ceiling is applied unsmoothed (by design), so a drop clamps in one step";
@@ -71,67 +75,24 @@ struct KnownClick {
 
 const std::vector<KnownClick>& knownClicks() {
     static const std::vector<KnownClick> clicks = {
-        {"Filter", "bypass_on", kHardBypass},
-        {"Filter", "bypass_off", kHardBypass},
-        {"Filter", "mute_on", kHardMute},
-        {"VCA", "bypass_on", kHardBypass},
-        {"VCA", "bypass_off", kHardBypass},
-        {"VCA", "mute_on", kHardMute},
-        {"VCA", "mute_off", kHardMute},
-        {"Channel Strip", "mute_on", kHardMute},
-        {"Channel Strip", "mute_off", kHardMute},
-        {"Master", "mute_on", kHardMute},
-        {"Master", "mute_off", kHardMute},
-        {"Delay", "bypass_on", kHardBypass},
-        {"Delay", "bypass_off", kHardBypass},
-        {"Delay", "mute_on", kHardMute},
-        {"Delay", "mute_off", kHardMute},
+        {"VCA", "bypass_on", kLegacyDuplicate},
+        {"VCA", "bypass_off", kLegacyDuplicate},
+        {"VCA", "mute_on", kLegacyDuplicate},
+        {"VCA", "mute_off", kLegacyDuplicate},
+        {"Delay", "bypass_off", kStaleLine},
+        {"Delay", "mute_off", kStaleLine},
         {"Delay", "time_min_to_max", kDelayJump},
         {"Delay", "time_max_to_min", kDelayJump},
-        {"Reverb", "bypass_on", kHardBypass},
-        {"Reverb", "mute_on", kHardMute},
-        {"Reverb", "mute_off", kHardMute},
-        {"Chorus", "bypass_off", kHardBypass},
-        {"Chorus", "mute_on", kHardMute},
-        {"Chorus", "mute_off", kHardMute},
         {"Chorus", "centreDelay_min_to_max", kDelayJump},
         {"Chorus", "centreDelay_max_to_min", kDelayJump},
-        {"Flanger", "bypass_on", kHardBypass},
-        {"Flanger", "bypass_off", kHardBypass},
-        {"Flanger", "mute_off", kHardMute},
+        {"Flanger", "mute_off", kStaleLine},
         {"Flanger", "centreDelay_min_to_max", kDelayJump},
         {"Flanger", "centreDelay_max_to_min", kDelayJump},
-        {"Phaser", "bypass_on", kHardBypass},
-        {"Phaser", "bypass_off", kHardBypass},
-        {"Phaser", "mute_on", kHardMute},
-        {"Phaser", "mute_off", kHardMute},
-        {"Distortion", "bypass_on", kHardBypass},
-        {"Distortion", "bypass_off", kHardBypass},
-        {"Distortion", "mute_on", kHardMute},
-        {"Distortion", "mute_off", kHardMute},
-        {"Limiter", "bypass_off", kHardBypass},
-        {"Limiter", "mute_on", kHardMute},
-        {"Limiter", "mute_off", kHardMute},
         {"Limiter", "ceiling_max_to_min", kCeilingJump},
-        {"Pitch Shifter", "mute_on", kHardMute},
-        {"Pitch Shifter", "mute_off", kHardMute},
-        {"Compressor", "bypass_on", kHardBypass},
-        {"Compressor", "mute_on", kHardMute},
-        {"Compressor", "mute_off", kHardMute},
         {"Compressor", "threshold_min_to_max", kBlockRateGain},
         {"Compressor", "threshold_max_to_min", kBlockRateGain},
         {"Compressor", "ratio_min_to_max", kBlockRateGain},
         {"Compressor", "attack_max_to_min", kBlockRateGain},
-        {"Bitcrusher", "mute_on", kHardMute},
-        {"Bitcrusher", "mute_off", kHardMute},
-        {"Parametric EQ", "mute_on", kHardMute},
-        {"Parametric EQ", "mute_off", kHardMute},
-        {"Ring Modulator", "bypass_on", kHardBypass},
-        {"Ring Modulator", "bypass_off", kHardBypass},
-        {"Ring Modulator", "mute_on", kHardMute},
-        {"Ring Modulator", "mute_off", kHardMute},
-        {"Gate", "bypass_off", kHardBypass},
-        {"Gate", "mute_on", kHardMute},
     };
     return clicks;
 }

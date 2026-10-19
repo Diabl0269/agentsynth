@@ -681,10 +681,12 @@ TEST_F(SamplerModuleTest, BypassAndMuteSilenceOutput) {
     ASSERT_TRUE(module->loadSampleFile(file));
 
     module->setBypassed(true);
+    render(*module, 1, 512); // the toggle block fades out; the clearing branch runs from the next one
     EXPECT_TRUE(TestAudioHelpers::isSilent(render(*module, 1, 512), 0)) << "a source module clears on bypass";
     module->setBypassed(false);
 
     module->setMuted(true);
+    render(*module, 1, 512);
     EXPECT_TRUE(TestAudioHelpers::isSilent(render(*module, 1, 512), 0));
     module->setMuted(false);
     file.deleteFile();

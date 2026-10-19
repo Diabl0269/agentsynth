@@ -303,6 +303,7 @@ TEST(CompressorGainReduction, MuteReadsZero) {
     }
     ASSERT_GT(source->getGainReductionDb(), 1.0f);
     setActual(*module, "muted", 1.0f);
+    module->processBlock(block, midi); // the toggle block still runs the normal branch while it fades out
     module->processBlock(block, midi);
     EXPECT_FLOAT_EQ(source->getGainReductionDb(), 0.0f);
 }

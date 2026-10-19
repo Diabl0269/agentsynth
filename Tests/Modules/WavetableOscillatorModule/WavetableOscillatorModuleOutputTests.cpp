@@ -127,6 +127,7 @@ TEST_P(WavetableMuteBypassTest, OutputIsSilentWhenMutedOrBypassed) {
     else
         module->setBypassed(true);
 
+    render(*module, 13, 2); // the toggle fades out; the silent branch runs from the block after
     const auto out = render(*module, 13, 2);
     for (int ch = 0; ch < out.getNumChannels(); ++ch)
         EXPECT_NEAR(rms(out, ch), 0.0f, 1.0e-9f) << "channel " << ch;
