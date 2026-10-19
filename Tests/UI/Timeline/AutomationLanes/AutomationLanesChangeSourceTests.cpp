@@ -558,8 +558,10 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRowsRealMenuOffersChangeSourceLis
 // order was stored under the old Attenuverter) and rebuilt it. Its undo brings the same row back to its old place with
 // the same swap.
 TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowItsPlaceAndItsFoldAndUndoSwapsBack) {
-    FadeAnimateGuard animate; // off-screen fades and full motion, as the glide tests do
     AmountScene s;
+    // After the scene: building MainComponent applies the saved animation mode (Follow system), and a CI runner's
+    // system asks for Reduce Motion.
+    FadeAnimateGuard animate;
     int adsrChannel = -1;
     const auto adsrUuid = addEnvelopeRouting(s, adsrChannel);
     auto spare = addNodeWithUuid(s.mc, "LFO");
