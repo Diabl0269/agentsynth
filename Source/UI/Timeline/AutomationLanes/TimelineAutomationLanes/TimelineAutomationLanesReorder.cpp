@@ -155,6 +155,45 @@ void TimelineAutomationLanes::commitLaneDrag() {
     onLaneDragFrame();
 }
 
+// An undo or redo that only changed the order of a track's lanes (called right after the pools synced, before the panel
+// lays the headers out again): the blocks start where they stood and release() glides each to its restored slot on the
+// same animator a drop settles on, nothing lifted. Mirrors the track rows' undo glide (glideTrackRowsFrom).
+void TimelineAutomationLanes::glideLanesReorderedByRestore(
+    const std::map<synth::TrackId, std::vector<synth::LaneId>>& before) {
+    laneDrag_.animator().finishIfSettled(); // a settle whose frames never came (off screen) is over
+    if (laneDrag_.isReordering() || !canAnimateBlocks())
+        return; // a real drag owns the animator
+    for (const auto& [trackId, ids] : before) {
+        const auto now = shownBlocks_.find(trackId);
+        const auto* track = doc_->getTrack(trackId);
+        if (now == shownBlocks_.end() || track == nullptr || now->second == ids || ids.size() < 2 ||
+            !std::is_permutation(ids.begin(), ids.end(), now->second.begin(), now->second.end()))
+            continue;
+        std::vector<ReorderDragAnimator::Slot> slots;
+        for (const auto id : ids) {
+            const auto* header = headerFor(id);
+            const auto height = placedBlockHeights_.find(id);
+            if (header == nullptr || height == placedBlockHeights_.end())
+                return;
+            slots.push_back({static_cast<float>(header->getY()), static_cast<float>(height->second)});
+        }
+        dragLaneIds_ = ids;
+        dragTrack_ = trackId;
+        liftedLane_ = {};
+        laneDrag_.discard();
+        auto& animator = laneDrag_.animator();
+        animator.begin(slots, 0, 0.0f, slots[0].start - 2.0f * ReorderDragAnimator::kDragThresholdPx, true);
+        animator.dragTo(slots[0].start); // lifts nothing visible: the first block has not moved
+        laneDrag_.release(laneStartsFor(*track, ids));
+        return;
+    }
+}
+
+void TimelineAutomationLanes::stepLaneGlideForTest() {
+    laneDrag_.animator().finishIfSettled();
+    onLaneDragFrame();
+}
+
 void TimelineAutomationLanes::discardLaneDrag() {
     laneDrag_.discard();
     dragLaneIds_.clear();

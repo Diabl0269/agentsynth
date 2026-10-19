@@ -24,6 +24,8 @@ float ReorderDragAnimator::Tween::at(double nowMs) const {
 ReorderDragAnimator::ReorderDragAnimator(Clock clock)
     : clock_(clock ? std::move(clock) : Clock(defaultClockMs)) {}
 
+void ReorderDragAnimator::setClock(Clock clock) { clock_ = clock ? std::move(clock) : Clock(defaultClockMs); }
+
 void ReorderDragAnimator::begin(const std::vector<Slot>& slots, int draggedKey, float grabOffset, float pointerAtPress,
                                 bool animate) {
     cancel();

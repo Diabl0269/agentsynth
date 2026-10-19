@@ -32,11 +32,16 @@ int TimelineAutomationLanes::addRowHeight() const {
 // A lane's block is its own row plus its modulator rows directly under it. Every geometry function
 // below walks lanes through this one helper, so the header column, the lanes region and the layout's
 // extra height can never disagree about where a row is.
-// A modulator's amount lane has no block of its own: it is the band of that modulator's row.
+// A modulator's amount lane has no block of its own: it is the band of that modulator's row. A block that is growing in
+// counts only its share so far (TimelineAutomationLanesBlockMotion.cpp).
 int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) const {
     if (isAmountLane(lane.id))
         return 0;
-    return laneRowHeight(lane.id) + modulatorOffset(lane.id, modulatorCount(lane.id));
+    const int full = laneRowHeight(lane.id) + modulatorOffset(lane.id, modulatorCount(lane.id));
+    const auto arriving = arriving_.find(laneMotionKey(lane.id));
+    if (arriving == arriving_.end())
+        return full;
+    return std::max(0, (int)std::lround((double)full * (double)arriving->second.now));
 }
 
 // A track with lanes gets its "+" in the gutter of its last lane header; only a track with none needs a whole row.
@@ -59,8 +64,8 @@ std::vector<int> TimelineAutomationLanes::extraHeights() const {
         int extra = 0;
         if (isVisibleLane(track)) {
             extra = addRowHeightFor(track);
-            for (const auto& lane : track.lanes)
-                extra += laneBlockHeight(lane);
+            for (const auto& block : blocksOf(track))
+                extra += block.height;
         }
         extras.push_back(extra);
     }
@@ -91,7 +96,13 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
     int staticY = firstRowY;
     int lastLaneY = -1;
     int lastRowHeight = 0;
-    for (const auto& lane : t->lanes) {
+    for (const auto& block : blocksOf(*t)) {
+        if (block.leaving != nullptr) {
+            placeLeavingLaneHeader(*block.leaving, staticY, width);
+            staticY += block.height;
+            continue;
+        }
+        const auto& lane = *block.lane;
         const int rowHeight = laneRowHeight(lane.id);
         const int modHeight = modulatorRowHeight(lane.id);
         int y = staticY;
@@ -104,32 +115,42 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             y = static_cast<int>(std::lround(dragged ? animator.getDraggedStart() : animator.getLayoutStart(key)));
             lift = dragged ? animator.getLift() : 0.0f;
         }
+        // A block growing in shows what fits so far: everything in it is cut at its bottom edge.
+        const bool growing = arriving_.count(laneMotionKey(lane.id)) > 0;
+        const int blockBottom = y + block.height;
+        const auto fit = [growing, blockBottom](int top, int height) {
+            return growing ? std::clamp(blockBottom - top, 0, height) : height;
+        };
         if (auto* header = headerFor(lane.id)) {
-            header->setBounds(0, y, width, rowHeight);
+            header->setBounds(0, y, width, fit(y, rowHeight));
             header->setLift(lift);
             lastLaneY = staticY;
             lastRowHeight = rowHeight;
-            placeHeightHandle(lane.id, *t, y + laneBlockHeight(lane), width);
+            placedBlockHeights_[lane.id] = block.height;
+            placeHeightHandle(lane.id, *t, blockBottom, width);
         }
         int modY = y + rowHeight + trayExtentOf(lane.id);
         for (int i = 0; i < modulatorCount(lane.id); ++i) {
+            modY += placeLeavingRows(lane.id, i, modY, width);
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
             row->setTitleLineHeight(modHeight / 3);
             const auto pose = modulatorDragPose(lane.id, i, modY);
-            row->setBounds(0, modY + modulatorGlideOffset(row->getInfo().key()) + pose.shift, width, height);
+            const int rowY = modY + modulatorGlideOffset(row->getInfo().key()) + pose.shift;
+            row->setBounds(0, rowY, width, fit(rowY, height));
             row->setLift(pose.lift);
             if (pose.lift > 0.0f)
                 row->toFront(false);
             modY += height + trayExtentOf(lane.id, i);
         }
+        placeLeavingRows(lane.id, modulatorCount(lane.id), modY, width);
         if (lift > 0.0f) {
             if (auto* header = headerFor(lane.id))
                 header->toFront(false);
             for (int i = 0; i < modulatorCount(lane.id); ++i)
                 modulatorRowFor(lane.id, i)->toFront(false);
         }
-        staticY += laneBlockHeight(lane);
+        staticY += block.height;
     }
     if (auto* row = addRowFor(track)) {
         const bool compact = addRowIsCompact(*t) && lastLaneY >= 0;
@@ -156,11 +177,15 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
         if (!isVisibleLane(track))
             continue;
         int y = layout.trackTop(i) + layout.trackRowHeight(i);
-        for (const auto& candidate : track.lanes) {
-            if (candidate.id == lane)
-                return isAmountLane(lane) ? juce::Rectangle<int>()
-                                          : juce::Rectangle<int>(0, y, bodies_->getWidth(), laneRowHeight(lane));
-            y += laneBlockHeight(candidate);
+        for (const auto& block : blocksOf(track)) {
+            if (block.lane != nullptr && block.lane->id == lane) {
+                if (isAmountLane(lane))
+                    return {};
+                const int rowHeight = laneRowHeight(lane);
+                const bool growing = arriving_.count(laneMotionKey(lane)) > 0;
+                return {0, y, bodies_->getWidth(), growing ? std::min(rowHeight, block.height) : rowHeight};
+            }
+            y += block.height;
         }
     }
     return {};
@@ -173,7 +198,12 @@ juce::Rectangle<int> TimelineAutomationLanes::modulatorRowContentBounds(synth::L
     const auto row = laneRowContentBounds(lane, layout);
     if (row.isEmpty())
         return {};
-    return {0, row.getBottom() + modulatorOffset(lane, index), row.getWidth(), modulatorRowHeightFor(lane, index)};
+    const int top = row.getY() + laneRowHeight(lane) + modulatorOffset(lane, index);
+    int height = modulatorRowHeightFor(lane, index);
+    if (arriving_.count(laneMotionKey(lane)) > 0) // a block growing in: cut at its bottom edge
+        if (const auto* l = doc_->getLane(lane))
+            height = std::clamp(row.getY() + laneBlockHeight(*l) - top, 0, height);
+    return {0, top, row.getWidth(), height};
 }
 
 juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId track,
@@ -188,8 +218,8 @@ juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId
         if (addRowIsCompact(candidate))
             return {};
         int y = layout.trackTop(i) + layout.trackRowHeight(i);
-        for (const auto& lane : candidate.lanes)
-            y += laneBlockHeight(lane);
+        for (const auto& block : blocksOf(candidate))
+            y += block.height;
         return {0, y, bodies_->getWidth(), addRowHeight()};
     }
     return {};
@@ -214,6 +244,8 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
             if (pose.lift > 0.0f)
                 entry.bands[(size_t)i]->toFront(false);
         }
+    placeLeavingBands(layout, scroll);
+    placeLeavingLaneBodies(layout);
     repositionOverlays();
 }
 

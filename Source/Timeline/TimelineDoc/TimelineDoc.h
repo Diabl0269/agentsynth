@@ -688,6 +688,8 @@ public:
     // Bumped once per effective mutation. Starts at 0 on a fresh doc; consumers cache it to
     // tell "nothing happened" from "something did" without diffing the model.
     std::int64_t getRevision() const noexcept { return revision; }
+    // Bumped by every fromVar that lands (a project load, an undo or redo restore): the whole doc was replaced.
+    std::int64_t getReplaceCount() const noexcept { return replaceCount; }
 
     // -- Serialisation ---------------------------------------------------------
     // The dialect PatchDocument embeds under the reserved top-level "timeline" key.
@@ -755,6 +757,7 @@ private:
     std::int64_t nextNoteId = 1;
     std::int64_t nextMarkerId = 1;
     std::int64_t revision = 0;
+    std::int64_t replaceCount = 0;
 
     juce::ListenerList<Listener> listeners;
 

@@ -153,13 +153,19 @@ bool TimelineAutomationLanes::syncModulators() {
             visible.insert(lane.id);
             auto infos = sortedByModulatorOrder(routings_[lane.id], lane.modulatorOrder);
             const auto parameterName = laneLabelsFor(lane, host_).parameter;
+            const bool shownBefore = modulators_.count(lane.id) > 0; // a block growing in brings its rows with it
             auto& entry = modulators_[lane.id];
             rekeyModulators(entry, lane.id, infos, parameterName);
             if (!sameRoutings(entry.infos, infos)) {
                 if (!sameRoutingSet(entry.infos, infos)) {
-                    rebuildModulators(entry, lane.id, std::move(infos), parameterName);
+                    rebuildModulators(entry, lane.id, std::move(infos), parameterName, shownBefore);
                     rebuilt = true;
                     continue;
+                }
+                if (glideRestoredOrder_) {
+                    auto& oldYs = restoreGlides_[lane.id]; // where each row stands before the undo moves it
+                    for (size_t i = 0; i < entry.rows.size() && i < entry.infos.size(); ++i)
+                        oldYs[entry.infos[i].key()] = entry.rows[i]->getY();
                 }
                 permuteModulators(entry, infos); // only the order changed: the same rows take their new slots
                 rebuilt = true;
@@ -223,7 +229,8 @@ void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
 }
 
 void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::LaneId lane,
-                                                std::vector<ModulatorInfo> infos, const juce::String& parameterName) {
+                                                std::vector<ModulatorInfo> infos, const juce::String& parameterName,
+                                                bool growNewRows) {
     std::set<juce::String> known; // routings that already had a row: they do not fade in again
     for (const auto& old : entry.infos)
         known.insert(old.key());
@@ -231,7 +238,7 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     for (const auto& info : infos)
         staying.insert(info.key());
     entry.fades.clear();
-    retireModulatorRows(entry, staying);
+    retireModulatorRows(entry, lane, staying);
     entry.infos = std::move(infos);
     for (const auto& info : entry.infos) {
         auto row = std::make_unique<ModulatorRow>(info, host_, parameterName, &laneControls_);
@@ -269,7 +276,10 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         bodies_->addAndMakeVisible(*band);
         entry.bands.push_back(std::move(band));
         if (known.count(info.key()) == 0) {
-            // A new routing's row and band come in with a fade; off screen they simply land shown.
+            // A new routing's row and band come in with a fade, and grow from nothing in a lane already on screen; off
+            // screen they simply land shown.
+            if (growNewRows)
+                growIn(rowMotionKey(lane, info.key()));
             auto* newRow = entry.rows.back().get();
             auto* newBand = entry.bands.back().get();
             newRow->setVisible(false);
@@ -281,29 +291,50 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
     }
 }
 
-// A row whose routing is gone (removed, undone) fades out where it stood instead of vanishing, when it is on screen;
-// otherwise it is dropped at once. Rows whose routing stays are rebuilt in place, as before.
-void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying) {
+// A row whose routing is gone (removed, moved to another lane, undone) fades out in its slot while the gap it leaves
+// closes, when it is on screen; otherwise it is dropped at once. Rows whose routing stays are rebuilt in place.
+void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::LaneId lane,
+                                                  const std::set<juce::String>& staying) {
     sweepLeavingModulators();
+    const bool shrink = canAnimateBlocks();
+    int stayingAbove = 0;
+    bool started = false;
     for (size_t i = 0; i < entry.rows.size(); ++i) {
-        if (staying.count(entry.infos[i].key()) > 0 || !FadeVisibility::canAnimateIn(&headerParent_))
+        if (staying.count(entry.infos[i].key()) > 0) {
+            ++stayingAbove;
+            continue;
+        }
+        if (!FadeVisibility::canAnimateIn(&headerParent_))
             continue;
         auto leaving = std::make_unique<LeavingModulator>();
+        leaving->lane = lane;
+        leaving->slot = stayingAbove;
+        leaving->height = modulatorRowHeightFor(lane, (int)i) + trayExtentOf(lane, (int)i);
+        leaving->presence = shrink ? FoldTween{1.0f, 0.0f, 1.0f} : FoldTween{0.0f, 0.0f, 0.0f};
+        started = started || shrink;
+        entry.rows[i]->setLift(0.0f);
         leaving->row = std::move(entry.rows[i]);
         leaving->band = std::move(entry.bands[i]);
         leaving->fade = std::make_unique<FadeVisibility>(
             std::initializer_list<juce::Component*>{leaving->row.get(), leaving->band.get()});
         leaving->fade->setShown(false);
+        // A row dropped on another lane is already drawn there (it grows in at its new slot): here only its gap closes.
+        if (entry.infos[i].key() == droppedRoutingKey_)
+            leaving->fade->snapTo(false);
         leaving_.push_back(std::move(leaving));
     }
     entry.rows.clear();
     entry.bands.clear();
+    if (started)
+        startBlockMotion();
 }
 
-// Drops the faded-out rows (never from inside their own fade callback).
+// Drops the rows that have faded out and whose gap has closed (never from inside their own fade callback).
 void TimelineAutomationLanes::sweepLeavingModulators() {
     leaving_.erase(std::remove_if(leaving_.begin(), leaving_.end(),
-                                  [](const auto& l) { return !l->fade->isFading() && !l->fade->isShown(); }),
+                                  [](const auto& l) {
+                                      return !l->fade->isFading() && !l->fade->isShown() && l->presence.now <= 0.0f;
+                                  }),
                    leaving_.end());
 }
 
@@ -314,6 +345,7 @@ void TimelineAutomationLanes::refreshModulators() {
         return;
     if (modulatorsHeld()) {
         modulatorsPending_ = true;
+        restoredWhileHeld_ = restoredWhileHeld_ || (undo_ != nullptr && undo_->isRestoring());
         return;
     }
     // A cable patched or removed by hand can turn an amount lane back into a lane row (or the reverse),
@@ -333,12 +365,16 @@ bool TimelineAutomationLanes::modulatorsHeld() const {
     return modulatorHolds_ > 0 || (undo_ != nullptr && undo_->isRestoring());
 }
 
-// The last hold went (or an undo step settled): one refresh for everything that came while held.
+// The last hold went (or an undo step settled): one refresh for everything that came while held. After an undo or redo
+// a lane whose rows only changed order glides them from where they stood, as the forward move did.
 void TimelineAutomationLanes::releaseHeldModulators() {
     if (modulatorsHeld() || !modulatorsPending_)
         return;
     modulatorsPending_ = false;
+    glideRestoredOrder_ = std::exchange(restoredWhileHeld_, false);
     refreshModulators();
+    glideRestoredOrder_ = false;
+    glideModulatorsReorderedByRestore();
 }
 
 TimelineAutomationLanes::ModulatorHold::ModulatorHold(TimelineAutomationLanes& lanes)

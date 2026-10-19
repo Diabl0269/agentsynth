@@ -33,6 +33,9 @@ public:
 
     explicit ReorderDragAnimator(Clock clock = {});
 
+    /** Replaces the clock (empty: the real one); for an owner whose test steps its glide by hand. */
+    void setClock(Clock clock);
+
     /** `slots` are in display order; an item's key is its index here. `pointerAtPress` and
      *  `grabOffset` (pointer minus the dragged slot's start) are on the axis, both measured once.
      *  Without `animate` (an off-screen owner gets no frames) every glide lands instantly. */

@@ -40,15 +40,18 @@ float TimelineAutomationLanes::modulatorOpenness(const juce::String& key) const 
 }
 
 // A folded row is one title line tall: the line its controls are laid out in (a third of the full height), but never
-// so small the title and the arrow are clipped.
+// so small the title and the arrow are clipped. A row growing in (a new routing) counts only its share so far.
 int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index) const {
     const int full = modulatorRowHeight(lane);
     const auto it = modulators_.find(lane);
     if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
         return full;
     const int line = std::max(full / 3, std::min(full, kMinFoldedHeight));
-    const float open = modulatorOpenness(it->second.infos[(size_t)index].key());
-    return line + (int)std::lround((double)(full - line) * (double)open);
+    const auto& key = it->second.infos[(size_t)index].key();
+    const float open = modulatorOpenness(key);
+    const int height = line + (int)std::lround((double)(full - line) * (double)open);
+    const float presence = arrivingPresence(rowMotionKey(lane, key));
+    return presence >= 1.0f ? height : (int)std::lround((double)height * (double)presence);
 }
 
 // How far the edit tray of the lane's header (or of its `modulatorIndex`th row) pushes what lies below it, px.
@@ -62,13 +65,13 @@ int TimelineAutomationLanes::trayExtentOf(synth::LaneId lane, int modulatorIndex
     return row != nullptr ? row->getControlStrip().trayExtent() : 0;
 }
 
-// Where the lane's `count`th modulator row starts under the lane row, px: past the lane header's edit tray (if open)
-// and every row above it with its own.
+// Where the lane's `count`th modulator row starts under the lane row, px: past the lane header's edit tray (if open),
+// every row above it with its own, and the gaps of rows leaving before it (TimelineAutomationLanesBlockMotion.cpp).
 int TimelineAutomationLanes::modulatorOffset(synth::LaneId lane, int count) const {
     int offset = trayExtentOf(lane);
     for (int i = 0; i < count; ++i)
-        offset += modulatorRowHeightFor(lane, i) + trayExtentOf(lane, i);
-    return offset;
+        offset += leavingRowsHeightAt(lane, i) + modulatorRowHeightFor(lane, i) + trayExtentOf(lane, i);
+    return offset + (leaving_.empty() ? 0 : leavingRowsHeightAt(lane, count));
 }
 
 // The rows show the fold state; a folding row keeps its controls (they are clipped away as it shrinks) until it lands.
@@ -208,6 +211,14 @@ void TimelineAutomationLanes::glideModulatorRows(synth::LaneId lane, const std::
         foldUpdater_, kFoldMs, easeOutCubic, [this](float t) { frameModulatorGlide(t); },
         [this] { landModulatorGlide(); });
     frameModulatorGlide(0.0f); // the first frame already shows the rows where they stood
+}
+
+// An undo or redo of a row move: the held refresh permuted the rows (noting where each stood) and laid them out in
+// their restored slots; they glide there from their old ones, like Cmd+Alt+Up/Down glided them forward.
+void TimelineAutomationLanes::glideModulatorsReorderedByRestore() {
+    const auto glides = std::exchange(restoreGlides_, {});
+    for (const auto& [lane, oldYs] : glides)
+        glideModulatorRows(lane, oldYs);
 }
 
 void TimelineAutomationLanes::frameModulatorGlide(float t) {

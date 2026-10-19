@@ -70,7 +70,7 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
 - a lane menu: **Add modulator...** ([below](#modulators)), **Change parameter...** and **Duplicate**
   ([below](#change-parameter-and-duplicate)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and
-  **Delete lane** (`TimelineDoc::removeLane`), each one undo step. There is no "..." button: a
+  **Delete lane** (`TimelineDoc::removeLane`), each one undo step, its block growing in or shrinking away ([lane motion](lane-motion.md)). There is no "..." button: a
   right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)), Shift+F10 and Return on the focused
   row open it, and the header's tooltip says so (the space the button took goes to the value readout);
 - **A click on the header** anywhere that is not a control (the marker and the value readout count as the header) gives
@@ -372,11 +372,11 @@ slots (`DropIndicator`).
   old depth, re-keys the amount lane to the new Attenuverter (same lane id, track and points) and cuts the old routing;
   then the destination lane's `modulatorOrder` gets the new routing's key at `index` and the old key leaves the order of
   every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back. The moved routing has a
-  new key, so its row fades in under the destination lane like any new routing.
+  new key, so its row fades and grows in under the destination lane like any new routing ([lane motion](lane-motion.md)).
 - Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
   carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
 - The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
-  another lane". Not done: no auto-scroll while dragging, and the lane the row leaves does not close its gap until the drop.
+  another lane". The row's old gap closes on the drop as it grows in where it landed. Not done: no auto-scroll while dragging.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: the marker, its card
 title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
@@ -825,7 +825,7 @@ state).
   is flat)" (the curve moves less than 1/10000 of the parameter's range), "(lane has too many points)".
 - **Motion.** The old curve melts into the flat line: the editor keeps the old shape and cross-fades it out over the
   range (200 ms, 80 ms under Reduce Motion, at once under Animations Off or off screen) while the old points shrink away,
-  repainting only the range's rectangle. The new modulator row and band fade in like any new routing, and a row whose routing goes (Undo) fades out where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off).
+  repainting only the range's rectangle. The new modulator row and band fade and grow in like any new routing, and a row whose routing goes (Undo) fades out in a closing gap where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off).
 
 The math is `CustomLfoFromRange` (`LaneShapes/`, pure, one plan shared by the menu's enabled state and the command);
 the command is `TrackHeaderHost::createCustomLfoFromRange`, implemented by `MainComponent` as one

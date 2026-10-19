@@ -300,7 +300,9 @@ TEST_F(TimelinePanelIntegrationTest, UndoFadesTheRemovedModulatorRowOutWhereItSt
     EXPECT_EQ(lanes.leavingModulatorCountForTest(), 1);
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
     s.panel().refreshModulators();
-    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 0) << "dropped once hidden";
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 1) << "faded, but its gap is still closing";
+    lanes.stepBlockMotionForTest(1.0f);
+    EXPECT_EQ(lanes.leavingModulatorCountForTest(), 0) << "dropped once hidden and its gap has closed";
 }
 
 TEST_F(TimelinePanelIntegrationTest, UnderAnimationsOffAnUndoneModulatorRowIsGoneAtOnce) {
