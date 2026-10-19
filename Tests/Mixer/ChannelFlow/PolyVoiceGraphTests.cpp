@@ -7,7 +7,9 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/ChannelFlows/PolyVoiceGraph.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -203,11 +205,15 @@ TEST(PolyVoiceGraphTests, PolyOnInsertsOnePolyMidiWiredPitchAndGate) {
     auto* pm = polyMidis.front();
     EXPECT_EQ(rig.count(i.source->nodeID, pm->nodeID, true), 1);
     for (int voice = 0; voice < 8; ++voice) {
-        EXPECT_EQ(rig.count(pm->nodeID, i.osc->nodeID), 8);
+        EXPECT_EQ(rig.count(pm->nodeID, i.osc->nodeID), 16) << "the Pitch fan and the Gate fan";
         const juce::AudioProcessorGraph::Connection pitch{{pm->nodeID, voice}, {i.osc->nodeID, voice}};
         const juce::AudioProcessorGraph::Connection gate{{pm->nodeID, 8 + voice}, {i.adsr->nodeID, voice}};
+        const juce::AudioProcessorGraph::Connection oscGate{{pm->nodeID, 8 + voice},
+                                                            {i.osc->nodeID, OscillatorModule::kGateBase + voice}};
         EXPECT_TRUE(rig.graph().isConnected(pitch)) << voice;
         EXPECT_TRUE(rig.graph().isConnected(gate)) << voice;
+        EXPECT_TRUE(rig.graph().isConnected(oscGate))
+            << "Poly MIDI's Gate fan restarts the oscillator's phase " << voice;
     }
     EXPECT_EQ(rig.count(pm->nodeID, i.adsr->nodeID), 8);
     EXPECT_EQ(rig.count(i.source->nodeID, i.osc->nodeID, true), 1) << "the raw MIDI cable stays";
@@ -224,7 +230,7 @@ TEST(PolyVoiceGraphTests, PolyOnReusesAPolyMidiThatTheSameSourceAlreadyFeeds) {
 
     EXPECT_TRUE(result.addedPolyMidi.empty());
     EXPECT_EQ(rig.nodesOfType("Poly MIDI").size(), 1u);
-    EXPECT_EQ(rig.count(existing->nodeID, i.osc->nodeID), 8);
+    EXPECT_EQ(rig.count(existing->nodeID, i.osc->nodeID), 16);
     EXPECT_EQ(rig.count(existing->nodeID, i.adsr->nodeID), 8);
 }
 
@@ -286,7 +292,7 @@ TEST(PolyVoiceGraphTests, PolyOffKeepsAPolyMidiThatStillFeedsSomethingElse) {
 
     const auto polyMidis = rig.nodesOfType("Poly MIDI");
     ASSERT_EQ(polyMidis.size(), 1u);
-    EXPECT_EQ(rig.count(polyMidis[0]->nodeID, otherOsc->nodeID), 8);
+    EXPECT_EQ(rig.count(polyMidis[0]->nodeID, otherOsc->nodeID), 16);
     EXPECT_EQ(rig.count(polyMidis[0]->nodeID, i.osc->nodeID), 0);
 }
 
@@ -357,4 +363,58 @@ TEST(PolyVoiceGraphTests, DefaultInstrumentChainVcasShareTheSameHeadroomGain) {
     auto* monoGain = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mono.vca->getProcessor(), "gain"));
     ASSERT_NE(monoGain, nullptr);
     EXPECT_FLOAT_EQ(monoGain->get(), 0.5f);
+}
+
+TEST(PolyVoiceGraphTests, PolyOnWiresAWavetablesGateFanToItsOwnGateBase) {
+    PolyRig rig;
+    auto* source = rig.add("Midi Input");
+    auto* wavetable = rig.add("Wavetable");
+    rig.midi(source, wavetable);
+
+    synth::applyPolyVoiceGraph(rig.graph(), {wavetable->nodeID}, true);
+
+    const auto polyMidis = rig.nodesOfType("Poly MIDI");
+    ASSERT_EQ(polyMidis.size(), 1u);
+    for (int voice = 0; voice < 8; ++voice) {
+        EXPECT_TRUE(rig.graph().isConnected({{polyMidis[0]->nodeID, voice}, {wavetable->nodeID, voice}})) << voice;
+        EXPECT_TRUE(rig.graph().isConnected(
+            {{polyMidis[0]->nodeID, 8 + voice}, {wavetable->nodeID, WavetableOscillatorModule::kGateBase + voice}}))
+            << voice;
+    }
+    EXPECT_EQ(rig.count(polyMidis[0]->nodeID, wavetable->nodeID), 16);
+}
+
+TEST(PolyVoiceGraphTests, PolyOffRemovesTheGateFanCablesToo) {
+    PolyRig rig;
+    const auto i = buildInstrument(rig);
+    synth::applyPolyVoiceGraph(rig.graph(), {i.osc->nodeID, i.adsr->nodeID}, true);
+    ASSERT_EQ(rig.nodesOfType("Poly MIDI").size(), 1u);
+
+    synth::applyPolyVoiceGraph(rig.graph(), {i.osc->nodeID, i.adsr->nodeID}, false);
+
+    for (const auto& c : rig.graph().getConnections())
+        EXPECT_FALSE(c.destination.nodeID == i.osc->nodeID && !c.destination.isMIDI() &&
+                     c.destination.channelIndex >= OscillatorModule::kGateBase)
+            << "no cable may be left on the Gate fan";
+}
+
+TEST(PolyVoiceGraphTests, TheDefaultPolyInstrumentChainWiresTheGateFanOfAnOscillatorAndAWavetable) {
+    for (const char* type : {"Oscillator", "Wavetable"}) {
+        PolyRig rig;
+        auto* trackIn = rig.add("Midi Input");
+        auto* instrument = rig.add(type);
+        *dynamic_cast<juce::AudioParameterBool*>(findParameterByID(instrument->getProcessor(), "poly")) = true;
+        const int gateBase = dynamic_cast<ModuleBase*>(instrument->getProcessor())->polyGateInputChannel();
+        ASSERT_GE(gateBase, 0) << type;
+
+        const auto chain =
+            synth::addPolyEnvelopeAndVCAForInstrument(rig.graph(), *trackIn, *instrument, {0, 0}, {300, 0}, {600, 0});
+        ASSERT_NE(chain.vca, nullptr);
+
+        auto* polyMidi = rig.nodesOfType("Poly MIDI").front();
+        for (int voice = 0; voice < 8; ++voice)
+            EXPECT_TRUE(
+                rig.graph().isConnected({{polyMidi->nodeID, 8 + voice}, {instrument->nodeID, gateBase + voice}}))
+                << type << " voice " << voice;
+    }
 }

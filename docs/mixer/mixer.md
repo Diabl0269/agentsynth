@@ -610,6 +610,7 @@ goes between Track In and the instrument instead of raw MIDI, and both ADSR and 
 ```
 Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
                     Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
+                    Poly MIDI --Gate(ch8-15)--> instrument's poly Gate in (restarts each voice's phase)
 ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
 instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
 ```

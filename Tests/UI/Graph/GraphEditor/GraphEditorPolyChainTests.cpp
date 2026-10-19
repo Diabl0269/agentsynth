@@ -239,7 +239,7 @@ TEST_F(GraphEditorTest, ParallelOscillatorsAndEnvelopesAllSwitchAndShareOnePolyM
         EXPECT_TRUE(rig.isPoly(id));
     ASSERT_EQ(rig.polyMidis().size(), 1u);
     const auto pm = rig.polyMidis().front();
-    EXPECT_EQ(rig.count(pm, osc2), 8);
+    EXPECT_EQ(rig.count(pm, osc2), 16) << "the Pitch fan and the Gate fan";
     EXPECT_EQ(rig.count(pm, adsr2), 8);
     EXPECT_EQ(rig.toasts.back(), "Made 6 modules poly");
 }

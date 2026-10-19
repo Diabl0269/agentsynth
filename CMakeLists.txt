@@ -407,6 +407,7 @@ add_library(Core STATIC
     Source/Modules/SamplerModule.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleRender.cpp
     Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.h
     Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.cpp
     Source/Modules/SequencerModule.h
@@ -416,6 +417,7 @@ add_library(Core STATIC
     Source/Modules/Lfo/LfoCustomWave.cpp
     Source/Modules/SampleHoldModule.h
     Source/Modules/SchmittTrigger.h
+    Source/Modules/GateEdges.h
     Source/Modules/ThresholdMeterSource.h
     Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h

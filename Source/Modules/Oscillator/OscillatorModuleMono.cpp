@@ -60,9 +60,15 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // before the clear below touches those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
 
+    // The Gate edges are found now, before the clear below wipes ch20: each one restarts voice 0 like a
+    // MIDI note-on, through the same per-sample restart list.
+    voices[0].gateEdges.scan(kGateBase < numCh ? buffer.getReadPointer(kGateBase) : nullptr, numSamples);
+    for (int i = 0; i < voices[0].gateEdges.count; ++i)
+        addRestartOffset(voices[0].gateEdges.offsets[(size_t)i]);
+
     // Clear every output channel except the mod-CV inputs still to be read (cleared at the end).
     // Clearing a shared input channel only ever zeroes this node's private copy: the module declares
-    // 22 output channels, so JUCE's AudioProcessorGraph makes a PRIVATE COPY of any CV channel that
+    // 28 output channels, so JUCE's AudioProcessorGraph makes a PRIVATE COPY of any CV channel that
     // a later node also consumes (addCopyChannelOp / isBufferNeededLater).
     // WARNING: this safety depends on the output declaration in the constructor -- do NOT reduce it.
     const int lastCVChannel = modCVChannelFor(kJackPan, /*poly*/ false);

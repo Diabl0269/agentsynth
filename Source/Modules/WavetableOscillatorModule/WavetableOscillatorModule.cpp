@@ -249,11 +249,11 @@ int WavetableOscillatorModule::detectPeriod(const float* samples, int numSamples
     return (bestScore > 0.9 && bestLag >= kMinPeriod) ? bestLag : kFrameSize;
 }
 
-// kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV. More outputs than inputs are
-// declared for the same reason as OscillatorModule: JUCE's AudioProcessorGraph only makes a
-// private copy of an input buffer when inputChan < getTotalNumOutputChannels(). Declaring
-// kNumOutputs stops our post-render clear of the CV channels from corrupting a CV source that
-// also feeds another node. The channels above the audio blocks are silent pass-throughs.
+// kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV + the 8-wide Gate fan (23-30). More outputs than inputs
+// are declared for the same reason as OscillatorModule: JUCE's AudioProcessorGraph only makes a private copy of an
+// input buffer when inputChan < getTotalNumOutputChannels(). Declaring kNumOutputs stops our post-render clear of the
+// CV channels from corrupting a CV source that also feeds another node. The channels above the audio blocks are silent
+// pass-throughs.
 //
 // StereoAudio::Declared: with more than two outputs the Auto shape test cannot see the stereo
 // pair — Audio R is the kRightBase block, not ch1. Ships SPLIT.
@@ -341,6 +341,7 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
         voices[v].decimator[0].reset();
         voices[v].decimator[1].reset();
         voices[v].active = false;
+        voices[v].gateEdges.reset();
     }
     lastSyncSample = 0.0f;
     blockPeakWarpAmount = 0.0f;
@@ -383,7 +384,7 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
     if (!poly)
         targets.push_back({jackLabels()[kJackPitch], 0});
 
-    for (int jack = 1; jack < kNumJacks; ++jack)
+    for (int jack = 1; jack <= kNumModCV; ++jack)
         targets.push_back({jackLabels()[jack], modCVChannelFor(jack, poly), jackParamIds()[jack]});
 
     return targets;
@@ -395,7 +396,7 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
 const juce::String* WavetableOscillatorModule::jackParamIds() {
     static const juce::String ids[kNumJacks] = {"",           "position", "octave",      "coarse", "fine",   "level",
                                                 "warpAmount", "phase",    "randomPhase", "detune", "spread", "width",
-                                                "blend",      "subLevel", "pan",         ""};
+                                                "blend",      "subLevel", "pan",         "",       ""};
     return ids;
 }
 
@@ -410,17 +411,24 @@ LogicalPort WavetableOscillatorModule::mapInputChannel(int raw) const {
             p.polyVoiceSpan = (raw == 0) ? kNumVoices : 1;
             return p;
         }
-        if (raw >= kPolyModCVBase && raw < kNumInputs) {
+        if (raw >= kPolyModCVBase && raw < kGateBase) {
             p.visibleJackIndex = raw - kPolyModCVBase + 1; // ch8 -> jack 1 (Position), ...
             p.role = PortRole::ModCV;
             p.isPolyGroupHead = true;
             p.polyVoiceSpan = 1;
             return p;
         }
+        if (raw >= kGateBase && raw < kGateBase + kNumVoices) { // per-voice Gate fan
+            p.visibleJackIndex = kJackGate;
+            p.role = PortRole::Gate;
+            p.isPolyGroupHead = (raw == kGateBase);
+            p.polyVoiceSpan = (raw == kGateBase) ? kNumVoices : 1;
+            return p;
+        }
     } else if (raw >= 0 && raw < kNumJacks) {
         // Mono: raw channels map straight onto the visible jacks.
         p.visibleJackIndex = raw;
-        p.role = PortRole::ModCV;
+        p.role = raw == kJackGate ? PortRole::Gate : PortRole::ModCV;
         p.isPolyGroupHead = true;
         p.polyVoiceSpan = 1;
         return p;
@@ -843,6 +851,7 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
     // Mono jack 0 (Pitch) shares channel 0 with Audio L, so — exactly as in
     // OscillatorModule — pitch CV is ignored in mono mode; MIDI drives the pitch.
     cacheModCV(buffer, /*poly*/ false, cacheLen, numSamples);
+    scanGateEdges(buffer, /*poly*/ false, numSamples);
 
     // Clearing the CV channels here is safe because they were cached above and the module
     // declares kNumOutputs outputs, so JUCE hands us a private copy of any CV buffer that
@@ -884,6 +893,7 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         pitchCV[(size_t)v] = (v < numCh) ? buffer.getReadPointer(v)[0] : 0.0f;
 
     cacheModCV(buffer, /*poly*/ true, cacheLen, numSamples);
+    scanGateEdges(buffer, /*poly*/ true, numSamples);
 
     // See the note in processMonoMode: safe because the CVs are cached and the module
     // declares kNumOutputs outputs.
@@ -935,7 +945,7 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
 
 void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffer, bool poly, int cacheLen,
                                            int numSamples) {
-    for (int jack = 1; jack < kNumJacks; ++jack) {
+    for (int jack = 1; jack <= kNumModCV; ++jack) {
         const int ch = modCVChannelFor(jack, poly);
         const size_t slot = (size_t)(jack - 1);
         cvActive[slot] = isChannelActive(buffer, ch, numSamples);
@@ -943,6 +953,15 @@ void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffe
             std::copy_n(buffer.getReadPointer(ch), cacheLen, cvCache[slot].data());
         else
             std::fill_n(cvCache[slot].data(), cacheLen, 0.0f);
+    }
+}
+
+void WavetableOscillatorModule::scanGateEdges(const juce::AudioBuffer<float>& buffer, bool poly, int numSamples) {
+    const int numCh = buffer.getNumChannels();
+    for (int v = 0; v < MAX_VOICES; ++v) {
+        const int ch = poly ? kGateBase + v : kJackGate;
+        const bool read = (poly || v == 0) && ch < numCh;
+        voices[v].gateEdges.scan(read ? buffer.getReadPointer(ch) : nullptr, numSamples);
     }
 }
 
@@ -954,7 +973,7 @@ void WavetableOscillatorModule::pushToVisualBuffer(const juce::AudioBuffer<float
 const juce::String* WavetableOscillatorModule::jackLabels() {
     static const juce::String labels[kNumJacks] = {"Pitch", "Position", "Octave", "Coarse", "Fine",   "Level",
                                                    "Warp",  "Phase",    "Rand",   "Detune", "Spread", "Width",
-                                                   "Blend", "Sub",      "Pan",    "Sync"};
+                                                   "Blend", "Sub",      "Pan",    "Sync",   "Gate"};
     return labels;
 }
 

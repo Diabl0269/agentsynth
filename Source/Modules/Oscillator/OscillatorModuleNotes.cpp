@@ -29,11 +29,7 @@ void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bo
             if (!shouldRestartOnNoteOn(overlapping))
                 continue;
             voice0RestartPending = true;
-            const int offset = juce::jlimit(0, std::max(0, numSamples - 1), metadata.samplePosition);
-            if (numRestarts > 0 && restartOffsets[(size_t)numRestarts - 1] == offset)
-                continue;
-            if (numRestarts < kMaxRestartsPerBlock)
-                restartOffsets[(size_t)numRestarts++] = offset;
+            addRestartOffset(juce::jlimit(0, std::max(0, numSamples - 1), metadata.samplePosition));
         } else if (msg.isNoteOff()) {
             heldNotes.release(msg.getNoteNumber());
             // Mono legato: letting go of the sounding note while others are held returns to the newest one.
@@ -46,6 +42,23 @@ void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bo
             heldNotes.clear();
         }
     }
+}
+
+// Both the MIDI note-ons and the mono Gate edges land here, so the per-sample restart loop sees one
+// ascending list. A duplicate offset (a chord, or a note-on on the same sample as a gate edge) shares
+// one restart; past the cap further offsets share the last restart.
+void OscillatorModule::addRestartOffset(int offset) {
+    int at = numRestarts;
+    while (at > 0 && restartOffsets[(size_t)at - 1] > offset)
+        --at;
+    if (at > 0 && restartOffsets[(size_t)at - 1] == offset)
+        return;
+    if (numRestarts >= kMaxRestartsPerBlock)
+        return;
+    for (int i = numRestarts; i > at; --i)
+        restartOffsets[(size_t)i] = restartOffsets[(size_t)i - 1];
+    restartOffsets[(size_t)at] = offset;
+    ++numRestarts;
 }
 
 // Every unison oscillator restarts at frac(Phase / 360 + Rand * random), the random drawn
@@ -64,6 +77,8 @@ void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
 
 void OscillatorModule::resetNoteState() {
     heldNotes.clear();
+    for (auto& v : voices)
+        v.gateEdges.reset();
     clearPendingRestarts();
     phaseRandom.setSeed(0x5EED1234);
 }

@@ -227,9 +227,17 @@ NodeID addPolyMidiNode(Graph& graph, NodeID source, NodeID firstFed, const PolyV
 
 void wirePolyMidi(Graph& graph, NodeID polyMidi, const std::vector<NodeID>& modules) {
     for (const auto module : modules) {
-        const bool isAdsr = isType(processorFor(graph, module), ModuleType::ADSR);
+        auto* processor = processorFor(graph, module);
+        const bool isAdsr = isType(processor, ModuleType::ADSR);
         for (int voice = 0; voice < 8; ++voice)
             graph.addConnection({{polyMidi, (isAdsr ? 8 : 0) + voice}, {module, voice}});
+        // An oscillator also takes the Gate fan, so a new note restarts its phase even when the pitch
+        // never drops between two notes on a voice.
+        const auto* moduleBase = dynamic_cast<ModuleBase*>(processor);
+        const int gateBase = moduleBase != nullptr ? moduleBase->polyGateInputChannel() : -1;
+        if (gateBase >= 0)
+            for (int voice = 0; voice < 8; ++voice)
+                graph.addConnection({{polyMidi, 8 + voice}, {module, gateBase + voice}});
     }
 }
 
