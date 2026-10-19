@@ -35,6 +35,18 @@ std::unique_ptr<synth::ui::ModMatrixPicker> pressReplace(MainComponent& mc, juce
     return captured;
 }
 
+// Folds `uuids` into one collapsed macro, as an instrument track's modules are by default.
+const synth::Macro* collapseIntoMacro(Scene& s, const std::vector<juce::String>& uuids) {
+    synth::Macro macro;
+    macro.name = "Oscillator 1";
+    macro.collapsed = true;
+    macro.bounds = {900, 700, 400, 300};
+    macro.members.assign(uuids.begin(), uuids.end());
+    s.mc.getGraphEditor().getMacros().add(macro);
+    s.mc.getGraphEditor().updateComponents();
+    return s.mc.getGraphEditor().getMacros().findByMember(uuids.front());
+}
+
 } // namespace
 
 TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedLaneHeaderReplacesTheLanesTargetModule) {
@@ -89,4 +101,48 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutKeepsTheCanvasBehaviourWhenN
     EXPECT_FALSE(isActive(s.mc, AppCommands::replaceSelectedModule));
     s.mc.getGraphEditor().selectModule(s.target->nodeID, false);
     EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule));
+}
+
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutUnfoldsTheCollapsedMacroHoldingTheLanesTargetModule) {
+    Scene s;
+    const auto* macro = collapseIntoMacro(s, {s.targetUuid});
+    ASSERT_NE(macro, nullptr);
+    const auto macroId = macro->id;
+    ASSERT_TRUE(macro->collapsed);
+    auto* header = s.panel().laneHeaderForTest(s.lane);
+    ASSERT_NE(header, nullptr);
+    s.mc.getGraphEditor().clearSelection();
+
+    s.mc.setFocusedComponentOverrideForTest(header);
+    EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule)) << "a hidden card is no reason to grey it out";
+    s.mc.setFocusedComponentOverrideForTest(nullptr);
+
+    auto picker = pressReplace(s.mc, *header);
+    ASSERT_NE(picker, nullptr) << "the picker opened over the revealed card";
+    EXPECT_FALSE(s.mc.getGraphEditor().getMacros().find(macroId)->collapsed) << "the macro was unfolded";
+    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected.front(), s.target->nodeID);
+}
+
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutUnfoldsTheCollapsedMacroHoldingTheModulatorSource) {
+    Scene s;
+    s.addLfoFromLaneMenu();
+    auto* row = s.row();
+    ASSERT_NE(row, nullptr);
+    const auto lfoUuid = row->getInfo().sourceUuid;
+    auto* lfo = s.byUuid(lfoUuid);
+    ASSERT_NE(lfo, nullptr);
+    const auto lfoId = lfo->nodeID;
+    const auto* macro = collapseIntoMacro(s, {lfoUuid});
+    ASSERT_NE(macro, nullptr);
+    const auto macroId = macro->id;
+    s.mc.getGraphEditor().clearSelection();
+
+    auto picker = pressReplace(s.mc, *row);
+    ASSERT_NE(picker, nullptr);
+    EXPECT_FALSE(s.mc.getGraphEditor().getMacros().find(macroId)->collapsed);
+    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected.front(), lfoId);
 }

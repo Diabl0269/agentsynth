@@ -386,7 +386,7 @@ the Mac) opens the "Replace with..." picker (Replace Module With...). Both are r
 selection, several cards, an Attenuverter or macro port (rename) or the singleton Audio Input and Output (replace). The
 checks are `ModuleComponent::canRename()` / `canReplace()`, shared with the right-click menu, whose "Rename" and "Replace
 with..." rows show the live binding. Plain Cmd+R is Repeat and Ctrl+R is Record, so Replace takes the Alt chord. Code:
-`CanvasCardKeyboard::renameSelectedModule` / `replaceSelectedModule`. The same chord also works from the timeline: with an automation lane header (or its editor) focused it replaces the lane's target module, with a modulator row focused the row's source module. The command shows that card on the canvas (`MainComponent::showNodeOnCanvas`), selects it and opens the picker over it; it is greyed out when the module sits in a collapsed group, whose card is hidden (`MainComponent::replaceModuleFromShortcut`).
+`CanvasCardKeyboard::renameSelectedModule` / `replaceSelectedModule`. The same chord also works from the timeline: with an automation lane header (or its editor) focused it replaces the lane's target module, with a modulator row focused the row's source module. The command shows that card on the canvas (`MainComponent::showNodeOnCanvas`), selects it and opens the picker over it; a module inside a collapsed macro is unfolded first (`MacroGroupController::setMacroCollapsed`, one undo step) so the picker has a card to sit on (`MainComponent::replaceModuleFromShortcut`).
 
 ## Header buttons
 

@@ -6,6 +6,7 @@
 #include "MainComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 // ---- Named isActive predicates shared by more than one row ----
@@ -58,7 +59,7 @@ bool MainComponent::canReplaceModuleFromShortcut() const {
         return false;
     for (auto* card : graphEditor.getModuleComponents())
         if (card != nullptr && card->getNodeId() == node->nodeID)
-            return card->isVisible() && card->canReplace(); // a member of a collapsed group has no visible card
+            return card->canReplace(); // a member of a collapsed group is revealed on perform
     return false;
 }
 
@@ -68,6 +69,17 @@ bool MainComponent::replaceModuleFromShortcut() {
         return graphEditor.getCardKeyboard().replaceSelectedModule();
     if (!canReplaceModuleFromShortcut())
         return false;
+    // A module inside a collapsed macro (every instrument track's modules, by default) has no visible card: unfold
+    // each collapsed ancestor, outermost first, through the same undoable setMacroCollapsed the card's expand button
+    // uses, so the picker has a card to sit on.
+    auto& macros = graphEditor.getMacros();
+    std::vector<juce::String> collapsedAncestors;
+    for (const auto* macro = macros.findByMember(uuid); macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros.find(macro->parentId))
+        if (macro->collapsed)
+            collapsedAncestors.insert(collapsedAncestors.begin(), macro->id);
+    for (const auto& id : collapsedAncestors)
+        graphEditor.getMacroController().setMacroCollapsed(id, false);
     showNodeOnCanvas(uuid); // switches to the canvas and selects the card, so the picker opens where it can be seen
     graphEditor.grabKeyboardFocus();
     return graphEditor.getCardKeyboard().replaceSelectedModule();
