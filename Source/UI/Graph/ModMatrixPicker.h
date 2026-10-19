@@ -47,6 +47,9 @@ public:
         // A row that creates something ("New LFO"): a green plus before the text and a "New" tag at the right. It
         // stays in the list whatever the search says, so a query that finds nothing can still create.
         bool isNew = false;
+        // What a screen reader announces for the row when it should say more than `text` (the add-automation picker
+        // adds where the module lives). Empty = `text` (and `detail`).
+        juce::String accessibleName;
     };
 
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);

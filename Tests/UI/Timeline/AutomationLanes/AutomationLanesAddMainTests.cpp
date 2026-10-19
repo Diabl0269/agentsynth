@@ -8,8 +8,10 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UserSettings.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <set>
@@ -234,4 +236,47 @@ TEST_F(AddFromTimelineMainTest, AnExplicitTrackWinsOverTheOwnershipRule) {
     ASSERT_TRUE(lane.isValid());
     EXPECT_EQ(mc.getTimelineDoc().getTrackForLane(lane)->id, second) << "the track asked for, not the owner";
     EXPECT_EQ(mc.addAutomationLaneForTest(second, p), lane) << "a repeat finds the same lane";
+}
+
+// The default project holds a free-standing starter patch with its own Oscillator, and the lone track adopts it for
+// the picker. The two "Pulse Width" groups used to read just "Oscillator" twice with nothing to tell them apart, yet
+// only the track's own survives Duplicate Track.
+TEST_F(AddFromTimelineMainTest, TheTracksOwnModulesComeFirstLabelledInTheTrackAndTheStarterPatchAfterLabelledShared) {
+    MainComponent mc(std::make_unique<QuietProvider>());
+    auto& panel = mc.getTimelinePanel();
+    panel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    const auto track = mc.getTimelineDoc().getTracks().back();
+
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    panel.setAddAutomationPickerHookForTest(
+        [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p) { picker = std::move(p); });
+    auto* header = panel.getTrackHeaderAt((int)mc.getTimelineDoc().getTracks().size() - 1);
+    ASSERT_NE(header, nullptr);
+    header->applyContextMenuChoice(synth::ui::TimelineTrackHeaderComponent::kAddAutomationMenuId);
+    ASSERT_NE(picker, nullptr);
+
+    const auto dot = juce::String::fromUTF8(" \xC2\xB7 ");
+    const auto ownHeading = "Oscillator" + dot + "in " + track.name;
+    const auto sharedHeading = "Oscillator" + dot + "shared";
+    const auto positionOf = [](const std::vector<juce::String>& names, const juce::String& name) {
+        return (int)(std::find(names.begin(), names.end(), name) - names.begin());
+    };
+
+    auto names = picker->getVisibleRowNamesForTest();
+    const int ownAt = positionOf(names, ownHeading);
+    const int sharedAt = positionOf(names, sharedHeading);
+    ASSERT_LT(ownAt, (int)names.size()) << "the track's own Oscillator is labelled in " << track.name;
+    ASSERT_LT(sharedAt, (int)names.size()) << "the starter patch's Oscillator is labelled shared";
+    EXPECT_LT(ownAt, sharedAt) << "own first, shared after";
+
+    picker->setSearchTextForTest("pulse");
+    names = picker->getVisibleRowNamesForTest();
+    EXPECT_EQ(positionOf(names, ownHeading), 0);
+    const int sharedAfterSearch = positionOf(names, sharedHeading);
+    ASSERT_LT(sharedAfterSearch, (int)names.size());
+    EXPECT_GT(sharedAfterSearch, 1) << "the own group's rows sit between the two headings";
+    picker->setSearchTextForTest("oscillator");
+    names = picker->getVisibleRowNamesForTest();
+    EXPECT_LT(positionOf(names, sharedHeading), (int)names.size()) << "the module name still finds its rows";
+    panel.setAddAutomationPickerHookForTest(nullptr);
 }
