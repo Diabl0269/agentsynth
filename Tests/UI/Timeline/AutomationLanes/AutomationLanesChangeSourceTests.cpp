@@ -5,6 +5,7 @@
 // (reading the channel the source catalogue gives it), keeps its drawn amount curve (re-keyed to the new routing's
 // Attenuverter) and the whole change is ONE graph + timeline undo step.
 
+#include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
 #include "UI/Graph/CardBody/CardBodySwapMotion.h"
@@ -556,16 +557,8 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRowsRealMenuOffersChangeSourceLis
 // Regression test for FRO881: Change source on the first of two rows moved it to the bottom (its slot in the lane's
 // order was stored under the old Attenuverter) and rebuilt it. Its undo brings the same row back to its old place with
 // the same swap.
-namespace {
-// Full animations whatever the machine's Reduce Motion says; restored on exit.
-struct AnimationsOn {
-    AnimationsOn() { synth::ui::setAnimationMode(synth::ui::AnimationMode::full); }
-    ~AnimationsOn() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
-};
-} // namespace
-
 TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowItsPlaceAndItsFoldAndUndoSwapsBack) {
-    AnimationsOn animate;
+    FadeAnimateGuard animate; // off-screen fades and full motion, as the glide tests do
     AmountScene s;
     int adsrChannel = -1;
     const auto adsrUuid = addEnvelopeRouting(s, adsrChannel);
