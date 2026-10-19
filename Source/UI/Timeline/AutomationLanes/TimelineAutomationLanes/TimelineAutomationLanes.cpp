@@ -37,6 +37,7 @@ TimelineAutomationLanes::~TimelineAutomationLanes() {
     headerParent_.removeChildComponent(dropIndicator_.get());
     modulators_.clear();
     addRows_.clear();
+    heightHandles_.clear();
     headers_.clear();
     editors_.clear();
 }
@@ -52,6 +53,7 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     routings_.clear();
     amountLanes_.clear();
     addRows_.clear();
+    heightHandles_.clear();
     headers_.clear();
     editors_.clear();
     expanded_.clear();
@@ -70,12 +72,14 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
 void TimelineAutomationLanes::setHost(TrackHeaderHost* host) {
     host_ = host;
     modulators_.clear();
+    heightHandles_.clear();
     headers_.clear();
     sync();
 }
 
 void TimelineAutomationLanes::setUndoManager(AppUndoManager* undo) {
     undo_ = undo;
+    heightHandles_.clear();
     headers_.clear();
     for (auto& [id, editor] : editors_)
         editor->setUndoManager(undo);
@@ -149,6 +153,7 @@ void TimelineAutomationLanes::sync() {
         routings_.clear();
         amountLanes_.clear();
         addRows_.clear();
+        heightHandles_.clear();
         headers_.clear();
         editors_.clear();
         return;
@@ -185,6 +190,8 @@ void TimelineAutomationLanes::syncPools() {
     for (auto it = headers_.begin(); it != headers_.end();)
         it = wanted.count(it->first) == 0 ? headers_.erase(it) : std::next(it);
 
+    for (auto it = heightHandles_.begin(); it != heightHandles_.end();)
+        it = wanted.count(it->first) == 0 ? heightHandles_.erase(it) : std::next(it);
     syncAddRows();
     for (const auto id : wanted) {
         if (editors_.count(id) == 0) {

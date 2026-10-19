@@ -7,6 +7,7 @@
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -73,6 +74,16 @@ bool setModulatorOrderUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, sy
     synth::TimelineDoc* target = &doc;
     return applyEdit(doc, undo,
                      [target, lane, order = std::move(order)] { return target->setModulatorOrder(lane, order); });
+}
+
+bool setLaneHeightScaleUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, double scale) {
+    const auto* current = doc.getLane(lane);
+    if (current == nullptr || !std::isfinite(scale) ||
+        current->heightScale ==
+            std::clamp(scale, synth::AutomationLane::kMinHeightScale, synth::AutomationLane::kMaxHeightScale))
+        return false;
+    synth::TimelineDoc* target = &doc;
+    return applyEdit(doc, undo, [target, lane, scale] { return target->setLaneHeightScale(lane, scale); });
 }
 
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane) {

@@ -213,6 +213,22 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     });
 }
 
+// Clamped to [AutomationLane::kMinHeightScale, kMaxHeightScale]. False for an unknown lane or a non-finite scale; true
+// without a revision bump when the lane already has that scale. A user gesture: wrap in
+// AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setLaneHeightScale(LaneId id, double scale) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    if (lane->heightScale == clamped)
+        return true;
+    return applyMutation([&] {
+        lane->heightScale = clamped;
+        return true;
+    });
+}
+
 // Routing keys are ModulatorInfo's Attenuverter uuid, else its key(). A routing not listed shows after the listed ones
 // in graph order and a stale key is ignored, never pruned. False for an unknown lane or the order it already has (no
 // revision bump, no notification). A user gesture: wrap in AppUndoManager::recordTimelineChange.
@@ -375,6 +391,7 @@ LaneId TimelineDoc::duplicateLane(LaneId source, const juce::String& nodeUuid, c
         copy.paramIndexHint = paramIndexHint;
         copy.recordMode = original->recordMode;
         copy.modulatorOrder = original->modulatorOrder;
+        copy.heightScale = original->heightScale;
         copy.points = rescalePoints(original->points, original->range, range);
         const auto id = copy.id;
         const auto position = (original - owner->lanes.data()) + 1;

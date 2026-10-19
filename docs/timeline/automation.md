@@ -16,7 +16,7 @@ Each open lane is a row of `Metrics::timelineAutomationLaneRowHeight` (40 px) ti
 vertical-zoom scale the clip rows use. The rows enter the one row layout as the track's extra area
 ([tracks](tracks.md#row-layout)), so the track headers, the clip lanes, hit testing, the reorder
 drag and the scroll limit all move them together. The clip lanes paint only a bg-1 backdrop there
-and refuse clicks there (`TimelineClipLaneArea::hitTest`).
+and refuse clicks there (`TimelineClipLaneArea::hitTest`). A lane can also be resized on its own ([lane-controls](lane-controls.md#resizing-a-lane)).
 
 `TimelineAutomationLanes` (`Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/`) is the
 panel's collaborator for all of it: the fold sets, the geometry it hands the layout

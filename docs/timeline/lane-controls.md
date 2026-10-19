@@ -3,6 +3,7 @@
 A timeline lane header (and a mod lane row, on its title line; see [automation.md](automation.md#the-lane-header)) carries a strip of 22 px icon buttons (20 px or less on a short
 row: the chip is the line's height at most) then a "+" button. `LaneControlStrip` is the one component for both rows; the
 owner gives it `Actions` (run a control, can it act now, what the tooltip adds) and the strip does the rest.
+A lane can be made taller or shorter on its own (drag the strip on its block's bottom edge, or Option+= / - / 0 with its header focused; see [Resizing a lane](#resizing-a-lane)); the chips keep their size and only the row around them changes.
 
 - **The catalogue** (`LaneControls.h`) is the actions the lane menus already have, in this order. Automation lane: Read /
   Write, Add mod, Change parameter, Mute, Duplicate, Move to track, Create custom LFO, Remove lane. Mod lane: Change
@@ -47,3 +48,19 @@ tooltips, each chip against its menu action, Mute and its restore, the "+" row's
 overflow and Reduce Motion), Edit controls (the tray making room for the rows below, click/Space/Alt+arrows, real drags header
 to tray and back, one lane at a time, the set shared by a kind and read back from the settings by a fresh panel) and a mod
 row's own chips.
+
+## Resizing a lane
+
+Each lane has its own height on top of the shared vertical zoom, the same way a track row does
+([tracks](tracks.md#one-tracks-height)): `AutomationLane::heightScale` (0.5 to 4, default 1, saved with the project and
+left out of the file at the default, written through `TimelineDoc::setLaneHeightScale`). It scales the lane's row and
+its modulator rows together (`TimelineAutomationLanes::laneRowHeight(lane)` and `modulatorRowHeight(lane)`), so the lane's
+whole block grows and the lanes and tracks below move down by the same amount. A thin vertical-resize strip
+(`EdgeResizeHandle`, id `laneHeightHandle`) sits on the bottom edge of the block in the header column: drag it to resize
+(the layout previews each step and the doc is written once on release, one undo step; a drag past 0.5 or 4 clamps) or
+double-click it for the default. The last lane of a track sits just above the track's own resize strip, which owns the
+exact seam above the next track. With a lane header focused, the track-height keys act on that lane: Option+= taller,
+Option+- shorter, Option+0 default (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`,
+`timelineResetTrackHeight`, x1.25 a step, one undo step each). The strip is named "Resize <parameter> lane" for screen
+readers and its tooltip lists the keys. A duplicate copies the height and Change parameter keeps it. Open edit trays and
+folded modulator rows keep their own fixed height and do not scale.

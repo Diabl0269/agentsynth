@@ -122,6 +122,16 @@ bool readModulatorOrder(const juce::var& v, std::vector<juce::String>& out) {
     return true;
 }
 
+// A lane's display fields: modulatorOrder (absent -> graph order) and heightScale (absent -> 1, else finite and
+// clamped).
+bool readLaneDisplayFields(const juce::DynamicObject& lObj, AutomationLane& lane) {
+    if (!readModulatorOrder(lObj.getProperty("modulatorOrder"), lane.modulatorOrder) ||
+        !readOptionalDouble(lObj.getProperty("heightScale"), lane.heightScale) || !std::isfinite(lane.heightScale))
+        return false;
+    lane.heightScale = std::clamp(lane.heightScale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    return true;
+}
+
 // A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
 // non-finite height is refused; a height outside its range is clamped, it is display data.
 bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
@@ -214,7 +224,9 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);
             l->setProperty("paramIndexHint", lane.paramIndexHint); // additive
-            if (!lane.modulatorOrder.empty()) {                    // additive; absent = empty = graph order
+            if (lane.heightScale != 1.0) // left out at the default, so older files stay byte-identical
+                l->setProperty("heightScale", lane.heightScale);
+            if (!lane.modulatorOrder.empty()) { // additive; absent = empty = graph order
                 juce::Array<juce::var> orderVars;
                 for (const auto& key : lane.modulatorOrder)
                     orderVars.add(key);
@@ -463,7 +475,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     // Additive: absent keeps the -1 default. Any integer is fine: resolveLaneParameter treats < 0 as
                     // "no hint" and bounds-checks a non-negative one.
                     if (!readOptionalInt(lObj->getProperty("paramIndexHint"), lane.paramIndexHint) ||
-                        !readModulatorOrder(lObj->getProperty("modulatorOrder"), lane.modulatorOrder))
+                        !readLaneDisplayFields(*lObj, lane))
                         return false;
 
                     const juce::Array<juce::var>* pointList = nullptr;
