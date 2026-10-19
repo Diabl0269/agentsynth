@@ -5,7 +5,10 @@
 #include "AutomationLanesModulatorFixture.h"
 
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModuleComponent/ReplaceWithPicker.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 using namespace modulator_test;
@@ -145,4 +148,36 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutUnfoldsTheCollapsedMacroHold
     const auto selected = s.mc.getGraphEditor().getSelectedNodes();
     ASSERT_EQ(selected.size(), 1u);
     EXPECT_EQ(selected.front(), lfoId);
+}
+
+// Regression test: the unfold hides the module's card until its glide lands, and a hidden card cannot take the
+// picker, so the first press opened nothing.
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOpensThePickerOnlyOnceTheUnfoldGlideHasLanded) {
+    synth::ui::setReducedMotionForTest(false);
+    Scene s;
+    const auto* macro = collapseIntoMacro(s, {s.targetUuid});
+    ASSERT_NE(macro, nullptr);
+    auto& editor = s.mc.getGraphEditor();
+    editor.getCardGlideForTest().setForceAnimateForTest(true);
+    auto* header = s.panel().laneHeaderForTest(s.lane);
+    ASSERT_NE(header, nullptr);
+    editor.clearSelection();
+
+    std::unique_ptr<synth::ui::ModMatrixPicker> captured;
+    synth::ui::test_hooks::replacePickerHookForTest() = [&captured](auto p) { captured = std::move(p); };
+    s.mc.setFocusedComponentOverrideForTest(header);
+    EXPECT_TRUE(s.mc.keyPressed(s.mc.getShortcutManager().getBinding("replaceSelectedModule")));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    s.mc.setFocusedComponentOverrideForTest(nullptr);
+
+    EXPECT_TRUE(editor.getCardGlide().fold().isLive()) << "the unfold is gliding";
+    EXPECT_EQ(captured, nullptr) << "the card is still held back, so no picker yet";
+
+    editor.finishCardGlideForTest();
+    synth::ui::test_hooks::replacePickerHookForTest() = nullptr;
+    synth::ui::setReducedMotionForTest(std::nullopt);
+    ASSERT_NE(captured, nullptr) << "the picker opens when the glide lands";
+    const auto selected = editor.getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected.front(), s.target->nodeID);
 }

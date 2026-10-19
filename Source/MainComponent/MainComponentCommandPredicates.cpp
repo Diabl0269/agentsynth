@@ -5,7 +5,9 @@
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -81,8 +83,18 @@ bool MainComponent::replaceModuleFromShortcut() {
     for (const auto& id : collapsedAncestors)
         graphEditor.getMacroController().setMacroCollapsed(id, false);
     showNodeOnCanvas(uuid); // switches to the canvas and selects the card, so the picker opens where it can be seen
-    graphEditor.grabKeyboardFocus();
-    return graphEditor.getCardKeyboard().replaceSelectedModule();
+    // The unfold holds the module's card back until its glide lands, and a hidden card cannot take the picker: wait
+    // for the fold to settle (at once when nothing animates).
+    auto open = [safe = juce::Component::SafePointer<MainComponent>(this)] {
+        if (safe == nullptr)
+            return false;
+        safe->graphEditor.grabKeyboardFocus();
+        return safe->graphEditor.getCardKeyboard().replaceSelectedModule();
+    };
+    if (!graphEditor.getCardGlide().fold().isLive())
+        return open();
+    graphEditor.getCardGlide().fold().whenSettled([open] { open(); });
+    return true;
 }
 
 // True while the active lane editor has a point selected.
