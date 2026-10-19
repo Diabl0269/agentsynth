@@ -98,12 +98,16 @@ public:
                        juce::AudioProcessorGraph::NodeID attenuverterId);
 
     // ---- pointer gesture (CardControlGestures::onModDotGesture) ----
-    /** `knob` is the control pressed, `anchor` the dot's button (or the knob itself when it has none);
-     *  `e` is in `knob`'s space. */
-    void pressed(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Slider& knob, juce::Component& anchor,
-                 const juce::MouseEvent& e);
+    /** `knob` is the control pressed (a knob, a fader, or a morph map slider), `anchor` the dot's button (or the
+     *  knob itself when it has none); `e` is in one fixed space for the whole press. */
+    void pressed(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
+                 juce::Component& anchor, const juce::MouseEvent& e);
     void dragged(const juce::MouseEvent& e);
     void released(const juce::MouseEvent& e);
+    /** `pressed` (phase 0, `button` is the dot's Tab stop or null), `dragged` (1) or `released` (2): what every
+     *  control's CardControlGestures::onModDotGesture does. */
+    void routeGesture(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
+                      juce::Component* button, const juce::MouseEvent& e, int phase);
     /** Esc during a drag: back to the starting amount, no undo step. */
     void cancel();
     bool isGestureActive() const noexcept { return gesture_.has_value(); }
@@ -111,7 +115,7 @@ public:
 
     // ---- keyboard ----
     /** One undo step: the chosen source's amount += `delta` (clamped), tooltip and announcement as in a drag. */
-    void step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Slider& knob, float delta);
+    void step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob, float delta);
 
     /** True when the routing set differs from the one the last call saw (a cheap signature of every
      *  routing's kind, endpoints and attenuverter), so the 30 Hz tick re-syncs the dot buttons only then. */
@@ -134,7 +138,7 @@ private:
         juce::AudioProcessorGraph::NodeID card;
         int destChannel = 0;
         juce::AudioProcessorGraph::NodeID attenuverter;
-        juce::Component::SafePointer<juce::Slider> knob;
+        juce::Component::SafePointer<juce::Component> knob;
         juce::Component::SafePointer<juce::Component> anchor;
         juce::Point<float> startPos;
         float startAmount = 0.0f;
@@ -145,7 +149,7 @@ private:
     ModDotPanelFrame* launchPopoverFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor);
     void setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target);
     void showTooltip(juce::AudioProcessorGraph::NodeID card, int destChannel,
-                     juce::AudioProcessorGraph::NodeID attenuverter, juce::Slider& knob);
+                     juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& knob);
     void announce(const juce::String& name, float amount);
     void scheduleKeyHide();
 

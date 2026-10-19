@@ -108,6 +108,24 @@ TEST(LfoCustomWaveTest, SanitiseFallsBackToDefault) {
     EXPECT_EQ(LfoCustomWave::fromVar(waveVar(2, twoPoints)), def) << "version newer than kVersion";
 }
 
+// Regression test for FRO953: a curve without "version" (as the AI writes them) keeps its points.
+TEST(LfoCustomWaveTest, MissingVersionReadsAsVersionOne) {
+    auto* obj = new juce::DynamicObject();
+    juce::Array<juce::var> pts;
+    pts.add(pointVar(0.0, 0.2));
+    pts.add(pointVar(0.5, 0.9));
+    pts.add(pointVar(1.0, 0.4));
+    obj->setProperty("points", juce::var(pts));
+    const auto wave = LfoCustomWave::fromVar(juce::var(obj));
+    ASSERT_EQ(wave.points.size(), 3u);
+    EXPECT_FLOAT_EQ(wave.points[1].y, 0.9f);
+
+    auto* bad = new juce::DynamicObject();
+    bad->setProperty("version", "x");
+    bad->setProperty("points", juce::var(pts));
+    EXPECT_EQ(LfoCustomWave::fromVar(juce::var(bad)), LfoCustomWave::defaultWave()) << "non-numeric version";
+}
+
 TEST(LfoCustomWaveTest, EvaluateIsRightContinuousAtSteps) {
     const auto square = LfoCustomWave::preset(LfoCustomWave::Preset::Square);
     EXPECT_FLOAT_EQ(square.evaluate(0.5f), 0.0f) << "at the step, the segment STARTING there wins";

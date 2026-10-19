@@ -46,6 +46,9 @@ void MorphMap::refreshStopNames() {
 
 juce::String MorphMap::tooltipAt(juce::Point<int> point) const {
     const auto p = point.toFloat();
+    if (extraTooltip)
+        if (const auto text = extraTooltip(p); text.isNotEmpty())
+            return text;
     if (cursorAt(p))
         return cursorStop_->getTooltip();
     if (const Axis strip = stripAt(p); strip != Axis::None && cursorVisible_)
@@ -95,23 +98,10 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
-    const float step = mods.isShiftDown() ? kBigStep : kStep;
     const int code = key.getKeyCode();
-    if (stop.isStrip()) { // a slider moves along its own axis; the keys that point along it, either pair
-        const float along = (code == juce::KeyPress::rightKey || code == juce::KeyPress::downKey) ? step
-                            : (code == juce::KeyPress::leftKey || code == juce::KeyPress::upKey)  ? -step
-                                                                                                  : 0.0f;
-        if (along != 0.0f)
-            return stepStop(stop, stop.axis() == Axis::X ? along : 0.0f, stop.axis() == Axis::Y ? along : 0.0f);
-    }
-    if (code == juce::KeyPress::leftKey)
-        return stepStop(stop, -step, 0.0f);
-    if (code == juce::KeyPress::rightKey)
-        return stepStop(stop, step, 0.0f);
-    if (code == juce::KeyPress::upKey)
-        return stepStop(stop, 0.0f, -step);
-    if (code == juce::KeyPress::downKey)
-        return stepStop(stop, 0.0f, step);
+    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ||
+        code == juce::KeyPress::downKey)
+        return pressArrow(stop, code, mods.isShiftDown());
     if (code == juce::KeyPress::escapeKey) {
         grabKeyboardFocus();
         return true;
@@ -126,8 +116,13 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
         return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
-        if (onDeleteDot && (!canDeleteDot || canDeleteDot()))
+        if (onDeleteDot && (!canDeleteDot || canDeleteDot())) {
+            juce::Component::SafePointer<MorphMap> safe(this);
             onDeleteDot(index);
+            // The owner refreshed the dots at once, so dot `index` is the one that followed (or the new last).
+            if (safe != nullptr && !safe->dotStops_.empty())
+                safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
+        }
         return true;
     }
     if (code == juce::KeyPress::F2Key) {

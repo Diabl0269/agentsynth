@@ -112,7 +112,7 @@ what the keys do inside each one, is in [`focus-regions.md`](focus-regions.md).
 keyboard-focused item opens, placed at that item instead of at the mouse. It is a command like the
 focus-cycle keys: `MainComponent` performs it, inactive while the launch overlay is up front, and a
 detached panel window resolves the same bound key itself (`isOpenContextMenuKeyPress`), because
-`MainComponent::keyPressed` never sees keys typed in another top-level window.
+`MainComponent::keyPressed` never sees keys typed in another top-level window. The [shape editor window](../modules/custom-filter.md#shape-editor-window) passes on the keys it does not use that are bound to an app command which makes sense there (play/stop, undo and redo, the transport, the panels), through `makeAppShortcutRelay`, one message-loop turn later; copy, paste and the other canvas-selection commands and the focus-region keys stay with the window.
 
 On a track row, an automation lane header and a modulator row, a bare Return opens that same menu too (those rows
 have no "..." button), and their tooltips name Right-click, Shift+F10 and Return. The Cmd-hold hint bubbles only

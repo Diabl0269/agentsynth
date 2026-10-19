@@ -40,11 +40,16 @@ public:
     int getNumShapes() const noexcept { return (int)shapes_.size(); }
     /** Re-reads the adapter (the polling timer does this when its generation moves). */
     void refresh();
+    /** Gives the keyboard focus to the map, the first Tab stop. Does nothing while the editor is not on screen. */
+    void focusFirstControl();
 
     /** Closing: Done and Escape. Unset closes the hosting window. */
     std::function<void()> onDone;
     /** Shows a menu; unset opens it as a real popup. A test replaces it to inspect the menu. */
     std::function<void(juce::PopupMenu&)> showMenu;
+    /** Offered every key the editor did not use except Escape; returns whether it took it (the window passes app
+     *  shortcuts on to the main window this way). */
+    std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
     /** Stamps the curve of start-from entry `index` onto the selected shape. */
     void applyStartFrom(int index);

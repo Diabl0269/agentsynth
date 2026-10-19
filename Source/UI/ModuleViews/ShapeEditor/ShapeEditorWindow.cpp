@@ -1,5 +1,6 @@
 // ShapeEditorWindow.cpp -- the shape editor's window and its grow-out-of-the-card motion.
 #include "ShapeEditorWindow.h"
+#include "ShapeEditorAppShortcuts.h"
 #include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
@@ -48,9 +49,16 @@ std::function<void(std::unique_ptr<ShapeListEditor>)>& shapeEditorWindowHookForT
 }
 } // namespace test_hooks
 
+void focusShapeEditorWindow(juce::DialogWindow& window) {
+    window.toFront(true);
+    if (auto* editor = dynamic_cast<ShapeListEditor*>(window.getContentComponent()))
+        editor->focusFirstControl();
+}
+
 juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adapter, int selected,
                                           juce::Component* anchor) {
     auto content = std::make_unique<ShapeListEditor>(std::move(adapter), selected);
+    content->onAppShortcut = makeAppShortcutRelay(anchor);
     if (auto& hook = test_hooks::shapeEditorWindowHookForTest()) {
         hook(std::move(content));
         return nullptr;
@@ -62,8 +70,15 @@ juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adap
     options.useNativeTitleBar = true;
     options.resizable = true;
     auto* dialog = options.launchAsync();
-    if (dialog != nullptr)
-        PopupMotion::attach(*dialog, motionStyle(anchor, dialog));
+    if (dialog == nullptr)
+        return nullptr;
+    PopupMotion::attach(*dialog, motionStyle(anchor, dialog));
+    // A window that has only just been launched may not be showing yet, and focus can only land on a showing
+    // component, so the focus is given one turn later (the window may also be gone by then).
+    juce::MessageManager::callAsync([window = juce::Component::SafePointer<juce::DialogWindow>(dialog)] {
+        if (window != nullptr)
+            focusShapeEditorWindow(*window);
+    });
     return dialog;
 }
 

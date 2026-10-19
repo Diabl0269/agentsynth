@@ -164,11 +164,13 @@ outline, and each dot, the cursor and the two edge sliders is a transparent, mou
 values and are re-set on every change ("ah, X 0.20, Y 0.25", "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"); tooltips
 read "<name> - drag to move, double-click to edit", "Morph cursor - drag to blend shapes". Keys, all inside the
 focused stop and therefore not rebindable actions (the native-control exception in [the rule](#the-rule)): the arrows
-move the focused dot, cursor or slider (Shift for a bigger step; one key press is one undo step), Return on a dot edits
-it, Delete or Backspace removes it (the last shape stays), F2 renames it, the open-context-menu key opens its menu
+move the focused dot, cursor or slider (Shift for a bigger step; held, they glide on, speeding up the longer they are
+held, and the whole hold is one undo step), Return on a dot edits it, Delete or Backspace removes it and focuses the
+next dot (the last shape stays), F2 renames it, the open-context-menu key opens its menu
 (`KeyboardContextMenuProvider`), Escape returns focus to the map. In the window Tab continues through the shape chips
 (named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
-window with the shared fade (`closeHostingWindow`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
+window with the shared fade (`closeHostingWindow`); the window opens with focus on the map, and the app shortcuts that make
+sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 ## Verifying for real
 

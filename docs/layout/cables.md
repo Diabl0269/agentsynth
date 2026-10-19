@@ -147,7 +147,9 @@ knob-bound target, a click within a few px of the dot claims the same
 begin/drag/endConnectionDrag gesture a real input jack starts — see
 `ModuleComponent::wantsCablePickupGestureFor`/`handleCablePickupGesture`, wired onto the knob itself
 (`CardKnobSlider::wantsCablePickupGesture`/`onCablePickupGesture`) rather than into
-`getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob.
+`getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob. The Filter's
+and LFO's morph map sliders land Morph X / Y cables the same way, the dot pushed out past the slider's modulation bar
+([custom-filter](../modules/custom-filter.md#card)).
 When the knob has at least one attenuverter routing, a plain press on the dot is NOT a pickup any
 more: it is the [mod-dot drag](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot)
 (the amount of the last-chosen source), and **Cmd+press** keeps the cable pickup. A dot with no

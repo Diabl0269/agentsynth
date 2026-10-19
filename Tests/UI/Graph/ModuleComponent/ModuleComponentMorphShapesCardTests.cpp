@@ -104,7 +104,7 @@ TEST_F(ModuleComponentTest, MorphMapIsShownByDefaultWithSeveralShapesAndHidesThe
     EXPECT_FALSE(rig.knobShown("Morph Y"));
     EXPECT_TRUE(rig.card->getLocalBounds().contains(rig.map().getBounds()));
     EXPECT_EQ(rig.map().getWidth(), 252);
-    EXPECT_EQ(rig.map().getHeight(), 150);
+    EXPECT_EQ(rig.map().getHeight(), 159);
 }
 
 TEST_F(ModuleComponentTest, MorphMapIsHiddenByDefaultWithOneShapeAndTheKnobsShow) {
@@ -133,6 +133,27 @@ TEST_F(ModuleComponentTest, ShowMorphMapToggleSwapsTheMapForTheKnobsAndIsRemembe
     toggle.setToggleState(false, juce::sendNotificationSync);
     ModuleComponent rebuilt(rig.filter, rig.node->nodeID, rig.editor, &rig.undo);
     EXPECT_FALSE(rebuilt.getMorphCard()->getMap().isVisible()) << "a rebuilt card keeps the choice";
+}
+
+// Regression test for FRO943: the toggle is drawn as a pill, not a tick box.
+TEST_F(ModuleComponentTest, ShowMorphMapToggleHasThePillStyle) {
+    CardRig rig;
+    EXPECT_TRUE((bool)rig.custom().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
+}
+
+// Regression test for FRO954: Shift and Depth share a cell with the hidden Cutoff and Resonance; a drop on
+// them lands on the visible knob.
+TEST_F(ModuleComponentTest, CableOverCustomShiftAndDepthLandsOnThem) {
+    CardRig rig;
+    ASSERT_FALSE(rig.knobShown("Cutoff"));
+    for (const auto& [name, channel] : {std::pair<const char*, int>{"Shift", FilterModule::kShiftCVChannel},
+                                        std::pair<const char*, int>{"Depth", FilterModule::kDepthCVChannel}}) {
+        auto* knob = rig.knob(name);
+        ASSERT_TRUE(knob != nullptr && knob->isVisible());
+        const auto port = rig.card->getModTargetPortForPoint(knob->getBounds().getCentre());
+        ASSERT_TRUE(port.has_value()) << name;
+        EXPECT_EQ(port->index, channel) << name;
+    }
 }
 
 TEST_F(ModuleComponentTest, MorphMapPillIsInTheFooterOnlyInCustom) {
@@ -258,7 +279,7 @@ TEST_F(ModuleComponentTest, MorphCablesLandOnTheMapSlidersWhileItShowsAndOnTheKn
         const auto anchor = rig.card->getModTargetKnobAnchor(channel);
         ASSERT_TRUE(anchor.has_value());
         const auto strip = rig.map().getStripBounds(axis).translated((float)rig.map().getX(), (float)rig.map().getY());
-        EXPECT_TRUE(strip.expanded(6.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
+        EXPECT_TRUE(strip.expanded(16.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
     }
     // Hiding the map hands the landing back to the knobs.
     rig.custom().getToggle().setToggleState(false, juce::sendNotificationSync);

@@ -153,6 +153,15 @@ so moving a shape (or Morph X/Y, for a note with no shape) moves held notes with
 yet stays on the shared kernel, so turning a mode on changes nothing until notes arrive; switching back to Off puts
 every voice on the shared kernel at once.
 
+**The Pitch cable is made for you.** Picking **By hand** or **By pitch** in the window, with the Filter in Poly and
+its Pitch input uncabled, cables that input from the Pitch source of the voice chain feeding the Filter (the Poly MIDI
+Pitch that drives the Oscillator upstream; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
+all 8 voices, in the same undo step as the mode change, so one undo takes both back. An input that is already cabled
+gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
+Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input." (By hand or By pitch, Pitch uncabled, and
+no source to take it from, or the cable was removed later) and "Per-note works in Poly: turn on the Filter's Poly."
+(any mode but Off on a mono Filter). The line fades in and out and follows the cabling at 10 Hz.
+
 **How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26)
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
 than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below
@@ -216,7 +225,11 @@ untrusted path reads only `mode` and `smoothness`, never the key map ([patch for
 
 The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
 <module name>" that grows out of the card's centre and shrinks back into it
-([animation](../layout/animation.md#popup-windows)); Esc or Done closes it. Left a large
+([animation](../layout/animation.md#popup-windows)); Esc or Done closes it, and the keyboard focus starts on the map (Tab works at once; asking for the window again
+brings it back with the focus there). It is its own top-level window, so a key it does not use (Space, Cmd+Z, Cmd+Shift+Z, the
+transport and panel shortcuts) is handed to the main window, which performs it a turn later
+([shortcuts](../control/shortcuts.md#open-context-menu)); Delete, Backspace, the arrows, Tab and the canvas-selection
+commands (copy, paste, select all, ...) are never handed over. Left a large
 [morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
 editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
 blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always
@@ -259,7 +272,13 @@ One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph
 drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
 points), double-click a dot (or press Return on it) to open the editor on it, right-click a dot for Edit, Duplicate,
-Rename and Delete. Delete on a focused dot removes it; the last shape never goes. Tooltips: "<name> - drag to move,
+Rename and Delete. Delete on a focused dot removes it and focuses the next dot; the last shape never goes. On a
+focused dot, the cursor or a slider an arrow moves it one step (Shift: a bigger one) and, held, glides it on:
+slowly at first (about 0.15 map units a second), faster the longer it is held (about 1.2 a second after two seconds),
+Shift faster still; two arrows held move it diagonally, a slider moves only along its own axis, and the whole hold is
+one gesture and one undo step. The curve is the timeline cursor's (`synth::CursorGlide`); the map's own model is
+`MorphMapGlide`, driven by a frame pump that runs only while an arrow is down. A refresh of the map (every key
+step causes one) keeps the dot stops it has, so the focused dot stays focused. Tooltips: "<name> - drag to move,
 double-click to edit", "Morph cursor - drag to blend shapes". Two sliders hugging the map set Morph X and Y alone. Keys and focus order are in
 [visualizers.md](../layout/visualizers.md#morphmap).
 
@@ -275,7 +294,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   and the knobs; no cutoff marker. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
-- **Morph map** (252 x 150, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
+- **Morph map** (252 x 159, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
   hugging it; the right edge is left free. The slider thumbs sit at the cursor; a drag, a click or the arrow keys set
   that one parameter (one host gesture and one undo step). **Show Morph Map** is a footer pill, shown only in Custom;
   the choice is remembered on the module (`CardViewState::showMorphMap`, saved as `"cardView"."morphMap"`); with no
@@ -285,6 +304,16 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   a landing widget. A cable dropped on a slider drives that parameter and lands on the slider; with the map hidden it
   lands on the knob's ring as before (`ModuleComponent::getModTargetPortForPoint` / `getModTargetKnobAnchor` ask
   `MorphShapesCard` first).
+- **A slider's modulation is a fader's.** Beside each slider runs a 3 px modulation bar and, past it, the cable's landing
+  dot (`MorphMap::stripAnchor`: the dot's radius and a 2 px gap beyond the bar, so it clears both; the map's insets leave
+  room for it). While a cable lands there the bar shows the reachable range faintly (`modDepthBandRange`) and the live
+  value-to-value-plus-CV bar over it, painted with the fader's `paintCardFaderModBar`; `MorphShapesCard::poll` reads
+  them on the card's gated tick. The dot gets the same `ModDotButton` a knob's has (named "Morph X modulation, 1
+  source", tooltip, Up/Down steps the amount, Return opens the menu), on the slider's Tab stop. A press on the bar or
+  the dot is offered to `MorphMap::pressGesture` first, which runs the fader's `CardControlGestures`: a drag on the bar
+  changes the amount of the chosen source, a click or drag on the dot opens or drags it, Cmd-press picks the cable up,
+  Alt-press on the slider drags the amount; each is one undo step and never moves the cursor. A plain press on the
+  slider itself still sets the cursor.
 - **Motion.** The map and the Edit shapes row fade and take their height with the shared `CardBlockFade`; the Morph
   knobs fade through the card body's conditional-section fade and the Cutoff / Resonance swap through its swap motion;
   the card's height eases and the neighbours make room once per direction. Reduce Motion is the short plain fade and

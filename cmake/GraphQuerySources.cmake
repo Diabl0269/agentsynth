@@ -1,7 +1,7 @@
 # The shared per-pass graph lookups, the undo history's graph snapshot cache and the mixer model built on them
 # (docs/architecture/graph-queries.md), added to Core outside the main list in CMakeLists.txt, which sits at the
 # repository's file-size cap. The Poly voice-graph switch (docs/modules/modulation.md#the-poly-toggle) is a graph query
-# plus its change, so it lives here too.
+# plus its change, so it lives here too, and so does the lookup of the Pitch cable that feeds a voice chain.
 target_sources(Core PRIVATE
     Source/AudioEngine/ConnectionIndex.h
     Source/AudioEngine/ConnectionIndex.cpp
@@ -13,6 +13,8 @@ target_sources(Core PRIVATE
     Source/MacroOwnerIndex.cpp
     Source/Mixer/ChannelFlows/PolyVoiceGraph.h
     Source/Mixer/ChannelFlows/PolyVoiceGraph.cpp
+    Source/Mixer/ChannelFlows/UpstreamPitchSource.h
+    Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp
     Source/Mixer/MixerModel/MixerModel.h
     Source/Mixer/MixerModel/MixerModelInternal.h
     Source/Mixer/MixerModel/MixerModelColumns.cpp

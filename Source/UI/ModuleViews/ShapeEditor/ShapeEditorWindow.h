@@ -13,6 +13,10 @@ namespace synth::ui {
 juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adapter, int selected,
                                           juce::Component* anchor);
 
+/** Brings `window` to the front with keyboard focus on its first Tab stop, so Tab works at once. A shape editor window
+ *  opened by openShapeEditorWindow already does this once it is showing; call it to bring an open one back. */
+void focusShapeEditorWindow(juce::DialogWindow& window);
+
 namespace test_hooks {
 /** When set, opening hands the editor to this instead of creating a window (which cannot open on a headless runner).
  *  The test keeps the pointer alive. */

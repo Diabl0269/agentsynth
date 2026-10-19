@@ -9,7 +9,8 @@ namespace synth::ui {
 
 namespace {
 constexpr int kMapWidth = 252;
-constexpr int kMapHeight = 150;
+// 150 plus the 9 px the landing dots and modulation bars take from the plot, so the plot keeps its height.
+constexpr int kMapHeight = 159;
 constexpr float kCursorEpsilon = 1.0e-4f;
 
 int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
@@ -32,6 +33,10 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
     };
     map_.showMenu = host_.showMenu;
     map_.setShowLabels(false);
+    map_.setLandingDotDiameter(host_.landingDotDiameter);
+    map_.pressGesture = [this](const juce::MouseEvent& e, int phase) { return routeMapPress(e, phase); };
+    map_.onStripHover = [this](MorphMap::Axis axis) { routeStripHover(axis); };
+    map_.extraTooltip = [this](juce::Point<float> point) { return stripTooltipAt(point); };
     map_.setCursorVisible(true);
     controller_->refresh();
 
@@ -102,6 +107,7 @@ void MorphShapesCard::poll() {
         controller_->refresh();
         sync();
     }
+    pushStripModulation();
     const auto cursor = adapter_->getCursor();
     if (std::abs(map_.getCursor().x - cursor.x) > kCursorEpsilon ||
         std::abs(map_.getCursor().y - cursor.y) > kCursorEpsilon)
@@ -130,7 +136,7 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply) {
 /** One window per card; asking again selects the shape in the open one. The adapter's title follows a rename. */
 juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
     if (window_ != nullptr) {
-        window_->toFront(true);
+        focusShapeEditorWindow(*window_);
         if (auto* editor = dynamic_cast<ShapeListEditor*>(window_->getContentComponent()))
             editor->setSelected(shapeIndex);
         return window_.getComponent();
@@ -170,6 +176,10 @@ MorphMap::Axis MorphShapesCard::axisForChannel(int channel) const {
                                        : MorphMap::Axis::None;
 }
 
+int MorphShapesCard::axisChannel(MorphMap::Axis axis) const noexcept {
+    return axis == MorphMap::Axis::X ? morphXChannel_ : axis == MorphMap::Axis::Y ? morphYChannel_ : -1;
+}
+
 std::optional<juce::Point<float>> MorphShapesCard::anchorFor(int channel) const {
     const auto axis = axisForChannel(channel);
     if (axis == MorphMap::Axis::None || !isMapShown())
@@ -183,6 +193,66 @@ juce::Rectangle<int> MorphShapesCard::stripBoundsFor(int channel) const {
 
 void MorphShapesCard::setDropChannel(int channel) {
     map_.setDropHighlight(isMapShown() ? axisForChannel(channel) : MorphMap::Axis::None);
+}
+
+juce::Component* MorphShapesCard::stripControlFor(int channel) const {
+    const auto axis = axisForChannel(channel);
+    return axis == MorphMap::Axis::None || !isMapShown() ? nullptr : map_.getStripStop(axis);
+}
+
+CardControlGestures& MorphShapesCard::stripGestures(int channel) {
+    return stripGestures_[channel == morphYChannel_ ? 1 : 0];
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Modulation
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Offers a press to the strips' gestures in the order a fader's are asked (amount drag, dot, cable pickup); the one
+    that claims it gets the drag and the release, and the map does nothing with that press. */
+bool MorphShapesCard::routeMapPress(const juce::MouseEvent& e, int phase) {
+    if (phase == 0) {
+        pressedStrip_ = -1;
+        for (int i = 0; i < 2 && pressedStrip_ < 0; ++i)
+            if (stripGestures_[i].press(e))
+                pressedStrip_ = i;
+        return pressedStrip_ >= 0;
+    }
+    if (pressedStrip_ < 0)
+        return false;
+    stripGestures_[pressedStrip_].forward(e, phase);
+    if (phase == 2)
+        pressedStrip_ = -1;
+    return true;
+}
+
+/** Hovering a slider or its bar hovers its cable, and back, as hovering a knob does. */
+void MorphShapesCard::routeStripHover(MorphMap::Axis axis) {
+    stripGestures_[0].hover(axis == MorphMap::Axis::X);
+    stripGestures_[1].hover(axis == MorphMap::Axis::Y);
+}
+
+/** The reading is taken on the card's gated tick; the map repaints only when a bar actually changed. */
+void MorphShapesCard::pushStripModulation() {
+    const bool live = host_.stripModulation && isMapShown();
+    map_.setStripModulation(MorphMap::Axis::X,
+                            live ? host_.stripModulation(morphXChannel_) : std::vector<MorphMap::StripModulation>{});
+    map_.setStripModulation(MorphMap::Axis::Y,
+                            live ? host_.stripModulation(morphYChannel_) : std::vector<MorphMap::StripModulation>{});
+}
+
+/** The bar and the landing dot carry the mod dot's tooltip. */
+juce::String MorphShapesCard::stripTooltipAt(juce::Point<float> point) const {
+    if (!host_.modDotTooltip || !isMapShown())
+        return {};
+    for (const int channel : {morphXChannel_, morphYChannel_}) {
+        const auto axis = axisForChannel(channel);
+        const float reach = MorphMap::kModBarThickness * 0.5f + host_.landingDotDiameter;
+        if (map_.modBarAt(point) == axis || map_.stripAnchor(axis).getDistanceFrom(point) <= reach)
+            if (const auto text = host_.modDotTooltip(channel); text.isNotEmpty())
+                return text;
+    }
+    return {};
 }
 
 } // namespace synth::ui

@@ -9,6 +9,7 @@
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include <set>
 
 // Wires the third card-control claim: a plain press on the landing dot of a knob that has at least one
@@ -24,17 +25,8 @@ void ModuleComponent::wireModDotGesture(juce::Slider& knob, synth::ui::CardContr
                pressIsOnLandingDot(param, knob, e);
     };
     gestures.onModDotGesture = [this, param, &knob](const juce::MouseEvent& e, int phase) {
-        auto& controller = owner.getModDot();
-        if (phase == 0) {
-            const int destChannel = destChannelForBoundParam(param);
-            auto* button = getModDotButton(destChannel);
-            controller.pressed(nodeId, destChannel, knob,
-                               button != nullptr ? static_cast<juce::Component&>(*button) : knob, e);
-        } else if (phase == 1) {
-            controller.dragged(e);
-        } else {
-            controller.released(e);
-        }
+        const int destChannel = destChannelForBoundParam(param);
+        owner.getModDot().routeGesture(nodeId, destChannel, knob, getModDotButton(destChannel), e, phase);
     };
     gestures.onModDotCancelled = [this] { owner.getModDot().cancel(); };
 }
@@ -52,9 +44,14 @@ void ModuleComponent::syncModDotButtons() {
         return;
     std::set<int> live;
     for (const auto& target : mb->getModulationTargets()) {
+        // The control the dot belongs to: the knob or fader, else (the Filter's and LFO's hidden Morph knobs) the
+        // map slider that stands in for it.
         const int si = sliderIndexForModTarget(target);
+        juce::Component* control = si >= 0 ? static_cast<juce::Component*>(sliders[si]) : nullptr;
+        if (control == nullptr && morphCard_ != nullptr)
+            control = morphCard_->stripControlFor(target.channelIndex);
         const auto anchor = getModTargetKnobAnchor(target.channelIndex);
-        if (si < 0 || !anchor.has_value())
+        if (control == nullptr || !anchor.has_value())
             continue;
         const int count = owner.getModDot().knobSourceCount(nodeId, target.channelIndex);
         if (count == 0)
@@ -65,13 +62,13 @@ void ModuleComponent::syncModDotButtons() {
         for (auto* b : modDotButtons_)
             if (b->getDestChannel() == target.channelIndex)
                 button = b;
-        if (button != nullptr && button->getKnob() != sliders[si]) { // the card rebuilt its controls
+        if (button != nullptr && button->getKnob() != control) { // the card rebuilt its controls
             modDotButtons_.removeObject(button);
             button = nullptr;
         }
         if (button == nullptr) {
             const int channel = target.channelIndex;
-            button = modDotButtons_.add(new synth::ui::ModDotButton(channel, *sliders[si]));
+            button = modDotButtons_.add(new synth::ui::ModDotButton(channel, *control));
             button->onStep = [this, channel](float delta) {
                 if (auto* b = getModDotButton(channel); b != nullptr && b->getKnob() != nullptr)
                     owner.getModDot().step(nodeId, channel, *b->getKnob(), delta);

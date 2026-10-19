@@ -2,6 +2,7 @@
 // optional names and the lit edge a cable is about to land on.
 #include "MorphMap.h"
 #include "MorphMapPalette.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -61,6 +62,19 @@ void MorphMap::paint(juce::Graphics& g) {
         paintStrips(g);
 }
 
+/** Each routing's modulation beside its slider, painted by the helper a card fader's bar uses: the reachable range
+    faint underneath (it answers how far the slider could move, so it shows at rest too) and the live bar from the
+    slider's value to value plus CV on top. */
+void MorphMap::paintStripModulation(juce::Graphics& g, Axis axis) const {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    for (const auto& m : stripModulation_[axis == Axis::X ? 0 : 1]) {
+        const auto bandColour = m.bandNegative ? colors.modRingNegative : colors.modRingPositive;
+        paintCardFaderModBar(g, getModBarBetween(axis, m.bandStart, m.bandEnd), bandColour.withAlpha(0.35f), false);
+        paintCardFaderModBar(g, getModBarBetween(axis, m.baseNorm, m.modNorm),
+                             m.positive ? colors.modRingPositive : colors.modRingNegative, m.hovered);
+    }
+}
+
 /** Thin sliders: a track, the accent fill from the start to the value, a thumb at the cursor, and an outline in the
     wire colour while a cable is about to land on it. */
 void MorphMap::paintStrips(juce::Graphics& g) const {
@@ -84,6 +98,7 @@ void MorphMap::paintStrips(juce::Graphics& g) const {
             g.setColour(colors.modWire);
             g.drawRoundedRectangle(strip.expanded(2.0f), 4.0f, 2.0f);
         }
+        paintStripModulation(g, axis);
     }
 }
 

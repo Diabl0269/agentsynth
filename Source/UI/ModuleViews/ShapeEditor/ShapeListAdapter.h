@@ -36,6 +36,14 @@ struct ShapeDrawRange {
     int cycles = 3;
 };
 
+/** Where the Filter's Pitch input stands, which By hand and By pitch need to tell notes apart. */
+enum class PitchInput {
+    Connected,       ///< A cable feeds it (or the adapter needs none).
+    Missing,         ///< No cable, but one can be made from the voice chain's Pitch source.
+    MissingNoSource, ///< No cable and nothing upstream carries pitch.
+    NotPoly          ///< The module is mono, so notes cannot sit apart at all.
+};
+
 class ShapeListAdapter {
 public:
     virtual ~ShapeListAdapter() = default;
@@ -69,6 +77,16 @@ public:
     virtual CustomFilterPerNote getPerNote() const { return {}; }
     /** Applies the settings live. Like setShapes, not an undo step by itself: bracket with beginEdit/endEdit. */
     virtual void setPerNote(const CustomFilterPerNote&) {}
+    /** Whether notes can be told apart: the Pitch input state. An adapter without per-note needs reports Connected. */
+    virtual PitchInput pitchInput() const { return PitchInput::Connected; }
+    /** Applies `perNote` as ONE undo step (no beginEdit/endEdit around it). For By hand and By pitch with the Pitch
+     *  input missing, it also cables the voice chain's Pitch source to it in the same step. True when it cabled. */
+    virtual bool setPerNoteConnectingPitch(const CustomFilterPerNote& perNote) {
+        beginEdit();
+        setPerNote(perNote);
+        endEdit();
+        return false;
+    }
     /** The curve y that is "no change" (a reference line the fill runs down to). */
     virtual float getReferenceLevel() const { return 0.5f; }
 };

@@ -1,5 +1,8 @@
-# The curve editor's multi-point selection tests (docs/layout/visualizers.md), kept in their own list so
-# Tests/CMakeLists.txt stays under the file-size cap.
+# The shape editing tests kept out of Tests/CMakeLists.txt so it stays under the file-size cap: the curve editor's
+# multi-point selection (docs/layout/visualizers.md) and the Custom filter's Pitch cable for the per-note modes (the
+# upstream lookup and the shape window's By hand / By pitch choice, docs/modules/custom-filter.md).
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/CurveEditor/CurveEditorMultiSelectTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mixer/ChannelFlow/UpstreamPitchSourceTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/PerNotePitchCableTests.cpp
 )

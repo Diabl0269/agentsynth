@@ -21,6 +21,7 @@ inline constexpr int kKnobLargeHeight = 80; // a 60 px dial + its text box
 inline constexpr int kFaderVHeight = 96;    // a vertical fader's travel + its text box
 inline constexpr int kFaderHHeight = 28;    // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
+inline constexpr int kPanelGap = 6;             // between the controls and a response or scope panel under them
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;

@@ -84,7 +84,7 @@ void ModDotController::setAmount(juce::AudioProcessorGraph::NodeID attenuverter,
     editor_.adjustModAmount(attenuverter, juce::jlimit(-1.0f, 1.0f, target) - current);
 }
 
-void ModDotController::pressed(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Slider& knob,
+void ModDotController::pressed(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
                                juce::Component& anchor, const juce::MouseEvent& e) {
     keyHideTimer_.stopTimer();
     cancelled_ = false;
@@ -137,6 +137,16 @@ void ModDotController::released(const juce::MouseEvent&) {
         onModDotClicked(g.card, g.destChannel, *g.anchor);
 }
 
+void ModDotController::routeGesture(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
+                                    juce::Component* button, const juce::MouseEvent& e, int phase) {
+    if (phase == 0)
+        pressed(card, destChannel, knob, button != nullptr ? *button : knob, e);
+    else if (phase == 1)
+        dragged(e);
+    else
+        released(e);
+}
+
 void ModDotController::cancel() {
     if (!gesture_.has_value())
         return;
@@ -147,7 +157,8 @@ void ModDotController::cancel() {
     tooltip_.hide();
 }
 
-void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Slider& knob, float delta) {
+void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
+                            float delta) {
     const auto attenuverter = chosenAttenuverter(card, destChannel);
     if (attenuverter.uid == 0)
         return;
@@ -160,7 +171,7 @@ void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChan
 }
 
 void ModDotController::showTooltip(juce::AudioProcessorGraph::NodeID card, int destChannel,
-                                   juce::AudioProcessorGraph::NodeID attenuverter, juce::Slider& knob) {
+                                   juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& knob) {
     const auto sources = knobModSources(editor_, card, destChannel);
     const auto* source = findSource(sources, attenuverter);
     const float amount = attenuverterAmount(editor_.getAudioEngine().getGraph(), attenuverter);

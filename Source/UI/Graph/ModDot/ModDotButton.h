@@ -18,7 +18,7 @@ public:
     static constexpr float kStepPercent = 0.01f;
     static constexpr float kShiftStepPercent = 0.10f;
 
-    ModDotButton(int destChannel, juce::Slider& knob)
+    ModDotButton(int destChannel, juce::Component& knob)
         : juce::Button({})
         , destChannel_(destChannel)
         , knob_(&knob) {
@@ -41,8 +41,8 @@ public:
     bool isMenuOpen() const noexcept { return menuOpen_; }
 
     int getDestChannel() const noexcept { return destChannel_; }
-    /** The knob or fader this dot belongs to; Tab visits the dot right after it. */
-    juce::Slider* getKnob() const noexcept { return knob_.getComponent(); }
+    /** The knob, fader or morph map slider this dot belongs to; Tab visits the dot right after it. */
+    juce::Component* getKnob() const noexcept { return knob_.getComponent(); }
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (!isEnabled())
@@ -82,7 +82,7 @@ public:
 private:
     int destChannel_;
     bool menuOpen_ = false;
-    juce::Component::SafePointer<juce::Slider> knob_;
+    juce::Component::SafePointer<juce::Component> knob_;
 };
 
 } // namespace synth::ui

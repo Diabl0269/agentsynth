@@ -91,6 +91,12 @@ struct WindowCapture {
 
 } // namespace
 
+// Regression test for FRO943: the toggle is drawn as a pill, not a tick box.
+TEST_F(ModuleComponentTest, LfoShowMorphMapToggleHasThePillStyle) {
+    LfoCardRig rig;
+    EXPECT_TRUE((bool)rig.morph().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
+}
+
 TEST_F(ModuleComponentTest, LfoMorphMapAppearsWithSeveralShapesAndNotWithOne) {
     LfoCardRig several(3);
     EXPECT_TRUE(several.map().isVisible());
@@ -192,7 +198,7 @@ TEST_F(ModuleComponentTest, LfoMorphCablesLandOnTheSlidersWhileTheMapShowsAndOnT
         const auto anchor = rig.card->getModTargetKnobAnchor(channel);
         ASSERT_TRUE(anchor.has_value());
         const auto strip = rig.map().getStripBounds(axis).translated((float)rig.map().getX(), (float)rig.map().getY());
-        EXPECT_TRUE(strip.expanded(6.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
+        EXPECT_TRUE(strip.expanded(16.0f).contains(*anchor)) << "the cable lands on the slider, not on a hidden knob";
     }
     rig.card->setModDropTargetChannel(LFOModule::kMorphYChannel);
     EXPECT_EQ(rig.card->getModDropTargetChannel(), LFOModule::kMorphYChannel);

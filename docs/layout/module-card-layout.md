@@ -263,7 +263,7 @@ envelope, LFO curve and threshold components plug in unchanged.
   chrome panels and above More, as one compact row (wrapping when full): toggles as the small pill,
   anything continuous as `faderH`, the rest as their own widget with an inline caption. On such a card
   the chrome toggles (Show Response, Show Spectrum, Show Scope) join the row as pills, and `poly`
-  joins it unless the layout places or hides it; a card without a footer keeps its chrome rows.
+  joins it unless the layout places or hides it; a card without a footer keeps its chrome rows. On a card with a footer, an open response or scope panel sits `kPanelGap` (6 px) below the controls above it, and the gap fades with the panel.
   Show on card never puts a control into the footer. Details in
   [module-card.md](module-card.md#the-footer-row).
 - **Tab strips (built).** A run of consecutive `presentation: tab` sections (the footer never counts)

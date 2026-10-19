@@ -115,18 +115,21 @@ bool isFiniteNumericVar(const juce::var& v) {
 } // namespace
 
 LfoCustomWave LfoCustomWave::fromVar(const juce::var& v) {
-    // Rules 1-3 (not-an-object / bad-or-missing version / points-not-an-array) resolve to the
+    // Rules 1-3 (not-an-object / bad-or-newer version / points-not-an-array) resolve to the
     // default wave outright, before a single point is parsed -- see sanitise()'s own doc comment
     // for rules 4-8, which this hands off to once a raw (possibly still-invalid) point list exists.
     const auto* obj = v.getDynamicObject();
     if (obj == nullptr)
         return defaultWave();
 
-    const juce::var versionVar = obj->getProperty("version");
-    if (!isFiniteNumericVar(versionVar))
-        return defaultWave();
-    if ((int)(double)versionVar > kVersion)
-        return defaultWave();
+    // A missing version reads as 1 (model-authored curves omit it); a present one must be numeric and not newer.
+    if (obj->hasProperty("version")) {
+        const juce::var versionVar = obj->getProperty("version");
+        if (!isFiniteNumericVar(versionVar))
+            return defaultWave();
+        if ((int)(double)versionVar > kVersion)
+            return defaultWave();
+    }
 
     const juce::var pointsVar = obj->getProperty("points");
     if (!pointsVar.isArray())

@@ -192,6 +192,7 @@ The suite is split by topic, all sharing the `ChannelFlowTest` fixture, `MockPro
 | `ChannelFlowMakeChannelCoreTests.cpp` | "Make channel" core behaviour through a standalone `GraphEditor` (render-identity comparisons), plus the adversarial no-double-drive / three-way-merge / chained-merge probes |
 | `ChannelFlowMakeChannelAppTests.cpp` | The real app wiring — track header, canvas selection and module right-click menus, each as one undo step |
 | `PolyVoiceGraphTests.cpp` | The whole-voice-graph Poly switch at the Core layer (`PolyVoiceGraph.cpp`), on bare hand-wired graphs: the voice graph reaches the chain and parallel branches and walks through modulators, stops at a Channel Strip / Master, names another track a cable really joins, Poly on inserts (or reuses) one Poly MIDI wired pitch ch0-7 / gate ch8-15, Poly off restores raw MIDI and removes only an orphaned Poly MIDI (and drops it from its macro), and a Poly MIDI holds a chord on several voices |
+| `UpstreamPitchSourceTests.cpp` | The Pitch cable lookup behind the Custom filter's per-note modes (`UpstreamPitchSource.cpp`): the jack feeding the voice chain behind a Filter, through another module, none when nothing upstream has a Pitch cable, and the Filter's own Pitch cable reported |
 
 ## Mixer panel
 

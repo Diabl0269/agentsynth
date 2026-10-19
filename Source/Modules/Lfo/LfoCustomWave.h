@@ -59,10 +59,10 @@ struct LfoCustomWave {
      *  sanitised wave (every instance reachable outside `fromVar` mid-parse is). */
     juce::var toVar() const;
 
-    /** Never fails: garbage input (wrong shape, wrong version, too few valid points, ...)
-     *  resolves to `defaultWave()`. See `sanitise()`'s doc comment for the exact rules -- this is
-     *  the ONLY entry point untrusted-shaped JSON should ever reach (LFOModule::setExtraState is
-     *  trusted-path only regardless; this is defence in depth, not the security boundary). */
+    /** Never fails: garbage input (wrong shape, bad or newer version, too few valid points, ...)
+     *  resolves to `defaultWave()`; a missing version reads as 1. See `sanitise()`'s doc comment for the exact rules --
+     * this is the ONLY entry point untrusted-shaped JSON should ever reach (LFOModule::setExtraState is trusted-path
+     * only regardless; this is defence in depth, not the security boundary). */
     static LfoCustomWave fromVar(const juce::var&);
 
     /** Clamps/sorts/pins this wave into the invariants every other member relies on: x, y in

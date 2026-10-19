@@ -2,6 +2,8 @@
 // keyboard stops, menu, rename and screen-reader names are MorphMapKeyboard.cpp.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -9,11 +11,12 @@ namespace synth::ui {
 namespace {
 constexpr float kHitRadius = 10.0f;
 constexpr float kStripGap = 6.0f;
-// Room each side of the plot: the left slider, the right edge kept free for a third axis, a margin above, and the
-// bottom slider with its gap. The map is symmetric left and right so a right-hand slider can join without moving it.
-constexpr float kSideInset = 22.0f;
+constexpr float kBarGap = 2.0f;
+constexpr float kBarHitPad = 3.0f;
+constexpr float kDotGap = 2.0f;
+constexpr float kEdgeMargin = 1.0f;
+// A margin above the plot; the sides and the bottom take stripReach().
 constexpr float kTopInset = 10.0f;
-constexpr float kBottomInset = 22.0f;
 constexpr float kMapMin = 0.0f;
 constexpr float kMapMax = 1.0f;
 } // namespace
@@ -22,6 +25,7 @@ MorphMap::MorphMap() {
     setTitle("Morph map");
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
+    glideHost_ = makeDefaultGlideHost();
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
@@ -33,16 +37,28 @@ MorphMap::MorphMap() {
     refreshStopNames();
 }
 
-MorphMap::~MorphMap() = default;
+MorphMap::~MorphMap() {
+    if (glidePump_ != nullptr)
+        glidePump_->stop();
+}
 
-/** The plot is inset so a dot or the cursor at 0 or 1 is not clipped and the sliders sit outside it. */
+/** From the plot's edge to the far side of a cable's landing dot: the slider with its gap, the modulation bar, and
+    the dot with its own gap, so the dot never covers the bar or the slider and never leaves the map. */
+float MorphMap::stripReach() const {
+    return kStripGap + (float)kStripThickness + kBarGap + kModBarThickness + kDotGap + landingDot_ + kEdgeMargin;
+}
+
+/** The plot is inset so a dot or the cursor at 0 or 1 is not clipped and the sliders sit outside it. The left and
+    right insets are equal (the right edge is kept free for a third axis, so a right-hand slider can join without
+    moving the plot) and the bottom one holds the bottom slider. */
 juce::Rectangle<float> MorphMap::getPlotArea() const {
+    const float reach = stripReach();
     return getLocalBounds()
         .toFloat()
-        .withTrimmedLeft(kSideInset)
-        .withTrimmedRight(kSideInset)
+        .withTrimmedLeft(reach)
+        .withTrimmedRight(reach)
         .withTrimmedTop(kTopInset)
-        .withTrimmedBottom(kBottomInset);
+        .withTrimmedBottom(reach);
 }
 
 juce::Point<float> MorphMap::toPixels(float x, float y) const {
@@ -125,10 +141,21 @@ void MorphMap::setShowLabels(bool show) {
     repaint();
 }
 
-/** One stop per dot, in dot order (their explicit focus orders put them before the cursor's). */
+/** One stop per dot, in dot order (their explicit focus orders put them before the cursor's). The stops that are
+    already there are kept: a key step refreshes the map, and replacing the focused stop would drop keyboard focus
+    after every step. Only the missing ones are created and the surplus ones removed from the end; if the focused
+    stop is one of those, focus moves to the nearest dot that remains (or the map when none does). */
 void MorphMap::rebuildStops() {
-    dotStops_.clear();
-    for (int i = 0; i < (int)dots_.size(); ++i) {
+    int focusedIndex = -1;
+    for (int i = 0; i < (int)dotStops_.size(); ++i)
+        if (dotStops_[(size_t)i]->hasKeyboardFocus(false))
+            focusedIndex = i;
+    const int wanted = (int)dots_.size();
+    if (glide_.isHeld() && glideStopIndex_ >= wanted)
+        endGlide();
+    while ((int)dotStops_.size() > wanted)
+        dotStops_.pop_back();
+    for (int i = (int)dotStops_.size(); i < wanted; ++i) {
         auto stop = std::make_unique<Stop>(*this, i);
         stop->setExplicitFocusOrder(i + 1);
         addAndMakeVisible(*stop);
@@ -136,6 +163,8 @@ void MorphMap::rebuildStops() {
     }
     layoutStops();
     refreshStopNames();
+    if (focusedIndex >= wanted)
+        takeFocus(wanted > 0 ? *dotStops_.back() : static_cast<juce::Component&>(*this));
 }
 
 void MorphMap::layoutStops() {
@@ -173,13 +202,72 @@ MorphMap::Axis MorphMap::stripAt(juce::Point<float> point) const {
     return Axis::None;
 }
 
+/** Past the modulation bar by the dot's radius and a gap, the same push-out a knob's or fader's landing point has. */
 juce::Point<float> MorphMap::stripAnchor(Axis axis) const {
     const auto strip = getStripBounds(axis);
+    const auto track = getModBarTrack(axis);
+    const float push = kDotGap + landingDot_ * 0.5f;
     if (axis == Axis::X)
-        return {strip.getCentreX(), strip.getBottom() + 3.0f};
+        return {strip.getCentreX(), track.getBottom() + push};
     if (axis == Axis::Y)
-        return {strip.getX() - 3.0f, strip.getCentreY()};
+        return {track.getX() - push, strip.getCentreY()};
     return getLocalBounds().toFloat().getCentre();
+}
+
+void MorphMap::setLandingDotDiameter(float diameter) {
+    if (diameter == landingDot_)
+        return;
+    landingDot_ = diameter;
+    layoutStops();
+    repaint();
+}
+
+juce::Rectangle<float> MorphMap::getModBarTrack(Axis axis) const {
+    const auto strip = getStripBounds(axis);
+    if (axis == Axis::X)
+        return {strip.getX(), strip.getBottom() + kBarGap, strip.getWidth(), kModBarThickness};
+    if (axis == Axis::Y)
+        return {strip.getX() - kBarGap - kModBarThickness, strip.getY(), kModBarThickness, strip.getHeight()};
+    return {};
+}
+
+juce::Rectangle<float> MorphMap::getModBarBetween(Axis axis, float fromNorm, float toNorm) const {
+    const auto track = getModBarTrack(axis);
+    if (axis == Axis::X) {
+        const float a = track.getX() + track.getWidth() * fromNorm;
+        const float b = track.getX() + track.getWidth() * toNorm;
+        return {std::min(a, b), track.getY(), std::abs(a - b), track.getHeight()};
+    }
+    if (axis == Axis::Y) {
+        const float a = track.getY() + track.getHeight() * fromNorm;
+        const float b = track.getY() + track.getHeight() * toNorm;
+        return {track.getX(), std::min(a, b), track.getWidth(), std::abs(a - b)};
+    }
+    return {};
+}
+
+MorphMap::Axis MorphMap::modBarAt(juce::Point<float> point) const {
+    if (!cursorVisible_)
+        return Axis::None;
+    for (const Axis axis : {Axis::X, Axis::Y})
+        if (getModBarTrack(axis).expanded(kBarHitPad).contains(point))
+            return axis;
+    return Axis::None;
+}
+
+void MorphMap::setStripModulation(Axis axis, std::vector<StripModulation> modulation) {
+    if (axis == Axis::None)
+        return;
+    auto& held = stripModulation_[axis == Axis::X ? 0 : 1];
+    if (held == modulation)
+        return;
+    held = std::move(modulation);
+    repaint();
+}
+
+const std::vector<MorphMap::StripModulation>& MorphMap::getStripModulation(Axis axis) const {
+    static const std::vector<StripModulation> none;
+    return axis == Axis::None ? none : stripModulation_[axis == Axis::X ? 0 : 1];
 }
 
 bool MorphMap::setDropHighlight(Axis axis) {
@@ -214,6 +302,11 @@ void MorphMap::takeFocus(juce::Component& target) {
 void MorphMap::mouseDown(const juce::MouseEvent& e) {
     if (renameEditor_ != nullptr)
         endRename(true);
+    pressClaimed_ = pressGesture && pressGesture(e, 0);
+    if (pressClaimed_) {
+        drag_ = Drag::None;
+        return;
+    }
     drag_ = Drag::None;
     dragMoved_ = false;
     gestureOpen_ = false;
@@ -251,6 +344,10 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
 }
 
 void MorphMap::mouseDrag(const juce::MouseEvent& e) {
+    if (pressClaimed_) {
+        pressGesture(e, 1);
+        return;
+    }
     if (drag_ == Drag::Strip) {
         moveToStrip(dragAxis_, e.position);
         return;
@@ -271,6 +368,11 @@ void MorphMap::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void MorphMap::mouseUp(const juce::MouseEvent& e) {
+    if (pressClaimed_) {
+        pressClaimed_ = false;
+        pressGesture(e, 2);
+        return;
+    }
     const Drag was = drag_;
     drag_ = Drag::None;
     if (gestureOpen_) {
@@ -294,6 +396,18 @@ void MorphMap::mouseDoubleClick(const juce::MouseEvent& e) {
 void MorphMap::mouseMove(const juce::MouseEvent& e) {
     const bool overThing = cursorAt(e.position) || dotAt(e.position) >= 0;
     setMouseCursor(overThing ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+    const Axis bar = modBarAt(e.position);
+    setHoveredAxis(bar != Axis::None || !cursorVisible_ ? bar : stripAt(e.position));
+}
+
+void MorphMap::mouseExit(const juce::MouseEvent&) { setHoveredAxis(Axis::None); }
+
+void MorphMap::setHoveredAxis(Axis axis) {
+    if (axis == hoverAxis_)
+        return;
+    hoverAxis_ = axis;
+    if (onStripHover)
+        onStripHover(axis);
 }
 
 void MorphMap::moveDot(int index, juce::Point<float> to) {

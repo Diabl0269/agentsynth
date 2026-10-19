@@ -493,10 +493,8 @@ private:
     void wireModDotGesture(juce::Slider& control, synth::ui::CardControlGestures& gestures,
                            juce::RangedAudioParameter* param);
 
-    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
-    // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
-    // headless test without opening a popup that segfaults with no display (see that setter's
-    // comment).
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces it via
+    // setShowContextMenuHookForTest() so a real right-click can be driven headless (see that setter's comment).
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
     // Where the real menu opens while showContextMenu() runs with an anchor; empty = at the mouse.
     std::optional<juce::Rectangle<int>> menuAnchor_;
@@ -744,7 +742,8 @@ private:
     void setResponseShown(bool show);
     void setSpectrumShown(bool show);
     void restoreCardView();
-    void createMorphShapesCard(); // ModuleComponentMorphCard.cpp
+    void createMorphShapesCard();  // ModuleComponentMorphCard.cpp
+    void wireMorphStripGestures(); // the map sliders' modulation gestures, same file
     int blockHeight(const synth::CardBlockFade& block, int full) const;
     void fadeBlock(synth::CardBlockFade& block, bool show);
     void attachBlockFade(synth::CardBlockFade& block, std::vector<juce::Component*> targets);
