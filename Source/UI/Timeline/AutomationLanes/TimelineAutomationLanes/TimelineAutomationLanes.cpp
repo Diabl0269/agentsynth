@@ -35,6 +35,9 @@ TimelineAutomationLanes::~TimelineAutomationLanes() {
     foldDriver_.stop(foldUpdater_);
     glideDriver_.stop(foldUpdater_);
     dropDriver_.stop(foldUpdater_);
+    blockDriver_.stop(foldUpdater_);
+    leavingLanes_.clear();
+    leaving_.clear();
     dropFade_.reset();
     headerParent_.removeChildComponent(dropIndicator_.get());
     modulators_.clear();
@@ -65,6 +68,13 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     foldDriver_.stop(foldUpdater_);
     glideTweens_.clear();
     glideDriver_.stop(foldUpdater_);
+    blockDriver_.stop(foldUpdater_);
+    blockDriverRunning_ = false;
+    arriving_.clear();
+    leavingLanes_.clear();
+    leaving_.clear();
+    shownBlocks_.clear();
+    placedBlockHeights_.clear();
     laneRange_.clear();
     doc_ = doc;
     sync();
@@ -157,6 +167,10 @@ void TimelineAutomationLanes::sync() {
         shownRoutings_.clear();
         rekeyed_.clear();
         amountLanes_.clear();
+        arriving_.clear();
+        leavingLanes_.clear();
+        shownBlocks_.clear();
+        placedBlockHeights_.clear();
         addRows_.clear();
         heightHandles_.clear();
         headers_.clear();
@@ -186,11 +200,17 @@ void TimelineAutomationLanes::sync() {
 // modulator's amount lane) loses them.
 void TimelineAutomationLanes::syncPools() {
     std::set<synth::LaneId> wanted;
+    std::map<synth::TrackId, std::vector<synth::LaneId>> shown;
     for (const auto& track : doc_->getTracks())
-        if (isVisibleLane(track))
+        if (isVisibleLane(track)) {
+            auto& blocks = shown[track.id];
             for (const auto& lane : track.lanes)
-                if (!isAmountLane(lane.id))
+                if (!isAmountLane(lane.id)) {
                     wanted.insert(lane.id);
+                    blocks.push_back(lane.id);
+                }
+        }
+    noteLaneBlockChanges(shown); // before the headers of lanes that went are dropped: their pictures are taken here
 
     // A lane that leaves the screen mid-drag takes its header (and the gesture) with it.
     if (laneDrag_.isReordering() && wanted.count(liftedLane_) == 0 && doc_->getLane(liftedLane_) == nullptr)
@@ -202,6 +222,8 @@ void TimelineAutomationLanes::syncPools() {
 
     for (auto it = heightHandles_.begin(); it != heightHandles_.end();)
         it = wanted.count(it->first) == 0 ? heightHandles_.erase(it) : std::next(it);
+    for (auto it = placedBlockHeights_.begin(); it != placedBlockHeights_.end();)
+        it = wanted.count(it->first) == 0 ? placedBlockHeights_.erase(it) : std::next(it);
     syncAddRows();
     for (const auto id : wanted) {
         if (editors_.count(id) == 0) {

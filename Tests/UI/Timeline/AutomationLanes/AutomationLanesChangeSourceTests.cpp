@@ -571,6 +571,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     s.undo().clearUndoHistory();
 
     auto& lanes = s.panel().getAutomationLanes();
+    lanes.stepBlockMotionForTest(1.0f); // the envelope's new row grows in: land it
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     auto* first = s.row(0);
     auto* second = s.row(1);

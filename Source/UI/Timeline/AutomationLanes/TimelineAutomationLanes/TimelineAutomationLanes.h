@@ -212,6 +212,14 @@ public:
     /** The lane whose header is drawn lifted, or an invalid id. */
     synth::LaneId liftedLane() const noexcept { return laneDrag_.isReordering() ? liftedLane_ : synth::LaneId(); }
 
+    // ---- Lane blocks and modulator rows coming and going (TimelineAutomationLanesBlockMotion.cpp) ----
+    /** True while a lane block or a modulator row is growing in or shrinking away. */
+    bool isBlockMotionAnimating() const noexcept { return blockDriverRunning_; }
+    /** Steps the grow and shrink tweens in flight by hand (t is the eased progress 0..1; 1 lands them). */
+    void stepBlockMotionForTest(float t);
+    /** Lane blocks still shrinking away after their lane left an open track. */
+    int leavingLaneCountForTest() const noexcept { return (int)leavingLanes_.size(); }
+
     // ---- A lane's own height (TimelineAutomationLanesHeight.cpp) ----
     /** Each step of Taller / Shorter multiplies (or divides) the lane's height scale by this. */
     static constexpr double kLaneHeightStepFactor = 1.25;
@@ -268,18 +276,75 @@ private:
         std::vector<std::unique_ptr<synth::ui::FadeVisibility>> fades;
     };
 
-    // A row and band whose routing is gone, fading out where they stood; swept once hidden.
-    struct LeavingModulator {
-        std::unique_ptr<ModulatorRow> row;
-        std::unique_ptr<ModulatorBand> band;
-        std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
-    };
-    std::vector<std::unique_ptr<LeavingModulator>> leaving_;
     struct FoldTween {
         float from = 1.0f;
         float to = 1.0f;
         float now = 1.0f;
     };
+    // A row and band whose routing is gone, fading out in a gap that shrinks from its height to nothing in its old
+    // place (before the lane's `slot`th remaining row); swept once both have finished.
+    struct LeavingModulator {
+        synth::LaneId lane;
+        int slot = 0;
+        int height = 0;
+        FoldTween presence{1.0f, 0.0f, 1.0f};
+        std::unique_ptr<ModulatorRow> row;
+        std::unique_ptr<ModulatorBand> band;
+        std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
+    };
+    std::vector<std::unique_ptr<LeavingModulator>> leaving_;
+
+    // A picture of a lane block that left, drawn in its shrinking gap: it never reads the doc its lane is gone from.
+    class BlockPicture : public juce::Component {
+    public:
+        BlockPicture(juce::Image image, float scale);
+        void paint(juce::Graphics& g) override;
+
+    private:
+        juce::Image image_;
+        float scale_ = 1.0f;
+    };
+    // A lane block that left an open track (deleted, moved to another track, undone), shrinking away after `after` (the
+    // lane above it that stayed; invalid for the top).
+    struct LeavingLane {
+        synth::LaneId lane;
+        synth::TrackId track;
+        synth::LaneId after;
+        int height = 0;
+        FoldTween presence{1.0f, 0.0f, 1.0f};
+        std::unique_ptr<BlockPicture> header; // in the header column
+        std::unique_ptr<BlockPicture> body;   // in the lanes region
+    };
+    // One block of a track's fold-out in order: a lane (`lane`) or a leaving block (`leaving`), and its height now.
+    struct BlockRef {
+        const synth::AutomationLane* lane = nullptr;
+        const LeavingLane* leaving = nullptr;
+        int height = 0;
+    };
+    std::vector<BlockRef> blocksOf(const synth::Track& track) const;
+    bool canAnimateBlocks() const;
+    float arrivingPresence(const juce::String& key) const;
+    static juce::String laneMotionKey(synth::LaneId lane);
+    static juce::String rowMotionKey(synth::LaneId lane, const juce::String& routingKey);
+    void growIn(const juce::String& key);
+    void startBlockMotion();
+    void frameBlockMotion(float t);
+    void landBlockMotion();
+    void noteLaneBlockChanges(const std::map<synth::TrackId, std::vector<synth::LaneId>>& shown);
+    void retireLaneBlock(synth::LaneId lane, synth::TrackId track, synth::LaneId after);
+    void placeLeavingLaneHeader(const LeavingLane& leaving, int y, int width);
+    void placeLeavingLaneBodies(const TimelineRowLayout& layout);
+    int leavingRowsHeightAt(synth::LaneId lane, int slot) const;
+    int leavingRowHeight(const LeavingModulator& leaving) const;
+    int leavingRowOffset(const LeavingModulator& leaving) const;
+    int placeLeavingRows(synth::LaneId lane, int slot, int y, int width);
+    void placeLeavingBands(const TimelineRowLayout& layout, int scroll);
+    std::map<juce::String, FoldTween> arriving_; // lane blocks (laneMotionKey) and rows (rowMotionKey) growing in
+    std::vector<LeavingLane> leavingLanes_;
+    std::map<synth::TrackId, std::vector<synth::LaneId>> shownBlocks_; // each open track's lane blocks, last synced
+    std::map<synth::LaneId, int> placedBlockHeights_;                  // each lane block's height as last placed
+    bool blockDriverRunning_ = false;
+    std::int64_t replaceCountSeen_ = -1; // the doc's getReplaceCount() at the last pool sync
     int modulatorGlideOffset(const juce::String& key) const;
     void frameModulatorGlide(float t);
     void landModulatorGlide();
@@ -309,7 +374,7 @@ private:
         float lift = 0.0f;
     };
     ModulatorDragPose modulatorDragPose(synth::LaneId lane, int index, int restY) const;
-    void retireModulatorRows(LaneModulators& entry, const std::set<juce::String>& staying);
+    void retireModulatorRows(LaneModulators& entry, synth::LaneId lane, const std::set<juce::String>& staying);
     void sweepLeavingModulators();
 
     bool handleLaneHeightKey(synth::LaneId lane, const juce::KeyPress& key);
@@ -332,7 +397,7 @@ private:
     void rekeyModulators(LaneModulators& entry, synth::LaneId lane, const std::vector<ModulatorInfo>& infos,
                          const juce::String& parameterName);
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
-                           const juce::String& parameterName);
+                           const juce::String& parameterName, bool growNewRows);
     void wireBand(ModulatorBand& band) const;
     void refreshModulatorAmounts(int visibleTop, int visibleBottom);
     int laneBlockHeight(const synth::AutomationLane& lane) const;
@@ -391,6 +456,7 @@ private:
     juce::VBlankAnimatorUpdater foldUpdater_; // drives the fold tween; declared before the driver that uses it
     AnimationDriver foldDriver_;
     AnimationDriver glideDriver_;
+    AnimationDriver blockDriver_; // the grow / shrink of lane blocks and modulator rows
 
     // The lane reorder drag. Slots are the track's lane blocks (a lane row plus its modulator rows) in header-list
     // coordinates; keys are indices into dragLaneIds_, fixed at press time.

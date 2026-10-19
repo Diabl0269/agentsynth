@@ -85,6 +85,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
 - [`docs/timeline/automation.md`](timeline/automation.md) — automation lanes folded out under their tracks, the Unassigned section, the curve editor
+- [`docs/timeline/lane-motion.md`](timeline/lane-motion.md) — lane blocks and modulator rows growing in, shrinking away and gliding on undo and redo
 - [`docs/timeline/modulator-row-identity.md`](timeline/modulator-row-identity.md) — a modulator row replaced in place (Change source, Change parameter, their undo) keeps its row, slot and fold
 - [`docs/timeline/lane-controls.md`](timeline/lane-controls.md) — the control chips on a lane header and mod row: the catalogue, the shown set per lane kind, the "+" row and Edit controls
 - [`docs/timeline/piano-roll.md`](timeline/piano-roll.md) — the per-clip MIDI note editor

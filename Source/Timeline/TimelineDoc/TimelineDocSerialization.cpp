@@ -588,7 +588,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         nextLaneId = parsedNextLaneId;
         nextNoteId = parsedNextNoteId;
         nextMarkerId = parsedNextMarkerId;
-        return true;
+        return ++replaceCount > 0; // always true; counted before the notification, so a listener sees it
     });
 }
 
