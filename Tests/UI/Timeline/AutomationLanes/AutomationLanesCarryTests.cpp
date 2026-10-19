@@ -207,6 +207,49 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterCarriesTheLanesModulatorOrde
     EXPECT_EQ(s.doc().getLane(s.lane)->modulatorOrder, before) << "ONE undo restores the order with the routings";
 }
 
+// Regression test for FRO885: Change parameter gave every routing a new Attenuverter, so a folded row reopened (its
+// fold was kept by the old key) and the lane's block changed height.
+TEST_F(TimelinePanelIntegrationTest, ChangeParameterKeepsTheRowsTheirFoldsAndTheirHeightsAndSoDoesItsUndo) {
+    CarryScene s;
+    auto& lanes = s.panel().getAutomationLanes();
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    auto* first = s.panel().modulatorRowForTest(s.lane, 0);
+    auto* second = s.panel().modulatorRowForTest(s.lane, 1);
+    const auto firstSource = first->getInfo().sourceUuid;
+    clickButton(first->getFoldArrow());
+    lanes.stepModulatorFoldForTest(1.0f);
+    ASSERT_TRUE(lanes.isModulatorCollapsed(s.lane, 0));
+    const auto heights = [&s] {
+        return std::vector<int>{s.panel().laneRowBoundsForTest(s.lane).getHeight(),
+                                s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(),
+                                s.panel().modulatorRowBoundsForTest(s.lane, 1).getHeight()};
+    };
+    const auto before = heights();
+    ASSERT_LT(before[1], before[2]) << "the premise: the folded row is the shorter one";
+
+    ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    ASSERT_EQ(s.doc().getLane(s.lane)->paramId, "resonance");
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 0), first) << "the rows are re-bound, not rebuilt";
+    EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 1), second);
+    EXPECT_EQ(first->getInfo().sourceUuid, firstSource);
+    EXPECT_EQ(first->getInfo().paramId, "resonance");
+    EXPECT_TRUE(lanes.isModulatorCollapsed(s.lane, 0)) << "the folded row stays folded";
+    EXPECT_FALSE(lanes.isModulatorCollapsed(s.lane, 1));
+    EXPECT_FALSE(lanes.isModulatorFoldAnimating());
+    EXPECT_EQ(heights(), before);
+
+    ASSERT_TRUE(s.undo().undo());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
+    EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 0), first);
+    EXPECT_EQ(first->getInfo().paramId, "cutoff");
+    EXPECT_TRUE(lanes.isModulatorCollapsed(s.lane, 0));
+    EXPECT_EQ(heights(), before);
+}
+
 TEST_F(TimelinePanelIntegrationTest, DuplicateGivesTheCopyTheMappedModulatorOrderAndLeavesTheOriginalsAlone) {
     CarryScene s;
     const std::vector<juce::String> before{s.adsrAttenUuid, s.attenUuid};

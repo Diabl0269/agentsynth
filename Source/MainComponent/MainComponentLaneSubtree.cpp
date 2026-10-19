@@ -140,6 +140,8 @@ bool MainComponent::retargetLaneWithAttachments(synth::LaneId lane, const synth:
     const LaneEnd to{target.nodeUuid, target.paramId};
     const auto track = owner->id;
     auto order = shownModulatorOrder(lane); // read before the edit: the rows keep their places on the new parameter
+    // The rows see the retarget and the carry as one change: each re-binds in place, keeping its fold and height.
+    const synth::ui::TimelineAutomationLanes::ModulatorHold hold(timelinePanel.getAutomationLanes());
     bool retargeted = false;
     undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
         retargeted = timelineDoc.retargetLane(lane, target.nodeUuid, target.paramId, target.range, target.paramIndex);
