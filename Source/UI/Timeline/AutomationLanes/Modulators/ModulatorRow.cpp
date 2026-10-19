@@ -170,10 +170,15 @@ void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& par
         if (part->isVisible() && !part->getBounds().isEmpty())
             arriving.push_back({part, nullptr, part->getBounds()});
     swap_ = std::make_unique<synth::SwapMotion>(*this, std::move(leaving), std::move(arriving));
-    swap_->run([this] {
+    auto landed = [this] {
         applySourceKind(); // a fold or a mode flip during the motion decides what shows now
         refreshValues();
-    });
+    };
+    // A forced test swap runs on the test's clock: real frames would land it during a slow runner's message loop.
+    if (forceSwapForTest_)
+        swap_->holdForTest(std::move(landed));
+    else
+        swap_->run(std::move(landed));
 }
 
 // The LFO controls and the shape picture show for an LFO source only, and not on a folded row (refreshValues picks the
