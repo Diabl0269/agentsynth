@@ -367,6 +367,37 @@ TEST_F(DuplicateTrackModulatorTest, ACopyOfATrackWithAModulatorIsWrappedInItsOwn
     EXPECT_EQ(lfosInside, 1) << "the copied LFO sits inside the copy's macro, as the original's does";
 }
 
+TEST_F(DuplicateTrackModulatorTest, TheCopiedModulatorKeepsTheDrawnAmountCurveAndOneUndoRemovesIt) {
+    const auto m = addModulatedCutoff();
+    ASSERT_TRUE(m.attenuverterUuid.isNotEmpty());
+    ASSERT_EQ(amountPointsOn(*doc().getTrack(m.track)).size(), m.points.size());
+
+    auto* header = mc->getTimelinePanel().getTrackHeaderAt(static_cast<int>(doc().getTracks().size()) - 1);
+    ASSERT_NE(header, nullptr);
+    ASSERT_TRUE(header->keyPressed(kCmdD));
+
+    ASSERT_EQ(doc().getTracks().size(), 2u);
+    const auto& copy = doc().getTracks().back();
+    const auto points = amountPointsOn(copy);
+    ASSERT_EQ(points.size(), m.points.size()) << "the copy's amount lane is not flat";
+    for (size_t i = 0; i < points.size(); ++i) {
+        EXPECT_DOUBLE_EQ(points[i].beat, m.points[i].beat);
+        EXPECT_FLOAT_EQ(points[i].value, m.points[i].value);
+    }
+    for (const auto& lane : copy.lanes)
+        EXPECT_NE(lane.nodeUuid, m.attenuverterUuid) << "the copy's lanes drive the copy's own nodes";
+    EXPECT_EQ(amountPointsOn(*doc().getTrack(m.track)).size(), m.points.size()) << "the original keeps its curve";
+
+    ASSERT_TRUE(mc->getUndoManager().undo());
+    ASSERT_EQ(doc().getTracks().size(), 1u);
+    EXPECT_EQ(amountPointsOn(*doc().getTrack(m.track)).size(), m.points.size());
+    int amountLanes = 0;
+    for (const auto& track : doc().getTracks())
+        for (const auto& lane : track.lanes)
+            amountLanes += lane.paramId == synth::ui::kAmountParamId ? 1 : 0;
+    EXPECT_EQ(amountLanes, 1) << "Cmd+Z removes the copied amount lane with the track";
+}
+
 TEST_F(DuplicateTrackModulatorTest, AnEnvelopeModulatorAmongOtherTracksIsCopiedIntoTheCopysMacroToo) {
     addInstrumentTrack();
     const auto m = addModulatedCutoff("ADSR");

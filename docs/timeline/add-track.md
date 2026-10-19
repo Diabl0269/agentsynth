@@ -269,7 +269,9 @@ the reconcile pass:
    exactly like the original. A channel macro named after the
    track is renamed to the copy's name so two mixer columns never read the same.
 4. **Timeline.** `TimelineDoc::duplicateTrack` inserts the copy below the source with fresh ids on the track, clips, notes
-   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A lane whose module is
+   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A modulation
+   routing's amount lane (keyed by its hidden Attenuverter, which paste rebuilds) joins that map too, so a copied
+   modulator keeps the source track's drawn amount curve and the same undo step removes it. A lane whose module is
    shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The copy is named "<name> copy",
    takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
 

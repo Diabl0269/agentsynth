@@ -104,11 +104,50 @@ juce::Point<int> placementBelow(juce::AudioProcessorGraph& graph, const std::vec
     return synth::LayoutUtil::snap({origin.x, bottom + synth::LayoutUtil::kGridSize * 5});
 }
 
+// Records "old Attenuverter uuid -> new one" so the track copy carries the routing's amount lane: the lane is keyed by
+// the Attenuverter's uuid, which paste rebuilds from `modulations` and so never reaches the copied-node remap.
+void mapAmountLane(juce::AudioProcessorGraph& graph, NodeID from, NodeID to,
+                   std::map<juce::String, juce::String>& uuidRemap) {
+    const auto uuidOf = [&graph](NodeID id) {
+        auto* node = graph.getNodeForId(id);
+        return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
+    };
+    const auto oldUuid = uuidOf(from);
+    const auto newUuid = uuidOf(to);
+    if (oldUuid.isNotEmpty() && newUuid.isNotEmpty())
+        uuidRemap[oldUuid] = newUuid;
+}
+
+// The modulation routings wholly inside the copied set: each one's copy is the routing between the two copies on the
+// same jacks, and its Attenuverter's amount lane follows.
+void mapInnerAmountLanes(AudioEngine& engine, const std::map<int, NodeID>& copies,
+                         std::map<juce::String, juce::String>& uuidRemap) {
+    const auto routings = engine.getModulationRoutings();
+    std::set<juce::uint32> claimed;
+    for (const auto& old : routings) {
+        if (old.kind != ModulationRoutingKind::AttenuverterChain || !old.hasSource || !old.hasDest)
+            continue;
+        const auto src = copies.find(static_cast<int>(old.sourceNodeID.uid));
+        const auto dst = copies.find(static_cast<int>(old.destNodeID.uid));
+        if (src == copies.end() || dst == copies.end())
+            continue;
+        for (const auto& made : routings) {
+            if (made.kind != ModulationRoutingKind::AttenuverterChain || made.sourceNodeID != src->second ||
+                made.destNodeID != dst->second || made.sourceChannelIndex != old.sourceChannelIndex ||
+                made.destChannelIndex != old.destChannelIndex || !claimed.insert(made.attenuverterNodeID.uid).second)
+                continue;
+            mapAmountLane(engine.getGraph(), old.attenuverterNodeID, made.attenuverterNodeID, uuidRemap);
+            break;
+        }
+    }
+}
+
 // Re-creates every cable between a copied node and the rest of the graph, pointing at the copy: the
 // copy is wired into Master / a shared bus like the original, and hears the same shared sources. A
 // modulation routing into a copied node from outside the set is re-created through the engine (its own
 // hidden attenuverter), amount carried over; routings between copied nodes already came with the snippet.
-void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies) {
+void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies,
+                    std::map<juce::String, juce::String>& uuidRemap) {
     auto& graph = engine.getGraph();
     const auto copyOf = [&copies](NodeID id) -> std::optional<NodeID> {
         const auto it = copies.find(static_cast<int>(id.uid));
@@ -146,6 +185,7 @@ void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies) {
             auto* toAmount = amountParameter(graph.getNodeForId(atten));
             if (fromAmount != nullptr && toAmount != nullptr)
                 toAmount->setValueNotifyingHost(fromAmount->getValue());
+            mapAmountLane(graph, into.source.nodeID, atten, uuidRemap);
         }
     }
 }
@@ -204,7 +244,8 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
                 macro.name = copyName;
             graphEditor.getMacros().add(macro);
         }
-        rewireBoundary(audioEngine, copies);
+        mapInnerAmountLanes(audioEngine, copies, uuidRemap);
+        rewireBoundary(audioEngine, copies, uuidRemap);
         graphEditor.updateComponents();
     }
 
