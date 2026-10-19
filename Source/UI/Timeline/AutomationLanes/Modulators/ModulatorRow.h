@@ -11,7 +11,12 @@
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
+
+namespace synth {
+class SwapMotion;
+}
 
 namespace synth::ui {
 
@@ -51,10 +56,19 @@ public:
      *  be null (the chips then show the default set and the "+" row has nowhere to float). */
     ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName,
                  LaneControlSet* controls = nullptr);
+    ~ModulatorRow() override;
 
     const ModulatorInfo& getInfo() const noexcept { return info_; }
     /** Same routing (same key()), possibly re-titled or re-coloured. */
     void setInfo(const ModulatorInfo& info, const juce::String& parameterName);
+    /** Another routing took this row's slot in one change (its source or parameter changed): the row re-binds to it in
+     *  place, its name, picture and controls swapping with the in-place swap motion when it is on screen. */
+    void setRouting(const ModulatorInfo& info, const juce::String& parameterName);
+    /** True while a setRouting swap is still moving. */
+    bool isSwapMotionRunning() const;
+    /** Lets a swap run off screen, then steps it by hand (elapsed ms since it started). */
+    void setForceSwapMotionForTest(bool force) noexcept { forceSwapForTest_ = force; }
+    void stepSwapMotionForTest(double elapsedMs);
     /** Re-reads every control from the live processor; a control mid-drag is left alone. */
     void refreshValues();
     /** The owning track's colour (tag, stripe, amount text), drawn pushed to a readable contrast. */
@@ -139,9 +153,13 @@ private:
     void applyNames();
     void openChangeSourcePicker(); // the name button's press and the menu's "Change source..."
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
-    void wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
-                       std::function<float(double)> toParameter);
+    void wireDragEdits(juce::Slider& slider, const juce::String& paramId, std::function<float(double)> toParameter);
     void applyCompact();
+    void applySourceKind();
+    void setPartVisible(juce::Component& part, bool visible);
+    std::vector<juce::Component*> sourceParts();
+    bool canAnimateSwap() const;
+    void finishSwapMotion();
     LaneControlStrip::Actions controlActions();
     bool controlEnabled(LaneControl control) const;
     void layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> amountLine);
@@ -175,6 +193,9 @@ private:
     juce::Rectangle<int> compactAmountArea_; // the readout alone, on the title line of a folded row
     std::optional<juce::Colour> trackColour_;
     std::optional<double> amount_;
+    bool lfoControlsBuilt_ = false;
+    bool forceSwapForTest_ = false;
+    std::unique_ptr<synth::SwapMotion> swap_; // declared last: gone before the controls it holds or scales
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorRow)
 };

@@ -3,8 +3,10 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 #include "Modules/LfoRateDivisions.h"
+#include "UI/Graph/CardBody/CardBodySwapMotion.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -80,9 +82,14 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     refreshValues();
 }
 
+ModulatorRow::~ModulatorRow() = default;
+
 // Tab reaches every control; a click does not move focus off the clips, whose Cmd+X/C/V the app
 // routes by where real focus sits (same rule as the lane header).
 void ModulatorRow::initLfoControls() {
+    if (lfoControlsBuilt_)
+        return;
+    lfoControlsBuilt_ = true;
     const juce::StringArray shapes{"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"};
     for (int i = 0; i < shapes.size(); ++i)
         shape_.addItem(shapes[i], i + 1);
@@ -103,19 +110,19 @@ void ModulatorRow::initLfoControls() {
     shape_.setVisible(true);
     sync_.setVisible(true);
 
-    const auto lfo = info_.sourceUuid;
-    shape_.onChange = [this, lfo] {
+    // Every edit names the LFO the row shows at the time: setRouting may re-bind the row to another one.
+    shape_.onChange = [this] {
         shapeIcon_.setShape(shape_.getSelectedId() - 1);
-        edit(lfo, "shape", (float)(shape_.getSelectedId() - 1), ParameterEditPhase::Once);
+        edit(info_.sourceUuid, "shape", (float)(shape_.getSelectedId() - 1), ParameterEditPhase::Once);
     };
-    syncRate_.onChange = [this, lfo] {
-        edit(lfo, "rateSync", (float)(syncRate_.getSelectedId() - 1), ParameterEditPhase::Once);
+    syncRate_.onChange = [this] {
+        edit(info_.sourceUuid, "rateSync", (float)(syncRate_.getSelectedId() - 1), ParameterEditPhase::Once);
     };
-    sync_.onClick = [this, lfo] {
-        edit(lfo, "mode", sync_.getToggleState() ? 1.0f : 0.0f, ParameterEditPhase::Once);
+    sync_.onClick = [this] {
+        edit(info_.sourceUuid, "mode", sync_.getToggleState() ? 1.0f : 0.0f, ParameterEditPhase::Once);
         refreshValues(); // swaps the sync-rate combo and the Hz bar
     };
-    wireDragEdits(rateHz_, lfo, "rateHz", [](double v) { return (float)v; });
+    wireDragEdits(rateHz_, "rateHz", [](double v) { return (float)v; });
 
     // The picture is display only; a right-click on it reaches the row's menu through the row's mouse listener.
     addAndMakeVisible(shapeIcon_);
@@ -128,6 +135,90 @@ void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parame
     parameterName_ = parameterName;
     applyNames();
     repaint();
+}
+
+// A routing replaced in place (Change source, Change parameter, the undo of either) keeps its row, so focus, the fold
+// and the slot stay; only what names or drives the source changes. The parts that show the source (the name, the shape
+// picture, the LFO controls) are pictured first, then the row re-binds and re-lays out at once, and the pictures shrink
+// away before the new parts grow in: animation.md "Controls swapping in place". It lands at once off screen, under
+// Reduce Motion or with Animations off.
+void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& parameterName) {
+    if (info.key() == info_.key()) {
+        setInfo(info, parameterName);
+        return;
+    }
+    finishSwapMotion();
+    const bool animate = canAnimateSwap() && !getLocalBounds().isEmpty();
+    std::vector<synth::SwapMotion::Departure> leaving;
+    if (animate)
+        for (auto* part : sourceParts())
+            if (part->isVisible() && !part->getBounds().isEmpty())
+                leaving.push_back({createComponentSnapshot(part->getBounds(), true, 2.0f), part->getBounds()});
+    info_ = info;
+    parameterName_ = parameterName;
+    if (info_.isLfo)
+        initLfoControls();
+    applySourceKind();
+    applyNames();
+    refreshValues();
+    resized();
+    repaint();
+    if (!animate)
+        return;
+    std::vector<synth::SwapMotion::Arrival> arriving;
+    for (auto* part : sourceParts())
+        if (part->isVisible() && !part->getBounds().isEmpty())
+            arriving.push_back({part, nullptr, part->getBounds()});
+    swap_ = std::make_unique<synth::SwapMotion>(*this, std::move(leaving), std::move(arriving));
+    swap_->run([this] {
+        applySourceKind(); // a fold or a mode flip during the motion decides what shows now
+        refreshValues();
+    });
+}
+
+// The LFO controls and the shape picture show for an LFO source only, and not on a folded row (refreshValues picks the
+// sync-rate combo or the Hz bar).
+void ModulatorRow::applySourceKind() {
+    if (!lfoControlsBuilt_)
+        return;
+    const bool show = info_.isLfo && !compact_;
+    setPartVisible(shape_, show);
+    setPartVisible(sync_, show);
+    setPartVisible(shapeIcon_, show);
+    if (!info_.isLfo) {
+        setPartVisible(syncRate_, false);
+        setPartVisible(rateHz_, false);
+    }
+}
+
+// A part a running swap holds hidden (the leaving pictures are still shrinking) stays hidden; the swap shows it.
+void ModulatorRow::setPartVisible(juce::Component& part, bool visible) {
+    if (swap_ != nullptr && swap_->holdsHidden(part))
+        return;
+    part.setVisible(visible);
+}
+
+std::vector<juce::Component*> ModulatorRow::sourceParts() {
+    std::vector<juce::Component*> parts{&nameButton_};
+    if (lfoControlsBuilt_)
+        parts.insert(parts.end(), {&shapeIcon_, &shape_, &syncRate_, &rateHz_, &sync_});
+    return parts;
+}
+
+bool ModulatorRow::canAnimateSwap() const {
+    return (forceSwapForTest_ || isShowing()) && !prefersReducedMotion() && !animationsOff();
+}
+
+void ModulatorRow::finishSwapMotion() {
+    if (swap_ != nullptr)
+        swap_->finish();
+}
+
+bool ModulatorRow::isSwapMotionRunning() const { return swap_ != nullptr && swap_->isRunning(); }
+
+void ModulatorRow::stepSwapMotionForTest(double elapsedMs) {
+    if (swap_ != nullptr)
+        swap_->setElapsed(elapsedMs);
 }
 
 // Every name says which parameter and which source it controls, so a screen reader moving through a
@@ -191,9 +282,7 @@ void ModulatorRow::applyCompact() {
             if (focused != nullptr && focused != this && isParentOf(focused) && focused != &foldArrow_)
                 grabKeyboardFocus();
         }
-        shape_.setVisible(!compact_);
-        sync_.setVisible(!compact_);
-        shapeIcon_.setVisible(!compact_);
+        applySourceKind();
         refreshValues(); // the sync-rate combo or the Hz bar, whichever the mode shows
     }
     resized();

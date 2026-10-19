@@ -2,6 +2,7 @@
 // lane editors. Geometry, placement and the value readouts live in TimelineAutomationLanesLayout.cpp.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
+#include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 
@@ -30,6 +31,7 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
 // dangling child pointer during the owner's own teardown.
 TimelineAutomationLanes::~TimelineAutomationLanes() {
+    restoreHook_.reset();
     foldDriver_.stop(foldUpdater_);
     glideDriver_.stop(foldUpdater_);
     dropDriver_.stop(foldUpdater_);
@@ -80,6 +82,7 @@ void TimelineAutomationLanes::setHost(TrackHeaderHost* host) {
 void TimelineAutomationLanes::setUndoManager(AppUndoManager* undo) {
     undo_ = undo;
     heightHandles_.clear();
+    restoreHook_ = undo_ != nullptr ? undo_->addRestoreSettledHook([this] { releaseHeldModulators(); }) : nullptr;
     headers_.clear();
     for (auto& [id, editor] : editors_)
         editor->setUndoManager(undo);
@@ -151,6 +154,8 @@ void TimelineAutomationLanes::sync() {
     if (doc_ == nullptr) {
         modulators_.clear();
         routings_.clear();
+        shownRoutings_.clear();
+        rekeyed_.clear();
         amountLanes_.clear();
         addRows_.clear();
         heightHandles_.clear();
@@ -164,9 +169,14 @@ void TimelineAutomationLanes::sync() {
     };
     prune(expanded_);
     prune(collapsedUnassigned_);
-    deriveRoutings();
+    // Held (one edit or one undo step still on its way through several changes): the rows wait for the end of it.
+    const bool held = modulatorsHeld();
+    modulatorsPending_ = modulatorsPending_ || held;
+    if (!held)
+        deriveRoutings();
     syncPools();
-    syncModulators();
+    if (!held)
+        syncModulators();
     refreshPooled();
 }
 

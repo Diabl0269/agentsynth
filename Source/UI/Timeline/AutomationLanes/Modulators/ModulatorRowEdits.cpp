@@ -21,20 +21,20 @@ void ModulatorRow::edit(const juce::String& uuid, const juce::String& paramId, f
 // A drag is one undo step (Begin at the press, Change per move, End at the release), exactly as a
 // canvas knob's gesture is. A value change with no drag around it -- a key press, a double-click reset,
 // an accessibility "set value" -- is a complete edit of its own (Once).
-void ModulatorRow::wireDragEdits(juce::Slider& slider, const juce::String& uuid, const juce::String& paramId,
+void ModulatorRow::wireDragEdits(juce::Slider& slider, const juce::String& paramId,
                                  std::function<float(double)> toParameter) {
-    slider.onDragStart = [this, &slider, uuid, paramId, toParameter] {
+    slider.onDragStart = [this, &slider, paramId, toParameter] {
         dragging_ = &slider;
-        edit(uuid, paramId, toParameter(slider.getValue()), ParameterEditPhase::Begin);
+        edit(info_.sourceUuid, paramId, toParameter(slider.getValue()), ParameterEditPhase::Begin);
     };
-    slider.onValueChange = [this, &slider, uuid, paramId, toParameter] {
+    slider.onValueChange = [this, &slider, paramId, toParameter] {
         const auto phase = dragging_ == &slider ? ParameterEditPhase::Change : ParameterEditPhase::Once;
-        edit(uuid, paramId, toParameter(slider.getValue()), phase);
+        edit(info_.sourceUuid, paramId, toParameter(slider.getValue()), phase);
         repaint(slider.getBounds()); // the value text is drawn over the bar
     };
-    slider.onDragEnd = [this, &slider, uuid, paramId, toParameter] {
+    slider.onDragEnd = [this, &slider, paramId, toParameter] {
         dragging_ = nullptr;
-        edit(uuid, paramId, toParameter(slider.getValue()), ParameterEditPhase::End);
+        edit(info_.sourceUuid, paramId, toParameter(slider.getValue()), ParameterEditPhase::End);
     };
 }
 
@@ -58,8 +58,8 @@ void ModulatorRow::refreshValues() {
                                 juce::dontSendNotification);
         const bool synced = host_->getNodeParameter(lfo, "mode") >= 0.5f;
         sync_.setToggleState(synced, juce::dontSendNotification);
-        syncRate_.setVisible(synced && !compact_);
-        rateHz_.setVisible(!synced && !compact_);
+        setPartVisible(syncRate_, synced && !compact_);
+        setPartVisible(rateHz_, !synced && !compact_);
         if (dragging_ != &rateHz_)
             set(rateHz_, host_->getNodeParameter(lfo, "rateHz"));
     }
