@@ -342,6 +342,7 @@ TEST(DrumKitRecorded, BypassAndMuteSilenceTheRecordingsAndStopTheirVoices) {
             kit->setBypassed(true);
         else
             kit->setMuted(true);
+        render(*kit, {}, 0.01); // the toggle block fades out; the silent branch runs from the next one
         const auto silent = render(*kit, {}, 0.1);
         EXPECT_LT(peakOf(silent), 1.0e-9f);
         EXPECT_EQ(kit->displayVoiceCount(), 0);

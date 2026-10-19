@@ -44,7 +44,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(samplesPerBlock);
+        prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedGain.reset(sampleRate, 0.01);
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }
@@ -260,6 +260,15 @@ public:
             }
         }
         return std::nullopt;
+    }
+
+    /** The legacy ch1 copy of the output is faded with the legs. Mono bypass clears it (ch1 is the gain CV
+        jack there), so it has no dry path; in poly mode bypass leaves voice 1's audio input on it. */
+    int duplicateOutputChannel() const override { return 1; }
+    int bypassDryChannel(int outputChannel) const override {
+        if (outputChannel == 1 && !polyParam->get())
+            return -1;
+        return ModuleBase::bypassDryChannel(outputChannel);
     }
 
     bool isAutoPromotableModTarget(int dstChannel) const override {

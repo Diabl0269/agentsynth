@@ -308,6 +308,7 @@ TEST(MalletModule, BypassAndMuteAreSilentAndStopRingingBars) {
             m->setBypassed(true);
         else
             m->setMuted(true);
+        render(*m, {}, 0.01, kRate); // the toggle block fades out; the silent branch runs from the next one
         const auto out = render(*m, {on(0, 64)}, 0.3, kRate);
         EXPECT_EQ(peakOf(out, 0, 1, kRate), 0.0f);
         EXPECT_EQ(m->activeVoiceCount(), 0);

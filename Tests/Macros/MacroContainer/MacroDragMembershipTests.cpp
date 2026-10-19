@@ -14,6 +14,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
+#include "Modules/VCAModule.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -255,7 +256,7 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
     editor.setSize(2000, 1200);
 
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
-    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 500, 100);
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     editor.setSelectedNodes({a, b, c});
     const auto macroId = editor.getMacroController().groupSelectionIntoMacro();

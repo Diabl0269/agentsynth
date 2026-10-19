@@ -24,6 +24,7 @@ public:
         addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay (ms)", 0.0f, 250.0f, 0.0f));
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter();             // shared output stage: this module keeps its own Mix
         allocateBuffers(44100.0, 512); // usable before prepareToPlay, like the juce::Reverb it wraps
     }
 

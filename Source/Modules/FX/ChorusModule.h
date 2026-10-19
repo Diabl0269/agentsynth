@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "ChorusCentreGlide.h"
 #include <juce_dsp/juce_dsp.h>
 
 // Feedback (-1..1) drives juce::dsp::Chorus's internal comb-filter loop; near its extremes a
@@ -20,6 +21,7 @@ public:
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -28,6 +30,7 @@ public:
         spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
         spec.numChannels = 2;
         chorus.prepare(spec);
+        lineStale_ = false;
         chorus.reset();
 
         smoothedRate.reset(sampleRate, 0.05);
@@ -52,14 +55,23 @@ public:
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
                 buffer.clear(ch, 0, buffer.getNumSamples());
+            lineStale_ = true; // the delay line is not run while bypassed
             return;
         }
         if (isMuted()) {
             buffer.clear();
+            lineStale_ = true;
             return;
         }
 
         juce::ignoreUnused(midiMessages);
+        if (lineStale_) {
+            // Resume from silence: the line still holds what it heard before the bypass or mute. Mix
+            // restarts from 0 and ramps up (juce::dsp::Chorus ramps it), so the first echoes fade in.
+            chorus.setMix(0.0f);
+            chorus.reset();
+            lineStale_ = false;
+        }
 
         const int numSamples = buffer.getNumSamples();
         if (numSamples == 0 || buffer.getNumChannels() < 2)
@@ -97,9 +109,10 @@ public:
         chorus.setDepth(depth);
         // Centre Delay / Feedback / Mix CV (ch4-6) follows the normalised convention
         // (docs/modules/modulation.md#cv-in-normalised-units): +1.0 sweeps the knob to its maximum.
-        // Read once per block like Rate/Depth above — all three land in juce::dsp::Chorus setters.
-        chorus.setCentreDelay(
-            modulateNormalised(*centreDelayParam, smoothedCentreDelay.getCurrentValue(), blockCV(buffer, 4)));
+        // Read once per block like Rate/Depth above — all three land in juce::dsp::Chorus setters
+        // (Centre Delay then glides per sample while its smoother runs, below).
+        const float centreCv = blockCV(buffer, 4);
+        chorus.setCentreDelay(modulateNormalised(*centreDelayParam, smoothedCentreDelay.getCurrentValue(), centreCv));
         // Feedback and Mix are already ramped inside juce::dsp::Chorus (a per-channel
         // SmoothedValue and a DryWetMixer), so smoothing them again here would only add lag.
         chorus.setFeedback(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 5)));
@@ -107,8 +120,10 @@ public:
 
         juce::dsp::AudioBlock<float> fullBlock(buffer);
         juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
-        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
-        chorus.process(context);
+        // A gliding Centre Delay is applied a couple of samples at a time (see processWithCentreGlide).
+        synth::processWithCentreGlide(chorus, audioBlock, smoothedCentreDelay, [&](float centre) {
+            chorus.setCentreDelay(modulateNormalised(*centreDelayParam, centre, centreCv));
+        });
 
         applyOutputLevel(buffer, 2);
 
@@ -118,7 +133,6 @@ public:
 
         smoothedRate.skip(numSamples);
         smoothedDepth.skip(numSamples);
-        smoothedCentreDelay.skip(numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override {
@@ -152,6 +166,7 @@ public:
 
 private:
     juce::dsp::Chorus<float> chorus;
+    bool lineStale_ = false; // bypassed or muted since the delay line last ran
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRate;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;

@@ -93,6 +93,8 @@ public:
         // Cutoff, Resonance, Drive.
         addOutputLevelParameter();
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
         enableVisualBuffer(true);
     }
 

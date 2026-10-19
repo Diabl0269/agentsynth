@@ -40,7 +40,7 @@ protected:
         host_.setSize(1200, 1300);
         host_.setVisible(true);
         host_.addAndMakeVisible(*graphEditor_);
-        graphEditor_->setBounds(0, 0, 1200, 1100); // tall enough for the Filter card's default spot
+        graphEditor_->setBounds(0, 0, 1200, 1145); // tall enough for the Filter card's default spot
         graphEditor_->updateComponents();
         host_.addAndMakeVisible(bar_);
         bar_.setBounds(0, 1150, 1200, 100);

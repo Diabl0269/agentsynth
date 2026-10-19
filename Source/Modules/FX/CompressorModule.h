@@ -29,9 +29,12 @@ public:
         // Width of the soft knee centred on the threshold; 0 is the hard knee every patch had before.
         addParameter(kneeParam = new juce::AudioParameterFloat("knee", "Knee (dB)", 0.0f, 24.0f, 0.0f));
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
+        prepareOutputStage(sampleRate, samplesPerBlock);
         juce::dsp::ProcessSpec spec;
         spec.sampleRate = sampleRate;
         spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
@@ -59,6 +62,12 @@ public:
         // The knee width shapes the same gain law, so a step in it steps the applied reduction too.
         smoothedKnee.reset(sampleRate, 0.01);
         smoothedKnee.setCurrentAndTargetValue(*kneeParam);
+        // Attack and Release glide as times (evenly in log terms), so a jump of the knob re-tunes the
+        // detector over 20 ms instead of switching its coefficient in one sample.
+        smoothedAttack.reset(sampleRate, 0.02);
+        smoothedRelease.reset(sampleRate, 0.02);
+        smoothedAttack.setCurrentAndTargetValue(*attackParam);
+        smoothedRelease.setCurrentAndTargetValue(*releaseParam);
         smoothedThreshold.setCurrentAndTargetValue(*thresholdParam);
         smoothedMakeupGain.setCurrentAndTargetValue(*makeupGainParam);
         smoothedRatio.setCurrentAndTargetValue(*ratioParam);
@@ -93,24 +102,29 @@ public:
         smoothedMakeupGain.setTargetValue(*makeupGainParam);
         smoothedRatio.setTargetValue(*ratioParam);
         smoothedKnee.setTargetValue(*kneeParam);
+        smoothedAttack.setTargetValue(*attackParam);
+        smoothedRelease.setTargetValue(*releaseParam);
 
         // CV (ch2-6, Knee ch9) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units)
-        // and is read once per block. Threshold/Ratio/Knee CV rides on top of the smoothed
+        // and is held for the block. Threshold/Ratio/Knee/Attack/Release CV rides on top of the smoothed
         // base, so a knob move still ramps while the CV steps.
+        motion_.thresholdCv = blockCV(buffer, 2);
+        motion_.ratioCv = blockCV(buffer, 3);
+        motion_.attackCv = blockCV(buffer, 4);
+        motion_.releaseCv = blockCV(buffer, 5);
+        motion_.kneeCv = blockCV(buffer, kKneeCvChannel);
         const float thresholdDb =
-            modulateNormalised(*thresholdParam, smoothedThreshold.getCurrentValue(), blockCV(buffer, 2));
-        const float ratio = modulateNormalised(*ratioParam, smoothedRatio.getCurrentValue(), blockCV(buffer, 3));
-        const float kneeDb =
-            modulateNormalised(*kneeParam, smoothedKnee.getCurrentValue(), blockCV(buffer, kKneeCvChannel));
-        // Attack/Release are detector time constants, not levels: stepping one changes how fast
-        // the envelope follower tracks, never the current gain. Deliberately not smoothed.
-        const float attackMs = modulateNormalised(*attackParam, *attackParam, blockCV(buffer, 4));
-        const float releaseMs = modulateNormalised(*releaseParam, *releaseParam, blockCV(buffer, 5));
-        envelope.setAttackTime(attackMs);
-        envelope.setReleaseTime(releaseMs);
-        keyEnvelope.setAttackTime(attackMs);
-        keyEnvelope.setReleaseTime(releaseMs);
+            modulateNormalised(*thresholdParam, smoothedThreshold.getCurrentValue(), motion_.thresholdCv);
+        const float ratio = modulateNormalised(*ratioParam, smoothedRatio.getCurrentValue(), motion_.ratioCv);
+        const float kneeDb = modulateNormalised(*kneeParam, smoothedKnee.getCurrentValue(), motion_.kneeCv);
+        const float attackMs = modulateNormalised(*attackParam, smoothedAttack.getCurrentValue(), motion_.attackCv);
+        const float releaseMs = modulateNormalised(*releaseParam, smoothedRelease.getCurrentValue(), motion_.releaseCv);
+        setDetectorTimes(attackMs, releaseMs);
         gainLaw.set(thresholdDb, ratio, kneeDb);
+        // While any of them glides, the gain law and detector times are re-evaluated every sample
+        // (stepMotion); at rest nothing changes inside the loops.
+        motion_.active = smoothedThreshold.isSmoothing() || smoothedRatio.isSmoothing() || smoothedKnee.isSmoothing() ||
+                         smoothedAttack.isSmoothing() || smoothedRelease.isSmoothing();
 
         // Keyed only while a cable reaches a Key jack (published from the message thread — never
         // inferred from the key's level) and the buffer actually carries the key channels.
@@ -133,10 +147,6 @@ public:
             buffer.getWritePointer(0)[i] *= linearGain;
             buffer.getWritePointer(1)[i] *= linearGain;
         }
-
-        smoothedThreshold.skip(numSamples);
-        smoothedRatio.skip(numSamples);
-        smoothedKnee.skip(numSamples);
 
         // Clear CV and key channels (read above) to prevent leaking to downstream modules
         for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
@@ -219,6 +229,8 @@ private:
     // Own detector: each leg listens to itself, as juce::dsp::Compressor did. Returns the lowest
     // gain applied (1 = untouched) for the gain-reduction meter.
     float processOwn(juce::AudioBuffer<float>& buffer) {
+        if (motion_.active)
+            return processOwnMoving(buffer);
         float deepest = 1.0f;
         for (int ch = 0; ch < 2; ++ch) {
             float* data = buffer.getWritePointer(ch);
@@ -231,6 +243,46 @@ private:
         return deepest;
     }
 
+    // processOwn while a setting glides: sample-major, so both legs share each sample's gain law.
+    float processOwnMoving(juce::AudioBuffer<float>& buffer) {
+        float deepest = 1.0f;
+        float* left = buffer.getWritePointer(0);
+        float* right = buffer.getWritePointer(1);
+        for (int i = 0, n = buffer.getNumSamples(); i < n; ++i) {
+            stepMotion();
+            const float gainL = gainLaw.gain(envelope.processSample(0, left[i]));
+            const float gainR = gainLaw.gain(envelope.processSample(1, right[i]));
+            left[i] = gainL * left[i];
+            right[i] = gainR * right[i];
+            deepest = std::min(deepest, std::min(gainL, gainR));
+        }
+        return deepest;
+    }
+
+    /** Advances every gliding setting by one sample and re-derives the gain law and detector times from it. */
+    void stepMotion() noexcept {
+        const bool timesMoving = smoothedAttack.isSmoothing() || smoothedRelease.isSmoothing();
+        const bool lawMoving =
+            smoothedThreshold.isSmoothing() || smoothedRatio.isSmoothing() || smoothedKnee.isSmoothing();
+        const float thresholdDb =
+            modulateNormalised(*thresholdParam, smoothedThreshold.getNextValue(), motion_.thresholdCv);
+        const float ratio = modulateNormalised(*ratioParam, smoothedRatio.getNextValue(), motion_.ratioCv);
+        const float kneeDb = modulateNormalised(*kneeParam, smoothedKnee.getNextValue(), motion_.kneeCv);
+        const float attackMs = modulateNormalised(*attackParam, smoothedAttack.getNextValue(), motion_.attackCv);
+        const float releaseMs = modulateNormalised(*releaseParam, smoothedRelease.getNextValue(), motion_.releaseCv);
+        if (lawMoving)
+            gainLaw.set(thresholdDb, ratio, kneeDb);
+        if (timesMoving)
+            setDetectorTimes(attackMs, releaseMs);
+    }
+
+    void setDetectorTimes(float attackMs, float releaseMs) noexcept {
+        envelope.setAttackTime(attackMs);
+        envelope.setReleaseTime(releaseMs);
+        keyEnvelope.setAttackTime(attackMs);
+        keyEnvelope.setReleaseTime(releaseMs);
+    }
+
     // The keyed path: the same peak ballistics and gain law, but ONE envelope driven by
     // max(|Key L|, |Key R|) and applied to both legs, so a mono key patched into Key L alone still
     // ducks the whole stereo image. Returns the lowest gain applied, as processOwn does.
@@ -241,6 +293,8 @@ private:
         float* left = buffer.getWritePointer(0);
         float* right = buffer.getWritePointer(1);
         for (int i = 0, n = buffer.getNumSamples(); i < n; ++i) {
+            if (motion_.active)
+                stepMotion();
             const float env = keyEnvelope.processSample(0, std::max(std::abs(keyL[i]), std::abs(keyR[i])));
             const float gain = gainLaw.gain(env);
             left[i] *= gain;
@@ -251,7 +305,14 @@ private:
         return deepest;
     }
 
+    /** The block's held CV offsets, and whether any setting is gliding this block. */
+    struct Motion {
+        bool active = false;
+        float thresholdCv = 0.0f, ratioCv = 0.0f, attackCv = 0.0f, releaseCv = 0.0f, kneeCv = 0.0f;
+    };
+
     GainLaw gainLaw;
+    Motion motion_;
     juce::dsp::BallisticsFilter<float> envelope;
     juce::dsp::BallisticsFilter<float> keyEnvelope;
     bool wasKeyed = false;
@@ -262,6 +323,8 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedMakeupGain;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRatio;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedKnee;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> smoothedAttack{10.0f};
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> smoothedRelease{100.0f};
 
     juce::AudioParameterFloat* thresholdParam;
     juce::AudioParameterFloat* ratioParam;

@@ -32,9 +32,11 @@ public:
                          new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
         addParameter(ceilingParam = new juce::AudioParameterFloat("ceiling", "Ceiling (dB)", -24.0f, 0.0f, 0.0f));
         addMuteParameter();
+        addPanParameter(); // no Mix: the lookahead latency would misalign the dry signal
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
+        prepareOutputStage(sampleRate, samplesPerBlock);
         juce::dsp::ProcessSpec spec;
         spec.sampleRate = sampleRate;
         spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
@@ -93,8 +95,7 @@ public:
         // Release (read above) is a detector time constant: stepping it changes how fast gain
         // recovers, never the current gain. Deliberately not smoothed.
         smoothedThreshold.skip(numSamples);
-        // Ceiling is not smoothed: the stage reacts to a lower ceiling the way it reacts to a louder
-        // peak (down at once), and a higher one is given back over the release time.
+        // Ceiling glides inside the stage (10 ms), so a jump of the setting is not a step in the output.
         const float ceilingDb = modulateNormalised(*ceilingParam, *ceilingParam, blockCV(buffer, kCeilingCvChannel));
 
         // Apply input gain per-sample (smoothed)

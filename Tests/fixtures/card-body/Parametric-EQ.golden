@@ -36,8 +36,12 @@ type Parametric EQ size 560x592
   child 34 label id="" at 414,492 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 35 knob id="Output" at 478,238 70x60 visible=1 title="Output" tip="Output" focusOrder=0 wantsFocus=1
   child 36 label id="" at 478,218 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 37 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 38 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 37 knob id="Mix" at 0,0 0x0 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 38 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 knob id="Pan" at 0,0 0x0 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 40 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 41 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 42 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 192, 391
   in 2 192, 471

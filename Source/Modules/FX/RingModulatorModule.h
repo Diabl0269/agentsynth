@@ -34,6 +34,7 @@ public:
         // (it shipped stereo with no toggle back when the opt-in was per-module).
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
     }
@@ -235,6 +236,8 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
+    // Bypassed, both legs carry the carrier (ch0): ch1 is the Modulator input, not a right-hand dry leg.
+    int bypassDryChannel(int /*outputChannel*/) const override { return 0; }
     ModuleType getModuleType() const override { return ModuleType::RingModulator; }
 
     double getLatencyInSamples() const {

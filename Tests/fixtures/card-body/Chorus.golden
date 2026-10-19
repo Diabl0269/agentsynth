@@ -1,4 +1,4 @@
-type Chorus size 280x309
+type Chorus size 280x335
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -15,10 +15,13 @@ type Chorus size 280x309
   child 13 label id="" at 182,91 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 14 slider id="Level" at 43,265 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 15 label id="" at 12,265 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 label id="cardSectionHeader" at 12,167 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 19 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 label id="cardSectionHeader" at 12,167 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 textButton id="cardMoreRow" at 12,297 256x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
+  child 21 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 37, 146
   in 2 122, 146

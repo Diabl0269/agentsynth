@@ -76,10 +76,13 @@ public:
         addParameter(outputGainParam =
                          new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
         addMuteParameter();
+        addMixParameter(); // shared output stage: added after Mute so no existing index moves
+        addPanParameter();
         enableVisualBuffer(true);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
+        prepareOutputStage(sampleRate, samplesPerBlock);
         lastSampleRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
 
         juce::dsp::ProcessSpec monoSpec{lastSampleRate, static_cast<juce::uint32>(std::max(1, samplesPerBlock)), 1};

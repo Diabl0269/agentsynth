@@ -67,16 +67,16 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        // The Filter is at revision 3: its Custom section came after the first design, and Shift and Depth
-        // then moved into the tone row.
-        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 3 : 1) << type;
+        // The Filter is at revision 4: its Custom section came after the first design, Shift and Depth then
+        // moved into the tone row, and Mix and Pan got a row of their own.
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 4 : 1) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())
                 EXPECT_FALSE(section.title->containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZ ")) << "sentence case";
     }
     EXPECT_EQ(sectionOrder(*defaults.find("Filter")),
-              (std::vector<juce::String>{"type", "tone", "modulation", "custom", "footer"}));
+              (std::vector<juce::String>{"type", "tone", "modulation", "output", "custom", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Compressor")),
               (std::vector<juce::String>{"meter", "levels", "dynamics", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Limiter")), (std::vector<juce::String>{"meter", "levels", "timing"}));
@@ -163,7 +163,7 @@ TEST(FilterDynamicsDefaultLayout,
     EXPECT_EQ(makeupLabel->getText(), "Makeup (dB)");
     EXPECT_EQ(makeupLabel->getTooltip(), "Makeup Gain (dB)");
     EXPECT_GT(knee->getY(), built.body->findWidget("release")->getBottom());
-    EXPECT_FALSE(built.body->hasMoreRow());
+    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Mix and Pan are left unplaced";
     for (const char* id : {"threshold", "ratio", "makeupGain", "attack", "release", "knee"})
         expectReachable(built, id);
 }
@@ -184,7 +184,7 @@ TEST(FilterDynamicsDefaultLayout, TheLimiterReadsAsMeterThenInputAndCeilingFader
     EXPECT_LT(input->getX(), ceiling->getX());
     EXPECT_LT(ceiling->getY(), built.body->findWidget("release")->getY());
     EXPECT_EQ(built.body->findWidget("threshold")->getY(), built.body->findWidget("release")->getY());
-    EXPECT_FALSE(built.body->hasMoreRow());
+    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Mix and Pan are left unplaced";
     for (const char* id : {"inputGain", "ceiling", "threshold", "release"})
         expectReachable(built, id);
 }
@@ -193,7 +193,7 @@ TEST(FilterDynamicsDefaultLayout, TheGateHasThresholdAttackHoldReleaseAndARangeA
     Built built("Gate");
     ASSERT_NE(built.body, nullptr);
     ASSERT_TRUE(built.body->hasFooter());
-    EXPECT_FALSE(built.body->hasMoreRow());
+    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Mix and Pan are left unplaced";
     auto* range = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("range"));
     auto* level = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("outputLevel"));
     ASSERT_NE(range, nullptr);
@@ -243,7 +243,7 @@ TEST(FilterDynamicsDefaultLayout, TheEstimateEqualsTheRealCardForEveryTypeInTheF
 TEST(FilterDynamicsDefaultLayout, TheFilterCustomKnobsShowOnlyWhileCustomIsTheType) {
     const auto* entry = synth::DefaultCardLayouts::builtIn().find("Filter");
     ASSERT_NE(entry, nullptr);
-    const auto& custom = entry->layout.sections[3];
+    const auto& custom = entry->layout.sections[4];
     ASSERT_EQ(custom.id, "custom");
     ASSERT_TRUE(custom.visibleWhen.has_value());
     EXPECT_EQ(custom.visibleWhen->param, "filterType");

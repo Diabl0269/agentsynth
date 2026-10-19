@@ -1,8 +1,8 @@
-type Filter size 280x477
+type Filter size 280x553
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 161,437 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 161,513 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 0,0 0x0 visible=0 title="Filter response" tip="Filter response: the filter's gain across 20 Hz to 20 kHz" focusOrder=0 wantsFocus=0
-  child 3 toggle id="" at 59,437 96x20 visible=1 title="Show Response" tip="Show Response" focusOrder=0 wantsFocus=1
+  child 3 toggle id="" at 59,513 96x20 visible=1 title="Show Response" tip="Show Response" focusOrder=0 wantsFocus=1
   child 4 toggle id="" at 0,0 0x0 visible=0 title="Show Spectrum" tip="Show Spectrum" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 6 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
@@ -16,7 +16,7 @@ type Filter size 280x477
   child 14 label id="" at 97,259 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 15 combo id="" at 40,131 200x24 visible=1 title="Filter Type" tip="Filter Type" focusOrder=0 wantsFocus=1
   child 16 label id="" at 40,113 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 toggle id="Poly" at 12,437 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
+  child 17 toggle id="Poly" at 12,513 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 18 knob id="Key Track" at 12,371 85x58 visible=1 title="Key Track" tip="Key Track" focusOrder=0 wantsFocus=1
   child 19 label id="" at 12,353 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Morph X" at 0,0 0x0 visible=0 title="Morph X" tip="Morph X" focusOrder=0 wantsFocus=1
@@ -29,16 +29,20 @@ type Filter size 280x477
   child 27 label id="" at 12,259 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 28 knob id="Level" at 97,371 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 29 label id="" at 97,353 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 30 label id="cardSectionHeader" at 12,335 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 31 label id="cardSectionHeader" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 32 component id="" at 4,52 12x12 visible=1 title="Audio L input" tip="" focusOrder=0 wantsFocus=0
-  child 33 component id="" at 4,72 12x12 visible=1 title="Audio R input" tip="" focusOrder=0 wantsFocus=0
-  child 34 component id="" at 4,92 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
-  child 35 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 36 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
-  child 37 component id="" at 0,0 0x0 visible=0 title="Morph map" tip="" focusOrder=0 wantsFocus=1
-  child 38 textButton id="" at 0,0 0x0 visible=0 title="Edit shapes" tip="Edit shapes: open the shape editor window" focusOrder=0 wantsFocus=1
-  child 39 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show Morph Map: the map of shapes and the morph cursor under the response view" focusOrder=0 wantsFocus=1
+  child 30 knob id="Mix" at 12,447 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 31 label id="" at 12,429 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 knob id="Pan" at 97,447 85x58 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 97,429 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 label id="cardSectionHeader" at 12,335 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 35 label id="cardSectionHeader" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 component id="" at 4,52 12x12 visible=1 title="Audio L input" tip="" focusOrder=0 wantsFocus=0
+  child 37 component id="" at 4,72 12x12 visible=1 title="Audio R input" tip="" focusOrder=0 wantsFocus=0
+  child 38 component id="" at 4,92 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
+  child 39 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 40 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 41 component id="" at 0,0 0x0 visible=0 title="Morph map" tip="" focusOrder=0 wantsFocus=1
+  child 42 textButton id="" at 0,0 0x0 visible=0 title="Edit shapes" tip="Edit shapes: open the shape editor window" focusOrder=0 wantsFocus=1
+  child 43 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show Morph Map: the map of shapes and the morph cursor under the response view" focusOrder=0 wantsFocus=1
   in 0 10, 58
   in 1 10, 78
   in 2 29, 235

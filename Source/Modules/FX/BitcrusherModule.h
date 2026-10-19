@@ -13,6 +13,7 @@ public:
         addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
         enableVisualBuffer(true);
     }
 

@@ -24,6 +24,7 @@ public:
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));
         addOutputLevelParameter();
         addMuteParameter();
+        addPanParameter(); // shared output stage: this module keeps its own Mix
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -32,6 +33,11 @@ public:
         delayBuffer.setSize(2, maxDelaySamples + samplesPerBlock);
         delayBuffer.clear();
         writePos = 0;
+        fadeLeft_ = 0;
+        lineFadeLeft_ = 0;
+        lineFadeSamples_ = std::max(1, (int)(kLineFadeSeconds * sampleRate));
+        fadeSamples_ = std::max(1, (int)(kCrossfadeSeconds * sampleRate));
+        lineStale_ = false;
 
         smoothedTime.reset(sampleRate, 0.05);      // 50ms ramp for time
         smoothedFeedback.reset(sampleRate, 0.005); // 5ms ramp
@@ -53,21 +59,25 @@ public:
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
                 buffer.clear(ch, 0, buffer.getNumSamples());
+            lineStale_ = true; // the line is not written while bypassed
             return;
         }
         if (isMuted()) {
             buffer.clear();
+            lineStale_ = true;
             return;
         }
 
         juce::ignoreUnused(midiMessages);
+        if (lineStale_)
+            clearLine();
 
         // CV (ch2-4) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units),
         // read once per block into the smoothing targets: Time's own 50 ms ramp is what keeps a
         // modulated delay time from zipping, so the CV rides that ramp like a knob move does.
         // These jacks were declared as targets long before the module had the channels — the
         // ModulationTargetBinding sweep is what caught it (channelIndex >= declared inputs).
-        smoothedTime.setTargetValue(targetTimeMs(buffer));
+        retargetTime(targetTimeMs(buffer));
         smoothedFeedback.setTargetValue(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 3)));
         smoothedMix.setTargetValue(modulateNormalised(*mixParam, *mixParam, blockCV(buffer, 4)));
 
@@ -132,6 +142,72 @@ private:
         return juce::jlimit(timeParam->range.start, timeParam->range.end, ms);
     }
 
+    /** Empties the line and the repeats in it, so the module resumes from silence after a bypass or mute
+        instead of playing echoes of what it heard before. */
+    void clearLine() {
+        delayBuffer.clear();
+        fadeLeft_ = 0;
+        lineFadeLeft_ = lineFadeSamples_; // what goes into the line fades in, so the first echo is not a step
+        lineStale_ = false;
+    }
+
+    /** Gain on what is written into the line: 1 at rest, rising from 0 after the line was cleared. */
+    float nextLineGain() {
+        if (lineFadeLeft_ == 0)
+            return 1.0f;
+        --lineFadeLeft_;
+        return 1.0f - static_cast<float>(lineFadeLeft_) / static_cast<float>(lineFadeSamples_);
+    }
+
+    /** Takes a new delay time. A small move glides (the read head speeds up or slows down a little); a jump
+        of more than kJumpMs crossfades from the old read position to the new one instead, because gliding
+        that far would sweep the pitch of everything in the line. A crossfade in progress finishes first;
+        a jump that arrives meanwhile is taken on the block after it ends. */
+    void retargetTime(float targetMs) {
+        const float movedMs = std::abs(targetMs - smoothedTime.getCurrentValue());
+        if (fadeLeft_ > 0) {
+            if (movedMs <= kJumpMs)
+                smoothedTime.setTargetValue(targetMs);
+            return;
+        }
+        if (movedMs > kJumpMs) {
+            fadeFromSamples_ = smoothedTime.getCurrentValue() * 0.001f * static_cast<float>(sampleRate);
+            fadeLeft_ = fadeSamples_;
+            smoothedTime.setCurrentAndTargetValue(targetMs);
+            return;
+        }
+        smoothedTime.setTargetValue(targetMs);
+    }
+
+    /** Where this sample reads: the (smoothed) current time and, during a crossfade, the outgoing time
+        with the equal-power gains that blend them. */
+    struct Taps {
+        float newPos = 0.0f, oldPos = 0.0f, newGain = 1.0f, oldGain = 0.0f;
+        bool crossfading = false;
+    };
+
+    Taps nextTaps(int localWritePos, int delayBufferSize) {
+        const float delaySamplesF = smoothedTime.getNextValue() * 0.001f * static_cast<float>(sampleRate);
+        Taps t;
+        t.newPos = static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
+        if (fadeLeft_ > 0) {
+            const float progress = 1.0f - static_cast<float>(fadeLeft_) / static_cast<float>(fadeSamples_);
+            t.crossfading = true;
+            t.oldPos = static_cast<float>(localWritePos) - fadeFromSamples_ + static_cast<float>(delayBufferSize);
+            t.newGain = std::sin(progress * juce::MathConstants<float>::halfPi);
+            t.oldGain = std::cos(progress * juce::MathConstants<float>::halfPi);
+            --fadeLeft_;
+        }
+        return t;
+    }
+
+    static float readTap(const float* line, int size, const Taps& t) {
+        const float current = linearInterpolate(line, size, t.newPos);
+        if (!t.crossfading)
+            return current;
+        return current * t.newGain + linearInterpolate(line, size, t.oldPos) * t.oldGain;
+    }
+
     /** The plain stereo delay: each leg feeds back into itself. */
     void runStereo(juce::AudioBuffer<float>& buffer) {
         const int bufferSize = buffer.getNumSamples();
@@ -141,21 +217,19 @@ private:
         int localWritePos = writePos;
 
         for (int i = 0; i < bufferSize; ++i) {
-            float delayTimeMs = smoothedTime.getNextValue();
+            const Taps taps = nextTaps(localWritePos, delayBufferSize);
             float feedback = smoothedFeedback.getNextValue();
             float mix = smoothedMix.getNextValue();
-            float delaySamplesF = delayTimeMs * 0.001f * static_cast<float>(sampleRate);
+            const float lineGain = nextLineGain();
 
             for (int ch = 0; ch < numChannels; ++ch) {
                 auto* data = buffer.getWritePointer(ch);
                 auto* delayData = delayBuffer.getWritePointer(ch);
 
                 float input = data[i];
-                float readPosF =
-                    static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
-                float delayedSample = linearInterpolate(delayData, delayBufferSize, readPosF);
+                float delayedSample = readTap(delayData, delayBufferSize, taps);
 
-                delayData[localWritePos] = input + (delayedSample * feedback);
+                delayData[localWritePos] = (input * lineGain) + (delayedSample * feedback);
                 data[i] = (delayedSample * mix) + (input * (1.0f - mix));
             }
 
@@ -183,17 +257,16 @@ private:
         int localWritePos = writePos;
 
         for (int i = 0; i < bufferSize; ++i) {
-            const float delaySamplesF = smoothedTime.getNextValue() * 0.001f * static_cast<float>(sampleRate);
+            const Taps taps = nextTaps(localWritePos, delayBufferSize);
             const float feedback = smoothedFeedback.getNextValue();
             const float mix = smoothedMix.getNextValue();
-            const float readPosF =
-                static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
-            const float delayedL = linearInterpolate(lineL, delayBufferSize, readPosF);
-            const float delayedR = linearInterpolate(lineR, delayBufferSize, readPosF);
+            const float lineGain = nextLineGain();
+            const float delayedL = readTap(lineL, delayBufferSize, taps);
+            const float delayedR = readTap(lineR, delayBufferSize, taps);
             const float inL = left[i];
             const float inR = right[i];
 
-            lineL[localWritePos] = 0.5f * (inL + inR) + delayedR * feedback;
+            lineL[localWritePos] = 0.5f * (inL + inR) * lineGain + delayedR * feedback;
             lineR[localWritePos] = delayedL * feedback;
             left[i] = (delayedL * mix) + (inL * (1.0f - mix));
             right[i] = (delayedR * mix) + (inR * (1.0f - mix));
@@ -214,8 +287,18 @@ private:
         return buffer[pos0] * (1.0f - frac) + buffer[pos1] * frac;
     }
 
+    static constexpr float kJumpMs = 20.0f;            // a larger move of the time crossfades instead of gliding
+    static constexpr float kCrossfadeSeconds = 0.025f; // length of that crossfade
+    static constexpr float kLineFadeSeconds = 0.01f;   // fade-in of the line's input after it was cleared
+
     juce::AudioBuffer<float> delayBuffer;
     int writePos = 0;
+    int fadeLeft_ = 0;             // samples of the running crossfade still to play (0: none)
+    int fadeSamples_ = 1;          // its full length
+    float fadeFromSamples_ = 0.0f; // the delay, in samples, being faded away from
+    int lineFadeLeft_ = 0;         // samples of line-input fade-in still to play
+    int lineFadeSamples_ = 1;
+    bool lineStale_ = false; // bypassed or muted since the line was last written
     double sampleRate = 44100.0;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedTime;
