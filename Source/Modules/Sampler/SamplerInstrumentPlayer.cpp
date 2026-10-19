@@ -1,4 +1,5 @@
 #include "Modules/Sampler/SamplerInstrumentPlayer.h"
+#include "Modules/SoftLimit.h"
 #include <cmath>
 
 namespace synth::sampler {
@@ -6,19 +7,10 @@ namespace synth::sampler {
 namespace {
 
 constexpr int kSustainPedalController = 64;
-constexpr float kLimiterKnee = 0.9f;
 // Recordings are mastered near full scale, so the voices sum with fixed headroom: a ten-note fortissimo piano chord
 // measured +7.5 dBFS before it, about -1.5 dBFS after it. A fixed trim keeps one note's level independent of how
 // many others sound (no pumping); the limiter below is only the last resort.
 constexpr float kVoiceSumHeadroom = 0.35481339f; // -9 dB
-
-// A chord past even that headroom is rounded above the knee only, so anything quieter passes untouched.
-float softLimit(float x) {
-    const float mag = std::fabs(x);
-    if (mag <= kLimiterKnee)
-        return x;
-    return std::copysign(kLimiterKnee + 0.08f * std::tanh((mag - kLimiterKnee) * 12.5f), x);
-}
 
 bool isInstrumentMessage(const juce::MidiMessage& m) {
     return m.isNoteOnOrOff() || m.isAllNotesOff() || m.isAllSoundOff() || m.isControllerOfType(kSustainPedalController);
@@ -112,8 +104,8 @@ void InstrumentPlayer::applyLevelAndLimit(float* left, float* right, int numSamp
     for (int i = 0; i < numSamples; ++i) {
         const float gain = kVoiceSumHeadroom *
                            juce::jlimit(0.0f, 1.0f, level_.getNextValue() + (levelCv != nullptr ? levelCv[i] : 0.0f));
-        left[i] = softLimit(left[i] * gain);
-        right[i] = softLimit(right[i] * gain);
+        left[i] = synth::softLimit(left[i] * gain);
+        right[i] = synth::softLimit(right[i] * gain);
     }
 }
 

@@ -586,7 +586,7 @@ regardless of the instrument's own `poly` parameter: `ADSRModule`'s poly branch 
 never reads the MIDI note-on and note-off fallback that drives its non-poly branch — so a poly ADSR
 fed only Track In's MIDI would output a permanent zero envelope. The ADSR is otherwise exactly the card the
 module library creates (stock defaults, plus the new-module Dual I/O default); only `poly` is forced.
-VCA's `gain` is overridden to 1.0 so the envelope alone governs level. **Sampler is untouched** — it
+VCA's `gain` is 0.5 (-6 dB of per-voice headroom, see [gain-staging](../development/gain-staging.md)). **Sampler is untouched** — it
 already has its own one-shot playback envelope.
 `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one
 collapsed macro.

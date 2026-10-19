@@ -1,13 +1,14 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/SoftLimit.h"
 
 class VoiceMixerModule : public ModuleBase {
 public:
     VoiceMixerModule()
         : ModuleBase("Voice Mixer", 8, 2) // 8 voice channels in, stereo out
     {
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.125f));
+        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -38,7 +39,7 @@ public:
             buffer.addFrom(0, 0, inputCopy, ch, 0, numSamples);
         }
 
-        // Apply smoothed level and soft-clip to prevent distortion
+        // Apply smoothed level; the shared soft limiter rounds only what passes 0.9
         smoothedLevel.setTargetValue(*levelParam);
         float* outputData = buffer.getWritePointer(0);
         float peakIn = 0.0f;
@@ -47,7 +48,7 @@ public:
             if (std::abs(raw) > peakIn)
                 peakIn = std::abs(raw);
             float out = raw * smoothedLevel.getNextValue();
-            outputData[s] = std::tanh(out);
+            outputData[s] = synth::softLimit(out);
         }
 
         // Copy to channel 1 for stereo output

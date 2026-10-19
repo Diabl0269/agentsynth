@@ -12,8 +12,9 @@ void OscillatorModule::fillUnisonRatios(float* ratios, int unisonCount, float de
 // Blend and Width are smoothed like Level, and the smoothed value is read at the block's start and
 // end; the per-voice weights then ramp linearly between the two inside the block, so an automated
 // Blend or Width glides instead of stepping at a block boundary. With a static Blend 1 / Width 0
-// the start equals the end, every step is exactly 0 and every weight exactly 1, which keeps the
-// render bit-identical to a plain unweighted average.
+// the start equals the end, every step is exactly 0 and every weight exactly 1. The stack is
+// divided by the square root of the summed squared weights (constant power): uncorrelated voices
+// keep the loudness of one voice however many are stacked, and one voice divides by exactly 1.
 // `blend` and `width` are the knob values after their CV.
 void OscillatorModule::prepareUnisonMix(int unisonCount, int numSamples, float blend, float width) {
     smoothedBlend.setTargetValue(blend);
@@ -31,8 +32,8 @@ void OscillatorModule::prepareUnisonMix(int unisonCount, int numSamples, float b
     for (int u = 0; u < unisonCount; ++u) {
         const float gainStart = synth::unisonBlendGain(u, unisonCount, blendStart);
         const float gainEnd = synth::unisonBlendGain(u, unisonCount, blendEnd);
-        sumStart += gainStart;
-        sumEnd += gainEnd;
+        sumStart += gainStart * gainStart;
+        sumEnd += gainEnd * gainEnd;
 
         float leftStart = gainStart;
         float leftEnd = gainEnd;

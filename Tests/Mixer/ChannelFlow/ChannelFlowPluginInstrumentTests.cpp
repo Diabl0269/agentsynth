@@ -768,7 +768,7 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
                 EXPECT_TRUE(boolParam->get()) << "the VCA must be poly";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "gain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f) << "same gain override as the non-poly path";
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.5f) << "same gain as the non-poly path";
     }
 
     EXPECT_TRUE(graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},

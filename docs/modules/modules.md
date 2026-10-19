@@ -141,8 +141,8 @@ Without `Spread` or `Rand Phase`, a unison stack and a poly chord attack perfect
 
 ### Unison, stacking and the sub
 - **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.
-- **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`, `Major`, `Minor`. Voice 0 always stays at the root so `Blend` has an unshifted centre to fade against.
-- **Blend** (0–1) fades the detuned/stacked voices against that always-present centre voice, so thinning the chorus does not change the fundamental's level.
+- **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`, `Major`, `Minor`. Voice 0 always stays at the root pitch. Unison is constant power: the stack is divided by the root of the summed squared voice gains, so its loudness stays that of one voice.
+- **Blend** (0–1) fades the voices away from the centre (shared `unisonBlendGain`: the middle voice, or the middle two for an even count, stay at full level; voice 0, the root, in a Stack mode), so thinning the chorus does not change the fundamental's level.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias at exactly the pitches the pyramid exists to protect.
 
 ### Stereo output
@@ -526,10 +526,10 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
     - Mono mode: `Audio L` (ch0), CV (ch1), `Audio R` (ch16).
     - Poly mode: Per-voice `Audio L` ch0-7, per-voice envelope/CV ch8-15, per-voice `Audio R` ch16-23.
 - **Stereo (issue #219)**: `Audio L` / `Audio R` jacks on both sides, with the right leg on a dedicated block at `kRightBase` (ch16). It is not on ch1 — that is the gain CV input. Both legs are gated by the **same** gain ramp and the same CV, so the stereo image cannot drift while Gain moves. A silent `Audio R` is skipped per block. This is what carries the default preset's stereo path from the Filter into the FX chain.
-- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices with `tanh` soft saturation and 1/8 normalization — the left block to ch0, the right block to ch16. Follower voices in both blocks are zeroed so they don't leak downstream.
+- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices at unity (never divided by the voice count, so one poly note is exactly as loud as the same note in mono) through the shared soft limiter, which leaves everything at or below 0.9 untouched (`SoftLimit.h`) — the left block to ch0, the right block to ch16. Follower voices in both blocks are zeroed so they don't leak downstream.
 - **Legacy ch0→ch1 duplicate, deliberately preserved**: mono still copies the gated ch0 onto ch1 after processing, and the poly left sum is still written to both ch0 and ch1. That was the module's old "mono to stereo" affordance and `VCAModuleTest.MonoToStereoCopy` / `PolyMode_MultiVoice` / `MonoMode_BackwardsCompatible` pin it. It is vestigial now that there is a real right leg — prefer the `Audio R` jack. The ch1 copy fades with the legs: ch1 is not an audio jack, but `duplicateOutputChannel()` reports it to the [bypass/mute transition](../architecture/module-base.md#the-transition-around-the-two-branches), which fades it like an audio leg (mono bypass has no dry path for it, since ch1 is the gain CV jack there; poly bypass leaves voice 1's input on it). Jacks and saved routings are unchanged.
 - **Features**: Parameter smoothing for click-free gain changes.
-- **Default instrument-track chain (P9-3i, FRO43)**: auto-wired ahead of the rest of an Oscillator/Wavetable instrument track's chain (`gain` overridden to 1.0 so the ADSR envelope alone governs level) — see [`docs/mixer/mixer.md#envelope-and-vca-for-a-raw-instrument`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument). When the instrument is poly (P9-3j, FRO46), the VCA is genuinely poly instead, doing its own 8-voice sum in place of a separate Voice Mixer stage — see [`docs/mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope`](../mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope).
+- **Default instrument-track chain (P9-3i, FRO43)**: auto-wired ahead of the rest of an Oscillator/Wavetable instrument track's chain (`gain` 0.5, -6 dB of per-voice headroom) — see [`docs/mixer/mixer.md#envelope-and-vca-for-a-raw-instrument`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument). When the instrument is poly (P9-3j, FRO46), the VCA is genuinely poly instead, doing its own 8-voice sum in place of a separate Voice Mixer stage — see [`docs/mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope`](../mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope).
 
 ## Poly MIDI Module
 - **Capacity**: 8 simultaneous voices.
@@ -562,12 +562,12 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 - **Downstream reality check (`ADSRModule`)**: the ADSR's poly branch samples its gate input **per sample** (FRO110 fixed the stale once-per-block sampling), so the 1 ms gap re-articulates it on the exact sample it happens, wherever it falls in the block — a mid-block retrigger is seen identically to one that spans a block boundary. Pinned end-to-end by `PolyMidiToAdsrTest.RetriggerReArticulatesAdsrRegardlessOfBlockAlignment`.
 
 ## Voice Mixer Module
-- **Purpose**: Explicit 8-to-stereo voice summing with level control and soft saturation. An alternative to VCA's internal poly summing for patches that need a separate mix stage.
+- **Purpose**: Explicit 8-to-stereo voice summing with level control and the shared soft limiter. An alternative to VCA's internal poly summing for patches that need a separate mix stage.
 - **Inputs**: ch0-7 (up to 8 voice signals).
 - **Outputs**: ch0 (Left), ch1 (Right) — stereo copy of the mono sum.
 - **Dual I/O**: output-only (the inputs are eight voice jacks, not a stereo pair), off by default — one `"Audio"` jack owning ch0/ch1. Same shape as the Ring Modulator's; see [`fx-modules.md § Stereo I/O`](fx-modules.md#stereo-io-dual-io-toggle).
-- **Processing**: Sums all 8 input channels, scales by Level parameter (0–1, default 0.125), then applies `std::tanh` soft saturation for gentle clip protection. Level smoothed over 10 ms to prevent clicks.
-- **Parameter**: `Level` (0.0–1.0, default 0.125).
+- **Processing**: Sums all 8 input channels, scales by Level parameter (0–1, default 1.0, unity), then applies the shared soft limiter (identity at or below 0.9). Level smoothed over 10 ms to prevent clicks.
+- **Parameter**: `Level` (0.0–1.0, default 1.0).
 
 ## Math Module
 - **Source file**: `Source/Modules/MathModule.h`

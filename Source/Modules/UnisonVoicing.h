@@ -34,7 +34,7 @@ inline void unisonPanGains(int u, int count, float width, float& gainL, float& g
 inline bool isUnisonCentreVoice(int u, int count) { return std::abs(2 * u - (count - 1)) == ((count - 1) & 1); }
 
 /** Level of voice `u` under Blend: 1 for the voices nearest the root, `blend` for the rest. Normalise
-    the stack by the sum of these gains; at blend 1 that is exactly the unisonCount average. */
+    the stack by the root of the summed squared gains (constant power); at blend 1 that is sqrt(unisonCount). */
 inline float unisonBlendGain(int u, int count, float blend) { return isUnisonCentreVoice(u, count) ? 1.0f : blend; }
 
 /** Start phase (0..1) of a voice restarting on a note: `startPhase` plus up to `randomAmount` of a

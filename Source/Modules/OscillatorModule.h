@@ -439,7 +439,7 @@ private:
         float leftStep[MAX_UNISON]{};
         float rightStart[MAX_UNISON]{};
         float rightStep[MAX_UNISON]{};
-        float sumStart = 1.0f; ///< sum of the Blend gains: the stack is divided by it
+        float sumStart = 1.0f; ///< sum of the squared Blend gains: the stack is divided by its square root
         float sumStep = 0.0f;
         bool stereo = false; ///< Width above 0: the stack renders to both legs
     } unisonMix;
@@ -539,7 +539,7 @@ private:
             s.right = old.right * alpha + s.right * (1.0f - alpha);
             --voice.restartFadeRemaining;
         }
-        const float divisor = unisonMix.sumStart + unisonMix.sumStep * (float)i;
+        const float divisor = std::sqrt(unisonMix.sumStart + unisonMix.sumStep * (float)i);
         s.left /= divisor;
         s.right /= divisor;
         return s;

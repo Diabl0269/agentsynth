@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/SoftLimit.h"
 #include <cmath>
 #include <optional>
 
@@ -112,10 +113,9 @@ public:
         } else {
             // --- Poly mode: 8 voices summed to stereo (ch0/ch1) ---
             // Each voice is multiplied by its envelope CV and the master gain,
-            // then all voices are accumulated into a single stereo sum.
-            // A fixed 1/MAX_VOICES normalization prevents hot signals from clipping,
-            // and std::tanh provides gentle soft saturation as a safety net.
-            static constexpr float kNorm = 1.0f / static_cast<float>(MAX_VOICES);
+            // then all voices are accumulated into a single stereo sum at unity: one voice
+            // is exactly as loud as the same note through the mono path, and the sum is never
+            // divided by the voice count. synth::softLimit rounds only what passes 0.9.
 
             if (numChannels >= 2) {
                 auto* outL = buffer.getWritePointer(0);
@@ -136,11 +136,11 @@ public:
                         if (hasRight && kRightBase + v < numChannels)
                             sumRight += buffer.getSample(kRightBase + v, s) * gain * cv;
                     }
-                    float mixed = std::tanh(sum * kNorm);
+                    float mixed = synth::softLimit(sum);
                     outL[s] = mixed;
                     outR[s] = mixed;
                     if (outRightLeg != nullptr)
-                        outRightLeg[s] = std::tanh(sumRight * kNorm);
+                        outRightLeg[s] = synth::softLimit(sumRight);
                 }
 
                 // Zero out voice channels 2-7 so they don't leak downstream

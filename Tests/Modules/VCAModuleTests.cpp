@@ -1,4 +1,5 @@
 #include "../ClickBoundHelpers.h"
+#include "Modules/SoftLimit.h"
 #include "Modules/VCAModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -96,12 +97,12 @@ TEST_F(VCAModuleTest, PolyMode_MultiVoice) {
     juce::MidiBuffer midi;
     vca->processBlock(polyBuffer, midi);
 
-    // VCA poly sums voices to stereo via tanh(sum * 0.125)
-    // Voice 0: 1.0 * 1.0 * 1.0 = 1.0, Voice 1: 0.5 * 1.0 * 0.5 = 0.25
-    // Sum = 1.25, tanh(1.25 * 0.125) = tanh(0.15625) ≈ 0.155
-    float expected = std::tanh((1.0f + 0.25f) * 0.125f);
-    EXPECT_NEAR(polyBuffer.getSample(0, 999), expected, 0.05f); // Left
-    EXPECT_NEAR(polyBuffer.getSample(1, 999), expected, 0.05f); // Right (same as left)
+    // Voices sum at unity: voice 0 is 1.0 * 1.0 * 1.0, voice 1 is 0.5 * 1.0 * 0.5, so the sum is 1.25.
+    // That is past the 0.9 knee, so the shared soft limiter rounds it below the plain sum.
+    const float expected = synth::softLimit(1.0f + 0.25f);
+    EXPECT_FLOAT_EQ(polyBuffer.getSample(0, 999), expected); // Left
+    EXPECT_FLOAT_EQ(polyBuffer.getSample(1, 999), expected); // Right (same as left)
+    EXPECT_LT(expected, 1.0f);
 }
 
 TEST_F(VCAModuleTest, MonoMode_BackwardsCompatible) {
@@ -161,5 +162,67 @@ TEST(VCAClickBound, Ch1CopyFadesWithBypassAndMute) {
                 vca, in, {0, 1}, [&] { clickbound::setNormalised(vca, flag, turnOn ? 1.0f : 0.0f); });
             EXPECT_NO_CLICK(steps) << flag << (turnOn ? " on" : " off");
         }
+    }
+}
+
+namespace {
+
+// Runs `voiceLevels` through a poly VCA at gain 1 (one audio value per voice, unity envelope CV) and
+// returns ch0 of the last sample.
+float polyVcaOutput(const std::vector<float>& voiceLevels) {
+    VCAModule vca;
+    vca.prepareToPlay(44100.0, 64);
+    *dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&vca, "poly")) = true;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&vca, "gain")) = 1.0f;
+    vca.prepareToPlay(44100.0, 64);
+
+    juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, 64);
+    buffer.clear();
+    for (size_t v = 0; v < voiceLevels.size(); ++v) {
+        for (int i = 0; i < 64; ++i) {
+            buffer.setSample((int)v, i, voiceLevels[v]);
+            buffer.setSample((int)v + 8, i, 1.0f);
+        }
+    }
+    juce::MidiBuffer midi;
+    vca.processBlock(buffer, midi);
+    return buffer.getSample(0, 63);
+}
+
+} // namespace
+
+// Regression test for FRO848: a single poly voice used to be divided by 8 and run through tanh, about 18 dB
+// below the same note through the mono path.
+TEST(VCAModulePolyLevel, SingleVoiceEqualsTheMonoPathUnderTheKnee) {
+    for (float level : {0.05f, 0.3f, 0.6f, 0.89f}) {
+        VCAModule mono;
+        mono.prepareToPlay(44100.0, 64);
+        *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&mono, "gain")) = 1.0f;
+        mono.prepareToPlay(44100.0, 64);
+        juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, 64);
+        buffer.clear();
+        for (int i = 0; i < 64; ++i) {
+            buffer.setSample(0, i, level);
+            buffer.setSample(1, i, 1.0f);
+        }
+        juce::MidiBuffer midi;
+        mono.processBlock(buffer, midi);
+
+        EXPECT_EQ(buffer.getSample(0, 63), polyVcaOutput({level})) << "level " << level;
+    }
+}
+
+TEST(VCAModulePolyLevel, FourVoicesOfPointTwoSumToPointEight) {
+    EXPECT_FLOAT_EQ(polyVcaOutput({0.2f, 0.2f, 0.2f, 0.2f}), 0.8f);
+}
+
+TEST(VCAModulePolyLevel, SumAboveTheKneeIsSoftLimitedAndContinuous) {
+    float previous = polyVcaOutput({0.89f});
+    for (float sum = 0.9f; sum <= 4.0f; sum += 0.1f) {
+        const float out = polyVcaOutput({sum * 0.5f, sum * 0.5f});
+        EXPECT_LT(out, 1.0f) << "sum " << sum;
+        EXPECT_GE(out, previous) << "sum " << sum;
+        EXPECT_LT(out - previous, 0.15f) << "sum " << sum;
+        previous = out;
     }
 }

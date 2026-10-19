@@ -179,8 +179,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
                 EXPECT_FALSE(boolParam->get()) << "the auto-wired VCA must be non-poly";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "gain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f)
-                    << "gain must be overridden so the envelope alone governs level";
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.5f)
+                    << "gain is the chain's per-voice headroom, the same as the poly chain";
     }
 }
 

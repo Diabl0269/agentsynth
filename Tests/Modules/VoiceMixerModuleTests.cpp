@@ -78,32 +78,63 @@ TEST_F(VoiceMixerModuleTest, LevelParameterExists) {
     EXPECT_EQ(levelParam->paramID, "level");
 }
 
+TEST_F(VoiceMixerModuleTest, DefaultLevelIsUnity) {
+    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mixer.get(), "level"));
+    ASSERT_NE(levelParam, nullptr);
+    EXPECT_FLOAT_EQ(levelParam->get(), 1.0f);
+    EXPECT_FLOAT_EQ(levelParam->getNormalisableRange().end, 1.0f);
+}
+
+// Regression test for FRO848: the default Level was 0.125, so a lone voice came out 18 dB down.
+TEST_F(VoiceMixerModuleTest, DefaultLevelSumsVoicesAtUnityUnderTheKnee) {
+    juce::AudioBuffer<float> buffer(8, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.2f);
+
+    juce::MidiBuffer midi;
+    mixer->processBlock(buffer, midi);
+    EXPECT_FLOAT_EQ(buffer.getSample(0, 511), 0.8f);
+}
+
+TEST_F(VoiceMixerModuleTest, SumAboveTheKneeIsSoftLimitedBelowOne) {
+    juce::AudioBuffer<float> buffer(8, 512);
+    for (int ch = 0; ch < 8; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 1.0f);
+
+    juce::MidiBuffer midi;
+    mixer->processBlock(buffer, midi);
+    EXPECT_GT(buffer.getSample(0, 511), 0.9f);
+    EXPECT_LT(buffer.getSample(0, 511), 1.0f);
+}
+
 TEST_F(VoiceMixerModuleTest, OutputAttenuatedByLevelParameter) {
     juce::AudioBuffer<float> buffer1(8, 512);
     juce::AudioBuffer<float> buffer2(8, 512);
     buffer1.clear();
     buffer2.clear();
 
-    // Set input on both buffers
     for (int ch = 0; ch < 8; ++ch) {
         for (int i = 0; i < 512; ++i) {
-            buffer1.setSample(ch, i, 1.0f);
-            buffer2.setSample(ch, i, 1.0f);
+            buffer1.setSample(ch, i, 0.05f);
+            buffer2.setSample(ch, i, 0.05f);
         }
     }
 
-    // Process with default level (0.125)
+    // Process with the default level (1.0)
     juce::MidiBuffer midi;
     mixer->processBlock(buffer1, midi);
     float out1 = buffer1.getSample(0, 511);
 
-    // Change level to higher value
+    // Lower the level
     auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mixer.get(), "level"));
-    levelParam->setValueNotifyingHost(1.0f);
+    levelParam->setValueNotifyingHost(0.5f);
     mixer->prepareToPlay(44100.0, 512); // Reset smoothing
     mixer->processBlock(buffer2, midi);
     float out2 = buffer2.getSample(0, 511);
 
-    // Output with higher level should be greater
-    EXPECT_GT(out2, out1);
+    EXPECT_FLOAT_EQ(out1, 0.4f);
+    EXPECT_FLOAT_EQ(out2, 0.2f);
 }

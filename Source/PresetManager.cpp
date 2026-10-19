@@ -351,7 +351,7 @@ juce::String PresetManager::getPresetJSON(int index) {
 })";
 
     case 6: // Poly Pad - 8-voice polyphonic pad
-        // VCA sums all 8 voices to stereo (ch0/ch1) internally; no VoiceMixer needed.
+        // VCA sums all 8 voices to stereo at unity (no VoiceMixer); gain 0.5 leaves chord headroom.
         return R"({
   "nodes": [
     {"id": 1, "type": "Audio Input", "position": {"x": 10, "y": 340}},
@@ -360,7 +360,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 4, "type": "Poly MIDI", "position": {"x": 10, "y": 10}},
     {"id": 5, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Saw", "poly": true, "unison": 2, "detune": 10.0, "level": 0.7}},
     {"id": 6, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 1200.0, "resonance": 0.15, "poly": true}},
-    {"id": 7, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8, "poly": true}},
+    {"id": 7, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.5, "poly": true}},
     {"id": 8, "type": "Amp Env", "position": {"x": 584, "y": 620}, "params": {"attack": 0.3, "decay": 0.4, "sustain": 0.7, "release": 1.5, "poly": true}},
     {"id": 10, "type": "Reverb", "position": {"x": 1250, "y": 10}, "params": {"roomSize": 0.8, "damping": 0.3, "wet": 0.5, "dry": 0.5, "width": 1.0}}
   ],
