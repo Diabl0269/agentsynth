@@ -32,6 +32,15 @@ std::unique_ptr<juce::DrawableButton> makeToolButton(EditTool tool, DrawPenButto
 } // namespace
 
 //==============================================================================
+// P in the roll loops the selected notes. The roll only decides the span; the clip lane's callback is
+// the one owner of transport.setLoop (and the arm-looping preference).
+void TimelinePanelComponent::wirePianoRollLoopRequest() {
+    pianoRoll_.onLoopRangeRequested = [this](double startBeat, double endBeat) {
+        if (clipLaneArea_.onLoopRangeRequested)
+            clipLaneArea_.onLoopRangeRequested(startBeat, endBeat);
+    };
+}
+
 TimelinePanelComponent::TimelinePanelComponent() {
     // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
@@ -152,6 +161,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
             ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), pianoRoll_.leftGutterWidth());
         ruler_.repaint();
     };
+    wirePianoRollLoopRequest();
     // The roll's Q button / Q key flipped the shared snapEnabled: persist it, sync the transport
     // bar's own Q toggle, and repaint the lanes+ruler that also paint the (now present/absent)
     // snap grid.

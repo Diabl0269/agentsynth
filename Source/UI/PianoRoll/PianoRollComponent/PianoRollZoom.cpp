@@ -243,6 +243,12 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "pianoRollNavPrevNote", modKey(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier)))
         return selectAdjacentNote(false);
 
+    // P = loop the selected notes: the roll's twin of the clip lanes' P, the same shared
+    // "timelineLoopSelection" action and a surface-local key rather than a command, so an empty
+    // selection falls through to the panel's whole-clip loop.
+    if (matchesAction(key, "timelineLoopSelection", plainKey('p')))
+        return loopSelectedNotes();
+
     if (matchesAction(key, "pianoRollNudgeRight", plainKey(juce::KeyPress::rightKey)))
         return nudgeSelectedNotes(1);
     if (matchesAction(key, "pianoRollNudgeLeft", plainKey(juce::KeyPress::leftKey)))

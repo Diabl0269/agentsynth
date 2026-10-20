@@ -469,6 +469,8 @@ public:
     std::pair<ClipId, ClipId> splitClipAtTempo(ClipId id, double atBeat, double secondsPerBeat);
     // Left edge to absolute `newStartBeat`, strictly inside the clip; the end stays put.
     bool trimClipStart(ClipId id, double newStartBeat, double secondsPerBeat);
+    // MIDI clips only: left edge to `newStartBeat`, end fixed, notes keep their absolute beat.
+    bool resizeClipLeft(ClipId id, double newStartBeat);
     // Right edge to absolute `newEndBeat`, strictly inside the clip; notes past it are cut.
     bool trimClipEnd(ClipId id, double newEndBeat);
     // Splits `tracks`' clips at both edges; returns the clips then wholly inside [start, end).

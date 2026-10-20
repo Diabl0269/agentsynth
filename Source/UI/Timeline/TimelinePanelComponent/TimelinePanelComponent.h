@@ -840,6 +840,7 @@ private:
     bool followPlayhead_ = false;
     juce::DrawableButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
     void persistFollowPlayheadChoice();
+    void wirePianoRollLoopRequest();
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is

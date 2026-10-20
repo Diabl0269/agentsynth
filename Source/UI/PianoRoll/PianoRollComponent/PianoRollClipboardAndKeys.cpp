@@ -210,6 +210,33 @@ bool PianoRollComponent::repeatSelectedNotes(int count) {
 //==============================================================================
 // ---- Arrow-key editing ----
 
+// P = loop the selected notes. Hands the owner [min note start, max note end] over the selection in
+// ABSOLUTE beats (notes are clip-relative; the open clip's start rebases them). Nothing selected, or
+// no owner listening, returns false so the key falls through to the panel's whole-clip loop.
+bool PianoRollComponent::loopSelectedNotes() {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || !onLoopRangeRequested)
+        return false;
+
+    double minStart = 0.0, maxEnd = 0.0;
+    bool any = false;
+    for (auto id : selection_.getSelected()) {
+        const auto* note = doc_->getNote(id);
+        if (note == nullptr)
+            continue;
+        const double end = note->startBeat + note->lengthBeats;
+        if (!any || note->startBeat < minStart)
+            minStart = note->startBeat;
+        if (!any || end > maxEnd)
+            maxEnd = end;
+        any = true;
+    }
+    if (!any)
+        return false;
+    onLoopRangeRequested(clip->startBeat + minStart, clip->startBeat + maxEnd);
+    return true;
+}
+
 bool PianoRollComponent::nudgeSelectedNotes(int direction) {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr)

@@ -426,12 +426,14 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             const auto id = activeClip_;
             const double newStart = previewStart_;
             const double newLength = previewLength_;
-            // Two doc calls, ONE undo step: the left edge moves the clip's start (its
-            // clip-relative notes travel with it — a divergence from per-note-anchored trimming,
-            // deferred) and resizes it so the end stays fixed.
+            // ONE undo step. A MIDI clip's left edge keeps its notes at the same absolute beat
+            // (resizeClipLeft drops/cuts the ones the shrink uncovers); an audio clip moves its
+            // start and resizes so the end stays fixed.
             auto mutate = [this, id, newStart, newLength] {
-                doc_->moveClip(id, newStart);
-                doc_->resizeClip(id, newLength);
+                if (!doc_->resizeClipLeft(id, newStart)) {
+                    doc_->moveClip(id, newStart);
+                    doc_->resizeClip(id, newLength);
+                }
             };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
