@@ -143,7 +143,7 @@ still just selects the macro (a click on the hull of an already-selected macro c
 
 `GraphEditor::buildMacroMenu(macroId, renameAction)` is the single builder behind both the collapsed
 card's right-click menu and the expanded hull's: Expand/Collapse, Rename, Change Colour, Save as
-Snippet, Ungroup, Delete Macro & Modules. Rename is the one item that varies by caller — the
+Snippet, Ungroup, Delete Macro & Modules (on a track's macro this deletes the track with it, after a question: [tracks](../timeline/tracks.md#row-context-menu)). Rename is the one item that varies by caller — the
 collapsed card passes its own inline-`TextEditor` opener (`MacroCardComponent::beginRename`), and
 every other caller falls back to `GraphEditor::promptRenameMacro`'s `juce::AlertWindow` dialog (the
 same `SafePointer` plus `ModalCallbackFunction` plus callback-owned-`unique_ptr` idiom as

@@ -59,6 +59,7 @@
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkController.h"
@@ -540,6 +541,9 @@ private:
     void selectNodeInGraph(const juce::String& uuid) override;
     void deleteTrackAfterConfirm(synth::TrackId track) override;
     void deleteTrack(synth::TrackId track) override;
+    /** Canvas Delete Macro: true when `macroId` is a track's macro, and the track (with it) goes after the question. */
+    bool deleteMacroOfTrack(const juce::String& macroId);
+    void askThenDeleteTrack(synth::TrackId track, const synth::ui::DeleteTrackConfirmText& text);
     void duplicateTrack(synth::TrackId track) override;
     // docs/timeline/tracks.md#selecting-several-tracks -- the bulk half of the track-row commands
     // (MainComponentTrackSelectionActions.cpp); each reuses the single-track path per track inside one undo step.

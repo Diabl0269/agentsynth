@@ -57,7 +57,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // PointValueField beside it: type a value, Return sets that one point's value (clamped to the lane's range, one undo
 // step), Escape cancels. Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point; right-click anywhere else (and Shift+F10) asks for the
-// lane's own menu through onLaneMenuRequested.
+// lane's own menu through onLaneMenuRequested. A right-click inside the lane's selected range also offers Create custom
+// LFO (addRangeMenuItems): on empty space it is the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
 class AutomationLaneEditor
@@ -96,6 +97,10 @@ public:
     /** Asked to show the lane's menu with the given placement (the pointer for a right-click on empty lane space,
      *  the editor's top-left for Shift+F10); may be null, which leaves a right-click on empty space unhandled. */
     std::function<void(const juce::PopupMenu::Options&)> onLaneMenuRequested;
+
+    /** Adds the items for a right-click inside the lane's selected range (Create custom LFO); may be null, which gives
+     *  the range no menu of its own. */
+    std::function<void(juce::PopupMenu&)> addRangeMenuItems;
 
     bool showContextMenuForKeyboardFocus() override;
 
@@ -311,9 +316,10 @@ private:
     void closeValueFieldIfPointGone();
 
     void handlePopupClick(const juce::MouseEvent& e);
-    void showContextMenu(juce::PopupMenu menu);
-    void showHandleContextMenu(double beat);
-    void showSegmentContextMenu(int leftIndex);
+    void showContextMenu(juce::PopupMenu menu, juce::Point<int> at);
+    bool isInSelectedRange(juce::Point<int> pos) const;
+    void showHandleContextMenu(double beat, juce::Point<int> pos);
+    void showSegmentContextMenu(int leftIndex, juce::Point<int> pos);
 
     TimelineViewState& viewState_;
     synth::TimelineDoc* doc_ = nullptr;

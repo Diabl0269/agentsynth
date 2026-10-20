@@ -3,11 +3,12 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h"
+#include "UI/Timeline/TrackColour.h"
 
 namespace synth::ui {
 
-// Concern: the pen button's current-shape icon, its crossfade, its corner triangle and the two gestures that
-// open the flyout (corner click, press and hold).
+// Concern: the pen button's current-shape icon, its crossfade, its corner triangle and the gestures that
+// open the flyout (corner click, right-click, press and hold).
 
 DrawPenButton::DrawPenButton(const juce::String& name)
     : juce::DrawableButton(name, juce::DrawableButton::ImageOnButtonBackground)
@@ -50,12 +51,28 @@ bool DrawPenButton::isInCorner(juce::Point<int> p) const noexcept {
         .contains(p);
 }
 
+// The lit fill is the light `toolActive` highlight, so the theme's primary text (white in a dark theme) would almost
+// vanish on it. The glyph takes whichever of the theme's inks reads best on that fill, which keeps 3:1 in every theme.
+namespace {
+juce::Colour drawPenLitInk(const synth::theme::Colors& colours) {
+    const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0};
+    auto best = candidates[0];
+    for (const auto& candidate : candidates)
+        if (colourContrast(candidate, colours.toolActive) > colourContrast(best, colours.toolActive))
+            best = candidate;
+    return best;
+}
+} // namespace
+
 void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto ink = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    const auto secondary = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
-    getLookAndFeel().drawButtonBackground(
-        g, *this, findColour(getToggleState() ? backgroundOnColourId : backgroundColourId), over, down);
+    const bool lit = getToggleState();
+    auto ink = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
+    auto secondary = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+    if (lit && lf != nullptr)
+        ink = secondary = drawPenLitInk(lf->getTheme().colors);
+    getLookAndFeel().drawButtonBackground(g, *this, findColour(lit ? backgroundOnColourId : backgroundColourId), over,
+                                          down);
 
     const auto iconArea = getLocalBounds().toFloat().reduced(6.0f);
     if (crossfade_ < 1.0f)
@@ -70,11 +87,18 @@ void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     g.fillPath(tri);
 }
 
-// A corner press opens the flyout at once and is not a click; any other press is a normal button press that also
-// arms the hold timer. A hold that fires opens the flyout and eats the release, so it does not also pick the tool.
+// A corner press or a right-click opens the flyout at once and is not a click; any other press is a normal button press
+// that also arms the hold timer. A hold that fires opens the flyout and eats the release, so it does not also pick the
+// tool.
 void DrawPenButton::mouseDown(const juce::MouseEvent& e) {
     cornerPress_ = false;
     holdFired_ = false;
+    if (e.mods.isPopupMenu()) { // a right-click opens the same flyout and, like the corner, picks nothing
+        cornerPress_ = true;
+        if (onOpenFlyout)
+            onOpenFlyout();
+        return;
+    }
     if (e.mods.isLeftButtonDown() && isInCorner(e.getPosition())) {
         cornerPress_ = true;
         if (onOpenFlyout)

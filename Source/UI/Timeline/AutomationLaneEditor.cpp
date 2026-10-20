@@ -877,11 +877,21 @@ void AutomationLaneEditor::applySegmentCurveChoice(double leftBeat, int curve) {
 void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
     const auto pos = e.getPosition();
     if (auto hit = hitTestHandle(pos))
-        showHandleContextMenu(hit->beat);
+        showHandleContextMenu(hit->beat, pos);
     else if (auto segIdx = onCurve(pos) ? hitTestSegmentLeftIndex(pos.x) : std::nullopt)
-        showSegmentContextMenu(*segIdx);
+        showSegmentContextMenu(*segIdx, pos);
+    else if (isInSelectedRange(pos) && addRangeMenuItems)
+        showContextMenu({}, pos);
     else if (onLaneMenuRequested)
         onLaneMenuRequested(synth::ui::contextMenuOptionsAtPoint(e.getScreenPosition()));
+}
+
+bool AutomationLaneEditor::isInSelectedRange(juce::Point<int> pos) const {
+    const auto* range = shapeGesture_.getLaneRange();
+    if (range == nullptr || !range->hasWidth() || range->getLane() != laneId_)
+        return false;
+    const double beat = viewState_.xToBeat((double)pos.x);
+    return beat >= range->getStartBeat() && beat <= range->getEndBeat();
 }
 
 bool AutomationLaneEditor::showContextMenuForKeyboardFocus() {
@@ -891,8 +901,14 @@ bool AutomationLaneEditor::showContextMenuForKeyboardFocus() {
     return true;
 }
 
-// The handle and segment menus go through the shared test hook too, so a test can tell which menu a click opened.
-void AutomationLaneEditor::showContextMenu(juce::PopupMenu menu) {
+// The handle and segment menus go through the shared test hook too, so a test can tell which menu a click opened. A
+// click inside the selected range adds the range's items, set off from the menu's own by a separator.
+void AutomationLaneEditor::showContextMenu(juce::PopupMenu menu, juce::Point<int> at) {
+    if (addRangeMenuItems && isInSelectedRange(at)) {
+        if (menu.getNumItems() > 0)
+            menu.addSeparator();
+        addRangeMenuItems(menu);
+    }
     const auto options = synth::ui::contextMenuOptionsAtPointer();
     if (auto& hook = synth::ui::test_hooks::laneMenuHookForTest()) {
         hook(menu, options);
@@ -901,7 +917,7 @@ void AutomationLaneEditor::showContextMenu(juce::PopupMenu menu) {
     menu.showMenuAsync(options);
 }
 
-void AutomationLaneEditor::showHandleContextMenu(double beat) {
+void AutomationLaneEditor::showHandleContextMenu(double beat, juce::Point<int> pos) {
     const auto laneId = laneId_;
     juce::PopupMenu menu;
     menu.addItem("Delete point", [this, laneId, beat] {
@@ -912,10 +928,10 @@ void AutomationLaneEditor::showHandleContextMenu(double beat) {
             mutate();
         repaint();
     });
-    showContextMenu(menu);
+    showContextMenu(menu, pos);
 }
 
-void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
+void AutomationLaneEditor::showSegmentContextMenu(int leftIndex, juce::Point<int> pos) {
     const auto* lane = doc_->getLane(laneId_);
     if (lane == nullptr || leftIndex < 0 || (size_t)leftIndex >= lane->points.size())
         return;
@@ -930,7 +946,7 @@ void AutomationLaneEditor::showSegmentContextMenu(int leftIndex) {
     menu.addItem("Linear", true, currentCurve == static_cast<int>(synth::BreakpointCurve::Linear), [this, leftBeat] {
         applySegmentCurveChoice(leftBeat, static_cast<int>(synth::BreakpointCurve::Linear));
     });
-    showContextMenu(menu);
+    showContextMenu(menu, pos);
 }
 
 } // namespace synth::ui

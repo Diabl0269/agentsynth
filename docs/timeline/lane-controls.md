@@ -69,3 +69,12 @@ Option+- shorter, Option+0 default (`timelineIncreaseTrackHeight`, `timelineDecr
 `timelineResetTrackHeight`, x1.25 a step, one undo step each). The strip is named "Resize <parameter> lane" for screen
 readers and its tooltip lists the keys. A duplicate copies the height and Change parameter keeps it. Open edit trays and
 folded modulator rows keep their own fixed height and do not scale.
+
+## Create custom LFO from the range
+
+A right-click inside the selected range on the lane's curve editor shows **Create custom
+LFO** as the whole menu when it lands on empty space (the lane menu stays on the header, its "..." button and a
+right-click outside the range), and as the last item, after a separator, of the handle menu ("Delete point") or the
+segment menu ("Hold" / "Linear") when it lands on a point or a segment. The item is the header's own, built by
+`AutomationLaneHeaderComponent::addCreateCustomLfoItem` (same text, enabled state and reasons) and runs the same
+host callback, so it is one undo step and animates identically (`AutomationLaneEditor::addRangeMenuItems`).

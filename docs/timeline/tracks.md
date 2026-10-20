@@ -659,6 +659,13 @@ The menu's items:
   card and the other cards that leave shrink away on the canvas with it; Cmd+Z makes room, grows them all back and fades
   a thin accent outline around each ([delete and undo](../layout/animation.md#delete-and-undo-animation),
   `TimelinePanelTrackListMotion.cpp`). Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
+- **Delete the macro of a track** (macro menu on the canvas, "Delete Macro & Modules") deletes the track too: on a macro
+  that is a track's channel (`synth::nearestChannelMacro` of its bound node; exactly one track) it asks "Delete the macro
+  and track <name>?" ("Deleting this macro also deletes the track <name> and the modules only it uses. Delete track and
+  macro?") with the keyboard delete's **Don't ask again** box and setting, and on Delete runs `MainComponent::deleteTrack`:
+  one undo step, the same animation, the same "only it used" rule. Cancel changes nothing. A macro that is no track's, or
+  one several tracks share, deletes its members as before (`MacroGroupController::requestDeleteMacro`,
+  `MainComponent::deleteMacroOfTrack`).
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own

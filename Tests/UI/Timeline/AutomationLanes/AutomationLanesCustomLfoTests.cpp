@@ -1,9 +1,11 @@
 // AutomationLanesCustomLfoTests.cpp -- a lane's "Create custom LFO" as a person reaches it: the item first in the lane
 // menu and what its text says when it is disabled (stub host), then the command against a real MainComponent: one new
 // LFO with the drawn wave, its row and amount lane, the flattened lane, the spent range, one undo step and redo, a
-// second row beside an existing LFO, and the motion.
+// second row beside an existing LFO, and the motion. Also the same item from a right-click inside the selected range on
+// the curve editor.
 
 #include "../../Layout/FadeVisibilityTestGuard.h"
+#include "../TimelinePanel/TimelinePanelTestEvents.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesModulatorFixture.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
@@ -312,4 +314,113 @@ TEST_F(TimelinePanelIntegrationTest, UnderAnimationsOffAnUndoneModulatorRowIsGon
     s.pick();
     ASSERT_TRUE(s.undo().undo());
     EXPECT_EQ(s.panel().getAutomationLanes().leavingModulatorCountForTest(), 0);
+}
+
+namespace {
+
+// A point of the lane editor off the curve and off every handle, at `beat`: the empty space a right-click lands on.
+juce::Point<float> emptySpotAt(CustomLfoScene& s, double beat) {
+    auto* editor = s.panel().laneEditorForTest(s.lane);
+    const float curveY = (float)editor->valueToY(synth::ui::laneValueAt(s.laneNow(), beat));
+    const float y = curveY > (float)editor->getHeight() * 0.5f ? 2.0f : (float)editor->getHeight() - 3.0f;
+    return {(float)s.panel().getViewState().beatToX(beat), y};
+}
+
+void rightClickEditor(CustomLfoScene& s, juce::Point<float> at) {
+    auto* editor = s.panel().laneEditorForTest(s.lane);
+    editor->mouseDown(makeClickEvent(*editor, at, lane_menu_test::rightButton()));
+}
+
+const juce::PopupMenu::Item* itemNamed(const juce::PopupMenu& menu, const juce::String& textStart) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next())
+        if (it.getItem().text.startsWith(textStart))
+            return &it.getItem();
+    return nullptr;
+}
+
+} // namespace
+
+TEST_F(TimelinePanelIntegrationTest, RightClickInsideTheSelectedRangeOffersCreateCustomLfoAsTheOnlyItem) {
+    CustomLfoScene s;
+    s.selectRange(1.0, 3.0);
+    lane_menu_test::MenuCapture capture;
+
+    rightClickEditor(s, emptySpotAt(s, 1.5));
+
+    ASSERT_EQ(capture.count, 1);
+    ASSERT_EQ(capture.itemTexts().size(), 1);
+    EXPECT_EQ(capture.itemTexts()[0], "Create custom LFO");
+    EXPECT_TRUE(itemNamed(capture.menu, "Create custom LFO")->isEnabled);
+}
+
+TEST_F(TimelinePanelIntegrationTest, ThePickFromTheRangeMenuIsTheSameOneUndoStepAsTheLaneMenu) {
+    CustomLfoScene s;
+    const auto originalPoints = pointsOf(s.laneNow());
+    s.selectRange(1.0, 3.0);
+    lane_menu_test::MenuCapture capture;
+    rightClickEditor(s, emptySpotAt(s, 1.5));
+    const auto* item = itemNamed(capture.menu, "Create custom LFO");
+    ASSERT_NE(item, nullptr);
+    ASSERT_TRUE(static_cast<bool>(item->action));
+
+    item->action();
+
+    ASSERT_NE(s.onlyLfo(), nullptr) << "exactly one new LFO";
+    EXPECT_NE(s.row(0), nullptr);
+    EXPECT_FALSE(s.range().isActive()) << "the range is spent";
+    ASSERT_TRUE(s.undo().undo()) << "one step";
+    EXPECT_TRUE(s.nodesOf<LFOModule>().empty());
+    expectSamePoints(pointsOf(s.laneNow()), originalPoints);
+}
+
+TEST_F(TimelinePanelIntegrationTest, TheRangeMenuItemSaysWhyItIsDisabledInTheLaneMenusWords) {
+    CustomLfoScene s;
+    s.selectRange(5.0, 7.0); // flat
+    lane_menu_test::MenuCapture capture;
+
+    rightClickEditor(s, emptySpotAt(s, 6.0));
+
+    ASSERT_EQ(capture.count, 1);
+    const auto* item = itemNamed(capture.menu, "Create custom LFO");
+    ASSERT_NE(item, nullptr);
+    EXPECT_EQ(item->text, "Create custom LFO (range is flat)");
+    EXPECT_FALSE(item->isEnabled);
+    EXPECT_EQ(item->text, s.firstItem().first) << "one builder for both menus";
+}
+
+TEST_F(TimelinePanelIntegrationTest, RightClickOutsideTheRangeOrWithoutOneKeepsOpeningTheLaneMenu) {
+    CustomLfoScene s;
+    {
+        lane_menu_test::MenuCapture capture;
+        rightClickEditor(s, emptySpotAt(s, 1.5)); // no range yet
+        ASSERT_EQ(capture.count, 1);
+        EXPECT_GT(capture.itemTexts().size(), 3) << "the whole lane menu";
+        EXPECT_NE(itemNamed(capture.menu, "Delete lane"), nullptr);
+    }
+    s.selectRange(1.0, 3.0);
+    lane_menu_test::MenuCapture capture;
+    rightClickEditor(s, emptySpotAt(s, 6.0));
+    ASSERT_EQ(capture.count, 1);
+    EXPECT_NE(itemNamed(capture.menu, "Delete lane"), nullptr) << "outside the range it is the lane menu";
+}
+
+TEST_F(TimelinePanelIntegrationTest, RightClickOnAHandleInsideTheRangeKeepsItsMenuAndAddsTheItem) {
+    CustomLfoScene s;
+    s.selectRange(1.0, 3.0);
+    lane_menu_test::MenuCapture capture;
+    auto* editor = s.panel().laneEditorForTest(s.lane);
+    const auto handle = editor->getHandleRectForTest(2.0);
+    ASSERT_FALSE(handle.isEmpty());
+
+    editor->mouseDown(makeClickEvent(*editor, handle.getCentre().toFloat(), lane_menu_test::rightButton()));
+
+    ASSERT_EQ(capture.count, 1);
+    juce::StringArray texts;
+    for (const auto& text : capture.itemTexts())
+        if (text.isNotEmpty())
+            texts.add(text); // separators carry no text
+    ASSERT_EQ(texts.size(), 2) << texts.joinIntoString(" | ");
+    EXPECT_EQ(texts[0], "Delete point");
+    EXPECT_EQ(texts[1], "Create custom LFO");
 }

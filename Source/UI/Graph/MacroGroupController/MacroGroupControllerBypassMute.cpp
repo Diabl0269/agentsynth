@@ -10,6 +10,14 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 
+// The menu item's entry point. A track's macro cannot be deleted on its own: the app hook turns that into deleting the
+// track, so the macro, the track and the modules only it used go as one step. Any other macro takes the plain path.
+void MacroGroupController::requestDeleteMacro(const juce::String& macroId) {
+    if (onDeleteMacroRequested && onDeleteMacroRequested(macroId))
+        return;
+    deleteMacroAndMembers(macroId);
+}
+
 // Transitive: deleting a macro deletes everything drawn inside it, nested children included.
 void MacroGroupController::deleteMacroAndMembers(const juce::String& macroId) {
     if (host_.getMacros().find(macroId) == nullptr)

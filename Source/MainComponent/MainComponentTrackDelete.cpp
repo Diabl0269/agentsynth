@@ -159,32 +159,57 @@ void MainComponent::deleteTrack(synth::TrackId track) {
     bottomDock.getMixerPanel().finishColumnChange();
 }
 
-// Cmd+Backspace on a focused row. Asks first unless the person switched the question off; the deletion itself is
-// deleteTrack, so the menu's one undo step is unchanged. "Don't ask again" counts only when they confirm.
-void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
-    if (const auto selected = tracksActedOnBy(track); selected.size() > 1) {
-        deleteTracksAfterConfirm(selected);
-        return;
-    }
-    const auto* existing = timelineDoc.getTrack(track);
-    if (existing == nullptr)
-        return;
+// Asks `text` (unless the person switched the question off) and then runs deleteTrack. "Don't ask again" counts only
+// when they confirm.
+void MainComponent::askThenDeleteTrack(synth::TrackId track, const synth::ui::DeleteTrackConfirmText& text) {
     const auto* settings = appProperties.getUserSettings();
     if (settings != nullptr && !settings->getBoolValue(synth::ui::kAskBeforeDeletingTrackKey, true)) {
         deleteTrack(track);
         return;
     }
     juce::Component::SafePointer<MainComponent> safeThis(this);
-    synth::ui::confirmDeleteTrack(synth::ui::deleteTrackConfirmText(existing->name),
-                                  [safeThis, track](bool confirmed, bool dontAskAgain) {
-                                      auto* self = safeThis.getComponent();
-                                      if (self == nullptr || !confirmed)
-                                          return;
-                                      if (dontAskAgain)
-                                          if (auto* userSettings = self->appProperties.getUserSettings()) {
-                                              userSettings->setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
-                                              userSettings->saveIfNeeded();
-                                          }
-                                      self->deleteTrack(track);
-                                  });
+    synth::ui::confirmDeleteTrack(text, [safeThis, track](bool confirmed, bool dontAskAgain) {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr || !confirmed)
+            return;
+        if (dontAskAgain)
+            if (auto* userSettings = self->appProperties.getUserSettings()) {
+                userSettings->setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
+                userSettings->saveIfNeeded();
+            }
+        self->deleteTrack(track);
+    });
+}
+
+// Cmd+Backspace on a focused row. The deletion itself is deleteTrack, so the menu's one undo step is unchanged.
+void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
+    if (const auto selected = tracksActedOnBy(track); selected.size() > 1) {
+        deleteTracksAfterConfirm(selected);
+        return;
+    }
+    if (const auto* existing = timelineDoc.getTrack(track))
+        askThenDeleteTrack(track, synth::ui::deleteTrackConfirmText(existing->name));
+}
+
+// The macro menu's Delete Macro on a track's macro. The macro is the track's when the track's bound node resolves to it
+// as its channel (the same lookup deleteTrack uses to take it). Exactly one such track is required: with none the
+// macro is an ordinary group, and with several the macro is shared, which a track delete leaves in place. The
+// question and its preference are the keyboard delete's, and confirming runs deleteTrack itself.
+bool MainComponent::deleteMacroOfTrack(const juce::String& macroId) {
+    const synth::Track* owner = nullptr;
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.bindingUuid.isEmpty())
+            continue;
+        const auto* channel =
+            synth::nearestChannelMacro(audioEngine.getGraph(), graphEditor.getMacros(), track.bindingUuid);
+        if (channel == nullptr || channel->id != macroId)
+            continue;
+        if (owner != nullptr)
+            return false;
+        owner = &track;
+    }
+    if (owner == nullptr)
+        return false;
+    askThenDeleteTrack(owner->id, synth::ui::deleteTrackMacroConfirmText(owner->name));
+    return true;
 }

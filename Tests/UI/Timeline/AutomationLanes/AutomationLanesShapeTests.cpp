@@ -4,8 +4,13 @@
 
 #include "AutomationLanesTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h"
+#include "UI/Timeline/TrackColour.h"
+#include <algorithm>
+#include <map>
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
@@ -608,4 +613,76 @@ TEST(AutomationLanesShapeTest, StampedPointsAreOrdinaryPoints) {
     const auto victim = f.editor->getHandleRectForTest(0.5).getCentre().toFloat();
     dragAcross(*f.editor, victim, victim, 1);
     EXPECT_EQ(f.theLane().points.size(), 5u);
+}
+
+TEST(AutomationLanesShapeTest, ARightClickOnThePenOpensTheFlyoutThroughTheSamePathAndPicksNothing) {
+    ShapeLane f;
+    f.captureFlyouts();
+    auto& comp = static_cast<juce::Component&>(f.pen());
+    const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
+    ASSERT_FALSE(f.pen().isInCorner(centre.toInt()));
+    const auto rightButton = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+
+    comp.mouseDown(makeClickEvent(comp, centre, rightButton));
+    EXPECT_EQ(f.flyoutsOpened, 1) << "opens on the press, like the corner";
+    ASSERT_NE(f.flyout, nullptr);
+    EXPECT_FALSE(f.pen().isHoldPendingForTest()) << "no hold timer is left running";
+    comp.mouseUp(makeClickEvent(comp, centre, rightButton));
+
+    EXPECT_EQ(f.flyoutsOpened, 1);
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the right-click is not a click on the tool";
+}
+
+namespace {
+// Paints the pen button on its own panel and returns the strongest contrast, against the button's fill (its most common
+// colour), of any pixel in `area` of the button.
+double penGlyphContrast(synth::ui::TimelinePanelComponent& panel, juce::Rectangle<int> area) {
+    juce::Image img(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        panel.paintEntireComponent(g, true);
+    }
+    const auto pen = panel.getDrawPenButton().getBounds();
+    std::map<juce::uint32, int> histogram;
+    for (int y = pen.getY(); y < pen.getBottom(); ++y)
+        for (int x = pen.getX(); x < pen.getRight(); ++x)
+            ++histogram[img.getPixelAt(x, y).getARGB()];
+    const auto fill =
+        juce::Colour(std::max_element(histogram.begin(), histogram.end(), [](const auto& l, const auto& r) {
+                         return l.second < r.second;
+                     })->first);
+    double best = 1.0;
+    const auto box = area.translated(pen.getX(), pen.getY());
+    for (int y = box.getY(); y < box.getBottom(); ++y)
+        for (int x = box.getX(); x < box.getRight(); ++x)
+            best = std::max(best, (double)synth::ui::colourContrast(img.getPixelAt(x, y).withAlpha(1.0f), fill));
+    return best;
+}
+} // namespace
+
+// The lit pen was a white glyph on the light-blue highlight. In every built-in theme, with the Draw tool lit, both the
+// shape icon and the corner triangle must stand out of the fill by the WCAG 3:1 ratio for graphical objects.
+TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsCornerContrastWithTheFillInEveryTheme) {
+#ifdef HAS_FONT_ASSETS
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::ui::TimelinePanelComponent panel;
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        panel.setLookAndFeel(&lf);
+        panel.setVisible(true);
+        panel.setSize(1200, 320);
+        panel.setActiveTool(EditTool::Draw);
+        ASSERT_TRUE(panel.getDrawPenButton().getToggleState());
+
+        const auto width = panel.getDrawPenButton().getWidth();
+        const auto height = panel.getDrawPenButton().getHeight();
+        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(7, 7, width - 14, height - 14)), 3.0)
+            << "theme '" << theme.name << "': the shape icon";
+        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(width - 7, height - 7, 5, 5)), 3.0)
+            << "theme '" << theme.name << "': the corner triangle";
+        panel.setLookAndFeel(nullptr);
+    }
+#else
+    GTEST_SKIP() << "needs the icon assets";
+#endif
 }

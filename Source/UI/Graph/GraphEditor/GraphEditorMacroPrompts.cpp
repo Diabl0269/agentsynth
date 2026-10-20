@@ -485,7 +485,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
         if (safeThis != nullptr)
-            safeThis->getMacroController().deleteMacroAndMembers(macroId);
+            safeThis->getMacroController().requestDeleteMacro(macroId);
     });
 
     return m;
