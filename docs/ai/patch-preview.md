@@ -33,7 +33,9 @@ This is the whole point, not an implementation detail. Diffing the patch JSON ag
 would misreport three things the patch itself never states:
 
 - merge mode auto-connects a new audio node with no outgoing wire to Audio Output, and a new
-  MIDI-accepting node to an existing MIDI source (`applyJSONToGraph`'s `autoConnectNewNodes`);
+  MIDI-accepting node (Oscillator, Sampler, Drum Kit, Pluck, Mallet, Sequencer, Poly Sequencer, Poly
+  MIDI, ADSR, LFO: an envelope or a retriggered LFO used as a modulation source needs the notes) to an
+  existing MIDI source (`applyJSONToGraph`'s `autoConnectNewNodes`);
 - replace mode deletes every node the patch does not restate;
 - the untrusted apply path rescales a value in `[0,1]` that is not a legal value of a wider parameter
   range (`AIStateMapper::applyParamsToProcessor`'s normalized-value heuristic: a cutoff of 0.5 on
