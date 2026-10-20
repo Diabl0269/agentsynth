@@ -131,20 +131,37 @@ bool TimelineAutomationLanes::isExpanded(synth::TrackId track) const {
     return expanded_.count(track) > 0;
 }
 
-void TimelineAutomationLanes::setExpanded(synth::TrackId track, bool expanded) {
-    const auto* t = doc_ != nullptr ? doc_->getTrack(track) : nullptr;
-    if (t == nullptr || isExpanded(track) == expanded)
-        return;
+namespace {
+// Flips one track's fold state in the two sets; false when it is already as asked or does not exist.
+bool applyExpanded(const synth::TimelineDoc* doc, bool alreadyExpanded, synth::TrackId track, bool expanded,
+                   std::set<synth::TrackId>& expandedSet, std::set<synth::TrackId>& collapsedUnassigned) {
+    const auto* t = doc != nullptr ? doc->getTrack(track) : nullptr;
+    if (t == nullptr || alreadyExpanded == expanded)
+        return false;
     if (t->kind == synth::TrackKind::Automation) {
         if (expanded)
-            collapsedUnassigned_.erase(track);
+            collapsedUnassigned.erase(track);
         else
-            collapsedUnassigned_.insert(track);
+            collapsedUnassigned.insert(track);
     } else if (expanded) {
-        expanded_.insert(track);
+        expandedSet.insert(track);
     } else {
-        expanded_.erase(track);
+        expandedSet.erase(track);
     }
+    return true;
+}
+} // namespace
+
+void TimelineAutomationLanes::setExpanded(synth::TrackId track, bool expanded) {
+    setExpanded(std::vector<synth::TrackId>{track}, expanded);
+}
+
+void TimelineAutomationLanes::setExpanded(const std::vector<synth::TrackId>& tracks, bool expanded) {
+    bool changed = false;
+    for (const auto track : tracks)
+        changed |= applyExpanded(doc_, isExpanded(track), track, expanded, expanded_, collapsedUnassigned_);
+    if (!changed)
+        return;
     sync();
     if (onLayoutChanged)
         onLayoutChanged();

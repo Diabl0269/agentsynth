@@ -529,8 +529,12 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         }
     }
     if (matchesAction(key, "timelineToggleTrackAutomation", plainKey('a'))) {
-        if (foldArrowFade_.isShown() && onAutomationToggleRequested)
-            onAutomationToggleRequested(trackId_);
+        if (foldArrowFade_.isShown()) {
+            if (onAutomationToggleSelectionRequested)
+                onAutomationToggleSelectionRequested(trackId_);
+            else if (onAutomationToggleRequested)
+                onAutomationToggleRequested(trackId_);
+        }
         return true;
     }
     // Cmd+Backspace deletes THIS row's track (after the host's question). Only a focused row sees the key, so

@@ -15,6 +15,14 @@ namespace {
 // A bare (unmodified) keypress — the shape every one of this panel's own default bindings has.
 juce::KeyPress plainKey(int keyCode) noexcept { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
 
+// The follow-mode key with no manager installed: the same per-platform chord resetToDefaults() gives it.
+juce::KeyPress followModeCycleDefault() noexcept {
+    const auto mods = ShortcutManager::hostDefaultsPlatform() == ShortcutManager::DefaultsPlatform::Mac
+                          ? juce::ModifierKeys(juce::ModifierKeys::ctrlModifier)
+                          : juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
+    return juce::KeyPress('f', mods, 0);
+}
+
 // The ShortcutManager action id that picks `tool`. Derived from editToolName() rather than written
 // out as a second table, so adding a tool cannot leave a digit unbound here while EditTool.h,
 // the button strip and the tooltips all already know about it — the ids in
@@ -128,6 +136,12 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // (setFollowPlayheadEnabled already persists the choice and forwards the flag into the roll).
     if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
         setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
+        return true;
+    }
+
+    // Ctrl+F (Ctrl+Alt+F off the Mac) = switch the follow mode between Page and Smooth; follow itself stays as it is.
+    if (matchesAction(key, "timelineFollowModeCycle", followModeCycleDefault())) {
+        setFollowMode(otherFollowMode(getFollowMode()));
         return true;
     }
 

@@ -32,6 +32,7 @@ Source layout — one file per concern; the class itself is declared in `Timelin
 | `TimelinePanelShortcuts.cpp` | Panel-scoped keyboard shortcut dispatch (`matchesAction`/`keyPressed`) |
 | `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement |
 | `TimelinePanelTrackDrag.cpp` | Track-header drag-to-reorder: animator glue, autoscroll, drop, row placement |
+| `TimelinePanelFollowMode.cpp` | Follow playhead's mode (Page/Smooth), the pin point and the Smooth view move |
 | `TimelinePanelLayout.cpp` | Preferences (snap/follow-playhead/scroll-invert), zoom/scroll helpers, `resized()`/`paint()` |
 
 ## Regions

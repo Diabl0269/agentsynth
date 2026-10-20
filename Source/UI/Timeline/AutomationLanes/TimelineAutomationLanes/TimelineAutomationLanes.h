@@ -69,6 +69,8 @@ public:
     // ---- Fold state ----
     bool isExpanded(synth::TrackId track) const;
     void setExpanded(synth::TrackId track, bool expanded);
+    /** Several tracks at once: one sync and one layout change, so their lanes animate together. */
+    void setExpanded(const std::vector<synth::TrackId>& tracks, bool expanded);
 
     // ---- Doc sync and geometry ----
     /** Re-derives the pools and the row geometry from the doc. Call on every doc notification. */

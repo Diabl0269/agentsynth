@@ -91,13 +91,20 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
         appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
 
-    followPlayhead_ =
-        appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
+    follow_.enabled =
+        appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, follow_.enabled);
     if (const int width = appProperties_->getUserSettings()->getIntValue(kTimelineTrackHeaderWidthPropertyKey, 0);
         width > 0)
         setTrackHeaderWidth(width, false);
-    followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
-    pianoRoll_.setFollowPlayhead(followPlayhead_);
+    followPlayheadButton_.setToggleState(follow_.enabled, juce::dontSendNotification);
+    follow_.mode = followModeFromKey(
+        appProperties_->getUserSettings()->getValue(kFollowModeKey, followModeKey(follow_.mode)).toStdString());
+    follow_.pointPercent = clampFollowPointPercent(
+        appProperties_->getUserSettings()->getIntValue(kFollowPointPercentKey, follow_.pointPercent));
+    followPlayheadButton_.mode = follow_.mode;
+    pianoRoll_.setFollowPlayhead(follow_.enabled);
+    pianoRoll_.setFollowStyle(follow_.mode, follow_.pointPercent);
+    refreshShortcutTooltips();
 
     // A pure forward -- the transport bar restores/persists ITS OWN two keys
     // ("timelineMetronomeEnabled", "timelineCountInBars") -- this panel has no other reason to know
@@ -200,7 +207,7 @@ void TimelinePanelComponent::persistSnapChoice() {
 // both the arrangement view and the roll -- including from the setApplicationProperties restore
 // path.
 void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
-    followPlayhead_ = enabled;
+    follow_.enabled = enabled;
     followPlayheadButton_.setToggleState(enabled, juce::dontSendNotification);
     pianoRoll_.setFollowPlayhead(enabled);
     persistFollowPlayheadChoice();
@@ -209,7 +216,9 @@ void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
 void TimelinePanelComponent::persistFollowPlayheadChoice() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
+    appProperties_->getUserSettings()->setValue(kTimelineFollowPlayheadPropertyKey, follow_.enabled);
+    appProperties_->getUserSettings()->setValue(kFollowModeKey, followModeKey(follow_.mode));
+    appProperties_->getUserSettings()->setValue(kFollowPointPercentKey, follow_.pointPercent);
     appProperties_->saveIfNeeded();
 }
 
@@ -324,7 +333,7 @@ void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
     // tween); follow's own page-flip goes through pageViewToShowBeat and never this method. Taking
     // the view away from the playhead by hand means "stop following", so the flag, the button and
     // the roll's mirror all switch off together rather than the next poll snapping the view back.
-    if (followPlayhead_)
+    if (follow_.enabled)
         setFollowPlayheadEnabled(false);
     viewState_.scrollBeats(amount);
     ruler_.repaint();

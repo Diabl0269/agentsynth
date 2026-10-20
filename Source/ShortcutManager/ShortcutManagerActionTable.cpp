@@ -137,6 +137,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"timelineToggleLoop", ShortcutCategory::Timeline},
             {"timelineLoopSelection", ShortcutCategory::Timeline},
             {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
+            {"timelineFollowModeCycle", ShortcutCategory::Timeline},
             {"timelineGlideBack", ShortcutCategory::Timeline},
             {"timelineGlideForward", ShortcutCategory::Timeline},
             {"timelineToolSelect", ShortcutCategory::Timeline},
@@ -167,6 +168,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             // Duplicate / copy / paste from a track row (Cmd+D / Cmd+C / Cmd+V, the General actions' chords).
             {"timelineDuplicateFocusedTrack", ShortcutCategory::Timeline},
             {"timelineCopyFocusedTracks", ShortcutCategory::Timeline},
+            {"timelineSelectAllTracks", ShortcutCategory::Timeline},
             {"timelinePasteTracks", ShortcutCategory::Timeline},
             // Shows the focused track's module on the canvas, and opens or closes an instrument's window (Ctrl+E).
             {"timelineShowFocusedTrackModule", ShortcutCategory::Timeline},

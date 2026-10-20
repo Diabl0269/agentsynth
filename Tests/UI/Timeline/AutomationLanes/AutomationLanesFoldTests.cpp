@@ -97,6 +97,70 @@ TEST(AutomationLanesFoldTest, TheBoundShortcutOnAFocusedHeaderTogglesItsLanes) {
     f.panel.setShortcutManager(nullptr);
 }
 
+// Bare A on a row that is one of several selected tracks folds all of them together, decided by the focused row.
+TEST(AutomationLanesFoldTest, AOnASelectedRowTogglesEverySelectedTracksLanesTogether) {
+    LanesPanel f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead");
+    const auto pad = f.doc.addTrack(TrackKind::Midi, "Pad");
+    f.addLane(bass, "cutoff");
+    f.addLane(lead, "cutoff");
+    f.addLane(pad, "cutoff");
+    f.panel.selectTracks({bass, lead}, bass);
+    const juce::KeyPress key('a', juce::ModifierKeys::noModifiers, 0);
+
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(key));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(bass));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(lead)) << "the selected neighbour opens with it";
+    EXPECT_FALSE(f.panel.isTrackAutomationExpandedForTest(pad)) << "an unselected track is left alone";
+
+    // The focused row's state decides: open, so every selected track closes.
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(key));
+    EXPECT_FALSE(f.panel.isTrackAutomationExpandedForTest(bass));
+    EXPECT_FALSE(f.panel.isTrackAutomationExpandedForTest(lead));
+
+    // Mixed state: the focused row is closed, so all open (the already-open one stays open).
+    f.panel.setTrackAutomationExpanded(lead, true);
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(key));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(bass));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(lead));
+
+    // A row outside the selection acts alone.
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(2)->keyPressed(key));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(pad));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(bass)) << "and does not touch the selection";
+    f.panel.setShortcutManager(nullptr);
+}
+
+// Cmd+A on a focused track row selects every track and keeps focus on that row; the chord is the rebindable
+// timelineSelectAllTracks action.
+TEST(AutomationLanesFoldTest, CmdAOnATrackRowSelectsAllTracksAndKeepsFocus) {
+    LanesPanel f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    const auto bass = f.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead");
+    const auto pad = f.doc.addTrack(TrackKind::Midi, "Pad");
+    f.panel.selectTracks({lead}, lead);
+    ASSERT_EQ(f.panel.selectedTracks().size(), 1u);
+    const juce::KeyPress key('a', juce::ModifierKeys::commandModifier, 0);
+    EXPECT_EQ(shortcuts.getBinding("timelineSelectAllTracks"), key);
+
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(1)->keyPressed(key));
+
+    EXPECT_EQ(f.panel.selectedTracks(), (std::vector<synth::TrackId>{bass, lead, pad}));
+    EXPECT_TRUE(f.panel.getSelectedTrackId() == lead) << "focus stays on the row that had it";
+
+    // Rebound, the old chord is the row's no longer.
+    shortcuts.setBinding("timelineSelectAllTracks", juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0));
+    f.panel.selectTracks({bass}, bass);
+    EXPECT_FALSE(f.panel.getTrackHeaderAt(0)->keyPressed(key));
+    EXPECT_EQ(f.panel.selectedTracks().size(), 1u);
+    f.panel.setShortcutManager(nullptr);
+}
+
 // A track row's header column has no room for a count badge beside the name (it squeezed the name
 // to "..." in a real project), so the folded arrow carries the count in its name and tooltip instead.
 TEST(AutomationLanesFoldTest, FoldedArrowNamesItsLaneCountAndTheNameKeepsItsRoom) {

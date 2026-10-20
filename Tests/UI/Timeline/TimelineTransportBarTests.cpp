@@ -12,6 +12,7 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -274,6 +275,7 @@ protected:
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
             s->setValue("bottomDockVisible", "0");
+            s->removeValue("recordStartsPlayback");
             s->saveIfNeeded();
         }
     }
@@ -337,6 +339,122 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordWithAnArmedTrackIsUnchanged) {
 
     transport.tick(512); // drains the play() posted by "record implies roll"
     EXPECT_TRUE(transport.getPositionSnapshot().playing);
+}
+
+// ---- 6c. "Record also starts playback" ----
+
+namespace {
+void setRecordStartsPlayback(MainComponent& mc, bool on) {
+    mc.getAppPropertiesForTest().getUserSettings()->setValue("recordStartsPlayback", on ? "1" : "0");
+}
+void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
+} // namespace
+
+// The default (preference untouched) is today's behaviour: the record command, which Ctrl+R is bound to, rolls the
+// transport.
+TEST_F(TimelineTransportBarAppWiringTest, RecordCommandStartsTheTransportByDefault) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    auto& transport = mc.getAudioEngine().getTransport();
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
+    pumpMessages();
+    transport.tick(512);
+    EXPECT_TRUE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+}
+
+// Preference off: the command engages recording and leaves the transport stopped. A MIDI take is armed at once (the
+// recorder captures nothing while stopped) and commits when the transport that Play started stops.
+TEST_F(TimelineTransportBarAppWiringTest, RecordCommandWithThePreferenceOffDoesNotStartTheTransport) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    setRecordStartsPlayback(mc, false);
+    auto& transport = mc.getAudioEngine().getTransport();
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    const auto trackId = mc.getTimelineDoc().addTrack(synth::TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(mc.getTimelineDoc().setTrackArmed(trackId, true));
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
+    pumpMessages();
+    transport.tick(512);
+    EXPECT_TRUE(bar.isRecordingForTest()) << "recording is engaged";
+    EXPECT_FALSE(transport.getPositionSnapshot().playing) << "but nothing started the transport";
+    EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording());
+
+    // Play starts the take's clock; the same Record press toggles recording off again.
+    transport.play();
+    transport.tick(512);
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
+    pumpMessages();
+    EXPECT_FALSE(bar.isRecordingForTest());
+    EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
+}
+
+TEST_F(TimelineTransportBarAppWiringTest, RecordWithThePreferenceOffAndNothingArmedHangsNothing) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    setRecordStartsPlayback(mc, false);
+    auto& transport = mc.getAudioEngine().getTransport();
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+
+    bar.getRecordButton().onClick();
+    transport.tick(512);
+    EXPECT_TRUE(bar.isRecordingForTest());
+    EXPECT_FALSE(transport.getPositionSnapshot().playing);
+    EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
+
+    bar.getRecordButton().onClick(); // pressing Record again cancels cleanly
+    EXPECT_FALSE(bar.isRecordingForTest());
+}
+
+// An audio take waits for Play (its tap would otherwise record the stopped input); once the transport rolls the 10 Hz
+// poll starts it through the normal path.
+TEST_F(TimelineTransportBarAppWiringTest, AnAudioTakeWaitsForPlayWhenThePreferenceIsOff) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    setRecordStartsPlayback(mc, false);
+    auto& transport = mc.getAudioEngine().getTransport();
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    const auto trackId = mc.getTimelineDoc().addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.getTimelineDoc().setTrackArmed(trackId, true));
+
+    bar.getRecordButton().onClick();
+    transport.tick(512);
+    EXPECT_TRUE(bar.isRecordingForTest());
+    EXPECT_FALSE(transport.getPositionSnapshot().playing);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Record is on - press Play to start the audio take");
+
+    transport.play();
+    transport.tick(512);
+    mc.timerCallback(); // the 10 Hz poll sees the transport rolling and starts the take through the normal path
+    EXPECT_TRUE(bar.isRecordingForTest()) << "the take started: the indicator stays lit";
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+
+    bar.getRecordButton().onClick(); // Record off commits cleanly
+    EXPECT_FALSE(bar.isRecordingForTest());
+}
+
+TEST_F(TimelineTransportBarAppWiringTest, TheRecordTooltipFollowsThePreference) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    auto& button = mc.getTimelinePanel().getTransportBar().getRecordButton();
+    EXPECT_TRUE(button.getTooltip().contains("implies Play"));
+
+    setRecordStartsPlayback(mc, false);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(200); // the settings broadcast is asynchronous
+    EXPECT_FALSE(button.getTooltip().contains("implies Play")) << button.getTooltip();
+    EXPECT_TRUE(button.getTooltip().contains("press Play")) << button.getTooltip();
+
+    setRecordStartsPlayback(mc, true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(200);
+    EXPECT_TRUE(button.getTooltip().contains("implies Play"));
 }
 
 // ---- 7. StopWhileRecordingCommitsOnce ----

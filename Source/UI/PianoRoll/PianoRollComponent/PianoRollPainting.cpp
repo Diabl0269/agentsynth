@@ -688,7 +688,14 @@ void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
         const auto grid = gridRegion();
         if (!grid.isEmpty() && rollView_.pixelsPerBeat > 0.0) {
             const int rawX = (int)std::llround(beatToX(absoluteBeat));
-            if (rawX < grid.getX() || rawX > grid.getRight()) {
+            if (followMode_ == FollowMode::Smooth) {
+                // Pinned at the chosen point; the sub-pixel guard keeps an unmoved view from repainting.
+                const double origin =
+                    followViewOrigin(FollowMode::Smooth, followPointPercent_, absoluteBeat, rollView_.firstVisibleBeat,
+                                     (double)grid.getWidth() / rollView_.pixelsPerBeat);
+                if (std::abs(origin - rollView_.firstVisibleBeat) * rollView_.pixelsPerBeat >= 0.5)
+                    setHorizontalView(rollView_.pixelsPerBeat, origin);
+            } else if (rawX < grid.getX() || rawX > grid.getRight()) {
                 // Land the beat a TENTH of the visible span past the gutter rather than flush
                 // against it — a beat sitting exactly on the edge would immediately re-trigger the
                 // same flip on the very next tick once it advances one more sample.

@@ -269,6 +269,12 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
     // F mirrors the transport strip's follow-playhead button, panel-scoped like J/L/P.
     bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
+    // Ctrl+F cycles the follow mode (Page / Smooth). A REAL ctrlModifier on the Mac; off the Mac Cmd IS Ctrl, so that
+    // chord would be Cmd+F (focusLibrarySearch) and the key takes Ctrl+Alt+F.
+    bindings["timelineFollowModeCycle"] =
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::KeyPress('f', juce::ModifierKeys::ctrlModifier, 0)
+            : juce::KeyPress('f', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
     // Holding Cmd+Left / Cmd+Right glides the cursor (TimelinePanelComponent). Nothing else binds an arrow with
     // Cmd: the timeline's own arrows are bare (clips) or Alt (move clip), the grid cycle is Ctrl+Shift, and the
     // category-scoped conflict check sees no other Timeline binding on these chords.
@@ -348,6 +354,9 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // keyPressed claims the chord (only with two or more tracks selected / tracks copied), everywhere else the
     // General copy and paste keep it.
     bindings["timelineCopyFocusedTracks"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+A on a track row selects every track: the row claims the chord, and the General select-all keeps it for the
+    // clip lane (all clips), the canvas and the piano roll.
+    bindings["timelineSelectAllTracks"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
     bindings["timelinePasteTracks"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
     // Ctrl+E shows the focused track's module. A REAL ctrlModifier on every platform (Cmd+E is taken on the Mac, and
     // off the Mac Cmd is Ctrl, so the one literal chord is the same everywhere). The Mixer's "mixerToggleEq" also

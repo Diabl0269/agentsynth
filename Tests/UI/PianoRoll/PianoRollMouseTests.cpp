@@ -484,6 +484,43 @@ TEST(PianoRollFollowPlayheadTest, ManualScrollSuspendsFollowUntilReArmed) {
         << "an explicit re-enable pages back toward the playhead";
 }
 
+// Smooth follow pins the playhead at the chosen point of the grid instead of paging, in the roll.
+TEST(PianoRollFollowPlayheadTest, SmoothPinsThePlayheadAtTheChosenPointOfTheGrid) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId, 40.0);
+    f.roll.setFollowPlayhead(true);
+    f.roll.setFollowStyle(synth::ui::FollowMode::Smooth, 25);
+
+    f.roll.setPlayheadBeat(40.0);
+    const auto grid = f.roll.getNoteGridBounds();
+    EXPECT_NEAR(f.roll.getPlayheadLineX(), grid.getX() + 0.25 * grid.getWidth(), 2.0);
+
+    // A later beat keeps the SAME on-screen x: the view travels, not the line.
+    f.roll.setPlayheadBeat(41.0);
+    EXPECT_NEAR(f.roll.getPlayheadLineX(), grid.getX() + 0.25 * grid.getWidth(), 2.0);
+}
+
+TEST(PianoRollFollowPlayheadTest, SmoothHonoursTheManualScrollLatchAndAStyleChangeDoesNotClearIt) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId, 40.0);
+    f.roll.setFollowPlayhead(true);
+    f.roll.setFollowStyle(synth::ui::FollowMode::Smooth, 50);
+    f.roll.setPlayheadBeat(40.0);
+
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.5f;
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::shiftModifier), wheel);
+    const double scrolled = f.roll.getFirstVisibleBeat();
+
+    f.roll.setFollowStyle(synth::ui::FollowMode::Smooth, 30); // only setFollowPlayhead(true) re-arms
+    f.roll.setPlayheadBeat(40.5);
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), scrolled) << "smooth follow must not fight a manual scroll";
+}
+
 // ============================================================================
 // 21. MULTI-NOTE RESIZE (11.1), the Cmd unquantized resize (11.2), and the clip-overrun prompt.
 // ============================================================================

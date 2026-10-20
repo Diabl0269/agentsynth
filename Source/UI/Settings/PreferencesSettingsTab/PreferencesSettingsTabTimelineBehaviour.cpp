@@ -1,5 +1,6 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Timeline/FollowPlayhead.h"
 
 // Concern: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
 // locators, natural scrolling, wheel-zoom direction, and piano-roll key-label density.
@@ -84,6 +85,69 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     askBeforeDeletingTrackToggle.onClick = [this] {
         persistAskBeforeDeletingTrack(askBeforeDeletingTrackToggle.getToggleState());
     };
+
+    contentHost.addAndMakeVisible(recordStartsPlaybackToggle);
+    recordStartsPlaybackToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kRecordStartsPlaybackKey, true), juce::dontSendNotification);
+    recordStartsPlaybackToggle.setTooltip(
+        "When on (the default), Record also starts playback, as in most DAWs. Turn it off to have Record only "
+        "engage recording; the take then starts when you press Play.");
+    recordStartsPlaybackToggle.onClick = [this] {
+        persistRecordStartsPlayback(recordStartsPlaybackToggle.getToggleState());
+    };
+
+    contentHost.addAndMakeVisible(followPointLabel);
+    followPointLabel.setText("Follow playhead point:", juce::dontSendNotification);
+    followPointLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contentHost.addAndMakeVisible(followPointEditor);
+    followPointEditor.setTitle("Follow playhead point, percent of the visible width");
+    followPointEditor.setMultiLine(false);
+    followPointEditor.setReturnKeyStartsNewLine(false);
+    followPointEditor.setSelectAllWhenFocused(true);
+    followPointEditor.setJustification(juce::Justification::centred);
+    followPointEditor.setInputRestrictions(2, "0123456789");
+    followPointEditor.setTooltip("In Smooth follow mode the playhead stays at this point of the visible timeline "
+                                 "while the view scrolls. Any value from 10 to 90 percent; applies at once.");
+    followPointEditor.setText(
+        juce::String(synth::ui::clampFollowPointPercent(appProperties.getUserSettings()->getIntValue(
+            synth::ui::kFollowPointPercentKey, synth::ui::kDefaultFollowPointPercent))),
+        juce::dontSendNotification);
+    // Commit on Return and on focus-lost; an empty or out-of-range entry snaps visibly to a valid value.
+    auto commitFollowPoint = [this] { setFollowPointPercent(followPointEditor.getText().getIntValue()); };
+    followPointEditor.onReturnKey = commitFollowPoint;
+    followPointEditor.onFocusLost = commitFollowPoint;
+    contentHost.addAndMakeVisible(followPointUnitLabel);
+    followPointUnitLabel.setText("% of the view", juce::dontSendNotification);
+    followPointUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+}
+
+bool PreferencesSettingsTab::isRecordStartsPlaybackEnabled() const {
+    return recordStartsPlaybackToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setRecordStartsPlaybackEnabled(bool enabled) {
+    recordStartsPlaybackToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistRecordStartsPlayback(enabled);
+}
+
+void PreferencesSettingsTab::persistRecordStartsPlayback(bool enabled) {
+    // The key is read at use time by the next Record press; MainComponent's settings listener refreshes the tooltip.
+    appProperties.getUserSettings()->setValue(kRecordStartsPlaybackKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+int PreferencesSettingsTab::getFollowPointPercent() const { return followPointEditor.getText().getIntValue(); }
+
+void PreferencesSettingsTab::setFollowPointPercent(int percent) {
+    const int clamped = synth::ui::clampFollowPointPercent(percent);
+    followPointEditor.setText(juce::String(clamped), juce::dontSendNotification);
+    persistFollowPointPercent(clamped);
+}
+
+void PreferencesSettingsTab::persistFollowPointPercent(int percent) {
+    // MainComponent's settings listener pushes the value into the timeline and the piano roll, so it applies live.
+    appProperties.getUserSettings()->setValue(synth::ui::kFollowPointPercentKey, percent);
+    appProperties.getUserSettings()->saveIfNeeded();
 }
 
 void PreferencesSettingsTab::persistAskBeforeDeletingTrack(bool enabled) {
@@ -184,6 +248,27 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
             askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             askBeforeDeletingTrackToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 5b: how record and follow-playhead behave while the transport runs.
+    {
+        const std::initializer_list<juce::Component*> rows{&recordStartsPlaybackToggle, &followPointLabel,
+                                                           &followPointEditor, &followPointUnitLabel};
+        const bool visible = groupMatches(rows);
+        setGroupVisible(rows, visible);
+        beginGroup(visible);
+        if (visible) {
+            recordStartsPlaybackToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
+            followPointLabel.setBounds(row.removeFromLeft(150));
+            row.removeFromLeft(4);
+            followPointEditor.setBounds(row.removeFromLeft(36));
+            row.removeFromLeft(4);
+            followPointUnitLabel.setBounds(row.removeFromLeft(100));
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

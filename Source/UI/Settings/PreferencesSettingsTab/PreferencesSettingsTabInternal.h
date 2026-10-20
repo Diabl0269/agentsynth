@@ -59,6 +59,10 @@ constexpr const char* kTimelineAskBeforeRemovingLfoKey = "timelineAskBeforeRemov
 // this off.
 constexpr const char* kTimelineAskBeforeDeletingTrackKey = "timelineAskBeforeDeletingTrack";
 
+// Read at use time by MainComponent::handleRecordToggle (and the record button's tooltip). DEFAULT TRUE: every major
+// DAW's Record also rolls the transport, so an install that never opens this tab is unaffected.
+constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
+
 // Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
 // autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.

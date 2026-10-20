@@ -747,4 +747,9 @@ void PianoRollComponent::setFollowPlayhead(bool follow) noexcept {
 }
 bool PianoRollComponent::isFollowPlayhead() const noexcept { return followPlayhead_; }
 
+void PianoRollComponent::setFollowStyle(FollowMode mode, int pointPercent) noexcept {
+    followMode_ = mode;
+    followPointPercent_ = clampFollowPointPercent(pointPercent);
+}
+
 } // namespace synth::ui

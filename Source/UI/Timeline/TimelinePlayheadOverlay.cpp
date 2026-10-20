@@ -92,6 +92,9 @@ void TimelinePlayheadOverlay::timerCallback() {
 }
 
 void TimelinePlayheadOverlay::refreshLine(bool force) {
+    if (onDrawnBeat)
+        onDrawnBeat(getDrawnBeat());
+
     // The local client is told the beat on EVERY refresh, before this overlay's own "did my x
     // move?" gate: its mapping is zoomed differently, so its line can move on a frame where the
     // shared one didn't. It runs the identical no-move-no-repaint gate on its own side.

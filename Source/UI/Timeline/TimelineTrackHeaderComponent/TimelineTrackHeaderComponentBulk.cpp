@@ -7,13 +7,21 @@ namespace synth::ui {
 namespace {
 const juce::KeyPress kCopyTracksKey('c', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kPasteTracksKey('v', juce::ModifierKeys::commandModifier, 0);
+const juce::KeyPress kSelectAllTracksKey('a', juce::ModifierKeys::commandModifier, 0);
 } // namespace
 
-// Cmd+C / Cmd+V on a row whose track is one of several selected / with tracks copied: the track clipboard
+// Cmd+A, Cmd+C / Cmd+V on a row whose track is one of several selected / with tracks copied: the track clipboard
 // (docs/timeline/tracks.md#selecting-several-tracks). Anything else bubbles, so a single selected row's Cmd+C and
 // Cmd+V mean what they always did.
 bool TimelineTrackHeaderComponent::handleTrackClipboardKey(const juce::KeyPress& key) {
-    if (isSectionHeader() || host_ == nullptr)
+    if (isSectionHeader())
+        return false;
+    // Cmd+A on a track row selects every track; elsewhere the chord keeps its select-all meaning.
+    if (matchesAction(key, "timelineSelectAllTracks", kSelectAllTracksKey) && onSelectAllTracksRequested) {
+        onSelectAllTracksRequested();
+        return true;
+    }
+    if (host_ == nullptr)
         return false;
     if (matchesAction(key, "timelineCopyFocusedTracks", kCopyTracksKey)) {
         const auto targets = bulkTargets();

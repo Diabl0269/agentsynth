@@ -2,6 +2,7 @@
 
 #include "TimelineViewState.h"
 #include "Transport/TransportService.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // TimelinePlayheadOverlay — the vertical position line drawn over the timeline panel's
@@ -75,6 +76,10 @@ public:
     // The client's rect in THIS overlay's coordinates. The client is a sibling, so only the owner
     // (TimelinePanelComponent::resized) knows the offset — it sets this alongside the bounds.
     void setLocalPlayheadRegion(juce::Rectangle<int> region) noexcept { localRegion_ = region; }
+
+    // Told the drawn beat on every refresh, before the line's x is read (the 30 Hz tick while playing), so a smooth
+    // follow can move the view first and the line then draws at its pinned x.
+    std::function<void(double)> onDrawnBeat;
 
     // THE drive seam. Called from the owner's LOW-RATE poll (10 Hz), never faster: it stores the
     // snapshot, starts/stops the 30 Hz timer on a play/stop transition, and requests a strip repaint
