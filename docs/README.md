@@ -16,7 +16,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## Modules
 
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
-- [`docs/modules/sequencer-design.md`](modules/sequencer-design.md) — design (pending picks): scales, step count, per-step settings and pattern tools for the sequencers, on a scale engine shared with the piano roll
+- [`docs/modules/sequencer-design.md`](modules/sequencer-design.md) — the sequencers' pattern as module state, playback, legacy adoption and the shared scale engine (card, pattern tools and chord picker still to come)
 - [`docs/modules/sampler-instruments.md`](modules/sampler-instruments.md) — the Sampler's Instrument mode: regions, velocity layers, round robin, release sounds, the SFZ subset, dropped-file placement, saved sources, sound packs
 - [`docs/modules/pluck-mallet.md`](modules/pluck-mallet.md) — the Pluck (extended Karplus-Strong string) and Mallet (modal struck bar) instruments: parameters, algorithms, formulas
 - [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)

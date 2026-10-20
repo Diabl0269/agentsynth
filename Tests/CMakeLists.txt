@@ -108,7 +108,6 @@ add_executable(Tests
     Modules/SampleHoldModuleTests.cpp
     Modules/SchmittTriggerTests.cpp
     Modules/ComparatorModuleTests.cpp
-    Modules/SequencerModuleTests.cpp
     Engine/TransportServiceTests.cpp
     Engine/TransportDocTests.cpp
     Engine/ViewDocTests.cpp
@@ -386,7 +385,6 @@ add_executable(Tests
     UI/Assistant/EntitlementWatcherTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
-    Modules/PolySequencerModuleTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceProviderConfigTests.cpp
     AI/AIIntegrationService/AIIntegrationServiceHistoryTests.cpp
     AI/AIIntegrationService/AIIntegrationServicePatchApplyTests.cpp
@@ -994,6 +992,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, dele
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
+include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

@@ -291,7 +291,7 @@ juce::String PresetManager::getPresetJSON(int index) {
   "nodes": [
     {"id": 1, "type": "Audio Input", "position": {"x": 10, "y": 10}},
     {"id": 2, "type": "Audio Output", "position": {"x": 1250, "y": 10}},
-    {"id": 3, "type": "Sequencer", "position": {"x": 10, "y": 620}, "params": {"run": true, "bpm": 128.0, "Pitch 1": 48, "Pitch 2": 51, "Pitch 3": 55, "Pitch 4": 58, "Pitch 5": 60, "Pitch 6": 55, "Pitch 7": 51, "Pitch 8": 50, "Gate 1": 0.5, "Gate 2": 0.5, "Gate 3": 0.5, "Gate 4": 0.5, "Gate 5": 0.8, "Gate 6": 0.3, "Gate 7": 0.3, "Gate 8": 0.5}},
+    {"id": 3, "type": "Sequencer", "position": {"x": 10, "y": 620}, "params": {"run": true, "bpm": 128.0}, "state": {"version": 1, "steps": [{"pitch": 48}, {"pitch": 51}, {"pitch": 55}, {"pitch": 58}, {"pitch": 60, "gate": 0.8}, {"pitch": 55, "gate": 0.3}, {"pitch": 51, "gate": 0.3}, {"pitch": 50}]}},
     {"id": 4, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Saw", "octave": -1}},
     {"id": 5, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 1500.0, "resonance": 0.2}},
     {"id": 6, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},

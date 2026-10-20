@@ -26,6 +26,7 @@
 #include "../../Tools/AIPatchHarness/Scenarios.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "Modules/SequencerModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
@@ -247,4 +248,63 @@ TEST(AIPatchFixtureReplayTest, EveryRecordedResponseReplaysItsRecordedOutcome) {
             }
         }
     }
+}
+
+// The recorded patches predate the sequencer pattern becoming state: they write "Pitch N" / "Gate N" / "F.Env N" (and,
+// for the Poly Sequencer, "Step N Root"). They must still replay, and the replayed module must hold those notes.
+TEST(AIPatchFixtureReplayTest, RecordedSequencerPatchesStillProduceTheirSteps) {
+    int checkedNodes = 0;
+    for (const auto& file : corpusFiles()) {
+        const juce::var root = juce::JSON::parse(file);
+        const juce::var records = root.getDynamicObject()->getProperty("records");
+        for (int i = 0; i < records.size(); ++i) {
+            const auto* rec = records[i].getDynamicObject();
+            const auto it = scenariosByName().find(rec->getProperty("scenario").toString());
+            if (it == scenariosByName().end() || !static_cast<bool>(rec->getProperty("responded")))
+                continue;
+            const auto& scenario = *it->second;
+            // The first answer and every retry answer: the sequencer ones were recorded among the retries too.
+            std::vector<juce::String> answers{rec->getProperty("rawResponse").toString()};
+            if (const auto* retries = rec->getProperty("retryResponses").getArray())
+                for (const auto& r : *retries)
+                    answers.push_back(r.toString());
+            for (const auto& answer : answers) {
+                const juce::var patch = juce::JSON::parse(synth::AIIntegrationService::extractJsonFromResponse(answer));
+                const auto* nodes = patch.getProperty("nodes", {}).getArray();
+                if (nodes == nullptr)
+                    continue;
+
+                juce::AudioProcessorGraph graph;
+                buildSeedGraph(scenario, graph);
+                std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
+                if (!synth::AIStateMapper::applyJSONToGraph(patch, graph, !scenario.mergeMode, /*trusted=*/false, true,
+                                                            &idMap))
+                    continue;
+
+                for (const auto& nodeVar : *nodes) {
+                    const auto* node = nodeVar.getDynamicObject();
+                    const auto* params = node != nullptr ? node->getProperty("params").getDynamicObject() : nullptr;
+                    const auto found = node != nullptr ? idMap.find((int)node->getProperty("id")) : idMap.end();
+                    if (params == nullptr || found == idMap.end() || !params->hasProperty("Pitch 1"))
+                        continue;
+                    auto* seq = dynamic_cast<SequencerModule*>(graph.getNodeForId(found->second)->getProcessor());
+                    if (seq == nullptr)
+                        continue;
+                    for (int n = 1; n <= 8; ++n) {
+                        const juce::String key = "Pitch " + juce::String(n);
+                        if (!params->hasProperty(key))
+                            continue;
+                        const int written = juce::jlimit(0, 127, (int)params->getProperty(key));
+                        const auto& step = seq->getPattern().steps[(size_t)(n - 1)];
+                        if (written == 0)
+                            EXPECT_FALSE(step.on) << key;
+                        else
+                            EXPECT_EQ((int)step.pitch, written) << key;
+                    }
+                    ++checkedNodes;
+                }
+            }
+        }
+    }
+    EXPECT_GT(checkedNodes, 0) << "the corpus no longer contains a Sequencer patch to check";
 }

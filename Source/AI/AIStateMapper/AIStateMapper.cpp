@@ -493,6 +493,23 @@ juce::var AIStateMapper::modulationsToJSON(juce::AudioProcessorGraph& graph, con
     return modulations;
 }
 
+namespace {
+
+// The steps of a sequencer are the node's "state", not parameters, so the parameter table above cannot show them.
+juce::String sequencerStateNote(bool poly) {
+    return juce::String(
+               "Steps are the node's `state`, e.g. `{\"steps\": [{\"pitch\": 48}, {\"pitch\": 55, "
+               "\"gate\": 0.3}]}` (`steps` above = how many play). Per step, only what you change: pitch 0-127, "
+               "on, gate 0.05-1, velocity 1-127, chance 0-100, repeat 1-8, nudge -0.5-0.5, condition "
+               "\"2/4\", ") +
+           (poly ? "chord (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random, Scale Triad, Scale Seventh, Dom7, "
+                   "Dim, Aug, Sus2, Sus4, ...)."
+                 : "slide, filter 0-1.") +
+           "\n\n";
+}
+
+} // namespace
+
 juce::String AIStateMapper::getModuleSchema() {
     juce::String schema = "### Available Modules and Parameters\n\n";
 
@@ -526,6 +543,8 @@ juce::String AIStateMapper::getModuleSchema() {
             }
         }
         schema += "\n";
+        if (entry.first == "Sequencer" || entry.first == "Poly Sequencer")
+            schema += sequencerStateNote(entry.first == "Poly Sequencer");
     }
 
     // Modulation targets section
@@ -650,6 +669,9 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
         for (auto* param : processor->getParameters())
             if (auto* mode = dynamic_cast<juce::AudioParameterBool*>(param); mode != nullptr && mode->paramID == "mode")
                 setNormalised(mode, 0.0f);
+
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        module->adoptLegacyParams(props);
 }
 
 void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,

@@ -118,6 +118,12 @@ struct SnippetNameComparator {
     static int compareElements(const SnippetInfo& a, const SnippetInfo& b) { return a.name.compareIgnoreCase(b.name); }
 };
 
+// A node whose "state" is pure data (no file or resource name) and re-parsed with clamping on load, so a snippet file
+// may carry it: the sequencers' pattern.
+bool stateIsSafeInSnippetFile(const juce::var& type) {
+    return type == juce::var("Sequencer") || type == juce::var("Poly Sequencer");
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------
@@ -385,7 +391,8 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
             n->setProperty("type", nObj->getProperty("type"));
             if (nObj->hasProperty("params"))
                 n->setProperty("params", nObj->getProperty("params"));
-            if (includeExtraState && nObj->hasProperty("state"))
+            if ((includeExtraState || stateIsSafeInSnippetFile(nObj->getProperty("type"))) &&
+                nObj->hasProperty("state"))
                 n->setProperty("state", nObj->getProperty("state"));
             // The per-instance card layout rides the same rule as "state": kept by the in-app
             // clipboard and duplicate, dropped from a snippet file on disk.
@@ -490,7 +497,8 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
                 n->setProperty("params", nObj->getProperty("params"));
             // Dropped unless explicitly asked for: applyJSONToGraph honours `state` on the trusted
             // path, and a snippet read off disk must not be able to carry one.
-            if (includeExtraState && nObj->hasProperty("state"))
+            if ((includeExtraState || stateIsSafeInSnippetFile(nObj->getProperty("type"))) &&
+                nObj->hasProperty("state"))
                 n->setProperty("state", nObj->getProperty("state"));
             // The per-instance card layout rides the same rule as "state": kept by the in-app
             // clipboard and duplicate, dropped from a snippet file on disk.

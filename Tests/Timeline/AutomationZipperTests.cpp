@@ -90,7 +90,7 @@ struct ModuleConfig {
 // ---------------------------------------------------------------------------------------------
 //
 //   Sequencer / Poly Sequencer  declare zero audio channels — every float they own (BPM, gate
-//                               length, F.Env amount) times or fills a discrete MIDI event, so
+//                               amount, velocity, chance) times or fills a discrete MIDI event, so
 //                               there is no continuous signal for a step to land in.
 //   Sampler                     renders silence until a file is loaded, and loading one from a
 //                               parameterised suite would make it a filesystem test.
@@ -238,9 +238,9 @@ const std::vector<ModuleConfig>& moduleConfigs() {
 
         // ---- excluded ------------------------------------------------------------------------
         {/*factoryName*/ "Sequencer", true,
-         "declares zero audio channels; BPM / Gate / F.Env only time or fill discrete MIDI events"},
+         "declares zero audio channels; BPM / Gate / Velocity / Chance only time or fill discrete MIDI events"},
         {/*factoryName*/ "Poly Sequencer", true,
-         "declares zero audio channels; BPM / Gate only time discrete MIDI events"},
+         "declares zero audio channels; BPM / Gate / Velocity / Chance only time discrete MIDI events"},
         {/*factoryName*/ "Sampler", true,
          "renders silence until a sample file is loaded; covered by SamplerModuleTests"},
         {/*factoryName*/ "Drum Kit", true,
