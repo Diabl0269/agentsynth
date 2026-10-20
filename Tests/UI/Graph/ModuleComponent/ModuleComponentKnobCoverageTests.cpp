@@ -101,7 +101,7 @@ bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParam
 // Oscillator knobs that deliberately have no CV jack yet. Phase and Rand are read once, when a note starts, so a
 // continuous input would have nothing to modulate; Blend and Width are unison voicing knobs whose jacks are not
 // added yet (the Oscillator's declared inputs are fixed by saved routings, and a new jack is its own change).
-const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand"};
+const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand", "Fixed rate"};
 
 // The shared `mix` / `pan` of ModuleBase's output stage (docs/modules/fx-modules.md#mix-and-pan-shared-stage), on
 // exactly the modules that opted in: like the shared Level they get no CV jack -- adding jacks to every FX is out of

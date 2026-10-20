@@ -467,6 +467,8 @@ sliderIndexForModTarget()` turns into a knob index:
 2. Otherwise → the parameter whose display name equals the jack label `name`.
 3. Neither → no knob (Oscillator's Pitch CV; Wavetable's Sync input).
 
+The reverse also holds: a knob can have no jack. The Oscillator's Fixed rate (and Rate mode) has none, like Phase and Rand, so the channel layout stays as it is; automate the knob instead.
+
 A module sets `paramId` whenever its jack label is not the knob's name — the jack is "Rate", the
 knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Gain"; Wavetable's "Warp" jack drives
 "Warp Amt". Matching the label against the knob's `componentID` (the parameter's display name) was

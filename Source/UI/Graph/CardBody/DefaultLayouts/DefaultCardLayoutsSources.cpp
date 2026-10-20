@@ -20,9 +20,10 @@ constexpr int kRevision = 1;
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
 
-// The Oscillator layout gained the Unison Blend and Width (Phase and Rand sit in the More controls row): a stored
-// layout based on an older revision is stale and picks the new controls up.
-constexpr int kOscillatorRevision = 2;
+// The Oscillator layout gained the Fixed rate in Glide's cell, with Rate in the More row (earlier: the Unison
+// Blend and Width; Phase and Rand sit in the More controls row): a stored layout based on an older revision is
+// stale and picks the new controls up.
+constexpr int kOscillatorRevision = 3;
 
 // The Drum Kit layout gained the Recorded switches (a recorded kit).
 constexpr int kDrumKitRevision = 2;
@@ -34,7 +35,12 @@ CardLayout oscillatorLayout() {
     CardLayout layout;
     layout.sections = {
         section("waveform", std::nullopt, {param("waveform", CardWidget::Segmented)}),
-        section("pitch", juce::String("Pitch"), {param("octave"), param("coarse"), param("fine"), param("glide")},
+        // Rate (Follow notes / Fixed) waits in the More row so the card keeps its size; a Fixed rate plays no notes to
+        // glide between, so the Fixed rate knob takes Glide's cell while it is on.
+        section("pitch", juce::String("Pitch"),
+                {param("octave"), param("coarse"), param("fine"),
+                 showWhen(param("glide"), "rateMode", {"Follow notes"}),
+                 showWhen(param("fixedRate"), "rateMode", {"Fixed"})},
                 kQuadColumns),
         section("unison", juce::String("Unison"),
                 {param("unison"), param("detune"), param("blend"), param("width"),

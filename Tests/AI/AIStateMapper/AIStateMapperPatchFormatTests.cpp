@@ -176,9 +176,10 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
-        {"Oscillator", "blend, bypassed, coarse, detune, dualIO, fine, glide, glideCurve, glideMode, legato, level, "
-                       "muted, octave, pan, "
-                       "phase, poly, pulseWidth, randomPhase, unison, waveform, width"},
+        {"Oscillator",
+         "blend, bypassed, coarse, detune, dualIO, fine, fixedRate, glide, glideCurve, glideMode, legato, "
+         "level, muted, octave, pan, "
+         "phase, poly, pulseWidth, randomPhase, rateMode, unison, waveform, width"},
         {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, "
                           "band3Freq, band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, "
                           "dualIO, mix, muted, outputGain, pan"},

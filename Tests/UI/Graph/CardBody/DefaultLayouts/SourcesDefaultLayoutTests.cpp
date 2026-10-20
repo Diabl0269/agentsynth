@@ -243,6 +243,28 @@ TEST(SourcesDefaultLayout, LfoRateSwapsHzAndDivisionInOneCell) {
     EXPECT_FALSE(lfo.body->hasMoreRow()) << "a swapped-out control never joins More";
 }
 
+TEST(SourcesDefaultLayout, OscillatorFixedRateSwapsWithGlideInOneCell) {
+    CardCanvas canvas;
+    const auto osc = build(canvas, "Oscillator");
+    auto* glide = widget(osc, "glide");
+    auto* fixedRate = widget(osc, "fixedRate");
+    const auto size = osc.card->getBounds();
+    const auto glideBounds = glide->getBounds();
+
+    // Follow notes is the default: Glide shows and Fixed rate waits in its cell.
+    EXPECT_TRUE(glide->isVisible());
+    EXPECT_FALSE(fixedRate->isVisible());
+    EXPECT_TRUE(osc.body->isSwappedOut(*fixedRate));
+
+    flip(canvas, osc, "rateMode", 1.0f);
+    EXPECT_TRUE(fixedRate->isVisible());
+    EXPECT_FALSE(glide->isVisible());
+    EXPECT_EQ(fixedRate->getY(), glideBounds.getY());
+    EXPECT_EQ(fixedRate->getX(), glideBounds.getX());
+    EXPECT_EQ(osc.card->getBounds(), size) << "a swap never resizes the card";
+    EXPECT_TRUE(osc.body->isSwappedOut(*glide));
+}
+
 TEST(SourcesDefaultLayout, LfoGlideDimsUnlessTheShapeIsSampleAndHold) {
     CardCanvas canvas;
     const auto lfo = build(canvas, "LFO");
@@ -346,7 +368,7 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
         SCOPED_TRACE(type.toStdString());
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr);
-        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" || type == "Oscillator" ? 2 : 1);
+        const int revision = type == "Sampler" ? 3 : (type == "Drum Kit" ? 2 : (type == "Oscillator" ? 3 : 1));
         EXPECT_EQ(entry->defaultRevision, revision);
         auto module = synth::AIStateMapper::createModule(type);
         for (const auto& section : entry->layout.sections)

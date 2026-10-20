@@ -70,6 +70,53 @@ juce::AudioProcessorGraph::Node::Ptr addNodeDeferred(juce::AudioProcessorGraph& 
     return graph.addNode(std::move(processor), id, juce::AudioProcessorGraph::UpdateKind::none);
 }
 
+// Merge-mode auto-connect, MIDI half: each new MIDI-accepting node with no MIDI input gets a cable from the patch's
+// existing MIDI source, so a model that adds an instrument or a note-driven modulator means for it to play.
+void autoConnectNewNodesToMidi(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                               const std::set<juce::AudioProcessorGraph::NodeID>& newlyCreatedNodes) {
+    // Sampler is here because a note-on retriggers it and transposes it against rootNote — the
+    // same reason Oscillator is. ADSR is here because without notes it never opens: an envelope a
+    // model adds as a modulation source (e.g. into a Custom filter's Morph X) would stay at zero.
+    // LFO is here so Retrig (and the Fade In it restarts) sees the notes; with Retrig off it ignores MIDI.
+    static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sampler",   "Drum Kit",       "Pluck",
+                                                              "Mallet",     "Sequencer", "Poly Sequencer", "Poly MIDI",
+                                                              "ADSR",       "LFO"};
+
+    // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
+    std::set<juce::AudioProcessorGraph::NodeID> midiSources;
+    for (const auto& conn : cables.all()) {
+        if (conn.source.isMIDI() && newlyCreatedNodes.find(conn.source.nodeID) == newlyCreatedNodes.end()) {
+            midiSources.insert(conn.source.nodeID);
+        }
+    }
+
+    if (!midiSources.empty()) {
+        auto midiSourceId = *midiSources.begin(); // Use the first MIDI source found
+        for (auto newNodeId : newlyCreatedNodes) {
+            auto* node = graph.getNodeForId(newNodeId);
+            if (node == nullptr)
+                continue;
+
+            juce::String typeName = node->getProcessor()->getName();
+            if (midiAcceptingTypes.find(typeName) == midiAcceptingTypes.end())
+                continue;
+
+            // Check if this node already has incoming MIDI
+            bool hasMidiInput = false;
+            for (const auto& conn : cables.into(newNodeId)) {
+                if (conn.destination.isMIDI()) {
+                    hasMidiInput = true;
+                    break;
+                }
+            }
+
+            if (!hasMidiInput && node->getProcessor()->acceptsMidi())
+                connectDeferred(graph, {{midiSourceId, juce::AudioProcessorGraph::midiChannelIndex},
+                                        {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
+        }
+    }
+}
+
 } // namespace
 
 std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::String& type) {
@@ -912,46 +959,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             }
         }
 
-        // Auto-connect MIDI: find existing MIDI sources and connect to new MIDI-accepting nodes
-        // Types that accept MIDI input
-        // Sampler is here because a note-on retriggers it and transposes it against rootNote — the
-        // same reason Oscillator is.
-        static const std::set<juce::String> midiAcceptingTypes = {
-            "Oscillator", "Sampler", "Drum Kit", "Pluck", "Mallet", "Sequencer", "Poly Sequencer", "Poly MIDI"};
-
-        // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
-        std::set<juce::AudioProcessorGraph::NodeID> midiSources;
-        for (const auto& conn : cables.all()) {
-            if (conn.source.isMIDI() && newlyCreatedNodes.find(conn.source.nodeID) == newlyCreatedNodes.end()) {
-                midiSources.insert(conn.source.nodeID);
-            }
-        }
-
-        if (!midiSources.empty()) {
-            auto midiSourceId = *midiSources.begin(); // Use the first MIDI source found
-            for (auto newNodeId : newlyCreatedNodes) {
-                auto* node = graph.getNodeForId(newNodeId);
-                if (node == nullptr)
-                    continue;
-
-                juce::String typeName = node->getProcessor()->getName();
-                if (midiAcceptingTypes.find(typeName) == midiAcceptingTypes.end())
-                    continue;
-
-                // Check if this node already has incoming MIDI
-                bool hasMidiInput = false;
-                for (const auto& conn : cables.into(newNodeId)) {
-                    if (conn.destination.isMIDI()) {
-                        hasMidiInput = true;
-                        break;
-                    }
-                }
-
-                if (!hasMidiInput && node->getProcessor()->acceptsMidi())
-                    connectDeferred(graph, {{midiSourceId, juce::AudioProcessorGraph::midiChannelIndex},
-                                            {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
-            }
-        }
+        autoConnectNewNodesToMidi(graph, cables, newlyCreatedNodes);
     }
 
     synth::publishSamplerMidiWiring(graph); // the nodes were already audible while cables landed

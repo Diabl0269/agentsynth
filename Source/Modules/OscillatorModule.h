@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FrequencyText.h"
 #include "GateEdges.h"
 #include "ModuleBase.h"
 #include "Oscillator/HeldNotes.h"
@@ -129,6 +130,13 @@ public:
         addParameter(glideCurveParam =
                          new juce::AudioParameterChoice("glideCurve", "Glide Curve", {"Linear", "Exponential"}, 0));
         addParameter(legatoParam = new juce::AudioParameterBool("legato", "Legato", false));
+        // Rate mode: "Fixed" runs the oscillator at Fixed rate (Hz) whatever note is played, so it can serve as an
+        // audio-rate modulation source.
+        addParameter(rateModeParam = new juce::AudioParameterChoice("rateMode", "Rate", {"Follow notes", "Fixed"}, 0));
+        juce::NormalisableRange<float> fixedRateRange(0.1f, 2000.0f);
+        fixedRateRange.setSkewForCentre(20.0f);
+        addParameter(fixedRateParam = new juce::AudioParameterFloat("fixedRate", "Fixed rate", fixedRateRange, 50.0f,
+                                                                    synth::frequencyAttributes()));
         enableVisualBuffer(true);
     }
 
@@ -136,9 +144,7 @@ public:
         juce::ignoreUnused(samplesPerBlock);
         currentSampleRate = sampleRate;
 
-        float initPitch = voices[0].lastMidiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() +
-                          (fineParam->get() / 100.0f);
-        float initFreq = 440.0f * std::pow(2.0f, (initPitch - 69.0f) / 12.0f);
+        const float initFreq = baseFrequencyHz();
 
         for (int v = 0; v < MAX_VOICES; ++v) {
             voices[v].smoothedFreq.reset(sampleRate, 0.005);
@@ -190,11 +196,14 @@ public:
         clearPendingRestarts();
     }
 
-    float getTargetFrequency() const {
-        float totalPitch = voices[0].lastMidiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() +
-                           (fineParam->get() / 100.0f);
-        return 440.0f * std::pow(2.0f, (totalPitch - 69.0f) / 12.0f);
-    }
+    /** The held note's pitch with the Octave/Coarse/Fine knobs, whatever the Rate mode. */
+    float getTargetFrequency() const;
+    /** The frequency the knobs set before any CV: the note's pitch, or in Fixed rate mode the Fixed rate. */
+    float baseFrequencyHz() const;
+    /** True while the Rate mode is Fixed. */
+    bool isFixedRate() const { return rateModeParam->getIndex() == 1; }
+    /** The lowest frequency a voice renders at in the current Rate mode. */
+    float minRenderHz() const;
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
@@ -703,5 +712,7 @@ private:
     juce::AudioParameterChoice* glideModeParam = nullptr;
     juce::AudioParameterChoice* glideCurveParam = nullptr;
     juce::AudioParameterBool* legatoParam = nullptr;
+    juce::AudioParameterChoice* rateModeParam = nullptr;
+    juce::AudioParameterFloat* fixedRateParam = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };

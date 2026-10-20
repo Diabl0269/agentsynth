@@ -59,3 +59,40 @@ TEST(AIStateMapperTest, MergeSkipsAutoConnectWhenTheCallerOptsOut) {
     EXPECT_FALSE(hasConnectionTo(graph, out, "Oscillator"))
         << "opting out must leave the new node exactly as the patch described it";
 }
+
+// Regression test for FRO1019: an AI-added ADSR never got notes, so as a mod source it stayed at zero.
+TEST(AIStateMapperTest, MergeAutoConnectsMidiToNewAdsrAndLfo) {
+    juce::AudioProcessorGraph graph;
+    addAudioOutput(graph);
+
+    // An existing MIDI source: a MIDI input node wired to an existing Oscillator.
+    auto midiIn = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::midiInputNode));
+    ASSERT_NE(midiIn, nullptr);
+    juce::var base = juce::JSON::parse(R"({"nodes":[{"id":4003,"type":"Oscillator"}]})");
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(base, graph, /*clearExisting=*/false));
+    juce::AudioProcessorGraph::NodeID oscId;
+    bool foundOsc = false;
+    for (auto* n : graph.getNodes())
+        if (n->getProcessor()->getName() == "Oscillator") {
+            oscId = n->nodeID;
+            foundOsc = true;
+        }
+    ASSERT_TRUE(foundOsc);
+    ASSERT_TRUE(graph.addConnection({{midiIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {oscId, juce::AudioProcessorGraph::midiChannelIndex}}));
+
+    juce::var patch = juce::JSON::parse(R"({"nodes":[{"id":4004,"type":"ADSR"},{"id":4005,"type":"LFO"}]})");
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(patch, graph, /*clearExisting=*/false));
+
+    for (const juce::String type : {"ADSR", "LFO"}) {
+        bool gotMidi = false;
+        for (const auto& conn : graph.getConnections()) {
+            auto* dst = graph.getNodeForId(conn.destination.nodeID);
+            if (dst != nullptr && dst->getProcessor()->getName() == type && conn.destination.isMIDI() &&
+                conn.source.nodeID == midiIn->nodeID)
+                gotMidi = true;
+        }
+        EXPECT_TRUE(gotMidi) << type << " should receive MIDI from the existing MIDI source";
+    }
+}

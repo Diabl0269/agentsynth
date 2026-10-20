@@ -67,6 +67,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     const bool rightWanted = unisonMix.stereo;
 
     const PolyVoiceSettings settings{global.unisonCount, global.detuneCents, global.glideSeconds};
+    const bool fixedMode = isFixedRate();
     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
         // Voice 0 falls back to the MIDI pitch when no pitch CV is patched; a voice below 20 Hz is off.
         float basePitchHz = pitchCVCache[v][0];
@@ -76,6 +77,9 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
             voices[v].active = false;
             continue;
         }
+        // Fixed rate replaces the pitch only after the voice is known to be live, so voices stay note-gated.
+        if (fixedMode)
+            basePitchHz = baseFrequencyHz();
 
         // A voice going from silent to sounding is a new note and restarts its phases; voice 0 also
         // restarts on a MIDI note-on, and only that one has an earlier note to fade out of. A rising
@@ -124,7 +128,7 @@ void OscillatorModule::renderPolyVoice(int voice, float* output, float* outputR,
 void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* outputR, int numSamples, float basePitchHz,
                                              const PolyVoiceSettings& set) {
     const int ns = std::min(numSamples, 4096);
-    const float freq = juce::jlimit(20.0f, 20000.0f, basePitchHz);
+    const float freq = juce::jlimit(minRenderHz(), 20000.0f, basePitchHz);
     const float baseDt = freq / (float)currentSampleRate;
     const int wf = waveformParam->getIndex();
     const int unisonCount = set.unisonCount;
@@ -177,6 +181,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
     const int unisonCount = set.unisonCount;
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
+    const float minHz = minRenderHz();
 
     // Each unison voice's detune ratio is a block constant, so never per sample
     float ratios[MAX_UNISON];
@@ -200,7 +205,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
 
         const float baseHz = gliding ? voices[v].glide.nextFrequency() : basePitchHz;
         float freqS = (extraPitchShift != 0.0f) ? baseHz * std::pow(2.0f, extraPitchShift / 12.0f) : baseHz;
-        freqS = juce::jlimit(20.0f, 20000.0f, freqS);
+        freqS = juce::jlimit(minHz, 20000.0f, freqS);
         const float dtS = freqS / (float)currentSampleRate;
 
         const int wfS = hasWaveCV ? juce::jlimit(0, 3, wf + (int)std::round(waveformCVCache[idx] * 3.0f)) : wf;
