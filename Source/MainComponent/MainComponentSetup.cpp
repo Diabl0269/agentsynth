@@ -567,6 +567,7 @@ void MainComponent::wireMidiRemoteEngine() {
         // every mapped parameter needs to re-announce its value to whatever is open now.
         remoteFeedbackOutputs_.closeAll();
         remoteEngine.resendFeedback();
+        timelinePanel.getRoutingPane().refresh(); // its Input row says whether the track's device is connected
     };
 
     // The mixer panel and transport bar are plain MainComponent members, already fully constructed

@@ -149,12 +149,13 @@ the preference changes nothing.
 
 `MainComponent`'s implementation, installed in `initialiseCommon()`:
 
-- **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first
-  `armed && (kind == TrackKind::Midi || kind == TrackKind::Audio)` track — first-armed-wins, there
-  is deliberately no "record both at once" — but either way the transport rolls: **record implies
-  roll** (a DAW convention — the record button starts the transport if it is not already playing)
-  and `setRecordingState(true)` fire unconditionally. An armed MIDI track additionally calls
-  `midiRecorder.startRecording(track, currentPpq)`; an armed Audio track resolves a
+- **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first armed
+  Audio track or armed MIDI track that records every input (`Track::recordsEveryMidiInput`) —
+  first-armed-wins among those — and adds every armed MIDI track with
+  [an input of its own](#recording-from-one-input) (`collectMidiTakeTargets`). Either way the
+  transport rolls: **record implies roll** (a DAW convention — the record button starts the transport
+  if it is not already playing) and `setRecordingState(true)` fire unconditionally. MIDI targets
+  call `midiRecorder.startRecording(targets, currentPpq)`; an armed Audio track resolves a
   `RecordTapModule` tap and take files *before* the transport moves — a request that cannot be
   honoured (no Audio Output in the patch, or the take file cannot be created or opened) must not
   leave the transport rolling — and then starts its capture.
@@ -176,9 +177,50 @@ the preference changes nothing.
   turns the indicator back off.
 
 `AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring, feeding
-`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer. See
-`Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
+`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer, plus
+the per-device copy below. See `Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp` for the button-to-commit path.
+
+### Recording from one input
+
+Each MIDI track has an input ([the Input row](tracks.md#the-input-row)): a device (or all MIDI inputs)
+and a channel (or any). The default, all inputs and any channel, is exactly the old behaviour, so
+an existing project records as it always did.
+
+- **Who records.** A take has up to `MidiRecorder::kMaxTargets` (16) targets. The first-armed track
+  that records every input (when the first-armed-wins search above picked a MIDI one) is one; every
+  armed MIDI track with its own device or channel is another, in document order. So two players on
+  two controllers, each armed into their own track, record at once. An audio take can run beside
+  them, and the 10 Hz poll and a device change commit both kinds.
+- **What each target hears.** A target on all inputs reads the collector-merged buffer, filtered by
+  channel when it has one. A target on one device reads that device's notes only, filtered by channel
+  when it has one. Every target that matches gets its own copy of a note.
+- **Where the device comes from.** The merged buffer has lost which input a message came from, so
+  the engine keeps a second, per-device copy of note on/off: `MidiInputSources`
+  (`Source/AudioEngine/MidiInputSources.h`). One lock-free `AbstractFifo` lane per device identifier,
+  handed out on the message thread the first time the identifier is seen (when the input opens, or
+  at record start) and never recycled, so each lane has one producer: that device's driver thread.
+  `handleIncomingMidiMessageFromSource` pushes into it right beside the collector, after the bounce
+  and MIDI Remote early-outs, so a note is in a lane exactly when it is in the merged stream. The
+  device callback drains every lane, recording or not, into one block of callback-relative sample
+  positions, placed by the message's timestamp the way `juce::MidiMessageCollector` places it (a gap
+  longer than a block is squeezed into the block; a note older than a second is a backlog from a
+  paused device and is dropped). Every render pass of that callback hands the recorder the slice of
+  the block it renders, so a sliced callback records each note once, at its own beat;
+  `renderNextBlock` then empties the block, so a hosted or bounce render never sees it. Nothing on
+  the MIDI or audio thread locks, allocates or logs.
+- **A device that is not connected.** Its lane is reserved at record start, so it records nothing
+  until it comes back, and then records at once (same identifier). It never falls back to every
+  input. In the plugin there is no hardware, so a device target records nothing; a channel-only
+  input still works there.
+- **Commit.** `stopAndCommit` pairs notes per target and adds one "Take" clip per target that
+  captured anything, all inside one `recordTimelineChange`: one Record press is one undo step for
+  the MIDI takes (an audio take beside them is its own step, as before).
+
+Tests: `MidiRecorderInputFilterTests.cpp` (filters, the lanes, and a device-thread / audio-thread /
+message-thread run meant for `-fsanitize=thread`), `TrackMidiInputRecordTests.cpp` (end to end
+through `MainComponent` and the device callback, sliced and not), `TimelineDocTrackMidiInputTests.cpp`
+and `TimelineRoutingPaneInputTests.cpp`.
 
 ## Return to Start button
 

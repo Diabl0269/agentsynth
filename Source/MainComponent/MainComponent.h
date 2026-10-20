@@ -634,6 +634,7 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
+    std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
@@ -717,6 +718,7 @@ private:
     void wireTimelineClipLaneCallbacks();
     void wireTimelineRecordToggle();
     void handleRecordToggle(bool wantRecording);
+    std::vector<synth::MidiRecorder::TakeTarget> collectMidiTakeTargets(synth::TrackId firstArmedMidi);
     void addToolbarToggleButtons();
     void assembleToolbar();
     void wireStatusBar();

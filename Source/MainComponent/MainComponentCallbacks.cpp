@@ -242,8 +242,8 @@ void MainComponent::timerCallback() {
     // once here (exchange-back-to-false, same contract as consumeFeedbackGuardTripped) and routed
     // through the SAME commit choke points a manual Record-off or a transport stop already use — see
     // AudioEngine::handleStreamFormatChange, which is what actually sets the flag, at the moment of
-    // the change. At most one of the two checks below ever fires: recording never runs both an audio
-    // and a MIDI take at once (first-armed-wins — see onRecordToggled).
+    // the change. Both checks can fire: an audio take can run beside MIDI takes on tracks with their
+    // own input (see handleRecordToggle).
     if (audioEngine.consumeFormatChangedDuringCapture()) {
         if (audioTake_.capturing)
             commitAudioRecording();

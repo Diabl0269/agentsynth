@@ -67,7 +67,7 @@ drawn differently, as the "Unassigned automation" section header
 `R` flips `Track::armed` in the document and nothing else — **arming is not recording**. The record
 button and `MidiRecorder::startRecording` live on the transport bar
 ([transport](transport.md#recording)), which looks for the first `armed` track when it starts a
-take.
+take, and records every armed MIDI track that has [an input of its own](#the-input-row) alongside it.
 
 ## Show a track's module
 
@@ -586,6 +586,9 @@ and re-reads when it opens. Rows, top to bottom:
   the node kind — with the line "Its notes are kept. Pick a new Track In to hear them again." Below a
   live binding, a **Show on canvas** link selects the node with `selectNodeInGraph`, the
   chip's highlight-only path (the canvas is not scrolled).
+- **Input** (MIDI tracks only): which keyboard or controller, and which MIDI channel, records into the
+  track. Two combo-style buttons, one under the other: the device ("All MIDI inputs" by default) and
+  the channel ("Any channel" by default). See [the Input row](#the-input-row).
 - **MIDI destinations** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
   Clicking it opens the [MIDI destination picker](#midi-destinations) in a `CallOutBox`, built by
   `buildTrackMidiDestinationPicker` over `getMidiDestinationOptions` / `setMidiDestinationConnected`
@@ -598,6 +601,37 @@ and re-reads when it opens. Rows, top to bottom:
 An automation track, or no selection, shows one muted line instead: "Nothing to route on an
 automation track." / "Select a MIDI or audio track to see its routing." Every control opts out of
 keyboard focus so a click never moves it off the panel.
+
+## The Input row
+
+Like Cubase's input routing: each MIDI track chooses what it records, so two players (or two
+controllers) can record into two tracks at once. The row is built in
+`TimelineRoutingPaneInput.cpp`.
+
+- **Device button.** Opens a menu: "All MIDI inputs", then every MIDI input connected now
+  (`TrackHeaderHost::getMidiInputDevices`, which `MainComponent` answers from
+  `AudioEngine::getAvailableMidiInputs`; empty in the plugin, where the host owns MIDI routing), the
+  current one ticked. A pick writes the device's stable identifier **and** its name
+  (`TimelineDoc::setTrackMidiInput`) through `performTrackEdit`: one undo step.
+- **Channel button.** Opens "Any channel" and "Channel 1" to "Channel 16". A pick keeps the device.
+- **A device that is not connected** (unplugged, or a project from another machine) stays the
+  track's input. The button names it, "Old Keyboard (not connected)", in the `warning` colour, and
+  its menu lists it ticked; picking it again changes nothing. A take records nothing from it until
+  it is back. It is never swapped for "All MIDI inputs" behind the user's back. The identifier is
+  matched exactly, as MIDI Remote matches its controllers. The row re-reads on
+  `AudioEngine::onMidiDevicesChanged`, so a replug clears the warning.
+- **Accessibility.** Both buttons are pane keyboard stops in visual order (Canvas node, device,
+  channel, MIDI destinations): Up/Down move between them and Return opens the menu. Each has the
+  accent focus ring, a screen-reader name that carries the value ("MIDI input, Keystation 49",
+  "Input channel, Any channel") and a tooltip that says what it records and what a click does.
+- **Motion.** The row fades in and out with the track kind (`FadeVisibility`), and the rows below
+  slide, like the MIDI destinations row.
+
+**Stored on the track.** `Track::midiInputId` (empty = all inputs), `midiInputName` and
+`midiInputChannel` (0 = any, else 1 to 16). They are saved with the project only when they differ
+from the defaults ("all inputs, any channel"), so older projects load unchanged and save
+byte-identical. A channel outside 0 to 16 in a file fails the load. A duplicated track keeps its input.
+How a take uses them: [transport](transport.md#recording-from-one-input).
 
 ## The automation fold arrow
 

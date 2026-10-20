@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/MidiInputSources.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "Mixer/MixerPanLaw.h"
 #include "Mixer/PeakMeterLatch.h"
@@ -454,6 +455,10 @@ public:
     void openMidiDevicesForRemote(const std::vector<juce::String>& deviceNames);
     // Device *identifiers* (the MIDI Remote source key), never names. Empty in Hosted mode.
     std::vector<juce::String> getOpenMidiInputIdentifiers() const;
+    // MESSAGE THREAD. The MIDI inputs this machine has now, for pickers; empty in Hosted mode.
+    juce::Array<juce::MidiDeviceInfo> getAvailableMidiInputs() const;
+    // Which device each recorded note came from; lanes are handed out on the message thread.
+    synth::MidiInputSources& getMidiInputSources() noexcept { return midiInputSources_; }
 
 protected:
     // TEST SEAM (message thread): devices JUCE currently sees as connected. See AudioEngineMidi.cpp.
@@ -699,6 +704,8 @@ private:
     juce::MidiBuffer remoteHostScratchMidi_;
 
     juce::MidiMessageCollector midiMessageCollector;
+    synth::MidiInputSources midiInputSources_;
+    synth::MidiInputSources::Block midiSourcedBlock_; // this device callback's per-device notes, audio thread only
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
 
     // MESSAGE THREAD, Standalone only. Returns whether the open set changed.

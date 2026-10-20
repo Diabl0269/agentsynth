@@ -26,7 +26,7 @@ TimelineRoutingPane::TimelineRoutingPane()
     , showInMixer_("Show in mixer " + chevron()) {
     setComponentID("timelineRoutingPane");
     // A control fading in or out resizes its row from the fade's progress, so the rows below slide.
-    for (auto* fade : {&canvasNodeFade_, &midiDestinationsFade_, &showOnCanvasFade_, &channelFade_})
+    for (auto* fade : {&canvasNodeFade_, &midiInputFade_, &midiDestinationsFade_, &showOnCanvasFade_, &channelFade_})
         fade->onFrame = [this] {
             layoutSections();
             repaint();
@@ -40,6 +40,11 @@ TimelineRoutingPane::TimelineRoutingPane()
     canvasNode_.setTitle("Canvas node");
     canvasNode_.setDescription("The node that plays this track. Opens a menu to choose a different one.");
     canvasNode_.onClick = [this] { openBindingMenu(); };
+    midiInputDevice_.setDescription(
+        "The keyboard or controller this track records from. Opens a menu to choose one, or all of them.");
+    midiInputDevice_.onClick = [this] { openMidiInputDeviceMenu(); };
+    midiInputChannel_.setDescription("The MIDI channel this track records. Opens a menu to choose one, or any.");
+    midiInputChannel_.onClick = [this] { openMidiInputChannelMenu(); };
     midiDestinations_.setTitle("MIDI destinations");
     midiDestinations_.setDescription("The instruments this track's notes are sent to. Opens a picker to change them.");
     midiDestinations_.onClick = [this] { openMidiDestinationsPicker(); };
@@ -56,11 +61,13 @@ TimelineRoutingPane::TimelineRoutingPane()
         link->setMouseClickGrabsKeyboardFocus(false);
     }
 
-    for (auto* child : std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_,
-                                                               &channelChip_, &showInMixer_})
+    // Children in visual (and so keyboard) order.
+    const std::initializer_list<juce::Component*> controls{&canvasNode_,       &showOnCanvas_,     &midiInputDevice_,
+                                                           &midiInputChannel_, &midiDestinations_, &showInMixer_};
+    for (auto* child : controls)
         addChildComponent(*child);
-    for (auto* control :
-         std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_, &showInMixer_})
+    addChildComponent(channelChip_);
+    for (auto* control : controls)
         paneKeys_.attach(*control);
     refresh();
 }
@@ -123,6 +130,7 @@ void TimelineRoutingPane::computeView() {
     }
     view_.colour = resolveTrackColour(track->colourArgb, index, false);
     computeCanvasNode(*track);
+    computeMidiInput(*track);
     computeNotesAndChannel();
 }
 
@@ -167,6 +175,7 @@ void TimelineRoutingPane::applyViewToChildren() {
     // Each control fades in or out as the selected track changes what is routable (animation.md); a fade-out keeps it
     // on screen until it has ended.
     canvasNodeFade_.setShown(routable);
+    midiInputFade_.setShown(routable && view_.isMidi);
     midiDestinationsFade_.setShown(routable && view_.isMidi);
     showOnCanvasFade_.setShown(routable && view_.bound);
     channelFade_.setShown(routable && view_.hasChannel);
@@ -178,6 +187,7 @@ void TimelineRoutingPane::applyViewToChildren() {
     canvasNode_.setTooltip(view_.canvasNodeWarning ? "This track plays nowhere yet. Click to choose a node."
                                                    : "This track plays through '" + view_.canvasNodeText +
                                                          "'. Click to choose a different node.");
+    applyMidiInputToChildren();
     midiDestinations_.setButtonText(view_.midiDestinationsText);
     midiDestinations_.setTooltip("MIDI destinations: " + view_.midiDestinationsText + ". Click to change.");
     if (view_.hasChannel) // a chip fading out keeps the name it showed
@@ -223,6 +233,15 @@ void TimelineRoutingPane::layoutSections() {
     if (const float p = showOnCanvasFade_.progress(); p > 0.0f)
         showOnCanvas_.setBounds(row(scaled(kLinkHeight, p)));
     endSection();
+
+    if (const float p = midiInputFade_.progress(); p > 0.0f) {
+        layout_.inputAlpha = p;
+        layout_.midiInputHeading = row(scaled(kHeadingHeight, p));
+        midiInputDevice_.setBounds(row(scaled(kButtonHeight, p)));
+        y += scaled(kRowGap, p);
+        midiInputChannel_.setBounds(row(scaled(kButtonHeight, p)));
+        endSection(p);
+    }
 
     if (const float p = midiDestinationsFade_.progress(); p > 0.0f) {
         layout_.midiAlpha = p;

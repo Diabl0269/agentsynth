@@ -132,13 +132,14 @@ TEST(TimelineRoutingPaneTest, TheRootAndItsControlsAreKeyboardStopsInOrderWithUp
     EXPECT_EQ(pane.getTitle(), "Routing for Lead");
 
     const auto stops = synth::ui::focusableDescendants(pane);
-    ASSERT_EQ(stops.size(), 2u) << "Canvas node and MIDI destinations; the links are hidden for an unbound track";
+    ASSERT_EQ(stops.size(), 4u)
+        << "Canvas node, the two Input buttons and MIDI destinations; the links are hidden for an unbound track";
     EXPECT_EQ(stops[0], &pane.getCanvasNodeButtonForTest());
-    EXPECT_EQ(stops[1], &pane.getMidiDestinationsButtonForTest());
+    EXPECT_EQ(stops[3], &pane.getMidiDestinationsButtonForTest());
     EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, +1), stops[0]) << "Down from the root enters the first control";
     EXPECT_EQ(synth::ui::neighbourStop(pane, stops[0], +1), stops[1]);
     EXPECT_EQ(synth::ui::neighbourStop(pane, stops[1], -1), stops[0]);
-    EXPECT_EQ(synth::ui::neighbourStop(pane, stops[1], +1), nullptr) << "no wrapping at the end";
+    EXPECT_EQ(synth::ui::neighbourStop(pane, stops[3], +1), nullptr) << "no wrapping at the end";
     EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, -1), nullptr) << "Up from the root has nowhere to go";
 
     const auto plain = [](int code) { return juce::KeyPress(code, juce::ModifierKeys::noModifiers, 0); };

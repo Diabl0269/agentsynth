@@ -14,12 +14,13 @@
 
 // TimelineRoutingPane.h (docs/timeline/tracks.md#routing-from-the-side-pane, docs/layout/side-pane.md): the Timeline
 // tab's side-pane content. It shows the SELECTED track's routing -- what plays it (its Track In / Track Audio node),
-// where its notes go (MIDI tracks) and which mixer channel its sound ends up in -- like Cubase's Inspector.
+// which MIDI input records into it and where its notes go (MIDI tracks), and which mixer channel its sound ends up
+// in -- like Cubase's Inspector.
 //
 // A view: it reads the TimelineDoc and the TrackHeaderHost, owns no document state and edits only through host calls
-// (bindTrackTo, createAndBindTrackInNode, setMidiDestinationConnected, selectNodeInGraph, revealChannelForTrack), each
-// one undoable there. It has no timer: the panel calls setTrack()/refresh() on selection, document and graph changes
-// and tickMeter() from its existing 15 Hz tick.
+// (bindTrackTo, createAndBindTrackInNode, setMidiDestinationConnected, selectNodeInGraph, revealChannelForTrack,
+// performTrackEdit), each one undoable there. It has no timer: the panel calls setTrack()/refresh() on selection,
+// document and graph changes and tickMeter() from its existing 15 Hz tick.
 namespace synth::ui {
 
 class TimelineRoutingPane
@@ -46,6 +47,13 @@ public:
     void applyBindingMenuChoice(int menuId);
     /** Opens the MIDI-destination picker in a CallOutBox anchored on the "MIDI destinations" button. */
     void openMidiDestinationsPicker();
+    /** Menu ids of the Input row: the device menu's "All MIDI inputs", its first device (the rest follow in the host's
+     *  order) and the not-connected device it ticks; the channel menu's "Any channel" (channel N is N + 1). */
+    static constexpr int kAllInputsMenuId = 1, kFirstInputDeviceMenuId = 2, kMissingInputDeviceMenuId = 1000;
+    static constexpr int kAnyChannelMenuId = 1;
+    /** Applies an Input-row menu choice as one undoable track edit; anything else is ignored. */
+    void applyMidiInputDeviceChoice(int menuId);
+    void applyMidiInputChannelChoice(int menuId);
 
     /** The side pane shows the pane inside a vertical scroller, so a short bottom panel never clips a section. */
     juce::Component& getPaneComponent() override { return scroller_; }
@@ -64,6 +72,16 @@ public:
     void setShowBindingMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showBindingMenuHook_ = std::move(hook);
     }
+    /** A real click on either Input button hands its built menu here instead of showing it. */
+    void setShowInputMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showInputMenuHook_ = std::move(hook);
+    }
+    juce::Button& getMidiInputDeviceButtonForTest() noexcept { return midiInputDevice_; }
+    juce::Button& getMidiInputChannelButtonForTest() noexcept { return midiInputChannel_; }
+    bool isMidiInputShownForTest() const noexcept { return midiInputDevice_.isVisible(); }
+    juce::String getMidiInputDeviceTextForTest() const { return view_.inputDeviceText; }
+    juce::String getMidiInputChannelTextForTest() const { return view_.inputChannelText; }
+    bool isMidiInputDeviceWarningForTest() const noexcept { return midiInputDevice_.isWarning(); }
     /** Replaces launching the picker's CallOutBox when "MIDI destinations" is clicked. */
     void setOpenMidiDestinationsHookForTest(std::function<void()> hook) { openDestinationsHook_ = std::move(hook); }
     /** The picker "MIDI destinations" opens, wired exactly like the real one but never launched. */
@@ -102,6 +120,10 @@ private:
         bool bound = false;                // the binding resolves to a live node (the canvas link is offered)
         juce::String missingNote;          // the orphaned-binding explanation, or empty
         juce::String midiDestinationsText; // the connected MIDI destinations, comma-joined, or "None"
+        juce::String inputDeviceText;      // "All MIDI inputs", the device's name, or "<name> (not connected)"
+        juce::String inputDeviceName;      // the stored device's name, when there is one
+        bool inputDeviceMissing = false;
+        juce::String inputChannelText; // "Any channel" or "Channel N"
         bool hasChannel = false;
         juce::String channelText;
     };
@@ -116,17 +138,24 @@ private:
     std::unique_ptr<MidiDestinationPicker> buildPicker();
     void computeCanvasNode(const synth::Track& track);
     void computeNotesAndChannel();
+    void computeMidiInput(const synth::Track& track);
+    void applyMidiInputToChildren();
+    void openMidiInputDeviceMenu();
+    void openMidiInputChannelMenu();
+    void showInputMenu(juce::PopupMenu& menu, juce::Component& anchor, void (TimelineRoutingPane::*apply)(int));
 
     // Rows and dividers as laid out by layoutSections(), for paint().
     struct Layout {
         juce::Rectangle<int> header;
         juce::Rectangle<int> canvasNodeHeading;
         juce::Rectangle<int> missingNote;
+        juce::Rectangle<int> midiInputHeading;
         juce::Rectangle<int> midiDestinationsHeading;
         juce::Rectangle<int> mixerChannelHeading;
         juce::Rectangle<int> noChannel;
         juce::Rectangle<int> emptyLine;
         float midiAlpha = 1.0f;      // the MIDI destinations heading's opacity while its section fades
+        float inputAlpha = 1.0f;     // the Input heading's, likewise
         float noChannelAlpha = 1.0f; // the "No mixer channel" line's, while the channel row fades
         std::vector<int> dividers;   // y of each 1 px section border
     };
@@ -154,18 +183,22 @@ private:
 
     RoutingComboButton canvasNode_{"Canvas node"};
     TextLinkButton showOnCanvas_;
+    RoutingComboButton midiInputDevice_{"MIDI input"};
+    RoutingComboButton midiInputChannel_{"Input channel"};
     RoutingComboButton midiDestinations_{"MIDI destinations"};
     ChannelChipComponent channelChip_;
     TextLinkButton showInMixer_;
     // One fade per control (the chip and its Show in mixer link go together).
     synth::ui::FadeVisibility canvasNodeFade_{&canvasNode_};
     synth::ui::FadeVisibility showOnCanvasFade_{&showOnCanvas_};
+    synth::ui::FadeVisibility midiInputFade_{&midiInputDevice_, &midiInputChannel_};
     synth::ui::FadeVisibility midiDestinationsFade_{&midiDestinations_};
     synth::ui::FadeVisibility channelFade_{&channelChip_, &showInMixer_};
     PaneKeys paneKeys_{*this};
 
     std::function<void(juce::PopupMenu&)> showBindingMenuHook_;
     std::function<void()> openDestinationsHook_;
+    std::function<void(juce::PopupMenu&)> showInputMenuHook_;
     Scroller scroller_{*this}; // last: it views *this, so it must be destroyed first
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineRoutingPane)

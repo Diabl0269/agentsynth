@@ -88,6 +88,9 @@ TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, ju
         copy.colourArgb = colourArgb;
         copy.muted = original->muted;
         copy.heightScale = original->heightScale;
+        copy.midiInputId = original->midiInputId;
+        copy.midiInputName = original->midiInputName;
+        copy.midiInputChannel = original->midiInputChannel;
         copy.bindingUuid = remap(original->bindingUuid);
         for (const auto& clip : original->clips) {
             Clip dup = clip;
@@ -223,6 +226,24 @@ bool TimelineDoc::setTrackArmed(TrackId id, bool armed) {
         return true;
     return applyMutation([&] {
         track->armed = armed;
+        return true;
+    });
+}
+
+// The input is a recording setting of the track, so it is refused on a track that cannot record MIDI rather than
+// stored where nothing would read it. With no device the display name is meaningless and is dropped.
+bool TimelineDoc::setTrackMidiInput(TrackId id, const juce::String& deviceId, const juce::String& deviceName,
+                                    int channel) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Midi || channel < 0 || channel > Track::kMaxMidiInputChannel)
+        return false;
+    const juce::String name = deviceId.isEmpty() ? juce::String() : deviceName;
+    if (track->midiInputId == deviceId && track->midiInputName == name && track->midiInputChannel == channel)
+        return true;
+    return applyMutation([&] {
+        track->midiInputId = deviceId;
+        track->midiInputName = name;
+        track->midiInputChannel = channel;
         return true;
     });
 }
