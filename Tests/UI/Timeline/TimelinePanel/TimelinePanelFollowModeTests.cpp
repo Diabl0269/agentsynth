@@ -293,7 +293,14 @@ TEST(TimelineFollowModeTest, TheTooltipNamesTheModeAndTheKeysAndFollowsTheMode) 
 }
 
 TEST(TimelineFollowModeTest, TheModeKeyIsUniqueInTheTimelineCategoryOnBothPlatforms) {
-    for (const auto platform : {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other}) {
+    // The Mac table is only checked on a Mac: elsewhere commandModifier IS ctrlModifier, so the Mac chord Ctrl+F
+    // collapses into Cmd+F there and would read as a clash no Mac user can hit.
+#if JUCE_MAC
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other};
+#else
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Other};
+#endif
+    for (const auto platform : platforms) {
         ShortcutManager manager;
         manager.setDefaultsPlatform(platform);
         manager.resetToDefaults();
