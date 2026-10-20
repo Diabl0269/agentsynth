@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
 #include "PianoRollTypes.h"
-#include "Timeline/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"

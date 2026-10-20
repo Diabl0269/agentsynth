@@ -8,7 +8,7 @@
 // (`using NoteHit = pianoroll::NoteHit;` etc.) so every existing `PianoRollComponent::NoteHit`-style
 // qualified reference elsewhere keeps compiling unchanged.
 
-#include "Timeline/MusicalScale.h"
+#include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>

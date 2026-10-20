@@ -17,7 +17,7 @@
 // it is simply session-only (nothing survives past this juce::PropertiesFile instance) — the same
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
-#include "Timeline/MusicalScale.h"
+#include "Music/MusicalScale.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"

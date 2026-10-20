@@ -428,7 +428,7 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
   pushes neighbours down and never brings them back; this lands before hiding controls does.
 - **Sequencers stay as they are** in this round. Scales, step count and richer patterns are a
   separate piece of work that shares one scale engine with the piano roll's scale assist
-  (`Source/Timeline/MusicalScale.h`).
+  (`Source/Music/MusicalScale.h`).
 - **Canvas pieces follow the design system.** New widgets (fader on a card, segmented switch,
   stepper, section header, More row, the layout editor) match the AgentSynth design system's values
   and are added to it by the work that builds them; card titles and section headers are never in

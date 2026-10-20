@@ -19,9 +19,8 @@ Current behaviour: [modules.md, Sequencer](modules.md#sequencer-module) and
   `F.Env N` (sent as CC 74); fixed velocity 100. `PolySequencerModule`: 8 steps of `Step N Root` +
   `Step N Chord` (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random) + `Gate N`. Both have `run`,
   `bpm` and `syncToTransport` (last). Synced, the step index is `beat % 8`.
-- Neither knows about scales. `Source/Timeline/MusicalScale.h` (header-only: root + 12-bit mask,
-  `snapPitch`, built-in presets, user-scale JSON, `generateRandomNotes`) serves only the piano roll's
-  `ScaleAssistPanel`. It includes `TimelineDoc.h` only for `MidiNote`.
+- Neither knows about scales yet. The shared engine they will use, `Source/Music/MusicalScale.h`
+  (see "Shared scale engine"), is built; the piano roll's `ScaleAssistPanel` is its only user so far.
 - Both cards are bespoke (`ModuleComponentPaint.cpp`, `layoutSequencerStepColumn`): three rows of 8
   knobs, fixed 560x406, excluded from data-driven layouts (`cardBodyLayoutIsDataDriven`).
 
@@ -113,42 +112,43 @@ About 135 parameters on the Sequencer and 125 on the Poly Sequencer.
 
 ## Shared scale engine
 
-`Source/Music/MusicalScale.h` (header-only, `namespace synth`, needs only `juce_core`):
+Built (FRO1001). `Source/Music/MusicalScale.h` is header-only, `namespace synth`, and needs only
+`juce_core`; the piano roll already uses it, the sequencers will.
 
 ```cpp
-struct MusicalScale {
-    int rootPitchClass = 0;
-    std::uint16_t mask = 0xFFF;
-    juce::String name;
-
+struct MusicalScale {                                 // root pitch class + 12-bit root-relative mask
+    int rootPitchClass; std::uint16_t mask; juce::String name;
     bool isChromatic() const noexcept;
     bool contains(int midiPitch) const noexcept;
-    int snapPitch(int midiPitch) const noexcept;          // unchanged: nearest, ties to the lower
-    int notesPerOctave() const noexcept;                  // popcount(mask)
-    int stepBy(int midiPitch, int scaleSteps) const noexcept;  // move N scale notes up/down, clamped 0..127
-    int degreeOf(int midiPitch) const noexcept;           // 0-based degree of the snapped pitch
-    // Stacks `size` notes, every `stride` scale notes, from the snapped root. Returns the count written.
-    int chordAt(int rootPitch, int size, int stride, std::array<int, 6>& out) const noexcept;
-    std::array<std::int8_t, 128> snapTable() const noexcept;  // audio-thread lookup
+    int snapPitch(int midiPitch) const noexcept;      // nearest, ties to the lower
+    int notesPerOctave() const noexcept;              // popcount(mask & 0xFFF)
+    int stepBy(int midiPitch, int scaleSteps) const noexcept;  // snap, then move N scale notes; clamped 0..127
+    int degreeOf(int midiPitch) const noexcept;       // 0-based degree of the snapped pitch; -1 if mask == 0
+    std::array<std::int8_t, 128> snapTable() const noexcept;   // audio-thread lookup; build once per change
 };
 
-const std::vector<ScalePreset>& builtInScalePresets();   // unchanged list and order
+const std::vector<ScalePreset>& builtInScalePresets();
 MusicalScale makeScale(int rootPitchClass, int presetIndex);
 MusicalScale makeScaleFromMask(int rootPitchClass, std::uint16_t mask, juce::String name = {});
-juce::String romanNumeral(const MusicalScale&, int rootPitch, int chordSize);  // "iv", "VI", "ii°"
-
-// User scales: unchanged parse/serialize, same settings key the piano roll uses today.
 std::vector<UserScale> parseUserScales(const juce::String&);
 juce::String serializeUserScales(const std::vector<UserScale>&);
-
-// Shared random picker; the piano roll and the sequencer's Randomize both call it.
 std::vector<int> pickPitches(int count, int minPitch, int maxPitch, const MusicalScale*, juce::Random&);
+
+enum class ScaleChordKind { Triad, Seventh, Sus2, Sus4, Add9, Sixth };
+struct ScaleChord { int rootPitch; std::array<int, 6> notes; int count; };
+ScaleChord chordInScale(const MusicalScale&, int rootPitch, ScaleChordKind) noexcept;
+ScaleChord chordFromIntervals(int rootPitch, const std::vector<int>& semitones);   // outside the key
+juce::String chordName(const ScaleChord&);                       // "C#", "Dm7", "Bm7b5"
+juce::String romanNumeral(const MusicalScale&, const ScaleChord&);  // "ii", "vii°", "V7", "bVII"
 ```
 
-`generateRandomNotes` moves to `Source/Timeline/ScaleNoteGenerator.h` as a thin wrapper that calls
-`pickPitches` and builds `MidiNote`s, so `Source/Music/` never includes Timeline. The five current
-includers switch to the new paths (no forwarding header). `MusicalScaleTests` moves to
-`Tests/Music/` and gains tests for `stepBy`, `chordAt`, `romanNumeral` and `snapTable`.
+- `chordInScale` snaps the root, then stacks scale notes at degree offsets (Triad 0,2,4; Seventh
+  0,2,4,6; Sus2 0,1,4; Sus4 0,3,4; Add9 0,2,4,`notesPerOctave()+1`; Sixth 0,2,4,5). Notes above 127
+  are dropped. Chromatic or empty scales fall back to Major intervals from the root.
+- `romanNumeral` uses I..VII for 7-note scales when the chord root is in the scale; otherwise the
+  chromatic distance from the scale root with Major names and a b/# prefix.
+- `generateRandomNotes` lives in `Source/Timeline/ScaleNoteGenerator.h` as a thin wrapper over
+  `pickPitches`, so `Source/Music/` never includes Timeline. Tests are in `Tests/Music/`.
 
 ---
 

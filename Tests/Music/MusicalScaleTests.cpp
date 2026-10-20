@@ -1,7 +1,8 @@
 // Tests for the musical-scale engine: membership, nearest-pitch snapping, built-in presets,
 // user-scale JSON persistence, and scale-constrained random note generation.
 
-#include "Timeline/MusicalScale.h"
+#include "Music/MusicalScale.h"
+#include "Timeline/ScaleNoteGenerator.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
@@ -304,4 +305,141 @@ TEST(MusicalScaleTest, GenerateRandomNotesSwapsReversedRange) {
     ASSERT_EQ(notesA.size(), notesB.size());
     for (size_t i = 0; i < notesA.size(); ++i)
         EXPECT_EQ(notesA[i].pitch, notesB[i].pitch);
+}
+
+//==============================================================================
+// snapTable / notesPerOctave / stepBy / degreeOf — every preset at every root
+//==============================================================================
+
+namespace {
+
+int popcount12(std::uint16_t mask) {
+    int n = 0;
+    for (int b = 0; b < 12; ++b)
+        n += (mask >> b) & 1;
+    return n;
+}
+
+} // namespace
+
+TEST(MusicalScaleTest, SnapTableMatchesSnapPitchForEveryPresetAndRoot) {
+    const auto& presets = synth::builtInScalePresets();
+    for (int p = 0; p < (int)presets.size(); ++p) {
+        for (int root = 0; root < 12; ++root) {
+            auto scale = makeScale(root, p);
+            auto table = scale.snapTable();
+            EXPECT_EQ(scale.notesPerOctave(), popcount12(scale.mask)) << presets[(size_t)p].name << " root " << root;
+            for (int i = 0; i < 128; ++i) {
+                EXPECT_EQ((int)table[(size_t)i], scale.snapPitch(i)) << presets[(size_t)p].name << " root " << root;
+                EXPECT_TRUE(scale.contains((int)table[(size_t)i])) << presets[(size_t)p].name << " root " << root;
+            }
+        }
+    }
+}
+
+TEST(MusicalScaleTest, SnapTableMaskZeroPassesThrough) {
+    MusicalScale empty = synth::makeScaleFromMask(0, 0);
+    auto table = empty.snapTable();
+    for (int i = 0; i < 128; ++i)
+        EXPECT_EQ((int)table[(size_t)i], i);
+    EXPECT_EQ(empty.notesPerOctave(), 0);
+}
+
+TEST(MusicalScaleTest, StepByRoundTripsAwayFromRangeEdges) {
+    const auto& presets = synth::builtInScalePresets();
+    for (int p = 0; p < (int)presets.size(); ++p) {
+        for (int root = 0; root < 12; ++root) {
+            auto scale = makeScale(root, p);
+            for (int pitch = 30; pitch <= 100; ++pitch) {
+                int up = scale.stepBy(pitch, 1);
+                EXPECT_EQ(scale.stepBy(up, -1), scale.snapPitch(pitch)) << presets[(size_t)p].name << " " << root;
+            }
+        }
+    }
+}
+
+TEST(MusicalScaleTest, StepByAcrossOctaveAndClamped) {
+    auto scale = cMajor();
+    EXPECT_EQ(scale.stepBy(60, 7), 72); // seven scale notes up is an octave
+    EXPECT_EQ(scale.stepBy(60, -7), 48);
+    EXPECT_EQ(scale.stepBy(61, 1), 62); // C# snaps to C (tie -> lower), then +1 -> D
+}
+
+TEST(MusicalScaleTest, StepByStopsAtLastInScalePitchInRange) {
+    auto scale = cMajor();
+    // Highest in-scale pitch <= 127 is 127 (G); lowest >= 0 is 0 (C).
+    EXPECT_EQ(scale.stepBy(120, 100), 127);
+    EXPECT_EQ(scale.stepBy(5, -100), 0);
+    auto cSharpMajor = makeScale(1, 0);
+    EXPECT_EQ(cSharpMajor.stepBy(100, 100), 126); // 126 % 12 = 6 = F#, in C# major; 127 (G) is not
+    EXPECT_EQ(cSharpMajor.stepBy(10, -100), 0);   // B# (pc 0) is in C# major
+}
+
+TEST(MusicalScaleTest, StepByMaskZeroAndChromatic) {
+    MusicalScale empty = synth::makeScaleFromMask(0, 0);
+    EXPECT_EQ(empty.stepBy(60, 5), 60);
+    EXPECT_EQ(empty.stepBy(200, 5), 127);
+    EXPECT_EQ(empty.stepBy(-5, -5), 0);
+    auto chromatic = makeScale(3, presetIndexByName("Chromatic"));
+    EXPECT_EQ(chromatic.stepBy(60, 3), 63);
+    EXPECT_EQ(chromatic.stepBy(125, 10), 127);
+    EXPECT_EQ(chromatic.stepBy(2, -10), 0);
+}
+
+TEST(MusicalScaleTest, DegreeOfCountsScaleNotesFromRoot) {
+    const auto& presets = synth::builtInScalePresets();
+    for (int p = 0; p < (int)presets.size(); ++p) {
+        for (int root = 0; root < 12; ++root) {
+            auto scale = makeScale(root, p);
+            int expected = 0;
+            for (int offset = 0; offset < 12; ++offset) {
+                int pitch = 60 + ((root + offset) % 12 + 12) % 12; // 60..71 contains each pitch class once
+                if (scale.contains(pitch)) {
+                    // walk upward from the root: ascending offset order == degree order
+                    EXPECT_EQ(scale.degreeOf(60 + (root + offset) % 12), expected) << presets[(size_t)p].name;
+                    ++expected;
+                }
+            }
+            EXPECT_EQ(expected, scale.notesPerOctave());
+        }
+    }
+    EXPECT_EQ(synth::makeScaleFromMask(0, 0).degreeOf(60), -1);
+}
+
+TEST(MusicalScaleTest, DegreeOfCMajorAndSnapping) {
+    auto scale = cMajor();
+    EXPECT_EQ(scale.degreeOf(60), 0);
+    EXPECT_EQ(scale.degreeOf(62), 1);
+    EXPECT_EQ(scale.degreeOf(71), 6);
+    EXPECT_EQ(scale.degreeOf(72), 0);
+    EXPECT_EQ(scale.degreeOf(61), 0); // C# snaps down to C
+}
+
+//==============================================================================
+// pickPitches
+//==============================================================================
+
+TEST(MusicalScaleTest, PickPitchesOnlyCandidatesAndMatchesGenerator) {
+    auto scale = cMajor();
+    juce::Random a(1234), b(1234);
+    auto picks = synth::pickPitches(16, 48, 72, &scale, a);
+    ASSERT_EQ(picks.size(), 16u);
+    for (int p : picks) {
+        EXPECT_TRUE(scale.contains(p));
+        EXPECT_GE(p, 48);
+        EXPECT_LE(p, 72);
+    }
+    auto notes = generateRandomNotes(4.0, 0.25, 48, 72, &scale, b);
+    ASSERT_EQ(notes.size(), 16u);
+    for (size_t i = 0; i < notes.size(); ++i)
+        EXPECT_EQ(notes[i].pitch, picks[i]);
+}
+
+TEST(MusicalScaleTest, PickPitchesEmptyWithoutCandidatesAndSwapsRange) {
+    auto scale = cMajor();
+    juce::Random rng(1);
+    EXPECT_TRUE(synth::pickPitches(4, 1, 1, &scale, rng).empty()); // C#0 is not in C major
+    EXPECT_TRUE(synth::pickPitches(0, 40, 80, nullptr, rng).empty());
+    juce::Random a(5), b(5);
+    EXPECT_EQ(synth::pickPitches(8, 72, 60, nullptr, a), synth::pickPitches(8, 60, 72, nullptr, b));
 }
