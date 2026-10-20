@@ -416,6 +416,14 @@ struct TrackHeaderHost {
      *  existing TrackHeaderHost implementer keeps compiling. */
     virtual void setMidiDestinationConnected(synth::TrackId, juce::uint32, bool) {}
 
+    /** A MIDI input a track can record from: its stable identifier and its display name. */
+    struct MidiInputDevice {
+        juce::String identifier;
+        juce::String name;
+    };
+    /** The MIDI inputs connected now, for the routing pane's Input picker; empty when there are none to pick. */
+    virtual std::vector<MidiInputDevice> getMidiInputDevices() { return {}; }
+
     /** NOTE AUDITION — sends one preview note-on (`noteOn` true) or note-off into the track's bound
      *  Track In node, so it reaches exactly the destination modules the track's clips play through
      *  (they are graph connections FROM that node — see setMidiDestinationConnected above). Driven by

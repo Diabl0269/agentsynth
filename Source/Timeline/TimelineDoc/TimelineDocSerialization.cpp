@@ -132,6 +132,16 @@ bool readLaneDisplayFields(const juce::DynamicObject& lObj, AutomationLane& lane
     return true;
 }
 
+// A track's MIDI input: absent keys keep "all inputs, any channel" (files written before the field existed). A
+// channel is a recording filter, not display data, so one out of range fails the load instead of being clamped.
+bool readTrackMidiInput(const juce::DynamicObject& tObj, Track& track) {
+    if (!readOptionalString(tObj.getProperty("midiInputId"), track.midiInputId) ||
+        !readOptionalString(tObj.getProperty("midiInputName"), track.midiInputName) ||
+        !readOptionalInt(tObj.getProperty("midiInputChannel"), track.midiInputChannel))
+        return false;
+    return track.midiInputChannel >= 0 && track.midiInputChannel <= Track::kMaxMidiInputChannel;
+}
+
 // A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
 // non-finite height is refused; a height outside its range is clamped, it is display data.
 bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
@@ -148,7 +158,7 @@ bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
         return false;
     track.colourArgb = static_cast<juce::uint32>(colourValue);
     track.heightScale = std::clamp(track.heightScale, Track::kMinHeightScale, Track::kMaxHeightScale);
-    return true;
+    return readTrackMidiInput(tObj, track);
 }
 
 } // namespace
@@ -179,6 +189,12 @@ juce::var TimelineDoc::toVar() const {
         if (track.heightScale != 1.0) // left out at the default, so older files and fixtures stay byte-identical
             t->setProperty("heightScale", track.heightScale);
         t->setProperty("bindingUuid", track.bindingUuid);
+        if (track.midiInputId.isNotEmpty()) { // the input keys are left out at their defaults, like heightScale
+            t->setProperty("midiInputId", track.midiInputId);
+            t->setProperty("midiInputName", track.midiInputName);
+        }
+        if (track.midiInputChannel != 0)
+            t->setProperty("midiInputChannel", track.midiInputChannel);
 
         juce::Array<juce::var> clipVars;
         for (const auto& clip : track.clips) {

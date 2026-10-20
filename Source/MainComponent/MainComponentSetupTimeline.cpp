@@ -336,20 +336,24 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // identical to Play plus a lit record indicator, plus a transient status-bar notice so the
     // silence isn't mistaken for a bug.
     //
-    // The lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
-    // of each kind the one earlier in the document decides which kind of take this is; there is
-    // deliberately no "record both at once" (two takes, two commits, two undo steps for one
-    // gesture). Automation-kind tracks are not recordable and are skipped.
+    // The lookup considers Audio tracks too, and FIRST-ARMED WINS among the tracks that record
+    // from every MIDI input: with one armed track of each kind the one earlier in the document
+    // decides which kind of take this is. Automation-kind tracks are not recordable and are
+    // skipped. A MIDI track with its own input (a device or a channel) is not part of that
+    // contest: it records alongside, see collectMidiTakeTargets.
     synth::TrackId armedTrack;
     synth::TrackKind armedKind = synth::TrackKind::Midi;
     for (const auto& track : timelineDoc.getTracks()) {
-        if (track.armed && (track.kind == synth::TrackKind::Midi || track.kind == synth::TrackKind::Audio)) {
+        const bool everyInput = track.kind == synth::TrackKind::Midi && track.recordsEveryMidiInput();
+        if (track.armed && (everyInput || track.kind == synth::TrackKind::Audio)) {
             armedTrack = track.id;
             armedKind = track.kind;
             break;
         }
     }
-    const bool anyArmed = armedTrack.isValid();
+    const auto midiTargets =
+        collectMidiTakeTargets(armedKind == synth::TrackKind::Midi ? armedTrack : synth::TrackId{});
+    const bool anyArmed = armedTrack.isValid() || !midiTargets.empty();
 
     // "Record also starts playback" (Preferences, default on). Off, from a stop: Record only engages recording and
     // the transport is left alone. A MIDI take starts at once, since MidiRecorder::captureBlock captures nothing
@@ -371,7 +375,7 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // moves, for the same reason as always — a request that cannot be honoured must not leave
     // the transport rolling. Only reachable with an armed Audio track; with nothing armed (or a
     // MIDI track armed) there is no take to resolve here.
-    const bool isAudioTake = anyArmed && (armedKind == synth::TrackKind::Audio);
+    const bool isAudioTake = armedTrack.isValid() && (armedKind == synth::TrackKind::Audio);
     AudioTake take;
     RecordTapModule* tapModule = nullptr;
     if (isAudioTake) {
@@ -460,12 +464,13 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
         take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
         audioTake_ = take;
-    } else if (anyArmed) {
+    }
+    if (!midiTargets.empty()) {
         // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
         // threshold — captureBlock() drops everything before it, so the pre-roll bars the
         // performer plays along with the click are heard but never committed.
-        midiRecorder.startRecording(armedTrack, punchInBeat);
-    } else {
+        midiRecorder.startRecording(midiTargets, punchInBeat);
+    } else if (!anyArmed) {
         // Nothing armed: the transport is rolling and the indicator is about to light, but no
         // take of either kind starts. Arming a track MID-ROLL does not retroactively start one
         // either — TimelineDoc::setTrackArmed() has no listener watching for this; the user has
@@ -476,4 +481,22 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // Lit regardless of arming — a bare "record" is still record-on.
     timelinePanel.getTransportBar().setRecordingState(true);
     countUsage(synth::telemetry::Feature::TimelineUsed); // a take started: every early return above is a refusal
+}
+
+// The MIDI take's targets: the first-armed track that records every input (when the contest above picked a MIDI
+// one), then every armed MIDI track with an input of its own, in document order. A device's lane is reserved here
+// even while the device is unplugged, so the take records it the moment it returns; until then it records
+// nothing, and never falls back to every input.
+std::vector<synth::MidiRecorder::TakeTarget> MainComponent::collectMidiTakeTargets(synth::TrackId firstArmedMidi) {
+    std::vector<synth::MidiRecorder::TakeTarget> targets;
+    if (firstArmedMidi.isValid())
+        targets.push_back({firstArmedMidi, synth::MidiRecorder::kAnySource, 0});
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (!track.armed || track.kind != synth::TrackKind::Midi || track.recordsEveryMidiInput())
+            continue;
+        const int source = track.midiInputId.isEmpty() ? synth::MidiRecorder::kAnySource
+                                                       : audioEngine.getMidiInputSources().sourceFor(track.midiInputId);
+        targets.push_back({track.id, source, track.midiInputChannel});
+    }
+    return targets;
 }

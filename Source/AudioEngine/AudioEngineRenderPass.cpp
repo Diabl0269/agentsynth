@@ -132,6 +132,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     juce::AudioBuffer<float> buffer(deviceChannelPointers_.data(), totalChannels, numSamples);
     juce::MidiBuffer midiMessages;
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
+    // Every callback, recording or not, so a lane never holds notes from before a take; renderNextBlock empties
+    // the block again once its passes have read it.
+    midiInputSources_.drainBlock(midiSourcedBlock_, juce::Time::getMillisecondCounterHiRes(), numSamples);
 
     // Collect MIDI from active ExternalMidiModules
     // The ExternalMidiModule is just a processor in the graph.
@@ -227,6 +230,8 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         renderSliced(buffer, midiMessages);
     else
         renderPass(buffer, midiMessages);
+    // Read: a later render with no device callback before it (hosted, a bounce) must not see these again.
+    midiSourcedBlock_.count = 0;
 
     // Audio Output's Right borrows Left, sample-exact, while Right is unpatched --
     // render-time only, never a graph edge (see refreshNormalling()). Right after the render pass
@@ -314,8 +319,11 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Loaded ONCE into a local, here, and used only within this pass — the pointer is borrowed, and
     // the in-flight guard in renderNextBlock is what makes that borrow safe against an owner
     // destroying the recorder (acquire pairs with the setter's publish).
+    // The per-device notes ride along, windowed to this pass's slice of the callback.
     if (auto* recorder = midiCaptureSink_.load(std::memory_order_acquire))
-        recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
+        recorder->captureBlock(
+            midiMessages, transport.getCurrentBlockInfo(),
+            {midiSourcedBlock_.events.data(), midiSourcedBlock_.count, inputSampleOffset, buffer.getNumSamples()});
 
     // Push this pass's automation values into their bound parameters, after the tick (so the
     // beat position is this pass's) and before the graph (so every node reads the automated value

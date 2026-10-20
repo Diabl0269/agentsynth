@@ -269,6 +269,12 @@ struct Track {
     double heightScale = 1.0;
     juce::String bindingUuid; // MIDI tracks: uuid of the Track In node this track feeds.
                               // May be empty — an unbound track is legal, it just plays nowhere.
+    // MIDI tracks: the input that records into the track. Both at their defaults = every input, any channel.
+    static constexpr int kMaxMidiInputChannel = 16;
+    juce::String midiInputId;   // the device's stable identifier; empty = all MIDI inputs
+    juce::String midiInputName; // the device's display name, kept to name it while it is not connected
+    int midiInputChannel = 0;   // 0 = any channel, else 1..kMaxMidiInputChannel
+    bool recordsEveryMidiInput() const noexcept { return midiInputId.isEmpty() && midiInputChannel == 0; }
     std::vector<Clip> clips;
     std::vector<AutomationLane> lanes;
 
@@ -373,6 +379,8 @@ public:
     bool setTrackHeightScale(TrackId id, double scale);
     // Puts every track back at the default height scale as one mutation; false when none differed.
     bool resetTrackHeightScales();
+    // MIDI tracks only; `channel` in [0, Track::kMaxMidiInputChannel]. An empty `deviceId` means all inputs.
+    bool setTrackMidiInput(TrackId id, const juce::String& deviceId, const juce::String& deviceName, int channel);
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
     // Copies `source` directly below it with fresh ids; `uuidRemap` rebinds the copy (see the definition).

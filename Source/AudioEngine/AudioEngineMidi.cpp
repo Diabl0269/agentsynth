@@ -30,6 +30,7 @@ bool AudioEngine::openMidiInput(const juce::MidiDeviceInfo& info) {
     auto input = juce::MidiInput::openDevice(info.identifier, this);
     if (input == nullptr)
         return false;
+    midiInputSources_.sourceFor(info.identifier); // its recording lane exists before its first message
     input->start();
     midiInputs.push_back(std::move(input));
     return true;
@@ -118,6 +119,10 @@ bool AudioEngine::reconcileMidiInputs() {
     return changed;
 }
 
+juce::Array<juce::MidiDeviceInfo> AudioEngine::getAvailableMidiInputs() const {
+    return isHosted() ? juce::Array<juce::MidiDeviceInfo>() : availableMidiInputs();
+}
+
 std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
     std::vector<juce::String> identifiers;
     identifiers.reserve(midiInputs.size());
@@ -176,5 +181,8 @@ void AudioEngine::handleIncomingMidiMessageFromSource(const juce::String& source
             }
         }
     }
+    // The per-device copy recording filters on, beside the merged one and after the same early-outs, so a note is
+    // in a device's lane exactly when it is in the stream the graph plays.
+    midiInputSources_.push(sourceKey, message);
     midiMessageCollector.addMessageToQueue(message);
 }

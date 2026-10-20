@@ -437,3 +437,10 @@ void MainComponent::setTrackPoly(synth::TrackId forTrack, bool poly) {
     if (auto* source = findNodeByUuid(track->bindingUuid))
         graphEditor.getPolyChain().trackPolyClicked(source->nodeID, poly);
 }
+
+std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> MainComponent::getMidiInputDevices() {
+    std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> devices;
+    for (const auto& info : audioEngine.getAvailableMidiInputs())
+        devices.push_back({info.identifier, info.name});
+    return devices;
+}

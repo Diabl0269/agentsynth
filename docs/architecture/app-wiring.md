@@ -107,7 +107,7 @@ is never deferred (`fullReconcileRunning_`): an orphan flag it flips republishes
 
 ### Audio recording
 
-Hook 5 above gained a second kind of take. The armed-track lookup now considers `TrackKind::Audio` as well, and **first-armed wins**: with one armed track of each kind, whichever comes first in the document decides which kind of take this is. There is deliberately no "record both at once" — that would be two takes, two commits and two undo steps for one gesture.
+Hook 5 above gained a second kind of take. The armed-track lookup now considers `TrackKind::Audio` as well, and **first-armed wins**: with one armed track of each kind, whichever comes first in the document decides which kind of take this is, among the tracks that record every MIDI input. A MIDI track with an input of its own (a device or a channel) records alongside, beside an audio take too, and the MIDI targets commit as one undo step ([transport](../timeline/transport.md#recording-from-one-input)).
 
 **The pipeline.** `RecordTapModule` (`Source/Modules/RecordTapModule.h/.cpp`, see [`docs/modules/modules.md#rec-tap-module-audio-take-recorder-hidden`](../modules/modules.md#rec-tap-module-audio-take-recorder-hidden) for the module itself) is a transparent stereo pass-through with three threads behind it:
 

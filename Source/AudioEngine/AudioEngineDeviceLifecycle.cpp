@@ -325,6 +325,7 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     //    beat (not the sample) canonical, so the musical position survives untouched; only
     //    the sample-domain mirror of it moves.
     transport.prepare(newRate, newBlockSize);
+    midiInputSources_.setSampleRate(newRate);
     onFormatChangeStepForTest(1);
 
     // 2. METRONOME: a voice ringing across the boundary was computed for the OLD rate (see

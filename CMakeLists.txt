@@ -362,8 +362,6 @@ add_library(Core STATIC
     Source/Timeline/EpochExchange.h
     Source/Timeline/MidiClipFile.cpp
     Source/Timeline/MidiClipFile.h
-    Source/Timeline/MidiRecorder.cpp
-    Source/Timeline/MidiRecorder.h
     Source/Timeline/PeaksFile.cpp
     Source/Timeline/PeaksFile.h
     Source/Timeline/TakePlacement.cpp
@@ -573,6 +571,7 @@ include(cmake/AiSources.cmake)
 include(cmake/GraphQuerySources.cmake)
 include(cmake/ProjectLoadSources.cmake)
 include(cmake/TimelineOpsSources.cmake)
+include(cmake/MidiRecordingSources.cmake)
 include(cmake/DrumKitSources.cmake)
 include(cmake/OscillatorSources.cmake)
 include(cmake/PluckMalletSources.cmake)

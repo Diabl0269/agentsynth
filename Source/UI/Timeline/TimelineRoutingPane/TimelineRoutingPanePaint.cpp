@@ -76,6 +76,8 @@ void TimelineRoutingPane::paint(juce::Graphics& g) {
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawFittedText(view_.missingNote, layout_.missingNote, juce::Justification::topLeft, 3);
     }
+    if (!layout_.midiInputHeading.isEmpty())
+        drawHeading(g, layout_.midiInputHeading, "Input", colours, layout_.inputAlpha);
     if (!layout_.midiDestinationsHeading.isEmpty()) // present while its section is shown or fading
         drawHeading(g, layout_.midiDestinationsHeading, "MIDI destinations", colours, layout_.midiAlpha);
     drawHeading(g, layout_.mixerChannelHeading, "Mixer channel", colours);

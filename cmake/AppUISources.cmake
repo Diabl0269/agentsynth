@@ -102,6 +102,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.cpp
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneActions.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneInput.cpp
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPanePaint.cpp
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
