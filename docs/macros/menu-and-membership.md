@@ -459,6 +459,8 @@ editing commands below handle nesting. A patch with no nesting behaves exactly a
   ports and members. Selecting a whole parent (every nested module) ungroups only the parent; selecting
   just a child's module ungroups the child, whose members then move into the parent. Everything the
   ungrouped macro held is re-selected.
+- **Delete Macro and Members** on a track's channel macro deletes the track too, after a confirmation: see
+  [tracks](../timeline/tracks.md#row-context-menu).
 - **Delete Macro and Members** on a parent deletes every descendant macro and every nested module, as
   one undo step.
 - **Collapse toggle** (Cmd+G and the menu): a selected module hidden inside a collapsed macro resolves to

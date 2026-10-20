@@ -50,10 +50,11 @@ void AutomationLaneHeaderComponent::addModulatorItem(juce::PopupMenu& menu) cons
                  canModulate);
 }
 
-// First in the menu. It acts on the Range tool's selection, so it is enabled only when that sits on this lane, the
+// First in the lane menu, and the one item in the menu of a right-click inside the selected range on the lane's curve
+// (AutomationLaneEditor). It acts on the Range tool's selection, so it is enabled only when that sits on this lane, the
 // parameter has a CV jack and the range can become an LFO; a disabled item says why in its own text (a menu item has no
 // tooltip, and the reason must reach a screen reader too).
-void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu) const {
+void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu, bool direct) const {
     const auto* lane = doc_.getLane(laneId_);
     const auto range = lane != nullptr && laneRangeProvider ? laneRangeProvider() : std::nullopt;
     auto blocker = synth::ui::CustomLfoBlocker::NoRange;
@@ -73,7 +74,17 @@ void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu
             enabled = plan.ok();
         }
     }
-    menu.addItem(kCreateCustomLfoMenuId, text, enabled);
+    if (!direct) {
+        menu.addItem(kCreateCustomLfoMenuId, text, enabled);
+        return;
+    }
+    // The pointer is only used to run the pick, which belongs to the (non-const) component the menu was built for.
+    juce::Component::SafePointer<AutomationLaneHeaderComponent> safeThis(
+        const_cast<AutomationLaneHeaderComponent*>(this));
+    menu.addItem(text, enabled, false, [safeThis] {
+        if (auto* self = safeThis.getComponent())
+            self->applyMenuChoice(kCreateCustomLfoMenuId);
+    });
 }
 
 // The picker's pick comes back after the call-out closes. A new LFO and an existing one are each ONE undo step

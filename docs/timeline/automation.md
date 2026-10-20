@@ -742,8 +742,8 @@ always shows what the tool will draw, and a tiny triangle in its bottom-right co
 shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
 Animations: Off and when the panel is not on screen). A click on the corner (the bottom-right 10 x 10 px), pressing
 and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
-also pick the tool), or the shape-menu key opens the flyout; a click anywhere else on the button just picks Draw.
-The transport row has the same layout whatever the tool.
+also pick the tool), a right-click on the button (it never picks the tool), or the shape-menu key opens the flyout; a
+click anywhere else on the button just picks Draw. The transport row has the same layout whatever the tool.
 
 The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button with six rows: the shape's icon, its name and
 its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit. It
@@ -796,7 +796,7 @@ calls to it first, so the editor's own tools are unchanged.
 ## Create custom LFO from a range
 
 Right-click a lane that holds the lane range (its header, or the curve editor away from a handle) and the lane menu's
-first item, **Create custom LFO**, turns the drawn movement inside the range into a NEW LFO whose Custom wave is that
+first item, **Create custom LFO**, (also offered by a right-click inside the range on the curve editor, see [lane controls](lane-controls.md#create-custom-lfo-from-the-range)) turns the drawn movement inside the range into a NEW LFO whose Custom wave is that
 shape, so playback sounds the same and the LFO can then be reused elsewhere by drawing its amount band over other bars.
 It always adds an LFO (a lane that already has modulators gets another row). One Cmd+Z removes the LFO, its row, its
 amount lane and puts the lane's points back; Redo re-applies all of it, the wave included (it rides the node's saved

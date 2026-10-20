@@ -76,6 +76,9 @@ public:
 
     /** The lane menu (right-click, Shift+F10 or Return on the row); item ids are the k*MenuId constants above. */
     juce::PopupMenu buildMenu();
+    /** Adds the Create custom LFO item (text and enabled state follow the lane's range and parameter). With `direct`
+     *  the item runs itself when picked, for a menu that does not route its choice through applyMenuChoice. */
+    void addCreateCustomLfoItem(juce::PopupMenu& menu, bool direct = false) const;
     /** Applies a menu choice; may destroy this component (see the class comment). */
     void applyMenuChoice(int menuId);
 
@@ -139,7 +142,6 @@ private:
     void openParameterPicker(bool duplicate);
     bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
-    void addCreateCustomLfoItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     // The control chips (AutomationLaneHeaderControls.cpp).
     LaneControlStrip::Actions controlActions();

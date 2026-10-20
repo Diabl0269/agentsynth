@@ -26,6 +26,7 @@ public:
     DrawShape getDrawShape() const noexcept { return shape_; }
     /** The shared lane range; non-owning, may be null (no lane ranges then). */
     void setLaneRange(LaneRangeSelection* range) noexcept { laneRange_ = range; }
+    const LaneRangeSelection* getLaneRange() const noexcept { return laneRange_; }
 
     // ---- Editor hooks: each returns true when it took the event ----
     /** `followedTool` is the timeline edit tool the editor follows, nullopt when a tool was set directly. */

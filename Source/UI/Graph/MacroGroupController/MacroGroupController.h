@@ -219,6 +219,10 @@ public:
         recordMacroColourHook;
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
     void deleteMacroAndMembers(const juce::String& macroId);
+    /** The canvas menu's Delete Macro: `onDeleteMacroRequested` gets first refusal, else deleteMacroAndMembers. */
+    void requestDeleteMacro(const juce::String& macroId);
+    /** Returns true when it took the delete over (a track's macro goes with its track). Unset by default. */
+    std::function<bool(const juce::String& macroId)> onDeleteMacroRequested;
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
     juce::StringArray macroMemberNames(const juce::String& macroId) const;
 

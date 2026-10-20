@@ -20,6 +20,13 @@ DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName) {
                                              undoShortcutText() + " brings it back."};
 }
 
+DeleteTrackConfirmText deleteTrackMacroConfirmText(const juce::String& trackName) {
+    return {"Delete the macro and track " + trackName + "?", "Deleting this macro also deletes the track " + trackName +
+                                                                 " and the modules only it uses. Delete track "
+                                                                 "and macro? " +
+                                                                 undoShortcutText() + " brings them back."};
+}
+
 DeleteTrackConfirmText deleteTrackConfirmText(int count) {
     return {"Delete " + juce::String(count) + " tracks?",
             "The tracks, their clips and their instrument nodes go. " + undoShortcutText() + " brings them back."};

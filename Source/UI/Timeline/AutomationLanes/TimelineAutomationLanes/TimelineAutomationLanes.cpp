@@ -275,6 +275,10 @@ void TimelineAutomationLanes::syncPools() {
                 if (auto* header = headerFor(id))
                     header->showMenuAt(options);
             };
+            editor->addRangeMenuItems = [this, id](juce::PopupMenu& menu) {
+                if (auto* header = headerFor(id))
+                    header->addCreateCustomLfoItem(menu, /*direct=*/true);
+            };
             editor->onLaneKey = [this, id](const juce::KeyPress& key) { return handleLaneKey(id, key); };
             editor->onSelectionChanged = [this, id] { updateSelectedReadout(id); };
             editor->onFocused = [this, id] {

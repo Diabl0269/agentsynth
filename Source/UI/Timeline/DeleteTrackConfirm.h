@@ -15,6 +15,8 @@ struct DeleteTrackConfirmText {
     juce::String message;
 };
 DeleteTrackConfirmText deleteTrackConfirmText(const juce::String& trackName);
+/** The question for deleting the macro that is track `trackName`'s: the track goes with it. */
+DeleteTrackConfirmText deleteTrackMacroConfirmText(const juce::String& trackName);
 /** The one question for deleting `count` selected tracks at once ("Delete 3 tracks?"). */
 DeleteTrackConfirmText deleteTrackConfirmText(int count);
 

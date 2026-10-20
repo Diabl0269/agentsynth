@@ -87,6 +87,8 @@ tool, the Draw shape buttons slide out between the Draw button and the follow-pl
 (`colors.toolActive`), not a different icon tint — the glyph reads the same lit or not; see
 [`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
 library.
+The Draw button is the exception that paints its own glyph: lit, its icon and corner triangle take whichever theme ink
+(`iconInk`, `iconPaper`, `textPrimary`, `bg0`) contrasts most with the `toolActive` fill, so they hold 3:1 in every theme.
 
 ## Tool cursors
 
