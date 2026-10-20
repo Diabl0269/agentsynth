@@ -7,6 +7,7 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -218,6 +219,55 @@ TEST_F(GraphEditorTest, OscillatorLevelKnobLandingRendersToPngForVisualInspectio
     if (snapshotDir == nullptr || juce::String(snapshotDir).isEmpty())
         GTEST_SKIP() << "set AGENTSYNTH_SNAPSHOT_DIR=<dir> to write osc-card.png for visual inspection";
     juce::File outFile = juce::File(snapshotDir).getChildFile("osc-card.png");
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    juce::PNGImageFormat().writeImageToStream(img, stream);
+}
+
+// Visual check: two Oscillator cards with the More row unfolded, Rate on Follow notes (Glide in the Pitch row) and on
+// Fixed (the Fixed rate knob in Glide's cell). Written to AGENTSYNTH_SNAPSHOT_DIR/osc-rate-modes.png when that is set.
+TEST_F(GraphEditorTest, OscillatorRateModesRenderToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    synth::theme::AppLookAndFeel lf;
+    editor.setLookAndFeel(&lf);
+
+    auto followNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto fixedNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    for (auto* p : fixedNode->getProcessor()->getParameters())
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p);
+            choice && choice->getParameterID() == "rateMode")
+            choice->setValueNotifyingHost(choice->convertTo0to1(1.0f));
+    editor.updateComponents();
+
+    int placed = 0;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                const bool fixed = mod->getModule() == fixedNode->getProcessor();
+                if (!fixed && mod->getModule() != followNode->getProcessor())
+                    continue;
+                mod->setTopLeftPosition(fixed ? 320 : 0, 0);
+                if (auto* body = mod->getCardBody()) {
+                    body->flushPendingConditionUpdate();
+                    if (body->hasMoreRow())
+                        body->setMoreUnfolded(true);
+                }
+                ++placed;
+            }
+    ASSERT_EQ(placed, 2);
+    editor.timerCallback();
+
+    juce::Image img(juce::Image::ARGB, 640, 900, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(editor.paintEntireComponent(g, true));
+    editor.setLookAndFeel(nullptr);
+
+    const char* snapshotDir = std::getenv("AGENTSYNTH_SNAPSHOT_DIR");
+    if (snapshotDir == nullptr || juce::String(snapshotDir).isEmpty())
+        GTEST_SKIP() << "set AGENTSYNTH_SNAPSHOT_DIR=<dir> to write osc-rate-modes.png for visual inspection";
+    juce::File outFile = juce::File(snapshotDir).getChildFile("osc-rate-modes.png");
     outFile.deleteFile();
     juce::FileOutputStream stream(outFile);
     juce::PNGImageFormat().writeImageToStream(img, stream);
