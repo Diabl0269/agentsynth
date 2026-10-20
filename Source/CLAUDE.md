@@ -24,3 +24,4 @@ Loaded for any work under `Source/`; the area files (`Modules/`, `Timeline/`, `A
 - **No file over 1,000 lines, no function over 200**; split by concern. → [file-size-guard](../docs/development/file-size-guard.md) · [function-size-guard](../docs/development/function-size-guard.md)
 - **`AudioEngine::shutdown()` fires `onBeforeShutdown` first**; any UI owner holding parameter attachments wires it to detach. → [audio-engine](../docs/architecture/audio-engine.md#shutdown-and-onbeforeshutdown)
 - **Usage statistics are opt-in and silent when off** (`shareUsageStats`): count on the message thread from user actions only. → [usage-statistics](../docs/development/usage-statistics.md#counting)
+- **`Source/Music/` is shared, pure music theory (scales, chords): header-only, `juce_core` only, no Timeline, module or UI types**; code that needs `MidiNote` wraps it from `Timeline/`. → [scale-assist](../docs/timeline/scale-assist.md#the-scale-engine)

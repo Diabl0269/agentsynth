@@ -7,7 +7,7 @@
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "PianoRollTestHelpers.h"
 
-#include "Timeline/MusicalScale.h"
+#include "Music/MusicalScale.h"
 
 // ============================================================================
 // 17. Scale assist — the header button + gutter shift, quantisePitchesToScale,

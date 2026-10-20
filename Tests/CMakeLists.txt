@@ -653,7 +653,8 @@ add_executable(Tests
     UI/PianoRoll/PianoRollVelocityStripPolishTests.cpp
     UI/PianoRoll/VelocityLaneMathTests.cpp
     UI/PianoRoll/PianoRollVelocitySlideTests.cpp
-    Timeline/MusicalScaleTests.cpp
+    Music/MusicalScaleTests.cpp
+    Music/MusicalScaleChordTests.cpp
     UI/PianoRoll/NoteColourTests.cpp
     Modules/ModuleMidiFlagsTests.cpp
     App/FocusArbitration/FocusArbitrationClipboardTests.cpp

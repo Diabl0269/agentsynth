@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
+#include "Timeline/ScaleNoteGenerator.h"
 #include "Transport/TransportService.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

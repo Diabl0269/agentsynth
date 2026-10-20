@@ -63,8 +63,10 @@ viewport, so nothing visually changes when scrolling is not needed.
 
 ## The scale engine
 
-`Source/Timeline/MusicalScale.h` is deliberately header-only and free of any UI or
-`TimelineDoc`-mutation dependency.
+`Source/Music/MusicalScale.h` is deliberately header-only and free of any UI, Timeline or module
+dependency (only `juce_core`); the piano roll and both sequencers share it. Only
+`generateRandomNotes` needs `MidiNote`, so it lives in `Source/Timeline/ScaleNoteGenerator.h` as a
+thin wrapper over the shared `pickPitches`.
 
 `synth::MusicalScale` is a root pitch class (0=C…11=B) plus a 12-bit, root-RELATIVE interval mask —
 bit *i* set means "root + i semitones, mod 12, is in the scale", so the same mask value describes a
@@ -88,7 +90,13 @@ follows ([`layout/colour-overrides.md`](../layout/colour-overrides.md#note-colou
 never reaches disk — the same null-degrades-gracefully contract every other timeline
 sub-component's setter follows.
 
-Tests: `Tests/Timeline/MusicalScaleTests.cpp`.
+Beyond what the piano roll uses, the same header carries the helpers the sequencers need:
+`notesPerOctave`, `stepBy` (move N scale notes), `degreeOf`, `snapTable` (a 128-entry audio-thread
+lookup), `makeScaleFromMask`, `pickPitches`, and in-scale chords (`chordInScale`,
+`chordFromIntervals`, `chordName`, `romanNumeral`). See
+[sequencer-design](../modules/sequencer-design.md#shared-scale-engine).
+
+Tests: `Tests/Music/MusicalScaleTests.cpp` and `Tests/Music/MusicalScaleChordTests.cpp`.
 
 ## Per-clip scale memory
 
@@ -169,7 +177,7 @@ which reads the RAW snap division regardless of the snap on/off toggle
 `isQuantiseEnabled` documents), falling back to a sixteenth (0.25 beats) when that division is Off
 or 0, since generation always needs a concrete grid step to place notes on.
 
-`synth::generateRandomNotes` (`MusicalScale.h`) then places one note per grid step from beat 0
+`synth::generateRandomNotes` (`Timeline/ScaleNoteGenerator.h`) then places one note per grid step from beat 0
 until the step's start would fall at or past the clip's length, picking a pitch uniformly among the
 in-scale pitches inside `[minPitch, maxPitch]` — every pitch in range when the scale is null or
 chromatic. If no candidate pitch exists in that range at all, it returns an empty note list rather
