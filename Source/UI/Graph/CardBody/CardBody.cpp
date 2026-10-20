@@ -31,6 +31,14 @@ namespace {
 
 using LearnableToggle = synth::ui::midilearn::RightClickSafeButton<juce::ToggleButton>;
 
+// A choice whose two or three values need a sentence of explanation carries it as its tooltip; every other choice
+// is named by the accessibility pass (the parameter's name) once the card has built.
+juce::String explainedChoiceTooltip(const juce::String& paramId) {
+    if (paramId == "rateMode")
+        return "Rate. Follow notes: plays the note's pitch. Fixed: runs at the Fixed rate in Hz whatever note plays.";
+    return {};
+}
+
 bool isAdsr(juce::AudioProcessor& module) {
     auto* mb = dynamic_cast<ModuleBase*>(&module);
     return mb != nullptr && mb->getModuleType() == ModuleType::ADSR;
@@ -248,6 +256,7 @@ void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& para
     else
         combo->addItemList(param.choices, 1);
     card_.addAndMakeVisible(combo);
+    combo->setTooltip(explainedChoiceTooltip(param.paramID));
     combo->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*combo, &param);
     comboAttachments_.add(new juce::ComboBoxParameterAttachment(param, *combo));

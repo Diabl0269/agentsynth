@@ -76,9 +76,8 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
         if (ch == 0 || ch > lastCVChannel)
             buffer.clear(ch, 0, numSamples);
 
-    float totalPitch =
-        voices[0].lastMidiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
-    float targetFreq = 440.0f * std::pow(2.0f, (totalPitch - 69.0f) / 12.0f);
+    const float targetFreq = baseFrequencyHz();
+    const float minHz = minRenderHz();
     voices[0].smoothedFreq.setTargetValue(targetFreq);
     // Glide 0 leaves the pitch on the plain 5 ms frequency smoother (today's behaviour); above 0 the
     // voice slides in pitch over the set time instead and hands its pitch back to the smoother.
@@ -147,7 +146,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
             float totalMod = clampedCV * 2.0f; // up to 2 octaves shift
             freq = freq * std::exp2(totalMod);
         }
-        freq = juce::jlimit(20.0f, 20000.0f, freq);
+        freq = juce::jlimit(minHz, 20000.0f, freq);
 
         int waveform = baseWaveform;
         if (cvWaveformCh) {

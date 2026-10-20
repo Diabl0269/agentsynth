@@ -24,3 +24,16 @@ Three Oscillator parameters, all in the card's More controls row:
 - **Legato** (`legato`, mono only, default off): glide happens only for overlapping notes (tracked by `HeldNotes`); a note that does not overlap another jumps. An overlapping note does not restart the phase, and releasing the current note while others are held glides back to the most recent held note. With Legato off the behaviour is unchanged.
 
 The ADSR has a matching Legato switch (see `modules.md`). Code: `Oscillator/PitchGlide.h`, `OscillatorModuleNotes.cpp`.
+
+## Fixed rate
+
+`rateMode` (Rate: Follow notes / Fixed, default Follow notes) and `fixedRate` (Hz, 0.1 to 2000, skewed around 20 Hz, default 50) let the oscillator run at a set frequency whatever note is played, like a DX7 operator's Fixed mode or a free-running Eurorack VCO. Its main use is an audio-rate modulation source: a 53 Hz square patched into another Oscillator's Level makes a frog croak.
+
+- **Formula**: in Fixed mode the frequency is `fixedRate * 2^((12*octave + coarse + fine/100 + CV shifts) / 12)`. The note term is dropped; the knobs and the Octave/Coarse/Fine CV still offset it. Follow notes is unchanged.
+- **Floor**: Follow notes clamps a voice to 20-20000 Hz; Fixed clamps to 0.1-20000 Hz, so sub-20 Hz rates (LFO-like) work.
+- **Poly voices stay note-gated**: a voice is live only while its pitch CV is at least 20 Hz (voice 0 falls back to the MIDI note); a live voice plays the Fixed rate instead of its note, an inactive one stays silent.
+- **Phase restarts on notes** (note-on, Gate edge, a poly voice going live) exactly as in Follow notes, so a fixed-rate modulator keeps its pulses aligned to each call.
+- **Glide has no effect** in Fixed mode: the target does not move with notes.
+- **No jack for Fixed rate** (to keep the channel layout); automate the knob instead.
+
+The shared logic is `OscillatorModule::baseFrequencyHz()` and `minRenderHz()` in `Source/Modules/Oscillator/OscillatorModuleRate.cpp`; tests: `Tests/Modules/OscillatorFixedRateTests.cpp`.
