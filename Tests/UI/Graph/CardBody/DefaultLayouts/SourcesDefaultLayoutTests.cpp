@@ -97,12 +97,10 @@ void expectDimmedAndOperable(const Card& card, const juce::String& paramId, bool
 TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     CardCanvas canvas;
     const auto osc = build(canvas, "Oscillator");
-    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "", "Pitch", "Unison", "Output"}));
+    EXPECT_EQ(sectionTitles(osc), (std::vector<juce::String>{"", "Pitch", "Unison", "Output"}));
     EXPECT_EQ(kindOf(osc, "waveform"), synth::CardBodyItem::Kind::Segmented);
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(widget(osc, "waveform")), nullptr);
-    EXPECT_EQ(kindOf(osc, "rateMode"), synth::CardBodyItem::Kind::Choice)
-        << "\"Follow notes\" is too long for a switch";
-    expectTopToBottom(osc, {"waveform", "rateMode", "octave", "unison", "level"});
+    expectTopToBottom(osc, {"waveform", "octave", "unison", "level"});
     expectOnOneRow(osc, {"octave", "coarse", "fine", "glide"});
     expectOnOneRow(osc, {"unison", "detune", "blend", "width"});
     expectOnOneRow(osc, {"level", "pan"});
