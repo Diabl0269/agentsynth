@@ -144,19 +144,21 @@ TEST(MusicalScaleChordTest, RomanNumeralsInCMajor) {
     auto scale = cMajor();
     EXPECT_EQ(roman(scale, chordInScale(scale, 60, ScaleChordKind::Triad)), "I");
     EXPECT_EQ(roman(scale, chordInScale(scale, 62, ScaleChordKind::Triad)), "ii");
-    EXPECT_EQ(roman(scale, chordInScale(scale, 71, ScaleChordKind::Triad)), "vii\xC2\xB0");
+    EXPECT_EQ(roman(scale, chordInScale(scale, 71, ScaleChordKind::Triad)),
+              juce::String::fromUTF8("vii\xC2\xB0").toStdString());
     EXPECT_EQ(roman(scale, chordInScale(scale, 60, ScaleChordKind::Seventh)), "Imaj7");
     EXPECT_EQ(roman(scale, chordInScale(scale, 67, ScaleChordKind::Seventh)), "V7");
     EXPECT_EQ(roman(scale, chordInScale(scale, 62, ScaleChordKind::Seventh)), "ii7");
-    EXPECT_EQ(roman(scale, chordInScale(scale, 71, ScaleChordKind::Seventh)), "vii\xC3\xB8"
-                                                                              "7");
+    EXPECT_EQ(roman(scale, chordInScale(scale, 71, ScaleChordKind::Seventh)),
+              (juce::String::fromUTF8("vii\xC3\xB8") + "7").toStdString());
     EXPECT_EQ(roman(scale, chordInScale(scale, 60, ScaleChordKind::Sus4)), "Isus4");
 }
 
 TEST(MusicalScaleChordTest, RomanNumeralsInCNaturalMinor) {
     auto scale = cMinor();
     EXPECT_EQ(roman(scale, chordInScale(scale, 60, ScaleChordKind::Triad)), "i");
-    EXPECT_EQ(roman(scale, chordInScale(scale, 62, ScaleChordKind::Triad)), "ii\xC2\xB0");
+    EXPECT_EQ(roman(scale, chordInScale(scale, 62, ScaleChordKind::Triad)),
+              juce::String::fromUTF8("ii\xC2\xB0").toStdString());
     EXPECT_EQ(roman(scale, chordInScale(scale, 63, ScaleChordKind::Triad)), "III");
     EXPECT_EQ(roman(scale, chordInScale(scale, 67, ScaleChordKind::Triad)), "v");
 }
