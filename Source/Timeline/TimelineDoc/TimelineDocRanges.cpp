@@ -73,6 +73,50 @@ bool TimelineDoc::trimClipStart(ClipId id, double newStartBeat, double secondsPe
     });
 }
 
+// Drags the left edge of a MIDI clip to absolute `newStartBeat` with the end fixed, anchoring every
+// surviving note to its ABSOLUTE beat (the notes are stored clip-relative, so they are re-based by
+// the edge's travel). A move rightwards cuts the notes at the new edge by the shared rule: notes
+// wholly before it are dropped and a straddler keeps only its right half; a move leftwards just
+// uncovers empty space. Fades are left alone (unlike trimClipStart, the edge is a resize, not a cut).
+// An audio clip is refused: its left edge also moves the source offset, which is trimClipStart's job.
+bool TimelineDoc::resizeClipLeft(ClipId id, double newStartBeat) {
+    if (!isFiniteAtOrAfterZero(newStartBeat))
+        return false;
+    Track* owner = nullptr;
+    auto* clip = findClip(id, &owner);
+    if (clip == nullptr || clip->assetRef.isNotEmpty())
+        return false;
+    const double end = clip->startBeat + clip->lengthBeats;
+    if (!(newStartBeat < end))
+        return false;
+    if (newStartBeat == clip->startBeat)
+        return true;
+
+    return applyMutation([&] {
+        const double delta = newStartBeat - clip->startBeat;
+        std::vector<MidiNote> kept;
+        if (delta > 0.0) {
+            std::vector<MidiNote> dropped;
+            partitionNotesAt(clip->notes, delta, keepOriginalId, dropped, kept);
+        } else {
+            kept = clip->notes;
+            for (auto& note : kept)
+                note.startBeat -= delta;
+        }
+
+        // Lift and re-insert, as moveClip does: the start participates in the clip ordering.
+        const auto index = clip - owner->clips.data();
+        Clip moved = std::move(*clip);
+        moved.notes = std::move(kept);
+        moved.startBeat = newStartBeat;
+        moved.lengthBeats = end - newStartBeat;
+        owner->clips.erase(owner->clips.begin() + index);
+        const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
+        owner->clips.insert(pos, std::move(moved));
+        return true;
+    });
+}
+
 // Shrinks the clip from the right. Unlike resizeClip (which leaves notes past the end in place,
 // merely unheard), a trim CUTS them — a range delete must actually delete what it covered, or a
 // later resize would bring it back. The fade-out is zeroed: the new edge is a cut.

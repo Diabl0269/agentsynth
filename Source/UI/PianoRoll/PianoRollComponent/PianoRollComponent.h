@@ -295,6 +295,9 @@ public:
     // Fired just before requestClose() empties the roll, so the owner can picture it as it was.
     std::function<void()> onAboutToClose;
 
+    // Fired by P with notes selected: the selection's [start, end] in absolute beats.
+    std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+
     // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
     std::function<void()> onSnapToggled;
 
@@ -580,6 +583,7 @@ private:
 
     // ---- Arrow-key editing ---- see PianoRollClipboardAndKeys.cpp for the full contract
     // (shared-delta clamping, row-vs-semitone stepping).
+    bool loopSelectedNotes();
     bool nudgeSelectedNotes(int direction);
     bool transposeSelectedNotes(int semitones);
     bool transposeSelectedNotesByRow(int rowDelta);

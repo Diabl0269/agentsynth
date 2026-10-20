@@ -305,3 +305,43 @@ TEST(PianoRollShortcutTest, WithManagerInstalledAndBindingClearedCtrlSDoesNothin
     // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
     f.roll.setShortcutManager(nullptr);
 }
+
+// P loops the selected notes, mirroring the clip lanes' P: the span is [first start, last end] over
+// the selection, in ABSOLUTE beats (the open clip may sit away from beat 0).
+TEST(PianoRollShortcutTest, PRequestsTheSelectedNotesAbsoluteSpan) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 8.0, 8.0, "Clip"); // parked at beat 8
+    const auto a = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto b = f.doc.addNote(clipId, makeNote(3.0, 64, 2.0));
+    f.doc.addNote(clipId, makeNote(6.0, 67, 1.0)); // unselected: must not widen the span
+    f.open(clipId);
+    f.roll.getSelectionForTest().setSelection({a, b});
+
+    int calls = 0;
+    double start = -1.0, end = -1.0;
+    f.roll.onLoopRangeRequested = [&](double s, double e) {
+        ++calls;
+        start = s;
+        end = e;
+    };
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('p')));
+    EXPECT_EQ(calls, 1);
+    EXPECT_DOUBLE_EQ(start, 9.0) << "clip start 8 + first note start 1, not the clip-relative 1";
+    EXPECT_DOUBLE_EQ(end, 13.0) << "clip start 8 + last note end 5";
+    EXPECT_FALSE(f.undo.canUndo()) << "looping never edits the document";
+}
+
+TEST(PianoRollShortcutTest, PWithNothingSelectedFallsThrough) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+    f.roll.getSelectionForTest().clear();
+
+    int calls = 0;
+    f.roll.onLoopRangeRequested = [&](double, double) { ++calls; };
+
+    EXPECT_FALSE(f.roll.keyPressed(plainPress('p'))) << "the key keeps its meaning at the panel";
+    EXPECT_EQ(calls, 0);
+    (void)bed;
+}

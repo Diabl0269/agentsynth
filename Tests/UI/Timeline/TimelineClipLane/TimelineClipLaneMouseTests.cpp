@@ -99,7 +99,7 @@ TEST(TimelineClipLaneInteractionTest, TrimRightAndLeft) {
         EXPECT_LT(resized->lengthBeats, 4.0) << "it did shrink, just not past the floor";
     }
 
-    // Left edge: start moves, end stays fixed, notes travel with the clip.
+    // Left edge: start moves, end stays fixed.
     {
         ClipLaneFixture f;
         const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
@@ -120,6 +120,88 @@ TEST(TimelineClipLaneInteractionTest, TrimRightAndLeft) {
         EXPECT_DOUBLE_EQ(resized->startBeat + resized->lengthBeats, 6.0) << "the end never moves";
         ASSERT_TRUE(f.undo.canUndo());
     }
+}
+
+// ---- Left-edge trim anchors notes to absolute time ----
+
+namespace {
+// Drags the left edge of `clipId` by `beats` (40 px/beat) through the real mouse path.
+void dragLeftEdge(ClipLaneFixture& f, ClipId clipId, double beats) {
+    const auto rect = f.lane.getClipRect(clipId);
+    const juce::Point<float> edge((float)rect.getX() + 3.0f, (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + (float)(beats * 40.0), edge.y);
+    f.lane.mouseDown(leftClick(f.lane, edge));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, edge));
+    f.lane.mouseUp(leftDrag(f.lane, dragged, edge));
+}
+
+double absoluteStart(const synth::Clip& clip, const synth::MidiNote& note) { return clip.startBeat + note.startBeat; }
+} // namespace
+
+TEST(TimelineClipLaneInteractionTest, LeftTrimShrinkKeepsSurvivingNotesAtTheirAbsoluteBeat) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip"); // [2, 6)
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)).isValid()); // abs [2, 3): wholly before the edge
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(0.5, 62, 2.0)).isValid()); // abs [2.5, 4.5): straddles the edge
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(3.0, 64, 1.0)).isValid()); // abs [5, 6)
+
+    dragLeftEdge(f, clipId, 1.3); // start snaps 2 -> 3
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_NE(clip, nullptr);
+    EXPECT_DOUBLE_EQ(clip->startBeat, 3.0);
+    EXPECT_DOUBLE_EQ(clip->startBeat + clip->lengthBeats, 6.0);
+    ASSERT_EQ(clip->notes.size(), 2u) << "the note wholly before the new edge is dropped";
+    EXPECT_EQ(clip->notes[0].pitch, 62);
+    EXPECT_DOUBLE_EQ(absoluteStart(*clip, clip->notes[0]), 3.0) << "straddler keeps only its right half";
+    EXPECT_DOUBLE_EQ(clip->notes[0].lengthBeats, 1.5);
+    EXPECT_EQ(clip->notes[1].pitch, 64);
+    EXPECT_DOUBLE_EQ(absoluteStart(*clip, clip->notes[1]), 5.0) << "untouched note stays at the same absolute beat";
+    EXPECT_DOUBLE_EQ(clip->notes[1].lengthBeats, 1.0);
+}
+
+TEST(TimelineClipLaneInteractionTest, LeftTrimGrowKeepsEveryNoteAtItsAbsoluteBeat) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 4.0, "Clip"); // [4, 8)
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)).isValid()); // abs 4
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(2.0, 64, 1.0)).isValid()); // abs 6
+
+    dragLeftEdge(f, clipId, -1.3); // start snaps 4 -> 3
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_NE(clip, nullptr);
+    EXPECT_DOUBLE_EQ(clip->startBeat, 3.0);
+    EXPECT_DOUBLE_EQ(clip->startBeat + clip->lengthBeats, 8.0);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(absoluteStart(*clip, clip->notes[0]), 4.0);
+    EXPECT_DOUBLE_EQ(absoluteStart(*clip, clip->notes[1]), 6.0);
+}
+
+TEST(TimelineClipLaneInteractionTest, LeftTrimUndoRestoresGeometryAndNotesInOneStep) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)).isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(3.0, 64, 1.0)).isValid());
+
+    dragLeftEdge(f, clipId, 1.3);
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_NE(clip, nullptr);
+    EXPECT_DOUBLE_EQ(clip->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(clip->lengthBeats, 4.0);
+    ASSERT_EQ(clip->notes.size(), 2u) << "the dropped note comes back";
+    EXPECT_DOUBLE_EQ(clip->notes[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(clip->notes[1].startBeat, 3.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "geometry and notes reverted in a single step";
 }
 
 TEST(EdgeAutoScrollVelocityTest, ZeroInsideTheSafeMiddleBand) {

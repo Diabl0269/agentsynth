@@ -87,7 +87,7 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Drag a clip's body | Moves it, and every other selected clip, by one Snap-quantised beat delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0, **plus** one shared track-row delta (see **Cross-track drag**) |
 | **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. Alt is re-read on every drag event, so it can be pressed or released mid-drag to switch between copy and move without restarting the drag. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking |
 | Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
-| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the clip's notes, being clip-relative, travel with it |
+| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed. A MIDI clip's notes keep their absolute beat (`TimelineDoc::resizeClipLeft`): a shrink drops the notes before the new edge and cuts a straddling one, a grow leaves the new space empty; one undo step restores geometry and notes |
 | Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**. It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
 | Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** |
@@ -394,6 +394,8 @@ across the selection (any row, ignoring anything unselected) and hands it outwar
 wires to `transport.setLoop(start, end, /*enabled=*/true)` — the same "the lane decides what, the
 owner does it" division as `onAudioFileDropped` / `onRelinkAudioRequested`. Nothing selected, or no
 owner listening, returns `false` so the key keeps its meaning elsewhere.
+
+With the piano roll open, P loops the selected notes instead ([piano-roll](piano-roll.md#arrow-key-editing)); the roll forwards its span into this same callback.
 
 ## Exporting the arrangement
 

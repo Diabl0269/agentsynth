@@ -678,6 +678,15 @@ lose the user's place.
 **Why Alt rather than Cmd or Shift.** Plain arrows already nudge, Shift+Up/Down is the octave, and
 Cmd+arrows carry OS-level jump-to-boundary semantics.
 
+**P loops the selected notes**: `loopSelectedNotes()` (the same shared `timelineLoopSelection` action
+the clip lanes' P uses, a surface-local key rather than a command) computes `[min note start, max note
+end]` over the selection, adds the open clip's `startBeat` so the span is in ABSOLUTE beats, and hands
+it to `std::function<void(double startBeat, double endBeat)> onLoopRangeRequested`. The roll owns no
+transport: `TimelinePanelComponent` forwards the callback into the clip lane area's, so
+`MainComponent` stays the one owner of `transport.setLoop` and the arm-looping preference. With
+nothing selected it returns `false` and the key falls through to the panel's P, which loops the whole
+edited clip.
+
 Tool-switching digit keys are deliberately **not** handled here at all
 ([edit-tools](edit-tools.md#rebinding)) — that binding belongs to the panel, so the roll and the
 panel can never disagree about which tool is active.

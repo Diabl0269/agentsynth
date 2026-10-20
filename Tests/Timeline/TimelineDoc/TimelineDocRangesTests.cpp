@@ -270,3 +270,56 @@ TEST_F(TimelineDocTest, ClipToRangeMatchesWhatDeleteRangeRemoves) {
     EXPECT_EQ(copiedNotes, 3);    // every note overlaps [2, 6)
     EXPECT_EQ(remainingNotes, 2); // the two halves outside it
 }
+
+TEST_F(TimelineDocTest, ResizeClipLeftShrinkDropsAndCutsNotesKeepingAbsoluteBeats) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 2.0, 4.0, "c");              // [2, 6)
+    doc.addNote(clip, makeNote(0.0, 60, 1.0));                        // abs [2, 3): dropped
+    const auto straddler = doc.addNote(clip, makeNote(0.5, 62, 2.0)); // abs [2.5, 4.5): cut at 3
+    doc.addNote(clip, makeNote(3.0, 64, 1.0));                        // abs [5, 6)
+
+    ASSERT_TRUE(doc.resizeClipLeft(clip, 3.0));
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_DOUBLE_EQ(c->startBeat, 3.0);
+    EXPECT_DOUBLE_EQ(c->lengthBeats, 3.0);
+    ASSERT_EQ(c->notes.size(), 2u);
+    EXPECT_EQ(c->notes[0].id, straddler) << "the straddler's right half keeps the original id";
+    EXPECT_DOUBLE_EQ(c->notes[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(c->notes[0].lengthBeats, 1.5);
+    EXPECT_DOUBLE_EQ(c->notes[1].startBeat, 2.0);
+}
+
+TEST_F(TimelineDocTest, ResizeClipLeftGrowShiftsNotesAndResortsTheTrack) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto before = doc.addClip(track, 1.0, 1.0, "before");
+    const auto clip = doc.addClip(track, 6.0, 2.0, "c"); // [6, 8)
+    doc.addNote(clip, makeNote(1.0, 60, 0.5));           // abs 7
+
+    ASSERT_TRUE(doc.resizeClipLeft(clip, 2.0));
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_DOUBLE_EQ(c->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(c->startBeat + c->lengthBeats, 8.0);
+    ASSERT_EQ(c->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(c->startBeat + c->notes[0].startBeat, 7.0);
+    const auto* t = doc.getTrack(track);
+    ASSERT_EQ(t->clips.size(), 2u);
+    EXPECT_EQ(t->clips[0].id, before);
+    EXPECT_EQ(t->clips[1].id, clip);
+}
+
+TEST_F(TimelineDocTest, ResizeClipLeftRejectsAudioAndBadEdges) {
+    const auto midiTrack = doc.addTrack(TrackKind::Midi, "T");
+    const auto midi = doc.addClip(midiTrack, 2.0, 4.0, "m");
+    EXPECT_FALSE(doc.resizeClipLeft(midi, 6.0)) << "the new start must stay before the end";
+    EXPECT_FALSE(doc.resizeClipLeft(midi, -1.0));
+    EXPECT_FALSE(doc.resizeClipLeft(midi, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.resizeClipLeft(ClipId{}, 3.0));
+    EXPECT_DOUBLE_EQ(doc.getClip(midi)->startBeat, 2.0);
+
+    const auto audioTrack = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(audioTrack, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 0.0));
+    EXPECT_FALSE(doc.resizeClipLeft(audio, 3.0));
+}
