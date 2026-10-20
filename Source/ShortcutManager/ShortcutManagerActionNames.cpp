@@ -155,6 +155,8 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
         return "Duplicate Focused Track";
     if (actionId == "timelineCopyFocusedTracks")
         return "Copy Selected Tracks";
+    if (actionId == "timelineSelectAllTracks")
+        return "Select All Tracks";
     if (actionId == "timelinePasteTracks")
         return "Paste Tracks";
     if (actionId == "timelineShowFocusedTrackModule")
@@ -328,6 +330,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Loop the Selection";
     if (actionId == "timelineFollowPlayheadToggle")
         return "Toggle Follow Playhead";
+    if (actionId == "timelineFollowModeCycle")
+        return "Cycle Follow Playhead Mode (Page / Smooth)";
     if (actionId == "timelineToolSelect")
         return "Select Tool";
     if (actionId == "timelineToolRange")

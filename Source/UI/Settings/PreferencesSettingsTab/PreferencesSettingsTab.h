@@ -112,6 +112,13 @@ public:
     void setAskBeforeRemovingLfoEnabled(bool enabled);
     bool isAskBeforeDeletingTrackEnabled() const;
     void setAskBeforeDeletingTrackEnabled(bool enabled);
+    // "Record also starts playback" (default ON, the DAW convention): off, Record only engages recording and the take
+    // starts when Play does. Read at use time by MainComponent::handleRecordToggle.
+    bool isRecordStartsPlaybackEnabled() const;
+    void setRecordStartsPlaybackEnabled(bool enabled);
+    // Where Smooth follow pins the playhead, 10-90 percent of the visible width (a digits-only field), applied live.
+    int getFollowPointPercent() const;
+    void setFollowPointPercent(int percent);
     bool isNaturalScrollingEnabled() const;
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
@@ -345,6 +352,8 @@ private:
     void persistDoubleClickSpansLocators(bool enabled);
     void persistAskBeforeRemovingLfo(bool enabled);
     void persistAskBeforeDeletingTrack(bool enabled);
+    void persistRecordStartsPlayback(bool enabled);
+    void persistFollowPointPercent(int percent);
     void initTimelineEditingToggles();
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
@@ -583,6 +592,10 @@ private:
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
     juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track with the keyboard"};
+    juce::ToggleButton recordStartsPlaybackToggle{"Record also starts playback"};
+    juce::Label followPointLabel;
+    juce::TextEditor followPointEditor;
+    juce::Label followPointUnitLabel;
     juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
     // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
     // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as

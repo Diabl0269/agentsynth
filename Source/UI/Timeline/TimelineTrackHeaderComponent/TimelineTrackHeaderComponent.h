@@ -642,6 +642,8 @@ public:
     // On every track (the Unassigned section only with lanes); the arrow and A only request a
     // toggle, the panel owns the fold state and answers with setAutomationExpanded().
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    std::function<void(synth::TrackId)> onAutomationToggleSelectionRequested; // the A key: the whole selection
+    std::function<void()> onSelectAllTracksRequested;                         // Cmd+A on a row
     // "Add automation..." from the context menu: the panel opens the track's parameter picker.
     std::function<void(synth::TrackId)> onAddAutomationRequested;
 

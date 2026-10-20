@@ -21,6 +21,7 @@
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/FollowPlayheadButton.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
@@ -69,16 +70,10 @@ class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h
 //   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
 //
-// The panel has no resize affordance of its own: the bottom dock's one top-edge handle
-// (BottomDockComponent) resizes the whole dock from every tab. The panel never sets its
-// own bounds.
-//
-// The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned
-// here and shared by reference with the ruler; getViewState() exposes it so every consumer maps
-// beats to pixels identically.
-//
-// Headless-safe: paint()/resized() dynamic_cast<AppLookAndFeel*> and fall back to literal
-// values/colours when the themed LnF is absent (test runner has no themed LnF installed).
+// The panel has no resize affordance of its own: the bottom dock's top-edge handle resizes the whole dock.
+// The single TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned here and shared by reference
+// with the ruler; getViewState() exposes it so every consumer maps beats to pixels identically.
+// Headless-safe: paint()/resized() fall back to literal colours when the themed LnF is absent.
 namespace synth::ui {
 
 class TimelinePanelComponent
@@ -93,8 +88,7 @@ public:
     ~TimelinePanelComponent() override;
 
     void paint(juce::Graphics& g) override;
-    // Focus-region outline, drawn OVER children -- see paintOverChildren()'s definition in
-    // TimelinePanelLayout.cpp for why.
+    // Focus-region outline, drawn OVER children (see its definition in TimelinePanelLayout.cpp).
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
@@ -383,13 +377,17 @@ public:
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
     // ---- Follow playhead ----
-    // "Keep the playhead on screen while it plays", persisted under "timelineFollowPlayhead",
-    // default OFF -- see its definition in TimelinePanelLayout.cpp.
+    // "Keep the playhead on screen while it plays" (default OFF, TimelinePanelFollowMode.cpp); the mode and pin point
+    // are separate.
     void setFollowPlayheadEnabled(bool enabled);
-    bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
-    /** Test seam: no OS mouse source exists headlessly, so a test drives the click via
-     *  `getFollowPlayheadButtonForTest().onClick()` rather than synthesising a real click. */
-    juce::DrawableButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
+    bool isFollowPlayheadEnabled() const noexcept { return follow_.enabled; }
+    FollowMode getFollowMode() const noexcept { return follow_.mode; }
+    void setFollowMode(FollowMode mode);     // Page or Smooth; persisted, forwarded to the roll, tooltip refreshed
+    void setFollowPointPercent(int percent); // where Smooth pins the cursor (10-90), applied live
+    int getFollowPointPercent() const noexcept { return follow_.pointPercent; }
+    void refreshTransportTooltips() { refreshShortcutTooltips(); } // after a preference the tooltips quote changes
+    /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
+    FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
 
     /** How many times updateFromTransport() has been called. Test hook: it is what proves the
      *  10 Hz poll never reaches a hidden panel. */
@@ -408,15 +406,13 @@ public:
     void refreshRoutingPane();
     /** The selected track: the header row that was last clicked or moved to with the arrow keys; invalid when none. */
     synth::TrackId getSelectedTrackId() const;
-    /** Every selected track, in timeline order (not click order). Cmd/Ctrl-click toggles, Shift-click selects
-     *  a range from the anchor, a plain click or an arrow key resets to one. A view-state selection:
-     *  never on TimelineDoc, never undoable. The primary track (getSelectedTrackId(): the one last clicked
-     *  or moved to, and the one the single-track commands act on) may be absent from it after a
-     *  Cmd/Ctrl-click took it out. */
+    /** Every selected track, in timeline order. A view-state selection (never on TimelineDoc, never undoable); the
+     *  primary track (getSelectedTrackId()) may be absent after a Cmd/Ctrl-click took it out. */
     std::vector<synth::TrackId> selectedTracks() const;
     bool isTrackSelected(synth::TrackId id) const { return trackSelection_.contains(id); }
     /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
     void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
+    void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
 
     // ---- Track headers ----
     // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
@@ -722,6 +718,7 @@ private:
     // ---- Automation lanes (TimelinePanelAutomation.cpp) ----
     // A header's fold arrow (or its key) lands here.
     void toggleAutomationForTrack(synth::TrackId trackId);
+    void toggleAutomationForSelection(synth::TrackId trackId); // bare A: the selection follows the focused row
     // Wires automationLanes_ into the panel (part of the constructor, kept out of its size ratchet).
     void initAutomationLanes();
     // Re-syncs the lane pools, pushes their row geometry into the clip lanes and relayouts.
@@ -837,8 +834,10 @@ private:
     TimelineTransportBar transportBar_;
 
     // ---- Follow playhead (see the public accessors above) ----
-    bool followPlayhead_ = false;
-    juce::DrawableButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
+    FollowPlayheadState follow_;
+    void followViewToBeat(double beat);
+    void wireFollowPlayheadModes();
+    FollowPlayheadButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
     void persistFollowPlayheadChoice();
     void wirePianoRollLoopRequest();
 

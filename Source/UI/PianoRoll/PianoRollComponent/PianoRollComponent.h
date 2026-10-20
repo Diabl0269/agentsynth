@@ -10,6 +10,7 @@
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/PianoRoll/VelocityLane/VelocityLaneSlide.h"
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/FollowPlayhead.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
@@ -329,12 +330,9 @@ public:
     bool isScaleFilterOn() const noexcept;
     bool isRowFilterActive() const noexcept;
 
-    // ---- Follow playhead ----
-
-    // When on, setPlayheadBeat page-flips the roll's own horizontal view rather than letting it
-    // scroll off the edge — see PianoRollPainting.cpp (setPlayheadBeat) and PianoRollMouse.cpp
-    // (autoScrollTick, which this gates against) for the full contract.
+    // ---- Follow playhead ---- the contract is in PianoRollPainting.cpp (setPlayheadBeat).
     void setFollowPlayhead(bool follow) noexcept;
+    void setFollowStyle(FollowMode mode, int pointPercent) noexcept;
     bool isFollowPlayhead() const noexcept;
 
     // THE refresh seam, called on every doc mutation — see PianoRollComponent.cpp.
@@ -863,6 +861,8 @@ private:
     bool hasPlayheadX_ = false;
     // See setFollowPlayhead. Off by default.
     bool followPlayhead_ = false;
+    FollowMode followMode_ = FollowMode::Page;
+    int followPointPercent_ = kDefaultFollowPointPercent;
     // Follow's auto-page branch (setPlayheadBeat) is suspended -- i.e. it never moves rollView_ --
     // until this goes back to false. Set whenever the user changes the horizontal view on their
     // own terms (openClip's fresh fit-to-clip framing counts: a stale follow position from the

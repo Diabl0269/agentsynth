@@ -119,6 +119,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
+        applyTimelineTransportPreferences();
         applyMidiRemotePreferences();
         applyTelemetryPreference();
         applyToolbarLabelPreference();
@@ -269,6 +270,17 @@ void MainComponent::timerCallback() {
             exportDialog_->reportProgress(bounceRunner_->getProgress());
         else if (stemRunner_ != nullptr)
             exportDialog_->reportProgress(stemRunner_->getProgress());
+    }
+
+    // A record waiting for Play (Preferences: Record does not start playback) begins its take once the transport
+    // rolls; one cancelled by other means (the indicator went off) is dropped.
+    if (recordPendingPlay_) {
+        if (!timelinePanel.getTransportBar().getRecordButton().getToggleState())
+            recordPendingPlay_ = false;
+        else if (position.playing) {
+            recordPendingPlay_ = false;
+            handleRecordToggle(true);
+        }
     }
 
     wasTransportPlaying_ = position.playing;

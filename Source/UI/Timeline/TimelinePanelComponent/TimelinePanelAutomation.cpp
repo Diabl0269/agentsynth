@@ -58,6 +58,17 @@ void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
     setTrackAutomationExpanded(trackId, !automationLanes_.isExpanded(trackId));
 }
 
+// Bare A on a row that is one of several selected tracks: the focused row's state decides for all of them (open ->
+// every selected track closes, else every one opens), applied as one layout change so the lanes animate together.
+void TimelinePanelComponent::toggleAutomationForSelection(synth::TrackId trackId) {
+    std::vector<synth::TrackId> targets;
+    if (trackSelection_.contains(trackId) && trackSelection_.size() > 1)
+        targets = selectedTracks();
+    else
+        targets = {trackId};
+    automationLanes_.setExpanded(targets, !automationLanes_.isExpanded(trackId));
+}
+
 void TimelinePanelComponent::setTrackAutomationExpanded(synth::TrackId track, bool expanded) {
     automationLanes_.setExpanded(track, expanded);
 }

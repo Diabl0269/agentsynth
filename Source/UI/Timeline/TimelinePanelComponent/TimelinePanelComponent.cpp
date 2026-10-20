@@ -118,15 +118,14 @@ TimelinePanelComponent::TimelinePanelComponent() {
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
     snapToggleButton_.onClick = [this] { setSnapEnabled(!viewState_.snapEnabled); };
 
-    // Follow-playhead — sits next to the snap toggle, same external-state pattern: the button
-    // never owns followPlayhead_, it only mirrors it.
+    // Follow-playhead sits next to the snap toggle and only mirrors follow_.enabled; its tooltip is
+    // set by refreshShortcutTooltips() below.
     addAndMakeVisible(followPlayheadButton_);
     followPlayheadButton_.setComponentID("timelineFollowPlayheadToggle");
-    // Tooltip text is set by refreshShortcutTooltips() below — it used to be the bare "Follow
-    // playhead" with no key hint at all, unlike every one of its siblings.
     followPlayheadButton_.setClickingTogglesState(false);
-    followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
-    followPlayheadButton_.onClick = [this] { setFollowPlayheadEnabled(!followPlayhead_); };
+    followPlayheadButton_.setToggleState(follow_.enabled, juce::dontSendNotification);
+    followPlayheadButton_.onClick = [this] { setFollowPlayheadEnabled(!follow_.enabled); };
+    wireFollowPlayheadModes();
 
     // Added after everything else but BEFORE the playhead below, so clips draw above the
     // grid (painted by this component's own paint(), which — as a parent — always paints before
@@ -344,9 +343,12 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 
     // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
     // didn't say its own shortcut.
+    const auto cycleKey = shortcutHintFor(shortcuts_, "timelineFollowModeCycle", {});
     followPlayheadButton_.setTooltip(synth::ui::formatShortcutHint(
-        "Follow playhead", shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
-                                           juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
+        juce::String("Follow playhead, ") + followModeName(follow_.mode) + " mode - " +
+            (cycleKey.isEmpty() ? juce::String() : cycleKey + " switches mode, ") + "right-click for the mode menu",
+        shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
+                        juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
 
     // The transport bar's own buttons name their keys too. Record and Metronome have no hardcoded default
     // (no manager: no hint); Loop answers to the timeline's bare L, or to the transport action's binding
@@ -357,8 +359,12 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     transportBar_.getLoopButton().setTooltip(synth::ui::formatShortcutHint("Loop", loopKey));
     transportBar_.getPlayStopButton().setTooltip(synth::ui::formatShortcutHint(
         "Play / Stop", shortcutHintFor(shortcuts_, "togglePlayback", juce::KeyPress(juce::KeyPress::spaceKey))));
+    const bool recordRollsTransport = appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr ||
+                                      appProperties_->getUserSettings()->getBoolValue(kRecordStartsPlaybackKey, true);
     transportBar_.getRecordButton().setTooltip(synth::ui::formatShortcutHint(
-        "Record (arms the first armed track; implies Play)", shortcutHintFor(shortcuts_, "transportRecord", {})));
+        recordRollsTransport ? "Record (arms the first armed track; implies Play)"
+                             : "Record (arms the first armed track; the take starts when you press Play)",
+        shortcutHintFor(shortcuts_, "transportRecord", {})));
     transportBar_.getMetronomeButton().setTooltip(
         synth::ui::formatShortcutHint("Metronome click (summed after the graph - never recorded or bounced)",
                                       shortcutHintFor(shortcuts_, "transportToggleMetronome", {})));
@@ -402,14 +408,13 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     // The modulator rows' live values (an edit on the canvas card shows there) ride it too.
     automationLanes_.tickModulatorValues(visibleTop, visibleTop + trackHeaderViewport_.getMaximumVisibleHeight());
 
-    // Follow playhead: page-flip the view so the (latency-compensated) playhead stays on screen —
-    // gated on all four of playing/enabled/roll-closed/no-drag-in-flight, so a stopped transport,
-    // the feature switched off, the piano roll open (its own follow wiring lands in a later wave)
-    // or a clip drag in progress all cost zero work here. No new timer: this rides the SAME 10 Hz
-    // poll every other transport-driven repaint in this class does.
-    if (followPlayhead_ && snapshot.playing && !pianoRoll_.isOpen() && !clipLaneArea_.isDragInProgress() &&
+    // Follow playhead: keep the (latency-compensated) playhead on screen, per mode. Gated on
+    // playing/enabled/roll-closed/ no-drag-in-flight, so a stopped transport, the feature off, the piano roll open (it
+    // follows on its own) or a clip drag in progress cost nothing here. No new timer: Page rides this 10 Hz poll,
+    // Smooth the playhead's 30 Hz frames.
+    if (follow_.enabled && snapshot.playing && !pianoRoll_.isOpen() && !clipLaneArea_.isDragInProgress() &&
         viewState_.pixelsPerBeat > 0.0) {
-        pageViewToShowBeat(playhead_.getDrawnBeat());
+        followViewToBeat(playhead_.getDrawnBeat());
     }
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from

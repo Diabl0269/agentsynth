@@ -106,6 +106,29 @@ When the latency-compensated drawn playhead beat moves outside `[firstVisibleBea
 against its edge — landing exactly on the edge would immediately re-trigger the same flip on the
 very next poll once the beat advances one more sample.
 
+### Follow modes
+
+Follow has a mode, Page or Smooth (`FollowMode`, `Source/UI/Timeline/FollowPlayhead.h`, which holds the pure rule
+`followViewOrigin(mode, pointPercent, playheadBeat, currentOrigin, visibleBeats)` both views use):
+
+- **Page** (the default, and what a missing setting means) is the page flip above.
+- **Smooth** scrolls the view so the playhead stays pinned at `pointPercent` of the visible width (50 by default, 10 to 90). Near
+  the start of the song the origin stops at beat 0, so the playhead travels to the pin first. The panel moves the view from
+  the playhead overlay's own 30 Hz frames (`onDrawnBeat`, called before the line's x is read), not the 10 Hz poll, so the line
+  does not drift and snap; the 10 Hz poll runs the same function, which does nothing when the view is already there. The same four
+  gates apply, and a view that moves under half a pixel repaints nothing.
+
+Ctrl+F (`timelineFollowModeCycle`; Ctrl+Alt+F off the Mac) switches the mode without touching on/off, right-clicking the
+button (or Shift+F10 on it) opens a Page / Smooth menu with a check on the current mode (`FollowPlayheadButton`; a right-click
+never toggles), and the tooltip names the mode and the keys. The mode is stored under `"timelineFollowMode"` (`"page"` / `"smooth"`)
+and the point under `"timelineFollowPointPercent"`, both written with the on/off flag. The point is the Preferences
+row **Follow playhead point** (Timeline category, a digits-only field committed on Return or focus loss); the settings broadcast
+carries it into the panel and the roll live (`MainComponent::applyTimelineTransportPreferences`).
+
+The roll gets the mode through `PianoRollComponent::setFollowStyle(mode, point)`, a separate setter that never clears the
+manual-scroll latch below; its Smooth branch runs in `setPlayheadBeat`, which already receives the beat every frame. Both
+modes honour the latch. The timeline's own sideways scroll still turns follow off entirely, in both modes.
+
 **Roll-local variant.** `PianoRollComponent::setFollowPlayhead(bool)` mirrors the same feature
 inside the roll's own horizontal view (`rollView_`), independent of the panel's — the roll has its
 own zoom and scroll ([piano-roll](piano-roll.md#horizontal-mapping)) and therefore its own follow
@@ -137,4 +160,5 @@ back.
 
 Tests: `Tests/UI/Timeline/TimelinePlayheadTests.cpp`,
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp`,
+`Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowModeTests.cpp` (the rule, Ctrl+F, persistence, Smooth, the menu),
 `Tests/UI/PianoRoll/PianoRollMouseTests.cpp` (`PianoRollFollowPlayheadTest`).

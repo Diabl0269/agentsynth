@@ -136,6 +136,17 @@ through `std::function<void(bool)> onRecordToggled`; it never flips its own togg
 outcome, and it is set the same way **regardless of whether anything is armed** — the indicator
 reflects record-ON, not "a take is capturing".
 
+**Record also starts playback** (Preferences, Timeline category, key `recordStartsPlayback`, default on — the convention of
+Cubase, Logic, Pro Tools, Reaper and Ableton). Off, pressing Record from a stop only engages recording; the transport is
+left alone and the take starts when the user presses Play. A MIDI take is armed at once with punch-in 0:
+`MidiRecorder::captureBlock` is a no-op while the transport is stopped, so nothing records until Play, a relocation before
+Play cannot drop notes, and the playing -> stopped edge commits it as usual. An audio take is deferred, because its tap would
+record the stopped input: the indicator lights, a status message says to press Play, and the 10 Hz poll re-enters
+`handleRecordToggle(true)` once the transport rolls, so the take begins up to one poll (about 100 ms) after Play. The count-in
+only applies when Record itself starts the transport. Pressing Record again cancels either kind with nothing recorded. The record
+button's tooltip follows the preference ("... implies Play" / "... the take starts when you press Play"). Already playing,
+the preference changes nothing.
+
 `MainComponent`'s implementation, installed in `initialiseCommon()`:
 
 - **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first

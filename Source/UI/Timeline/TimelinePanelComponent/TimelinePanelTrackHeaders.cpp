@@ -464,6 +464,8 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     header->setShortcutManager(shortcuts_);
     // The header only reports a fold-arrow press; this panel owns the fold state.
     header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+    header->onAutomationToggleSelectionRequested = [this](synth::TrackId id) { toggleAutomationForSelection(id); };
+    header->onSelectAllTracksRequested = [this] { selectAllTracks(); };
     // The header menu's "Add automation...": the picker opens anchored on the header row.
     header->onAddAutomationRequested = [this, header](synth::TrackId track) {
         openAddAutomationPicker(track, *header);
@@ -565,6 +567,15 @@ void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids
         trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
         ensureTrackVisible(focusedTrackIndex_);
     }
+}
+
+// Cmd+A on a track row: every track is selected and focus stays on the row that had it.
+void TimelinePanelComponent::selectAllTracks() {
+    const auto order = trackOrder();
+    const auto primary = juce::isPositiveAndBelow(focusedTrackIndex_, (int)order.size())
+                             ? order[(std::size_t)focusedTrackIndex_]
+                             : synth::TrackId{};
+    selectTracks(order, primary);
 }
 
 void TimelinePanelComponent::selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods) {

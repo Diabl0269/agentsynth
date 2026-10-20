@@ -890,6 +890,14 @@ void MainComponent::applyZoomScrollPreference() {
     timelinePanel.setZoomScrollInverted(!upZoomsIn);
 }
 
+void MainComponent::applyTimelineTransportPreferences() {
+    if (auto* settings = appProperties.getUserSettings()) {
+        timelinePanel.setFollowPointPercent(
+            settings->getIntValue(synth::ui::kFollowPointPercentKey, timelinePanel.getFollowPointPercent()));
+        timelinePanel.refreshTransportTooltips();
+    }
+}
+
 void MainComponent::applyMidiRemotePreferences() {
     const auto* settings = appProperties.getUserSettings();
     if (settings == nullptr)

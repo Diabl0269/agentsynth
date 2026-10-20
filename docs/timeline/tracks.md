@@ -208,6 +208,7 @@ transaction:
 |---|---|
 | **Cmd+D** (or the row menu's Duplicate Track) | A copy of every selected track, in the same relative order, after the **last** selected track. The copies become the selection. One audio-graph rebuild for all of them (`GraphRebuildBatch`), not one per track. |
 | **Cmd+C**, then **Cmd+V** on a row | Cmd+C remembers the selected tracks; Cmd+V pastes a copy of each, in order, directly below the row that has focus (the primary track), through the same duplicate path, and selects the copies. A copied track deleted since is skipped. |
+| **A** on a row | The focused row's automation lanes decide for every selected track: open, so all close; closed, so all open. One layout change, so the lanes animate together. The fold arrow click still folds only its own track. |
 | **Cmd+Backspace** (or the row menu's Delete Track) | One confirmation ("Delete 3 tracks?", unless switched off in Preferences), then `deleteTrack` per track, one undo step. |
 | **M** / **S** button or key | The clicked track toggles as before and every other selected track takes the state it ended in (a linked track's channel strip included), so a mixed selection ends uniform. |
 | Colour swatch | One pick colours every selected track, live preview included. Every selected track that owns its channel macro has the macro recoloured too, inside the same undo step. |
@@ -216,6 +217,9 @@ transaction:
 Cmd+C and Cmd+V on a row are the rebindable `timelineCopyFocusedTracks` / `timelinePasteTracks`; the row claims
 Cmd+C only with two or more tracks selected and Cmd+V only while tracks are copied, so everywhere else they keep their
 General meaning (copy / paste modules). The track clipboard holds ids, so it survives nothing but the session.
+
+Cmd+A on a row is the rebindable `timelineSelectAllTracks` (Timeline category): the row selects every track (focus stays
+on the row that had it); Select All keeps its meaning on the clip lane (all clips), the canvas and the piano roll.
 
 ## Drag to reorder
 
@@ -603,7 +607,7 @@ right while the track's lanes are folded, down while they are open under the tra
 ([automation](automation.md#lane-rows)). It is a Tab stop; Return or Space toggles it, and its
 name and tooltip say what the next press does ("Show Bass automation" / "Hide Bass automation").
 The rebindable "Show/Hide Track Automation" action (`timelineToggleTrackAutomation`, Timeline
-category, default bare A) does the same from the focused header row. A right-click on the arrow
+category, default bare A) does the same from the focused header row (for every selected track when the row is one of several). A right-click on the arrow
 opens the row menu and never toggles.
 
 The header only reports a toggle via `onAutomationToggleRequested`; the panel owns the fold state

@@ -325,6 +325,8 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         // them unconditionally and neither path has to know the other exists.
         commitAudioRecording();
         commitMidiRecording();
+        recordPendingPlay_ = false;
+        timelinePanel.getTransportBar().setRecordingState(false); // a waiting record has no take to do it
         return;
     }
 
@@ -348,6 +350,22 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         }
     }
     const bool anyArmed = armedTrack.isValid();
+
+    // "Record also starts playback" (Preferences, default on). Off, from a stop: Record only engages recording and
+    // the transport is left alone. A MIDI take starts at once, since MidiRecorder::captureBlock captures nothing
+    // while the transport is stopped; an audio take's tap would record the stopped input, so it waits (the 10 Hz poll
+    // re-enters here once the transport rolls).
+    auto& transport = audioEngine.getTransport();
+    const auto snap = transport.getPositionSnapshot();
+    const auto* userSettings = appProperties.getUserSettings();
+    const bool waitForPlay = !snap.playing && userSettings != nullptr &&
+                             !userSettings->getBoolValue(synth::ui::kRecordStartsPlaybackKey, true);
+    if (waitForPlay && anyArmed && armedKind == synth::TrackKind::Audio) {
+        recordPendingPlay_ = true;
+        timelinePanel.getTransportBar().setRecordingState(true);
+        statusBar.showMessage("Record is on - press Play to start the audio take");
+        return;
+    }
 
     // An audio take's tap and its destination files are resolved BEFORE the transport
     // moves, for the same reason as always — a request that cannot be honoured must not leave
@@ -374,9 +392,7 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     }
 
     // Record implies roll (DAW convention): starting a take also starts the transport if it
-    // isn't already running.
-    auto& transport = audioEngine.getTransport();
-    const auto snap = transport.getPositionSnapshot();
+    // isn't already running (unless the preference above says otherwise).
 
     // Re-anchor the 10 Hz commit-on-stop poll's edge-detector (timerCallback's
     // wasTransportPlaying_) to what we just read, before starting anything below. When starting
@@ -398,7 +414,10 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // gets no pre-roll (the user is already mid-performance) and no forced click, matching
     // today's plain "record implies roll" behaviour exactly.
     double punchInBeat = snap.ppq;
-    if (!snap.playing && countInBars > 0) {
+    if (waitForPlay) {
+        // The transport stays stopped. Punch-in 0 filters nothing, so a locate before Play cannot drop notes.
+        punchInBeat = 0.0;
+    } else if (!snap.playing && countInBars > 0) {
         const double beatsPerBar = (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
         const double preRollStart = std::max(0.0, punchInBeat - (double)countInBars * beatsPerBar);
         transport.locateBeat(preRollStart);

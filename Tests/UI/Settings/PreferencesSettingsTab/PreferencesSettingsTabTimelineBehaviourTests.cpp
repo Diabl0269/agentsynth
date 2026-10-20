@@ -248,3 +248,49 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeDeletingTrackToggleWrites
     EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "0");
     EXPECT_FALSE(tab.isAskBeforeDeletingTrackEnabled());
 }
+
+// "Record also starts playback": DEFAULT ON (the DAW convention, today's behaviour), its own key, and the real toggle
+// writes it.
+TEST_F(PreferencesSettingsTabTest, RecordAlsoStartsPlaybackDefaultsOnAndTheToggleWritesIt) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 1200);
+    EXPECT_TRUE(tab.isRecordStartsPlaybackEnabled());
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("recordStartsPlayback"));
+    juce::ToggleButton* toggle = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText() == "Record also starts playback")
+                toggle = tb;
+    ASSERT_NE(toggle, nullptr);
+    toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("recordStartsPlayback"), "0");
+    EXPECT_FALSE(tab.isRecordStartsPlaybackEnabled());
+    tab.setRecordStartsPlaybackEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("recordStartsPlayback"), "1");
+}
+
+// The follow-playhead pin point: a digits-only field, 10-90, committed on Return, applied through the settings key.
+TEST_F(PreferencesSettingsTabTest, FollowPlayheadPointFieldClampsCommitsAndPersists) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 1200);
+    EXPECT_EQ(tab.getFollowPointPercent(), 50);
+    juce::TextEditor* field = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* te = dynamic_cast<juce::TextEditor*>(child))
+            if (te->getTitle().startsWith("Follow playhead point"))
+                field = te;
+    ASSERT_NE(field, nullptr);
+    EXPECT_FALSE(field->getTooltip().isEmpty());
+
+    field->setText("75", juce::dontSendNotification);
+    field->onReturnKey();
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("timelineFollowPointPercent"), 75);
+
+    field->setText("3", juce::dontSendNotification);
+    field->onReturnKey();
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("timelineFollowPointPercent"), 10);
+    EXPECT_EQ(field->getText(), "10") << "an out-of-range entry snaps visibly to a valid value";
+
+    tab.setFollowPointPercent(95);
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("timelineFollowPointPercent"), 90);
+}

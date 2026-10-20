@@ -162,6 +162,8 @@ public:
     static constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
     /** Re-reads kZoomScrollUpZoomsInKey and pushes it into the timeline panel; idempotent. */
     void applyZoomScrollPreference();
+    /** Pushes the follow-playhead pin point into the timeline and refreshes the record button's tooltip; idempotent. */
+    void applyTimelineTransportPreferences();
 
     /** Re-reads the two MIDI Remote preferences and pushes them into the engine / badge painter; idempotent. */
     void applyMidiRemotePreferences();
@@ -842,6 +844,7 @@ private:
     bool bottomDockAutoHiddenByEmptyTabs_ = false; // dock auto-hid because its last tab detached
     bool fitMixerAfterDockSlide_ = false;          // set when the dock starts opening; see finishPanelSlide()
     int timelinePanelHeight_ = 0;                  // 0 only before initialiseCommon() resolves it
+    bool recordPendingPlay_ = false;               // record is on, an audio take starts when the transport rolls
     bool wasTransportPlaying_ = false;             // playing->stopped edge for the MIDI recorder's auto-commit
     synth::TransportNudgeState transportNudge_;    // message-thread memory of the last cursor-move request
 

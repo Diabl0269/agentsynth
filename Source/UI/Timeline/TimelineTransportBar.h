@@ -43,6 +43,9 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // moment Record is clicked. Both persist themselves via setApplicationProperties.
 namespace synth::ui {
 
+// "Record also starts playback" (default ON): the Settings key, read at use time by the record flow and the tooltip.
+inline constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
+
 class TimelineTransportBar : public juce::Component {
 public:
     TimelineTransportBar();

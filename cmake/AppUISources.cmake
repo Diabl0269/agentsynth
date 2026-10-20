@@ -79,6 +79,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelCursorGlide.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelFollowMode.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLaneKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
