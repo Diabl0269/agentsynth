@@ -20,9 +20,9 @@ constexpr int kRevision = 1;
 // The Sampler layout changed (Instrument mode, then Glide and Mono): a user layout based on an older revision is stale.
 constexpr int kSamplerRevision = 3;
 
-// The Oscillator layout gained the Rate mode and Fixed rate above the Pitch section (earlier: the Unison Blend and
-// Width; Phase and Rand sit in the More controls row): a stored layout based on an older revision is stale and
-// picks the new controls up.
+// The Oscillator layout gained the Rate mode above the Pitch section and the Fixed rate in Glide's cell (earlier: the
+// Unison Blend and Width; Phase and Rand sit in the More controls row): a stored layout based on an older revision is
+// stale and picks the new controls up.
 constexpr int kOscillatorRevision = 3;
 
 // The Drum Kit layout gained the Recorded switches (a recorded kit).
@@ -35,10 +35,13 @@ CardLayout oscillatorLayout() {
     CardLayout layout;
     layout.sections = {
         section("waveform", std::nullopt, {param("waveform", CardWidget::Segmented)}),
-        // "Follow notes" is longer than a switch's 10 characters, so Rate is a combo. The Fixed rate knob takes the
-        // cell beside it only while the mode is Fixed.
-        section("rate", std::nullopt, {param("rateMode"), showWhen(param("fixedRate"), "rateMode", {"Fixed"})}, 2),
-        section("pitch", juce::String("Pitch"), {param("octave"), param("coarse"), param("fine"), param("glide")},
+        // "Follow notes" is longer than a switch's 10 characters, so Rate is a combo.
+        section("rate", std::nullopt, {param("rateMode")}),
+        // A Fixed rate plays no notes to glide between, so the Fixed rate knob takes Glide's cell while it is on.
+        section("pitch", juce::String("Pitch"),
+                {param("octave"), param("coarse"), param("fine"),
+                 showWhen(param("glide"), "rateMode", {"Follow notes"}),
+                 showWhen(param("fixedRate"), "rateMode", {"Fixed"})},
                 kQuadColumns),
         section("unison", juce::String("Unison"),
                 {param("unison"), param("detune"), param("blend"), param("width"),
