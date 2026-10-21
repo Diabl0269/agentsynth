@@ -380,6 +380,9 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineClipOpen"] = juce::KeyPress(juce::KeyPress::returnKey, none, 0);
     bindings["timelineClipMoveEarlier"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
     bindings["timelineClipMoveLater"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
+    // Shift+Cmd+D: Duplicate's Cmd+D plus Shift, bound nowhere else in any category.
+    bindings["timelineClipDuplicateLinked"] =
+        juce::KeyPress('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Cmd+Backspace deletes the focused track row. Bare Backspace/Delete on clips and the canvas stay fixed keys
     // outside this table; the row claims only the Cmd chord, and only while it has focus.
     bindings["timelineDeleteFocusedTrack"] =

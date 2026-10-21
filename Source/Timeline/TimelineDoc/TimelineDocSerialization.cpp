@@ -96,6 +96,11 @@ bool readOptionalCounter(const juce::var& v, std::int64_t& out) {
     return readInt64(v, out) && out >= 1 && out <= TimelineDoc::kMaxIdValue;
 }
 
+// A clip's optional link group: absent leaves 0 (not linked), present must be in [0, kMaxIdValue].
+bool readOptionalLinkGroup(const juce::var& v, std::int64_t& out) {
+    return v.isVoid() || (readInt64(v, out) && out >= 0 && out <= TimelineDoc::kMaxIdValue);
+}
+
 // Absent -> empty list; present must be an array.
 bool readOptionalArray(const juce::var& v, const juce::Array<juce::var>*& out) {
     if (v.isVoid())
@@ -201,6 +206,8 @@ juce::var TimelineDoc::toVar() const {
             juce::DynamicObject::Ptr c = new juce::DynamicObject();
             c->setProperty("id", static_cast<juce::int64>(clip.id.value));
             c->setProperty("name", clip.name);
+            if (clip.linkGroup != 0) // optional: absent loads as 0 (not linked)
+                c->setProperty("linkGroup", static_cast<juce::int64>(clip.linkGroup));
             c->setProperty("startBeat", clip.startBeat);
             c->setProperty("lengthBeats", clip.lengthBeats);
             // Additive, same "written ALWAYS" rule as the audio fields below: a reader that
@@ -372,10 +379,10 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         return false;
                     clip.id = ClipId{clipIdValue};
 
-                    // `muted` is optional like the rest: a file written before per-clip mute
-                    // existed simply has no key, and the struct default (false — audible) is what
-                    // that file always meant.
+                    // `muted` is optional like the rest: a file written before per-clip mute existed
+                    // simply has no key, and the struct default (false — audible) is what it meant.
                     if (!readOptionalString(cObj->getProperty("name"), clip.name) ||
+                        !readOptionalLinkGroup(cObj->getProperty("linkGroup"), clip.linkGroup) ||
                         !readOptionalDouble(cObj->getProperty("startBeat"), clip.startBeat) ||
                         !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats) ||
                         !readOptionalBool(cObj->getProperty("muted"), clip.muted))
@@ -586,7 +593,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     for (const auto& track : parsed) {
         parsedNextTrackId = std::max(parsedNextTrackId, track.id.value + 1);
         for (const auto& clip : track.clips) {
-            parsedNextClipId = std::max(parsedNextClipId, clip.id.value + 1);
+            parsedNextClipId = std::max({parsedNextClipId, clip.id.value + 1, clip.linkGroup + 1}); // groups use it too
             for (const auto& note : clip.notes)
                 parsedNextNoteId = std::max(parsedNextNoteId, note.id.value + 1);
         }

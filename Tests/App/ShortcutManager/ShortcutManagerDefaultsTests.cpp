@@ -96,6 +96,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineClipOpen",
         "timelineClipMoveEarlier",
         "timelineClipMoveLater",
+        "timelineClipDuplicateLinked",
         // AutomationLaneEditor / AutomationLaneHeaderComponent, through TimelineAutomationLanes
         "timelineMoveLaneUp",
         "timelineMoveLaneDown",

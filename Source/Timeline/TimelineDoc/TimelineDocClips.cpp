@@ -119,6 +119,7 @@ bool TimelineDoc::resizeClip(ClipId id, double newLengthBeats) {
 
     return applyMutation([&] {
         clip->lengthBeats = newLengthBeats; // length doesn't participate in the clip ordering
+        syncLinkedClips(*clip);             // a linked clip's length is shared content
         return true;
     });
 }
@@ -187,6 +188,9 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
 
         clip->notes = std::move(leftNotes);
         clip->lengthBeats = atBeat;
+        // Neither half is the content the group shares any more, so both leave it (the right half
+        // starts unlinked); a member left alone is unlinked by dissolveLoneLinkGroups.
+        clip->linkGroup = 0;
 
         Clip right;
         right.id = ClipId{nextClipId++};
@@ -262,6 +266,8 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
         // untouched — the survivor's state is the one that survives — while each merged note keeps
         // its own muted flag through the struct copies above.
         clipA->fadeOutBeats = clipB->fadeOutBeats;
+        // The glued clip is new content, so it leaves its link group (b's group loses b with it).
+        clipA->linkGroup = 0;
 
         // Erase b last: clipA and clipB alias the same vector, but nothing above dereferences
         // clipA or clipB again after this.
@@ -270,16 +276,24 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
     });
 }
 
-ClipId TimelineDoc::duplicateClip(ClipId id) {
+ClipId TimelineDoc::duplicateClip(ClipId id) { return duplicateClipImpl(id, false); }
+
+// `linked` is duplicateClipLinked: the copy joins the source's link group, which is created (from
+// the clip-id counter, see TimelineDocLinkedClips.cpp) when the source is not linked yet. Audio
+// clips are never linked, so a linked duplicate of one is refused.
+ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
     Track* owner = nullptr;
     auto* clip = findClip(id, &owner);
-    if (clip == nullptr)
+    if (clip == nullptr || (linked && clip->assetRef.isNotEmpty()))
         return {};
     if (static_cast<int>(owner->clips.size()) >= kMaxClipsPerTrack)
         return {};
 
     return applyMutation([&] {
+        if (linked && clip->linkGroup == 0)
+            clip->linkGroup = nextClipId++;
         Clip dup;
+        dup.linkGroup = linked ? clip->linkGroup : 0;
         dup.id = ClipId{nextClipId++};
         dup.name = clip->name;
         dup.startBeat = clip->startBeat + clip->lengthBeats;

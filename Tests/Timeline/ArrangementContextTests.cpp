@@ -293,3 +293,18 @@ TEST(ArrangementContextTest, AMarkerOnlyDocIsNotEmpty) {
     doc.addMarker(0.0, "Intro", 0);
     EXPECT_TRUE(ArrangementContext::summarize(doc, graph, makeSnapshot()).contains("\"Intro\" @ 0"));
 }
+
+// The model sees which clips are linked copies, since editing one of them edits the whole group.
+TEST(ArrangementContextTest, LinkedClipsAreMarked) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    const auto drums = doc.addTrack(TrackKind::Midi, "Drums");
+    const auto beat = doc.addClip(drums, 0.0, 4.0, "Beat");
+    doc.addNote(beat, makeNote(0.0, 36));
+    doc.duplicateClipLinked(beat);
+    doc.addClip(drums, 8.0, 4.0, "Fill");
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("3 clips @ 0-4 (linked), 4-8 (linked), 8-12 beats; 2 notes total"))
+        << summary.toStdString();
+}

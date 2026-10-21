@@ -229,6 +229,27 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
     return {};
 }
 
+// Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
+juce::String clipKeyboardActionName(const juce::String& actionId) {
+    if (actionId == "timelineClipPrevious")
+        return "Previous Clip";
+    if (actionId == "timelineClipNext")
+        return "Next Clip";
+    if (actionId == "timelineClipAbove")
+        return "Clip on Track Above";
+    if (actionId == "timelineClipBelow")
+        return "Clip on Track Below";
+    if (actionId == "timelineClipOpen")
+        return "Open Clip in Editor";
+    if (actionId == "timelineClipMoveEarlier")
+        return "Move Clip Earlier by One Grid Step";
+    if (actionId == "timelineClipMoveLater")
+        return "Move Clip Later by One Grid Step";
+    if (actionId == "timelineClipDuplicateLinked")
+        return "Duplicate Selected Clips as Linked Copies";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -356,21 +377,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Jump to Locator 2";
     if (const auto name = focusedTrackActionName(actionId); name.isNotEmpty())
         return name;
-    // Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
-    if (actionId == "timelineClipPrevious")
-        return "Previous Clip";
-    if (actionId == "timelineClipNext")
-        return "Next Clip";
-    if (actionId == "timelineClipAbove")
-        return "Clip on Track Above";
-    if (actionId == "timelineClipBelow")
-        return "Clip on Track Below";
-    if (actionId == "timelineClipOpen")
-        return "Open Clip in Editor";
-    if (actionId == "timelineClipMoveEarlier")
-        return "Move Clip Earlier by One Grid Step";
-    if (actionId == "timelineClipMoveLater")
-        return "Move Clip Later by One Grid Step";
+    if (const auto clip = clipKeyboardActionName(actionId); clip.isNotEmpty())
+        return clip;
     if (actionId == "timelineMoveLaneUp")
         return "Move Automation Lane Up";
     if (actionId == "timelineMoveLaneDown")

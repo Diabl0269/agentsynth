@@ -47,7 +47,8 @@ different argument — see [timeline ops](timeline-ops.md#the-local-path).
 One line per item, in `TimelineDoc`'s own stable order: a header
 (`"Arrangement: N tracks, bpm B, T/S, loop [a, b)"`, or `"loop off"`), then per track its kind,
 name, `armed`/`muted`/`soloed` flags shown only when set, and its binding; a compressed clip line
-for MIDI tracks (`"3 clips @ 0-8, 8-12, 16-20 beats; 42 notes total"`); one line per clip for audio
+for MIDI tracks (`"3 clips @ 0-8, 8-12, 16-20 beats; 42 notes total"`, a [linked clip](../timeline/linked-clips.md)'s
+window followed by `(linked)`); one line per clip for audio
 tracks (name, beat window, bare file name); then one line per automation lane
 (`"cutoff lane on Filter: 12 points, Read"`).
 

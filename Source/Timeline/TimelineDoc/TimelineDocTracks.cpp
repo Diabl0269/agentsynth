@@ -92,9 +92,17 @@ TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, ju
         copy.midiInputName = original->midiInputName;
         copy.midiInputChannel = original->midiInputChannel;
         copy.bindingUuid = remap(original->bindingUuid);
+        // Linked clips on the copy stay linked to each other, in fresh groups, never to the originals.
+        std::map<std::int64_t, std::int64_t> groupRemap;
         for (const auto& clip : original->clips) {
             Clip dup = clip;
             dup.id = ClipId{nextClipId++};
+            if (dup.linkGroup != 0) {
+                const auto [it, added] = groupRemap.try_emplace(dup.linkGroup, 0);
+                if (added)
+                    it->second = nextClipId++;
+                dup.linkGroup = it->second;
+            }
             for (auto& note : dup.notes)
                 note.id = NoteId{nextNoteId++};
             copy.clips.push_back(std::move(dup));
