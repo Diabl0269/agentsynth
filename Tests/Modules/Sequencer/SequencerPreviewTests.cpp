@@ -5,7 +5,9 @@
 #include "Modules/SequencerModule.h"
 #include "SequencerTestSupport.h"
 #include <algorithm>
+#include <atomic>
 #include <map>
+#include <thread>
 
 using namespace seqtest;
 
@@ -182,4 +184,31 @@ TEST_F(SequencerPreviewTest, BypassEmitsNothingForANewPreviewAndEndsOneThatIsSou
     const auto rest = render(*seq, 20000);
     events.insert(events.end(), rest.begin(), rest.end());
     expectBalanced(events);
+}
+
+// Run under -fsanitize=thread: the message thread keeps replacing the request while the audio thread renders, and
+// every chord the audio thread starts is a whole request, never a mix of two.
+TEST_F(SequencerPreviewTest, RequestsFromAnotherThreadAreNeverReadHalfWritten) {
+    std::atomic<bool> done{false};
+    std::thread writer([&] {
+        for (int i = 0; i < 20000; ++i) {
+            const int root = 40 + (i % 24);
+            const int chord[] = {root, root + 4, root + 7};
+            seq->previewNotes(chord, 3, 0.8f);
+        }
+        done.store(true);
+    });
+    int chordsStarted = 0;
+    while (!done.load() || chordsStarted == 0) {
+        const auto ons = onsOnly(render(*seq, 512));
+        if (ons.empty())
+            continue;
+        ++chordsStarted;
+        const auto notes = pitches(ons);
+        ASSERT_EQ(notes.size(), 3u);
+        EXPECT_EQ(notes[1] - notes[0], 4);
+        EXPECT_EQ(notes[2] - notes[0], 7);
+    }
+    writer.join();
+    EXPECT_GT(chordsStarted, 0);
 }
