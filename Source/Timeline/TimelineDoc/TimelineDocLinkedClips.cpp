@@ -1,11 +1,11 @@
 // Concern: linked clips — MIDI clips that share one musical content.
 //
 // What a link shares follows the "linked / shared clip" model of the common DAWs: the CONTENT is
-// shared (the notes and the clip's length), while everything about where and how a copy plays is
-// its own (name, position, track, mute, gain, fades). Editing the notes of any member — through any
-// note mutator, from the piano roll, quantise, the velocity lane or an import — rewrites every other
-// member inside the SAME applyMutation, so the edit is one revision, one notification and therefore
-// one undo step (AppUndoManager diffs the snapshots around the mutation).
+// shared (the notes, the clip's length and the drum machine's steps per bar and per-drum mute/solo), while everything
+// about where and how a copy plays is its own (name, position, track, mute, gain, fades). Editing the notes of any
+// member — through any note mutator, from the piano roll, quantise, the velocity lane or an import — rewrites every
+// other member inside the SAME applyMutation, so the edit is one revision, one notification and therefore one undo step
+// (AppUndoManager diffs the snapshots around the mutation).
 //
 // Note ids stay unique doc-wide: the other members get fresh copies of the edited clip's notes,
 // issued in its (already sorted) order, so each member's list is sorted by (startBeat, pitch, id)
@@ -51,7 +51,7 @@ int TimelineDoc::countLinkedClips(ClipId id) const {
 }
 
 // Called at the end of a mutation's lambda, after `source` is edited. Only the other members'
-// notes and length are reassigned — no clip is inserted or erased — so every Clip/Track pointer
+// notes, length and drum-machine settings are reassigned — no clip is inserted or erased — so every Clip/Track pointer
 // the calling mutator still holds stays valid.
 void TimelineDoc::syncLinkedClips(const Clip& source) {
     if (source.linkGroup == 0)
@@ -61,6 +61,9 @@ void TimelineDoc::syncLinkedClips(const Clip& source) {
             if (clip.linkGroup != source.linkGroup || clip.id == source.id)
                 continue;
             clip.lengthBeats = source.lengthBeats;
+            clip.stepsPerBar = source.stepsPerBar;
+            clip.mutedPitches = source.mutedPitches;
+            clip.soloPitches = source.soloPitches;
             clip.notes.clear();
             clip.notes.reserve(source.notes.size());
             for (const auto& note : source.notes) {

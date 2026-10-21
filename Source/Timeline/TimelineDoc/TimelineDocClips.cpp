@@ -168,6 +168,7 @@ bool TimelineDoc::setClipStepsPerBar(ClipId id, int stepsPerBar) {
 
     return applyMutation([&] {
         clip->stepsPerBar = stepsPerBar;
+        syncLinkedClips(*clip); // the drum grid's resolution is shared content
         return true;
     });
 }
@@ -197,7 +198,11 @@ bool TimelineDoc::setClipPitchMuted(ClipId id, int pitch, bool muted) {
     if (present == muted)
         return true;
 
-    return applyMutation([&] { return setPitchMembership(clip->mutedPitches, pitch, muted); });
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->mutedPitches, pitch, muted);
+        syncLinkedClips(*clip);
+        return changed;
+    });
 }
 
 bool TimelineDoc::setClipPitchSoloed(ClipId id, int pitch, bool soloed) {
@@ -210,7 +215,11 @@ bool TimelineDoc::setClipPitchSoloed(ClipId id, int pitch, bool soloed) {
     if (present == soloed)
         return true;
 
-    return applyMutation([&] { return setPitchMembership(clip->soloPitches, pitch, soloed); });
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->soloPitches, pitch, soloed);
+        syncLinkedClips(*clip);
+        return changed;
+    });
 }
 
 std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) { return splitClipImpl(id, atBeat, 0.0); }

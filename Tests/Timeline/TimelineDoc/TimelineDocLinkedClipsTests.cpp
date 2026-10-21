@@ -260,3 +260,48 @@ TEST(TimelineDocLinkedClipsTest, LoadingAGroupOfOneOrABadGroupIsHandled) {
     clipVar.getDynamicObject()->setProperty("linkGroup", "seven");
     EXPECT_FALSE(loaded.fromVar(state));
 }
+
+TEST(TimelineDocLinkedClipsTest, StepsPerBarIsSharedAndOneUndoStep) {
+    TimelineDoc doc;
+    AppUndoManager undo;
+    const auto pair = makeLinkedPair(doc);
+
+    ASSERT_TRUE(undo.recordTimelineChange(doc, [&] { EXPECT_TRUE(doc.setClipStepsPerBar(pair.a, 32)); }));
+    EXPECT_EQ(doc.getClip(pair.a)->stepsPerBar, 32);
+    EXPECT_EQ(doc.getClip(pair.b)->stepsPerBar, 32);
+
+    ASSERT_TRUE(undo.undo());
+    EXPECT_EQ(doc.getClip(pair.a)->stepsPerBar, Clip::kDefaultStepsPerBar);
+    EXPECT_EQ(doc.getClip(pair.b)->stepsPerBar, Clip::kDefaultStepsPerBar);
+    EXPECT_FALSE(undo.canUndo()) << "the whole group's edit was one step";
+}
+
+TEST(TimelineDocLinkedClipsTest, DrumMuteAndSoloAreSharedAndEachOneUndoStep) {
+    TimelineDoc doc;
+    AppUndoManager undo;
+    const auto pair = makeLinkedPair(doc);
+
+    ASSERT_TRUE(undo.recordTimelineChange(doc, [&] { EXPECT_TRUE(doc.setClipPitchMuted(pair.b, 36, true)); }));
+    EXPECT_EQ(doc.getClip(pair.a)->mutedPitches, std::vector<int>{36});
+    ASSERT_TRUE(undo.recordTimelineChange(doc, [&] { EXPECT_TRUE(doc.setClipPitchSoloed(pair.a, 38, true)); }));
+    EXPECT_EQ(doc.getClip(pair.b)->soloPitches, std::vector<int>{38});
+
+    ASSERT_TRUE(undo.undo());
+    EXPECT_TRUE(doc.getClip(pair.a)->soloPitches.empty());
+    EXPECT_TRUE(doc.getClip(pair.b)->soloPitches.empty());
+    EXPECT_EQ(doc.getClip(pair.a)->mutedPitches, std::vector<int>{36});
+    ASSERT_TRUE(undo.undo());
+    EXPECT_TRUE(doc.getClip(pair.a)->mutedPitches.empty());
+    EXPECT_TRUE(doc.getClip(pair.b)->mutedPitches.empty());
+    EXPECT_FALSE(undo.canUndo());
+}
+
+TEST(TimelineDocLinkedClipsTest, DrumSettingsOfAnUnlinkedClipStayItsOwn) {
+    TimelineDoc doc;
+    const auto pair = makeLinkedPair(doc);
+    const auto other = doc.addClip(pair.track, 16.0, 4.0, "Solo");
+    ASSERT_TRUE(doc.setClipStepsPerBar(other, 64));
+    ASSERT_TRUE(doc.setClipPitchMuted(other, 36, true));
+    EXPECT_EQ(doc.getClip(pair.a)->stepsPerBar, Clip::kDefaultStepsPerBar);
+    EXPECT_TRUE(doc.getClip(pair.a)->mutedPitches.empty());
+}
