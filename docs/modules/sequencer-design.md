@@ -91,6 +91,17 @@ Code: `SequencerClock` (position), `SequencerPlayer` (events), `SequencerScaleSn
   11 above and one up to 11 below, from `hash(seed, k)`. Duplicate and out-of-range pitches are dropped.
 - **Audio thread.** No locks, no allocation, no logging: the snap table is rebuilt only when key, scale or custom
   mask changed; hits and held notes live in fixed arrays (512 hits per block, 256 held notes).
+- **Audition (preview) path** (`SequencerPreview`, shared by both modules). The message thread calls
+  `previewNotes(notes, count, velocity)` (at most 8 notes) or `stopPreview()`; the request goes into a fixed slot guarded
+  by a sequence counter (odd while being written, every field atomic). The audio thread reads it at the end of
+  `processModuleBlock`, after the pattern rendered: a reader that sees the counter change keeps the old state and tries
+  again next block, so nothing waits. A new request first ends the sounding preview (note-offs at sample 0), then
+  plays the new notes (note-ons at sample 0) on the pattern's channel, and ends them 300 ms later, counted in samples. It
+  works with Run on or off and while a transport-synced sequencer is stopped. A preview note-off is skipped for any pitch
+  the pattern is holding at that moment (`SequencerPlayer::isHolding`), so the pattern's own note-off ends it and nothing
+  hangs; if the pattern ends such a note first, the preview note ends with it. Bypass drops the request and ends what is
+  sounding (the Sequencer has no mute parameter; a module that gains one is silenced the same way). The slot is unrelated to
+  the pattern handoff, so a preview never waits on a pattern change.
 - **Round 2 changes to the old sound.** The old free-running clock tested step boundaries once per block, so notes
   slid by up to a block and the first note-on was one sample late; the new clock puts them on the exact sample. CC 74
   is `round(0.5 * 127) = 64` for the default filter amount (was 63). The Poly Sequencer no longer forces a root below
@@ -188,8 +199,11 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   (the fixed qualities whose notes differ from every in-key chip) and More (Unison, 5ths, Octs, Random, so older chords stay
   reachable). The current chord is accent-highlighted. Up/Down move between rows, Left/Right between chips, Enter picks, Esc
   closes. A pick sets `step.chord` as one undo step; chord ids are unchanged, so old projects load identically.
-- **Hover audition** is not built: the sequencer has no lock-free preview path to its output, and none was added. A hovered
-  chip only lights.
+- **Hover audition.** Resting the pointer on a chip (or moving the keyboard onto one) for 60 ms plays that chord through the
+  module's output, as the step would play it: `sequencerChordNotes` at the step's played root, velocity 0.8. Moving across
+  chips plays only the one the pointer settles on; leaving the chips, picking and closing end the sound. The chip light-up is
+  unchanged. The picker reports the settled chip (`onAudition`); `StepGridComponent::auditionChord` turns it into
+  `previewNotes` / `stopPreview` on the module. The audio side is the audition path under [Playback](#playback).
 - The contents and names are pure (`StepGridChords.{h,cpp}`) and unit-tested.
 
 ---
@@ -234,10 +248,10 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   step. The page strip and the chip row are Tab stops of their own.
 - **Size.** 560 wide; the card is 482 tall at the default lanes (Pitch and Velocity; the grid is 256 px, 28 of them the tools row), 758 with every lane (730 on the Poly Sequencer, which has no Slide lane); a 17+ step pattern adds nothing because the page strip's row is always reserved. The Row sections take two lines at 560 px: Play and Time on the first, Notes and Pattern on the second.
 
-## Chord picker (next)
+## Chord picker
 
-Not built. A Poly Sequencer step picks from 25 chords: the card groups them as Basic (the old eight), In key (the six
-`Scale *` kinds, labelled with their roman numeral in the key) and Borrowed (the eleven fixed qualities).
+Built: see [Poly Sequencer chords](#poly-sequencer-chords). A step picks from 25 chord types; the picker offers the ones in
+the key first (Triad, Seventh, Sus, Add), then Borrowed (the fixed qualities) and More.
 
 ---
 

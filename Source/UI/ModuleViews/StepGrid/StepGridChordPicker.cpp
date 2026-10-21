@@ -39,7 +39,7 @@ StepGridChordPicker::StepGridChordPicker(stepgrid::ChordPickerContent content, S
     setSize(kWidth, layoutAll());
 }
 
-StepGridChordPicker::~StepGridChordPicker() = default;
+StepGridChordPicker::~StepGridChordPicker() { endAudition(); }
 
 SequencerChord StepGridChordPicker::getFocusedChord() const {
     return content_.rows[(size_t)row_].chips[(size_t)chip_].chord;
@@ -139,7 +139,29 @@ void StepGridChordPicker::setHover(int row, int chip) {
     if (onHover)
         onHover(row >= 0 ? std::optional<SequencerChord>(content_.rows[(size_t)row].chips[(size_t)chip].chord)
                          : std::nullopt);
+    // Only the chip the pointer rests on plays: every move restarts the wait, leaving the chips ends the sound at once.
+    if (row >= 0)
+        startTimer(kAuditionDelayMs);
+    else
+        endAudition();
     repaint();
+}
+
+void StepGridChordPicker::timerCallback() {
+    stopTimer();
+    if (hoverRow_ < 0 || !onAudition)
+        return;
+    auditioning_ = true;
+    onAudition(content_.rows[(size_t)hoverRow_].chips[(size_t)hoverChip_].chord);
+}
+
+void StepGridChordPicker::endAudition() {
+    stopTimer();
+    if (!auditioning_)
+        return;
+    auditioning_ = false;
+    if (onAudition)
+        onAudition(std::nullopt);
 }
 
 void StepGridChordPicker::mouseMove(const juce::MouseEvent& e) {

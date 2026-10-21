@@ -78,6 +78,8 @@ public:
     void openChordPicker(int step);
     /** Sets `step`'s chord: one undo step, the label cross-fades. */
     void pickChord(int step, SequencerChord chord);
+    /** Plays `chord` as the step would play it through the module output (nullopt ends it); the picker calls this. */
+    void auditionChord(int step, std::optional<SequencerChord> chord);
     /** The label's hit rectangle for `step` in this component's coordinates; empty when no label is drawn. */
     juce::Rectangle<int> chordLabelBounds(int step) const;
 

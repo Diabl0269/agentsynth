@@ -61,6 +61,7 @@ void SequencerModuleBase::prepareToPlay(double sampleRate, int samplesPerBlock) 
     sampleRate_ = sampleRate;
     clock_.reset();
     player_.reset();
+    preview_.prepare(sampleRate);
     currentActiveStep = 0;
 }
 
@@ -87,9 +88,20 @@ void SequencerModuleBase::processModuleBlock(juce::AudioBuffer<float>& buffer, j
     handoff_.adopt();
     if (isBypassed()) {
         stopOutput(midiMessages);
+        preview_.silence(midiMessages, player_);
         buffer.clear();
         return;
     }
+    renderPattern(buffer, midiMessages);
+    // This module has no mute parameter today; one added later silences the audition like bypass does.
+    if (hasMuteParameter() && isMuted())
+        preview_.silence(midiMessages, player_);
+    else
+        preview_.render(midiMessages, buffer.getNumSamples(), player_);
+}
+
+// The audition is rendered after the pattern, so the held-note list it consults already holds this block's notes.
+void SequencerModuleBase::renderPattern(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     const auto* pattern = handoff_.current();
     if (pattern == nullptr || !runParam_->get()) {
         stopOutput(midiMessages);

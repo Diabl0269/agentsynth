@@ -8,6 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerPatternTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerStateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerPatternOpsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerPreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridToolsTests.cpp
