@@ -17,6 +17,9 @@ constexpr int kPlayClipSlotWidth = 72;
 constexpr int kShowAllWidth = 92;
 constexpr int kStepsComboWidth = 56;
 constexpr int kStepsCaptionWidth = 78;
+constexpr int kSwingCaptionWidth = 44;
+constexpr int kSwingKnobSize = 18;
+constexpr int kSwingValueWidth = 34;
 constexpr int kToolbarPad = 4;
 constexpr float kRestingAlpha = 0.55f;
 constexpr float kSilencedAlpha = 0.35f;
@@ -24,6 +27,7 @@ constexpr float kMutedHitAlpha = 0.4f;
 constexpr float kPlayColumnAlpha = 0.16f;
 constexpr float kFlashAlpha = 0.55f;
 constexpr float kAccentTickHeight = 2.0f;
+constexpr float kSwingTickAlpha = 0.45f;
 constexpr int kDenseStepPx = 3;
 constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
 constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
@@ -35,8 +39,9 @@ static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches t
 //==============================================================================
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
-    const int nameWidth = std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth -
-                                          kStepsComboWidth - kStepsCaptionWidth - 4 * kToolbarPad);
+    const int nameWidth =
+        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth - kStepsComboWidth -
+                        kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize - kSwingValueWidth - 7 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -47,10 +52,16 @@ void DrumMachineComponent::layoutToolbar() {
     header.removeFromLeft(kToolbarPad);
     stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
     stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
+    header.removeFromLeft(kToolbarPad);
+    swingCaptionBounds_ = header.removeFromLeft(kSwingCaptionWidth);
+    swingKnob_.setBounds(header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
+    header.removeFromLeft(kToolbarPad);
+    swingValueBounds_ = header.removeFromLeft(kSwingValueWidth);
 }
 
 void DrumMachineComponent::resized() {
     layoutToolbar();
+    layoutBottom();
     layoutRows();
 }
 
@@ -68,6 +79,20 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
                true);
     g.setColour(theme.colors.textMuted);
     g.drawText("Steps per bar", stepsCaptionBounds_, juce::Justification::centredRight, true);
+    g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
+    g.setColour(theme.colors.textPrimary);
+    g.drawText(juce::String(juce::roundToInt(swingKnob_.getValue())) + "%", swingValueBounds_,
+               juce::Justification::centredLeft, true);
+}
+
+// "for Kick" beside the lane chips: the row the lanes edit.
+void DrumMachineComponent::paintLaneCaption(juce::Graphics& g) {
+    if (forBounds_.isEmpty())
+        return;
+    const auto& theme = synth::theme::themeOf(*this);
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain));
+    g.setColour(theme.colors.textMuted);
+    g.drawText("for " + drumLaneForPitch(selectedPitch_).name, forBounds_, juce::Justification::centredLeft, true);
 }
 
 //==============================================================================
@@ -75,6 +100,7 @@ void DrumMachineComponent::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.fillAll(theme.colors.bg1);
     paintToolbar(g);
+    paintLaneCaption(g);
     {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(gridRegion());
@@ -159,6 +185,14 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
             g.setColour(juce::Colours::white.withMultipliedAlpha(alpha));
             g.fillRect(tick.transformedBy(scaled).getIntersection(area));
         }
+        if (swing_ > synth::Clip::kStraightSwing && (step & 1) != 0 && !dense) {
+            // The hit sits on the grid but plays late: a small tick marks how far into its cell.
+            const float offset = static_cast<float>((swing_ - synth::Clip::kStraightSwing) * 2.0);
+            g.setColour(juce::Colours::white.withMultipliedAlpha(kSwingTickAlpha * alpha));
+            g.fillRect(juce::Rectangle<float>(area.getX() + offset * area.getWidth() - 1.0f, area.getY() + 3.0f, 2.0f,
+                                              std::max(1.0f, area.getHeight() - 6.0f))
+                           .getIntersection(area));
+        }
         const float flash = flashAmount(key);
         if (flash > 0.0f) {
             g.setColour(juce::Colours::white.withAlpha(kFlashAlpha * flash * alpha));
@@ -232,6 +266,8 @@ void DrumMachineComponent::setPlayheadBeat(double absoluteBeat) {
             }
         }
     }
+    if (c != nullptr)
+        flushSwungFlashes(absoluteBeat - c->startBeat);
 
     const int x =
         static_cast<int>(std::llround(std::clamp(beatToX(absoluteBeat), -kMaxLineXMagnitude, kMaxLineXMagnitude)));

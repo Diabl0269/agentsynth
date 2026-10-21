@@ -83,12 +83,14 @@ DrumMachineComponent::DrumMachineComponent()
     showAllButton_.setTitle("Show all drums");
     showAllButton_.setTooltip("Show every General MIDI drum as a row, not only the common ones");
     showAllButton_.onClick = [this] { setShowAllDrums(showAllButton_.getToggleState()); };
+    setupGroove();
 }
 
 DrumMachineComponent::~DrumMachineComponent() {
     wheelTween_.stop();
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
+    laneAnim_.stop(vblank_);
 }
 
 //==============================================================================
@@ -121,6 +123,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     rowAnim_.stop(vblank_);
     hasPlayheadX_ = false;
     playStep_ = -1;
+    pendingSwung_.clear();
     clipId_ = {};
 
     const auto* c = doc_ != nullptr ? doc_->getClip(id) : nullptr;
@@ -145,6 +148,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
         juce::dontSendNotification);
     fitViewToClip();
     layoutRows();
+    refreshGroove();
     if (auto* handler = getAccessibilityHandler())
         handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
     repaint();
@@ -161,6 +165,7 @@ void DrumMachineComponent::closeGrid() {
     clipId_ = {};
     hasPlayheadX_ = false;
     playStep_ = -1;
+    pendingSwung_.clear();
     repaint();
 }
 
@@ -201,6 +206,7 @@ void DrumMachineComponent::refreshFromDoc() {
     const int steps = getStepCount();
     focus_.step = juce::jlimit(0, std::max(0, steps - 1), focus_.step);
     layoutRows();
+    refreshGroove();
     if (auto* handler = getAccessibilityHandler())
         handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
     repaint();
@@ -269,7 +275,7 @@ void DrumMachineComponent::layoutRows() {
 }
 
 void DrumMachineComponent::pushRowsToLabels() {
-    labels_.setBounds(0, canvasTop(), kLabelColumnWidth, std::max(0, getHeight() - canvasTop()));
+    labels_.setBounds(0, canvasTop(), kLabelColumnWidth, gridHeight());
     std::vector<DrumRowLabels::Row> rows;
     const auto* c = clip();
     for (size_t i = 0; i < slots_.size(); ++i) {
@@ -279,6 +285,7 @@ void DrumMachineComponent::pushRowsToLabels() {
         row.top = (i < rowTops_.size() ? rowTops_[i] : canvasTop()) - canvasTop();
         row.height = rowHeightOf(slot);
         row.alpha = slot.reveal;
+        row.selected = slot.lane.pitch == selectedPitch_;
         if (c != nullptr) {
             row.muted = std::binary_search(c->mutedPitches.begin(), c->mutedPitches.end(), slot.lane.pitch);
             row.soloed = std::binary_search(c->soloPitches.begin(), c->soloPitches.end(), slot.lane.pitch);

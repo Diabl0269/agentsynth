@@ -91,11 +91,11 @@ void DrumMachineComponent::flashSkippedSteps(int previous, int step) {
     else if (previewing_ && previous > step && count - previous + step <= kMaxSkippedSteps)
         from = (previous + 1) % std::max(1, count);
     for (int s = from;; s = (s + 1) % std::max(1, count)) {
-        for (const auto& slot : slots_) {
-            const auto key = drumgrid::cellKey(slot.lane.pitch, s);
-            if (cells_.count(key) > 0 && !rowSilenced(slot.lane.pitch))
-                beginFlash(key);
-        }
+        const bool swung = swing_ > synth::Clip::kStraightSwing && (s & 1) != 0;
+        if (!swung)
+            flashStepHits(s);
+        else if (std::find(pendingSwung_.begin(), pendingSwung_.end(), s) == pendingSwung_.end())
+            pendingSwung_.push_back(s); // flushSwungFlashes flashes it when its time comes
         if (s == step)
             break;
     }

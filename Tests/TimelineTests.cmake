@@ -2,6 +2,8 @@
 # under the file-size cap.
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachinePreviewTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineGrooveTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/ClipSwingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineMidiSource/TimelineMidiSourcePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTransportBarReturnToStartTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp

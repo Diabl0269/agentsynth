@@ -36,6 +36,61 @@ float gainFromDecibels(double gainDb) noexcept {
     return (float)std::pow(10.0, gainDb * 0.05);
 }
 
+// The delay swing gives a note starting at the clip-relative `startBeat`: every ODD step of the clip's grid (steps
+// counted from 0, a step being beatsPerBar / stepsPerBar beats) is pushed later by (swing - 0.5) * 2 steps, so 0.75
+// puts the off-beat of a pair at 75% of it. A note off the grid is untouched, and a shift that would leave the clip is
+// dropped, so a swung note always starts inside its clip.
+double swingDelayBeats(const Clip& clip, double startBeat, double beatsPerBar) noexcept {
+    if (clip.swing <= Clip::kStraightSwing)
+        return 0.0;
+    const double bar = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
+    const double step = bar / static_cast<double>(std::max(1, clip.stepsPerBar));
+    const double index = startBeat / step;
+    const double nearest = std::round(index);
+    if (std::abs(index - nearest) > 1.0e-6 || (static_cast<long long>(nearest) & 1LL) == 0)
+        return 0.0;
+    const double delay = (clip.swing - Clip::kStraightSwing) * 2.0 * step;
+    return startBeat + delay < clip.lengthBeats ? delay : 0.0;
+}
+
+// Flattens one clip's notes onto the end of `out`, applying the clip's mute, solo and swing. The result is sorted by
+// start: the notes already are, and a swung note moves later (never past the clip end), so a re-sort is needed only
+// when swing is on.
+void appendClipNotes(std::vector<TimelineSnapshot::NoteEvent>& out, const Clip& clip, double beatsPerBar) {
+    const double clipEnd = clip.startBeat + clip.lengthBeats;
+    const auto runStart = out.size();
+    const auto& mutedPitches = clip.mutedPitches;
+    const auto& soloPitches = clip.soloPitches;
+
+    for (const auto& note : clip.notes) {
+        // Notes are sorted by (startBeat, pitch), so the first one at or past the clip
+        // end means every remaining note is too.
+        if (note.startBeat >= clip.lengthBeats)
+            break;
+        // A muted note is skipped, never emitted silent: dropping it keeps the run
+        // free of events no consumer would know to ignore. `continue`, not `break` --
+        // mute is not part of the sort key, so a muted note says nothing about the
+        // ones after it.
+        if (note.muted)
+            continue;
+        // Drum-machine mute/solo is applied here and never written onto the note, so
+        // un-muting a row restores exactly the notes that were there.
+        if (std::binary_search(mutedPitches.begin(), mutedPitches.end(), note.pitch))
+            continue;
+        if (!soloPitches.empty() && !std::binary_search(soloPitches.begin(), soloPitches.end(), note.pitch))
+            continue;
+
+        TimelineSnapshot::NoteEvent event;
+        event.startBeat = clip.startBeat + note.startBeat + swingDelayBeats(clip, note.startBeat, beatsPerBar);
+        event.endBeat = std::min(event.startBeat + note.lengthBeats, clipEnd);
+        event.pitch = note.pitch;
+        event.velocity = note.velocity;
+        event.channel = note.channel;
+        out.push_back(event);
+    }
+    if (clip.swing > Clip::kStraightSwing)
+        std::stable_sort(out.begin() + static_cast<std::ptrdiff_t>(runStart), out.end(), noteEventLess);
+}
 } // namespace
 
 std::atomic<int>& TimelineSnapshot::liveInstanceCount() noexcept {
@@ -47,7 +102,7 @@ TimelineSnapshot::TimelineSnapshot() { liveInstanceCount().fetch_add(1, std::mem
 
 TimelineSnapshot::~TimelineSnapshot() { liveInstanceCount().fetch_sub(1, std::memory_order_relaxed); }
 
-std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc& doc) {
+std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc& doc, double beatsPerBar) {
     auto snapshot = std::make_unique<TimelineSnapshot>();
     snapshot->revision = doc.getRevision();
 
@@ -83,37 +138,8 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                 if (clip.muted)
                     continue;
 
-                const double clipEnd = clip.startBeat + clip.lengthBeats;
                 const auto runStart = snapshot->notes.size();
-                const auto& mutedPitches = clip.mutedPitches;
-                const auto& soloPitches = clip.soloPitches;
-
-                for (const auto& note : clip.notes) {
-                    // Notes are sorted by (startBeat, pitch), so the first one at or past the clip
-                    // end means every remaining note is too.
-                    if (note.startBeat >= clip.lengthBeats)
-                        break;
-                    // A muted note is skipped, never emitted silent: dropping it keeps the run
-                    // free of events no consumer would know to ignore. `continue`, not `break` —
-                    // mute is not part of the sort key, so a muted note says nothing about the
-                    // ones after it.
-                    if (note.muted)
-                        continue;
-                    // Drum-machine mute/solo is applied here and never written onto the note, so
-                    // un-muting a row restores exactly the notes that were there.
-                    if (std::binary_search(mutedPitches.begin(), mutedPitches.end(), note.pitch))
-                        continue;
-                    if (!soloPitches.empty() && !std::binary_search(soloPitches.begin(), soloPitches.end(), note.pitch))
-                        continue;
-
-                    NoteEvent event;
-                    event.startBeat = clip.startBeat + note.startBeat;
-                    event.endBeat = std::min(event.startBeat + note.lengthBeats, clipEnd);
-                    event.pitch = note.pitch;
-                    event.velocity = note.velocity;
-                    event.channel = note.channel;
-                    snapshot->notes.push_back(event);
-                }
+                appendClipNotes(snapshot->notes, clip, beatsPerBar);
 
                 // Each clip contributes an already-sorted run (its notes are sorted and shifted by
                 // one constant), so folding it into the track's run is a stable merge, never a sort.

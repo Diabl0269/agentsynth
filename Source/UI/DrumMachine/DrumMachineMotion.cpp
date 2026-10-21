@@ -98,10 +98,15 @@ bool DrumMachineComponent::isHitMotionActive(int row, int step) const {
     return slotIndexForRow(row) >= 0 && hitMotions_.count(drumgrid::cellKey(slots_[(size_t)row].lane.pitch, step)) > 0;
 }
 
+bool DrumMachineComponent::isFlashActive(int row, int step) const {
+    return slotIndexForRow(row) >= 0 && flashes_.count(drumgrid::cellKey(slots_[(size_t)row].lane.pitch, step)) > 0;
+}
+
 void DrumMachineComponent::finishMotionsForTest() {
     motionAnim_.stop(vblank_);
     hitMotions_.clear();
     flashes_.clear();
+    laneAnim_.completeForTest();
     rowAnim_.completeForTest();
     repaint();
 }

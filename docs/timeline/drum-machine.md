@@ -6,9 +6,10 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 
 ## What it shows
 
-- A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", and the
-  Steps per bar dropdown (8, 16, 32, 64).
-- One row per drum: a coloured dot, the name, and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
+- A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
+  Steps per bar dropdown (8, 16, 32, 64), the Swing knob.
+- One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
+  in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
   A pitch that holds a note always has a row, and a pitch outside the table is named "Note N".
 - Cells are rounded squares with alternating beat-group shades. A hit fills the cell to its velocity; an accent adds
@@ -59,13 +60,45 @@ Per-drum Mute and Solo are stored on the clip (`mutedPitches`, `soloPitches`) an
 `TimelineSnapshot::buildFrom`: a note is skipped when its pitch is muted, or when any pitch is soloed and its
 pitch is not. They never write `MidiNote::muted`, which stays the piano roll's per-note mute.
 
+## Swing
+
+The Swing knob in the header (50% straight to 75% shuffle, 56% reads "56%") sets `Clip::swing` (0.5 to 0.75), one
+undo step per turn: a drag or key press commits on release, a double-click resets to 50%. A linked group shares it
+(`syncLinkedClips`); split, duplicate and copy/paste carry it. It is saved only when it is not 0.5.
+
+Swing is applied in `TimelineSnapshot::buildFrom` and never written into the notes. The steps of the clip's grid are
+counted from 0; a note whose clip-relative start is on an ODD step (within 1e-6 of a step) starts later by
+`(swing - 0.5) * 2 * step`, so at 0.75 the off-beat of a pair sits at 75% of the pair (a triplet feel). Notes off the
+grid are untouched, the note keeps its length (its end follows, clamped to the clip end as before), and a shift that
+would push the start past the clip end is dropped. The clip's run is sorted again when swing is on, since a swung note
+can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar length of the transport's time signature,
+which the engine passes to `buildFrom` on every publish (a time-signature change reaches playback at the next
+publish, not at once).
+
+The grid keeps its cells on the grid. A hit on a swung step shows a small tick inside its cell, at how far into the
+step it plays. The playhead column is real time, and a swung hit flashes when it plays, not when the playhead enters
+its column.
+
+## Lanes under the grid
+
+A row of lane chips (`LaneChipRow`, [lane-chips](../layout/lane-chips.md)) sits under the grid with a "for <row>" note
+beside it. The only lane so far is Loudness; the lane host (the chips row, the lane band above it) takes more.
+
+Turning Loudness on grows a lane under the grid over 160 ms (`easeOutCubic`, 80 ms under Reduce Motion, at once with
+Animations Off or off screen); the grid area above it scrolls when the panel is short. The lane draws one bar per hit
+of the picked row, as tall as the hit is loud, with the value on hover. Press and drag across it to set each hit
+under the pointer to the pointer's height; a drag is a straight ramp between its pointer samples, previewed in the
+lane and written once on release as ONE undo step. The lane is one Tab stop: Left and Right move between the row's
+hits, Up and Down change loudness by 5 (Shift 25), each press one undo step, read out as "Kick, step 5, loudness
+100".
+
 ## Keyboard and accessibility
 
 The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End move a focus cell (drawn with the
 focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
 by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return and Shift+Up/Down are rebindable (Drum Machine
 category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
-"Kick, step 5, empty". Header controls and each row's M and S are Tab-reachable with names and tooltips.
+"Kick, step 5, empty". Header controls (the Swing knob, Ideas) and each row's name, M and S are Tab-reachable with names and tooltips.
 
 ## Motion
 

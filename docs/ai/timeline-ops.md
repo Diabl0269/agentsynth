@@ -336,7 +336,7 @@ Every op adds new clips; none edits a clip that already exists, so an op never l
 edits its whole group: any later path that changes an existing clip's notes has to go through the
 `TimelineDoc` note mutators, which rewrite every member of the group in the same mutation (one undo
 step). The arrangement summary marks linked clips `(linked)` so the model knows a repeated pattern is
-shared.
+shared. A clip's swing is a clip setting the AI does not set; AI-placed clips play straight.
 
 ## Sibling, never nested
 

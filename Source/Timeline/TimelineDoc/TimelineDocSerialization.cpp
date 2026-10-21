@@ -135,6 +135,8 @@ bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
     if (!readOptionalInt(obj.getProperty("stepsPerBar"), clip.stepsPerBar) ||
         !Clip::isValidStepsPerBar(clip.stepsPerBar))
         return false;
+    if (!readOptionalDouble(obj.getProperty("swing"), clip.swing) || !Clip::isValidSwing(clip.swing))
+        return false;
     return readPitchList(obj.getProperty("mutedPitches"), clip.mutedPitches) &&
            readPitchList(obj.getProperty("soloPitches"), clip.soloPitches);
 }
@@ -152,6 +154,8 @@ void writePitchList(juce::DynamicObject& obj, const char* key, const std::vector
 void writeClipDrumFields(juce::DynamicObject& obj, const Clip& clip) {
     if (clip.stepsPerBar != Clip::kDefaultStepsPerBar)
         obj.setProperty("stepsPerBar", clip.stepsPerBar);
+    if (clip.swing != Clip::kStraightSwing)
+        obj.setProperty("swing", clip.swing);
     writePitchList(obj, "mutedPitches", clip.mutedPitches);
     writePitchList(obj, "soloPitches", clip.soloPitches);
 }

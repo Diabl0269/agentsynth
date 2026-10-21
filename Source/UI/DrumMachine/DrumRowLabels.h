@@ -10,7 +10,8 @@
 namespace synth::ui {
 
 /** The drum machine's left column: a coloured dot, the drum's name and its Mute and Solo toggles, one row per lane,
- *  scrolled in step with the cells. The toggles are real buttons so each is a Tab stop with a name. */
+ *  scrolled in step with the cells. The toggles and the name are real buttons so each is a Tab stop with a name; the
+ *  name selects the row the lanes under the grid edit, and the selected one is drawn in the accent colour. */
 class DrumRowLabels : public juce::Component {
 public:
     DrumRowLabels() = default;
@@ -22,17 +23,21 @@ public:
         float alpha = 1.0f; ///< below 1 while the row fades in or out
         bool muted = false;
         bool soloed = false;
-        bool dimmed = false; ///< silenced by another row's solo, or by its own mute
+        bool dimmed = false;   ///< silenced by another row's solo, or by its own mute
+        bool selected = false; ///< the row the lanes under the grid show
     };
 
     /** Fired for a user toggle of a row's M or S. */
     std::function<void(int pitch, bool on)> onMuteToggled;
     std::function<void(int pitch, bool on)> onSoloToggled;
+    /** Fired when a row's name is pressed (click, Space or an accessibility press). */
+    std::function<void(int pitch)> onRowClicked;
 
     void setRows(std::vector<Row> rows);
     /** The row's toggle, or null when `pitch` has no row. */
     juce::Button* getMuteButton(int pitch) const;
     juce::Button* getSoloButton(int pitch) const;
+    juce::Button* getNameButton(int pitch) const;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -42,6 +47,7 @@ private:
     struct Controls {
         std::unique_ptr<juce::TextButton> mute;
         std::unique_ptr<juce::TextButton> solo;
+        std::unique_ptr<juce::Button> name;
     };
 
     Controls& controlsFor(const DrumLane& lane);

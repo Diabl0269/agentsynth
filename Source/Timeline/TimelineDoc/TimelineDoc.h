@@ -194,8 +194,14 @@ struct Clip {
         return steps == 8 || steps == 16 || steps == 32 || steps == 64;
     }
     int stepsPerBar = kDefaultStepsPerBar; // 8, 16, 32 or 64
-    std::vector<int> mutedPitches;         // sorted, unique, 0..127
-    std::vector<int> soloPitches;          // sorted, unique, 0..127
+    // Swing: every second step of the grid (the odd ones, counting from 0) starts later. 0.5 is straight, 0.75 a
+    // shuffle; applied in TimelineSnapshot::buildFrom, never written into the notes.
+    static constexpr double kStraightSwing = 0.5;
+    static constexpr double kMaxSwing = 0.75;
+    static constexpr bool isValidSwing(double swing) noexcept { return swing >= kStraightSwing && swing <= kMaxSwing; }
+    double swing = kStraightSwing;
+    std::vector<int> mutedPitches; // sorted, unique, 0..127
+    std::vector<int> soloPitches;  // sorted, unique, 0..127
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -453,6 +459,8 @@ public:
     // Drum-machine settings. stepsPerBar must be 8, 16, 32 or 64 and pitch 0..127, else false; a
     // no-op change returns true without bumping the revision.
     bool setClipStepsPerBar(ClipId id, int stepsPerBar);
+    // Swing must be 0.5 to 0.75, else false.
+    bool setClipSwing(ClipId id, double swing);
     bool setClipPitchMuted(ClipId id, int pitch, bool muted);
     bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 

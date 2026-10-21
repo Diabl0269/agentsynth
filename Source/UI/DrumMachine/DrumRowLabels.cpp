@@ -3,6 +3,7 @@
 
 #include "DrumRowLabels.h"
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 
@@ -15,6 +16,28 @@ constexpr int kToggleWidth = 20;
 constexpr int kToggleGap = 2;
 constexpr int kRightPad = 4;
 constexpr float kDimmedAlpha = 0.45f;
+constexpr int kNameLeft = kDotLeft + kDotDiameter + 6;
+
+// The drum's name as a button: it draws the text itself (accent colour while selected) and the focus ring.
+class NameButton : public juce::Button {
+public:
+    explicit NameButton(const juce::String& text)
+        : juce::Button(text) {
+        setClickingTogglesState(false);
+        setMouseClickGrabsKeyboardFocus(false);
+    }
+
+    float alpha = 1.0f;
+
+    void paintButton(juce::Graphics& g, bool, bool) override {
+        const auto& theme = synth::theme::themeOf(*this);
+        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain));
+        g.setColour((getToggleState() ? theme.colors.accent : theme.colors.textPrimary).withAlpha(alpha));
+        g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredLeft, true);
+        if (hasKeyboardFocus(false))
+            paintFocusRing(g, getLocalBounds().toFloat(), *this, theme.metrics.cornerRadiusSmall);
+    }
+};
 } // namespace
 
 DrumRowLabels::Controls& DrumRowLabels::controlsFor(const DrumLane& lane) {
@@ -24,7 +47,16 @@ DrumRowLabels::Controls& DrumRowLabels::controlsFor(const DrumLane& lane) {
 
     controls.mute = std::make_unique<juce::TextButton>("M");
     controls.solo = std::make_unique<juce::TextButton>("S");
+    controls.name = std::make_unique<NameButton>(lane.name);
+    addChildComponent(*controls.name);
     const int pitch = lane.pitch;
+    controls.name->setComponentID("drumRowName" + juce::String(pitch));
+    controls.name->setTitle(lane.name + " row");
+    controls.name->setTooltip("Select " + lane.name + ": the lanes under the grid edit this drum's hits");
+    controls.name->onClick = [this, pitch] {
+        if (onRowClicked)
+            onRowClicked(pitch);
+    };
     for (auto* button : {controls.mute.get(), controls.solo.get()}) {
         button->setClickingTogglesState(true);
         button->setMouseClickGrabsKeyboardFocus(false);
@@ -54,6 +86,8 @@ void DrumRowLabels::setRows(std::vector<Row> rows) {
         auto& controls = controlsFor(row.lane);
         controls.mute->setToggleState(row.muted, juce::dontSendNotification);
         controls.solo->setToggleState(row.soloed, juce::dontSendNotification);
+        controls.name->setToggleState(row.selected, juce::dontSendNotification);
+        static_cast<NameButton&>(*controls.name).alpha = (row.dimmed ? kDimmedAlpha : 1.0f) * row.alpha;
     }
     // A row that is gone takes its buttons with it, so the Tab order never holds a hidden drum.
     for (auto it = controls_.begin(); it != controls_.end();) {
@@ -75,6 +109,11 @@ juce::Button* DrumRowLabels::getSoloButton(int pitch) const {
     return it == controls_.end() ? nullptr : it->second.solo.get();
 }
 
+juce::Button* DrumRowLabels::getNameButton(int pitch) const {
+    const auto it = controls_.find(pitch);
+    return it == controls_.end() ? nullptr : it->second.name.get();
+}
+
 void DrumRowLabels::layoutControls() {
     for (const auto& row : rows_) {
         auto& controls = controls_[row.lane.pitch];
@@ -89,6 +128,11 @@ void DrumRowLabels::layoutControls() {
         controls.solo->setBounds(solo);
         controls.mute->setVisible(whole);
         controls.solo->setVisible(whole);
+        const auto nameArea = juce::Rectangle<int>(0, row.top, getWidth(), row.height)
+                                  .withTrimmedLeft(kNameLeft)
+                                  .withTrimmedRight(2 * kToggleWidth + kToggleGap + kRightPad + 2);
+        controls.name->setBounds(nameArea);
+        controls.name->setVisible(row.height > 0);
     }
 }
 
@@ -118,10 +162,6 @@ void DrumRowLabels::paint(juce::Graphics& g) {
         g.setColour(row.lane.colour.withAlpha(alpha));
         g.fillEllipse(juce::Rectangle<float>((float)kDotLeft, (float)bounds.getCentreY() - kDotDiameter * 0.5f,
                                              (float)kDotDiameter, (float)kDotDiameter));
-        g.setColour(theme.colors.textPrimary.withAlpha(alpha));
-        auto text = bounds.withTrimmedLeft(kDotLeft + kDotDiameter + 6)
-                        .withTrimmedRight(2 * kToggleWidth + kToggleGap + kRightPad + 2);
-        g.drawText(row.lane.name, text, juce::Justification::centredLeft, true);
     }
     g.setColour(theme.colors.border);
     g.drawVerticalLine(getWidth() - 1, 0.0f, (float)getHeight());

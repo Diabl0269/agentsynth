@@ -738,9 +738,8 @@ private:
     std::function<void(std::unique_ptr<ModMatrixPicker>)> addAutomationPickerHook_;
 
     // ---- Clip clipboard ----
-    // One captured clip, relative to the earliest selected clip's start at copy time (see
-    // copySelectedClips()). Notes are already clip-relative in the doc, so they need no rebasing;
-    // addNote() reassigns their ids on paste regardless of what's stored here.
+    // One captured clip, relative to the earliest selected clip's start at copy time (see copySelectedClips()).
+    // Notes are already clip-relative in the doc; addNote() reassigns their ids on paste.
     struct ClipboardClip {
         synth::TrackId originalTrack;
         // The track kind this clip needs on paste, derived at COPY time from the payload
@@ -760,6 +759,7 @@ private:
         double fadeOutBeats = 0.0;
         double sourceStartSeconds = 0.0;
         int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
+        double swing = synth::Clip::kStraightSwing;
         std::vector<int> mutedPitches, soloPitches;
     };
     std::vector<ClipboardClip> clipClipboard_;
