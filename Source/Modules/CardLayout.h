@@ -37,10 +37,14 @@ enum class CardView {
     Wavetable,
     EqCurve,
     Threshold,
-    GainReduction
+    GainReduction,
+    StepGrid
 };
 
-enum class CardPresentation { Grid, Tab };
+/** Grid = a stack of runs across the card; Tab = consecutive sections share a tab strip; Row = consecutive sections
+ *  sit side by side, each under a small title and apart by a hairline, wrapping to a new line only when the card
+ *  is too narrow. */
+enum class CardPresentation { Grid, Tab, Row };
 enum class CardConditionEffect { Show, Dim };
 
 /** Dim or show an item by another parameter's value: choice value strings, or "true"/"false". */
@@ -88,7 +92,8 @@ struct CardViewItem {
 
 using CardItem = std::variant<CardParamItem, CardViewItem>;
 
-/** A titled (or untitled) group of items; consecutive Tab sections render as one tab strip. */
+/** A titled (or untitled) group of items; consecutive Tab sections render as one tab strip, consecutive Row sections as
+ * one row. */
 struct CardSection {
     static constexpr int kDefaultColumns = 3;
     /** The reserved id of the footer section: one compact row at the bottom of a built-in card. */

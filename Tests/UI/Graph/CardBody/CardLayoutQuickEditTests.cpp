@@ -219,7 +219,7 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout)
 
 TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {
     CardCanvas canvas;
-    const auto id = canvas.add(synth::AIStateMapper::createModule("Sequencer"), 0, 0);
+    const auto id = canvas.add(synth::AIStateMapper::createModule("Parametric EQ"), 0, 0);
     canvas.editor.updateComponents();
     auto* card = canvas.card(id);
     ASSERT_NE(card, nullptr);

@@ -80,6 +80,12 @@ This matters because preset load — and any undo that has to fall back to a ful
 
 `setExtraState` is only ever called on the **trusted** path (our own snapshots and presets). A module may legitimately read this as a filename, so honouring it for untrusted model output would turn a patch suggestion into an arbitrary file read.
 
+### Legacy parameters (`adoptLegacyParams`)
+
+`virtual void adoptLegacyParams(const juce::NamedValueSet& params)` / `virtual bool isLegacyParamId(const juce::String&) const`
+
+For parameters a module no longer has. `AIStateMapper::applyParamsToProcessor` calls `adoptLegacyParams` with the node's whole `"params"` object once it has applied the real parameters, on the trusted and the untrusted path (a patch, a preset, a saved project, an undo snapshot, a snippet all go through it), so an old file or an AI patch from a backend that still lists the dropped ids keeps working. Values come straight from the file or the model: clamp every one. A params object without the old keys must change nothing. `isLegacyParamId` tells `validateNodeParams` which dropped ids to accept instead of rejecting them as unknown keys. The extra state is applied after the parameters on every load path (`applyJSONToGraph` for new and existing nodes, `applySnapshotPreservingNodes` for kept and created nodes), so a node that carries both ends up with its state; anything the module adopted from old keys and the user then edits is saved as state. The Sequencer and Poly Sequencer use it for their eight old steps ([sequencer-design.md](../modules/sequencer-design.md#legacy-adoption)).
+
 ### Port Labels
 
 `virtual juce::String getInputPortLabel(int channelIndex) const` / `getOutputPortLabel(int channelIndex)` — overridden per-module to provide descriptive jack names (e.g. "CV In", "Audio L") shown in the UI.

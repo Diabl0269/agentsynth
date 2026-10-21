@@ -1,4 +1,4 @@
-// ModuleComponentPaint.cpp -- the Sequencer step-column layout helper, the card's paint() (ports,
+// ModuleComponentPaint.cpp -- the card's paint() (ports,
 // activity LED, output-card identity treatment, modulation rings), the macro-port docked widget's
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
@@ -7,7 +7,6 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
-#include "Modules/SequencerModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -30,46 +29,6 @@ bool showsModulation(const juce::Slider& slider) {
 }
 
 } // namespace
-
-void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
-    // Gate slider (row 0)
-    juce::String gateId = "Gate " + juce::String(step);
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (sliders[i]->getComponentID().equalsIgnoreCase(gateId)) {
-            sliderLabels[i]->setBounds(colX, startY, 55, 20);
-            sliders[i]->setBounds(colX, startY + 20, 55, 50);
-        }
-    }
-
-    // Pitch / Root slider (row 1) — Sequencer uses "Pitch N", PolySequencer uses "Step N Root"
-    juce::String pitchId = "Pitch " + juce::String(step);
-    juce::String rootId = "Step " + juce::String(step) + " Root";
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (sliders[i]->getComponentID().equalsIgnoreCase(pitchId) ||
-            sliders[i]->getComponentID().equalsIgnoreCase(rootId)) {
-            sliderLabels[i]->setBounds(colX, startY + 80, 55, 20);
-            sliders[i]->setBounds(colX, startY + 100, 55, 50);
-        }
-    }
-
-    // F.Env / Chord combo (row 2) — Sequencer uses "F.Env N" slider; PolySequencer uses "Step N Chord" combo
-    juce::String fEnvId = "F.Env " + juce::String(step);
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (sliders[i]->getComponentID().equalsIgnoreCase(fEnvId)) {
-            sliderLabels[i]->setBounds(colX, startY + 160, 55, 20);
-            sliders[i]->setBounds(colX, startY + 180, 55, 50);
-        }
-    }
-
-    juce::String chordId = "Step " + juce::String(step) + " Chord";
-    for (int i = 0; i < comboBoxes.size(); ++i) {
-        if (comboBoxes[i]->getName().equalsIgnoreCase(chordId)) {
-            if (i < comboLabels.size())
-                comboLabels[i]->setBounds(colX, startY + 160, 55, 20);
-            comboBoxes[i]->setBounds(colX, startY + 180, 55, 24);
-        }
-    }
-}
 
 void ModuleComponent::paint(juce::Graphics& g) {
     if (module == nullptr)
@@ -119,22 +78,6 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
         if (instrumentChrome_ != nullptr)
             instrumentChrome_->paintDropHint(g, getLocalBounds());
-    }
-
-    // Highlight Active Step (Sequencer only) — recolored from theme accent when available.
-    if (getType(module) == ModuleType::Sequencer) {
-        if (auto* seq = dynamic_cast<SequencerModule*>(module)) {
-            int activeStep = seq->currentActiveStep.load();
-            // Coordinates match resized()
-            int startX = 10;
-            int stepWidth = 60;
-            int x = startX + activeStep * stepWidth;
-
-            auto stepColour =
-                (lf != nullptr) ? lf->getTheme().colors.accent.withAlpha(0.3f) : juce::Colours::yellow.withAlpha(0.3f);
-            g.setColour(stepColour);
-            g.fillRect(x, 110, stepWidth - 5, 220); // Cover Gate+Pitch+F.Env area
-        }
     }
 
     // Activity LED in header — recolored to the theme's success token when available.
@@ -827,87 +770,6 @@ void ModuleComponent::resized() {
 
     if (getType(module) == ModuleType::ParametricEQ) {
         layoutParametricEQ();
-        return;
-    }
-
-    if (getType(module) == ModuleType::Sequencer) {
-        // --- Sequencer Specific Layout ---
-        int x = 10;
-        int y = 30;
-
-        // Top Row: Run and BPM
-        for (auto* toggle : toggles) {
-            if (toggle->getComponentID().equalsIgnoreCase("run")) {
-                toggle->setBounds(x + 30, y, 60, 24); // Add margin
-                x += 70;
-            }
-        }
-
-        for (int i = 0; i < sliders.size(); ++i) {
-            if (sliders[i]->getComponentID().equalsIgnoreCase("bpm")) {
-                sliderLabels[i]->setBounds(x + 20, y, 60, 20); // Add margin
-                sliders[i]->setBounds(x + 20, y + 20, 60, 50);
-                x += 70;
-            }
-        }
-
-        // Steps Row: 8 columns starting at (10, 110), each 60px wide
-        const int startX = 10;
-        const int startY = 110;
-        const int stepWidth = 60;
-
-        for (int step = 1; step <= 8; ++step) {
-            int colX = startX + (step - 1) * stepWidth;
-            layoutSequencerStepColumn(step, colX, startY);
-        }
-
-        // Sync to Transport toggle: a 26px row appended below the step grid.
-        for (auto* toggle : toggles) {
-            if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
-                toggle->setBounds(startX, 380, 200, 24);
-        }
-
-        return;
-    }
-
-    if (getType(module) == ModuleType::PolySequencer) {
-        // --- PolySequencer Specific Layout ---
-        // Run toggle + BPM in header row (y=30), then 8 step columns at y=110.
-        // Step N params: "Gate N" (slider), "Step N Root" (slider), "Step N Chord" (combo).
-        int x = 10;
-        int y = 30;
-
-        for (auto* toggle : toggles) {
-            if (toggle->getComponentID().equalsIgnoreCase("run")) {
-                toggle->setBounds(x + 30, y, 60, 24);
-                x += 70;
-            }
-        }
-
-        for (int i = 0; i < sliders.size(); ++i) {
-            if (sliders[i]->getComponentID().equalsIgnoreCase("bpm")) {
-                sliderLabels[i]->setBounds(x + 20, y, 60, 20);
-                sliders[i]->setBounds(x + 20, y + 20, 60, 50);
-                x += 70;
-            }
-        }
-
-        // Steps Row: 8 columns starting at (10, 110), each 60px wide
-        const int startX = 10;
-        const int startY = 110;
-        const int stepWidth = 60;
-
-        for (int step = 1; step <= 8; ++step) {
-            int colX = startX + (step - 1) * stepWidth;
-            layoutSequencerStepColumn(step, colX, startY);
-        }
-
-        // Sync to Transport toggle: a 26px row appended below the step grid.
-        for (auto* toggle : toggles) {
-            if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
-                toggle->setBounds(startX, 380, 200, 24);
-        }
-
         return;
     }
 

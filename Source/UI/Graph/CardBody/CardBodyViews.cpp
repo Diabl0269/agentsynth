@@ -9,9 +9,11 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/GainReductionMeterSource.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/Sequencer/SequencerModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/GainReductionMeterComponent.h"
+#include "UI/ModuleViews/StepGrid/StepGridComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 
 namespace synth {
@@ -76,6 +78,21 @@ int gainReductionHeight(juce::AudioProcessor&) { return GainReductionMeterCompon
 
 const CardViewFactory kGainReduction{createGainReduction, gainReductionHeight, noOwnedParam};
 
+// The sequencers' step grid; it edits the pattern, no parameter, and its height follows the lanes the node remembers.
+std::unique_ptr<juce::Component> createStepGrid(juce::AudioProcessor& module) {
+    auto* sequencer = dynamic_cast<SequencerModuleBase*>(&module);
+    if (sequencer == nullptr)
+        return nullptr;
+    return std::make_unique<ui::StepGridComponent>(*sequencer);
+}
+
+int stepGridHeight(juce::AudioProcessor& module) {
+    auto* sequencer = dynamic_cast<SequencerModuleBase*>(&module);
+    return sequencer != nullptr ? ui::StepGridComponent::preferredHeightFor(*sequencer) : 0;
+}
+
+const CardViewFactory kStepGrid{createStepGrid, stepGridHeight, noOwnedParam};
+
 } // namespace
 
 const CardViewFactory* findCardViewFactory(CardView view) {
@@ -86,6 +103,8 @@ const CardViewFactory* findCardViewFactory(CardView view) {
         return &kEnvelope;
     case CardView::GainReduction:
         return &kGainReduction;
+    case CardView::StepGrid:
+        return &kStepGrid;
     default:
         return nullptr;
     }
@@ -101,6 +120,8 @@ bool cardViewAvailableFor(CardView view, juce::AudioProcessor& module) {
         return dynamic_cast<ADSRModule*>(&module) != nullptr;
     case CardView::GainReduction:
         return dynamic_cast<GainReductionMeterSource*>(&module) != nullptr;
+    case CardView::StepGrid:
+        return dynamic_cast<SequencerModuleBase*>(&module) != nullptr;
     default:
         return false;
     }

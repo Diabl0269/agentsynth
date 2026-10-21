@@ -36,6 +36,17 @@ void CardStepper::setValueText(const juce::String& text) {
     value_.setTitle(name_ + ": " + text);
 }
 
+void CardStepper::setTypable(bool typable) {
+    typable_ = typable;
+    value_.setEditable(false, typable, false);
+    value_.setInterceptsMouseClicks(typable, false);
+    value_.setTooltip(typable ? name_ + ": double-click to type a value" : juce::String());
+    value_.onTextChange = [this] {
+        if (onTypedValue)
+            onTypedValue(value_.getText());
+    };
+}
+
 void CardStepper::step(int delta) {
     if (isEnabled() && onStep)
         onStep(delta);
@@ -59,6 +70,14 @@ bool CardStepper::keyPressed(const juce::KeyPress& key) {
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     const int code = key.getKeyCode();
+    if (typable_ && code >= '0' && code <= '9') {
+        value_.showEditor();
+        if (auto* editor = value_.getCurrentTextEditor()) {
+            editor->setText(juce::String::charToString((juce::juce_wchar)code), false);
+            editor->moveCaretToEnd();
+        }
+        return true;
+    }
     if (code == juce::KeyPress::upKey || code == juce::KeyPress::rightKey) {
         step(+1);
         return true;

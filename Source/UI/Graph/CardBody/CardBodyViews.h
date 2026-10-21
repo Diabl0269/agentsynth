@@ -21,6 +21,15 @@ struct CardViewFactory {
     juce::String (*ownedParamId)(juce::AudioProcessor& module) = nullptr;
 };
 
+/** Implemented by a view whose height changes while the card is up (a lane that folds in or out): the live layout
+ *  asks it, where a static measure asks the factory for the final height. */
+class CardAnimatedHeightView {
+public:
+    virtual ~CardAnimatedHeightView() = default;
+    /** The height the view takes in this layout pass. */
+    virtual int currentLayoutHeight() const = 0;
+};
+
 /** Null for a view nothing registered. */
 const CardViewFactory* findCardViewFactory(CardView view);
 

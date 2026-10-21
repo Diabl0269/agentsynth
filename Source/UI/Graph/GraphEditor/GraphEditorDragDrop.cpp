@@ -37,9 +37,6 @@
 // measured from its card-body plan. Each entry is pinned to the real card by
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents or the test its comment names.
 static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
-    if (typeName.containsIgnoreCase("Sequencer"))
-        // Sequencer and Poly Sequencer: the step grid, plus one toggle row for Sync to Transport.
-        return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         // The keys under a 24 px Octave stepper row; pinned to the real card (ModuleComponentMidiKeyboardCard.cpp).

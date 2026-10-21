@@ -194,19 +194,16 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // (and there is deliberately no mute — muting a tap would silence the patch, which is
         // not what a recorder is for).
         {"Rec Tap", "bypassed"},
-        {"Poly Sequencer", "Gate 1, Gate 2, Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Step 1 Chord, Step 1 Root, "
-                           "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
-                           "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
-                           "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
+        {"Poly Sequencer", "bpm, bypassed, chance, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+                           "transpose, velocity"},
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, pan, preDelay, roomSize, wet, width"},
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling, pan"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
          "attack, bypassed, density, dualIO, end, feel, fine, glide, grainSize, level, loop, mono, muted, pitch, "
          "playMode, release, releaseSound, reverse, rootNote, spray, start, tone, voices"},
-        {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
-                      "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
-                      "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
+        {"Sequencer", "bpm, bypassed, chance, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+                      "transpose, velocity"},
         // Every playback value it needs (gain, fades, trim) lives on the CLIP, not on the node,
         // so the inherited bypass is the whole parameter set — and there is deliberately no mute,
         // since a muted track is a document state the module already honours.

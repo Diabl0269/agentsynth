@@ -52,8 +52,6 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
 // a combo.
 constexpr int kMaxSegments = 6;
 constexpr int kMaxSegmentChars = 10;
-// A stepper walks one value at a time, so it only suits a small integer range.
-constexpr int kMaxStepperSpan = 24;
 
 bool isBool(const juce::RangedAudioParameter& param) {
     return dynamic_cast<const juce::AudioParameterBool*>(&param) != nullptr;
@@ -75,11 +73,6 @@ bool suitsSegmented(const juce::RangedAudioParameter& param) {
         if (value.length() > kMaxSegmentChars)
             return false;
     return true;
-}
-
-bool suitsStepper(const juce::AudioParameterInt& param) {
-    const auto range = param.getRange();
-    return range.getLength() > 0 && range.getLength() <= kMaxStepperSpan;
 }
 
 // A widget kind per JUCE parameter type, exactly as the generic card always chose: a choice is a combo,
@@ -205,6 +198,8 @@ struct SectionPlacer {
             section.freeform = true;
         if (section.footer)
             applyFooterKind(planned);
+        else if (section.row && planned.kind == CardBodyItem::Kind::Toggle)
+            planned.pill = true;
         section.items.push_back(index);
         if (!source.when.has_value() || source.when->effect != CardConditionEffect::Show) {
             openGroupParam.clear();
@@ -366,6 +361,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
         section.title = source->title;
         section.visibleWhen = source->visibleWhen;
         section.footer = source->id == CardSection::kFooterId;
+        section.row = source->presentation == CardPresentation::Row && !section.footer;
         plan.sections.push_back(std::move(section));
         joinTabGroup(*source, plan);
         const int sectionIndex = (int)plan.sections.size() - 1;
@@ -444,7 +440,7 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
     case CardWidget::Segmented:
         return (choice != nullptr || isBool(param)) && suitsSegmented(param) ? Kind::Segmented : automatic;
     case CardWidget::Stepper:
-        return integer != nullptr && suitsStepper(*integer) ? Kind::Stepper : automatic;
+        return integer != nullptr ? Kind::Stepper : automatic;
     case CardWidget::Auto:
     case CardWidget::Toggle:
     case CardWidget::Choice:
@@ -478,8 +474,6 @@ bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module) {
     if (!cardBodyBuildsWidgetsFor(module) || dynamic_cast<MacroControlModule*>(&module) != nullptr)
         return false;
     switch (typeOf(module)) {
-    case ModuleType::Sequencer:
-    case ModuleType::PolySequencer:
     case ModuleType::Attenuverter:
     case ModuleType::ParametricEQ:
     case ModuleType::MacroInlet:

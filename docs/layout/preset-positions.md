@@ -22,9 +22,9 @@ auto-arrange advances a single-width column by. The two are separate concepts.
 | Row | y | Contents |
 |---|---|---|
 | Signal row | 10 | Osc, Filter, VCA, FX chain |
-| Sequencer row | 560 | Sequencer (bottom edge 940) |
-| Modulator row | 600 | AmpEnv, FilterEnv, LFO |
-| Keyboard row | 960 | MIDI Keyboard |
+| Sequencer row | 620 | Sequencer (454 tall: bottom edge 1074) |
+| Modulator row | 620 | AmpEnv, FilterEnv, LFO |
+| Keyboard row | 1100 | MIDI Keyboard |
 
 ## Sequencer-adjacent envelopes
 

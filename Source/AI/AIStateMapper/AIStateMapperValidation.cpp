@@ -394,6 +394,9 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
     for (const auto& entry : paramsObj->getProperties()) {
         const juce::String key = entry.name.toString();
         if (knownParamIds.count(key) == 0) {
+            // A parameter the module dropped but still adopts (adoptLegacyParams): old saves and patches use it.
+            if (const auto* module = dynamic_cast<const ModuleBase*>(processor); module && module->isLegacyParamId(key))
+                continue;
             // Name the real parameter IDs, not just that one was wrong — same reasoning as
             // describeKnownIds() above: a retry that can't see the valid options re-rolls blind.
             juce::StringArray ids;

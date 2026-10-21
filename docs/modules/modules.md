@@ -611,30 +611,33 @@ Low-frequency oscillator / CV source, including the user-drawn Custom waveform (
 reference: [`lfo.md`](lfo.md).
 
 ## Sequencer Module
-- **Source file**: `Source/Modules/SequencerModule.h`
-- **Purpose**: 8-step monophonic step sequencer. Generates MIDI messages (Note On/Off + CC) — it does **not** output a raw CV pitch channel.
-- **Parameters**:
-    - `Run` (bool) — starts/stops sequencer; sends Note Off for the active note on stop.
-    - `BPM` (30–300, default 120) — internal tempo.
-    - `Pitch 1–8` (`AudioParameterInt`, 0–127, MIDI note number) — per-step pitch. Displayed as note names (e.g. "F3"). Default sequence: F3 F4 Gb3 Db4 F3 A3 Gb3 C4.
-    - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
-    - `F.Env 1–8` (0.0–1.0, default 0.5) — per-step filter envelope amount, sent as MIDI CC 74.
-- **Timing**: One step per beat at the configured BPM. `currentActiveStep` (`std::atomic<int>`) is written each block for UI step-highlight.
-- **Sync to Transport** (`syncToTransport`, bool, default **off**): opt-in. Off (default): behaves exactly as above — `BPM` stays authoritative and every existing preset produces a byte-identical event schedule (`AIStateMapperTest.ParamIdsGolden` and `SequencerModuleTest.LegacyScheduleIsByteIdenticalWithSyncOff` pin this). On: the module locks to the graph transport instead — tempo comes from the transport (`BPM` is ignored), the step index is a pure function of the beat (beat *B* plays step `B % 8`), note-on/off land at sample-accurate crossing offsets within the block (not the legacy 0/1-sample hack), a loop wrap fires the wrapped range's beats (e.g. the loop-start step) at `loopWrapSample + <offset>` with no double-fire or skipped beat, and a stopped transport emits one note-off for any held note and goes silent without advancing. `Run` still gates everything in both modes. The transport is read via `dynamic_cast<synth::TransportService*>(getPlayHead())`; only this app's own `AudioEngine` installs a `TransportService` as the playhead, so a foreign host (or a null playhead) falls back to the legacy free-running clock for that block instead of going silent.
+- **Source file**: `Source/Modules/SequencerModule.h` (a thin subclass of `Source/Modules/Sequencer/SequencerModuleBase.h`; design and playback rules in [sequencer-design.md](sequencer-design.md)).
+- **Purpose**: monophonic step sequencer of 1 to 128 steps. Generates MIDI messages (Note On/Off + CC 74) — it does **not** output a raw CV pitch channel.
+- **Parameters** (whole-pattern settings only; the steps are state, below):
+    - `run` (bool) — starts/stops; every held note gets a Note Off on stop, bypass or a stopped transport.
+    - `bpm` (30–300, default 120) — tempo when not synced.
+    - `syncToTransport` (bool, default off) — see below.
+    - `steps` (int 1–128, default 8) — how many steps play before the pattern wraps.
+    - `rate` (choice from the shared note-length list `1/128` … `1/1D`, default `1/4`) — one step lasts this many beats.
+    - `transpose` (int -24–24, default 0) — added to every step's pitch before the scale snap.
+    - `gate` (0–2, default 1), `velocity` (0–2, default 1), `chance` (0–1, default 1) — multiply every step's own gate, velocity and chance.
+    - `scaleRoot` (C … B, shown as "Key") and `scale` (`No scale`, the built-in scale presets, `Custom`; default `No scale`) — the pitch of every note is snapped to the nearest scale note when it plays; the stored pitch is never rewritten.
+- **State** (the pattern, `getExtraState`): per step pitch, on, gate, velocity, chance, repeat, slide, nudge, condition, filter amount; the custom scale mask; the seed for chance. Format: [patch-format.md](../ai/patch-format.md#per-node-state). Default: F3 F4 Gb3 Db4 F3 A3 Gb3 C4, gate 0.5, filter 0.5 (CC 74 = 64), steps 9–128 repeat steps 1–8.
+- **Old files**: the former parameters `Pitch 1–8`, `Gate 1–8` and `F.Env 1–8` are read once on load into the pattern ([sequencer-design.md](sequencer-design.md#legacy-adoption)).
+- **Timing**: sample-accurate. `currentActiveStep` (`std::atomic<int>`) is the step whose first hit came last, for the card's playhead.
+- **Sync to Transport** (`syncToTransport`, bool, default **off**): off, `bpm` is authoritative and the position counts from 0 when `run` goes on. On: the position is the transport's beat divided by the step length (step *k* plays pattern step `k % steps`), tempo comes from the transport (`bpm` is ignored), a loop wrap fires the wrapped range's steps at `loopWrapSample + <offset>` with no double-fire or skipped step, a locate plays whatever step is next, and a stopped transport sends one Note Off per held note and goes silent. The transport is read via `dynamic_cast<synth::TransportService*>(getPlayHead())`; a foreign host's playhead falls back to the free-running clock for that block.
 - **Width**: DOUBLE (560 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
+- **Card**: a layout card, four `row` sections (Play, Time, Notes, Pattern) over the step grid: a page strip, the Pitch lane as a mini piano roll, step pads, lane chips (Gate, Velocity, Chance, Repeat, Slide, Nudge, Condition, Filter) and the lanes they show. Design, gestures and keys: [sequencer-design.md](sequencer-design.md#card); the lane chips: [lane-chips.md](../layout/lane-chips.md).
 
 ## Poly Sequencer Module
-- **Source file**: `Source/Modules/PolySequencerModule.h`
-- **Purpose**: 8-step polyphonic chord sequencer. Generates MIDI chord events — it does **not** output per-voice pitch CV channels.
-- **Parameters**:
-    - `Run` (bool) — starts/stops; sends Note Off for all active chord notes on stop.
-    - `BPM` (30–300, default 120) — internal tempo.
-    - `Step 1–8 Root` (`AudioParameterInt`, 0–127) — root note for the step. Defaults: C3 E3 G3 C4 C3 G3 E3 C4.
-    - `Step 1–8 Chord` (choice) — chord voicing: Unison, Major (0/4/7), Minor (0/3/7), Maj7 (0/4/7/11), Min7 (0/3/7/10), 5ths (0/7), Octs (0/12), Random (±12 semitones).
-    - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
-- **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
-- **Sync to Transport** (`syncToTransport`, bool, default **off**): same contract as the Sequencer module above — off keeps `BPM` authoritative with a byte-identical legacy schedule; on locks the whole chord (fire and kill together) to the transport's BPM and beat-locked step index (`B % 8`), with sample-accurate crossing offsets, correct loop-wrap behaviour, and one note-off per held chord note on stop. Same `TransportService` downcast caveat: a foreign host's playhead falls back to the legacy clock for that block.
+- **Source file**: `Source/Modules/PolySequencerModule.h` (same base as the Sequencer).
+- **Purpose**: polyphonic chord sequencer, 1 to 128 steps. Generates MIDI chord events — it does **not** output per-voice pitch CV channels, and sends no CC 74.
+- **Parameters**: exactly the Sequencer's (`run`, `bpm`, `syncToTransport`, `steps`, `rate`, `transpose`, `gate`, `velocity`, `chance`, `scaleRoot`, `scale`).
+- **State**: the same pattern; the per-step `chord` replaces `slide` and `filter`. The 25 chords are the old eight (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random), six built from the scale at the snapped root (`Scale Triad`, `Scale Seventh`, `Scale Sus2`, `Scale Sus4`, `Scale Add9`, `Scale Sixth`; with no scale they use the Major scale at the root) and eleven fixed qualities (`Dom7`, `Dim`, `Aug`, `Sus2`, `Sus4`, `Sixth`, `Min6`, `Add9`, `Dim7`, `HalfDim7`, `MinMaj7`). The old and fixed chords stack their intervals on the snapped root unsnapped; Random picks its notes from the seed. Notes outside 0–127 are dropped. Default roots: C3 E3 G3 C4 C3 G3 E3 C4.
+- **Old files**: `Step N Root`, `Step N Chord` and `Gate N` are read once on load into the pattern.
+- **Timing and sync**: as the Sequencer; the whole chord starts together and ends together after the gate.
 - **Width**: DOUBLE (560 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
+- **Card**: the Sequencer's, without the Slide lane (a polyphonic step has no legato); the chord shows over the bar. Picking chords on the card is the chord picker, not built yet ([sequencer-design.md](sequencer-design.md#chord-picker-next)).
 
 ## Sample & Hold Module
 - **Source file**: `Source/Modules/SampleHoldModule.h`

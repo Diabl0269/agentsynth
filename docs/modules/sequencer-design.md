@@ -1,114 +1,101 @@
-# Sequencer and Poly Sequencer: scales, step count and pattern tools (design)
+# Sequencer and Poly Sequencer: pattern, playback and tools (design)
 
-Engineers' design for the next round of the two melodic step sequencers. **Status: designed, not
-built.** Nothing here describes current behaviour unless it says "today". Choices still open are
-marked **pending founder pick**, each with the recommended default the build assumes. The drum
-step grid is a separate module with its own design; this doc covers only `SequencerModule` and
-`PolySequencerModule`.
+How the two melodic step sequencers (`SequencerModule`, `PolySequencerModule`) work after round 2. **Status:
+the engine and the card are built** (pattern as module state, 1-128 steps, Rate, lanes, scales, legacy adoption, chance and
+conditions, sample-accurate clock). **Next, not built:** the pattern tools and the chord picker; those
+sections say so. The drum step grid is a separate module with its own design.
 
-Current behaviour: [modules.md, Sequencer](modules.md#sequencer-module) and
+Behaviour summary: [modules.md, Sequencer](modules.md#sequencer-module) and
 [Poly Sequencer](modules.md#poly-sequencer-module). Card layout model:
 [module-card-layout.md](../layout/module-card-layout.md). Motion rules:
-[animation.md](../layout/animation.md#motion-rules).
+[animation.md](../layout/animation.md#motion-rules). Wire format of the pattern:
+[patch-format.md](../ai/patch-format.md#per-node-state).
 
 ---
 
-## Today
+## The pattern is module state
 
-- `SequencerModule`: 8 fixed steps, one step per beat, per step `Gate N`, `Pitch N` (0..127, 0 = rest),
-  `F.Env N` (sent as CC 74); fixed velocity 100. `PolySequencerModule`: 8 steps of `Step N Root` +
-  `Step N Chord` (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random) + `Gate N`. Both have `run`,
-  `bpm` and `syncToTransport` (last). Synced, the step index is `beat % 8`.
-- Neither knows about scales yet. The shared engine they will use, `Source/Music/MusicalScale.h`
-  (see "Shared scale engine"), is built; the piano roll's `ScaleAssistPanel` is its only user so far.
-- Both cards are bespoke (`ModuleComponentPaint.cpp`, `layoutSequencerStepColumn`): three rows of 8
-  knobs, fixed 560x406, excluded from data-driven layouts (`cardBodyLayoutIsDataDriven`).
+Round 1 had 24 per-step parameters per module and a fixed 8 steps. Round 2 holds the steps as **pattern data**
+(`Source/Modules/Sequencer/SequencerPattern.h`) in the module's extra state, next to a handful of whole-pattern
+parameters. 128 steps with ten settings each would have been over a thousand parameters (host automation lists,
+catalog size, one undo step per knob); as state it is one value that the card edits and one undo step per gesture.
 
----
+```
+SequencerPattern { std::array<SequencerStep, 128> steps; uint32 seed; uint16 customMask; String customName; }
+SequencerStep    { pitch 0-127, on, gate 0.05-1, velocity 1-127, chance 0-100, repeat 1-8, slide, nudge -0.5..0.5,
+                   condition hit/of (1-8), filter 0-1, chord }
+```
 
-## Decisions
+- **Default**: today's patterns (mono pitches F3 F4 Gb3 Db4 F3 A3 Gb3 C4, poly roots C3 E3 G3 C4 C3 G3 E3 C4, gate
+  0.5, filter 0.5); steps 9-128 repeat steps 1-8, so raising `steps` first repeats the old pattern.
+- **JSON** (`toVar` / `fromVar`): `{"version": 1, "seed": n, "customScale": {...}, "steps": [...]}`; a step writes only
+  the fields that differ from a plain step, trailing steps equal to the factory step are dropped, gates and nudges keep
+  three decimals. `fromVar` is the untrusted door too: it clamps every value, ignores unknown keys and wrong types,
+  reads at most 128 steps and keeps the factory pattern for anything missing.
+- **Seed**: random when the module is created and saved with the pattern; it feeds the chance rolls and the
+  Random chord, so two renders of one project are identical.
+- **Ownership and handoff**: the message thread owns the pattern (`getPattern()`, `setPattern()`); `setPattern` publishes a
+  copy through `synth::LockFreeHandoff<SequencerPattern>` and bumps `patternGeneration()` (the card polls it). The audio
+  thread adopts at the top of a block and never locks or allocates.
+- **Edits are state**: an undo restores the pattern through `setExtraState` (re-applied only when it changed).
 
-1. **Old projects sound identical.** Every new parameter is appended after `syncToTransport`, and every
-   default reproduces today's schedule byte for byte (Steps 8, Rate 1/4, Scale "No scale", velocity
-   100, chance 100, repeat 1, slide off, step on). `Pitch N` = 0 keeps meaning rest.
-2. **One shared scale engine** in a new `Source/Music/` folder (still in the `Core` target), free of
-   Timeline types. The piano roll and both sequencers use it; the built-in list and the user's saved
-   scales are the same everywhere.
-3. **Scale applies while playing** *(pending founder pick, recommended)*: stored pitches are never
-   rewritten; the audio thread snaps each step's pitch (mono) or root (poly) through the scale. The
-   card's drag and keyboard move by scale note. Alternatives: rewrite stored notes on scale change;
-   store scale degrees (breaks the plain-note model and what the AI writes).
-4. **Step count 1..16** *(pending founder pick, recommended)*, an int parameter. Steps 9..16 get their
-   own parameters. 32 can be added later by appending steps 17..32 (append-safe). Alternatives: fixed
-   8/16/32; 1..32 with two pages.
-5. **Rate** (step length) is added as a choice so 16 steps can be one bar: `1/32, 1/16, 1/8, 1/4,
-   1/2, 1/1`, default `1/4` (today's one-step-per-beat). Triplets can be appended later.
-6. **Per-step lanes, first round** *(pending founder pick, recommended)*: Velocity, Chance, Repeat
-   (ratchet 1..4), Slide (mono only), Step on. Later: timing nudge, "every Nth loop" conditions, swing.
-7. **Poly chords from the scale** *(pending founder pick, recommended)*: three chord types appended to
-   the Chord list (`Triad in scale`, `Seventh in scale`, `Sus4 in scale`), built by stacking scale
-   notes from the (snapped) root. Fixed types keep their meaning. With No scale the in-scale types
-   fall back to Major triad, Maj7 and sus4 intervals. The card shows the chord's numeral in the key.
-8. **Card: lane tabs over one step grid** *(pending founder pick, recommended)*; the control row is
-   layout data, the grid is a view (see [Card](#card)).
-9. **Pattern tools on the card** *(pending founder pick, recommended)*: Randomize (with a small panel),
-   Shift left/right, Reverse, Double, Up/Down one scale note. Each is one undo step.
-10. **Each sequencer has its own key** *(pending founder pick, recommended)*. A song-wide key is a
-    later feature that can sit on top of the same parameters.
+### Parameters
 
----
+| ID | Type, range | Default | Notes |
+| :-- | :-- | :-- | :-- |
+| `run`, `bpm`, `syncToTransport` | as before | off, 120, off | |
+| `steps` | int 1-128 | 8 | Steps that play before the pattern wraps |
+| `rate` | choice, the shared note-length list | `1/4` | Step length; `1/4` with 8 steps is round 1 |
+| `transpose` | int -24..24 | 0 | Semitones, before the scale snap |
+| `gate`, `velocity`, `chance` | float 0-2, 0-2, 0-1 | 1 | Multiply each step's own value |
+| `scaleRoot` | choice C..B ("Key") | C | |
+| `scale` | `No scale`, the built-in presets, `Custom` | `No scale` | `Custom` uses the pattern's `customMask` |
 
-## Parameters
+A "follows the song key" switch is planned as a new bool appended after these (never inserted).
 
-Append order matters: it is the positional order every existing `getParameters()[n]` lookup and the
-param-ID golden rely on. Choices are saved by name, so appending choice values is safe for projects;
-a plugin host's normalised value shifts, which `ModuleBase::legacyChoiceCount()` already handles for
-the Chord list.
+### Legacy adoption
 
-### Sequencer (after `syncToTransport`)
-
-| # | ID | Type, range | Default | Notes |
-| :-- | :-- | :-- | :-- | :-- |
-| 1 | `Steps` | int 1..16 | 8 | Steps that play before wrapping |
-| 2 | `Rate` | choice `1/32 1/16 1/8 1/4 1/2 1/1` | `1/4` | Step length in note values |
-| 3 | `Scale Root` | choice `C`..`B` | `C` | |
-| 4 | `Scale` | choice `No scale`, the built-in presets in their current order, `Custom` | `No scale` | `No scale` = chromatic, identity snap |
-| 5 | `Custom Scale` | int 0..4095 | 4095 | 12-bit root-relative mask, read only when Scale is `Custom` |
-| 6 | `Gate 9`..`Gate 16` | float 0.1..1 | 0.5 | |
-| 7 | `Pitch 9`..`Pitch 16` | int 0..127 | copy of steps 1..8 | So Steps 16 first plays the old pattern twice |
-| 8 | `F.Env 9`..`F.Env 16` | float 0..1 | 0.5 | |
-| 9 | `Velocity 1`..`Velocity 16` | int 1..127 | 100 | |
-| 10 | `Chance 1`..`Chance 16` | int 0..100 (%) | 100 | |
-| 11 | `Repeat 1`..`Repeat 16` | int 1..4 | 1 | Even hits inside the step, each `gate / n` long |
-| 12 | `Slide 1`..`Slide 16` | bool | off | Next note-on is sent before this note-off (legato) |
-| 13 | `Step On 1`..`Step On 16` | bool | on | Off mutes the step without losing its note |
-
-### Poly Sequencer (after `syncToTransport`)
-
-Same rows 1..5, then `Gate 9..16`, `Step 9..16 Root` (defaults copy steps 1..8), `Step 9..16 Chord`
-(default Unison), `Step N Velocity`, `Step N Chance`, `Step N Repeat`, `Step N On` for N = 1..16. No
-Slide. Chord list appended with `Triad in scale`, `Seventh in scale`, `Sus4 in scale`.
-
-About 135 parameters on the Sequencer and 125 on the Poly Sequencer.
+The round 1 ids (`Pitch N`, `Gate N`, `F.Env N`; `Step N Root`, `Step N Chord`, `Gate N` for N = 1-8) are gone as
+parameters. `ModuleBase::adoptLegacyParams` (called at the end of `applyParamsToProcessor`, trusted and untrusted)
+reads them into the pattern: `Pitch` 0 turns the step off, a chord is read by name or index, every value is clamped.
+`isLegacyParamId` keeps `validatePatch` from rejecting them. State is applied after params on every load path, so an
+old save loads its eight steps, a new save (state, no old keys) is untouched, an AI patch from a backend that still
+lists the old ids keeps working, and a step edited after an adoption is saved as state. The presets that wrote
+`Pitch N` use the `state` form.
 
 ---
 
 ## Playback
 
-- **Step clock.** Free-running: samples per step = `60 / bpm * sampleRate * rateBeats`; advance
-  `currentStep = (currentStep + 1) % steps`. Synced: step boundary every `rateBeats` of ppq, index
-  `floor(ppq / rateBeats) % steps`. With Steps 8 and Rate 1/4 both reduce to today's code paths;
-  keep the legacy-schedule golden tests green unchanged.
-- **Per step, at its boundary:** skip if `Step On` is off or pitch is 0; roll `Chance` (skip on miss);
-  snap the pitch or root through the scale's 128-entry table; send CC 74 then note-on at `Velocity`;
-  schedule `Repeat` hits at `stepLen * k / n`; Slide delays the note-off past the next note-on.
-- **Audio-thread rules.** No allocation: the snap table is rebuilt only when Scale, Scale Root or
-  Custom Scale change (compare on block start); chords are built into a fixed `std::array<int, 6>`.
-  Chance uses a module-owned `juce::Random`, reseeded on `prepareToPlay` and on transport locate so
-  an offline render of the same project is repeatable.
-- `currentActiveStep` keeps feeding the card's playhead.
+Code: `SequencerClock` (position), `SequencerPlayer` (events), `SequencerScaleSnap` and `SequencerChords`.
 
----
+- **Position in step units.** One step is `rate` beats. Synced: `ppq / rateBeats` for the block, split in two at a
+  transport loop wrap. Free-running: advances by `numSamples / samplesPerStep` per block from 0 at the first running
+  block (a restart goes back to 0).
+- **Sample accurate.** Global step *k* (>= 0) plays pattern step `k % steps` at unit `k + nudge`, at its exact sample
+  in both modes. Each repeat hit *j* of *n* is at `k + nudge + j/n`. The hits of a block are sorted by time before
+  they are played, so a nudge can never put a note-off before its note-on. A hit is never fired twice; the memory of
+  the last hit is dropped at a locate, a loop wrap, a clock source change and a stop.
+- **Per hit:** skip if the step is off, if its condition fails (`(k / steps) % of != hit - 1`), or if the chance roll
+  fails (`hash(seed, k) % 100 < chance * chanceAmount`; the roll is per step, so all repeats agree). Then CC 74
+  (`round(filter * 127)`, Sequencer only), then the note-on(s) at `round(velocity * velocityAmount)` clamped 1-127. Pitch
+  is `snap(clamp(pitch + transpose, 0, 127))` through the scale table.
+- **Note lengths.** A hit lasts `gate * gateAmount / repeat` of a step (at least one sample). Note-offs wait in a
+  fixed list of 256 held notes and cross blocks; a full list ends the oldest note now. A new hit first ends every note
+  still held. Stop, bypass and a stopped transport end every held note once at sample 0.
+- **Slide** (Sequencer only): the slid note is not ended by its gate; the next played note-on goes first and the
+  note-off follows at the same sample (the same pitch just keeps sounding). It is held at most half a step past its
+  own slot, so a slide into a rest does not stick. With repeats only the last hit slides.
+- **Chords** (Poly): legacy and fixed kinds stack their intervals on the snapped root, unsnapped; `Scale *` kinds use
+  `chordInScale` at the snapped root (No scale falls back to Major at the root); Random is the root plus one note up to
+  11 above and one up to 11 below, from `hash(seed, k)`. Duplicate and out-of-range pitches are dropped.
+- **Audio thread.** No locks, no allocation, no logging: the snap table is rebuilt only when key, scale or custom
+  mask changed; hits and held notes live in fixed arrays (512 hits per block, 256 held notes).
+- **Round 2 changes to the old sound.** The old free-running clock tested step boundaries once per block, so notes
+  slid by up to a block and the first note-on was one sample late; the new clock puts them on the exact sample. CC 74
+  is `round(0.5 * 127) = 64` for the default filter amount (was 63). The Poly Sequencer no longer forces a root below
+  24 to C3 and sends no CC.
+- `currentActiveStep` is the step of the last first hit, whether or not it played.
 
 ## Shared scale engine
 
@@ -152,85 +139,88 @@ juce::String romanNumeral(const MusicalScale&, const ScaleChord&);  // "ii", "vi
 
 ---
 
-## Pattern tools
+## Pattern tools (next)
 
-Message-thread functions in a pure unit (`Source/Modules/Sequencer/SequencerPatternOps.h`) that take a
-plain `SequencerPattern` value (the per-step arrays plus Steps) and return a new one; the card writes
-the result back as parameter changes inside one undo transaction.
+Not built. Message-thread functions in a pure unit (`Source/Modules/Sequencer/SequencerPatternOps.h`) that take a
+`SequencerPattern` and return a new one; the card writes it back with `setPattern` inside one undo transaction.
 
 | Tool | Effect |
 | :-- | :-- |
-| Randomize | `pickPitches` within Lowest..Highest; "Steps that play" sets `Step On` by density; "Keep my rhythm" leaves `Step On` and Gate alone |
-| Shift left / right | Rotate every lane by one within the active Steps |
-| Reverse | Reverse every lane within the active Steps |
-| Double | Copy steps 1..N into N+1..2N and set Steps to 2N; disabled when 2N > 16 |
-| Up / Down | `stepBy(+/-1)` on every pitch or root (chromatic when No scale) |
+| Randomize | `pickPitches` within Lowest..Highest; "Steps that play" sets `on` by density; "Keep my rhythm" leaves `on` and gate alone |
+| Shift left / right | Rotate every field within the active `steps` |
+| Reverse | Reverse every field within the active `steps` |
+| Double | Copy steps 1..N into N+1..2N and set `steps` to 2N; disabled when 2N > 128 |
+| Up / Down | `stepBy(+/-1)` on every pitch (chromatic when No scale) |
 
 The Randomize panel's range and density are card view state (not saved), like the piano roll's.
+`sequencerPlayedPitch` already gives the card the pitch a step really plays, to draw a dashed outline when it differs
+from the written one.
 
 ---
 
 ## Card
 
-- The control row (Run, BPM, Rate, Steps as a `stepper`, Scale Root and Scale as choices, Sync as the
-  footer pill) becomes the type's code-default `CardLayout`, so it gets hide/reorder like other cards.
-  The Scale menu is a custom popup: No scale, built-ins, a "Your scales" group from the shared user
-  scales, and "Edit custom scales..."; picking a user scale sets `Scale = Custom` and `Custom Scale`.
-- A new view, `stepGrid`, in the view registry draws the tool row, the lane tab strip (a
-  `CardSegmentedSwitch`), the grid and the step pads. It **owns** the per-step parameters: they are
-  added to the plan's "edited elsewhere" rule when the view is present, so 100+ parameters never land
-  in the More row.
-- Lanes: Pitch (a mini roll with scale rows shaded and slide links between steps), Gate, Velocity,
-  Chance, Repeat, Filter; Poly: Chord, Gate, Velocity, Chance, Repeat. Drag across bars draws in one
-  stroke; Pitch drag moves by scale note.
-- Size stays 560 wide and no taller than today's 406; unused steps beyond Steps are dimmed, never
-  removed, so the card never resizes while a value changes.
-- Removes the Sequencer branches from `ModuleComponentPaint.cpp`/`ModuleComponentLayout.cpp` and the
-  two types from the `cardBodyLayoutIsDataDriven` exclusion.
-- Accessibility: the grid is one Tab stop (Left/Right step, Up/Down value, Shift = octave on Pitch,
-  Space = Step On), read as "Step 5 of 16, F2, on, chance 100 percent"; the lane strip is a radio
-  group; every tool button has a tooltip and the same screen-reader name. Motion: bars glide 160 ms
-  (`easeOutCubic`) on lane switch and tool actions; dimming 120 ms; popups grow from their button.
-- The design system gains the step grid, lane strip and tool row.
+Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `ModuleComponent`.
+
+- **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is four `row` sections (Play: Run and Sync
+  as pills and BPM as a fader that swaps out while Sync is on; Time: Rate and Steps; Notes: Key and Scale; Pattern:
+  Transpose, Gate, Velocity, Chance) and then the `stepGrid` view. Consecutive `row` sections sit side by side and wrap
+  only when the 560 px card is too narrow ([module-card-layout.md](../layout/module-card-layout.md#rendering)).
+  Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
+- **The grid** (`Source/UI/ModuleViews/StepGrid/`): a page strip, 16 columns of the viewed page, the Pitch lane as a
+  mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
+  stacked under them. Steps past `steps` are dimmed, never removed.
+  - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
+    chord label over the bar); when the scale moved the note, the written note is a dashed outline. A drag lands only on
+    scale notes (`MusicalScale::snapPitch`; chromatic with No scale); Shift moves by octaves; the written pitch is the
+    played pitch minus Transpose. The rows are frozen while a drag is in progress.
+  - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,
+    Filter** are bar lanes: drag across them to draw, interpolating between the columns the pointer skipped.
+    **Slide** (mono only) toggles the link between a step and the next. **Condition** opens a menu of `1/1` ... `8/8`.
+  - Lanes shown default to Pitch and Velocity; the choice is saved with the node
+    (`CardViewState::stepGridLanes`). Filter stays on the Poly Sequencer although it sends no CC 74 and so has no
+    audible effect there.
+  - **Pages.** The strip shows one bar per 16 steps once Steps passes 16 (its row is always reserved, so the card never
+    changes height when Steps crosses 16), the page holding the playhead pulses, and the Follow pill (off by default)
+    turns the viewed page with the playhead.
+- **Undo.** A gesture (a pad stroke, a bar drag, a pitch drag, a menu pick, one key press) is one undo step: the
+  module's extra state is snapshotted when the gesture starts and recorded once at its end
+  (`AppUndoManager::recordNodeExtraStateChange`). A change from outside (undo, a preset, the AI) is not an edit; the
+  bars glide to it.
+- **Motion** (all time-bounded, none free-running): lanes fold 160 ms (the card's height follows every frame, the
+  neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
+  per-column stagger, dimming 120 ms, the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
+  Animations Off lands at once.
+- **Accessibility.** The grid is one Tab stop, read as "Step 5 of 16, F2, on, chance 100 percent". Keys: Left/Right
+  pick the step (the page follows), Up/Down change the focused lane's value (Pitch: one scale note, Shift: one octave;
+  Slide: toggles; Condition: next or previous condition), Space turns the step on or off (Slide lane: the link), Enter
+  opens the Condition menu or acts as Space, Page Up/Down move to the lane above or below, Home/End the first and last
+  step. The page strip and the chip row are Tab stops of their own.
+- **Size.** 560 wide; the card is 454 tall at the default lanes (Pitch and Velocity; the grid is 228 px), 730 with every lane (702 on the Poly Sequencer, which has no Slide lane); a 17+ step pattern adds nothing because the page strip's row is always reserved. The Row sections take two lines at 560 px: Play and Time on the first, Notes and Pattern on the second.
+
+## Chord picker (next)
+
+Not built. A Poly Sequencer step picks from 25 chords: the card groups them as Basic (the old eight), In key (the six
+`Scale *` kinds, labelled with their roman numeral in the key) and Borrowed (the eleven fixed qualities).
 
 ---
 
-## AI patch format
+## AI
 
-No contract change. A patch's `params` is an open record (`additionalProperties: true` in the
-envelope), choices are written and read by name, and `validatePatch` checks keys against the live
-module's parameter IDs, so the new IDs are valid the moment they exist. Updates needed: the param-ID
-golden and the two card-body goldens. The module catalog and schema text grow by roughly 100 entries
-per sequencer; measure prompt size with the AI harness, and if it matters, compact repeated per-step
-entries in the catalog text (a formatting change, not a patch-format change).
+The pattern is the node's `state`, accepted on the untrusted path and clamped ([patch-format.md](../ai/patch-format.md#per-node-state));
+`params` carries `steps`, `rate`, `scale` and the rest. The module catalog lost 48 (Sequencer) and 24 (Poly) per-step
+entries and gained eleven whole-pattern ones; the system prompt names the `state` shape in one bullet. The hosted
+backend's catalog and its patch envelope (which does not list `state` on nodes) are separate work.
 
 ---
 
 ## Risks
 
-- **Parameter count** (~130 per module): long host automation lists, more state per save, and tool
-  actions that change dozens of parameters must group into one undo step, not one per parameter.
-- **Chance and offline renders**: without the reseed rule above, two bounces differ.
-- **Slide** depends on the receiving instrument's legato/glide; on one without glide it only removes
-  the gap between notes.
-- **Scale snapping is invisible in the stored data**; the card must always show what plays (dashed
-  outline for the written note when it differs).
-- **Choice appends** shift host-normalised values; covered by `legacyChoiceCount()`, which needs an
-  entry for the Chord list.
-- **Card rewrite** touches a bespoke card with golden fixtures; keep the old component IDs for the
-  parameters that keep widgets.
-
----
-
-## Build tasks
-
-1. Move the scale engine to `Source/Music/`, add `stepBy`, `chordAt`, `romanNumeral`, `snapTable`,
-   `pickPitches`; piano roll unchanged.
-2. Both sequencers: Steps, Rate, Scale Root, Scale, Custom Scale and steps 9..16; play-time snapping;
-   legacy schedule goldens unchanged.
-3. Per-step Velocity, Chance, Repeat, Step On (both), Slide (Sequencer), with seeded Chance.
-4. Poly Sequencer in-scale chord types and numerals.
-5. New card: code-default control row, `stepGrid` view with lanes, keyboard, screen reader, motion.
-6. Pattern tools and the Randomize panel, one undo step each.
-7. Shared scale menu with user scales in card and piano roll; update `modules.md`, the AI goldens and
-   the design system.
+- **Scale snapping is invisible in the stored data**; the card must always show what plays.
+- **Slide** depends on the receiving instrument's legato; on one without glide it only removes the gap between notes.
+- **A model that sends `state` replaces the whole pattern**; the current patch it sees includes the sequencer's
+  `state`, so a change should send the full steps it wants to keep.
+- **The patch envelope** (generated from the backend's schema) lists no `state` on a node, so a constrained local
+  decoder cannot emit one until the backend adds it; `params` (`steps`, `rate`, `scale`...) and the old step keys work
+  meanwhile.
+- **Chance and the seed**: copying a module keeps its seed, so two copies roll alike until the copy is re-seeded.

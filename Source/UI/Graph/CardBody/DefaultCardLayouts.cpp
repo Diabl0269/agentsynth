@@ -23,6 +23,7 @@ const DefaultCardLayouts& DefaultCardLayouts::builtIn() {
         registerEnvelopeCardLayouts(defaults);
         registerFilterDynamicsCardLayouts(defaults);
         registerEffectCardLayouts(defaults);
+        registerSequencerCardLayouts(defaults);
         return defaults;
     }();
     return registry;

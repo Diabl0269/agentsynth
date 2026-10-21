@@ -131,6 +131,42 @@ Every other module's `state` stays trusted-only. A Filter insert of an `addInstr
 `state` (see [timeline-ops.md](timeline-ops.md)); it goes through `AIStateMapper::applyUntrustedState`, the same
 untrusted door. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.
 
+**The third exception: a `Sequencer` or `Poly Sequencer` node's pattern.** Both override
+`setUntrustedExtraState()`. The steps no longer exist as parameters; they are the node's `state`
+([sequencer-design.md](../modules/sequencer-design.md#the-pattern-is-module-state)):
+
+```json
+{"version": 1, "seed": 12345,
+ "customScale": {"name": "My scale", "mask": 2741},
+ "steps": [
+   {"pitch": 48, "gate": 0.6},
+   {"pitch": 55, "velocity": 90, "chance": 75, "repeat": 2, "nudge": 0.1, "condition": "2/4"},
+   {"pitch": 60, "on": false}
+ ]}
+```
+
+Per step (all optional; a field left out is its default, a step left out keeps the factory pattern): `pitch` 0..127,
+`on`, `gate` 0.05..1, `velocity` 1..127, `chance` 0..100, `repeat` 1..8, `slide` (Sequencer only), `nudge`
+-0.5..0.5, `condition` (`"hit/of"`, both 1..8, hit at most of), `filter` 0..1 (Sequencer only, sent as CC 74) and
+`chord` (Poly Sequencer only: `Unison`, `Major`, `Minor`, `Maj7`, `Min7`, `5ths`, `Octs`, `Random`, `Scale Triad`,
+`Scale Seventh`, `Scale Sus2`, `Scale Sus4`, `Scale Add9`, `Scale Sixth`, `Dom7`, `Dim`, `Aug`, `Sus2`, `Sus4`,
+`Sixth`, `Min6`, `Add9`, `Dim7`, `HalfDim7`, `MinMaj7`). `seed` (optional, 32 bits) fixes the chance rolls and the
+Random chord; without one the module keeps its own. `customScale` (a name of at most 64 characters and a 12-bit
+`mask`) is the scale used when the `scale` parameter is `Custom`. `SequencerPattern::fromVar` clamps every value,
+ignores unknown keys and wrong types, reads at most 128 steps, and turns anything missing into the factory pattern;
+it is pure data and cannot name a file. How many steps play is the ordinary `steps` parameter (1..128), the step
+length `rate`. A `state` replaces the whole pattern. The "current patch" sent to a model keeps a sequencer's `state` (every other module's is stripped), so edits see the existing steps. A node with no `state` at all leaves the pattern as it is.
+`getModuleSchema()` (the system prompt's module tables) adds a short note under each sequencer's table naming this shape,
+since the parameter table cannot show the steps.
+Tests: `Tests/Modules/Sequencer/SequencerPatternTests.cpp`, `SequencerStateTests.cpp`.
+
+**Old keys keep working.** Projects, presets and patches written before the pattern moved into `state` set
+`Pitch N`, `Gate N`, `F.Env N` (Sequencer) or `Step N Root`, `Step N Chord`, `Gate N` (Poly Sequencer) in `params`.
+Those ids are no longer parameters, but `ModuleBase::adoptLegacyParams` reads them at the end of
+`applyParamsToProcessor` on both paths (a `Pitch` of 0 becomes a step that is off, a chord by name or by index), and
+`isLegacyParamId` lets `validatePatch` accept them instead of rejecting an unknown key. `state` is applied after
+`params`, so a node carrying both ends with the state.
+
 Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
 properties are a union across module types, so it cannot say "only on an LFO"), so a constrained
 decoder is never invited to emit one; a caller that knows the curve format, such as the hosted song

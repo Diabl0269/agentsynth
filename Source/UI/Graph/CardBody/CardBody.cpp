@@ -90,10 +90,10 @@ bool isWaveformChoice(const juce::StringArray& choices) {
 }
 
 // The parameters whose choices are note lengths ("1/8", "1/8T", "1/8D"): the ADSR stage divisions, the Delay's time
-// division and the LFO's sync rate.
+// division, the LFO's sync rate and the sequencers' step rate.
 bool isNoteLengthParameter(const juce::String& paramId) {
     return paramId == "attackDiv" || paramId == "holdDiv" || paramId == "decayDiv" || paramId == "releaseDiv" ||
-           paramId == "timeDiv" || paramId == "rateSync";
+           paramId == "timeDiv" || paramId == "rateSync" || paramId == "rate";
 }
 
 void fillWaveformItems(juce::ComboBox& combo, const juce::StringArray& choices, juce::LookAndFeel& lnf) {
@@ -194,10 +194,11 @@ void CardBody::createParameterWidgets() {
     startWatchingConditions();
 }
 
-// A footer toggle is the small pill; a footer caption sits inline, in the pill's text size.
+// A footer or row toggle is the small pill; a footer caption sits inline, in the pill's text size.
 void CardBody::styleFooterItems() {
     for (auto& item : plan_.items) {
-        if (item.section < 0 || !plan_.sections[(size_t)item.section].footer)
+        if (item.section < 0 ||
+            !(plan_.sections[(size_t)item.section].footer || plan_.sections[(size_t)item.section].row))
             continue;
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
             synth::ui::setTogglePillStyle(*toggle, true);
@@ -430,6 +431,19 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
         if (next != param.get())
             attachment->setValueAsCompleteGesture((float)next);
     };
+    // A range too wide to walk one step at a time (the sequencers' Steps) can also be typed.
+    if (param.getRange().getLength() > 24) {
+        stepper->setTypable(true);
+        stepper->onTypedValue = [stepper, attachment, &param, alive = widgetsAlive_](const juce::String& text) {
+            if (!*alive)
+                return;
+            const auto range = param.getRange();
+            const int typed = juce::jlimit(range.getStart(), range.getEnd(), text.getIntValue());
+            if (text.containsAnyOf("0123456789") && typed != param.get())
+                attachment->setValueAsCompleteGesture((float)typed);
+            stepper->setValueText(param.getCurrentValueAsText());
+        };
+    }
     attachment->sendInitialUpdate();
     addCaption(item, param, juce::Justification::centredLeft);
     item.widget = stepper;

@@ -46,6 +46,8 @@ juce::String cardLayoutViewName(CardView view) {
         return "Threshold display";
     case CardView::GainReduction:
         return "Gain reduction meter";
+    case CardView::StepGrid:
+        return "Step grid";
     }
     return "Display";
 }

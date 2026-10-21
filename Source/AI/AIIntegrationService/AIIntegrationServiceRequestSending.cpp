@@ -86,14 +86,19 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph or
 // any other caller), so stripping "state" from these nodes in place cannot mutate anything else.
 // "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) — the model
-// can never author it, so it is pure leakage and token waste over the wire. Shared by the patch
+// can never author it, so it is pure leakage and token waste over the wire. The one exception is a sequencer's
+// pattern, which the model can read and write. Shared by the patch
 // path's "Current patch state" section and project.generate's "currentPatch".
 juce::var AIIntegrationService::buildStrippedPatchJson() const {
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
     if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray()) {
         for (auto& nodeVar : *nodeArr) {
             if (auto* nodeObj = nodeVar.getDynamicObject()) {
-                nodeObj->removeProperty("state");
+                // A sequencer's pattern is pure data the model can author and edit, and its steps used to be
+                // visible as parameters, so it stays.
+                const auto type = nodeObj->getProperty("type").toString();
+                if (type != "Sequencer" && type != "Poly Sequencer")
+                    nodeObj->removeProperty("state");
                 nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
                 nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
             }

@@ -269,7 +269,7 @@ void AudioEngine::createDefaultPatch() {
     filterAdsrNode->properties.set("x", 830.0f);
     filterAdsrNode->properties.set("y", 450.0f);
     lfoNode->properties.set("x", 10.0f);
-    lfoNode->properties.set("y", 500.0f);
+    lfoNode->properties.set("y", 560.0f); // clear of the Sequencer card (80 + 454 = 534)
     distortionNode->properties.set("x", 1410.0f);
     distortionNode->properties.set("y", 50.0f);
     delayNode->properties.set("x", 1690.0f);

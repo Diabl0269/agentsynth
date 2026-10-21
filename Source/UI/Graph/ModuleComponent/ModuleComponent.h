@@ -704,7 +704,6 @@ private:
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
-    int lastActiveStep = -1;
 
     // Output-card identity treatment (Audio Output only — see setOutputDeviceInfoText). Empty
     // means "nothing to show yet" (before the first refresh, or a Hosted build that returned
@@ -928,9 +927,11 @@ private:
     // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
     int getInputPortColumns() const;
 
-    // Shared step-column layout helper used by Sequencer and PolySequencer.
-    // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
-    void layoutSequencerStepColumn(int step, int colX, int startY);
+    // --- Sequencer card (ModuleComponentSequencerCard.cpp) ---
+    // Hands the step grid view the undo hook and the card's height hooks; called once after the body built its views.
+    void wireSequencerCard();
+    // The 15 Hz tick: lets the step grid read the module (playhead, pattern generation, parameters).
+    void pollSequencerCard();
 
     // --- Parametric EQ card ---
     // One column per band (on/off toggle above Freq / Gain / Q), so the knobs read as a grid

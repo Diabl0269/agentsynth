@@ -58,10 +58,13 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
     return false;
 }
 
-// The card's width (ModuleComponent::updateLayout): the Wavetable is double width, the rest single.
+// The card's width (ModuleComponent::updateLayout): the Wavetable and the two sequencers are double width, the rest
+// single.
 int cardWidthFor(ModuleBase& module) {
-    return module.getModuleType() == ModuleType::Wavetable ? synth::LayoutUtil::kDoubleWidth
-                                                           : synth::LayoutUtil::kSingleWidth;
+    const auto type = module.getModuleType();
+    return type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer
+               ? synth::LayoutUtil::kDoubleWidth
+               : synth::LayoutUtil::kSingleWidth;
 }
 
 // ModuleComponent::getContentTopY: the lowest drawn jack, column-major in two columns on a double-width
