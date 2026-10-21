@@ -84,6 +84,7 @@ DrumMachineComponent::DrumMachineComponent()
     showAllButton_.setTooltip("Show every General MIDI drum as a row, not only the common ones");
     showAllButton_.onClick = [this] { setShowAllDrums(showAllButton_.getToggleState()); };
     setupGroove();
+    setupIdeas();
 }
 
 DrumMachineComponent::~DrumMachineComponent() {
@@ -91,6 +92,7 @@ DrumMachineComponent::~DrumMachineComponent() {
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
     laneAnim_.stop(vblank_);
+    changeAnim_.stop(vblank_);
 }
 
 //==============================================================================
@@ -119,8 +121,10 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     gesture_ = {};
     hitMotions_.clear();
     flashes_.clear();
+    changed_.clear();
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
+    changeAnim_.stop(vblank_);
     hasPlayheadX_ = false;
     playStep_ = -1;
     pendingSwung_.clear();
@@ -162,6 +166,8 @@ void DrumMachineComponent::closeGrid() {
     rowAnim_.stop(vblank_);
     hitMotions_.clear();
     flashes_.clear();
+    changed_.clear();
+    changeAnim_.stop(vblank_);
     clipId_ = {};
     hasPlayheadX_ = false;
     playStep_ = -1;

@@ -7,7 +7,7 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 ## What it shows
 
 - A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
-  Steps per bar dropdown (8, 16, 32, 64), the Swing knob.
+  Steps per bar dropdown (8, 16, 32, 64), the Swing knob and the Ideas button.
 - One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
@@ -91,6 +91,29 @@ under the pointer to the pointer's height; a drag is a straight ramp between its
 lane and written once on release as ONE undo step. The lane is one Tab stop: Left and Right move between the row's
 hits, Up and Down change loudness by 5 (Shift 25), each press one undo step, read out as "Kick, step 5, loudness
 100".
+
+## Ideas
+
+The Ideas button opens a popover grown out of it (`DrumIdeasPanel`, a `CallOutBox` with the shared reveal) holding
+three parts. The pattern logic is plain functions over notes in `DrumIdeas.cpp`, deterministic for a seed (real use
+seeds from the time); every result is ONE undo step, and the cells it changed keep an orange outline that fades over
+1.2 s. New hits grow in from left to right, 8 ms per column (none under Reduce Motion).
+
+- **Starters by style**: House, Techno, Hip hop, Trap, Drum and bass, Breakbeat, Rock, Funk, Disco, Reggaeton,
+  Afrobeat, Lo-fi. A style's one-bar pattern (16 sixteenths on the default rows, Trap with hat rolls on 32nds) is
+  repeated across the clip and replaces its notes. The grid is lifted to 16 steps per bar (32 for Trap) in the same
+  undo step when it is coarser. The tempo is not changed.
+- **Vary**: an Amount slider (Subtle to Wild) and "Make 3 takes" show three mini grids side by side. Pressing a mini
+  grid plays one pass of that take at the project tempo through the single-note audition path (a timer; it stops after
+  the pass or on the next press). "Pick" under a take adds it as a new clip right after this one (same grid and
+  swing, the grid opens it) or, with "Replace this clip" on, swaps this clip's notes. The rules move, add and remove
+  ghost hits on the snare and hats, push the kick, swap a closed hat for an open one and humanise some velocities;
+  the amount scales how many; a kick on a bar's first beat and the snare backbeats stay unless the amount is Wild.
+- **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
+  snare (38, 40) notes stay exactly as they are and only the other drums are generated.
+
+Escape closes the popover and the focus returns to the Ideas button; each result is announced ("Filled with House
+starter").
 
 ## Keyboard and accessibility
 

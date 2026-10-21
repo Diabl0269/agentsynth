@@ -10,6 +10,10 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumLanes.cpp
     Source/UI/DrumMachine/DrumRowLabels.h
     Source/UI/DrumMachine/DrumRowLabels.cpp
+    Source/UI/DrumMachine/DrumIdeas.h
+    Source/UI/DrumMachine/DrumIdeas.cpp
+    Source/UI/DrumMachine/DrumIdeasPanel.h
+    Source/UI/DrumMachine/DrumIdeasPanel.cpp
     Source/UI/DrumMachine/DrumLoudnessLane.h
     Source/UI/DrumMachine/DrumLoudnessLane.cpp
     Source/UI/DrumMachine/DrumMachineComponent.h
@@ -17,6 +21,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumMachineComponent.cpp
     Source/UI/DrumMachine/DrumMachineGeometry.cpp
     Source/UI/DrumMachine/DrumMachineGroove.cpp
+    Source/UI/DrumMachine/DrumMachineIdeas.cpp
     Source/UI/DrumMachine/DrumMachineEdit.cpp
     Source/UI/DrumMachine/DrumMachineMotion.cpp
     Source/UI/DrumMachine/DrumMachinePainting.cpp

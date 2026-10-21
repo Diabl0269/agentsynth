@@ -20,6 +20,8 @@ constexpr int kStepsCaptionWidth = 78;
 constexpr int kSwingCaptionWidth = 44;
 constexpr int kSwingKnobSize = 18;
 constexpr int kSwingValueWidth = 34;
+constexpr int kIdeasWidth = 56;
+constexpr juce::uint32 kChangedOutlineArgb = 0xffFFB454;
 constexpr int kToolbarPad = 4;
 constexpr float kRestingAlpha = 0.55f;
 constexpr float kSilencedAlpha = 0.35f;
@@ -39,9 +41,9 @@ static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches t
 //==============================================================================
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
-    const int nameWidth =
-        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth - kStepsComboWidth -
-                        kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize - kSwingValueWidth - 7 * kToolbarPad);
+    const int nameWidth = std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth -
+                                          kStepsComboWidth - kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize -
+                                          kSwingValueWidth - kIdeasWidth - 8 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -57,6 +59,8 @@ void DrumMachineComponent::layoutToolbar() {
     swingKnob_.setBounds(header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
     header.removeFromLeft(kToolbarPad);
     swingValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+    header.removeFromLeft(kToolbarPad);
+    ideasButton_.setBounds(header.removeFromLeft(kIdeasWidth));
 }
 
 void DrumMachineComponent::resized() {
@@ -202,6 +206,11 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
         g.setColour(colors.border.withMultipliedAlpha(rowAlpha * kRestingAlpha));
         if (!dense)
             g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
+    }
+    // A cell an idea just changed keeps an orange outline that fades out.
+    if (const float amount = changedAmount(key); amount > 0.0f) {
+        g.setColour(juce::Colour(kChangedOutlineArgb).withAlpha(amount));
+        g.drawRoundedRectangle(area.reduced(0.75f), radius, 1.5f);
     }
 }
 

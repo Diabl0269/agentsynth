@@ -29,13 +29,19 @@ void DrumMachineComponent::rebuildCells(bool animate) {
         cells_ = drumgrid::buildCellIndex(*c, stepLen);
     const bool sameGrid = std::abs(cellsStepBeats_ - stepLen) < 1.0e-12;
     cellsStepBeats_ = stepLen;
-    if (!animate || !sameGrid) {
+    // A new grid resolution moves every cell, so nothing shrinks out; an idea that changed it still grows its hits in.
+    const bool stagger = staggerNext_ && !prefersReducedMotion();
+    if (!animate || (!sameGrid && !staggerNext_)) {
         hitMotions_.clear();
         return;
     }
     for (const auto& [key, hits] : cells_)
-        if (previous.count(key) == 0)
-            beginHitMotion(key, true, hits.velocity);
+        if (previous.count(key) == 0 || !sameGrid)
+            beginHitMotion(key, true, hits.velocity,
+                           stagger ? std::min(kMaxStaggerMs, kStaggerMsPerColumn * static_cast<double>(key % 1000000))
+                                   : 0.0);
+    if (!sameGrid)
+        return;
     for (const auto& [key, hits] : previous)
         if (cells_.count(key) == 0)
             beginHitMotion(key, false, hits.velocity);

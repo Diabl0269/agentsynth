@@ -30,10 +30,12 @@ juce::Rectangle<int> DrumMachineComponent::rectForKey(drumgrid::CellKey key) con
     return row < 0 ? juce::Rectangle<int>() : cellBounds(row, step).expanded(2);
 }
 
-void DrumMachineComponent::beginHitMotion(drumgrid::CellKey key, bool growing, int velocity) {
+// `delayMs` holds a growing hit back (the left-to-right stagger of an idea); it draws nothing until its time.
+void DrumMachineComponent::beginHitMotion(drumgrid::CellKey key, bool growing, int velocity, double delayMs) {
     if (!motionAllowed())
         return;
-    hitMotions_[key] = {nowMs(), growing, velocity};
+    hitMotions_[key] = {nowMs() + delayMs, growing, velocity};
+    staggerTailMs_ = std::max(staggerTailMs_, delayMs);
     startMotionClock();
 }
 
@@ -48,12 +50,13 @@ void DrumMachineComponent::beginFlash(drumgrid::CellKey key) {
 // One driver serves every motion. Restarting it on each new motion keeps it running until the newest one ends; each
 // motion reads its own progress from its start time.
 void DrumMachineComponent::startMotionClock() {
-    const double duration = std::max(kFlashMs, hitMotionDuration());
+    const double duration = std::max(kFlashMs, hitMotionDuration() + staggerTailMs_);
     motionAnim_.start(
         vblank_, duration, [](float t) { return t; }, [this](float) { tickMotion(); },
         [this] {
             hitMotions_.clear();
             flashes_.clear();
+            staggerTailMs_ = 0.0;
             repaint();
         });
 }
@@ -106,6 +109,8 @@ void DrumMachineComponent::finishMotionsForTest() {
     motionAnim_.stop(vblank_);
     hitMotions_.clear();
     flashes_.clear();
+    changed_.clear();
+    changeAnim_.stop(vblank_);
     laneAnim_.completeForTest();
     rowAnim_.completeForTest();
     repaint();

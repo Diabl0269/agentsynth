@@ -41,6 +41,7 @@ void TimelinePanelComponent::wireDrumMachine() {
     grid.onAuditionNote = [this](int pitch, float velocity01, bool on) {
         auditionClipNote(drum_->grid.getClipId(), pitch, velocity01, on);
     };
+    grid.onClipCreated = [this](synth::ClipId id) { clipSelection_.setSelection({id}); };
     wireClipPreview();
     pianoRoll_.onDrumMachineRequested = [this](synth::ClipId id) {
         closePianoRoll();
