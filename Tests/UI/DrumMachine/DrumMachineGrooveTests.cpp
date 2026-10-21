@@ -4,11 +4,19 @@
 #include "../PianoRoll/PianoRollTestHelpers.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/ReducedMotion.h"
 
 using synth::ui::DrumLoudnessLane;
 using synth::ui::DrumMachineComponent;
 
 namespace {
+
+// The motion tests pin Animations to Full: the mode is process-wide, so an earlier test (or the machine's Reduce
+// Motion) would otherwise decide whether a flash or a lane motion runs at all.
+struct AnimationModeGuard {
+    explicit AnimationModeGuard(synth::ui::AnimationMode mode) { synth::ui::setAnimationMode(mode); }
+    ~AnimationModeGuard() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+};
 
 struct GrooveFixture {
     TimelineDoc doc;
@@ -131,6 +139,7 @@ TEST(DrumMachineSwingTest, ASwungHitShowsATickAndAStraightOneDoesNot) {
 }
 
 TEST(DrumMachineSwingTest, ASwungHitFlashesWhenItPlaysNotWhenTheColumnIsEntered) {
+    AnimationModeGuard fullMotion(synth::ui::AnimationMode::full);
     GrooveFixture f;
     f.addHits(42, {1});
     ASSERT_TRUE(f.doc.setClipSwing(f.clip, 0.75));
@@ -186,6 +195,7 @@ TEST(DrumMachineLoudnessTest, TheChipGrowsTheLaneAndFoldsItBack) {
 }
 
 TEST(DrumMachineLoudnessTest, TheLaneGrowsOverTimeWhenAnimationsAreOnScreenAndLandsAtOnceOtherwise) {
+    AnimationModeGuard fullMotion(synth::ui::AnimationMode::full);
     GrooveFixture f;
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
     f.clickChip();
