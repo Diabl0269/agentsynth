@@ -640,11 +640,11 @@ private:
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
+    bool isDrumKitTrack(synth::TrackId track) const override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
     void setTrackPoly(synth::TrackId track, bool poly) override;
     bool everyHeaderRefreshFollows() const override;
-
     juce::String createTrackInNode();
     juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);
     void refreshAssetRoots();

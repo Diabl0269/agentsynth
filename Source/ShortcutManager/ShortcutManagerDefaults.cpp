@@ -429,6 +429,16 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["snapCycleNext"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(ctrlShift), 0);
 }
 
+void ShortcutManager::addDrumMachineDefaultBindings() {
+    // The defaults DrumMachineComponent::keyPressed() falls back to when no manager is installed. Space also toggles a
+    // hit but is a fixed key, as in the step sequencer.
+    bindings["drumMachineToggleHit"] = juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::noModifiers, 0);
+    bindings["drumMachineToggleAccent"] =
+        juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["drumMachineLouder"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["drumMachineSofter"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
+}
+
 void ShortcutManager::addPianoRollDefaultBindings() {
     // ---- Piano roll ----
     // Exactly the defaults PianoRollComponent::keyPressed() falls back to when no manager is

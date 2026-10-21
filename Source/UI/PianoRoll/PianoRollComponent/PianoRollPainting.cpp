@@ -380,6 +380,14 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Clips", backButtonBounds_.withTrimmedLeft(12), juce::Justification::centredLeft, false);
 
+    if (drumKitTrack_) {
+        const auto drumFill =
+            paintHeaderChip(drumMachineChipBounds_, false, hoveredHeaderButton_ == HeaderButtonId::DrumMachine);
+        g.setColour(drumFill.contrasting(0.9f));
+        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
+        g.drawText("Drum machine", drumMachineChipBounds_, juce::Justification::centred, false);
+    }
+
     // QUANTISE (note starts -> grid): an ACTION, never lit, but dimmed when it would do nothing (no
     // division chosen, or an empty clip). The momentary press flash — ended by the one-shot timer in
     // timerCallback() — sits ON TOP of whichever base fill is showing, so every press is acknowledged
@@ -647,6 +655,8 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return velocityChipBounds_;
     case HeaderButtonId::Humanize:
         return humanizeChipBounds_;
+    case HeaderButtonId::DrumMachine:
+        return drumMachineChipBounds_;
     case HeaderButtonId::None:
         break;
     }
@@ -743,6 +753,9 @@ void PianoRollComponent::resized() {
     bounds.removeFromTop(rulerBandHeight_);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
+    drumMachineChipBounds_ = drumKitTrack_ ? header.removeFromLeft(96).reduced(3, 2) : juce::Rectangle<int>();
+    if (drumKitTrack_)
+        header.removeFromLeft(4);
     // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one
     // group, so "the three quantise verbs" (position, length, pitch — the order the feature was
     // designed in) read as one cluster and "scale + its row filter" as another. Every glyph chip is

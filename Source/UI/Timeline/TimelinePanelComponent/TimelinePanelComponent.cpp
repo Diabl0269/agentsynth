@@ -11,6 +11,7 @@
 #include "TimelinePanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Transport/TransportService.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 #include <algorithm>
 #include <cmath>
 
@@ -144,6 +145,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // invisible — addChildComponent (not addAndMakeVisible) keeps it hidden until openPianoRoll()
     // shows it.
     addChildComponent(pianoRoll_);
+    wireDrumMachine();
     addChildComponent(rollLeaving_); // above the roll, below the playhead overlay added last
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onAboutToClose = [this] { rollLeaving_.capture(pianoRoll_); };
@@ -188,26 +190,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // off before a retrigger's on — see startAudition), so a plain member is enough; it is cleared on
     // the off.
     pianoRoll_.onAuditionNote = [this](int pitch, float velocity01, bool on) {
-        if (trackHeaderHost_ == nullptr || doc_ == nullptr)
-            return;
-        const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
-
-        if (!on) {
-            // Whatever the ON went to, the OFF follows it. No isOpen() check, no re-resolution.
-            const auto latched = auditionTrackLatch_;
-            auditionTrackLatch_ = {};
-            if (latched.isValid())
-                trackHeaderHost_->auditionTrackNote(latched, pitch, velocity, false);
-            return;
-        }
-
-        if (!pianoRoll_.isOpen())
-            return;
-        const auto* track = doc_->getTrackForClip(pianoRoll_.getClipId());
-        if (track == nullptr)
-            return;
-        auditionTrackLatch_ = track->id;
-        trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
+        auditionClipNote(pianoRoll_.isOpen() ? pianoRoll_.getClipId() : synth::ClipId{}, pitch, velocity01, on);
     };
 
     // The automation lane editors, over the clip lanes and under the playhead.
@@ -255,6 +238,26 @@ TimelinePanelComponent::TimelinePanelComponent() {
 // rather than one more call site relying on every future test remembering the idiom.
 // `shortcutsWeak_` goes null automatically the moment the referenced manager destructs, making
 // removeChangeListener safe to skip instead of a use-after-free.
+// Shared by the piano roll and the drum machine, each passing the clip it is open on: only the note-ON resolves a
+// track (an invalid `clip` silences it), and the OFF follows the latched track as described above.
+void TimelinePanelComponent::auditionClipNote(synth::ClipId clip, int pitch, float velocity01, bool on) {
+    if (trackHeaderHost_ == nullptr || doc_ == nullptr)
+        return;
+    const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
+    if (!on) {
+        const auto latched = auditionTrackLatch_;
+        auditionTrackLatch_ = {};
+        if (latched.isValid())
+            trackHeaderHost_->auditionTrackNote(latched, pitch, velocity, false);
+        return;
+    }
+    const auto* track = clip.isValid() ? doc_->getTrackForClip(clip) : nullptr;
+    if (track == nullptr)
+        return;
+    auditionTrackLatch_ = track->id;
+    trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
+}
+
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
@@ -383,6 +386,7 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transportBar_.setTransport(transport);
     clipLaneArea_.setTransport(transport);
     pianoRoll_.setTransport(transport);
+    drum_->grid.setTransport(transport);
     automationLanes_.setTransport(transport);
 }
 
@@ -412,7 +416,8 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     // playing/enabled/roll-closed/ no-drag-in-flight, so a stopped transport, the feature off, the piano roll open (it
     // follows on its own) or a clip drag in progress cost nothing here. No new timer: Page rides this 10 Hz poll,
     // Smooth the playhead's 30 Hz frames.
-    if (follow_.enabled && snapshot.playing && !pianoRoll_.isOpen() && !clipLaneArea_.isDragInProgress() &&
+    drum_->grid.setTransportPlaying(snapshot.playing);
+    if (follow_.enabled && snapshot.playing && !clipEditorOpen() && !clipLaneArea_.isDragInProgress() &&
         viewState_.pixelsPerBeat > 0.0) {
         followViewToBeat(playhead_.getDrawnBeat());
     }
@@ -464,6 +469,7 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     refreshRoutingPane();
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
+    drum_->grid.setTimelineDoc(doc_);
     // The ruler draws (and edits) the doc's MARKERS — see TimelineRulerComponent's class comment
     // for why it never listens to the doc itself: this panel's timelineChanged() repaints it.
     ruler_.setTimelineDoc(doc_);
@@ -477,6 +483,7 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
+    drum_->grid.setUndoManager(undoManager);
     automationLanes_.setUndoManager(undoManager);
     // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
     ruler_.setUndoManager(undoManager);

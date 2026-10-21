@@ -33,6 +33,11 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
         "pianoRollToggleVelocityLane",
+        // DrumMachineComponent::keyPressed
+        "drumMachineToggleHit",
+        "drumMachineToggleAccent",
+        "drumMachineLouder",
+        "drumMachineSofter",
         // MixerPanelComponent::keyPressed
         "mixerToggleInserts",
         "mixerToggleSends",

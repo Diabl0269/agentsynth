@@ -8,6 +8,7 @@
 
 #include "AddTrackPicker.h"
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -364,6 +365,7 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
+    drum_->grid.refreshFromDoc();
 
     // Fold arrows, row positions and editor positions all follow the lanes' new state.
     if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr)

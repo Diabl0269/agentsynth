@@ -47,6 +47,8 @@ namespace synth {
 class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 namespace ui {
+class DrumMachineComponent;
+struct DrumMachineHost;
 class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
 } // namespace ui
 } // namespace synth
@@ -210,21 +212,20 @@ public:
     // copyRange() then deletes the range as ONE recordTimelineChange. False when the copy fails.
     bool cutRange();
 
-    // ---- Piano roll ----
-    // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
-    // synth::ui::PianoRollComponent, editing `id`. A no-op if `id` does not resolve to a live
-    // clip (PianoRollComponent::openClip's own contract). Double-clicking a clip in the lane area
-    // calls this via the onClipDoubleClicked hook wired in the constructor.
+    // ---- Clip editors (piano roll, drum machine) ----
+    // Each swaps the lanes region for an editor on clip `id` (a no-op when it is not a live clip); openClipEditor picks
+    // the drum machine on a Drum Kit track, else the roll.
+    void openClipEditor(synth::ClipId id);
     void openPianoRoll(synth::ClipId id);
-    // Swaps back to the clip lanes. Wired to PianoRollComponent::onCloseRequested (back button,
-    // Escape with nothing selected, or the edited clip disappearing from the doc) — also callable
-    // directly.
     void closePianoRoll();
+    void closeClipEditor(); // whichever editor is open
+    void openDrumMachine(synth::ClipId id);
+    void closeDrumMachine();
+    bool clipEditorOpen() const noexcept; // THE test for "an editor covers the clip lanes"; never ask one editor alone
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
+    synth::ui::DrumMachineComponent& getDrumMachine() const noexcept;
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
     synth::ui::FadeOutPicture& getRollLeavingForTest() noexcept { return rollLeaving_; }
-    // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
-    // resolveEditSurface()).
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
 
     // ---- Automation lanes (folded out under their tracks -- TimelinePanelAutomation.cpp) ----
@@ -750,14 +751,14 @@ private:
         juce::String name;
         std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
         bool muted = false;
-        // Audio fields — captured and restored so copy/paste of an audio clip yields the same
-        // clip, not a silent husk pointing at nothing (they were dropped before, which is exactly
-        // what "the clipboard drops audio clips" looked like from the outside).
+        // Audio fields and the drum machine's settings: captured and restored so a paste yields the same clip.
         juce::String assetRef;
         double gainDb = 0.0;
         double fadeInBeats = 0.0;
         double fadeOutBeats = 0.0;
         double sourceStartSeconds = 0.0;
+        int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
+        std::vector<int> mutedPitches, soloPitches;
     };
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
@@ -804,18 +805,15 @@ private:
     // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
     // grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
-    // Occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
-    // it (addChildComponent — not addAndMakeVisible, so it starts invisible) so z-order still
-    // reads grid -> clips/piano-roll -> playhead. Only one of clipLaneArea_/pianoRoll_ is visible
-    // at a time; openPianoRoll()/closePianoRoll() toggle it. The roll owns its OWN beat<->x
-    // mapping (keys column as a real gutter, its own zoom/scroll), which is why it is registered as
-    // playhead_'s LocalPlayheadClient: while it is open the overlay skips its rows and hands it the
-    // drawn beat instead. See PianoRollComponent's class comment.
+    // Occupies the same rect as clipLaneArea_, added right after it and invisible until opened, so z-order reads grid
+    // -> clips/editor -> playhead. It owns its own beat<->x mapping, so it is a LocalPlayheadClient of playhead_.
     synth::ui::PianoRollComponent pianoRoll_{viewState_};
     // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
     synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
     synth::ui::FadeVisibility rollFade_{&pianoRoll_};
-    synth::ui::FadeOutPicture rollLeaving_; // the roll as it was, fading away over the lanes (closePianoRoll)
+    synth::ui::FadeOutPicture rollLeaving_; // the roll or drum machine as it was, fading away over the lanes
+    std::unique_ptr<synth::ui::DrumMachineHost>
+        drum_; // same rect and cross-fade as the roll (TimelinePanelDrumMachine.cpp)
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
@@ -840,6 +838,9 @@ private:
     FollowPlayheadButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
     void persistFollowPlayheadChoice();
     void wirePianoRollLoopRequest();
+    void wireDrumMachine();
+    bool isDrumKitClip(synth::ClipId id) const;
+    void auditionClipNote(synth::ClipId clip, int pitch, float velocity01, bool on);
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is

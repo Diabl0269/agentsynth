@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -132,15 +133,14 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.onCanvasBodyChanged = [this] { resized(); };
     wireMainViewHooks();
 
-    // The user's bindings for the three surfaces that resolve their OWN keys (see
-    // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are
-    // installed together and MUST stay together: with a manager installed, resolution is strict —
-    // an action id missing from ShortcutManager::resetToDefaults() has NO key at all rather than
-    // falling back to its hardcoded default, so installing the manager before registering an id
-    // makes that key silently inert. ShortcutManagerTest's surface-id tripwire pins the id list
-    // these three consult against the defaults table for exactly that reason.
+    // The user's bindings for the surfaces that resolve their OWN keys (see PianoRollComponent::setShortcutManager
+    // for the strict-resolution contract). They are installed together and MUST stay together: with a manager
+    // installed, an action id missing from ShortcutManager::resetToDefaults() has NO key at all, so installing the
+    // manager before registering an id makes that key silently inert. ShortcutManagerTest's surface-id tripwire pins
+    // the id list these consult against the defaults table.
     timelinePanel.setShortcutManager(&shortcutManager);
     timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
+    timelinePanel.getDrumMachine().setShortcutManager(&shortcutManager);
     timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
     // The mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
     // "timelineArmFocusedTrack" action ids the track-header row above already binds -- a user's

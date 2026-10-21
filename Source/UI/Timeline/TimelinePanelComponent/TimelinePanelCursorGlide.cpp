@@ -101,7 +101,7 @@ TimelineCursorGlide::Host TimelinePanelComponent::makeCursorGlideHost() {
         playhead_.updateFromTransport(transport_->getPositionSnapshot(), lastOutputLatencySeconds_);
     };
     host.ensureVisible = [this](double beat) {
-        if (!pianoRoll_.isOpen())
+        if (!clipEditorOpen())
             pageViewToShowBeat(beat);
     };
     host.isKeyHeld = keyAndModifiersDown;

@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h" // findMidiNodesReachedFrom
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 
 namespace {
@@ -38,6 +39,12 @@ juce::AudioProcessorGraph::Node* MainComponent::trackModuleNode(synth::TrackId t
         return nullptr;
     auto* instrument = instrumentOf(audioEngine.getGraph(), *bound);
     return instrument != nullptr ? instrument : bound;
+}
+
+// A track's clips open in the drum machine when its instrument is a Drum Kit.
+bool MainComponent::isDrumKitTrack(synth::TrackId trackId) const {
+    auto* node = const_cast<MainComponent*>(this)->trackModuleNode(trackId);
+    return node != nullptr && dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr;
 }
 
 // Selects and centres the module; it never opens a window (that is toggleTrackPluginWindow's job).

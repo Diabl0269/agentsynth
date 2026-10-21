@@ -6,6 +6,7 @@
 #include "MainComponent.h"
 #include "ShortcutManager/SnapNoteValueActions.h"
 #include "Transport/MarkerJump.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/TimelineSnapNames.h"
@@ -314,6 +315,11 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 
     switch (resolveEditSurface()) {
     case EditSurface::PianoRoll:
+        if (timelinePanel.getDrumMachine().isOpen()) {
+            timelinePanel.getDrumMachine().zoomHorizontal(vertical ? 1.0 : factor);
+            statusBar.showMessage("Drum machine: zoom");
+            return true;
+        }
         if (vertical)
             timelinePanel.getPianoRoll().zoomVertical(factor);
         else

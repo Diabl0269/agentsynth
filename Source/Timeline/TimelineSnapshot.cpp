@@ -85,6 +85,8 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
 
                 const double clipEnd = clip.startBeat + clip.lengthBeats;
                 const auto runStart = snapshot->notes.size();
+                const auto& mutedPitches = clip.mutedPitches;
+                const auto& soloPitches = clip.soloPitches;
 
                 for (const auto& note : clip.notes) {
                     // Notes are sorted by (startBeat, pitch), so the first one at or past the clip
@@ -96,6 +98,12 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                     // mute is not part of the sort key, so a muted note says nothing about the
                     // ones after it.
                     if (note.muted)
+                        continue;
+                    // Drum-machine mute/solo is applied here and never written onto the note, so
+                    // un-muting a row restores exactly the notes that were there.
+                    if (std::binary_search(mutedPitches.begin(), mutedPitches.end(), note.pitch))
+                        continue;
+                    if (!soloPitches.empty() && !std::binary_search(soloPitches.begin(), soloPitches.end(), note.pitch))
                         continue;
 
                     NoteEvent event;

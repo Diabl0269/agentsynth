@@ -85,6 +85,9 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.fadeInBeats = clip->fadeInBeats;
         entry.fadeOutBeats = clip->fadeOutBeats;
         entry.sourceStartSeconds = clip->sourceStartSeconds;
+        entry.stepsPerBar = clip->stepsPerBar;
+        entry.mutedPitches = clip->mutedPitches;
+        entry.soloPitches = clip->soloPitches;
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -146,6 +149,12 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
             doc_->setClipGainDb(newId, entry.gainDb);
             doc_->setClipFades(newId, entry.fadeInBeats, entry.fadeOutBeats);
             doc_->setClipMuted(newId, entry.muted);
+            if (entry.stepsPerBar != synth::Clip::kDefaultStepsPerBar)
+                doc_->setClipStepsPerBar(newId, entry.stepsPerBar);
+            for (const int pitch : entry.mutedPitches)
+                doc_->setClipPitchMuted(newId, pitch, true);
+            for (const int pitch : entry.soloPitches)
+                doc_->setClipPitchSoloed(newId, pitch, true);
             newIds.push_back(newId);
         }
     };
@@ -318,6 +327,9 @@ bool TimelinePanelComponent::copyRange() {
             entry.fadeInBeats = fragment->fadeInBeats;
             entry.fadeOutBeats = fragment->fadeOutBeats;
             entry.sourceStartSeconds = fragment->sourceStartSeconds;
+            entry.stepsPerBar = fragment->stepsPerBar;
+            entry.mutedPitches = fragment->mutedPitches;
+            entry.soloPitches = fragment->soloPitches;
             captured.push_back(std::move(entry));
         }
     }

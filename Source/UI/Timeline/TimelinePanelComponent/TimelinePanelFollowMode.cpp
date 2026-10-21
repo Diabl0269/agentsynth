@@ -19,7 +19,7 @@ void TimelinePanelComponent::wireFollowPlayheadModes() {
 
 // Smooth moves the view on every frame so the cursor stays at its pin; Page defers to the cursor glide's page flip.
 void TimelinePanelComponent::followViewToBeat(double beat) {
-    if (pianoRoll_.isOpen() || clipLaneArea_.isDragInProgress() || viewState_.pixelsPerBeat <= 0.0)
+    if (clipEditorOpen() || clipLaneArea_.isDragInProgress() || viewState_.pixelsPerBeat <= 0.0)
         return;
     if (follow_.mode == FollowMode::Page) {
         pageViewToShowBeat(beat);

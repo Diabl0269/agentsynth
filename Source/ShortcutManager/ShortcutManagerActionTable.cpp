@@ -203,6 +203,11 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
             {"pianoRollToggleVelocityLane", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScaleFilter", ShortcutCategory::PianoRoll},
+            // Drum machine -- consulted by DrumMachineComponent::keyPressed only.
+            {"drumMachineToggleHit", ShortcutCategory::DrumMachine},
+            {"drumMachineToggleAccent", ShortcutCategory::DrumMachine},
+            {"drumMachineLouder", ShortcutCategory::DrumMachine},
+            {"drumMachineSofter", ShortcutCategory::DrumMachine},
             // Mixer -- consulted by MixerPanelComponent::keyPressed only.
             {"mixerToggleInserts", ShortcutCategory::Mixer},
             {"mixerToggleSends", ShortcutCategory::Mixer},

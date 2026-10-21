@@ -992,3 +992,4 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyFades.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
+include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES

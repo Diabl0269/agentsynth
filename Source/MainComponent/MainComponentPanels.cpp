@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -332,8 +333,9 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     // check visibility BEFORE even asking what's focused (the real focus, or a test's stand-in).
     if (bottomDock.isTimelineShowing()) {
         if (auto* focused = getFocusedComponentForMenu()) {
-            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
-                return EditSurface::PianoRoll;
+            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()) ||
+                isOrIsChildOf(focused, timelinePanel.getDrumMachine()))
+                return EditSurface::PianoRoll; // the drum machine shares the roll's verbs and zoom
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
                 return EditSurface::TimelineClips;
             if (timelinePanel.getAutomationLanes().laneOwning(focused).isValid() ||

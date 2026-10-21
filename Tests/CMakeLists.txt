@@ -635,6 +635,7 @@ add_executable(Tests
     UI/Layout/PanelAnimationAndLoadingTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp
+    UI/DrumMachine/DrumMachineTests.cpp
     UI/PianoRoll/PianoRollComponentTests.cpp
     UI/PianoRoll/PianoRollEditToolsTests.cpp
     UI/PianoRoll/PianoRollClipboardTests.cpp

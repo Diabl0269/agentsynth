@@ -424,18 +424,14 @@ struct TrackHeaderHost {
     /** The MIDI inputs connected now, for the routing pane's Input picker; empty when there are none to pick. */
     virtual std::vector<MidiInputDevice> getMidiInputDevices() { return {}; }
 
-    /** NOTE AUDITION — sends one preview note-on (`noteOn` true) or note-off into the track's bound
-     *  Track In node, so it reaches exactly the destination modules the track's clips play through
-     *  (they are graph connections FROM that node — see setMidiDestinationConnected above). Driven by
-     *  the piano roll's note click (PianoRollComponent::onAuditionNote, forwarded by
-     *  TimelinePanelComponent). A no-op when the track's binding no longer resolves — clicking a note
-     *  on an unbound track must be silent, never a crash.
-     *
-     *  Called on the MESSAGE thread; the implementation hands the event to the node through a
-     *  wait-free FIFO (TimelineMidiSourceModule::pushAuditionNote) rather than touching the audio
-     *  thread. Non-pure with an inert default so every existing TrackHeaderHost implementer — and
-     *  every test stub — keeps compiling. */
+    /** NOTE AUDITION: one preview note-on (`noteOn` true) or note-off into the track's bound Track In node, so it
+     *  reaches the modules the track's clips play through. Driven by the clip editors' note clicks (forwarded by
+     *  TimelinePanelComponent). A no-op when the binding no longer resolves. Message thread; the event reaches the
+     *  node through a wait-free FIFO. Non-pure with an inert default so test stubs keep compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
+
+    /** True when the track's instrument is a Drum Kit: its clips open in the drum machine, not the piano roll. */
+    virtual bool isDrumKitTrack(synth::TrackId) const { return false; }
 
     /** docs/mixer/track-presets.md: true when `track`'s bound node has a channel of its own
      *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as

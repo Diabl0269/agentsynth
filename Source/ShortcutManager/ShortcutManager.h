@@ -20,7 +20,7 @@
  *  MainComponent::resolveEditSurface() (copy/paste/cut/duplicate/repeat/select-all, and both zoom
  *  pairs) is General because it means something on EVERY surface — one key, whichever editor has
  *  focus. Graph holds only the verbs that have no meaning anywhere else. */
-enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, Mixer, LayoutEditor };
+enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, DrumMachine, Mixer, LayoutEditor };
 
 // Public juce::ChangeBroadcaster so MULTIPLE surfaces can each react to a rebind independently —
 // TimelinePanelComponent's tool-strip/snap/follow tooltips and (in a future cached-tooltip surface)
@@ -333,6 +333,7 @@ public:
         addGraphDefaultBindings();
         addTimelineDefaultBindings();
         addPianoRollDefaultBindings();
+        addDrumMachineDefaultBindings();
         addLayoutEditorDefaultBindings();
     }
 
@@ -341,6 +342,7 @@ public:
     void addGraphDefaultBindings();
     void addTimelineDefaultBindings();
     void addPianoRollDefaultBindings();
+    void addDrumMachineDefaultBindings();
     void addLayoutEditorDefaultBindings();
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -428,6 +430,8 @@ public:
             return "Timeline";
         case ShortcutCategory::PianoRoll:
             return "Piano Roll";
+        case ShortcutCategory::DrumMachine:
+            return "Drum Machine";
         case ShortcutCategory::Mixer:
             return "Mixer";
         case ShortcutCategory::LayoutEditor:
@@ -441,9 +445,10 @@ public:
     /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
      *  getActionTable(). */
     static const std::vector<ShortcutCategory>& getCategoryOrder() {
-        static const std::vector<ShortcutCategory> order{ShortcutCategory::General,  ShortcutCategory::Graph,
-                                                         ShortcutCategory::Timeline, ShortcutCategory::PianoRoll,
-                                                         ShortcutCategory::Mixer,    ShortcutCategory::LayoutEditor};
+        static const std::vector<ShortcutCategory> order{ShortcutCategory::General,     ShortcutCategory::Graph,
+                                                         ShortcutCategory::Timeline,    ShortcutCategory::PianoRoll,
+                                                         ShortcutCategory::DrumMachine, ShortcutCategory::Mixer,
+                                                         ShortcutCategory::LayoutEditor};
         return order;
     }
 
