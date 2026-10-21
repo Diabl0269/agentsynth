@@ -1,5 +1,5 @@
-type Sequencer size 560x454
-  child 0 component id="" at 12,208 536x228 visible=1 title="Step grid" tip="Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, Up and Down change the value, Space turns the step on or off" focusOrder=0 wantsFocus=1
+type Sequencer size 560x482
+  child 0 component id="" at 12,208 536x256 visible=1 title="Step grid" tip="Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, Up and Down change the value, Space turns the step on or off" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -23,8 +23,12 @@ type Sequencer size 560x454
   child 21 label id="" at 12,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 combo id="" at 112,161 96x24 visible=1 title="Scale" tip="Scale" focusOrder=0 wantsFocus=1
   child 23 label id="" at 112,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 label id="cardSectionHeader" at 12,38 252x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 25 label id="cardSectionHeader" at 278,38 204x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 label id="cardSectionHeader" at 12,108 196x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 27 label id="cardSectionHeader" at 222,108 236x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 25 label id="cardSectionHeader" at 12,38 252x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 component id="" at 271,56 1x46 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 label id="cardSectionHeader" at 278,38 204x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 29 label id="cardSectionHeader" at 12,108 196x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 component id="" at 215,126 1x76 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 label id="cardSectionHeader" at 222,108 236x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

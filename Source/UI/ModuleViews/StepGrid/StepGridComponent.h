@@ -1,9 +1,13 @@
 #pragma once
 
 #include "Modules/Sequencer/SequencerModuleBase.h"
+#include "StepGridChordPicker.h"
+#include "StepGridChords.h"
 #include "StepGridLayout.h"
 #include "StepGridModel.h"
 #include "StepGridPageStrip.h"
+#include "StepGridRandomizePanel.h"
+#include "StepGridTools.h"
 #include "UI/Graph/CardBody/CardBodyViews.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/UIAnimation.h"
@@ -17,6 +21,11 @@ namespace synth::ui {
 struct StepGridHooks {
     /** One finished edit (a drag, a key, a click): the module's extra state before and after. */
     std::function<void(const juce::var& before, const juce::var& after)> recordEdit;
+    /** Like recordEdit, plus one parameter of the module (normalised values) changed with it: both are ONE undo step.
+     */
+    std::function<void(const juce::var& before, const juce::var& after, const juce::String& paramId, float oldValue,
+                       float newValue)>
+        recordEditWithParameter;
     /** The view's height changed (every frame of a lane folding in or out): the card measures itself again. */
     std::function<void()> layoutChanged;
     /** The neighbours make room: once when a lane starts to open, once when a lane has closed. */
@@ -55,6 +64,23 @@ public:
     LaneChipRow& getChipRow() noexcept { return chips_; }
     int currentLayoutHeight() const override;
 
+    // ---- Pattern tools -------------------------------------------------------------------------------
+    StepGridTools& getTools() noexcept { return tools_; }
+    /** Runs `tool` as a click on its button does: one undo step, the bars glide. Randomize opens its popover. */
+    void applyTool(StepGridTools::Tool tool);
+    /** Randomizes once with `settings` (a Roll): one undo step, the bars glide. */
+    void roll(const sequencer_ops::RandomizeSettings& settings);
+    /** What the Randomize popover starts from and was last left at; kept for the session, never saved. */
+    const sequencer_ops::RandomizeSettings& getRandomizeSettings() const noexcept { return randomize_; }
+
+    // ---- Chords (Poly Sequencer) ---------------------------------------------------------------------
+    /** Opens the chord picker for `step`, growing out of its label. A no-op on the mono Sequencer. */
+    void openChordPicker(int step);
+    /** Sets `step`'s chord: one undo step, the label cross-fades. */
+    void pickChord(int step, SequencerChord chord);
+    /** The label's hit rectangle for `step` in this component's coordinates; empty when no label is drawn. */
+    juce::Rectangle<int> chordLabelBounds(int step) const;
+
     // ---- Pages ---------------------------------------------------------------------------------------
     StepGridPageStrip& getPageStrip() noexcept { return pages_; }
     int getViewedPage() const noexcept { return page_; }
@@ -84,6 +110,7 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
+    juce::String getTooltip() override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
@@ -140,7 +167,12 @@ private:
     void paintFocus(juce::Graphics& g, const stepgrid::StepGridLayout& layout);
     float shownNormal(SequencerLane lane, int step) const;
     float shownPitch(int step) const;
-    juce::String chordLabel(int step, int playedRoot) const;
+    stepgrid::ChordLabel labelOf(SequencerChord chord, int playedRoot, int step) const;
+    juce::Rectangle<float> pitchBarRect(int step, float played, juce::Rectangle<int> lane) const;
+    juce::Rectangle<float> chordLabelRect(const juce::Rectangle<float>& bar, juce::Rectangle<int> lane) const;
+    void paintLabel(juce::Graphics& g, const stepgrid::ChordLabel& label, juce::Rectangle<float> area,
+                    float alpha) const;
+    void paintStepLabel(juce::Graphics& g, int step, int playedRoot, juce::Rectangle<float> area) const;
 
     // StepGridEdit.cpp
     void beginGesture(const Hit& hit);
@@ -153,6 +185,18 @@ private:
     void openConditionMenu(int step);
     void setStepCondition(int step, int hit, int of);
 
+    // StepGridChordActions.cpp
+    bool chordLabelAt(juce::Point<int> p, int step) const;
+    void startLabelFade();
+
+    // StepGridToolActions.cpp
+    void commitPatternTool(const SequencerPattern& next, std::optional<int> newSteps);
+    void openRandomizePanel();
+    void seedRandomizeRange();
+    void updateToolAvailability();
+    SequencerPattern inPlayedDomain(const SequencerPattern& pattern,
+                                    const std::function<SequencerPattern(const SequencerPattern&)>& op) const;
+
     // StepGridKeys.cpp
     bool moveFocus(int dx, int dy, bool shift);
     bool changeFocusedValue(int direction, bool shift);
@@ -163,6 +207,9 @@ private:
     juce::AudioParameterInt* stepsParam_ = nullptr;
     juce::AudioParameterBool* runParam_ = nullptr;
     StepGridHooks hooks_;
+    StepGridTools tools_;
+    sequencer_ops::RandomizeSettings randomize_;
+    bool randomizeSeeded_ = false;
     StepGridPageStrip pages_;
     LaneChipRow chips_;
 
@@ -197,6 +244,9 @@ private:
     AnimationDriver pageAnim_;
     AnimationDriver glideAnim_;
     AnimationDriver dimAnim_;
+    AnimationDriver labelFadeAnim_;
+    float labelFadeT_ = 1.0f;
+    bool labelFading_ = false;
     std::array<float, kSequencerLaneCount> revealFrom_{};
     std::array<float, kSequencerLaneCount> revealTo_{};
     float pageFrom_ = 0.0f;
@@ -208,5 +258,13 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridComponent)
 };
+
+namespace test_hooks {
+/** When set, opening the Randomize popover hands the panel here instead of launching a CallOutBox (which cannot open
+ *  in a headless test). The test keeps the pointer alive. */
+std::function<void(std::unique_ptr<StepGridRandomizePanel>)>& randomizePanelHookForTest();
+/** The same for the chord picker. */
+std::function<void(std::unique_ptr<StepGridChordPicker>)>& chordPickerHookForTest();
+} // namespace test_hooks
 
 } // namespace synth::ui

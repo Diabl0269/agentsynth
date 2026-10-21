@@ -658,8 +658,7 @@ TEST(ScaleAssistPanelTest, GenerateButtonFiresItsCallback) {
     std::vector<std::tuple<int, int, bool>> generated;
     panel.onGenerate = [&](int lo, int hi, bool add) { generated.emplace_back(lo, hi, add); };
 
-    panel.getMinNoteCombo().setSelectedId(37, juce::dontSendNotification); // pitch 36 == C2
-    panel.getMaxNoteCombo().setSelectedId(73, juce::dontSendNotification); // pitch 72 == C5
+    panel.getRangePicker().setRange(36, 72); // C2 to C5
     EXPECT_EQ(panel.getMinPitchSelection(), 36);
     EXPECT_EQ(panel.getMaxPitchSelection(), 72);
 
@@ -689,7 +688,7 @@ TEST(ScaleAssistPanelTest, AddToExistingToggleStartsOffAndTravelsOutWithGenerate
     EXPECT_TRUE(addFlags.back()) << "the toggle's state at press time travels with the callback";
 }
 
-TEST(ScaleAssistPanelTest, MinMaxNoteCombosDefaultToC2AndC5) {
+TEST(ScaleAssistPanelTest, NoteRangePickerDefaultsToC2AndC5) {
     ScaleAssistPanel panel;
     EXPECT_EQ(panel.getMinPitchSelection(), 36) << "C2";
     EXPECT_EQ(panel.getMaxPitchSelection(), 72) << "C5";
@@ -920,4 +919,16 @@ TEST(ScaleAssistPanelTest, TheCustomEditorFadesInAndOutWhileTheRowsBelowSlide) {
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
     EXPECT_FALSE(block.isVisible());
     EXPECT_EQ(panel.getContentNaturalHeightForTest(), without);
+}
+
+// The picker and the scale choice are one control surface: picking a scale makes the picker's edges snap to it, and
+// dragging the picker changes what Generate is given.
+TEST(ScaleAssistPanelTest, TheRangePickerFollowsTheScaleAndFeedsGenerate) {
+    ScaleAssistPanel panel;
+    panel.setSize(170, 400);
+    panel.setSelection(synth::makeScale(0, 0), false);
+    auto& picker = panel.getRangePicker();
+    picker.getStop(synth::ui::NoteRangePicker::Part::HighEdge).keyPressed(juce::KeyPress(juce::KeyPress::leftKey));
+    EXPECT_TRUE(synth::makeScale(0, 0).contains(picker.getHigh())) << "a key press moves one scale note";
+    EXPECT_EQ(panel.getMaxPitchSelection(), picker.getHigh());
 }

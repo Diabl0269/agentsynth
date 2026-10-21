@@ -209,11 +209,34 @@ void CardBody::styleFooterItems() {
     }
 }
 
+namespace {
+
+// The 1 px rule between two row sections on one line, in the theme's border colour.
+class RowDivider : public juce::Component {
+public:
+    RowDivider() {
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+    }
+    void paint(juce::Graphics& g) override {
+        g.setColour(synth::theme::themeOf(*this).colors.border);
+        g.fillRect(getLocalBounds());
+    }
+};
+
+} // namespace
+
 // A titled section's header row: a small caption-style label, in the title's own case (UI text is
 // never all caps). Created after every parameter widget so child, Tab and screen-reader order stay
 // the declaration order; a header takes no focus.
 void CardBody::createSectionHeaders() {
     for (auto& section : plan_.sections) {
+        if (section.row && !section.footer) {
+            auto* rule = new RowDivider();
+            widgets_.add(rule);
+            card_.addAndMakeVisible(rule);
+            section.divider = rule;
+        }
         if (!section.hasHeader())
             continue;
         auto* header = new juce::Label("sectionHeader", section.title->trim());

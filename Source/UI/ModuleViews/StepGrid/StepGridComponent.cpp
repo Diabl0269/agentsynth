@@ -50,6 +50,8 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     };
     pages_.onViewPage = [this](int page) { setViewedPage(page); };
     pages_.onFollow = [this](bool follow) { follow_ = follow; };
+    tools_.onTool = [this](StepGridTools::Tool tool) { applyTool(tool); };
+    addAndMakeVisible(tools_);
     addAndMakeVisible(pages_);
     addAndMakeVisible(chips_);
 
@@ -59,6 +61,7 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     seenActive_ = module.currentActiveStep.load();
     seenRunning_ = runParam_ != nullptr && runParam_->get();
     updatePages();
+    updateToolAvailability();
 }
 
 StepGridComponent::~StepGridComponent() = default;
@@ -73,6 +76,7 @@ void StepGridComponent::resized() { layoutParts(); }
 
 void StepGridComponent::layoutParts() {
     const auto layout = currentLayout();
+    tools_.setBounds(layout.tools);
     pages_.setBounds(layout.strip);
     chips_.setBounds(layout.chips.withTrimmedLeft(kGutterWidth));
     repaint();
@@ -206,6 +210,7 @@ void StepGridComponent::syncPattern() {
 void StepGridComponent::poll() {
     syncPattern();
     syncSettings();
+    updateToolAvailability();
     const bool running = runParam_ != nullptr && runParam_->get();
     const int active = module_.currentActiveStep.load();
     if (active == seenActive_ && running == seenRunning_)
@@ -268,7 +273,7 @@ juce::String StepGridComponent::describeFocus() const {
     const auto& entry = module_.getPattern().steps[(size_t)step];
     auto text = "Step " + juce::String(step + 1) + " of " + juce::String(steps) + ", " + noteName(playedPitchOf(step));
     if (module_.isPoly() && entry.chord != SequencerChord::Unison)
-        text << " " << chordId(entry.chord);
+        text << ", chord " << labelOf(entry.chord, playedPitchOf(step), step).name;
     text << (entry.on ? ", on" : ", off");
     if (focusLane_ != SequencerLane::Pitch)
         text << ", " << laneValueText(focusLane_, entry);

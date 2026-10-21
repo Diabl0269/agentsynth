@@ -130,6 +130,10 @@ void StepGridComponent::mouseDown(const juce::MouseEvent& e) {
     setFocusStep(hit.step);
     if (hit.kind == Hit::Kind::Lane)
         focusLane_ = hit.lane;
+    if (hit.kind == Hit::Kind::Lane && hit.lane == SequencerLane::Pitch && chordLabelAt(e.getPosition(), hit.step)) {
+        openChordPicker(hit.step);
+        return;
+    }
     if (hit.kind == Hit::Kind::Lane && hit.lane == SequencerLane::Condition) {
         openConditionMenu(hit.step);
         return;

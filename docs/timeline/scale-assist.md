@@ -25,7 +25,7 @@ Contents, top to bottom:
   plus name plus Save editor rather than being itself a scale choice;
 - a **"Show only scale notes"** toggle — the same flag the roll's funnel chip drives, see **Show
   Only Scale Notes has one writer**;
-- a **Min/Max note range** pair plus a **Generate** button with an **"Add to existing"** toggle
+- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a four-octave keyboard strip, drag an edge to add or remove notes, drag the middle to move the range; it follows the panel's scale; C2 to C5 by default) plus a **Generate** button with an **"Add to existing"** toggle
   under it. The toggle sits under the button rather than beside it because at `kScalePanelWidth` a
   button-plus-checkbox row truncates the label the button's meaning depends on.
 

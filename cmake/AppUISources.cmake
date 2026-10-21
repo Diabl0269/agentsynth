@@ -319,6 +319,9 @@ set(APPUI_SOURCES
     Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.cpp
     Source/UI/Layout/NoteLengthMenu/NoteLengthBox.h
     Source/UI/Layout/NoteLengthMenu/NoteLengthBox.cpp
+    Source/UI/Layout/NoteRangePicker/NoteRangeGeometry.h
+    Source/UI/Layout/NoteRangePicker/NoteRangePicker.h
+    Source/UI/Layout/NoteRangePicker/NoteRangePicker.cpp
     Source/UI/Layout/LaneChips/LaneChipRow.h
     Source/UI/Layout/LaneChips/LaneChipRow.cpp
     Source/UI/Layout/FoldAllButton.h
@@ -742,6 +745,16 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/StepGrid/StepGridPaint.cpp
     Source/UI/ModuleViews/StepGrid/StepGridEdit.cpp
     Source/UI/ModuleViews/StepGrid/StepGridKeys.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridToolActions.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChordActions.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChords.h
+    Source/UI/ModuleViews/StepGrid/StepGridChords.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChordPicker.h
+    Source/UI/ModuleViews/StepGrid/StepGridChordPicker.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridTools.h
+    Source/UI/ModuleViews/StepGrid/StepGridTools.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridRandomizePanel.h
+    Source/UI/ModuleViews/StepGrid/StepGridRandomizePanel.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorSelection.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorClipboard.cpp

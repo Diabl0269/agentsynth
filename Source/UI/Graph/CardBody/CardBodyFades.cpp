@@ -83,6 +83,8 @@ std::vector<juce::Component*> CardBody::sectionTargets(int index) const {
     std::vector<juce::Component*> targets;
     if (section.header != nullptr)
         targets.push_back(section.header);
+    if (section.divider != nullptr)
+        targets.push_back(section.divider);
     for (int i : section.items)
         for (auto* component : {plan_.items[(size_t)i].widget, plan_.items[(size_t)i].label})
             if (component != nullptr)

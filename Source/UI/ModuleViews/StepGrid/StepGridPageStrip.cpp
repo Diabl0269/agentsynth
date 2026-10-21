@@ -14,6 +14,7 @@ namespace {
 
 constexpr int kFollowWidth = 62;
 constexpr int kBarGap = 3;
+constexpr int kFollowGap = 6;
 constexpr int kBarWidth = 52;
 constexpr double kPulseMs = 220.0;
 
@@ -59,8 +60,12 @@ juce::String StepGridPageStrip::getTooltip() {
 void StepGridPageStrip::resized() { follow_.setBounds(getWidth() - kFollowWidth, 0, kFollowWidth, getHeight()); }
 
 juce::Rectangle<int> StepGridPageStrip::pageBounds(int page) const {
-    const int x = stepgrid::kGutterWidth + page * (kBarWidth + kBarGap);
-    return {x, 2, kBarWidth, getHeight() - 4};
+    // The bars share the width left of the Follow pill, so they shrink rather than run under it.
+    const int room = getWidth() - kFollowWidth - kFollowGap - stepgrid::kGutterWidth;
+    const int fit = (room - (count_ - 1) * kBarGap) / std::max(1, count_);
+    const int width = std::clamp(fit, 12, kBarWidth);
+    const int x = stepgrid::kGutterWidth + page * (width + kBarGap);
+    return {x, 2, width, getHeight() - 4};
 }
 
 int StepGridPageStrip::pageAt(juce::Point<int> p) const {

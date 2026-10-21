@@ -54,9 +54,10 @@ struct CardBodyPlan {
     struct Section {
         juce::String id; ///< The layout section's id; empty in the automatic layout.
         int columns = CardSection::kDefaultColumns;
-        std::vector<int> items;            ///< Indices into `items`, in card order.
-        std::optional<juce::String> title; ///< Drawn as a header row above the items; nullopt = none.
-        juce::Component* header = nullptr; ///< The header row; null until built, and without a title.
+        std::vector<int> items;             ///< Indices into `items`, in card order.
+        std::optional<juce::String> title;  ///< Drawn as a header row above the items; nullopt = none.
+        juce::Component* header = nullptr;  ///< The header row; null until built, and without a title.
+        juce::Component* divider = nullptr; ///< A row section's 1 px rule on its left; empty at the start of a line.
         std::optional<CardCondition> visibleWhen;
         bool visible = true; ///< visibleWhen's current result (false while codeHidden).
         bool codeHidden =

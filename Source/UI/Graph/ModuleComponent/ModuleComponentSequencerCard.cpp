@@ -29,6 +29,13 @@ void ModuleComponent::wireSequencerCard() {
             safeThis->undoManager->recordNodeExtraStateChange(safeThis->owner.getAudioEngine().getGraph(),
                                                               safeThis->nodeId, before, after);
     };
+    hooks.recordEditWithParameter = [safeThis](const juce::var& before, const juce::var& after,
+                                               const juce::String& paramId, float oldValue, float newValue) {
+        if (safeThis != nullptr && safeThis->undoManager != nullptr)
+            safeThis->undoManager->recordNodeExtraStateAndParameterChange(safeThis->owner.getAudioEngine().getGraph(),
+                                                                          safeThis->nodeId, before, after, paramId,
+                                                                          oldValue, newValue);
+    };
     hooks.layoutChanged = [safeThis] {
         if (safeThis != nullptr)
             safeThis->updateLayout();
