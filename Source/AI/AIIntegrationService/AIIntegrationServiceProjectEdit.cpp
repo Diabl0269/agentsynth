@@ -216,8 +216,9 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // setProjectPromptVersion() overrides it for the eval harness, which measures a newer server prompt before any
 // app build asks for it: an app may only pin a version once the deployed service serves it.
 // Prompt versions: 2 envelope and instrumentParams, 3 whole-track rules, 4 song layout, 5 tempo and
-// section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum.
-static constexpr int kProjectGeneratePromptVersion = 6;
+// section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum, 7 a sequencer's
+// pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters.
+static constexpr int kProjectGeneratePromptVersion = 7;
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
@@ -226,7 +227,8 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
         body.getDynamicObject()->setProperty("currentPatch", patch);
     // Pins the server prompt this build understands: version 2 teaches addInstrumentTrack's "envelope" and
     // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
-    // clips, and 5 the tempo and markers (setTempo and addMarker ops). A build that does not understand those
+    // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track and 7 a sequencer's
+    // pattern state. A build that does not understand those
     // fields sends no version and keeps getting version 1, so a server deploy can never hand an older app a
     // field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0

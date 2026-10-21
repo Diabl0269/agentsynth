@@ -34,6 +34,9 @@ constexpr int kDefaultRequestTimeoutMs = 240000;
 // rather than the one-answer timeout.
 constexpr int kStreamTimeoutMs = 660000;
 
+// The patch.generate prompt this build understands; the eval harness never overrides it, unlike project.generate's.
+constexpr int kPatchGeneratePromptVersion = 2;
+
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Remote provider is shutting down.";
 const char* const kCancelledMessage = "Request cancelled.";
 
@@ -774,7 +777,7 @@ void RemoteProvider::processRequest(const Request& req) {
         jsonBody = req.capabilityBodyJson;
     } else {
         // Legacy sendPrompt() path: build the patch.generate body {"productName": ...,
-        // "userPrompt": ...}. currentPatch and promptVersion are deliberately OMITTED entirely
+        // "userPrompt": ..., "promptVersion": ...}. currentPatch is deliberately OMITTED entirely
         // (not sent as null).
         //
         // Why this is safe: AIIntegrationService::buildPatchAugmentedContent() already renders the
@@ -800,6 +803,10 @@ void RemoteProvider::processRequest(const Request& req) {
         juce::DynamicObject::Ptr body = new juce::DynamicObject();
         body->setProperty("productName", juce::String(synth::branding::kProductName));
         body->setProperty("userPrompt", userPrompt);
+        // Pins the server prompt this build understands: version 2 writes a sequencer's pattern as the
+        // node's "state". A build that sends no version keeps getting version 1, so a server deploy
+        // never hands an older app a pattern shape it would drop.
+        body->setProperty("promptVersion", kPatchGeneratePromptVersion);
 
         jsonBody = juce::JSON::toString(juce::var(body.get()));
     }
