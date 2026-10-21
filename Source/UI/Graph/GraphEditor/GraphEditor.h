@@ -322,8 +322,7 @@ public:
     using MacroMemberPreview = MacroGroupController::MacroMemberPreview;
     juce::Colour categoryPreviewColour(synth::ui::ModuleCategory category) const;
 
-    /** Status-bar surface for a refused macro action. Owner installs; a no-op by default. Mirrors
-     *  onSaveSnippetRequested's ownership split — GraphEditor owns no status bar. */
+    /** Status-bar surface for a refused macro action; the owner installs it (GraphEditor owns no status bar). */
     std::function<void(const juce::String&)> onStatusMessage;
 
     // ---- Macro card drag (MacroCardComponent calls these; carries the hidden members along) ----
@@ -395,12 +394,15 @@ public:
     // Repaints every card so its MIDI-mapped badges follow the Preferences switch (a card paints from a cached image).
     void repaintMidiLearnBadges();
 
+    // The Drum Kit card's "Drum machine" button: is a track playing the kit (else disabled), and a press.
+    std::function<bool(juce::AudioProcessorGraph::NodeID)> drumKitHasTrack;
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenDrumMachineRequested;
     // Hosted-plugin card hooks ("Open Editor", the add-by-moving mode), wired to HostedPluginWindowManager.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, bool)> onPluginAddingControlsChanged;
     void endPluginAddingControls(juce::AudioProcessorGraph::NodeID nodeId);
 
-    // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, must outlive this editor.
+    // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, outlives this editor.
     void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }
     synth::PluginCardLayoutStore* getPluginCardLayoutStore() const noexcept { return pluginCardLayoutStore_; }
 
@@ -409,13 +411,11 @@ public:
     /** Fires from replaceModule() once the new node exists and the old one is gone: OLD uuid, NEW id. May be null. */
     std::function<void(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId)> onModuleReplaced;
 
-    /** Fires as the postRestore of the combined undo/redo this doc participates in (see
-     *  setMidiRemoteProjectDocForUndo) -- never for the initial replace itself. May be null. */
+    /** Fires as the postRestore of the combined undo/redo (see setMidiRemoteProjectDocForUndo). */
     std::function<void()> onMidiRemoteDocRestored;
     std::function<std::vector<synth::PluginIdentity>()> installedPluginsProvider; // "Replace with..." plugin rows
 
-    /** Non-owning; null (the default, every headless test) means replaceModule() falls back to its plain graph-only
-     *  undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must outlive this editor. */
+    /** Non-owning, may be null (plain graph-only undo step in replaceModule()); outlives this editor. */
     void setMidiRemoteProjectDocForUndo(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDocForUndo_ = doc; }
 
     // ---- Copy / paste / duplicate (snippet pipeline, docs/layout/snippets-clipboard.md) ----

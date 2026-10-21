@@ -243,3 +243,31 @@ TEST(DrumKitCard, TheCardSizeMatchesItsEstimate) {
     EXPECT_EQ(estimate.x, scene.card().getWidth());
     EXPECT_EQ(estimate.y, scene.card().getHeight());
 }
+
+TEST(DrumKitCard, TheDrumMachineButtonIsDisabledWithAReasonWhenNoTrackPlaysTheKit) {
+    Scene scene;
+    auto& button = scene.chrome().getDrumMachineButton();
+    scene.chrome().refreshDrumMachineButton();
+    EXPECT_TRUE(button.isVisible());
+    EXPECT_EQ(button.getTitle(), "Drum machine");
+    EXPECT_FALSE(button.isEnabled());
+    EXPECT_TRUE(button.getTooltip().contains("No track plays this Drum Kit")) << button.getTooltip();
+
+    scene.canvas.editor.drumKitHasTrack = [](NodeID) { return false; };
+    scene.chrome().refreshDrumMachineButton();
+    EXPECT_FALSE(button.isEnabled());
+}
+
+TEST(DrumKitCard, TheDrumMachineButtonOpensTheGridForThisKitWhenATrackPlaysIt) {
+    Scene scene;
+    NodeID opened;
+    scene.canvas.editor.drumKitHasTrack = [](NodeID) { return true; };
+    scene.canvas.editor.onOpenDrumMachineRequested = [&opened](NodeID n) { opened = n; };
+    scene.chrome().refreshDrumMachineButton();
+    auto& button = scene.chrome().getDrumMachineButton();
+    EXPECT_TRUE(button.isEnabled());
+    EXPECT_FALSE(button.getTooltip().isEmpty());
+    EXPECT_TRUE(button.getWantsKeyboardFocus());
+    button.onClick();
+    EXPECT_EQ(opened, scene.id);
+}

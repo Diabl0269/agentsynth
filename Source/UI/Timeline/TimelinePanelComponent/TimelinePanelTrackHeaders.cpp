@@ -466,6 +466,7 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     header->setShortcutManager(shortcuts_);
     // The header only reports a fold-arrow press; this panel owns the fold state.
     header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+    header->onDrumMachineRequested = [this](synth::TrackId id) { openDrumMachineOnTrack(id); };
     header->onAutomationToggleSelectionRequested = [this](synth::TrackId id) { toggleAutomationForSelection(id); };
     header->onSelectAllTracksRequested = [this] { selectAllTracks(); };
     // The header menu's "Add automation...": the picker opens anchored on the header row.

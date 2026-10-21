@@ -74,6 +74,7 @@
 
 class AudioEngine;
 class GraphEditor;
+class TimelineMidiSourceModule; // Modules/TimelineMidiSourceModule.h
 namespace synth {
 struct CollectResult;          // Project/ProjectCollector.h
 class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
@@ -641,6 +642,9 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     bool isDrumKitTrack(synth::TrackId track) const override;
+    bool startClipPreview(synth::TrackId track, double startBeat, double endBeat) override;
+    void stopClipPreview(synth::TrackId track) override;
+    double clipPreviewBeat(synth::TrackId track) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
     void setTrackPoly(synth::TrackId track, bool poly) override;
@@ -658,6 +662,12 @@ private:
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
     /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */
     juce::AudioProcessorGraph::Node* trackModuleNode(synth::TrackId track);
+    /** The Track In module bound to `track`, or null (unbound, orphaned, or not a Track In). */
+    TimelineMidiSourceModule* trackInSource(synth::TrackId track);
+    /** The first track whose instrument is the node `kit` (a Drum Kit card's), or none. */
+    synth::TrackId trackPlayingNode(juce::AudioProcessorGraph::NodeID kit);
+    /** Shows the Timeline and opens the drum machine on the track playing the Drum Kit `kit`. */
+    void openDrumMachineForKit(juce::AudioProcessorGraph::NodeID kit);
 
     // ---- File handlers, minus the dialogs ----
     bool saveToFile(const juce::File& file);

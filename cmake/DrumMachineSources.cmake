@@ -2,6 +2,9 @@
 # AppUISources.cmake to stay under the file-size cap).
 list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelDrumMachine.cpp
+    Source/MainComponent/MainComponentDrumMachine.cpp
+    Source/UI/Timeline/TrackDrumMachineButton.h
+    Source/UI/Timeline/TrackDrumMachineButton.cpp
     Source/UI/DrumMachine/DrumGrid.h
     Source/UI/DrumMachine/DrumLanes.h
     Source/UI/DrumMachine/DrumLanes.cpp
@@ -16,5 +19,6 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumMachinePainting.cpp
     Source/UI/DrumMachine/DrumMachineMouse.cpp
     Source/UI/DrumMachine/DrumMachineKeys.cpp
+    Source/UI/DrumMachine/DrumMachinePreview.cpp
     Source/UI/DrumMachine/DrumMachineAccessibility.cpp
 )

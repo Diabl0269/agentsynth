@@ -71,6 +71,12 @@ DrumMachineComponent::DrumMachineComponent()
             setStepsPerBar(kStepChoices[id - 1]);
     };
 
+    addAndMakeVisible(playClipButton_);
+    playClipButton_.setComponentID("drumPlayClip");
+    playClipButton_.setClickingTogglesState(false);
+    playClipButton_.onClick = [this] { toggleClipPreview(); };
+    refreshPlayClipTexts();
+
     addAndMakeVisible(showAllButton_);
     showAllButton_.setComponentID("drumShowAll");
     showAllButton_.setClickingTogglesState(true);
@@ -106,6 +112,7 @@ int DrumMachineComponent::getStepCount() const {
 
 //==============================================================================
 void DrumMachineComponent::openClip(synth::ClipId id) {
+    stopClipPreview();
     wheelTween_.stop();
     gesture_ = {};
     hitMotions_.clear();
@@ -144,6 +151,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
 }
 
 void DrumMachineComponent::closeGrid() {
+    stopClipPreview();
     wheelTween_.stop();
     endGesture(false);
     motionAnim_.stop(vblank_);
@@ -181,6 +189,9 @@ void DrumMachineComponent::refreshFromDoc() {
     if (c == nullptr) {
         requestClose();
         return;
+    }
+    if (previewing_ && (c->startBeat != previewStart_ || c->startBeat + c->lengthBeats != previewEnd_)) {
+        startClipPreview(); // the clip moved or was resized: loop its new range
     }
     syncLanes(true);
     rebuildCells();

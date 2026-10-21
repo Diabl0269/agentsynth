@@ -69,7 +69,8 @@ void TimelinePlayheadOverlay::updateFromTransport(const synth::TransportService:
         if (playing_) {
             startTimerHz(kFrameRateHz);
         } else {
-            stopTimer();
+            if (!previewActive_)
+                stopTimer();
             justStopped = true;
         }
     }
@@ -78,6 +79,19 @@ void TimelinePlayheadOverlay::updateFromTransport(const synth::TransportService:
     // ruler); the stop transition is the one case that always emits, so the line settles exactly on
     // the position playback ended at even if the last 30 Hz tick had already drawn it there.
     refreshLine(/*force=*/justStopped);
+}
+
+void TimelinePlayheadOverlay::setClipPreviewActive(bool active) {
+    if (previewActive_ == active)
+        return;
+    previewActive_ = active;
+    if (active) {
+        if (!isTimerRunning())
+            startTimerHz(kFrameRateHz);
+    } else if (!playing_) {
+        stopTimer();
+        refreshLine(/*force=*/false); // the local client settles on the beat it is left at
+    }
 }
 
 void TimelinePlayheadOverlay::timerCallback() {

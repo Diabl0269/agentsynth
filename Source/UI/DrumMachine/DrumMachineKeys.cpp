@@ -1,6 +1,6 @@
 // DrumMachineComponent: the keyboard. The grid is one Tab stop; the arrows move a focus cell, and the cell's verbs
-// (toggle a hit, toggle accent, louder, softer) are rebindable actions resolved through matchesAction. Space,
-// Delete/Backspace, the arrows, Home/End and Escape are fixed conventions.
+// (toggle a hit, toggle accent, louder, softer, play the clip) are rebindable actions resolved through
+// matchesAction. Delete/Backspace, the arrows, Home/End and Escape are fixed conventions.
 
 #include "DrumMachineComponent.h"
 
@@ -55,8 +55,11 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
         announceFocus();
         return true;
     }
-    if (matchesAction(key, "drumMachineToggleHit", juce::KeyPress(juce::KeyPress::returnKey, none, 0)) ||
-        key == juce::KeyPress(juce::KeyPress::spaceKey, none, 0)) {
+    if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, none, 0))) {
+        toggleClipPreview();
+        return true;
+    }
+    if (matchesAction(key, "drumMachineToggleHit", juce::KeyPress(juce::KeyPress::returnKey, none, 0))) {
         if (pitch >= 0)
             toggleHit(pitch, focus_.step, false);
         announceFocus();

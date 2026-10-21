@@ -213,13 +213,15 @@ public:
     bool cutRange();
 
     // ---- Clip editors (piano roll, drum machine) ----
-    // Each swaps the lanes region for an editor on clip `id` (a no-op when it is not a live clip); openClipEditor picks
-    // the drum machine on a Drum Kit track, else the roll.
+    // Each swaps the lanes for an editor on clip `id` (a no-op if not a live clip); openClipEditor picks the drum
+    // machine on a Drum Kit track, else the roll. openDrumMachineOnTrack opens the clip under the playhead or adds a
+    // one-bar one.
     void openClipEditor(synth::ClipId id);
     void openPianoRoll(synth::ClipId id);
     void closePianoRoll();
     void closeClipEditor(); // whichever editor is open
     void openDrumMachine(synth::ClipId id);
+    bool openDrumMachineOnTrack(synth::TrackId trackId);
     void closeDrumMachine();
     bool clipEditorOpen() const noexcept; // THE test for "an editor covers the clip lanes"; never ask one editor alone
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
@@ -811,19 +813,15 @@ private:
     // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
     synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
     synth::ui::FadeVisibility rollFade_{&pianoRoll_};
-    synth::ui::FadeOutPicture rollLeaving_; // the roll or drum machine as it was, fading away over the lanes
-    std::unique_ptr<synth::ui::DrumMachineHost>
-        drum_; // same rect and cross-fade as the roll (TimelinePanelDrumMachine.cpp)
+    synth::ui::FadeOutPicture rollLeaving_;            // the roll or drum machine as it was, fading away over the lanes
+    std::unique_ptr<synth::ui::DrumMachineHost> drum_; // same rect and cross-fade as the roll
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     NoteLengthBox snapCombo_;
-    // Toggles TimelineViewState::snapEnabled from the panel chrome, so the switch is discoverable
-    // without opening a clip. Toggle STATE mirrors the shared flag via setSnapEnabled() — the
-    // button never owns it. Labelled "Snap" rather than with its key: the key moved from Q to J
-    // (Cubase's snap key — Q is Cubase's *quantise*, which is what the roll uses it for), and a
-    // button that spells its own letter goes stale the moment the binding is rebound. The live key
-    // is in the tooltip, through synth::shortcutHintFor.
+    // Toggles TimelineViewState::snapEnabled from the panel chrome; its state mirrors the shared flag via
+    // setSnapEnabled() and the button never owns it. Labelled "Snap", not with its key, which goes stale on a rebind:
+    // the live key is in the tooltip, through synth::shortcutHintFor.
     juce::TextButton snapToggleButton_{"Snap"};
     // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
     // the button's lit state, and repaints every grid painter.
@@ -839,6 +837,7 @@ private:
     void persistFollowPlayheadChoice();
     void wirePianoRollLoopRequest();
     void wireDrumMachine();
+    void wireClipPreview();
     bool isDrumKitClip(synth::ClipId id) const;
     void auditionClipNote(synth::ClipId clip, int pitch, float velocity01, bool on);
 

@@ -19,6 +19,11 @@ void ModuleComponent::createSamplerControls() {
             if (cardBody_ != nullptr)
                 cardBody_->refreshConditions();
         };
+        host.drumMachineAvailable = [this] { return owner.drumKitHasTrack && owner.drumKitHasTrack(nodeId); };
+        host.openDrumMachine = [this] {
+            if (owner.onOpenDrumMachineRequested)
+                owner.onOpenDrumMachineRequested(nodeId);
+        };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }
 }

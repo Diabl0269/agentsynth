@@ -834,8 +834,7 @@ add_executable(Tests
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
-    # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
-    # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
+    # MeterColourStops.cpp is compiled into Core (FRO147), so it must NOT also be listed here.
     # The same holds for every AppUI source (cmake/AppUISources.cmake): Tests links AppUI (see the
     # target_link_libraries below), so only the plugin wrapper's two units, which live in no
     # library, are compiled here.

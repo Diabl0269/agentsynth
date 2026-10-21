@@ -84,12 +84,9 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"openAddTrackMenu", ShortcutCategory::General},
             // Opens the Send feedback window from anywhere (Cmd+Shift+F), the top bar's Feedback button.
             {"openFeedback", ShortcutCategory::General},
-            // Transport verbs promoted to command-dispatched actions (the prerequisite for
-            // docs/control/midi-remote.md#action-targets) -- deliberately UNBOUND by default (see resetToDefaults()),
-            // unlike every other row above. They exist as command/MIDI-Remote targets first; a
-            // user may still rebind one in Settings. "transportTogglePlayStop" is not here: it is
-            // a pure alias id resolved by AppCommands::getCommandForAction straight to
-            // "togglePlayback" (which keeps its own row, and its Space binding, unchanged).
+            // Transport verbs as command-dispatched actions (docs/control/midi-remote.md#action-targets), UNBOUND by
+            // default (see resetToDefaults()). "transportTogglePlayStop" has no row: it is an alias id that
+            // AppCommands::getCommandForAction resolves to "togglePlayback" (own row, Space binding unchanged).
             {"transportPlay", ShortcutCategory::General},
             {"transportStop", ShortcutCategory::General},
             {"transportToggleLoop", ShortcutCategory::General},
@@ -208,6 +205,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"drumMachineToggleAccent", ShortcutCategory::DrumMachine},
             {"drumMachineLouder", ShortcutCategory::DrumMachine},
             {"drumMachineSofter", ShortcutCategory::DrumMachine},
+            {"drumMachinePlayClip", ShortcutCategory::DrumMachine},
             // Mixer -- consulted by MixerPanelComponent::keyPressed only.
             {"mixerToggleInserts", ShortcutCategory::Mixer},
             {"mixerToggleSends", ShortcutCategory::Mixer},

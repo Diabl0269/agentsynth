@@ -6,14 +6,37 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 
 ## What it shows
 
-- A header strip: the clip name, a "Drum machine | Piano roll" switch, a space reserved for a later "Play clip"
-  control, "Show all drums", and the Steps per bar dropdown (8, 16, 32, 64).
+- A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", and the
+  Steps per bar dropdown (8, 16, 32, 64).
 - One row per drum: a coloured dot, the name, and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
   A pitch that holds a note always has a row, and a pitch outside the table is named "Note N".
 - Cells are rounded squares with alternating beat-group shades. A hit fills the cell to its velocity; an accent adds
   a white tick on top. While the transport plays the playing column is tinted and a hit flashes as it plays.
 
+## Opening it
+
+Besides double-clicking a clip, a "Drum machine" button opens it from the Drum Kit card on the canvas and from the
+header of every Drum Kit track (only those; other tracks show no button). The button opens the clip under the
+playhead on the track; with none there, it adds a one-bar clip named "Beat N" (the first free N) at the start of the
+bar the playhead is in, as ONE undo step. On the canvas the button is disabled, with a tooltip saying why, while no
+track plays that kit; it opens the timeline tab and the first track playing the kit.
+
+## Play clip
+
+"Play clip" loops the open clip even with the song stopped, and reads "Stop clip" in the accent colour while it
+loops. The grid's playhead follows the loop and hits flash as it reaches them. Space toggles it (the rebindable
+`drumMachinePlayClip` action, Drum Machine category). Edits are heard on the next pass of the loop.
+
+It stops on its own when the transport plays, the grid closes or switches to the piano roll, the clip is deleted, or
+the project changes. A change to the clip's start or length restarts the loop on the new range.
+
+`TimelineMidiSourceModule` (the track's Track In) plays the loop: the message thread publishes a start or stop
+request through atomics (a version counter, odd while being written) and the audio thread reads it at the top of a
+block. It reuses the module's note-hygiene (every note-on gets its note-off, also at the wrap, a stop, a mute and a
+lost track). The loop only runs while the transport is stopped, and the module ends it the moment the transport
+plays. The panel reads the loop's beat back through `TrackHeaderHost::clipPreviewBeat` at the playhead's 30 Hz frames,
+which keep running while a loop plays (a NaN beat means the module ended it).
 ## Cell mapping
 
 A row is one General MIDI pitch. A step is `beatsPerBar / stepsPerBar` beats (`beatsPerBarFor(transport)`). A note
@@ -39,8 +62,8 @@ pitch is not. They never write `MidiNote::muted`, which stays the piano roll's p
 ## Keyboard and accessibility
 
 The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End move a focus cell (drawn with the
-focus ring); Return or Space toggles a hit, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
-by 10, Delete removes the hit, Escape closes. Return, Shift+Return and Shift+Up/Down are rebindable (Drum Machine
+focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
+by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return and Shift+Up/Down are rebindable (Drum Machine
 category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
 "Kick, step 5, empty". Header controls and each row's M and S are Tab-reachable with names and tooltips.
 

@@ -40,8 +40,9 @@ void DrumMachineComponent::layoutToolbar() {
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
-    // The slot after the switch is kept free for a "Play clip" control to come.
-    header.removeFromLeft(kPlayClipSlotWidth + kToolbarPad);
+    header.removeFromLeft(kToolbarPad);
+    playClipButton_.setBounds(header.removeFromLeft(kPlayClipSlotWidth));
+    header.removeFromLeft(kToolbarPad);
     showAllButton_.setBounds(header.removeFromLeft(kShowAllWidth));
     header.removeFromLeft(kToolbarPad);
     stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
@@ -122,7 +123,7 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     g.setColour((group % 2 == 0 ? colors.surface : colors.surfaceHi).withMultipliedAlpha(rowAlpha));
     g.fillRoundedRectangle(area, radius);
 
-    if (playing_ && step == playStep_) {
+    if (showsPlayhead() && step == playStep_) {
         g.setColour(colors.accent.withAlpha(kPlayColumnAlpha * rowAlpha));
         g.fillRoundedRectangle(area, radius);
     }
@@ -196,6 +197,8 @@ void DrumMachineComponent::paintOverChildren(juce::Graphics& g) {
 
 //==============================================================================
 void DrumMachineComponent::setTransportPlaying(bool playing) {
+    if (playing)
+        stopClipPreview(); // the song plays alone
     if (playing_ == playing)
         return;
     playing_ = playing;
@@ -204,6 +207,7 @@ void DrumMachineComponent::setTransportPlaying(bool playing) {
 }
 
 void DrumMachineComponent::setPlayheadBeat(double absoluteBeat) {
+    followPreviewBeat(absoluteBeat);
     if (!std::isfinite(absoluteBeat))
         return;
     playheadBeat_ = absoluteBeat;
@@ -219,16 +223,12 @@ void DrumMachineComponent::setPlayheadBeat(double absoluteBeat) {
     if (step != playStep_) {
         const int previous = playStep_;
         playStep_ = step;
-        if (playing_) {
+        if (showsPlayhead()) {
             if (previous >= 0)
                 requestRepaintStrip(columnStrip(previous));
             if (step >= 0) {
                 requestRepaintStrip(columnStrip(step));
-                for (const auto& slot : slots_) {
-                    const auto key = drumgrid::cellKey(slot.lane.pitch, step);
-                    if (cells_.count(key) > 0 && !rowSilenced(slot.lane.pitch))
-                        beginFlash(key);
-                }
+                flashSkippedSteps(previous, step);
             }
         }
     }

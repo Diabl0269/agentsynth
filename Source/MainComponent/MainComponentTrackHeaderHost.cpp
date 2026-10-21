@@ -387,21 +387,10 @@ void MainComponent::setMidiDestinationConnectedForTest(synth::TrackId id, juce::
 }
 
 void MainComponent::auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) {
-    // Deliberately the SAME resolution the two functions above use — track -> bindingUuid -> live
-    // node — because that node's MIDI output is where the track's destinations are wired FROM. Going
-    // anywhere else (AudioEngine's own midiMessageCollector, say) would reach the global MIDI-in
-    // path instead of this track's instruments, so the preview would play the wrong thing or nothing.
-    const auto* track = timelineDoc.getTrack(forTrack);
-    if (track == nullptr || track->bindingUuid.isEmpty())
-        return; // an unbound track plays nowhere, so a preview on it is silence
-
-    auto* trackInNode = findNodeByUuid(track->bindingUuid);
-    if (trackInNode == nullptr)
-        return; // orphaned binding — the chip already says so; a preview must not crash on it
-
-    auto* source = dynamic_cast<TimelineMidiSourceModule*>(trackInNode->getProcessor());
+    // The Track In node's MIDI output is where the track's destinations are wired FROM (see trackInSource).
+    auto* source = trackInSource(forTrack);
     if (source == nullptr)
-        return; // the uuid resolves to something that is not a Track In node
+        return;
 
     // NO structural change, NO undo step and NO doc mutation: a preview is not an edit. The push is
     // wait-free and a full FIFO simply drops the event (see pushAuditionNote) — nothing here may

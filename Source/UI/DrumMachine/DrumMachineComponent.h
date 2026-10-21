@@ -57,7 +57,10 @@ public:
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
     void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
-    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    void setShortcutManager(const ShortcutManager* manager) noexcept {
+        shortcuts_ = manager;
+        refreshPlayClipTexts();
+    }
     void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
     void setZoomScrollInverted(bool inverted) noexcept { zoomScrollInverted_ = inverted; }
 
@@ -80,6 +83,20 @@ public:
     std::function<void()> onHorizontalViewChanged;
     /** A preview note on (`on` true) then off for the same pitch; the owner routes it to the track. */
     std::function<void(int pitch, float velocity01, bool on)> onAuditionNote;
+
+    // ---- Play clip: loops the open clip, even with the song stopped ----
+    /** Asks the owner to loop [startBeat, endBeat) (absolute beats) on the clip's track; false when nothing can. */
+    std::function<bool(double startBeat, double endBeat)> onStartClipPreview;
+    std::function<void()> onStopClipPreview;
+    /** The loop's current absolute beat, NaN once it has ended. */
+    std::function<double()> clipPreviewBeat;
+    /** The loop started or stopped; the owner keeps the playhead's frames running while it plays. */
+    std::function<void(bool playing)> onClipPreviewChanged;
+    bool isClipPreviewing() const noexcept { return previewing_; }
+    void startClipPreview();
+    /** Stops the loop; every way the grid stops showing its clip ends it too. */
+    void stopClipPreview();
+    juce::Button& getPlayClipButton() noexcept { return playClipButton_; }
 
     // ---- Geometry: the grid's own horizontal mapping ----
     /** Pixels the ruler band keeps blank below the toolbar for the panel's ruler. */
@@ -232,6 +249,13 @@ private:
     bool nudgeFocusedVelocity(int delta);
     void announceFocus();
 
+    // DrumMachinePreview.cpp
+    void toggleClipPreview();
+    void refreshPlayClipTexts();
+    void followPreviewBeat(double& beat);
+    void flashSkippedSteps(int previous, int step);
+    bool showsPlayhead() const noexcept { return playing_ || previewing_; }
+
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
@@ -257,6 +281,9 @@ private:
     bool hasPlayheadX_ = false;
     int playStep_ = -1;
     bool playing_ = false;
+    bool previewing_ = false;
+    double previewStart_ = 0.0;
+    double previewEnd_ = 0.0;
 
     std::unordered_map<drumgrid::CellKey, HitMotion> hitMotions_;
     std::unordered_map<drumgrid::CellKey, double> flashes_;
@@ -268,6 +295,7 @@ private:
     CardSegmentedSwitch viewSwitch_;
     juce::ComboBox stepsCombo_;
     juce::TextButton showAllButton_{"Show all drums"};
+    juce::TextButton playClipButton_{"Play clip"};
     DrumRowLabels labels_;
     juce::Rectangle<int> nameBounds_, stepsCaptionBounds_;
 

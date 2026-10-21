@@ -38,6 +38,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "drumMachineToggleAccent",
         "drumMachineLouder",
         "drumMachineSofter",
+        "drumMachinePlayClip",
         // MixerPanelComponent::keyPressed
         "mixerToggleInserts",
         "mixerToggleSends",

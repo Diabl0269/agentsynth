@@ -10,6 +10,7 @@ namespace synth::ui {
 struct DrumMachineHost {
     DrumMachineComponent grid;
     FadeVisibility fade{&grid};
+    synth::TrackId previewTrack; // the track a running Play clip loop was started on (the clip may be gone by the stop)
 };
 
 } // namespace synth::ui

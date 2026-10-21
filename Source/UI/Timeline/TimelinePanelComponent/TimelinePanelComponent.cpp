@@ -452,6 +452,8 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
 void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     if (doc_ == doc)
         return;
+    if (drum_ != nullptr)
+        drum_->grid.stopClipPreview(); // a loop belongs to the project it was started in
     if (doc_ != nullptr)
         doc_->removeListener(this);
     doc_ = doc;

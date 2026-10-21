@@ -4,6 +4,7 @@
 #include "../Transport/TransportService.h"
 #include "ModuleBase.h"
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -50,6 +51,15 @@
  * non-authorable by the AI (kNonAuthorableModuleTypes) — a model could otherwise wire itself to a
  * track it did not create.
  *
+ * CLIP PREVIEW is a third emitter beside the transport and audition: startClipPreview() loops one clip's notes while
+ * the transport is STOPPED, on a beat clock of its own that advances at the transport's tempo. It reads the same
+ * published snapshot through the same emitRange as playback, so per-pitch mute/solo and edits apply on the next
+ * pass, and a muted or soloed-away track is silent. Its notes are ordinary timeline notes (finite end beat), so
+ * flushTimelineNotes releases them: that is correct only because preview never runs with the transport playing.
+ * The module ends the preview itself the block it sees the transport playing (flush, then the song plays alone);
+ * stopClipPreview, bypass, no transport and a lost track release it too. The request crosses threads through a
+ * seqlock (like TransportService's snapshot), the UI beat through an atomic.
+ *
  * Held-note hygiene: a note-on emitted here is a promise to emit the matching note-off. Anything
  * that could break that promise (stop, locate, bypass, track deleted/muted/soloed away) flushes
  * every held note as note-offs at sample 0 first. Always PER-NOTE, never a blanket CC 123 — a MIDI
@@ -91,6 +101,7 @@ public:
         wasBypassed_ = false;
         wasPlaying_ = false;
         wasSuppressed_ = false;
+        dropClipPreview(); // a device restart cancels a running preview rather than resuming it
     }
 
     /** AUDITION — pushes one preview note edge into this track's MIDI stream, to be emitted at
@@ -138,6 +149,15 @@ public:
         return count;
     }
 
+    /** CLIP PREVIEW: loops the notes in [clipStartBeat, clipEndBeat) of this track while the transport is stopped.
+     *  Message thread only (single writer); a new call replaces the running one, and nothing sounds once the
+     *  transport plays. */
+    void startClipPreview(double clipStartBeat, double clipEndBeat) noexcept;
+    /** Ends the preview; its held notes are released on the next block. Message thread only. */
+    void stopClipPreview() noexcept;
+    /** The absolute beat the preview is at, or NaN when none runs. Any thread. */
+    double clipPreviewBeat() const noexcept { return previewBeat_.load(std::memory_order_relaxed); }
+
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // This module REPLACES the graph-supplied MIDI buffer (the ExternalMidiModule contract):
         // it is a source, so whatever the graph handed it is not ours to forward.
@@ -158,6 +178,7 @@ public:
             // DISCARDED rather than queued: replaying a stale click the moment bypass comes off
             // would be a note nobody asked for. The flush above already released whatever was held.
             discardAuditionEvents();
+            dropClipPreview();
             haveLastBlock_ = false; // resuming is a discontinuity, not a continuation
             wasPlaying_ = false;
             buffer.clear();
@@ -174,6 +195,7 @@ public:
             // would sound a click the user made minutes ago.
             flushActiveNotes(midiMessages);
             discardAuditionEvents();
+            dropClipPreview();
             haveLastBlock_ = false;
             wasPlaying_ = false;
             pushActivity(numSamples);
@@ -217,6 +239,7 @@ public:
             releaseAllAuditionNotes(midiMessages);
 
         drainAuditionEvents(midiMessages);
+        runClipPreview(info, snapshot, numSamples, midiMessages);
 
         if (!info.playing || snapshot == nullptr || numSamples <= 0) {
             pushActivity(numSamples);
@@ -545,6 +568,16 @@ private:
         }
     }
 
+    // ---- Clip preview (see startClipPreview and the class comment); out of line in TimelineMidiSourceModulePreview
+    // ----
+    void runClipPreview(const synth::BlockTimeInfo& info, const synth::TimelineSnapshot* snapshot, int numSamples,
+                        juce::MidiBuffer& midiMessages);
+    bool syncPreviewRequest(juce::MidiBuffer& midiMessages);
+    void emitPreviewBlock(const synth::TimelineSnapshot& snapshot, const synth::TimelineSnapshot::TrackInfo& track,
+                          double beatsPerSample, int numSamples, juce::MidiBuffer& midiMessages);
+    void endClipPreview(juce::MidiBuffer& midiMessages);
+    void dropClipPreview() noexcept;
+
     // Activity LED, same shape as ExternalMidiModule's: high while anything is sounding.
     void pushActivity(int numSamples) {
         if (auto* vb = getVisualBuffer()) {
@@ -566,6 +599,20 @@ private:
     // the reason it exists: it must be impossible to lose, and an atomic cannot be full.
     std::atomic<bool> auditionPanic_{false};
 
+    // Clip preview. The request is written by the message thread inside an odd/even version pair and read by the
+    // audio thread; everything after it (running, position, range) belongs to the audio thread alone.
+    std::atomic<std::uint32_t> previewVersion_{0};
+    std::atomic<bool> previewWanted_{false};
+    std::atomic<double> previewStart_{0.0};
+    std::atomic<double> previewEnd_{0.0};
+    std::atomic<double> previewBeat_{std::numeric_limits<double>::quiet_NaN()};
+    std::uint32_t previewSeen_ = 0;
+    bool previewRunning_ = false;
+    bool previewSuppressed_ = false;
+    double previewLo_ = 0.0;
+    double previewHi_ = 0.0;
+    double previewPos_ = 0.0;
+
     std::int64_t expectedNextBlockStart_ = 0;
     bool haveLastBlock_ = false;
     bool wasBypassed_ = false;
@@ -574,3 +621,121 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineMidiSourceModule)
 };
+
+// ---- Clip preview ------------------------------------------------------------------------------------------------
+
+inline void TimelineMidiSourceModule::startClipPreview(double clipStartBeat, double clipEndBeat) noexcept {
+    if (!std::isfinite(clipStartBeat) || !std::isfinite(clipEndBeat) || !(clipEndBeat > clipStartBeat))
+        return stopClipPreview();
+    previewVersion_.fetch_add(1, std::memory_order_acq_rel); // odd: write in flight
+    previewStart_.store(clipStartBeat, std::memory_order_relaxed);
+    previewEnd_.store(clipEndBeat, std::memory_order_relaxed);
+    previewWanted_.store(true, std::memory_order_relaxed);
+    previewVersion_.fetch_add(1, std::memory_order_release); // even: request complete
+    previewBeat_.store(clipStartBeat, std::memory_order_relaxed);
+}
+
+inline void TimelineMidiSourceModule::stopClipPreview() noexcept {
+    previewVersion_.fetch_add(1, std::memory_order_acq_rel);
+    previewWanted_.store(false, std::memory_order_relaxed);
+    previewVersion_.fetch_add(1, std::memory_order_release);
+    previewBeat_.store(std::numeric_limits<double>::quiet_NaN(), std::memory_order_relaxed);
+}
+
+// Forgets the preview and any request already seen, so it cannot restart on its own; the caller flushes the notes.
+inline void TimelineMidiSourceModule::dropClipPreview() noexcept {
+    previewRunning_ = false;
+    previewSuppressed_ = false;
+    previewSeen_ = previewVersion_.load(std::memory_order_acquire);
+    previewBeat_.store(std::numeric_limits<double>::quiet_NaN(), std::memory_order_relaxed);
+}
+
+// Ends a running preview: its notes are released at sample 0 and the UI beat goes NaN. The request stays "seen", so
+// nothing restarts until the UI asks again.
+inline void TimelineMidiSourceModule::endClipPreview(juce::MidiBuffer& midiMessages) {
+    flushTimelineNotes(midiMessages);
+    dropClipPreview();
+}
+
+// Takes up a new request, if one landed whole since the last block. Returns whether a preview is running afterwards.
+// A request caught mid-write (odd version) or rewritten under the read is left for the next block.
+inline bool TimelineMidiSourceModule::syncPreviewRequest(juce::MidiBuffer& midiMessages) {
+    const std::uint32_t before = previewVersion_.load(std::memory_order_acquire);
+    if (before != previewSeen_ && (before & 1u) == 0u) {
+        const bool wanted = previewWanted_.load(std::memory_order_relaxed);
+        const double lo = previewStart_.load(std::memory_order_relaxed);
+        const double hi = previewEnd_.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (previewVersion_.load(std::memory_order_relaxed) == before) {
+            previewSeen_ = before;
+            if (previewRunning_)
+                flushTimelineNotes(midiMessages); // a restart or a stop: nothing of the old pass may hang on
+            previewRunning_ = wanted && hi > lo;
+            previewSuppressed_ = false;
+            previewLo_ = lo;
+            previewHi_ = hi;
+            previewPos_ = lo;
+            if (!previewRunning_)
+                previewBeat_.store(std::numeric_limits<double>::quiet_NaN(), std::memory_order_relaxed);
+        }
+    }
+    return previewRunning_;
+}
+
+inline void TimelineMidiSourceModule::runClipPreview(const synth::BlockTimeInfo& info,
+                                                     const synth::TimelineSnapshot* snapshot, int numSamples,
+                                                     juce::MidiBuffer& midiMessages) {
+    if (!syncPreviewRequest(midiMessages))
+        return;
+    if (info.playing) { // the song takes over: it must start from a clean slate
+        endClipPreview(midiMessages);
+        return;
+    }
+    if (snapshot == nullptr || numSamples <= 0 || !(info.beatsPerSample() > 0.0))
+        return; // nothing to read yet: hold the position
+    const auto* track = findMyTrack(*snapshot);
+    if (track == nullptr) { // the track went away: there is nothing left to preview
+        endClipPreview(midiMessages);
+        return;
+    }
+    if (track->muted || (snapshot->anySoloed && !track->soloed)) {
+        if (!previewSuppressed_)
+            flushTimelineNotes(midiMessages);
+        previewSuppressed_ = true;
+    } else {
+        previewSuppressed_ = false;
+    }
+    emitPreviewBlock(*snapshot, *track, info.beatsPerSample(), numSamples, midiMessages);
+}
+
+// One block of the loop: a single beat range, or two when it crosses the clip end (released at the wrap exactly as the
+// transport's loop wrap does). The clock advances even when the track is silenced, so unmuting rejoins the loop.
+inline void TimelineMidiSourceModule::emitPreviewBlock(const synth::TimelineSnapshot& snapshot,
+                                                       const synth::TimelineSnapshot::TrackInfo& track,
+                                                       double beatsPerSample, int numSamples,
+                                                       juce::MidiBuffer& midiMessages) {
+    const int lastSample = juce::jmax(0, numSamples - 1);
+    const double length = previewHi_ - previewLo_;
+    if (!(previewPos_ >= previewLo_ && previewPos_ < previewHi_)) {
+        flushTimelineNotes(midiMessages); // the previous block ended exactly on the clip end
+        previewPos_ = previewLo_;
+    }
+    const double end = previewPos_ + static_cast<double>(numSamples) * beatsPerSample;
+    const auto emit = [&](double from, double to, int baseOffset) {
+        if (!previewSuppressed_)
+            emitRange(snapshot, track, midiMessages, from, to, baseOffset, beatsPerSample, lastSample);
+    };
+    if (end <= previewHi_) {
+        emit(previewPos_, end, 0);
+        previewPos_ = end;
+    } else {
+        emit(previewPos_, previewHi_, 0);
+        const int wrapOffset =
+            juce::jlimit(0, lastSample, static_cast<int>(std::llround((previewHi_ - previewPos_) / beatsPerSample)));
+        flushTimelineNotes(midiMessages, wrapOffset);
+        const double into = std::fmod(end - previewHi_, length); // a clip shorter than the block folds, as a loop does
+        emit(previewLo_, previewLo_ + into, wrapOffset);
+        previewPos_ = previewLo_ + into;
+    }
+    previewBeat_.store(previewPos_, std::memory_order_relaxed);
+}
