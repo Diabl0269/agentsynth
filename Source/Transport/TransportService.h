@@ -5,6 +5,7 @@
 #include "TransportDoc.h"
 #include <array>
 #include <atomic>
+#include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -43,6 +44,10 @@ public:
     bool setLoop(double startBeat, double endBeat, bool enabled);
     bool setBpm(double newBpm);
     bool setTimeSignature(int numerator, int denominator);
+
+    // Message thread only. Fires after a time signature that differs from the last requested one was queued, from
+    // every path (the transport bar, a project load, undo), so an owner can republish what depends on the bar length.
+    std::function<void()> onTimeSignatureChanged;
 
     // Message thread only. The tempo, time signature and loop last requested, valid immediately.
     const TransportDoc& getDocumentState() const noexcept { return documentState_; }

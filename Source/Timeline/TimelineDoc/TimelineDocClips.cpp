@@ -173,6 +173,22 @@ bool TimelineDoc::setClipStepsPerBar(ClipId id, int stepsPerBar) {
     });
 }
 
+bool TimelineDoc::setClipSwing(ClipId id, double swing) {
+    if (!std::isfinite(swing) || !Clip::isValidSwing(swing))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->swing == swing)
+        return true;
+
+    return applyMutation([&] {
+        clip->swing = swing;
+        syncLinkedClips(*clip); // swing is shared content, like the grid's resolution
+        return true;
+    });
+}
+
 namespace {
 // Adds or removes `pitch` in a sorted, unique list. Returns false when nothing changed.
 bool setPitchMembership(std::vector<int>& list, int pitch, bool member) {
@@ -279,6 +295,7 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         // two halves.
         right.muted = clip->muted;
         right.stepsPerBar = clip->stepsPerBar;
+        right.swing = clip->swing;
         right.mutedPitches = clip->mutedPitches;
         right.soloPitches = clip->soloPitches;
         clip->fadeOutBeats = 0.0;
@@ -377,6 +394,7 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         // has to be listed here explicitly — a duplicate of a muted clip is muted.
         dup.muted = clip->muted;
         dup.stepsPerBar = clip->stepsPerBar;
+        dup.swing = clip->swing;
         dup.mutedPitches = clip->mutedPitches;
         dup.soloPitches = clip->soloPitches;
         dup.notes.reserve(clip->notes.size());

@@ -17,13 +17,20 @@ constexpr int kPlayClipSlotWidth = 72;
 constexpr int kShowAllWidth = 92;
 constexpr int kStepsComboWidth = 56;
 constexpr int kStepsCaptionWidth = 78;
+constexpr int kSwingCaptionWidth = 44;
+constexpr int kSwingKnobSize = 18;
+constexpr int kSwingValueWidth = 34;
+constexpr int kIdeasWidth = 56;
+constexpr juce::uint32 kChangedOutlineArgb = 0xffFFB454;
 constexpr int kToolbarPad = 4;
 constexpr float kRestingAlpha = 0.55f;
 constexpr float kSilencedAlpha = 0.35f;
 constexpr float kMutedHitAlpha = 0.4f;
+constexpr float kBeatGroupShadeAlpha = 0.03f;
 constexpr float kPlayColumnAlpha = 0.16f;
 constexpr float kFlashAlpha = 0.55f;
 constexpr float kAccentTickHeight = 2.0f;
+constexpr float kSwingTickAlpha = 0.45f;
 constexpr int kDenseStepPx = 3;
 constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
 constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
@@ -36,7 +43,8 @@ static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches t
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
     const int nameWidth = std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth -
-                                          kStepsComboWidth - kStepsCaptionWidth - 4 * kToolbarPad);
+                                          kStepsComboWidth - kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize -
+                                          kSwingValueWidth - kIdeasWidth - 8 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -47,10 +55,18 @@ void DrumMachineComponent::layoutToolbar() {
     header.removeFromLeft(kToolbarPad);
     stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
     stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
+    header.removeFromLeft(kToolbarPad);
+    swingCaptionBounds_ = header.removeFromLeft(kSwingCaptionWidth);
+    swingKnob_.setBounds(header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
+    header.removeFromLeft(kToolbarPad);
+    swingValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+    header.removeFromLeft(kToolbarPad);
+    ideasButton_.setBounds(header.removeFromLeft(kIdeasWidth));
 }
 
 void DrumMachineComponent::resized() {
     layoutToolbar();
+    layoutBottom();
     layoutRows();
 }
 
@@ -68,6 +84,20 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
                true);
     g.setColour(theme.colors.textMuted);
     g.drawText("Steps per bar", stepsCaptionBounds_, juce::Justification::centredRight, true);
+    g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
+    g.setColour(theme.colors.textPrimary);
+    g.drawText(juce::String(juce::roundToInt(swingKnob_.getValue())) + "%", swingValueBounds_,
+               juce::Justification::centredLeft, true);
+}
+
+// "for Kick" beside the lane chips: the row the lanes edit.
+void DrumMachineComponent::paintLaneCaption(juce::Graphics& g) {
+    if (forBounds_.isEmpty())
+        return;
+    const auto& theme = synth::theme::themeOf(*this);
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1.0f, juce::Font::plain));
+    g.setColour(theme.colors.textMuted);
+    g.drawText("for " + drumLaneForPitch(selectedPitch_).name, forBounds_, juce::Justification::centredLeft, true);
 }
 
 //==============================================================================
@@ -75,6 +105,7 @@ void DrumMachineComponent::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
     g.fillAll(theme.colors.bg1);
     paintToolbar(g);
+    paintLaneCaption(g);
     {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(gridRegion());
@@ -117,11 +148,16 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     const float radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
     const auto area = rect.toFloat();
 
-    // Alternating beat groups keep the pulse readable; steps per beat is a whole number for every choice.
+    // Every other beat group is shaded like the step sequencer's every other group of four, so the pulse stays
+    // readable; steps per beat is a whole number for every choice.
     const double stepsPerBeat = static_cast<double>(stepsPerBar()) / std::max(1.0, beatsPerBar());
     const int group = static_cast<int>(std::floor(static_cast<double>(step) / std::max(1.0, stepsPerBeat)));
-    g.setColour((group % 2 == 0 ? colors.surface : colors.surfaceHi).withMultipliedAlpha(rowAlpha));
+    g.setColour(colors.surface.withMultipliedAlpha(rowAlpha));
     g.fillRoundedRectangle(area, radius);
+    if (group % 2 == 1) {
+        g.setColour(colors.textPrimary.withAlpha(kBeatGroupShadeAlpha * rowAlpha));
+        g.fillRoundedRectangle(area, radius);
+    }
 
     if (showsPlayhead() && step == playStep_) {
         g.setColour(colors.accent.withAlpha(kPlayColumnAlpha * rowAlpha));
@@ -159,6 +195,14 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
             g.setColour(juce::Colours::white.withMultipliedAlpha(alpha));
             g.fillRect(tick.transformedBy(scaled).getIntersection(area));
         }
+        if (swing_ > synth::Clip::kStraightSwing && (step & 1) != 0 && !dense) {
+            // The hit sits on the grid but plays late: a small tick marks how far into its cell.
+            const float offset = static_cast<float>((swing_ - synth::Clip::kStraightSwing) * 2.0);
+            g.setColour(juce::Colours::white.withMultipliedAlpha(kSwingTickAlpha * alpha));
+            g.fillRect(juce::Rectangle<float>(area.getX() + offset * area.getWidth() - 1.0f, area.getY() + 3.0f, 2.0f,
+                                              std::max(1.0f, area.getHeight() - 6.0f))
+                           .getIntersection(area));
+        }
         const float flash = flashAmount(key);
         if (flash > 0.0f) {
             g.setColour(juce::Colours::white.withAlpha(kFlashAlpha * flash * alpha));
@@ -168,6 +212,11 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
         g.setColour(colors.border.withMultipliedAlpha(rowAlpha * kRestingAlpha));
         if (!dense)
             g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
+    }
+    // A cell an idea just changed keeps an orange outline that fades out.
+    if (const float amount = changedAmount(key); amount > 0.0f) {
+        g.setColour(juce::Colour(kChangedOutlineArgb).withAlpha(amount));
+        g.drawRoundedRectangle(area.reduced(0.75f), radius, 1.5f);
     }
 }
 
@@ -232,6 +281,8 @@ void DrumMachineComponent::setPlayheadBeat(double absoluteBeat) {
             }
         }
     }
+    if (c != nullptr)
+        flushSwungFlashes(absoluteBeat - c->startBeat);
 
     const int x =
         static_cast<int>(std::llround(std::clamp(beatToX(absoluteBeat), -kMaxLineXMagnitude, kMaxLineXMagnitude)));

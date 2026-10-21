@@ -9,6 +9,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <algorithm>
 #include <map>
 
 // Builds the snapshot, resolves every automation lane against the CURRENT graph, and publishes the
@@ -30,7 +31,12 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     refreshNormalling();
     refreshMidiWiring();
 
-    auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
+    // The bar length sizes a drum clip's swing steps (TimelineSnapshot::buildFrom). It comes from the requested time
+    // signature, not the audio-side snapshot, which lags a tick and never moves without a device.
+    const auto& requested = transport.getDocumentState();
+    const double beatsPerBar = static_cast<double>(requested.timeSigNumerator) * 4.0 /
+                               static_cast<double>(std::max(1, requested.timeSigDenominator));
+    auto snapshot = synth::TimelineSnapshot::buildFrom(doc, beatsPerBar > 0.0 ? beatsPerBar : 4.0);
 
     // The snapshot's address is stable across the move into publish() (unique_ptr moves the
     // pointer, not the object), so the binding table can point at it before it is handed over.

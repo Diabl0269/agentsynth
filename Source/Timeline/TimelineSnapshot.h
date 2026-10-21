@@ -159,8 +159,10 @@ struct TimelineSnapshot {
     // content" without diffing.
     std::int64_t revision = 0;
 
-    // Message thread only: allocates, walks juce::Strings, and reads the doc.
-    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc);
+    // Message thread only: allocates, walks juce::Strings, and reads the doc. `beatsPerBar` (the transport's time
+    // signature, 4 when unknown) sizes a drum clip's steps for its swing; a time-signature change reaches the audio
+    // thread with the next publish.
+    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc, double beatsPerBar = 4.0);
 
     // Every index range in bounds and every run correctly sorted. Cheap enough for tests and the
     // stress harness to call per block; not called on the real audio path.

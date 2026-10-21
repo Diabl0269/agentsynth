@@ -273,6 +273,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    audioEngine.getTransport().onTimeSignatureChanged = nullptr;
     // Send every open handshake's `close` bytes FIRST, while remoteFeedbackOutputs_ (the sink) and
     // every MIDI output device are still fully alive -- "the app lets go of the controller" is the
     // very first thing quitting means. A no-op in HostMode::Hosted and everywhere

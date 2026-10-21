@@ -64,8 +64,12 @@ bool TransportService::setTimeSignature(int numerator, int denominator) {
     c.j = denominator;
     if (!postCommand(c))
         return false;
+    const bool changed =
+        documentState_.timeSigNumerator != numerator || documentState_.timeSigDenominator != denominator;
     documentState_.timeSigNumerator = numerator;
     documentState_.timeSigDenominator = denominator;
+    if (changed && onTimeSignatureChanged)
+        onTimeSignatureChanged();
     return true;
 }
 

@@ -1,10 +1,14 @@
 #pragma once
 
 #include "DrumGrid.h"
+#include "DrumIdeasPanel.h"
 #include "DrumLanes.h"
+#include "DrumLoudnessLane.h"
 #include "DrumRowLabels.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
+#include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
@@ -17,6 +21,10 @@
 
 class AppUndoManager;
 class ShortcutManager;
+namespace synth::ui::test_hooks {
+/** A test sets this to receive the Ideas panel instead of showing it in a popover. */
+std::function<void(std::unique_ptr<DrumIdeasPanel>)>& drumIdeasPanelHookForTest();
+} // namespace synth::ui::test_hooks
 
 namespace synth {
 class TransportService;
@@ -42,6 +50,13 @@ public:
     static constexpr double kRowMotionMs = 160.0;
     static constexpr double kReducedMotionMs = 80.0;
     static constexpr int kVelocityKeyStep = 10;
+    static constexpr int kLaneHeight = 72;
+    static constexpr int kBottomPad = 4;
+    static constexpr double kLaneMotionMs = 160.0;
+    static constexpr int kDefaultSelectedPitch = 36;
+    static constexpr double kStaggerMsPerColumn = 8.0;
+    static constexpr double kMaxStaggerMs = 400.0;
+    static constexpr double kChangedOutlineMs = 1200.0;
 
     struct Cell {
         int row = -1;
@@ -134,11 +149,45 @@ public:
     void setShowAllDrums(bool showAll);
     juce::String getAccessibilityValueText() const;
 
+    // ---- Groove: swing and the lanes under the grid (DrumMachineGroove.cpp) ----
+    /** The clip's swing, 0.5 (straight) to 0.75; set through the clip, one undo step. */
+    double getSwing() const noexcept { return swing_; }
+    void setSwing(double swing);
+    /** The row the lanes under the grid edit, by pitch; Kick until a row name is chosen. */
+    int getSelectedPitch() const noexcept { return selectedPitch_; }
+    void setSelectedPitch(int pitch);
+    bool isLoudnessShown() const noexcept { return laneTo_ > 0.5f; }
+    void setLoudnessShown(bool shown);
+    CardKnobSlider& getSwingKnob() noexcept { return swingKnob_; }
+    LaneChipRow& getLaneChips() noexcept { return chips_; }
+    DrumLoudnessLane& getLoudnessLane() noexcept { return lane_; }
+    /** The height the lane band takes right now (it grows and folds with the lane). */
+    int bottomBandHeight() const noexcept;
+    bool isLaneMotionRunning() const noexcept { return laneAnim_.isRunning(); }
+
+    // ---- Ideas: starters, variations, randomize (DrumMachineIdeas.cpp) ----
+    juce::Button& getIdeasButton() noexcept { return ideasButton_; }
+    void openIdeasPanel();
+    /** Fills the clip with `style`'s pattern, as one undo step (the grid becomes 16 steps per bar, 32 for Trap). */
+    void fillWithStarter(drumideas::Style style);
+    void randomizePattern(double density, bool keepKickAndSnare, int seed);
+    /** Puts a take in the clip (`replace`) or in a new clip right after it, and returns the clip that now holds it. */
+    synth::ClipId pickTake(const std::vector<synth::MidiNote>& notes, bool replace);
+    /** The owner is told when a pick made a new clip (it selects it); the grid has already opened it. */
+    std::function<void(synth::ClipId)> onClipCreated;
+    bool isChangedOutlineActive(int row, int step) const;
+    /** Gives the Ideas button the keyboard focus (the popover closed). */
+    void focusIdeasButton();
+    int getIdeasFocusReturns() const noexcept { return ideasFocusReturns_; }
+    const juce::String& getLastAnnouncement() const noexcept { return lastAnnouncement_; }
+
     CardSegmentedSwitch& getViewSwitch() noexcept { return viewSwitch_; }
     juce::ComboBox& getStepsCombo() noexcept { return stepsCombo_; }
     juce::Button& getShowAllButton() noexcept { return showAllButton_; }
     DrumRowLabels& getRowLabels() noexcept { return labels_; }
     bool isHitMotionActive(int row, int step) const;
+    /** True while the hit at (row, step) is flashing because the playhead reached it. */
+    bool isFlashActive(int row, int step) const;
     /** Test seams: animate although the grid is off screen, and land every running motion. */
     static void setAnimateOffScreenForTest(bool animate);
     void finishMotionsForTest();
@@ -223,7 +272,7 @@ private:
 
     // DrumMachineMotion.cpp
     bool motionAllowed() const;
-    void beginHitMotion(drumgrid::CellKey key, bool growing, int velocity);
+    void beginHitMotion(drumgrid::CellKey key, bool growing, int velocity, double delayMs = 0.0);
     void beginFlash(drumgrid::CellKey key);
     void startMotionClock();
     void tickMotion();
@@ -238,7 +287,30 @@ private:
     void paintCells(juce::Graphics& g);
     void paintCell(juce::Graphics& g, const LaneSlot& slot, int row, int step, juce::Rectangle<int> rect, bool dense);
     void paintPlayhead(juce::Graphics& g);
+    void paintLaneCaption(juce::Graphics& g);
     void layoutToolbar();
+
+    // DrumMachineGroove.cpp
+    void setupGroove();
+    void refreshGroove();
+    void refreshLane();
+    void commitLoudness(const std::vector<DrumLoudnessLane::Hit>& changed);
+    void commitSwingKnob();
+    void layoutBottom();
+    void startLaneMotion(float target);
+    void flushSwungFlashes(double relativeBeat);
+    void flashStepHits(int step);
+    int gridHeight() const noexcept;
+    juce::Range<int> stepXRange(int step) const;
+
+    // DrumMachineIdeas.cpp
+    void setupIdeas();
+    drumideas::Grid ideaGrid() const;
+    DrumIdeasContext ideasContext() const;
+    void applyIdeaNotes(std::vector<synth::MidiNote> notes, int requiredSteps, const juce::String& announcement);
+    void markChanged(const std::vector<drumideas::ChangedCell>& cells);
+    float changedAmount(drumgrid::CellKey key) const;
+    void announce(const juce::String& text);
 
     // DrumMachineMouse.cpp
     void endGesture(bool commit);
@@ -276,6 +348,12 @@ private:
     Cell focus_{0, 0};
     Gesture gesture_;
 
+    double swing_ = synth::Clip::kStraightSwing;
+    int selectedPitch_ = kDefaultSelectedPitch;
+    float laneReveal_ = 0.0f, laneFrom_ = 0.0f, laneTo_ = 0.0f;
+    bool swingDragging_ = false, updatingKnob_ = false;
+    std::vector<int> pendingSwung_; ///< swung steps the playhead entered whose hits have not reached their time yet
+
     double playheadBeat_ = 0.0;
     int playheadLineX_ = 0;
     bool hasPlayheadX_ = false;
@@ -287,17 +365,28 @@ private:
 
     std::unordered_map<drumgrid::CellKey, HitMotion> hitMotions_;
     std::unordered_map<drumgrid::CellKey, double> flashes_;
+    std::unordered_map<drumgrid::CellKey, double> changed_; ///< cells an idea changed, by the time they were marked
+    double staggerTailMs_ = 0.0;
+    bool staggerNext_ = false;
+    int ideasFocusReturns_ = 0;
+    juce::String lastAnnouncement_;
+    AnimationDriver changeAnim_;
     juce::VBlankAnimatorUpdater vblank_{this};
     AnimationDriver motionAnim_;
     AnimationDriver rowAnim_;
+    AnimationDriver laneAnim_;
     ScrollTweenRunner wheelTween_;
 
     CardSegmentedSwitch viewSwitch_;
     juce::ComboBox stepsCombo_;
     juce::TextButton showAllButton_{"Show all drums"};
     juce::TextButton playClipButton_{"Play clip"};
+    juce::TextButton ideasButton_{"Ideas"};
+    CardKnobSlider swingKnob_;
+    LaneChipRow chips_;
+    DrumLoudnessLane lane_;
     DrumRowLabels labels_;
-    juce::Rectangle<int> nameBounds_, stepsCaptionBounds_;
+    juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, swingValueBounds_, forBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumMachineComponent)
 };

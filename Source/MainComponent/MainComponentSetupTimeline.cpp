@@ -39,6 +39,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    audioEngine.getTransport().onTimeSignatureChanged = [this] { publishTimelineAndRebindRecorder(); }; // swing steps
     timelinePanel.getTransportBar().onPlayStarted = [this] {
         countUsage(synth::telemetry::Feature::TimelineUsed); // Play / Stop button or Space started the timeline
     };

@@ -2,7 +2,7 @@
 
 A row of toggle chips under a stepped editor, one chip per lane. Each chip shows or hides one lane (a row of per-step
 values), and several lanes can be on at once. The first user is the sequencer card's step grid
-(`Source/UI/ModuleViews/StepGrid/`); the drum machine's pad lanes will use the same widget.
+(`Source/UI/ModuleViews/StepGrid/`); the drum machine's lanes under its grid (Loudness so far) use the same widget.
 
 - **Widget:** `synth::ui::LaneChipRow` (`Source/UI/Layout/LaneChips/LaneChipRow.h`). `setLanes(names)` builds the chips,
   `setShown(index, shown)` sets one without notifying, `onToggle(index, shown)` fires for a user toggle (click, Space or

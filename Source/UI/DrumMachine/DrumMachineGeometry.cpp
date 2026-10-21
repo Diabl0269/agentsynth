@@ -23,8 +23,7 @@ void DrumMachineComponent::setRulerBandHeight(int heightPx) {
 }
 
 juce::Rectangle<int> DrumMachineComponent::gridRegion() const noexcept {
-    return {kLabelColumnWidth, canvasTop(), std::max(0, getWidth() - kLabelColumnWidth),
-            std::max(0, getHeight() - canvasTop())};
+    return {kLabelColumnWidth, canvasTop(), std::max(0, getWidth() - kLabelColumnWidth), gridHeight()};
 }
 
 double DrumMachineComponent::beatToX(double absBeat) const noexcept {
@@ -37,6 +36,7 @@ double DrumMachineComponent::xToBeat(double x) const noexcept {
 
 void DrumMachineComponent::notifyViewChanged() {
     repaint();
+    lane_.repaint();
     if (onHorizontalViewChanged)
         onHorizontalViewChanged();
 }
@@ -69,7 +69,7 @@ double DrumMachineComponent::maxScrollY() const noexcept {
     int total = 0;
     for (const auto& slot : slots_)
         total += rowHeightOf(slot);
-    return std::max(0.0, static_cast<double>(total - std::max(0, getHeight() - canvasTop())));
+    return std::max(0.0, static_cast<double>(total - gridHeight()));
 }
 
 bool DrumMachineComponent::setScrollY(double y) {
