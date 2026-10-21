@@ -36,8 +36,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
   control's right-click menu or the layout editor ([Editing a layout](#editing-a-layout)).
 - Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
   parameter and the Wavetable's Table choice (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO
-  custom-wave editor, the Sampler/Wavetable chrome, and fully bespoke bodies for Sequencer, Poly
-  Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ and External MIDI. The Wavetable's
+  custom-wave editor, the Sampler/Wavetable chrome, and fully bespoke bodies for MIDI Keyboard, Macros, Attenuverter, Parametric EQ and External MIDI. The Wavetable's
   tab strip is layout data (`tab` sections in its code default).
 - Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
   an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
@@ -87,8 +86,7 @@ reads the disk), each rebuilt card then making room for its new height. A card o
 binding (most tests) skips the per-type step. The size estimate for a card before it exists
 (`CardBodyMeasure`) measures the type's code default (or the automatic layout) with its conditions read
 at the fresh module's values, so it never sees a stored default: a type with one is placed at its
-code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
-Sequencer, Macros, Parametric EQ, Attenuverter, macro ports) always build from the
+code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Macros, Parametric EQ, Attenuverter, macro ports) always build from the
 automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 A card builds its body once; when its node's `cardLayout` changes (a quick-path click, its undo or
 redo), `GraphEditor::updateComponents` sees that the card was built from a different override and
@@ -122,7 +120,7 @@ Section
   id       : string             // stable within the layout ("pitch", "user-1")
   title    : string | null      // null = no header
   columns  : 1..6               // grid columns; a Double card doubles them
-  presentation : grid | tab     // consecutive "tab" sections render as one tab strip
+  presentation : grid | tab | row  // consecutive "tab" sections render as one tab strip; consecutive "row" sections sit side by side
   visibleWhen  : Condition | null
   items    : Item[]
 Item = ParamItem | ViewItem
@@ -137,7 +135,7 @@ ParamItem
   min, max : number | null      // narrows a knob or fader, in the parameter's own units; both or neither, min < max
 ViewItem
   view     : scope | response | spectrum | envelope | lfoShape | lfoCurve | waveform
-           | wavetable | eqCurve | threshold | gainReduction
+           | wavetable | eqCurve | threshold | gainReduction | stepGrid
   open     : bool               // collapsible views: open by default or not
   x, y     : 0..4000 | null     // free position, as a param item's; the on-card editor writes it for every view of an edited group so it stays put
 Condition
@@ -283,7 +281,19 @@ envelope, LFO curve and threshold components plug in unchanged.
   and screen-reader order stay the declaration order. The selected tab is the card's own (a rebuilt card
   opens on its first tab) and is never saved, as the Wavetable's page never was. A tab section's
   `visibleWhen` hides its controls, not its tab. Details in [module-card.md](module-card.md#tab-strips).
-- **Bespoke cards.** Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
+- **Row sections (built).** A run of consecutive `presentation: row` sections (the footer never counts) is one **row
+  group**: each section is a block (its header row over its cells in one line), and the blocks flow left to right,
+  wrapping to a new line only when the card is too narrow. A cell's width is fixed per kind, not measured from the
+  font, so the estimate and the real card agree: knob 56, toggle 60, choice 96, stepper 104, horizontal fader 124
+  (large knob 64, segmented 124, vertical fader 40); blocks are 14 px apart, cells 4 px, lines 6 px. A toggle in a row
+  is a pill; a cell shorter than its line sits at the line's vertical middle. A swapped-out member keeps its cell. Each
+  cell is placed by the same run layouts as a freeform cell (`placeFreeCell`), so a widget looks the same in a row as
+  in a grid. The Sequencer and Poly Sequencer defaults are four row sections and the `stepGrid` view
+  ([sequencer-design.md](../modules/sequencer-design.md#card)).
+- **Views whose height moves.** A view that folds parts of itself in and out while the card is up implements
+  `CardAnimatedHeightView` (`CardBodyViews.h`): the live layout asks it for the height of this pass, where the static
+  measure (and so the size estimate) asks the factory for the final height. The `stepGrid` view is the one such view.
+- **Bespoke cards.** MIDI Keyboard, Macros, Attenuverter, Parametric EQ
   and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
   knob row they expose. The Wavetable is a layout card: its pages are `presentation: tab` sections of
   its code default (built). ADSR, LFO and Sampler become ordinary layouts with views.
@@ -426,7 +436,7 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
   (the [make-room rules](layout.md#making-room-when-something-grows) macros already use) and returns
   them when the card shrinks, unless they were moved meanwhile. Today a loose card's growth only
   pushes neighbours down and never brings them back; this lands before hiding controls does.
-- **Sequencers stay as they are** in this round. Scales, step count and richer patterns are a
+- **Sequencers** were left as they were in this round; they are layout cards now (see Row sections). Scales, step count and richer patterns are a
   separate piece of work that shares one scale engine with the piano roll's scale assist
   (`Source/Music/MusicalScale.h`).
 - **Canvas pieces follow the design system.** New widgets (fader on a card, segmented switch,

@@ -2,6 +2,7 @@
 # the player and the scale snap table. Part of Core; its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/Sequencer/SequencerPattern.h
+    Source/Modules/Sequencer/SequencerLanes.h
     Source/Modules/Sequencer/SequencerPattern.cpp
     Source/Modules/Sequencer/SequencerPatternParse.h
     Source/Modules/Sequencer/SequencerPatternLegacy.h

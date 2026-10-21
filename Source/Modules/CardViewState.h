@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/Sequencer/SequencerLanes.h"
 #include <juce_core/juce_core.h>
 #include <optional>
 
@@ -23,10 +24,13 @@ struct CardViewState {
     /** Not a panel: the core pack sound ("core/flute") this module stands in for until the pack is installed. It rides
      *  here because this is the module's one saved non-parameter field that is neither a file nor model input. */
     juce::String pendingSound;
+    /** The sequencer step grid's shown lanes, one SequencerLane bit each; unset follows the card default
+     *  (kDefaultSequencerLanes). */
+    std::optional<std::uint16_t> stepGridLanes;
 
     bool isDefault() const noexcept {
         return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
-               pendingSound.isEmpty();
+               pendingSound.isEmpty() && !stepGridLanes.has_value();
     }
 
     /** A void var when everything is at its default, so an untouched card adds no JSON. */
@@ -44,6 +48,13 @@ struct CardViewState {
             obj->setProperty("morphMap", *showMorphMap);
         if (pendingSound.isNotEmpty())
             obj->setProperty("pendingSound", pendingSound);
+        if (stepGridLanes.has_value()) {
+            juce::Array<juce::var> lanes;
+            for (int i = 0; i < kSequencerLaneCount; ++i)
+                if ((*stepGridLanes & sequencerLaneBit((SequencerLane)i)) != 0)
+                    lanes.add(sequencerLaneId((SequencerLane)i));
+            obj->setProperty("lanes", lanes);
+        }
         return juce::var(obj);
     }
 
@@ -63,6 +74,13 @@ struct CardViewState {
             if (morphMap.isBool())
                 out.showMorphMap = static_cast<bool>(morphMap);
             out.pendingSound = obj->getProperty("pendingSound").toString();
+            if (const auto* lanes = obj->getProperty("lanes").getArray()) {
+                std::uint16_t mask = 0;
+                for (const auto& lane : *lanes)
+                    if (const auto id = sequencerLaneFromId(lane.toString()))
+                        mask = (std::uint16_t)(mask | sequencerLaneBit(*id));
+                out.stepGridLanes = mask;
+            }
         }
         return out;
     }

@@ -1,25 +1,30 @@
-type Sequencer size 560x406
-  child 0 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 1 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 2 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 3 toggle id="Run" at 40,30 60x24 visible=1 title="Run" tip="Run" focusOrder=0 wantsFocus=1
-  child 4 knob id="BPM" at 100,50 60x50 visible=1 title="BPM" tip="BPM" focusOrder=0 wantsFocus=1
-  child 5 label id="" at 100,30 60x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 toggle id="Sync to Transport" at 10,380 200x24 visible=1 title="Sync to Transport" tip="Sync to Transport" focusOrder=0 wantsFocus=1
-  child 7 knob id="Steps" at 0,0 0x0 visible=1 title="Steps" tip="Steps" focusOrder=0 wantsFocus=1
-  child 8 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 9 combo id="" at 0,0 0x0 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="Transpose" at 0,0 0x0 visible=1 title="Transpose" tip="Transpose" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 knob id="Gate" at 0,0 0x0 visible=1 title="Gate" tip="Gate" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="Velocity" at 0,0 0x0 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="Chance" at 0,0 0x0 visible=1 title="Chance" tip="Chance" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 19 combo id="" at 0,0 0x0 visible=1 title="Key" tip="Key" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 21 combo id="" at 0,0 0x0 visible=1 title="Scale" tip="Scale" focusOrder=0 wantsFocus=1
-  child 22 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 23 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0
+type Sequencer size 560x454
+  child 0 component id="" at 12,208 536x228 visible=1 title="Step grid" tip="Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, Up and Down change the value, Space turns the step on or off" focusOrder=0 wantsFocus=1
+  child 1 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 4 toggle id="Run" at 12,67 60x24 visible=1 title="Run" tip="Run" focusOrder=0 wantsFocus=1
+  child 5 slider id="BPM" at 140,74 124x28 visible=1 title="BPM" tip="BPM" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 140,56 124x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 toggle id="Sync to Transport" at 76,67 60x24 visible=1 title="Sync" tip="Sync to Transport" focusOrder=0 wantsFocus=1
+  child 8 component id="Steps" at 378,76 104x24 visible=1 title="Steps" tip="Steps" focusOrder=0 wantsFocus=0
+  child 9 label id="" at 378,58 104x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 combo id="" at 278,76 96x24 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 278,58 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Transpose" at 222,144 56x58 visible=1 title="Transpose" tip="Transpose" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 222,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Gate" at 282,144 56x58 visible=1 title="Gate" tip="Gate" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 282,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Velocity" at 342,144 56x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 342,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Chance" at 402,144 56x58 visible=1 title="Chance" tip="Chance" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 402,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 combo id="" at 12,161 96x24 visible=1 title="Key" tip="Key" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 12,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 combo id="" at 112,161 96x24 visible=1 title="Scale" tip="Scale" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 112,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 label id="cardSectionHeader" at 12,38 252x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 25 label id="cardSectionHeader" at 278,38 204x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 label id="cardSectionHeader" at 12,108 196x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 label id="cardSectionHeader" at 222,108 236x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

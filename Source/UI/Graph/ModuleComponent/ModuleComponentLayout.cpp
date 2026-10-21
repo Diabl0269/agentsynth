@@ -53,12 +53,6 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        // +26 for the Sync to Transport toggle row — see the ADSR comment above for the pattern.
-        setSize(synth::LayoutUtil::kDoubleWidth, 406);
-        return;
-    }
-
     // ADSR does not measure itself: its envelope graph is a view of the card body, its stage faders
     // and Time/Tempo switch items of the body's layout, so it takes the generic path below.
 
@@ -72,8 +66,11 @@ void ModuleComponent::updateLayout() {
     // The Wavetable card carries 15 knobs, 8 combos and 16 input jacks, so it goes double-width: its
     // chrome sits beside a two-column jack gutter and its body's runs take their wide-card branches
     // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
+    const auto type = getType(module);
     const int cardWidth =
-        (getType(module) == ModuleType::Wavetable) ? synth::LayoutUtil::kDoubleWidth : synth::LayoutUtil::kSingleWidth;
+        (type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer)
+            ? synth::LayoutUtil::kDoubleWidth
+            : synth::LayoutUtil::kSingleWidth;
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)

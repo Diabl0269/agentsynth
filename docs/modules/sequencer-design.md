@@ -1,8 +1,8 @@
 # Sequencer and Poly Sequencer: pattern, playback and tools (design)
 
 How the two melodic step sequencers (`SequencerModule`, `PolySequencerModule`) work after round 2. **Status:
-the engine is built** (pattern as module state, 1-128 steps, Rate, lanes, scales, legacy adoption, chance and
-conditions, sample-accurate clock). **Next, not built:** the new card, the pattern tools and the chord picker; those
+the engine and the card are built** (pattern as module state, 1-128 steps, Rate, lanes, scales, legacy adoption, chance and
+conditions, sample-accurate clock). **Next, not built:** the pattern tools and the chord picker; those
 sections say so. The drum step grid is a separate module with its own design.
 
 Behaviour summary: [modules.md, Sequencer](modules.md#sequencer-module) and
@@ -158,24 +158,45 @@ from the written one.
 
 ---
 
-## Card (next)
+## Card
 
-Not built; the old bespoke card still draws eight columns from parameters that no longer exist, so it shows nothing
-until the new card lands.
+Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `ModuleComponent`.
 
-- The control row (Run, BPM, Rate, Steps as a `stepper`, Key and Scale, Transpose, Gate, Velocity, Chance, Sync as
-  the footer pill) becomes the type's code-default `CardLayout`. The Scale menu is a custom popup: No scale, the
-  built-ins, a "Your scales" group from the shared user scales and "Edit custom scales..."; picking a user scale sets
-  `scale = Custom` and the pattern's custom mask and name.
-- A `stepGrid` view draws the tool row, the lane tab strip, the grid and the step pads and edits the pattern.
-- Lanes: Pitch (a mini roll with scale rows shaded and slide links), Gate, Velocity, Chance, Repeat, Nudge,
-  Condition, Filter; Poly: Chord, Gate, Velocity, Chance, Repeat, Nudge, Condition. Drag across bars draws in one stroke.
-- Size stays 560 wide and no taller than 406; steps beyond `steps` are dimmed, never removed.
-- Accessibility: the grid is one Tab stop (Left/Right step, Up/Down value, Shift = octave on Pitch, Space = step on),
-  read as "Step 5 of 16, F2, on, chance 100 percent"; the lane strip is a radio group; every tool has a tooltip and a
-  screen-reader name. Motion: bars glide 160 ms (`easeOutCubic`) on lane switch, dimming 120 ms.
-- Removes the Sequencer branches from `ModuleComponentPaint.cpp` / `ModuleComponentLayout.cpp` and the two types from
-  the `cardBodyLayoutIsDataDriven` exclusion; the design system gains the step grid, lane strip and tool row.
+- **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is four `row` sections (Play: Run and Sync
+  as pills and BPM as a fader that swaps out while Sync is on; Time: Rate and Steps; Notes: Key and Scale; Pattern:
+  Transpose, Gate, Velocity, Chance) and then the `stepGrid` view. Consecutive `row` sections sit side by side and wrap
+  only when the 560 px card is too narrow ([module-card-layout.md](../layout/module-card-layout.md#rendering)).
+  Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
+- **The grid** (`Source/UI/ModuleViews/StepGrid/`): a page strip, 16 columns of the viewed page, the Pitch lane as a
+  mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
+  stacked under them. Steps past `steps` are dimmed, never removed.
+  - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
+    chord label over the bar); when the scale moved the note, the written note is a dashed outline. A drag lands only on
+    scale notes (`MusicalScale::snapPitch`; chromatic with No scale); Shift moves by octaves; the written pitch is the
+    played pitch minus Transpose. The rows are frozen while a drag is in progress.
+  - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,
+    Filter** are bar lanes: drag across them to draw, interpolating between the columns the pointer skipped.
+    **Slide** (mono only) toggles the link between a step and the next. **Condition** opens a menu of `1/1` ... `8/8`.
+  - Lanes shown default to Pitch and Velocity; the choice is saved with the node
+    (`CardViewState::stepGridLanes`). Filter stays on the Poly Sequencer although it sends no CC 74 and so has no
+    audible effect there.
+  - **Pages.** The strip shows one bar per 16 steps once Steps passes 16 (its row is always reserved, so the card never
+    changes height when Steps crosses 16), the page holding the playhead pulses, and the Follow pill (off by default)
+    turns the viewed page with the playhead.
+- **Undo.** A gesture (a pad stroke, a bar drag, a pitch drag, a menu pick, one key press) is one undo step: the
+  module's extra state is snapshotted when the gesture starts and recorded once at its end
+  (`AppUndoManager::recordNodeExtraStateChange`). A change from outside (undo, a preset, the AI) is not an edit; the
+  bars glide to it.
+- **Motion** (all time-bounded, none free-running): lanes fold 160 ms (the card's height follows every frame, the
+  neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
+  per-column stagger, dimming 120 ms, the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
+  Animations Off lands at once.
+- **Accessibility.** The grid is one Tab stop, read as "Step 5 of 16, F2, on, chance 100 percent". Keys: Left/Right
+  pick the step (the page follows), Up/Down change the focused lane's value (Pitch: one scale note, Shift: one octave;
+  Slide: toggles; Condition: next or previous condition), Space turns the step on or off (Slide lane: the link), Enter
+  opens the Condition menu or acts as Space, Page Up/Down move to the lane above or below, Home/End the first and last
+  step. The page strip and the chip row are Tab stops of their own.
+- **Size.** 560 wide; the card is 454 tall at the default lanes (Pitch and Velocity; the grid is 228 px), 730 with every lane (702 on the Poly Sequencer, which has no Slide lane); a 17+ step pattern adds nothing because the page strip's row is always reserved. The Row sections take two lines at 560 px: Play and Time on the first, Notes and Pattern on the second.
 
 ## Chord picker (next)
 

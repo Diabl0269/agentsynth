@@ -627,6 +627,7 @@ reference: [`lfo.md`](lfo.md).
 - **Timing**: sample-accurate. `currentActiveStep` (`std::atomic<int>`) is the step whose first hit came last, for the card's playhead.
 - **Sync to Transport** (`syncToTransport`, bool, default **off**): off, `bpm` is authoritative and the position counts from 0 when `run` goes on. On: the position is the transport's beat divided by the step length (step *k* plays pattern step `k % steps`), tempo comes from the transport (`bpm` is ignored), a loop wrap fires the wrapped range's steps at `loopWrapSample + <offset>` with no double-fire or skipped step, a locate plays whatever step is next, and a stopped transport sends one Note Off per held note and goes silent. The transport is read via `dynamic_cast<synth::TransportService*>(getPlayHead())`; a foreign host's playhead falls back to the free-running clock for that block.
 - **Width**: DOUBLE (560 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
+- **Card**: a layout card, four `row` sections (Play, Time, Notes, Pattern) over the step grid: a page strip, the Pitch lane as a mini piano roll, step pads, lane chips (Gate, Velocity, Chance, Repeat, Slide, Nudge, Condition, Filter) and the lanes they show. Design, gestures and keys: [sequencer-design.md](sequencer-design.md#card); the lane chips: [lane-chips.md](../layout/lane-chips.md).
 
 ## Poly Sequencer Module
 - **Source file**: `Source/Modules/PolySequencerModule.h` (same base as the Sequencer).
@@ -636,6 +637,7 @@ reference: [`lfo.md`](lfo.md).
 - **Old files**: `Step N Root`, `Step N Chord` and `Gate N` are read once on load into the pattern.
 - **Timing and sync**: as the Sequencer; the whole chord starts together and ends together after the gate.
 - **Width**: DOUBLE (560 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
+- **Card**: the Sequencer's, without the Slide lane (a polyphonic step has no legato); the chord shows over the bar. Picking chords on the card is the chord picker, not built yet ([sequencer-design.md](sequencer-design.md#chord-picker-next)).
 
 ## Sample & Hold Module
 - **Source file**: `Source/Modules/SampleHoldModule.h`

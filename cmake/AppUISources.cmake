@@ -319,6 +319,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.cpp
     Source/UI/Layout/NoteLengthMenu/NoteLengthBox.h
     Source/UI/Layout/NoteLengthMenu/NoteLengthBox.cpp
+    Source/UI/Layout/LaneChips/LaneChipRow.h
+    Source/UI/Layout/LaneChips/LaneChipRow.cpp
     Source/UI/Layout/FoldAllButton.h
     Source/UI/Layout/FoldAllButton.cpp
     Source/UI/Layout/NavigationSearchField.h
@@ -625,6 +627,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentSequencerCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMorphCard.cpp
     Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h
     Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.cpp
@@ -727,6 +730,18 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.h
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridModel.h
+    Source/UI/ModuleViews/StepGrid/StepGridModel.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridLayout.h
+    Source/UI/ModuleViews/StepGrid/StepGridLayout.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridPageStrip.h
+    Source/UI/ModuleViews/StepGrid/StepGridPageStrip.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridComponent.h
+    Source/UI/ModuleViews/StepGrid/StepGridComponent.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridMotion.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridPaint.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridEdit.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridKeys.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorSelection.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorClipboard.cpp
@@ -817,6 +832,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSequencers.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFilterDynamics.cpp

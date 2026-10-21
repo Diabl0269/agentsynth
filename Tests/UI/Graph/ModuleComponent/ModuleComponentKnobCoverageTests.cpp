@@ -68,7 +68,8 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // dedicated "Add lane..." UI, never a ModuleComponent knob -- docs/modules/modulation.md's
     // "Hosted plugin parameters as automation lanes" section.
     "Hosted Plugin",
-    // Per-step pattern data, not a continuous mod target.
+    // The pattern lives in the step grid, and the knobs on the card (Transpose, Gate, Velocity, Chance) are read per
+    // step by the sequencer's own clock: no continuous input for a modulation cable to reach.
     "Sequencer",
     "Poly Sequencer",
     // Mixer-panel gain stages (Master/bus/channel gain, VoiceMixer per-voice level). Adding CV

@@ -26,9 +26,10 @@ struct NameTable {
 
 constexpr NameTable<CardWidget, 9> kWidgets{
     {"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice", "segmented", "stepper"}};
-constexpr NameTable<CardView, 11> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
-                                          "waveform", "wavetable", "eqCurve", "threshold", "gainReduction"}};
-constexpr NameTable<CardPresentation, 2> kPresentations{{"grid", "tab"}};
+constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
+                                          "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
+                                          "stepGrid"}};
+constexpr NameTable<CardPresentation, 3> kPresentations{{"grid", "tab", "row"}};
 constexpr NameTable<CardConditionEffect, 2> kEffects{{"show", "dim"}};
 
 bool isNumber(const juce::var& value) { return value.isInt() || value.isInt64() || value.isDouble(); }

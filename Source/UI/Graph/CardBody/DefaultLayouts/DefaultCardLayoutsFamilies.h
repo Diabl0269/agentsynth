@@ -12,6 +12,7 @@ void registerSourceCardLayouts(DefaultCardLayouts& defaults);
 void registerEnvelopeCardLayouts(DefaultCardLayouts& defaults);
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults);
 void registerEffectCardLayouts(DefaultCardLayouts& defaults);
+void registerSequencerCardLayouts(DefaultCardLayouts& defaults);
 
 namespace cardlayout {
 
@@ -57,6 +58,13 @@ inline CardSection tab(const juce::String& id, const juce::String& title, std::v
                        int columns = CardSection::kDefaultColumns) {
     auto result = section(id, title, std::move(items), columns);
     result.presentation = CardPresentation::Tab;
+    return result;
+}
+
+/** A `row` section: its items side by side in one line under the header (wrapping only when the card is too narrow). */
+inline CardSection rowSection(const juce::String& id, const juce::String& title, std::vector<CardItem> items) {
+    auto result = section(id, title, std::move(items));
+    result.presentation = CardPresentation::Row;
     return result;
 }
 

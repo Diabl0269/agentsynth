@@ -10,8 +10,6 @@
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
-#include "Modules/PolySequencerModule.h"
-#include "Modules/SequencerModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CableColour.h"
@@ -188,6 +186,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (getType(module) == ModuleType::LFO)
         createLfoCardControls();
     createMorphShapesCard();
+    wireSequencerCard();
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout
     applyControlAccessibility(); // last: names every control the steps above built
@@ -444,6 +443,7 @@ void ModuleComponent::timerCallback() {
     // itself no-ops when the (segment, progress) pair is unchanged, so an idle or collapsed card
     // costs nothing beyond the guard check.
     updateEnvelopePlayhead();
+    pollSequencerCard();
     // Reverse-sync the LFO wave graph from an undo/redo or preset load this card didn't
     // itself just write (writeLfoWaveFromCurve/applyLfoWavePreset/applyLfoWaveTool already keep
     // lfoLastSeenWaveGeneration current for their OWN writes), then poll the playhead -- same
@@ -480,35 +480,6 @@ void ModuleComponent::timerCallback() {
             if (info.destNodeID == nodeId && std::abs(info.modSignalValue) > 0.001f) {
                 needsRepaint = true;
                 break;
-            }
-        }
-    }
-
-    // 3. Sequencer / PolySequencer: repaint only when the active step changes
-    //    so the playhead highlight animates without repainting on every idle tick.
-    if (!needsRepaint) {
-        auto t = getType(module);
-        if (t == ModuleType::Sequencer) {
-            if (auto* seq = dynamic_cast<SequencerModule*>(module)) {
-                int step = seq->currentActiveStep.load();
-                if (step != lastActiveStep) {
-                    lastActiveStep = step;
-                    needsRepaint = true;
-                }
-            } else {
-                // Fallback: sequencer type but no accessor — repaint each tick
-                needsRepaint = true;
-            }
-        } else if (t == ModuleType::PolySequencer) {
-            if (auto* pseq = dynamic_cast<PolySequencerModule*>(module)) {
-                int step = pseq->currentActiveStep.load();
-                if (step != lastActiveStep) {
-                    lastActiveStep = step;
-                    needsRepaint = true;
-                }
-            } else {
-                // Fallback: sequencer type but no accessor — repaint each tick
-                needsRepaint = true;
             }
         }
     }
@@ -659,12 +630,6 @@ void ModuleComponent::createControls() {
     captureLogicalPortMaps();
 
     // Auto-resize
-    if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        // 8 cols * 60 + margins, 3 rows, +26 for the Sync to Transport toggle row.
-        setSize(synth::LayoutUtil::kDoubleWidth, 406);
-        return;
-    }
-
     updateLayout();
 }
 

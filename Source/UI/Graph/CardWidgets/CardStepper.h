@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -21,6 +22,13 @@ public:
     /** Fired with -1 or +1 when the user steps (a button or a key). */
     std::function<void(int delta)> onStep;
 
+    /** Fired with the text the user typed into the value (see setTypable); the owner applies it and sets the value
+     *  text again, whether or not it was accepted. */
+    std::function<void(const juce::String& text)> onTypedValue;
+    /** Lets the user type the value: a double-click on it, or a digit key while a button has focus, opens an editor;
+     *  Return applies, Escape cancels. For a range too wide to walk one step at a time. */
+    void setTypable(bool typable);
+
     /** The value as the parameter's text; also what the value label reads to a screen reader. */
     void setValueText(const juce::String& text);
     juce::String getValueText() const { return value_.getText(); }
@@ -39,7 +47,8 @@ private:
     juce::String name_;
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> down_{"-"};
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> up_{"+"};
-    juce::Label value_;
+    synth::ui::NonModalLabel value_;
+    bool typable_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CardStepper)
 };

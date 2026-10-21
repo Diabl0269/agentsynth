@@ -304,12 +304,27 @@ TEST_F(SequencerModuleTest, NudgeMovesTheEventAndAnEarlyNudgeOnLoopTwoLandsInThe
     seq->setPattern(early);
     setNumber(*seq, "steps", 2);
     ons = onsOnly(render(*seq, 3 * kQuarter + 100));
-    // k=0 would be before the start and is skipped; k=2 (loop two, step 0) fires a quarter step early.
-    ASSERT_EQ(ons.size(), 3u);
-    EXPECT_EQ(ons[0].note, 65); // step 1 at k=1
-    EXPECT_NEAR((double)ons[1].sample, 1.75 * kQuarter, 2.0);
-    EXPECT_EQ(ons[1].note, 53);
-    EXPECT_EQ(ons[2].note, 65); // k=3
+    // k=0 would be before the start: it plays at the start instead (see the test below). k=2 (loop two, step 0)
+    // fires a quarter step early.
+    ASSERT_EQ(ons.size(), 4u);
+    EXPECT_EQ(ons[0].sample, 0);
+    EXPECT_EQ(ons[0].note, 53);
+    EXPECT_EQ(ons[1].note, 65); // step 1 at k=1
+    EXPECT_NEAR((double)ons[2].sample, 1.75 * kQuarter, 2.0);
+    EXPECT_EQ(ons[2].note, 53);
+    EXPECT_EQ(ons[3].note, 65); // k=3
+}
+
+// Regression test: an early nudge on step 1 of the very first loop was before the clock's start and never played.
+TEST_F(SequencerModuleTest, AnEarlyNudgeOnTheFirstStepOfTheFirstLoopPlaysAtSampleZero) {
+    auto early = seq->getPattern();
+    early.steps[0].nudge = -0.4f;
+    seq->setPattern(early);
+    run(*seq, true);
+    const auto ons = onsOnly(render(*seq, kQuarter));
+    ASSERT_GE(ons.size(), 1u);
+    EXPECT_EQ(ons[0].sample, 0);
+    EXPECT_EQ(ons[0].note, 53);
 }
 
 TEST_F(SequencerModuleTest, SlideStartsTheNextNoteBeforeEndingTheSlidNote) {

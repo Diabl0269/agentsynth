@@ -149,3 +149,28 @@ TEST_F(SequencerSyncedTest, PolySequencerLocksTheWholeChordTogether) {
     EXPECT_EQ(ons[1].note, 51);
     EXPECT_EQ(ons[2].note, 55);
 }
+
+// Regression test: an early nudge on a step at the transport start (or the locate point) was before the clock's
+// start and never played; it now plays at the first sample of the block.
+TEST_F(SequencerSyncedTest, AnEarlyNudgeOnTheStepAtTheTransportStartPlaysAtSampleZero) {
+    auto pattern = seq.getPattern();
+    pattern.steps[0].nudge = -0.4f;
+    seq.setPattern(pattern);
+    transport.play();
+    const auto ons = onsOnly(play(4));
+    ASSERT_GE(ons.size(), 1u);
+    EXPECT_EQ(ons[0].sample, 0);
+    EXPECT_EQ(ons[0].note, 53);
+}
+
+TEST_F(SequencerSyncedTest, AnEarlyNudgeOnTheStepAtTheLocatePointPlaysAtTheStartOfTheBlock) {
+    auto pattern = seq.getPattern();
+    pattern.steps[5].nudge = -0.4f;
+    seq.setPattern(pattern);
+    transport.play();
+    transport.locateBeat(5.0);
+    const auto ons = onsOnly(play(4));
+    ASSERT_GE(ons.size(), 1u);
+    EXPECT_EQ(ons[0].sample, 0);
+    EXPECT_EQ(ons[0].note, seq.getPattern().steps[5].pitch);
+}

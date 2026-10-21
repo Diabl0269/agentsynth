@@ -135,7 +135,7 @@ edits only its own table:
 | Rec Tap / Track Audio | 131 |
 | Track In | 100 |
 
-From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (tracks
+The Sequencer and Poly Sequencer (560x454 at the default lanes) are measured from their layout like any other. From the table (bespoke): MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (tracks
 its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`),
 Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
 100 px floor.

@@ -92,7 +92,11 @@ void SequencerPlayer::collectHits(const SequencerSegment& segment, const Sequenc
             const double unit = (double)k + (double)step.nudge + (double)j / (double)repeats;
             // The first sample at or after the hit, within a hair so float error in a tempo or rate cannot push an
             // exact boundary a sample late. Each hit belongs to exactly one block: the one whose samples hold it.
-            const int local = (int)std::ceil((unit - segment.uStart) * segment.samplesPerUnit - kBoundaryTolerance);
+            int local = (int)std::ceil((unit - segment.uStart) * segment.samplesPerUnit - kBoundaryTolerance);
+            // An early nudge on a step that sits at or after the start of a restarted clock (the first loop, a
+            // locate, a loop wrap) would fall before the start and never play: it plays at the start instead.
+            if (local < 0 && segment.discontinuity && (double)k >= segment.uStart - kBoundaryTolerance)
+                local = 0;
             if (local < 0 || local >= segment.sampleCount)
                 continue;
             const std::int64_t key = k * 8 + j;

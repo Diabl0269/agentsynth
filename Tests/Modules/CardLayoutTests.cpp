@@ -429,6 +429,26 @@ TEST(CardLayoutV2Test, FullLayoutRoundTripsThroughJson) {
     EXPECT_TRUE(result.layout.slots.empty()) << "a v2 document fills sections, not slots";
 }
 
+TEST(CardLayoutV2Test, RowSectionsAndTheStepGridViewRoundTripThroughJson) {
+    CardSection play;
+    play.id = "play";
+    play.title = "Play";
+    play.presentation = CardPresentation::Row;
+    play.items = {paramItem("run", CardWidget::Toggle)};
+    CardSection grid;
+    grid.id = "grid";
+    grid.items = {CardViewItem{CardView::StepGrid, true}};
+    CardLayout layout;
+    layout.sections = {play, grid};
+    EXPECT_TRUE(layout.usesV2Features());
+
+    const auto result = CardLayout::fromVar(reparsed(layout));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(result.layout, layout);
+    EXPECT_EQ(result.layout.sections[0].presentation, CardPresentation::Row);
+    EXPECT_EQ(std::get<CardViewItem>(result.layout.sections[1].items[0]).view, CardView::StepGrid);
+}
+
 TEST(CardLayoutV2Test, ConditionsKeepChoiceValueStringsNotIndices) {
     const auto result = CardLayout::fromVar(reparsed(richLayout()));
     ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);

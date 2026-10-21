@@ -106,6 +106,14 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
     }
 }
 
+// A view's height now: a live view that folds parts of itself in and out (the step grid) says so; a plan that is only
+// measured, and every other view, uses the factory's final height.
+int viewHeightOf(const CardBodyItem& view, const CardViewFactory& factory, juce::AudioProcessor& module) {
+    if (const auto* animated = dynamic_cast<const CardAnimatedHeightView*>(view.widget))
+        return animated->currentLayoutHeight();
+    return factory.preferredHeight(module);
+}
+
 int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& captioned,
                   const std::vector<juce::Component*>& plain, int columns, int y, const cardbody::BodyGeometry& g,
                   bool apply) {
@@ -143,8 +151,8 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
         if (factory == nullptr || shown <= 0.0f || (apply && view.widget == nullptr))
             return y;
         // A view fading in or out takes its height in step, so the rows around it slide.
-        return cardbody::layoutViewRow(view.widget, juce::roundToInt((float)factory->preferredHeight(module) * shown),
-                                       y, g, apply);
+        return cardbody::layoutViewRow(
+            view.widget, juce::roundToInt((float)viewHeightOf(view, *factory, module) * shown), y, g, apply);
     }
     std::vector<cardbody::CaptionedWidget> captioned;
     std::vector<juce::Component*> plain;
@@ -190,7 +198,7 @@ juce::Rectangle<int> naturalCellSize(const CardBodyPlan& plan, juce::AudioProces
     const auto& view = plan.items[(size_t)cell.item];
     const auto* factory = findCardViewFactory(view.view);
     const float shown = view.reveal >= 0.0f ? view.reveal : (view.open ? 1.0f : 0.0f);
-    return {g.contentW, factory != nullptr ? juce::roundToInt((float)factory->preferredHeight(module) * shown) : 0};
+    return {g.contentW, factory != nullptr ? juce::roundToInt((float)viewHeightOf(view, *factory, module) * shown) : 0};
 }
 
 std::optional<juce::Point<int>> positionOf(const CardBodyPlan& plan, const Cell& cell, int section) {
@@ -314,6 +322,126 @@ int layoutAltGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, const
     return y + tallest;
 }
 
+// ---- Row presentation -------------------------------------------------------------------------------------------
+// Consecutive `row` sections sit side by side: each is a block (its header row over its cells in one line), blocks
+// flow left to right and wrap to a new line only when the card is too narrow. Cell widths are fixed per kind (not
+// measured from the font) so the estimate and the real card agree.
+constexpr int kRowBlockGap = 14;
+constexpr int kRowCellGap = 4;
+constexpr int kRowLineGap = 6;
+
+int rowCellWidth(Kind kind) {
+    switch (kind) {
+    case Kind::Knob:
+        return 56;
+    case Kind::KnobLarge:
+        return 64;
+    case Kind::Toggle:
+        return 60;
+    case Kind::Choice:
+        return 96;
+    case Kind::Segmented:
+        return 124;
+    case Kind::Stepper:
+        return 104;
+    case Kind::FaderH:
+        return 124;
+    case Kind::FaderV:
+        return 40;
+    case Kind::View:
+        break;
+    }
+    return 0;
+}
+
+struct RowBlock {
+    int section = -1;
+    std::vector<Cell> cells;
+    int width = 0;
+    int cellHeight = 0;
+};
+
+RowBlock rowBlockOf(const CardBodyPlan& plan, int sectionIndex, const cardbody::BodyGeometry& g) {
+    RowBlock block;
+    block.section = sectionIndex;
+    const auto& section = plan.sections[(size_t)sectionIndex];
+    for (const auto& cell : cellsOf(plan, section.items, true)) {
+        if (cell.runKind == Kind::View)
+            continue;
+        block.cells.push_back(cell);
+        block.width += (block.cells.size() > 1 ? kRowCellGap : 0) + rowCellWidth(cell.runKind);
+        block.cellHeight = std::max(block.cellHeight, cardBodyCellSize(cell.runKind, 1, g).y);
+    }
+    return block;
+}
+
+// The run of row sections that starts at `first`: the blocks of the ones shown now.
+std::vector<RowBlock> rowBlocksFrom(const CardBodyPlan& plan, int first, const cardbody::BodyGeometry& g) {
+    std::vector<RowBlock> blocks;
+    for (int s = first; s < (int)plan.sections.size() && plan.sections[(size_t)s].row; ++s) {
+        const auto& section = plan.sections[(size_t)s];
+        if (section.visible || section.holding)
+            blocks.push_back(rowBlockOf(plan, s, g));
+    }
+    return blocks;
+}
+
+void placeRowBlock(const CardBodyPlan& plan, juce::AudioProcessor& module, const RowBlock& block, int x, int y,
+                   int headerH, int cellBand, const cardbody::BodyGeometry& g) {
+    const auto& section = plan.sections[(size_t)block.section];
+    if (section.header != nullptr)
+        section.header->setBounds(x, y, std::max(block.width, 60), cardbody::kSectionHeaderHeight);
+    section.cellTop = y + headerH;
+    section.cellBottom = y + headerH + cellBand;
+    int cellX = x;
+    for (const auto& cell : block.cells) {
+        const int w = rowCellWidth(cell.runKind);
+        const int h = cardBodyCellSize(cell.runKind, 1, g).y;
+        // A cell shorter than the line (a pill beside knobs) sits at the line's vertical middle.
+        const int cellY = y + headerH + (cellBand - h) / 2;
+        if (cell.item >= 0 || cell.group >= 0) {
+            FreeCell free{cell, juce::Rectangle<int>(0, 0, w, h), std::nullopt};
+            if (cell.item >= 0)
+                placeFreeCell(plan, module, free, {cellX, cellY}, g);
+        }
+        cellX += w + kRowCellGap;
+    }
+}
+
+// The group of row sections starting at `first`: lines of blocks. Measuring and placing share the walk.
+int layoutRowGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, int first, int y,
+                   const cardbody::BodyGeometry& g, bool apply) {
+    const auto blocks = rowBlocksFrom(plan, first, g);
+    size_t i = 0;
+    while (i < blocks.size()) {
+        size_t end = i;
+        int used = 0;
+        for (; end < blocks.size(); ++end) {
+            const int next = used + (end > i ? kRowBlockGap : 0) + std::max(blocks[end].width, 60);
+            if (end > i && next > g.contentW)
+                break;
+            used = next;
+        }
+        bool headed = false;
+        int band = 0;
+        for (size_t b = i; b < end; ++b) {
+            headed = headed || plan.sections[(size_t)blocks[b].section].hasHeader();
+            band = std::max(band, blocks[b].cellHeight);
+        }
+        const int headerH = headed ? cardbody::kSectionHeaderHeight : 0;
+        if (apply) {
+            int x = g.contentX;
+            for (size_t b = i; b < end; ++b) {
+                placeRowBlock(plan, module, blocks[b], x, y, headerH, band, g);
+                x += std::max(blocks[b].width, 60) + kRowBlockGap;
+            }
+        }
+        y += headerH + band + kRowLineGap;
+        i = end;
+    }
+    return y;
+}
+
 } // namespace
 
 // The widths and heights the run layouts give a cell of its kind.
@@ -357,6 +485,11 @@ int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& modul
         const auto& section = plan.sections[(size_t)s];
         if (section.footer)
             continue;
+        if (section.row) {
+            if (s == 0 || !plan.sections[(size_t)s - 1].row)
+                y = layoutRowGroup(plan, module, s, y, g, apply);
+            continue;
+        }
         if (section.tabGroup >= 0) {
             const auto& group = plan.tabGroups[(size_t)section.tabGroup];
             if (group.sections.front() == s)
