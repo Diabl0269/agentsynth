@@ -3,7 +3,8 @@
 //   Up / Down         change the focused lane's value (Pitch: one scale note, Shift: one octave; Slide: toggles;
 //                     Condition: the next / previous condition)
 //   Space             turn the focused step on or off (on the Slide lane: toggle the link)
-//   Enter             on the Condition lane open its menu, elsewhere the same as Space
+//   Enter             on the Condition lane open its menu, on the Poly Sequencer's Pitch lane open the chord picker,
+//                     elsewhere the same as Space
 //   Page Up / Down    the lane above / below
 //   Home / End        the first / last step
 // Every key press that changes the pattern is one undo step.
@@ -117,6 +118,10 @@ bool StepGridComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
     const bool enter = code == juce::KeyPress::returnKey;
+    if (enter && focusLane_ == SequencerLane::Pitch && module_.isPoly()) {
+        openChordPicker(focusStep_);
+        return true;
+    }
     if (enter && focusLane_ == SequencerLane::Condition) {
         openConditionMenu(focusStep_);
         return true;

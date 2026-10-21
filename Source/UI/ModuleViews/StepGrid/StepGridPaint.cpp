@@ -51,11 +51,68 @@ float StepGridComponent::shownPitch(int step) const {
     return (float)from + (to - (float)from) * glideMix(step);
 }
 
-juce::String StepGridComponent::chordLabel(int step, int playedRoot) const {
+// The label over a bar: the note for a mono step or a single note, the chord (and its numeral) on the Poly Sequencer.
+stepgrid::ChordLabel StepGridComponent::labelOf(SequencerChord chord, int playedRoot, int step) const {
+    if (!module_.isPoly())
+        return {noteName(playedRoot), {}};
+    return chordLabelFor(chord, playedRoot, scale_, module_.getPattern().seed, step);
+}
+
+// The bar of `step` at pitch `played` in the Pitch lane `lane` (its full box), the one place both painting and the
+// chord label's hit test get it from.
+juce::Rectangle<float> StepGridComponent::pitchBarRect(int step, float played, juce::Rectangle<int> lane) const {
+    const float rowH = (float)lane.getHeight() / (float)pitchRange_.rows();
+    const float barH = std::max(rowH - 1.0f, 5.0f);
+    const float rowTop =
+        (float)lane.getY() +
+        ((float)pitchRange_.hi - juce::jlimit((float)pitchRange_.lo, (float)pitchRange_.hi, played)) * rowH;
+    return {(float)columnLeft(step) + 2.0f, rowTop + rowH * 0.5f - barH * 0.5f, (float)columnWidth() - 4.0f, barH};
+}
+
+// Above the bar, or below it for the top row; as wide as the column plus a little. Drawn only in columns 22 px wide
+// or more.
+juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<float>& bar,
+                                                         juce::Rectangle<int> lane) const {
+    const float labelY = bar.getY() >= (float)lane.getY() + 11.0f ? bar.getY() - 11.0f : bar.getBottom();
+    return {bar.getX() - 4.0f, labelY, bar.getWidth() + 8.0f, 11.0f};
+}
+
+// The name, and beside it the numeral smaller and muted when both fit the column; otherwise the name alone.
+void StepGridComponent::paintLabel(juce::Graphics& g, const stepgrid::ChordLabel& label, juce::Rectangle<float> area,
+                                   float alpha) const {
+    const auto& c = colorsOf(*this);
+    const auto nameFont = theme::AppLookAndFeel::uiFont(11.0f);
+    const auto numeralFont = theme::AppLookAndFeel::uiFont(9.0f);
+    const float nameWidth = (float)theme::AppLookAndFeel::uiTextWidth(label.name, 11.0f);
+    const float numeralWidth = (float)theme::AppLookAndFeel::uiTextWidth(label.numeral, 9.0f);
+    const bool both = label.numeral.isNotEmpty() && nameWidth + 3.0f + numeralWidth <= area.getWidth();
+    g.setFont(nameFont);
+    g.setColour(c.textPrimary.withMultipliedAlpha(alpha));
+    if (!both) {
+        g.drawText(label.name, area, juce::Justification::centred);
+        return;
+    }
+    const float left = area.getCentreX() - (nameWidth + 3.0f + numeralWidth) * 0.5f;
+    g.drawText(label.name, juce::Rectangle<float>(left, area.getY(), nameWidth, area.getHeight()),
+               juce::Justification::centredLeft);
+    g.setFont(numeralFont);
+    g.setColour(c.textMuted.withMultipliedAlpha(alpha));
+    g.drawText(label.numeral,
+               juce::Rectangle<float>(left + nameWidth + 3.0f, area.getY(), numeralWidth + 1.0f, area.getHeight()),
+               juce::Justification::centredLeft);
+}
+
+// A step whose chord just changed cross-fades from its old label to the new one.
+void StepGridComponent::paintStepLabel(juce::Graphics& g, int step, int playedRoot, juce::Rectangle<float> area) const {
     const auto& entry = module_.getPattern().steps[(size_t)step];
-    if (!module_.isPoly() || entry.chord == SequencerChord::Unison)
-        return noteName(playedRoot);
-    return noteName(playedRoot) + " " + chordId(entry.chord);
+    const auto now = labelOf(entry.chord, playedRoot, step);
+    const auto& before = glideFrom_.steps[(size_t)step];
+    if (labelFading_ && module_.isPoly() && before.chord != entry.chord) {
+        paintLabel(g, labelOf(before.chord, playedRoot, step), area, 1.0f - labelFadeT_);
+        paintLabel(g, now, area, labelFadeT_);
+        return;
+    }
+    paintLabel(g, now, area, 1.0f);
 }
 
 void StepGridComponent::paintGutter(juce::Graphics& g, const StepGridLayout& layout) {
@@ -132,17 +189,11 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
         const auto& entry = pattern.steps[(size_t)s];
         const float played = shownPitch(s);
         const float barH = std::max(rowH - 1.0f, 5.0f);
-        const float centre = rowTop(juce::jlimit((float)pitchRange_.lo, (float)pitchRange_.hi, played)) + rowH * 0.5f;
-        const juce::Rectangle<float> bar((float)columnLeft(s) + 2.0f, centre - barH * 0.5f, colW - 4.0f, barH);
+        const auto bar = pitchBarRect(s, played, lane);
         g.setColour(entry.on ? c.accent : c.textDisabled);
         g.fillRoundedRectangle(bar, 2.0f);
-        if (colW >= 22.0f) {
-            g.setColour(c.textPrimary);
-            const float labelY = bar.getY() >= (float)lane.getY() + 11.0f ? bar.getY() - 11.0f : bar.getBottom();
-            g.drawText(chordLabel(s, juce::roundToInt(played)),
-                       juce::Rectangle<float>(bar.getX() - 4.0f, labelY, bar.getWidth() + 8.0f, 11.0f),
-                       juce::Justification::centred);
-        }
+        if (colW >= 22.0f)
+            paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane));
         const int written = entry.pitch;
         if (!gliding_ && written != juce::roundToInt(played) && written >= pitchRange_.lo &&
             written <= pitchRange_.hi) {

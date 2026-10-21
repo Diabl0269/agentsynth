@@ -21,6 +21,7 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/NoteRangePicker/NoteRangePicker.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <array>
 #include <cstdint>
@@ -102,14 +103,14 @@ public:
     int contentNaturalHeight() const {
         constexpr int kInset = 6; // matches the inset layoutContentInto takes off the content area
         int y = kInset;
-        y += 22 + 4;              // root row + gap
-        y += 22 + 6;              // scale combo + gap
-        y += customBlockHeight(); // the custom editor: its full height once shown, tweened with its fade
-        y += 22 + 10;             // pitch-visibility toggle + gap
-        y += 22 + 4;              // min row + gap
-        y += 22 + 6;              // max row + gap
-        y += 24 + 2;              // generate button + gap
-        y += 20;                  // add-to-existing toggle
+        y += 22 + 4;                // root row + gap
+        y += 22 + 6;                // scale combo + gap
+        y += customBlockHeight();   // the custom editor: its full height once shown, tweened with its fade
+        y += 22 + 10;               // pitch-visibility toggle + gap
+        y += kRangeLabelHeight + 2; // "Note range" label + gap
+        y += NoteRangePicker::kPreferredHeight + 6; // range picker + gap
+        y += 24 + 2;                                // generate button + gap
+        y += 20;                                    // add-to-existing toggle
         return y + kInset;
     }
 
@@ -151,14 +152,9 @@ public:
         pitchVisibilityToggle_.setBounds(bounds.removeFromTop(22));
         bounds.removeFromTop(10);
 
-        auto minRow = bounds.removeFromTop(22);
-        minNoteLabel_.setBounds(minRow.removeFromLeft(28));
-        minNoteCombo_.setBounds(minRow);
-        bounds.removeFromTop(4);
-
-        auto maxRow = bounds.removeFromTop(22);
-        maxNoteLabel_.setBounds(maxRow.removeFromLeft(28));
-        maxNoteCombo_.setBounds(maxRow);
+        rangeLabel_.setBounds(bounds.removeFromTop(kRangeLabelHeight));
+        bounds.removeFromTop(2);
+        rangePicker_.setBounds(bounds.removeFromTop(NoteRangePicker::kPreferredHeight));
         bounds.removeFromTop(6);
 
         generateButton_.setBounds(bounds.removeFromTop(24));
@@ -186,6 +182,7 @@ public:
     // edit the user made) ----
     void setSelection(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn) {
         selectedScale_ = scale;
+        rangePicker_.setScale(selectedScale_.has_value() ? &*selectedScale_ : nullptr);
         pitchVisibilityOn_ = pitchVisibilityOn;
         if (selectedScale_.has_value()) {
             rootPitchClass_ = selectedScale_->rootPitchClass;
@@ -200,8 +197,8 @@ public:
     std::optional<synth::MusicalScale> getSelectedScale() const noexcept { return selectedScale_; }
     bool isPitchVisibilityOn() const noexcept { return pitchVisibilityOn_; }
 
-    int getMinPitchSelection() const noexcept { return juce::jlimit(0, 127, minNoteCombo_.getSelectedId() - 1); }
-    int getMaxPitchSelection() const noexcept { return juce::jlimit(0, 127, maxNoteCombo_.getSelectedId() - 1); }
+    int getMinPitchSelection() const noexcept { return rangePicker_.getLow(); }
+    int getMaxPitchSelection() const noexcept { return rangePicker_.getHigh(); }
     /** false (the default) means Generate REPLACES the clip's contents, true means it overlays the
      *  generated notes on top of whatever is already there. Replace stays the default because it is
      *  what "generate a pattern" meant before this control existed — a persisted preference would
@@ -225,8 +222,7 @@ public:
     juce::ToggleButton& getPitchVisibilityToggle() noexcept { return pitchVisibilityToggle_; }
     juce::TextButton& getGenerateButton() noexcept { return generateButton_; }
     juce::ToggleButton& getAddToExistingToggle() noexcept { return addToExistingToggle_; }
-    juce::ComboBox& getMinNoteCombo() noexcept { return minNoteCombo_; }
-    juce::ComboBox& getMaxNoteCombo() noexcept { return maxNoteCombo_; }
+    NoteRangePicker& getRangePicker() noexcept { return rangePicker_; }
     juce::TextEditor& getCustomScaleNameEditor() noexcept { return customScaleNameEditor_; }
     juce::TextButton& getSaveCustomScaleButton() noexcept { return saveCustomScaleButton_; }
     juce::ToggleButton& getCustomPitchToggle(int pitchClass) noexcept {
@@ -249,6 +245,7 @@ private:
     static constexpr int kCustomRowId = 9000;
     static constexpr int kDefaultMinPitch = 36; // C2
     static constexpr int kDefaultMaxPitch = 72; // C5
+    static constexpr int kRangeLabelHeight = 14;
     static constexpr const char* kUserScalesPropertyKey = "pianoRollUserScales";
 
     // A custom-scale toggle painted as a small piano KEY rather than a checkbox+label: it overrides
@@ -387,29 +384,14 @@ private:
     }
 
     void buildRandomGenerationControls() {
-        scaleContent_.addAndMakeVisible(minNoteLabel_);
-        minNoteLabel_.setText("Min", juce::dontSendNotification);
-        minNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
-        scaleContent_.addAndMakeVisible(minNoteCombo_);
-        minNoteCombo_.setComponentID("scaleAssistMinNoteCombo");
-        minNoteCombo_.setTitle("Lowest note to generate");
-        minNoteCombo_.setTooltip("Lowest note Generate may use");
+        scaleContent_.addAndMakeVisible(rangeLabel_);
+        rangeLabel_.setText("Note range", juce::dontSendNotification);
+        rangeLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
+        rangeLabel_.setInterceptsMouseClicks(false, false);
 
-        scaleContent_.addAndMakeVisible(maxNoteLabel_);
-        maxNoteLabel_.setText("Max", juce::dontSendNotification);
-        maxNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
-        scaleContent_.addAndMakeVisible(maxNoteCombo_);
-        maxNoteCombo_.setComponentID("scaleAssistMaxNoteCombo");
-        maxNoteCombo_.setTitle("Highest note to generate");
-        maxNoteCombo_.setTooltip("Highest note Generate may use");
-
-        for (int pitch = 0; pitch <= 127; ++pitch) {
-            const auto label = noteNameWithOctave(pitch);
-            minNoteCombo_.addItem(label, pitch + 1);
-            maxNoteCombo_.addItem(label, pitch + 1);
-        }
-        minNoteCombo_.setSelectedId(kDefaultMinPitch + 1, juce::dontSendNotification);
-        maxNoteCombo_.setSelectedId(kDefaultMaxPitch + 1, juce::dontSendNotification);
+        scaleContent_.addAndMakeVisible(rangePicker_);
+        rangePicker_.setComponentID("scaleAssistRangePicker");
+        rangePicker_.setRange(kDefaultMinPitch, kDefaultMaxPitch);
 
         scaleContent_.addAndMakeVisible(generateButton_);
         generateButton_.setComponentID("scaleAssistGenerateButton");
@@ -534,6 +516,7 @@ private:
     }
 
     void notifyScaleChanged() {
+        rangePicker_.setScale(selectedScale_.has_value() ? &*selectedScale_ : nullptr);
         if (onScaleChanged)
             onScaleChanged(selectedScale_);
         repaint();
@@ -542,13 +525,6 @@ private:
     static juce::String pitchClassName(int pitchClass) {
         static const char* const kNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
         return kNames[juce::jlimit(0, 11, pitchClass)];
-    }
-
-    static juce::String noteNameWithOctave(int pitch) {
-        // Octave numbering matches PianoRollComponent::keyLabelFor: pitch / 12 - 1.
-        const int pitchClass = ((pitch % 12) + 12) % 12;
-        const int octave = pitch / 12 - 1;
-        return pitchClassName(pitchClass) + juce::String(octave);
     }
 
     juce::PropertiesFile* propertiesFile_ = nullptr;
@@ -578,10 +554,8 @@ private:
 
     juce::ToggleButton pitchVisibilityToggle_;
 
-    juce::Label minNoteLabel_;
-    juce::Label maxNoteLabel_;
-    juce::ComboBox minNoteCombo_;
-    juce::ComboBox maxNoteCombo_;
+    juce::Label rangeLabel_;
+    NoteRangePicker rangePicker_;
     juce::TextButton generateButton_{"Generate"};
     // Session-only, off by default — see isAddToExistingSelected().
     juce::ToggleButton addToExistingToggle_;

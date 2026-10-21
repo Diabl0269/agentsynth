@@ -9,6 +9,8 @@ target_sources(Core PRIVATE
     Source/Modules/Sequencer/SequencerPatternLegacy.cpp
     Source/Modules/Sequencer/SequencerScaleSnap.h
     Source/Modules/Sequencer/SequencerScaleSnap.cpp
+    Source/Modules/Sequencer/SequencerPatternOps.h
+    Source/Modules/Sequencer/SequencerPatternOps.cpp
     Source/Modules/Sequencer/SequencerChords.h
     Source/Modules/Sequencer/SequencerChords.cpp
     Source/Modules/Sequencer/SequencerClock.h

@@ -139,22 +139,58 @@ juce::String romanNumeral(const MusicalScale&, const ScaleChord&);  // "ii", "vi
 
 ---
 
-## Pattern tools (next)
+## Pattern tools
 
-Not built. Message-thread functions in a pure unit (`Source/Modules/Sequencer/SequencerPatternOps.h`) that take a
-`SequencerPattern` and return a new one; the card writes it back with `setPattern` inside one undo transaction.
+Built. Pure functions in `Source/Modules/Sequencer/SequencerPatternOps.{h,cpp}` (namespace `synth::sequencer_ops`) take a
+`SequencerPattern` and the number of active steps and return a new pattern; only steps `[0, steps)` change.
 
-| Tool | Effect |
-| :-- | :-- |
-| Randomize | `pickPitches` within Lowest..Highest; "Steps that play" sets `on` by density; "Keep my rhythm" leaves `on` and gate alone |
-| Shift left / right | Rotate every field within the active `steps` |
-| Reverse | Reverse every field within the active `steps` |
-| Double | Copy steps 1..N into N+1..2N and set `steps` to 2N; disabled when 2N > 128 |
-| Up / Down | `stepBy(+/-1)` on every pitch (chromatic when No scale) |
+| Tool | Function | Effect |
+| :-- | :-- | :-- |
+| Randomize | `randomized(p, n, scale, RandomizeSettings, rng)` | `pickPitches` within the range; unless Keep my rhythm, each step plays with probability `density` (at least one always does); Keep my rhythm leaves `on` and gate alone |
+| Shift left / right | `shiftLeft`, `shiftRight` | Rotate every field within the active steps, wrapping round |
+| Reverse | `reversed` | Reverse every field within the active steps |
+| Double | `doubled`, `canDouble` | Copy steps 1..N into N+1..2N; the card then sets `steps` to 2N; off when 2N > 128 (the card also disables it past 64 steps) |
+| Up / Down | `movedByScaleStep` | `stepBy(+/-1)` on every pitch (one semitone with No scale, clamped to 0..127) |
+| Fit to scale | `fitToScale`, `fitToScaleWouldChange` | `snapPitch` on every pitch; off with No scale and when nothing would change |
 
-The Randomize panel's range and density are card view state (not saved), like the piano roll's.
-`sequencerPlayedPitch` already gives the card the pitch a step really plays, to draw a dashed outline when it differs
-from the written one.
+**The row** (`StepGridTools`, `Source/UI/ModuleViews/StepGrid/`) is its own 28 px row at the top of the step grid, above the
+page strip, with eight 24 px chips right-aligned: Randomize, shift left, shift right, Reverse, Double, up, down, Fit to
+scale. Every button is a Tab stop with a focus ring; its tooltip is its screen-reader name ("Randomize notes in the scale",
+"Shift pattern one step left", "Reverse pattern", "Copy the steps into a pattern twice as long", "Move every note up one
+scale note", "Rewrite the notes into the scale", and so on).
+
+**One click is one undo step that glides.** `StepGridComponent::applyTool` computes the new pattern, writes it with
+`setPattern`, records the module's extra state before and after (`StepGridHooks::recordEdit`) and starts the bar glide
+itself, because the grid's own edits do not glide. The pitch tools work on the pitch a step *plays* (written plus
+Transpose), so a transposed pattern moves and fits as it sounds. **Double** also sets the Steps parameter: it records
+through `StepGridHooks::recordEditWithParameter` (`AppUndoManager::recordNodeExtraStateAndParameterChange`), which puts the
+pattern change and the parameter change in one transaction, so a single undo gives both back.
+
+**Randomize** opens a 250 px popover (`StepGridRandomizePanel`, a `juce::CallOutBox` with `CalloutReveal`) with the note range
+picker ([note-range-picker.md](../layout/note-range-picker.md)), a "Steps that play" slider (75 percent by default), the
+"Keep my rhythm" pill (on by default) and Roll. Roll applies `randomized` once and each Roll is one undo step; the popover
+stays open between rolls. Esc closes it. The range, density and rhythm choice live on the grid for the session and are not
+saved; the range starts at C2 to C4 (the grid's note numbering), widened to cover the pattern's notes.
+
+---
+
+## Poly Sequencer chords
+
+Built. A step stores a chord *type* (`SequencerChord`); its notes are built on the step's played pitch.
+
+- **The label** over each bar is the chord's name (`chordName`) with its roman numeral (`romanNumeral`) smaller and muted when
+  a scale is set and both fit the column, e.g. "Cmaj7" with "Imaj7"; a single note stays the note name. When a chord changes
+  (a pick, undo, redo) the old and new label cross-fade in 120 ms (80 under Reduce Motion). The step's screen-reader text
+  gains ", chord <name>".
+- **The picker** (`StepGridChordPicker`, 250 px, `juce::CallOutBox` with `CalloutReveal`) opens from a click on the label
+  (tooltip "Choose a chord for this step") or Enter on a focused step in the Pitch lane. Header "Chords that fit C major on C"
+  ("Chords on C" with No scale). Rows: Triad, Seventh, Sus (sus2, sus4), Add (add9, sixth), then "Outside the key": Borrowed
+  (the fixed qualities whose notes differ from every in-key chip) and More (Unison, 5ths, Octs, Random, so older chords stay
+  reachable). The current chord is accent-highlighted. Up/Down move between rows, Left/Right between chips, Enter picks, Esc
+  closes. A pick sets `step.chord` as one undo step; chord ids are unchanged, so old projects load identically.
+- **Hover audition** is not built: the sequencer has no lock-free preview path to its output, and none was added. A hovered
+  chip only lights.
+- The contents and names are pure (`StepGridChords.{h,cpp}`) and unit-tested.
 
 ---
 
@@ -167,7 +203,7 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   Transpose, Gate, Velocity, Chance) and then the `stepGrid` view. Consecutive `row` sections sit side by side and wrap
   only when the 560 px card is too narrow ([module-card-layout.md](../layout/module-card-layout.md#rendering)).
   Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
-- **The grid** (`Source/UI/ModuleViews/StepGrid/`): a page strip, 16 columns of the viewed page, the Pitch lane as a
+- **The grid** (`Source/UI/ModuleViews/StepGrid/`): the pattern tools row ([Pattern tools](#pattern-tools)), a page strip, 16 columns of the viewed page, the Pitch lane as a
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
   stacked under them. Steps past `steps` are dimmed, never removed.
   - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
@@ -196,7 +232,7 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   Slide: toggles; Condition: next or previous condition), Space turns the step on or off (Slide lane: the link), Enter
   opens the Condition menu or acts as Space, Page Up/Down move to the lane above or below, Home/End the first and last
   step. The page strip and the chip row are Tab stops of their own.
-- **Size.** 560 wide; the card is 454 tall at the default lanes (Pitch and Velocity; the grid is 228 px), 730 with every lane (702 on the Poly Sequencer, which has no Slide lane); a 17+ step pattern adds nothing because the page strip's row is always reserved. The Row sections take two lines at 560 px: Play and Time on the first, Notes and Pattern on the second.
+- **Size.** 560 wide; the card is 482 tall at the default lanes (Pitch and Velocity; the grid is 256 px, 28 of them the tools row), 758 with every lane (730 on the Poly Sequencer, which has no Slide lane); a 17+ step pattern adds nothing because the page strip's row is always reserved. The Row sections take two lines at 560 px: Play and Time on the first, Notes and Pattern on the second.
 
 ## Chord picker (next)
 

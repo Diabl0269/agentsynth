@@ -20,8 +20,9 @@ int placeLane(StepGridLayout& layout, SequencerLane lane, float reveal, int widt
 
 StepGridLayout computeLayout(const std::array<float, kSequencerLaneCount>& reveal, int width) {
     StepGridLayout layout;
-    layout.strip = {0, 0, width, kPageStripHeight};
-    int y = kPageStripHeight;
+    layout.tools = {0, 0, width, kToolsRowHeight};
+    layout.strip = {0, kToolsRowHeight, width, kPageStripHeight};
+    int y = kToolsRowHeight + kPageStripHeight;
     y = placeLane(layout, SequencerLane::Pitch, reveal[(size_t)SequencerLane::Pitch], width, y);
     y += kGap;
     layout.pads = {0, y, width, kPadRowHeight};

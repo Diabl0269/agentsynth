@@ -59,6 +59,13 @@ public:
     void recordParameterChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                const juce::String& paramId, float oldValue, float newValue);
 
+    /** Records an already-applied edit of a node's extra state and of one of its parameters as ONE undo step (the
+     *  parameter's values are normalised). The extra-state half is skipped when it did not change. */
+    void recordNodeExtraStateAndParameterChange(juce::AudioProcessorGraph& graph,
+                                                juce::AudioProcessorGraph::NodeID nodeId,
+                                                const juce::var& beforeExtraState, const juce::var& afterExtraState,
+                                                const juce::String& paramId, float oldValue, float newValue);
+
     /** Records an already-applied node extra-state edit; undo/redo replay before/after via setExtraState. */
     void recordNodeExtraStateChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                     const juce::var& beforeExtraState, const juce::var& afterExtraState);

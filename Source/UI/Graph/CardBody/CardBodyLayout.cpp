@@ -387,8 +387,12 @@ std::vector<RowBlock> rowBlocksFrom(const CardBodyPlan& plan, int first, const c
 }
 
 void placeRowBlock(const CardBodyPlan& plan, juce::AudioProcessor& module, const RowBlock& block, int x, int y,
-                   int headerH, int cellBand, const cardbody::BodyGeometry& g) {
+                   int headerH, int cellBand, bool lineStart, const cardbody::BodyGeometry& g) {
     const auto& section = plan.sections[(size_t)block.section];
+    // A 1 px rule centred in the gap before the block, as tall as its controls; none at the start of a line.
+    if (section.divider != nullptr)
+        section.divider->setBounds(lineStart ? juce::Rectangle<int>()
+                                             : juce::Rectangle<int>(x - kRowBlockGap / 2, y + headerH, 1, cellBand));
     if (section.header != nullptr)
         section.header->setBounds(x, y, std::max(block.width, 60), cardbody::kSectionHeaderHeight);
     section.cellTop = y + headerH;
@@ -432,7 +436,7 @@ int layoutRowGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, int f
         if (apply) {
             int x = g.contentX;
             for (size_t b = i; b < end; ++b) {
-                placeRowBlock(plan, module, blocks[b], x, y, headerH, band, g);
+                placeRowBlock(plan, module, blocks[b], x, y, headerH, band, b == i, g);
                 x += std::max(blocks[b].width, 60) + kRowBlockGap;
             }
         }

@@ -107,6 +107,7 @@ void StepGridComponent::startGlide(const SequencerPattern& from) {
     if (!FadeVisibility::canAnimateIn(this))
         return;
     glideFrom_ = from;
+    startLabelFade();
     gliding_ = true;
     glideElapsed_ = 0.0f;
     glideAnim_.start(

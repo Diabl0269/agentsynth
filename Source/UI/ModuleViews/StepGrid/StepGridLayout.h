@@ -9,6 +9,7 @@ namespace synth::ui::stepgrid {
 /** Where the parts of the step grid sit for a width and a reveal (0 folded, 1 fully shown) per lane. Pure, so the
  *  card's height and the painted view agree by construction. */
 struct StepGridLayout {
+    juce::Rectangle<int> tools; ///< The pattern tools row, at the very top.
     juce::Rectangle<int> strip; ///< The page strip's row (its space is always kept).
     juce::Rectangle<int> pads;
     juce::Rectangle<int> chips;
@@ -22,8 +23,8 @@ struct StepGridLayout {
     }
 };
 
-/** Page strip, the Pitch lane (the grid proper), the pads, the chip row, then the other lanes in chip order. A lane
- *  whose reveal is 0 takes no room at all. */
+/** Tools row, page strip, the Pitch lane (the grid proper), the pads, the chip row, then the other lanes in chip order.
+ * A lane whose reveal is 0 takes no room at all. */
 StepGridLayout computeLayout(const std::array<float, kSequencerLaneCount>& reveal, int width);
 
 /** All reveals at 0 or 1 from a lane mask. */

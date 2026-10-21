@@ -1,4 +1,5 @@
 #include "StepGridModel.h"
+#include "Music/NoteNames.h"
 #include <algorithm>
 #include <cmath>
 
@@ -62,7 +63,7 @@ std::uint16_t sanitizeLanes(std::uint16_t mask, bool poly) noexcept {
     return out;
 }
 
-int fixedHeight(bool) { return kPageStripHeight + kGap + kPadRowHeight + kGap + kChipRowHeight; }
+int fixedHeight(bool) { return kToolsRowHeight + kPageStripHeight + kGap + kPadRowHeight + kGap + kChipRowHeight; }
 
 int viewHeightFor(std::uint16_t lanes, bool poly) {
     int height = fixedHeight(poly);
@@ -87,11 +88,7 @@ juce::String pageDescription(int page, int steps) {
     return "Page " + juce::String(page + 1) + ", steps " + juce::String(first) + " to " + juce::String(last);
 }
 
-juce::String noteName(int pitch) {
-    static const char* const names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    pitch = std::clamp(pitch, 0, 127);
-    return juce::String(names[pitch % 12]) + juce::String(pitch / 12 - 2);
-}
+juce::String noteName(int pitch) { return noteNameWithOctave(pitch, 3); }
 
 PitchRange fitPitchRange(const std::vector<int>& pitches) {
     PitchRange range;

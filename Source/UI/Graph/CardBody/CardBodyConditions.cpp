@@ -201,6 +201,9 @@ void CardBody::applyVisibility() {
     for (int s = 0; s < (int)plan_.sections.size(); ++s)
         if (const auto& section = plan_.sections[(size_t)s]; section.header != nullptr && !fadeOwnsSection(s))
             section.header->setVisible(section.visible);
+    for (int s = 0; s < (int)plan_.sections.size(); ++s)
+        if (const auto& section = plan_.sections[(size_t)s]; section.divider != nullptr && !fadeOwnsSection(s))
+            section.divider->setVisible(section.visible);
     if (moreButton_ != nullptr)
         moreButton_->setUnfolded(moreUnfolded_);
 }
