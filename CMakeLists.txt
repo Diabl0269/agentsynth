@@ -228,13 +228,6 @@ add_library(Core STATIC
     Source/AudioEngine/SidechainConnections.h
     Source/AudioEngine/StereoDownMix.cpp
     Source/AudioEngine/StereoDownMix.h
-    Source/AppUndoManager.cpp
-    Source/AppUndoManager.h
-    Source/AppUndoManagerMixerView.cpp
-    Source/AppUndoManagerTransport.cpp
-    Source/AppUndoManagerHistory.cpp
-    Source/AppUndoManagerSnapshotSize.h
-    Source/AppUndoManagerSnapshotSize.cpp
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h
@@ -579,6 +572,7 @@ include(cmake/SamplerInstrumentSources.cmake)
 include(cmake/SoundPackSources.cmake)
 include(cmake/FilterSources.cmake)
 include(cmake/SequencerSources.cmake)
+include(cmake/UndoSources.cmake)
 # Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
 # licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
 # deliberately deferred: it would mean vendoring clap-juce-extensions or the CLAP headers, i.e. exactly the new

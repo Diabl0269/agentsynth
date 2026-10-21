@@ -1,6 +1,5 @@
 # The Sequencer and Poly Sequencer engine: the pattern data, its JSON and legacy-parameter adoption, the step clock,
-# the player, the scale snap table and the undo step that sets a module's state with a parameter. Part of Core; its own
-# list so the root file stays under the line cap.
+# the player and the scale snap table. Part of Core; its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/Sequencer/SequencerPattern.h
     Source/Modules/Sequencer/SequencerLanes.h
@@ -20,5 +19,4 @@ target_sources(Core PRIVATE
     Source/Modules/Sequencer/SequencerPlayer.cpp
     Source/Modules/Sequencer/SequencerModuleBase.h
     Source/Modules/Sequencer/SequencerModuleBase.cpp
-    Source/AppUndoManagerNodeState.cpp
 )
