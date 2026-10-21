@@ -12,7 +12,7 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
   A pitch that holds a note always has a row, and a pitch outside the table is named "Note N".
-- Cells are rounded squares with alternating beat-group shades. A hit fills the cell to its velocity; an accent adds
+- Cells are rounded squares with every other beat group (the cells of beats 2 and 4 in 4/4) shaded with text-primary at 3%, as the step sequencer shades its groups. A hit fills the cell to its velocity; an accent adds
   a white tick on top. While the transport plays the playing column is tinted and a hit flashes as it plays.
 
 ## Opening it
@@ -71,7 +71,7 @@ counted from 0; a note whose clip-relative start is on an ODD step (within 1e-6 
 `(swing - 0.5) * 2 * step`, so at 0.75 the off-beat of a pair sits at 75% of the pair (a triplet feel). Notes off the
 grid are untouched, the note keeps its length (its end follows, clamped to the clip end as before), and a shift that
 would push the start past the clip end is dropped. The clip's run is sorted again when swing is on, since a swung note
-can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar length of the transport's time signature,
+can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar length of the transport's requested time signature (a change republishes through `TransportService::onTimeSignatureChanged`),
 which the engine passes to `buildFrom` on every publish (a time-signature change reaches playback at the next
 publish, not at once).
 

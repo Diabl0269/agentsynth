@@ -218,6 +218,31 @@ TEST(DrumMachineGridTest, PaintsAHitAtItsVelocityHeight) {
     EXPECT_NE(top.getRed(), laneColour.getRed()) << "a velocity near half leaves the top empty";
 }
 
+TEST(DrumMachineGridTest, EveryOtherBeatGroupOfEmptyCellsIsShaded) {
+    DrumFixture f;
+    juce::Image image(juce::Image::ARGB, f.grid.getWidth(), f.grid.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    f.grid.paintEntireComponent(g, false);
+    const int row = f.grid.rowOfPitch(36);
+    const auto pixel = [&](int step) {
+        const auto cell = f.grid.cellBounds(row, step);
+        return image.getPixelAt(cell.getCentreX(), cell.getCentreY());
+    };
+    const auto shade = [&](int step) { return pixel(step).getBrightness(); };
+    // 16 steps in a 4/4 bar: a beat group is four cells, and beats 2 and 4 are the shaded ones.
+    EXPECT_FLOAT_EQ(shade(0), shade(3));
+    EXPECT_GT(shade(4), shade(0)) << "beat 2 is a different shade from beat 1";
+    EXPECT_FLOAT_EQ(shade(4), shade(7));
+    EXPECT_FLOAT_EQ(shade(0), shade(8));
+    EXPECT_FLOAT_EQ(shade(4), shade(12));
+    const auto& colors = synth::theme::themeOf(f.grid).colors;
+    const auto expected = colors.surface.overlaidWith(colors.textPrimary.withAlpha(0.03f));
+    EXPECT_NEAR(pixel(4).getRed(), expected.getRed(), 1) << "the shade is text-primary at 3% over the cell";
+    EXPECT_NEAR(pixel(4).getGreen(), expected.getGreen(), 1);
+    EXPECT_NEAR(pixel(4).getBlue(), expected.getBlue(), 1);
+    EXPECT_NEAR(pixel(0).getRed(), colors.surface.getRed(), 1);
+}
+
 //==============================================================================
 // Hosted in the timeline panel.
 

@@ -26,6 +26,7 @@ constexpr int kToolbarPad = 4;
 constexpr float kRestingAlpha = 0.55f;
 constexpr float kSilencedAlpha = 0.35f;
 constexpr float kMutedHitAlpha = 0.4f;
+constexpr float kBeatGroupShadeAlpha = 0.03f;
 constexpr float kPlayColumnAlpha = 0.16f;
 constexpr float kFlashAlpha = 0.55f;
 constexpr float kAccentTickHeight = 2.0f;
@@ -147,11 +148,16 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     const float radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
     const auto area = rect.toFloat();
 
-    // Alternating beat groups keep the pulse readable; steps per beat is a whole number for every choice.
+    // Every other beat group is shaded like the step sequencer's every other group of four, so the pulse stays
+    // readable; steps per beat is a whole number for every choice.
     const double stepsPerBeat = static_cast<double>(stepsPerBar()) / std::max(1.0, beatsPerBar());
     const int group = static_cast<int>(std::floor(static_cast<double>(step) / std::max(1.0, stepsPerBeat)));
-    g.setColour((group % 2 == 0 ? colors.surface : colors.surfaceHi).withMultipliedAlpha(rowAlpha));
+    g.setColour(colors.surface.withMultipliedAlpha(rowAlpha));
     g.fillRoundedRectangle(area, radius);
+    if (group % 2 == 1) {
+        g.setColour(colors.textPrimary.withAlpha(kBeatGroupShadeAlpha * rowAlpha));
+        g.fillRoundedRectangle(area, radius);
+    }
 
     if (showsPlayhead() && step == playStep_) {
         g.setColour(colors.accent.withAlpha(kPlayColumnAlpha * rowAlpha));

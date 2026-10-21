@@ -145,3 +145,28 @@ TEST_F(MainComponentTest, ContinuouslyChangingTransportRecordsNoStepUntilItSettl
     EXPECT_DOUBLE_EQ(transport.getDocumentState().bpm, 120.0);
     EXPECT_FALSE(mc.getUndoManager().canUndo());
 }
+
+// Regression test for FRO1012: swing used the bar length of the last publish, so a time-signature change left the
+// swung notes where the old bar put them until the next timeline edit.
+TEST_F(MainComponentTest, ATimeSignatureChangeRepublishesTheTimelineSoSwingFollowsTheBarLength) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto clip = doc.addClip(doc.addTrack(synth::TrackKind::Midi, "Drums"), 0.0, 4.0, "Beat");
+    synth::MidiNote note;
+    note.startBeat = 0.1875; // step 1 of 16 in a 3/4 bar, off the 4/4 grid
+    note.lengthBeats = 0.1;
+    note.pitch = 42;
+    note.velocity = 100;
+    doc.addNote(clip, note);
+    ASSERT_TRUE(doc.setClipSwing(clip, 0.75));
+    const auto publishedStart = [&] {
+        const auto& snapshot = mc.getAudioEngine().getTimelineSnapshots().beginAudioBlock();
+        return snapshot.notes.empty() ? -1.0 : snapshot.notes.front().startBeat;
+    };
+    EXPECT_NEAR(publishedStart(), 0.1875, 1e-9) << "off the 4/4 grid: untouched";
+
+    ASSERT_TRUE(mc.getAudioEngine().getTransport().setTimeSignature(3, 4));
+    EXPECT_NEAR(publishedStart(), 0.1875 + 0.1875 * 0.5, 1e-9) << "no timeline edit in between";
+}

@@ -31,10 +31,11 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     refreshNormalling();
     refreshMidiWiring();
 
-    // The bar length sizes a drum clip's swing steps (TimelineSnapshot::buildFrom).
-    const auto position = transport.getPositionSnapshot();
-    const double beatsPerBar = static_cast<double>(position.timeSigNumerator) * 4.0 /
-                               static_cast<double>(std::max(1, position.timeSigDenominator));
+    // The bar length sizes a drum clip's swing steps (TimelineSnapshot::buildFrom). It comes from the requested time
+    // signature, not the audio-side snapshot, which lags a tick and never moves without a device.
+    const auto& requested = transport.getDocumentState();
+    const double beatsPerBar = static_cast<double>(requested.timeSigNumerator) * 4.0 /
+                               static_cast<double>(std::max(1, requested.timeSigDenominator));
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc, beatsPerBar > 0.0 ? beatsPerBar : 4.0);
 
     // The snapshot's address is stable across the move into publish() (unique_ptr moves the
