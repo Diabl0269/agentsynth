@@ -22,7 +22,8 @@ the notes of any clip in the group and every other clip in it changes too. It is
 
 ## What is shared
 
-Following the common DAW model, a link shares the clip's **content**: its notes and its length.
+Following the common DAW model, a link shares the clip's **content**: its notes and its length,
+plus its drum-machine settings (steps per bar, per-drum mute and solo; see [drum-machine](drum-machine.md)).
 Everything about where and how each copy plays stays its own: name, start, track, mute, and the audio
 fields. So a right-edge resize of one member resizes all of them, while moving, renaming or muting one
 does not touch the others.

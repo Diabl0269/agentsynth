@@ -157,18 +157,15 @@ public:
     juce::String getTooltip() override;
     juce::String getTooltipFor(juce::Point<int> pos) const;
 
-    // Non-owning; may be null. Same degrade-gracefully contract as every other timeline
-    // sub-component's setter.
+    // Non-owning; may be null (same degrade-gracefully contract as every timeline sub-component's setter).
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept;
     synth::TimelineDoc* getTimelineDoc() const noexcept;
     void setUndoManager(AppUndoManager* undoManager) noexcept;
     AppUndoManager* getUndoManager() const noexcept;
-    // Only consulted for Snap::Bar's beatsPerBar, same reasoning as
-    // TimelineClipLaneArea::setTransport.
+    // Only consulted for Snap::Bar's beatsPerBar, as in TimelineClipLaneArea::setTransport.
     void setTransport(synth::TransportService* transport) noexcept;
 
-    // The user's keyboard bindings for this surface's OWN keys — see PianoRollZoom.cpp for the full
-    // resolution contract.
+    // The user's bindings for this surface's own keys (resolution contract: PianoRollZoom.cpp).
     void setShortcutManager(const ShortcutManager* manager) noexcept;
     const ShortcutManager* getShortcutManager() const noexcept;
 
@@ -290,11 +287,13 @@ public:
     bool isOpen() const noexcept;
     synth::ClipId getClipId() const noexcept;
 
-    // Fired when the roll asks to be closed (back button, Escape, or the edited clip disappearing)
-    // — not fired by a direct closeRoll() call. See PianoRollComponent.cpp (refreshFromDoc).
+    // Fired when the roll asks to be closed (back button, Escape, clip gone), not by a direct closeRoll().
     std::function<void()> onCloseRequested;
     // Fired just before requestClose() empties the roll, so the owner can picture it as it was.
     std::function<void()> onAboutToClose;
+    // The "Drum machine" chip, shown while the open clip is on a Drum Kit track (setDrumKitTrack), was pressed.
+    std::function<void(synth::ClipId)> onDrumMachineRequested;
+    void setDrumKitTrack(bool isDrumKit);
 
     // Fired by P with notes selected: the selection's [start, end] in absolute beats.
     std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
@@ -425,8 +424,8 @@ public:
     double getLastExtendPromptLengthForTest() const noexcept;
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // Eight header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
-    // Scale, ScaleFilter, Velocity, Humanize. Scale, ScaleFilter and Velocity paint lit when on.
+    // Header chips: Back ("Clips"), DrumMachine (Drum Kit tracks only, right after Back), Quantise, QuantiseLength,
+    // QuantisePitches, Scale, ScaleFilter, Velocity, Humanize. Scale, ScaleFilter and Velocity paint lit when on.
     enum class HeaderButtonId {
         None,
         Back,
@@ -436,7 +435,8 @@ public:
         Scale,
         ScaleFilter,
         Velocity,
-        Humanize
+        Humanize,
+        DrumMachine
     };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
     /** A header chip's current bounds in this component's coordinates (empty before the first layout). */
@@ -959,16 +959,16 @@ private:
     std::vector<ClipboardNote> noteClipboard_;
 
     juce::Rectangle<int> backButtonBounds_;
+    juce::Rectangle<int> drumMachineChipBounds_; // empty unless drumKitTrack_
+    bool drumKitTrack_ = false;
     // Quantise note STARTS to the grid (a drawn "blocks aligned on gridlines" glyph). An action.
     juce::Rectangle<int> quantiseButtonBounds_;
-    // Quantise note LENGTHS to the grid (a drawn "block's trailing edge snapping to a gridline"
-    // glyph). An action; Alt+Q's visible twin (see PianoRollZoom.cpp's keyPressed).
+    // Quantise note LENGTHS to the grid (a drawn trailing-edge glyph). An action; Alt+Q's visible twin.
     juce::Rectangle<int> quantiseLengthButtonBounds_;
     // Quantise note PITCHES into the scale (a drawn "note head snapping onto a row" glyph).
     juce::Rectangle<int> quantisePitchButtonBounds_;
-    // "Show only scale notes" — the row filter, surfaced here as its PRIMARY control (a drawn funnel
-    // glyph). A toggle, so it paints lit; shares one state with the scale panel — see
-    // toggleScaleFilter().
+    // "Show only scale notes": the row filter's primary control (funnel glyph); a toggle sharing the scale panel's
+    // state.
     juce::Rectangle<int> scaleFilterButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
@@ -989,7 +989,7 @@ private:
 
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
     HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;
-    std::array<std::unique_ptr<PianoRollHeaderChip>, 8> headerChips_; // indexed by HeaderButtonId - 1
+    std::array<std::unique_ptr<PianoRollHeaderChip>, 9> headerChips_; // indexed by HeaderButtonId - 1
     juce::String announcedValueText_;
     bool focusRingForced_ = false;
 

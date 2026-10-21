@@ -13,10 +13,10 @@
 
 namespace synth::ui {
 
-// Double-click (and the Open Clip key) open the piano roll; the keyboard-clip callbacks keep the
+// Double-click (and the Open Clip key) open the clip editor; the keyboard-clip callbacks keep the
 // track rows and focused-track index following the clip the arrow keys are on.
 void TimelinePanelComponent::wireClipLaneCallbacks() {
-    clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openPianoRoll(id); };
+    clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openClipEditor(id); };
     clipLaneArea_.onKeyboardClipChanged = [this](synth::ClipId id) { followKeyboardClip(id); };
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
@@ -47,7 +47,7 @@ bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
 // The playhead is the anchor, so entering a track lands where the user is listening; with no
 // transport it is beat 0 and the track's first clip is chosen.
 bool TimelinePanelComponent::enterTrackClips(synth::TrackId trackId) {
-    if (doc_ == nullptr || pianoRoll_.isOpen())
+    if (doc_ == nullptr || clipEditorOpen())
         return false;
     const auto* track = doc_->getTrack(trackId);
     if (track == nullptr)

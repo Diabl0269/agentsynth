@@ -6,6 +6,7 @@
 // directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -232,6 +233,7 @@ void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
     // mouseWheelMove), so a preference set on the panel chrome must reach it directly rather than
     // through anything shared like TimelineViewState.
     pianoRoll_.setScrollInverted(inverted);
+    drum_->grid.setScrollInverted(inverted);
 }
 
 // mouseWheelMove derives the physical gesture direction via synth::ui::wheelGestureIsUpward
@@ -241,6 +243,7 @@ void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
 void TimelinePanelComponent::setZoomScrollInverted(bool inverted) noexcept {
     zoomScrollInverted_ = inverted;
     pianoRoll_.setZoomScrollInverted(inverted); // same forwarding reason as setScrollInverted above
+    drum_->grid.setZoomScrollInverted(inverted);
 }
 
 //==============================================================================
@@ -467,7 +470,7 @@ void TimelinePanelComponent::resized() {
     // leaves the ruler's band blank for this sibling to draw in (PianoRollComponent::
     // setRulerBandHeight). While the roll is closed nothing here changes: the ruler is the top row and
     // the roll gets gridLanesBounds_ like the clip lanes do.
-    const bool rollOpen = pianoRoll_.isOpen();
+    const bool rollOpen = clipEditorOpen();
     const int rollTop = lanes.getY();
     // Open, the ruler drops below the roll's toolbar row; closed, it is the top row as it always was.
     if (rollOpen)
@@ -499,10 +502,12 @@ void TimelinePanelComponent::resized() {
     // only on the open path would frame the very first clip against the wrong canvas height. A closed
     // roll is invisible, so a canvasTop() describing the open geometry costs nothing meanwhile.
     pianoRoll_.setRulerBandHeight(rulerHeight);
+    drum_->grid.setRulerBandHeight(rulerHeight);
     // The rect, by contrast, IS two-mode: closed, the roll is exactly the clip-lane rect (the two are
     // interchangeable there, and leaving an invisible component sitting over the ruler is the kind of
     // thing that reads as a bug); open, it also covers its toolbar row and the ruler band.
-    pianoRoll_.setBounds(rollOpen ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    pianoRoll_.setBounds(pianoRoll_.isOpen() ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    drum_->grid.setBounds(drum_->grid.isOpen() ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
     // The ruler is a SIBLING drawn inside the band the roll reserves for it, and the roll was added to
     // this panel after the ruler — so without this the roll would paint over it. Re-asserted here
     // rather than once at open time because a re-layout is the only moment the overlap can appear.
@@ -522,8 +527,8 @@ void TimelinePanelComponent::resized() {
     // The roll's OWN rect, not gridLanesBounds_, so the toolbar row it added above the ruler is in
     // the skipped region too — otherwise the overlay would draw its line straight across the chips.
     // Closed, pianoRoll_.getBounds() IS gridLanesBounds_, so this is unchanged there.
-    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(pianoRoll_.getBounds()) -
-                                     playhead_.getBounds().getPosition());
+    const auto editorBounds = drum_->grid.isOpen() ? drum_->grid.getBounds() : pianoRoll_.getBounds();
+    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(editorBounds) - playhead_.getBounds().getPosition());
 
     // The automation lane editors cover the clip lanes' rect (each sits at its lane row); the piano
     // roll takes that rect over while it is open, so they hide with the clip lanes.

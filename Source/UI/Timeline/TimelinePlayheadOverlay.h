@@ -81,6 +81,9 @@ public:
     // follow can move the view first and the line then draws at its pinned x.
     std::function<void(double)> onDrawnBeat;
 
+    // A drum machine clip loop runs with the transport stopped: the 30 Hz frames run for it too. Start and stop only.
+    void setClipPreviewActive(bool active);
+
     // THE drive seam. Called from the owner's LOW-RATE poll (10 Hz), never faster: it stores the
     // snapshot, starts/stops the 30 Hz timer on a play/stop transition, and requests a strip repaint
     // only when the rounded line x actually moved (plus the one guaranteed final strip on stop).
@@ -139,6 +142,7 @@ private:
     double outputLatencySeconds_ = 0.0;
 
     bool playing_ = false;
+    bool previewActive_ = false;
     // Seeded (without requesting a repaint) by the first updateFromTransport: before that there is
     // no "old" line on screen to erase, so the first poll of a stopped transport must stay silent.
     bool hasLineX_ = false;

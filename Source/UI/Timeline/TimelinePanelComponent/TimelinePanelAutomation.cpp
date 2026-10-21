@@ -81,8 +81,7 @@ void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
     const auto* track = doc_ != nullptr ? doc_->getTrackForLane(id) : nullptr;
     if (track == nullptr)
         return;
-    if (pianoRoll_.isOpen())
-        closePianoRoll();
+    closeClipEditor();
     selectedAutomationLane_ = id;
     automationLanes_.setExpanded(track->id, true);
     syncAutomationLanes();

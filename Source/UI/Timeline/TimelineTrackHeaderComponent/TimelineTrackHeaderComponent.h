@@ -16,9 +16,11 @@
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/MidiDestinationPicker.h"
 #include "UI/Timeline/TrackChannelLinkSurface.h"
+#include "UI/Timeline/TrackDrumMachineButton.h"
 #include "UI/Timeline/TrackPolySwitch.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -424,18 +426,20 @@ struct TrackHeaderHost {
     /** The MIDI inputs connected now, for the routing pane's Input picker; empty when there are none to pick. */
     virtual std::vector<MidiInputDevice> getMidiInputDevices() { return {}; }
 
-    /** NOTE AUDITION — sends one preview note-on (`noteOn` true) or note-off into the track's bound
-     *  Track In node, so it reaches exactly the destination modules the track's clips play through
-     *  (they are graph connections FROM that node — see setMidiDestinationConnected above). Driven by
-     *  the piano roll's note click (PianoRollComponent::onAuditionNote, forwarded by
-     *  TimelinePanelComponent). A no-op when the track's binding no longer resolves — clicking a note
-     *  on an unbound track must be silent, never a crash.
-     *
-     *  Called on the MESSAGE thread; the implementation hands the event to the node through a
-     *  wait-free FIFO (TimelineMidiSourceModule::pushAuditionNote) rather than touching the audio
-     *  thread. Non-pure with an inert default so every existing TrackHeaderHost implementer — and
-     *  every test stub — keeps compiling. */
+    /** NOTE AUDITION: one preview note-on (`noteOn` true) or note-off into the track's bound Track In node, so it
+     *  reaches the modules the track's clips play through. Driven by the clip editors' note clicks (forwarded by
+     *  TimelinePanelComponent). A no-op when the binding no longer resolves. Message thread; the event reaches the
+     *  node through a wait-free FIFO. Non-pure with an inert default so test stubs keep compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
+
+    /** True when the track's instrument is a Drum Kit: its clips open in the drum machine, not the piano roll. */
+    virtual bool isDrumKitTrack(synth::TrackId) const { return false; }
+
+    /** CLIP PREVIEW (the drum machine's Play clip): loops [startBeat, endBeat) of the track on its Track In while the
+     *  transport is stopped; false when nothing can play it. clipPreviewBeat is NaN when none runs. Inert defaults. */
+    virtual bool startClipPreview(synth::TrackId, double /*startBeat*/, double /*endBeat*/) { return false; }
+    virtual void stopClipPreview(synth::TrackId) {}
+    virtual double clipPreviewBeat(synth::TrackId) { return std::numeric_limits<double>::quiet_NaN(); }
 
     /** docs/mixer/track-presets.md: true when `track`'s bound node has a channel of its own
      *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as
@@ -650,6 +654,8 @@ public:
     // On every track (the Unassigned section only with lanes); the arrow and A only request a
     // toggle, the panel owns the fold state and answers with setAutomationExpanded().
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    /** The "Drum machine" button (Drum Kit tracks only) was pressed. */
+    std::function<void(synth::TrackId)> onDrumMachineRequested;
     std::function<void(synth::TrackId)> onAutomationToggleSelectionRequested; // the A key: the whole selection
     std::function<void()> onSelectAllTracksRequested;                         // Cmd+A on a row
     // "Add automation..." from the context menu: the panel opens the track's parameter picker.
@@ -756,6 +762,7 @@ public:
     ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
     TrackShowModuleButton& getShowModuleButton() noexcept { return showModuleButton_; }
+    TrackDrumMachineButton& getDrumMachineButton() noexcept { return drumButton_; }
     TrackPolySwitch& getPolySwitch() noexcept { return polySwitch_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
@@ -939,10 +946,7 @@ private:
     // See setShowContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
-    // See ContextMenuForwardingLabel/ContextMenuForwardingButton above — these four are the
-    // children with NO popup menu of their own, so a right-click on them forwards to
-    // showContextMenu(). bindingChip_ keeps its own Track In menu and colourSwatch_ (SwatchButton)
-    // keeps its own colour picker — neither changes here.
+    // The children with no popup menu of their own: a right-click on them forwards to showContextMenu().
     ContextMenuForwardingLabel nameLabel_{*this};
     SwatchButton colourSwatch_{*this};
     ContextMenuForwardingButton muteButton_{*this, "M"};
@@ -950,13 +954,14 @@ private:
     ContextMenuForwardingButton armButton_{*this, "R"};
     TrackFoldArrow foldArrow_;
     TrackShowModuleButton showModuleButton_;
+    TrackDrumMachineButton drumButton_;
+    synth::ui::FadeVisibility drumButtonFade_{&drumButton_};
     EdgeResizeHandle heightHandle_{EdgeResizeHandle::Axis::Vertical};
     void initHeightHandle();
     void refreshHeightHandleText();
     juce::String bindingText(const juce::String& actionId, const juce::KeyPress& fallback) const;
     juce::TextButton bindingChip_;
-    // The CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
-    // "which node feeds it". Hidden whenever the track reaches no channel yet.
+    // The CHANNEL chip: where this track's audio ends up (bindingChip_ says what feeds it); hidden with no channel.
     ChannelChipComponent channelChip_;
     // The chips and the fold arrow fade as the track gains or loses them (animation.md, "Fading things in and out").
     synth::ui::FadeVisibility foldArrowFade_{&foldArrow_};

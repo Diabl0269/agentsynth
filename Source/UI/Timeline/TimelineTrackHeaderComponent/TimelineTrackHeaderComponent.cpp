@@ -112,8 +112,15 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
     initHeightHandle();
     // The chips and the arrow fade as the track gains or loses them; their widths follow the fade so the row slides.
-    for (auto* fade : {&foldArrowFade_, &channelChipFade_, &polySwitchFade_})
+    for (auto* fade : {&foldArrowFade_, &channelChipFade_, &polySwitchFade_, &drumButtonFade_})
         fade->onFrame = [this] { resized(); };
+
+    // Drum Kit tracks only (refreshFromDoc shows it); it opens the drum machine on the clip under the playhead.
+    addChildComponent(drumButton_);
+    drumButton_.onClick = [this] {
+        if (onDrumMachineRequested)
+            onDrumMachineRequested(trackId_);
+    };
 
     // Ctrl+E's pointer and Tab twin. Its tooltip names the binding, so refreshFromDoc rebuilds it.
     addAndMakeVisible(showModuleButton_);
@@ -296,6 +303,12 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         resized(); // the switch shares the bottom row with the binding chip
     }
 
+    const bool showDrumButton = host_ != nullptr && !isSectionHeader() && host_->isDrumKitTrack(trackId_);
+    if (drumButtonFade_.isShown() != showDrumButton) {
+        drumButtonFade_.setShown(showDrumButton);
+        resized(); // the button shares the bottom row with the binding chip
+    }
+
     // Every track has the arrow (open, an empty track shows just "+ Add automation..."); the Unassigned
     // section only while it holds lanes.
     foldArrowFade_.setShown(!isSectionHeader() || !t->lanes.empty());
@@ -309,7 +322,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         for (juce::Component* hidden :
              {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&polySwitch_),
               static_cast<juce::Component*>(&muteButton_), static_cast<juce::Component*>(&soloButton_),
-              static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&showModuleButton_)})
+              static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&showModuleButton_),
+              static_cast<juce::Component*>(&drumButton_)})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");

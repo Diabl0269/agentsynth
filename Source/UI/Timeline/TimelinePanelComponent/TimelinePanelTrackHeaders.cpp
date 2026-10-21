@@ -8,6 +8,7 @@
 
 #include "AddTrackPicker.h"
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -364,6 +365,7 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
+    drum_->grid.refreshFromDoc();
 
     // Fold arrows, row positions and editor positions all follow the lanes' new state.
     if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr)
@@ -464,6 +466,7 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     header->setShortcutManager(shortcuts_);
     // The header only reports a fold-arrow press; this panel owns the fold state.
     header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+    header->onDrumMachineRequested = [this](synth::TrackId id) { openDrumMachineOnTrack(id); };
     header->onAutomationToggleSelectionRequested = [this](synth::TrackId id) { toggleAutomationForSelection(id); };
     header->onSelectAllTracksRequested = [this] { selectAllTracks(); };
     // The header menu's "Add automation...": the picker opens anchored on the header row.

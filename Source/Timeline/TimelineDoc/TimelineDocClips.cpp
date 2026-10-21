@@ -157,6 +157,71 @@ bool TimelineDoc::setClipMuted(ClipId id, bool muted) {
     });
 }
 
+bool TimelineDoc::setClipStepsPerBar(ClipId id, int stepsPerBar) {
+    if (!Clip::isValidStepsPerBar(stepsPerBar))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->stepsPerBar == stepsPerBar)
+        return true;
+
+    return applyMutation([&] {
+        clip->stepsPerBar = stepsPerBar;
+        syncLinkedClips(*clip); // the drum grid's resolution is shared content
+        return true;
+    });
+}
+
+namespace {
+// Adds or removes `pitch` in a sorted, unique list. Returns false when nothing changed.
+bool setPitchMembership(std::vector<int>& list, int pitch, bool member) {
+    const auto it = std::lower_bound(list.begin(), list.end(), pitch);
+    const bool present = it != list.end() && *it == pitch;
+    if (present == member)
+        return false;
+    if (member)
+        list.insert(it, pitch);
+    else
+        list.erase(it);
+    return true;
+}
+} // namespace
+
+bool TimelineDoc::setClipPitchMuted(ClipId id, int pitch, bool muted) {
+    if (pitch < 0 || pitch > 127)
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const bool present = std::binary_search(clip->mutedPitches.begin(), clip->mutedPitches.end(), pitch);
+    if (present == muted)
+        return true;
+
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->mutedPitches, pitch, muted);
+        syncLinkedClips(*clip);
+        return changed;
+    });
+}
+
+bool TimelineDoc::setClipPitchSoloed(ClipId id, int pitch, bool soloed) {
+    if (pitch < 0 || pitch > 127)
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const bool present = std::binary_search(clip->soloPitches.begin(), clip->soloPitches.end(), pitch);
+    if (present == soloed)
+        return true;
+
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->soloPitches, pitch, soloed);
+        syncLinkedClips(*clip);
+        return changed;
+    });
+}
+
 std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) { return splitClipImpl(id, atBeat, 0.0); }
 
 // `secondsPerBeat` 0 is splitClip's documented behaviour: the right half's sourceStartSeconds is
@@ -213,6 +278,9 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         // own muted flag rides along in the struct copies above, including the straddling note's
         // two halves.
         right.muted = clip->muted;
+        right.stepsPerBar = clip->stepsPerBar;
+        right.mutedPitches = clip->mutedPitches;
+        right.soloPitches = clip->soloPitches;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -308,6 +376,9 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         // Copied field by field rather than by struct assignment (the ids must not be), so `muted`
         // has to be listed here explicitly — a duplicate of a muted clip is muted.
         dup.muted = clip->muted;
+        dup.stepsPerBar = clip->stepsPerBar;
+        dup.mutedPitches = clip->mutedPitches;
+        dup.soloPitches = clip->soloPitches;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;

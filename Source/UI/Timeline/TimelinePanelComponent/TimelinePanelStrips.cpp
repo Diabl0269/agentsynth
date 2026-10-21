@@ -6,6 +6,7 @@
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineSnapNames.h"
@@ -137,6 +138,8 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     // The clip lanes fade out as the roll fades in (FadeVisibility); both are laid out at once, only the opacity runs.
     clipLaneFade_.setShown(false);
     rollFade_.setShown(true);
+    playhead_.setLocalPlayheadClient(&pianoRoll_);
+    pianoRoll_.setDrumKitTrack(isDrumKitClip(id));
     pianoRoll_.grabKeyboardFocus();
     // The lanes region is carved DIFFERENTLY once the roll is open — it reserves a toolbar row above
     // the ruler (see resized()) — and isOpen() is what that carve-up branches on, so the layout has

@@ -45,6 +45,7 @@ struct ChipSpec {
 
 constexpr ChipSpec kChipSpecs[] = {
     {HeaderButtonId::Back, "Back to clips", "pianoRollBackChip", false},
+    {HeaderButtonId::DrumMachine, "Show as drum machine", "pianoRollDrumMachineChip", false},
     {HeaderButtonId::Quantise, "Quantize note starts", "pianoRollQuantiseChip", false},
     {HeaderButtonId::QuantiseLength, "Quantize note lengths", "pianoRollQuantiseLengthChip", false},
     {HeaderButtonId::QuantisePitches, "Quantize note pitches to the scale", "pianoRollQuantisePitchChip", false},
@@ -139,6 +140,16 @@ void PianoRollComponent::initHeaderChips() {
 void PianoRollComponent::layoutHeaderChips() {
     for (const auto& spec : kChipSpecs)
         headerChips_[chipIndex(spec.id)]->setBounds(headerButtonBoundsFor(spec.id));
+    headerChips_[chipIndex(HeaderButtonId::DrumMachine)]->setVisible(drumKitTrack_);
+}
+
+// The chip exists for a clip on a Drum Kit track only; the header re-lays out so the others make room for it.
+void PianoRollComponent::setDrumKitTrack(bool isDrumKit) {
+    if (drumKitTrack_ == isDrumKit)
+        return;
+    drumKitTrack_ = isDrumKit;
+    resized();
+    repaint();
 }
 
 // The three toggle chips mirror the roll's own state (the panel's logical target, the row filter, the
@@ -191,6 +202,10 @@ void PianoRollComponent::activateHeaderButton(HeaderButtonId which) {
     case HeaderButtonId::Humanize:
         showHumanizeMenu();
         break;
+    case HeaderButtonId::DrumMachine:
+        if (onDrumMachineRequested && clipId_.isValid())
+            onDrumMachineRequested(clipId_); // the roll is closed from here on, like Back
+        return;
     case HeaderButtonId::None:
         break;
     }
@@ -216,6 +231,8 @@ juce::String PianoRollComponent::headerTooltipText(HeaderButtonId which) const {
     case HeaderButtonId::Humanize:
         return juce::String::fromUTF8("Humanize velocities \xE2\x80\x94 adds a small random offset to the selected "
                                       "notes, or to every note when none is selected");
+    case HeaderButtonId::DrumMachine:
+        return "Show this clip as a drum machine step grid";
     case HeaderButtonId::None:
         break;
     }

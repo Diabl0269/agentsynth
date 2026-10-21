@@ -65,6 +65,20 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
 
 // The Mixer category, split out of getActionDescription to keep that function under the function-size
 // cap. Empty when `actionId` is not a Mixer action.
+juce::String drumMachineActionName(const juce::String& actionId) {
+    if (actionId == "drumMachineToggleHit")
+        return "Toggle Hit at Focused Step";
+    if (actionId == "drumMachineToggleAccent")
+        return "Toggle Accent at Focused Step";
+    if (actionId == "drumMachineLouder")
+        return "Make Focused Hit Louder";
+    if (actionId == "drumMachineSofter")
+        return "Make Focused Hit Softer";
+    if (actionId == "drumMachinePlayClip")
+        return "Play or Stop the Clip";
+    return {};
+}
+
 juce::String mixerActionName(const juce::String& actionId) {
     if (actionId == "mixerToggleInserts")
         return "Show or Hide Mixer Inserts";
@@ -247,6 +261,15 @@ juce::String clipKeyboardActionName(const juce::String& actionId) {
         return "Move Clip Later by One Grid Step";
     if (actionId == "timelineClipDuplicateLinked")
         return "Duplicate Selected Clips as Linked Copies";
+    return {};
+}
+
+// The Drum Machine, Mixer and Layout Editor categories, tried in turn.
+juce::String nonTimelineActionName(const juce::String& actionId) {
+    for (const auto& name :
+         {drumMachineActionName(actionId), mixerActionName(actionId), layoutEditorActionName(actionId)})
+        if (name.isNotEmpty())
+            return name;
     return {};
 }
 
@@ -433,9 +456,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Toggle Scale Panel";
     if (actionId == "pianoRollToggleVelocityLane")
         return "Show or Hide Velocity Strip";
-    if (const auto mixer = mixerActionName(actionId); mixer.isNotEmpty())
-        return mixer;
-    if (const auto editor = layoutEditorActionName(actionId); editor.isNotEmpty())
-        return editor;
+    if (const auto other = nonTimelineActionName(actionId); other.isNotEmpty())
+        return other;
     return actionId;
 }

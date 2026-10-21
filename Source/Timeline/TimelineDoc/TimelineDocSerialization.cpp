@@ -111,6 +111,51 @@ bool readOptionalArray(const juce::var& v, const juce::Array<juce::var>*& out) {
     return out != nullptr;
 }
 
+// A clip's drum-machine pitch list: absent -> empty; present, an array of distinct ints in 0..127
+// (stored sorted).
+bool readPitchList(const juce::var& v, std::vector<int>& out) {
+    const juce::Array<juce::var>* list = nullptr;
+    if (!readOptionalArray(v, list))
+        return false;
+    out.clear();
+    if (list == nullptr)
+        return true;
+    for (const auto& item : *list) {
+        int pitch = 0;
+        if (!readInt(item, pitch) || pitch < 0 || pitch > 127)
+            return false;
+        out.push_back(pitch);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return true;
+}
+
+bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
+    if (!readOptionalInt(obj.getProperty("stepsPerBar"), clip.stepsPerBar) ||
+        !Clip::isValidStepsPerBar(clip.stepsPerBar))
+        return false;
+    return readPitchList(obj.getProperty("mutedPitches"), clip.mutedPitches) &&
+           readPitchList(obj.getProperty("soloPitches"), clip.soloPitches);
+}
+
+void writePitchList(juce::DynamicObject& obj, const char* key, const std::vector<int>& pitches) {
+    if (pitches.empty())
+        return;
+    juce::Array<juce::var> items;
+    for (int pitch : pitches)
+        items.add(pitch);
+    obj.setProperty(key, items);
+}
+
+// Written only when non-default, so a clip no drum machine touched serialises exactly as before.
+void writeClipDrumFields(juce::DynamicObject& obj, const Clip& clip) {
+    if (clip.stepsPerBar != Clip::kDefaultStepsPerBar)
+        obj.setProperty("stepsPerBar", clip.stepsPerBar);
+    writePitchList(obj, "mutedPitches", clip.mutedPitches);
+    writePitchList(obj, "soloPitches", clip.soloPitches);
+}
+
 // A lane's modulatorOrder: absent -> empty (graph order); present, an array of strings.
 bool readModulatorOrder(const juce::var& v, std::vector<juce::String>& out) {
     const juce::Array<juce::var>* list = nullptr;
@@ -221,6 +266,7 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("fadeInBeats", clip.fadeInBeats);
             c->setProperty("fadeOutBeats", clip.fadeOutBeats);
             c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
+            writeClipDrumFields(*c, clip);
 
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {
@@ -403,7 +449,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         return false;
                     if (!isValidAssetRefString(clip.assetRef) || !std::isfinite(clip.gainDb) ||
                         !isFiniteAtOrAfterZero(clip.fadeInBeats) || !isFiniteAtOrAfterZero(clip.fadeOutBeats) ||
-                        !isFiniteAtOrAfterZero(clip.sourceStartSeconds))
+                        !isFiniteAtOrAfterZero(clip.sourceStartSeconds) || !readClipDrumFields(*cObj, clip))
                         return false;
 
                     const juce::Array<juce::var>* noteList = nullptr;

@@ -37,6 +37,7 @@ One rule per bullet; mechanism and history live in the linked docs.
 - **Nothing sits left of or above (0,0), and the canvas never clamps to a fixed size**: use `clampDragDeltaToCanvas` and `slidePatchForEdgeDrop`. → [layout](../../docs/layout/layout.md#canvas-frame)
 - **Canvas-initiated card moves run in one `CardGlideAnimator::Scope`**; geometry is final at once, never animate bounds. → [layout](../../docs/layout/layout.md#making-room-when-something-grows)
 - **Card outlines take `synth::ui::cardBodyRect` and `metrics.cornerRadius`**, never literals. → [insert-motion](../../docs/layout/insert-motion.md)
+- **TimelinePanelComponent asks `clipEditorOpen()` whether a clip editor (piano roll or drum machine) covers the lanes**, never `pianoRoll_.isOpen()` alone; a new editor joins that predicate and the playhead's local client. → [drum-machine](../../docs/timeline/drum-machine.md#how-it-is-hosted)
 - **Every new control: keyboard path, `paintFocusRing`, `setTitle` name, tooltip; dialogs Tab in visual order and close on Escape.** → [accessibility](../../docs/development/accessibility.md)
 - **One shared component per control kind** (`AppLookAndFeel`, `IconLibrary`, `Layout/` widgets); colours from theme tokens (`themeOf(component)`), never literals. → [theming](../../docs/layout/theming.md#themed-widgets)
 - **UI text is never all caps** (`scripts/check-ui-caps.sh`); list arrow keys come from `synth::ui::ArrowKeyNavigation`. → [accessibility](../../docs/development/accessibility.md#arrow-keys-in-lists-of-controls)

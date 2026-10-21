@@ -31,7 +31,7 @@
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
-106 Source/Timeline/TimelineDoc/TimelineDoc.h
+101 Source/Timeline/TimelineDoc/TimelineDoc.h
 15 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
@@ -41,6 +41,6 @@
 33 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
 40 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
-24 Source/UI/Timeline/TimelinePlayheadOverlay.h
+23 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
-20 Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h
+3 Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h

@@ -19,7 +19,9 @@ public:
         juce::Component* card = nullptr; ///< Parent of every component the chrome adds; outlives it.
         AppUndoManager* undo = nullptr;  ///< Null: instrument loads record no undo step.
         juce::AudioProcessorGraph* graph = nullptr;
-        std::function<void()> kitChanged; ///< Called when the loaded instrument changed (may be empty).
+        std::function<void()> kitChanged;           ///< Called when the loaded instrument changed (may be empty).
+        std::function<bool()> drumMachineAvailable; ///< Drum Kit: does a track play it? (empty: no)
+        std::function<void()> openDrumMachine;      ///< Drum Kit: the "Drum machine" button was pressed.
     };
 
     virtual ~InstrumentChrome() = default;

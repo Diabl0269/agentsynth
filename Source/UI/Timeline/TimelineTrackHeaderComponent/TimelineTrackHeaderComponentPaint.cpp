@@ -128,6 +128,12 @@ void TimelineTrackHeaderComponent::resized() {
     showModuleButton_.setBounds(showSlot.withSizeKeepingCentre(
         TrackShowModuleButton::kSize, juce::jmin(TrackShowModuleButton::kSize, showSlot.getHeight())));
     bottomRow.removeFromRight(kRowPadding);
+    if (const float p = drumButtonFade_.progress(); p > 0.0f) { // the Drum Kit track's Drum machine button
+        const int width = juce::roundToInt(static_cast<float>(TrackShowModuleButton::kSize) * p);
+        drumButton_.setBounds(bottomRow.removeFromRight(width).withSizeKeepingCentre(
+            width, juce::jmin(TrackShowModuleButton::kSize, bottomRow.getHeight())));
+        bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
+    }
     if (const float p = channelChipFade_.progress(); p > 0.0f) { // the chip's share grows and shrinks with its fade
         channelChip_.setBounds(
             bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(bottomRow.getWidth() / 2) * p)));

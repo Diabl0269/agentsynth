@@ -41,7 +41,7 @@ void TimelinePanelComponent::noteTracksLeaving() {
     pendingTrackPicture_.reset();
     trackRowsAdded_.clear();
     trackRowsRemoved_.clear();
-    if (doc_ == nullptr || !canAnimateTrackGlide() || pianoRoll_.isOpen() || trackListMotionArea().isEmpty())
+    if (doc_ == nullptr || !canAnimateTrackGlide() || clipEditorOpen() || trackListMotionArea().isEmpty())
         return;
     TrackListPicture picture;
     picture.rows = trackListRows();
@@ -78,7 +78,7 @@ void TimelinePanelComponent::finishTrackListChange() {
     const auto added = std::exchange(trackRowsAdded_, {});
     const auto removed = std::exchange(trackRowsRemoved_, {});
     trackInsertArmed_ = false;
-    if (doc_ == nullptr || !canAnimateTrackGlide() || pianoRoll_.isOpen() || added.empty() == removed.empty())
+    if (doc_ == nullptr || !canAnimateTrackGlide() || clipEditorOpen() || added.empty() == removed.empty())
         return; // nothing came or went, or both did (lands at once)
 
     const auto area = trackListMotionArea();

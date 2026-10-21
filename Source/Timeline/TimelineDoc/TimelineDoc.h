@@ -185,6 +185,17 @@ struct Clip {
     // clip's flag (see splitClip / duplicateClip / joinClips). Additive field: absent in a file
     // loads as false, and kFormatVersion stays 1.
     bool muted = false;
+
+    // Drum-machine view of the clip: grid resolution and per-pitch mute/solo. Mute/solo is applied
+    // when the snapshot is built and never touches MidiNote::muted. Additive; written only when
+    // non-default.
+    static constexpr int kDefaultStepsPerBar = 16;
+    static constexpr bool isValidStepsPerBar(int steps) noexcept {
+        return steps == 8 || steps == 16 || steps == 32 || steps == 64;
+    }
+    int stepsPerBar = kDefaultStepsPerBar; // 8, 16, 32 or 64
+    std::vector<int> mutedPitches;         // sorted, unique, 0..127
+    std::vector<int> soloPitches;          // sorted, unique, 0..127
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -439,6 +450,11 @@ public:
     // Mutes / un-mutes the clip: a muted clip is excluded WHOLESALE from TimelineSnapshot (see
     // Clip::muted). Setting the flag it already has is a no-op — no revision bump, no notification.
     bool setClipMuted(ClipId id, bool muted);
+    // Drum-machine settings. stepsPerBar must be 8, 16, 32 or 64 and pitch 0..127, else false; a
+    // no-op change returns true without bumping the revision.
+    bool setClipStepsPerBar(ClipId id, int stepsPerBar);
+    bool setClipPitchMuted(ClipId id, int pitch, bool muted);
+    bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 
     const Clip* getClip(ClipId id) const;
     const Track* getTrackForClip(ClipId id) const;

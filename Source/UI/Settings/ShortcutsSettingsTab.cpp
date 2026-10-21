@@ -41,6 +41,8 @@ const char* persistedName(ShortcutCategory category) {
         return "Timeline";
     case ShortcutCategory::PianoRoll:
         return "PianoRoll";
+    case ShortcutCategory::DrumMachine:
+        return "DrumMachine";
     case ShortcutCategory::Mixer:
         return "Mixer";
     case ShortcutCategory::LayoutEditor:

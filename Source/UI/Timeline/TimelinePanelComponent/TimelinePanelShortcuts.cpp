@@ -6,6 +6,7 @@
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 
@@ -179,8 +180,9 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // targets inside the panel (same span, same setLoop the lane's callback performs).
     if (matchesAction(key, "timelineLoopSelection", plainKey('p')) && transport_ != nullptr) {
         std::optional<std::pair<double, double>> span;
-        if (pianoRoll_.isOpen() && doc_ != nullptr) {
-            if (const auto* clip = doc_->getClip(pianoRoll_.getClipId()))
+        if (clipEditorOpen() && doc_ != nullptr) {
+            const auto openClip = pianoRoll_.isOpen() ? pianoRoll_.getClipId() : drum_->grid.getClipId();
+            if (const auto* clip = doc_->getClip(openClip))
                 span = std::make_pair(clip->startBeat, clip->startBeat + clip->lengthBeats);
         } else {
             span = clipLaneArea_.getSelectedClipSpan();

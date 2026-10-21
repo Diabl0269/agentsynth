@@ -889,7 +889,7 @@ strings.
 | **Card parts: scope, response, LFO wave section, envelope view, More row, conditional section** | Fade in 160 ms / out 110 ms (plain 80 ms under Reduce Motion) with `FadeVisibility` while the card's height follows the fade; neighbours make room once per direction; lands at once off screen or under Animations Off; a swap of controls keeps its own motion; see [Fading things in and out](#fading-things-in-and-out) | `CardBlockFade` via `ModuleComponent`, `CardBody` |
 | **Pick on canvas overlay** | Fades in 160 ms / out 110 ms as one component, takes no click once ended, outlines stay until it has faded out | `PickTargetOverlay` via `FadeVisibility` |
 | **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
-| **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
+| **Timeline playhead** | 30 Hz vertical position line, **playing only** (or while a drum machine Play clip loop runs), repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent`; the morph map's arrow hold is the same pump and curve (`MorphMapGlide` via `MorphMap`) |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
 | **Macro fold** | Collapse: each module flies from its card into its preview box on the closed card (`easeInCubic`, 200 ms, 35 ms apart, all landed by 320 ms) while the dashed border shrinks around them. Expand: the reverse with the 8% bounce, the border growing ahead, each cable drawing out of its port (160 ms) once its module lands. Plain 80 ms fade under Reduce Motion; at once when Off or not on screen; undo and redo fold too; see [Macro fold](#macro-fold) | `MacroFoldAnimator` via `CardGlideAnimator` |
@@ -933,7 +933,7 @@ a duration:
 |---|---|---|---|
 | AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8x8 component | on completion or cancel |
 | A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
-| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING | a strip a few px wide, spanning the panel's ruler and lanes | on stop or pause, with one final strip |
+| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, or a drum machine Play clip loop runs | a strip a few px wide, spanning the panel's ruler and lanes | on stop or pause, with one final strip |
 
 `zoomSettleAnim` is **not** a third exception: it is a normal time-bounded `AnimationDriver` that
 restarts on every zoom event — the restart-on-event IS the debounce — and its `onUpdate` is a no-op,
@@ -955,7 +955,7 @@ A third exception is not granted just because the second was. The playhead earne
 three clauses, all enforced in code and asserted in `Tests/UI/Timeline/TimelinePlayheadTests.cpp`:
 
 1. **Playing only.** The 30 Hz `juce::Timer` starts on play and stops on stop or pause, so an idle app
-   repaints nothing (`ZeroRepaintsOver100IdleFrames`).
+   repaints nothing (`ZeroRepaintsOver100IdleFrames`). A Play clip loop counts as playing (`setClipPreviewActive`).
 2. **Strip only.** A frame repaints the *union of the old and new line strips* (`kStripHalfWidth` px
    either side of the line), never the component; a frame whose rounded x did not move requests nothing
    (`PlayingRequestsConfinedStrips`).

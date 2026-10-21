@@ -92,6 +92,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/modulator-row-identity.md`](timeline/modulator-row-identity.md) — a modulator row replaced in place (Change source, Change parameter, their undo) keeps its row, slot and fold
 - [`docs/timeline/lane-controls.md`](timeline/lane-controls.md) — the control chips on a lane header and mod row: the catalogue, the shown set per lane kind, the "+" row and Edit controls
 - [`docs/timeline/piano-roll.md`](timeline/piano-roll.md) — the per-clip MIDI note editor
+- [`docs/timeline/drum-machine.md`](timeline/drum-machine.md) — the step-grid editor for a Drum Kit track's clips: cell mapping, accent, per-drum mute/solo, steps per bar
 - [`docs/timeline/scale-assist.md`](timeline/scale-assist.md) — the Scale Assist panel, the scale engine, pitch-row collapse, random generation
 - [`docs/timeline/focus.md`](timeline/focus.md) — which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on
 
