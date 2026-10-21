@@ -9,6 +9,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
@@ -400,11 +401,21 @@ void TimelineClipLaneArea::finishRename(bool commit) {
 // instead — but a test that right-clicked an actual clip would SIGSEGV there while passing
 // locally.
 void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
-    if (doc_ == nullptr)
+    auto menu = buildClipContextMenu(id, localPos);
+    if (menu.getNumItems() == 0)
         return;
+    const auto options = synth::ui::contextMenuOptions(keyboardMenuAnchor_);
+    menu.showMenuAsync(options);
+}
+
+// The menu itself, apart from showing it, so a test can walk the real items (and run their actions)
+// without the display a shown menu needs.
+juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
+    if (doc_ == nullptr)
+        return {};
     const auto* clip = doc_->getClip(id);
     if (clip == nullptr)
-        return;
+        return {};
 
     const double pointerBeat = viewState_.xToBeat((double)localPos.x);
     const double snappedPointer = snappedBeatAt(pointerBeat);
@@ -429,6 +440,17 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.addItem(glue);
 
     menu.addItem("Duplicate", [this, id] { applyClipContextChoice(id, ClipContextChoice::Duplicate, 0.0); });
+    // Greyed for an audio clip (only MIDI clips link). "Make unique" shows only on a linked clip.
+    juce::PopupMenu::Item linkedDup("Duplicate linked");
+    linkedDup.setEnabled(clip->assetRef.isEmpty());
+    const juce::KeyPress linkedKey('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    const auto boundKey = shortcuts_ != nullptr ? shortcuts_->getBinding("timelineClipDuplicateLinked") : linkedKey;
+    if (boundKey.isValid())
+        linkedDup.shortcutKeyDescription = boundKey.getTextDescriptionWithIcons();
+    linkedDup.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::DuplicateLinked, 0.0); };
+    menu.addItem(linkedDup);
+    if (doc_->countLinkedClips(id) > 0)
+        menu.addItem("Make unique", [this, id] { applyClipContextChoice(id, ClipContextChoice::MakeUnique, 0.0); });
     // One toggling item rather than two, labelled for what the click will DO.
     menu.addItem(clip->muted ? "Unmute" : "Mute",
                  [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
@@ -449,9 +471,7 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
         menu.addSeparator();
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
-
-    const auto options = synth::ui::contextMenuOptions(keyboardMenuAnchor_);
-    menu.showMenuAsync(options);
+    return menu;
 }
 
 bool TimelineClipLaneArea::showContextMenuForKeyboardFocus() {
@@ -501,6 +521,25 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
             mutate();
         if (newId.isValid())
             selection_.setSelection({newId});
+        break;
+    }
+    case ClipContextChoice::DuplicateLinked: {
+        synth::ClipId newId;
+        auto mutate = [this, id, &newId] { newId = doc_->duplicateClipLinked(id); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        if (newId.isValid())
+            selection_.setSelection({newId});
+        break;
+    }
+    case ClipContextChoice::MakeUnique: {
+        auto mutate = [this, id] { doc_->makeClipUnique(id); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
         break;
     }
     case ClipContextChoice::Delete: {

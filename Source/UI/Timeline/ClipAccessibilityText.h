@@ -25,9 +25,9 @@ inline juce::String describeBarPosition(double beat, double beatsPerBar) {
 
 /** The spoken description of `clip` on `track`: kind, name, track and bar span. A clip ending on
  *  a bar line reads "bars 5 to 9" (the end is the boundary where the next bar begins); a muted
- *  clip adds ", muted". */
-inline juce::String describeClipForAccessibility(const synth::Clip& clip, const synth::Track& track,
-                                                 double beatsPerBar) {
+ *  clip adds ", muted", and a linked one ", linked with N other clips" (`linkedOthers` > 0). */
+inline juce::String describeClipForAccessibility(const synth::Clip& clip, const synth::Track& track, double beatsPerBar,
+                                                 int linkedOthers = 0) {
     const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
     const auto start = describeBarPosition(clip.startBeat, bpb);
     const auto end = describeBarPosition(clip.startBeat + clip.lengthBeats, bpb);
@@ -37,6 +37,8 @@ inline juce::String describeClipForAccessibility(const synth::Clip& clip, const 
     text += wholeBars ? "bars " + start + " to " + end : "from bar " + start + " to bar " + end;
     if (clip.muted)
         text += ", muted";
+    if (linkedOthers > 0)
+        text += ", linked with " + juce::String(linkedOthers) + (linkedOthers == 1 ? " other clip" : " other clips");
     return text;
 }
 

@@ -118,7 +118,9 @@ juce::String buildTrackBlock(const Track& track, const std::unordered_map<juce::
             juce::StringArray windows;
             int totalNotes = 0;
             for (const auto& clip : track.clips) {
-                windows.add(formatNumber(clip.startBeat) + "-" + formatNumber(clip.startBeat + clip.lengthBeats));
+                // A linked clip shares its notes with its copies, so editing one edits them all.
+                windows.add(formatNumber(clip.startBeat) + "-" + formatNumber(clip.startBeat + clip.lengthBeats) +
+                            (clip.linkGroup != 0 ? " (linked)" : ""));
                 totalNotes += static_cast<int>(clip.notes.size());
             }
             const juce::String clipWord = track.clips.size() == 1 ? " clip @ " : " clips @ ";

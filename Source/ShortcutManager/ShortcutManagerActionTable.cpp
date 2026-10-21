@@ -181,6 +181,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"timelineClipOpen", ShortcutCategory::Timeline},
             {"timelineClipMoveEarlier", ShortcutCategory::Timeline},
             {"timelineClipMoveLater", ShortcutCategory::Timeline},
+            // Linked copies of the selected clips (Shift+Cmd+D), resolved by TimelineClipLaneArea.
+            {"timelineClipDuplicateLinked", ShortcutCategory::Timeline},
             // The focused automation lane up or down within its track (Cmd+Alt+Up / Down).
             {"timelineMoveLaneUp", ShortcutCategory::Timeline},
             {"timelineMoveLaneDown", ShortcutCategory::Timeline},

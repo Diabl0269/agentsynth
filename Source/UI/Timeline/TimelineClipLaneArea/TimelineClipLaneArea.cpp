@@ -394,6 +394,12 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     const auto layout = getRowLayout();
     paintAutomationRows(g, layout);
     const auto& tracks = doc_->getTracks();
+    // Group sizes once per paint, so a clip's link mark is a map lookup rather than a doc scan.
+    linkGroupSizes_.clear();
+    for (const auto& track : tracks)
+        for (const auto& clip : track.clips)
+            if (clip.linkGroup != 0)
+                ++linkGroupSizes_[clip.linkGroup];
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         const auto& track = tracks[(size_t)trackIndex];
         const auto bounds = rowBounds(layout, trackIndex);
@@ -480,14 +486,22 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         }
     }
 
+    const auto group = linkGroupSizes_.find(clip.linkGroup);
+    const bool linked = clip.linkGroup != 0 && group != linkGroupSizes_.end() && group->second > 1;
+    const auto markBounds = linked ? linkMarkBounds(rect) : juce::Rectangle<int>();
     if (rect.getWidth() > kMinWidthForName && clip.name.isNotEmpty()) {
         // Fixed black, not a theme token, for the same reason as the note-preview lines above: the
         // label sits on `fill` (an arbitrary per-track hue), so its contrast need is independent of
         // which app theme is active.
         g.setColour(juce::Colours::black.withAlpha(clip.muted ? kMutedClipLabelAlpha : 0.8f));
         g.setFont(juce::Font(11.0f));
-        g.drawText(clip.name, rect.reduced(4, 2), juce::Justification::topLeft, true);
+        auto nameArea = rect.reduced(4, 2);
+        if (!markBounds.isEmpty())
+            nameArea.setRight(markBounds.getX() - 2); // the name never runs under the link mark
+        g.drawText(clip.name, nameArea, juce::Justification::topLeft, true);
     }
+    if (!markBounds.isEmpty())
+        paintLinkMark(g, rect, track.muted || clip.muted);
 }
 
 juce::String TimelineClipLaneArea::emptyRowHintFor(synth::TrackKind kind) {

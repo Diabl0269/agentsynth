@@ -146,6 +146,7 @@ struct MidiNote {
 struct Clip {
     ClipId id;
     juce::String name;
+    std::int64_t linkGroup = 0; // 0 = not linked; MIDI clips sharing a non-zero value share notes and length
     double startBeat = 0.0;
     double lengthBeats = 4.0;
     std::vector<MidiNote> notes;
@@ -469,6 +470,12 @@ public:
     // notes — each of which keeps its own muted flag. Rejects if the track is already at
     // kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
+    // duplicateClip whose copy shares the source's link group. MIDI clips only (invalid id for audio).
+    ClipId duplicateClipLinked(ClipId id);
+    // Takes the clip out of its link group, keeping its notes; false when it is not linked.
+    bool makeClipUnique(ClipId id);
+    // How many OTHER clips share this clip's link group; 0 when it is unlinked or missing.
+    int countLinkedClips(ClipId id) const;
 
     // -- Ranges (the Range tool's composed edits; see TimelineDocRanges.cpp) -----------------
     // Every call below takes the caller's `secondsPerBeat` (finite, > 0, else rejected) — this doc
@@ -749,6 +756,9 @@ private:
     static std::vector<Track> automationTracksLast(std::vector<Track> list);
     // splitClip's body; `secondsPerBeat` 0 keeps sourceStartSeconds unchanged.
     std::pair<ClipId, ClipId> splitClipImpl(ClipId id, double atBeat, double secondsPerBeat);
+    ClipId duplicateClipImpl(ClipId id, bool linked);
+    void syncLinkedClips(const Clip& source);
+    void dissolveLoneLinkGroups();
 
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;

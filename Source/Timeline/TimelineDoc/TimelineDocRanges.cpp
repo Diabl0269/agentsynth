@@ -64,6 +64,7 @@ bool TimelineDoc::trimClipStart(ClipId id, double newStartBeat, double secondsPe
         moved.startBeat = newStartBeat;
         moved.lengthBeats = end - newStartBeat;
         moved.fadeInBeats = 0.0;
+        moved.linkGroup = 0; // a cut edge is new content: the clip leaves its link group
         if (moved.assetRef.isNotEmpty())
             moved.sourceStartSeconds += trimmed * secondsPerBeat;
         owner->clips.erase(owner->clips.begin() + index);
@@ -110,6 +111,7 @@ bool TimelineDoc::resizeClipLeft(ClipId id, double newStartBeat) {
         moved.notes = std::move(kept);
         moved.startBeat = newStartBeat;
         moved.lengthBeats = end - newStartBeat;
+        moved.linkGroup = 0; // the left edge re-bases every note: the clip leaves its link group
         owner->clips.erase(owner->clips.begin() + index);
         const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
         owner->clips.insert(pos, std::move(moved));
@@ -137,6 +139,7 @@ bool TimelineDoc::trimClipEnd(ClipId id, double newEndBeat) {
         clip->notes = std::move(kept);
         clip->lengthBeats = length; // length doesn't participate in the clip ordering
         clip->fadeOutBeats = 0.0;
+        clip->linkGroup = 0; // a cut is new content, like a split: the clip leaves its link group
         return true;
     });
 }
@@ -250,6 +253,7 @@ std::optional<Clip> TimelineDoc::clipToRange(const Clip& clip, double startBeat,
         return std::nullopt;
 
     Clip fragment = clip;
+    fragment.linkGroup = 0; // a detached copy belongs to no link group
     const double newStart = std::max(clip.startBeat, startBeat);
     const double newEnd = std::min(clipEnd, endBeat);
 

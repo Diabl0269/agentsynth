@@ -365,6 +365,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocCore.cpp
     Source/Timeline/TimelineDoc/TimelineDocInternal.h
     Source/Timeline/TimelineDoc/TimelineDocMarkers.cpp
+    Source/Timeline/TimelineDoc/TimelineDocLinkedClips.cpp
     Source/Timeline/TimelineDoc/TimelineDocNotes.cpp
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp

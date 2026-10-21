@@ -142,6 +142,7 @@ class TimelineClipLaneArea
     : public juce::Component
     , public juce::FileDragAndDropTarget
     , public KeyboardContextMenuProvider
+    , public juce::TooltipClient
     , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
@@ -413,7 +414,26 @@ public:
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
     // Every tool action is ALSO a menu item; see TimelineClipLaneEditTools.cpp for why Rename is
     // the one entry applyClipContextChoice treats as a no-op (its commit path is renameClip()).
-    enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete, ToggleMute, GlueWithNext, Rename };
+    enum class ClipContextChoice {
+        SplitAtPointer,
+        Duplicate,
+        Delete,
+        ToggleMute,
+        GlueWithNext,
+        Rename,
+        DuplicateLinked,
+        MakeUnique
+    };
+
+    // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).
+    juce::PopupMenu buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+    // Linked copies of the selected MIDI clips, tiled after the selection as one undo step; false if none.
+    bool duplicateLinkedSelection();
+    // Names the link mark under the pointer; empty anywhere else.
+    juce::String getTooltip() override;
+    juce::String linkTooltipAt(juce::Point<int> localPos) const;
+    // Where a linked clip painted at `clipRect` draws its link mark (empty when too narrow for one).
+    static juce::Rectangle<int> linkMarkBounds(juce::Rectangle<int> clipRect);
 
     // Applies one context-menu choice. `pointerBeat` is in absolute (doc) beats, UNSNAPPED — the
     // split case snaps it internally. One recordTimelineChange mutation, same as every other
@@ -655,6 +675,7 @@ private:
     void paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track, int trackIndex,
                    const TimelineRowLayout& layout);
     void paintMarquee(juce::Graphics& g);
+    void paintLinkMark(juce::Graphics& g, juce::Rectangle<int> clipRect, bool dimmed) const;
 
     // ---- Waveform + live-recording-strip painting ----
     // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
@@ -786,6 +807,7 @@ private:
     // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;
     std::map<juce::String, bool> assetExistsCache_;
+    std::map<std::int64_t, int> linkGroupSizes_; // rebuilt at the top of every paint()
 
     // ---- The live-recording strip ----
     LiveRecordingInfo liveRecording_;

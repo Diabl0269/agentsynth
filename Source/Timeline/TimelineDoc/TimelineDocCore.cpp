@@ -18,6 +18,7 @@ void TimelineDoc::removeListener(Listener* listener) {
 }
 
 void TimelineDoc::finishMutation() {
+    dissolveLoneLinkGroups(); // every mutation ends with no link group of fewer than two clips
     ++revision;
     listeners.call([this](Listener& l) { l.timelineChanged(*this); });
 }

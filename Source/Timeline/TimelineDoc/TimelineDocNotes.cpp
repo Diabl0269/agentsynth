@@ -22,7 +22,9 @@ NoteId TimelineDoc::addNote(ClipId clipId, const MidiNote& note) {
         MidiNote toInsert = note;
         toInsert.id = NoteId{nextNoteId++}; // ids are doc-assigned, never taken from the caller
         const auto pos = std::lower_bound(clip->notes.begin(), clip->notes.end(), toInsert, noteLess);
-        return clip->notes.insert(pos, toInsert)->id;
+        const NoteId added = clip->notes.insert(pos, toInsert)->id;
+        syncLinkedClips(*clip);
+        return added;
     });
 }
 
@@ -35,6 +37,7 @@ bool TimelineDoc::clearNotes(ClipId clipId) {
 
     return applyMutation([&] {
         clip->notes.clear();
+        syncLinkedClips(*clip);
         return true;
     });
 }
@@ -47,6 +50,7 @@ bool TimelineDoc::removeNote(NoteId id) {
 
     return applyMutation([&] {
         owner->notes.erase(owner->notes.begin() + (note - owner->notes.data()));
+        syncLinkedClips(*owner);
         return true;
     });
 }
@@ -71,6 +75,7 @@ bool TimelineDoc::moveNote(NoteId id, double newStartBeat, int newPitch) {
         owner->notes.erase(owner->notes.begin() + index);
         const auto pos = std::lower_bound(owner->notes.begin(), owner->notes.end(), moved, noteLess);
         owner->notes.insert(pos, std::move(moved));
+        syncLinkedClips(*owner);
         return true;
     });
 }
@@ -78,7 +83,8 @@ bool TimelineDoc::moveNote(NoteId id, double newStartBeat, int newPitch) {
 bool TimelineDoc::resizeNote(NoteId id, double newLengthBeats) {
     if (!isFinitePositive(newLengthBeats))
         return false;
-    auto* note = findNote(id);
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
     if (note == nullptr)
         return false;
     if (note->lengthBeats == newLengthBeats)
@@ -86,6 +92,7 @@ bool TimelineDoc::resizeNote(NoteId id, double newLengthBeats) {
 
     return applyMutation([&] {
         note->lengthBeats = newLengthBeats; // length doesn't participate in note ordering
+        syncLinkedClips(*owner);
         return true;
     });
 }
@@ -93,7 +100,8 @@ bool TimelineDoc::resizeNote(NoteId id, double newLengthBeats) {
 bool TimelineDoc::setNoteVelocity(NoteId id, int velocity) {
     if (velocity < 1 || velocity > 127)
         return false;
-    auto* note = findNote(id);
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
     if (note == nullptr)
         return false;
     if (note->velocity == velocity)
@@ -101,12 +109,14 @@ bool TimelineDoc::setNoteVelocity(NoteId id, int velocity) {
 
     return applyMutation([&] {
         note->velocity = velocity;
+        syncLinkedClips(*owner);
         return true;
     });
 }
 
 bool TimelineDoc::setNoteMuted(NoteId id, bool muted) {
-    auto* note = findNote(id);
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
     if (note == nullptr)
         return false;
     if (note->muted == muted)
@@ -114,6 +124,7 @@ bool TimelineDoc::setNoteMuted(NoteId id, bool muted) {
 
     return applyMutation([&] {
         note->muted = muted; // mute doesn't participate in note ordering
+        syncLinkedClips(*owner);
         return true;
     });
 }
@@ -149,6 +160,7 @@ bool TimelineDoc::quantiseNotes(ClipId clipId, double gridBeats, double strength
         // Lengths are untouched and every note moved independently, so the list needs a single
         // re-sort at the end rather than a re-position per note.
         std::stable_sort(clip->notes.begin(), clip->notes.end(), noteLess);
+        syncLinkedClips(*clip);
         return true;
     });
 }
@@ -178,6 +190,7 @@ bool TimelineDoc::quantiseNoteLengths(ClipId clipId, double gridBeats) {
         for (size_t i = 0; i < clip->notes.size(); ++i)
             clip->notes[i].lengthBeats = newLengths[i];
         // Lengths don't participate in note ordering (see resizeNote), so no re-sort is needed.
+        syncLinkedClips(*clip);
         return true;
     });
 }

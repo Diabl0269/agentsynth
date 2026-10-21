@@ -68,7 +68,7 @@ juce::String TimelineClipLaneArea::getKeyboardClipAccessibilityText() const {
     const auto* track = doc_->getTrackForClip(id);
     if (clip == nullptr || track == nullptr)
         return {};
-    return describeClipForAccessibility(*clip, *track, currentBeatsPerBar());
+    return describeClipForAccessibility(*clip, *track, currentBeatsPerBar(), doc_->countLinkedClips(id));
 }
 
 void TimelineClipLaneArea::setKeyboardClip(synth::ClipId id) {
@@ -173,6 +173,11 @@ bool TimelineClipLaneArea::handleKeyboardClipKey(const juce::KeyPress& key) {
             onReturnToTrackHeaderRequested(trackId);
         return true;
     }
+
+    // Acts on the whole selection, so it is resolved before the single keyboard-verb target.
+    const juce::KeyPress linkedKey('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    if (matchesClipAction(key, "timelineClipDuplicateLinked", linkedKey))
+        return duplicateLinkedSelection();
 
     const auto id = keyboardVerbTarget();
     if (!id.isValid())

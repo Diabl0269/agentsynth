@@ -329,6 +329,15 @@ Bounds, in the order they are checked:
 Any failure at any of those steps rejects the WHOLE batch, the same all-or-nothing contract every
 other op has.
 
+## Linked clips
+
+Every op adds new clips; none edits a clip that already exists, so an op never lands on a
+[linked clip](../timeline/linked-clips.md) and the grammar has no link field. Editing a linked clip
+edits its whole group: any later path that changes an existing clip's notes has to go through the
+`TimelineDoc` note mutators, which rewrite every member of the group in the same mutation (one undo
+step). The arrangement summary marks linked clips `(linked)` so the model knows a repeated pattern is
+shared.
+
 ## Sibling, never nested
 
 `timelineOps` sits **beside** a patch, never inside one. `validatePatch(trusted=false)` refuses a
