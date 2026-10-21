@@ -637,7 +637,7 @@ reference: [`lfo.md`](lfo.md).
 - **Old files**: `Step N Root`, `Step N Chord` and `Gate N` are read once on load into the pattern.
 - **Timing and sync**: as the Sequencer; the whole chord starts together and ends together after the gate.
 - **Width**: DOUBLE (560 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
-- **Card**: the Sequencer's, without the Slide lane (a polyphonic step has no legato); the chord shows over the bar. Picking chords on the card is the chord picker, not built yet ([sequencer-design.md](sequencer-design.md#chord-picker-next)).
+- **Card**: the Sequencer's, without the Slide lane (a polyphonic step has no legato); the chord shows over the bar. Chords are picked in the chord picker, which plays a chip's chord when you hover it ([sequencer-design.md](sequencer-design.md#poly-sequencer-chords)).
 
 ## Sample & Hold Module
 - **Source file**: `Source/Modules/SampleHoldModule.h`

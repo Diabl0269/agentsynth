@@ -9,6 +9,9 @@
 
 namespace synth {
 
+/** The MIDI channel the sequencer writes on. */
+inline constexpr int kSequencerMidiChannel = 1;
+
 /** The whole-pattern parameters, read once per block. */
 struct SequencerSettings {
     bool poly = false;
@@ -31,6 +34,9 @@ public:
     void flush(juce::MidiBuffer& midi);
 
     bool hasHeldNotes() const noexcept { return pendingCount_ > 0; }
+
+    /** Whether `note` is among the notes whose note-off is still to come. */
+    bool isHolding(int note) const noexcept;
 
     /** Plays every step hit inside the block's segments, in time order, and the note-offs that fall in the block. */
     void renderBlock(const SequencerClockBlock& block, const SequencerPattern& pattern, const SequencerScaleSnap& snap,

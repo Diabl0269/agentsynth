@@ -5,6 +5,7 @@
 #include "SequencerClock.h"
 #include "SequencerPattern.h"
 #include "SequencerPlayer.h"
+#include "SequencerPreview.h"
 #include "SequencerScaleSnap.h"
 #include <atomic>
 
@@ -41,6 +42,14 @@ public:
     /** Bumps on every setPattern(); the card polls it to know when to redraw. */
     int patternGeneration() const noexcept { return generation_.load(std::memory_order_acquire); }
 
+    /** Message thread: plays these notes (at most 8) through the output for about 300 ms, whether Run is on or off,
+     *  replacing any earlier preview. Does nothing while the module is bypassed. */
+    void previewNotes(const int* notes, int count, float velocity) noexcept {
+        preview_.request(notes, count, velocity);
+    }
+    /** Message thread: ends the preview now. */
+    void stopPreview() noexcept { preview_.request(nullptr, 0, 0.0f); }
+
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
@@ -59,6 +68,7 @@ protected:
 
 private:
     SequencerSettings readSettings() const;
+    void renderPattern(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
     void stopOutput(juce::MidiBuffer& midi);
 
     const bool poly_;
@@ -69,6 +79,7 @@ private:
     SequencerClock clock_;
     SequencerPlayer player_;
     SequencerScaleSnap snap_;
+    SequencerPreview preview_;
     double sampleRate_ = 44100.0;
 
     juce::AudioParameterBool* runParam_ = nullptr;

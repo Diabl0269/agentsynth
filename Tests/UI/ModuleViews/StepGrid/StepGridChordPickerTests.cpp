@@ -173,3 +173,98 @@ TEST(StepGridChordPicker, TheMonoSequencerHasNoPickerAndTheStepReadsItsChordAlou
     poly.module->setPattern(pattern);
     EXPECT_NE(poly.grid->describeFocus().indexOf(", chord "), -1);
 }
+
+namespace {
+
+struct Block {
+    std::vector<int> ons;
+    std::vector<int> offs;
+};
+
+// Renders one block of the module and returns the notes it started and ended.
+Block renderBlock(synth::SequencerModuleBase& module) {
+    juce::AudioBuffer<float> buffer(2, 256);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+    Block block;
+    for (const auto meta : midi) {
+        const auto msg = meta.getMessage();
+        if (msg.isNoteOn())
+            block.ons.push_back(msg.getNoteNumber());
+        else if (msg.isNoteOff())
+            block.offs.push_back(msg.getNoteNumber());
+    }
+    std::sort(block.ons.begin(), block.ons.end());
+    std::sort(block.offs.begin(), block.offs.end());
+    return block;
+}
+
+void moveOver(synth::ui::StepGridChordPicker& picker, juce::Point<int> p) {
+    const auto e = cardbody_test::mouseAt(picker, p.toFloat(), juce::ModifierKeys());
+    picker.mouseEnter(e);
+    picker.mouseMove(e);
+}
+
+void settle(int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil(ms); }
+
+std::vector<int> chordAt(SeqCard& c, SequencerChord chord, int step) {
+    const auto notes = synth::sequencerChordNotes(chord, c.grid->playedPitchOf(step), synth::makeScale(0, 0),
+                                                  c.module->getPattern().seed, step);
+    std::vector<int> out(notes.notes.begin(), notes.notes.begin() + notes.count);
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+} // namespace
+
+TEST(StepGridChordPicker, HoveringAChipPlaysItsChordAfterTheDebounceAndLeavingOrClosingStopsIt) {
+    SeqCard c("Poly Sequencer");
+    c.setChoice("scaleRoot", "C");
+    c.setChoice("scale", "Major");
+    c.grid->poll();
+    c.module->prepareToPlay(44100.0, 256);
+    auto open = std::make_unique<Open>(c, 2);
+    auto& picker = *open->picker;
+
+    const auto seventh = picker.chipBounds(1, 0).getCentre();
+    moveOver(picker, seventh);
+    EXPECT_TRUE(renderBlock(*c.module).ons.empty()) << "nothing plays before the pointer has rested";
+    settle(150);
+    const auto played = renderBlock(*c.module);
+    EXPECT_EQ(played.ons, chordAt(c, SequencerChord::ScaleSeventh, 2));
+    EXPECT_FALSE(played.ons.empty());
+
+    moveOver(picker, {1, 1}); // the gap outside every chip
+    const auto stopped = renderBlock(*c.module);
+    EXPECT_EQ(stopped.offs, played.ons);
+    EXPECT_TRUE(stopped.ons.empty());
+
+    moveOver(picker, seventh);
+    settle(150);
+    EXPECT_EQ(renderBlock(*c.module).ons, played.ons);
+    open.reset(); // closing the picker ends the sound
+    EXPECT_EQ(renderBlock(*c.module).offs, played.ons);
+}
+
+TEST(StepGridChordPicker, OnlyTheChipThePointerRestsOnPlaysAndTheKeysAuditionToo) {
+    SeqCard c("Poly Sequencer");
+    c.setChoice("scaleRoot", "C");
+    c.setChoice("scale", "Major");
+    c.grid->poll();
+    c.module->prepareToPlay(44100.0, 256);
+    Open open(c, 0);
+    auto& picker = *open.picker;
+
+    moveOver(picker, picker.chipBounds(0, 0).getCentre());
+    moveOver(picker, picker.chipBounds(1, 0).getCentre());
+    moveOver(picker, picker.chipBounds(2, 1).getCentre()); // all within the wait
+    settle(150);
+    EXPECT_EQ(renderBlock(*c.module).ons, chordAt(c, SequencerChord::ScaleSus4, 0)) << "only the last chip plays";
+
+    picker.keyPressed(juce::KeyPress(juce::KeyPress::upKey)); // keyboard focus moves up from the current chord's row
+    settle(150);
+    const auto next = renderBlock(*c.module);
+    EXPECT_EQ(next.ons, chordAt(c, picker.getFocusedChord(), 0));
+    EXPECT_NE(picker.getFocusedChord(), SequencerChord::ScaleSus4);
+    EXPECT_FALSE(next.offs.empty()) << "the new chord replaces the old";
+}

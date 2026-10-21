@@ -6,7 +6,7 @@ namespace synth {
 
 namespace {
 
-constexpr int kChannel = 1;
+constexpr int kChannel = kSequencerMidiChannel;
 constexpr int kFilterCc = 74;
 constexpr int kMaxStepsPerSegment = 4096;
 constexpr double kBoundaryTolerance = 1.0e-3;
@@ -43,6 +43,13 @@ void SequencerPlayer::flush(juce::MidiBuffer& midi) {
         midi.addEvent(juce::MidiMessage::noteOff(kChannel, held_[(size_t)i].note), 0);
     pendingCount_ = 0;
     lastHitKey_ = -1;
+}
+
+bool SequencerPlayer::isHolding(int note) const noexcept {
+    for (int i = 0; i < pendingCount_; ++i)
+        if (held_[(size_t)i].note == note)
+            return true;
+    return false;
 }
 
 void SequencerPlayer::removeHeld(int index) noexcept {

@@ -16,7 +16,8 @@ namespace synth::ui {
  */
 class StepGridChordPicker
     : public juce::Component
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , private juce::Timer {
 public:
     static constexpr int kWidth = 250;
 
@@ -25,8 +26,12 @@ public:
 
     /** A chip was picked (click or Enter); the popover closes after reporting it. */
     std::function<void(SequencerChord chord)> onPick;
-    /** The chord under the pointer or the keyboard changed (none: nullopt); only lights a chip today. */
+    /** The chord under the pointer or the keyboard changed (none: nullopt); lights the chip. */
     std::function<void(std::optional<SequencerChord> chord)> onHover;
+    /** The chip to play settled for kAuditionDelayMs, or nullopt once nothing is under the pointer or the picker
+     * closes. */
+    std::function<void(std::optional<SequencerChord> chord)> onAudition;
+    static constexpr int kAuditionDelayMs = 60;
 
     const stepgrid::ChordPickerContent& getContent() const noexcept { return content_; }
     /** The chip the keyboard is on, as row and index. */
@@ -64,6 +69,8 @@ private:
     bool findChip(juce::Point<int> p, int& row, int& chip) const;
     juce::String describe() const;
     void setHover(int row, int chip);
+    void timerCallback() override;
+    void endAudition();
 
     stepgrid::ChordPickerContent content_;
     SequencerChord current_;
@@ -74,6 +81,7 @@ private:
     int chip_ = 0;
     int hoverRow_ = -1;
     int hoverChip_ = -1;
+    bool auditioning_ = false;
     CalloutReveal reveal_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridChordPicker)

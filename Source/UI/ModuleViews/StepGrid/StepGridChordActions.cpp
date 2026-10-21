@@ -19,6 +19,7 @@ std::function<void(std::unique_ptr<StepGridChordPicker>)>& chordPickerHookForTes
 namespace {
 constexpr double kLabelFadeMs = 120.0;
 constexpr double kReducedFadeMs = 80.0;
+constexpr float kAuditionVelocity = 0.8f;
 } // namespace
 
 juce::Rectangle<int> StepGridComponent::chordLabelBounds(int step) const {
@@ -53,6 +54,10 @@ void StepGridComponent::openChordPicker(int step) {
         if (safe != nullptr)
             safe->pickChord(step, chord);
     };
+    picker->onAudition = [safe, step](std::optional<SequencerChord> chord) {
+        if (safe != nullptr)
+            safe->auditionChord(step, chord);
+    };
     if (auto& hook = test_hooks::chordPickerHookForTest()) {
         hook(std::move(picker));
         return;
@@ -61,6 +66,16 @@ void StepGridComponent::openChordPicker(int step) {
     if (area.isEmpty())
         area = cellBounds(SequencerLane::Pitch, step);
     juce::CallOutBox::launchAsynchronously(std::move(picker), localAreaToGlobal(area), nullptr);
+}
+
+// Plays the chord the step would play with `chord` through the module's output, or ends the audition (nullopt).
+void StepGridComponent::auditionChord(int step, std::optional<SequencerChord> chord) {
+    if (!chord.has_value()) {
+        module_.stopPreview();
+        return;
+    }
+    const auto notes = sequencerChordNotes(*chord, playedPitchOf(step), scale_, module_.getPattern().seed, step);
+    module_.previewNotes(notes.notes.data(), notes.count, kAuditionVelocity);
 }
 
 void StepGridComponent::pickChord(int step, SequencerChord chord) {
