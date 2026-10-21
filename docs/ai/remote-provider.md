@@ -12,8 +12,9 @@ rules stated there apply here unchanged.
 ## Wire contract
 
 - `POST {host}/v1/capability/patch.generate`
-- Request: `{"productName": string, "userPrompt": string}`. `currentPatch` and `promptVersion` are
-  always omitted, never sent as `null`.
+- Request: `{"productName": string, "userPrompt": string, "promptVersion": 2}`. `currentPatch` is
+  always omitted, never sent as `null`. `promptVersion` 2 (`kPatchGeneratePromptVersion`) is the prompt
+  that writes a sequencer's pattern as the node's `state`; a request without it gets prompt 1.
 - Success: HTTP 200, `{"data": <Patch JSON object>}`. `data` is re-serialized with
   `juce::JSON::toString()` and delivered as `AIResponse::content`, the same raw-JSON-text shape
   `AIIntegrationService::applyPatch()` expects from any provider.
