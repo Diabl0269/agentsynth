@@ -35,14 +35,18 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     addAndMakeVisible(search_);
     applySearchColours();
 
+    setupFilters();
+    setupPreview();
     index_.addListener(this);
     rebuildRows();
 }
 
 SoundBrowserComponent::~SoundBrowserComponent() {
     index_.removeListener(this);
-    if (vblank_.has_value())
+    if (vblank_.has_value()) {
         listAnim_.stop(*vblank_);
+        panelAnim_.stop(*vblank_);
+    }
     scrollBar_.removeListener(this);
 }
 
@@ -56,9 +60,8 @@ void SoundBrowserComponent::focusList() {
 void SoundBrowserComponent::soundIndexChanged() { rebuildRows(); }
 
 void SoundBrowserComponent::resized() {
-    search_.setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
-    layoutPathParts();
-    updateScrollBar();
+    layoutTop();
+    footer_.setBounds(0, getHeight() - SoundPreviewFooter::kHeight, getWidth(), SoundPreviewFooter::kHeight);
 }
 
 void SoundBrowserComponent::lookAndFeelChanged() {
@@ -81,7 +84,7 @@ void SoundBrowserComponent::scrollBarMoved(juce::ScrollBar* bar, double newRange
 }
 
 juce::Rectangle<int> SoundBrowserComponent::listArea() const {
-    return {0, kListTop, getWidth(), juce::jmax(0, getHeight() - kListTop - kFooterHeight)};
+    return {0, getListTop(), getWidth(), juce::jmax(0, getHeight() - getListTop() - kFooterHeight)};
 }
 
 int SoundBrowserComponent::contentWidth() const {
@@ -107,7 +110,7 @@ void SoundBrowserComponent::updateScrollBar() {
     if (!needed)
         return;
     const int barWidth = 10;
-    scrollBar_.setBounds(getWidth() - barWidth, kListTop, barWidth, viewport);
+    scrollBar_.setBounds(getWidth() - barWidth, getListTop(), barWidth, viewport);
     scrollBar_.setSingleStepSize((double)kRowHeight);
     scrollBar_.setRangeLimits(0.0, (double)total, juce::dontSendNotification);
     scrollBar_.setCurrentRange((double)scrollOffset_, (double)viewport, juce::dontSendNotification);

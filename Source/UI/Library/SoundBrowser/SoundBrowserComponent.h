@@ -2,8 +2,14 @@
 
 #include "SoundBrowser/SoundIndex.h"
 #include "SoundBrowser/SoundLists.h"
+#include "SoundBrowser/SoundPreviewPlayer.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Library/SoundBrowser/SoundFilterChipRow.h"
+#include "UI/Library/SoundBrowser/SoundFilterModel.h"
+#include "UI/Library/SoundBrowser/SoundFilterPanel.h"
+#include "UI/Library/SoundBrowser/SoundFiltersButton.h"
+#include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -23,8 +29,9 @@ public:
     static constexpr int kSearchHeight = 32;
     static constexpr int kPathHeight = 26;
     static constexpr int kRowHeight = 30;
-    static constexpr int kFooterHeight = 72; // the sound's name and place; the waveform and volume will join it
-    static constexpr int kListTop = kSearchHeight + kPathHeight;
+    static constexpr int kFooterInfoHeight = 44; // the sound's name and place
+    static constexpr int kFooterHeight = kFooterInfoHeight + SoundPreviewFooter::kHeight;
+    static constexpr int kFiltersButtonWidth = 84;
 
     static constexpr const char* kFavouritesId = "@favourites";
     static constexpr const char* kRecentId = "@recent";
@@ -53,6 +60,42 @@ public:
     std::function<void(const synth::soundbrowser::SoundEntry&)> onSoundSelected;
     /** Return or a double-click on a sound row. */
     std::function<void(const synth::soundbrowser::SoundEntry&)> onSoundActivated;
+
+    // ---- Filters (SoundBrowserFilters.cpp) ----------------------------------------------------------------
+    synth::ui::SoundFilterModel& getFilters() { return filters_; }
+    bool areFiltersOpen() const { return filtersOpen_; }
+    /** Opens or closes the Filters panel under the search; it pushes the list down and grows 190 ms. */
+    void setFiltersOpen(bool open, bool animate = true);
+    /** The filters changed from outside the panel (a test, a restore): chips, panel and list follow. */
+    void applyFiltersChanged();
+    /** The song's key when the project has one; "" otherwise. Adds the Song key chip to the Key group. */
+    void setSongKey(const juce::String& key);
+    /** The song's tempo for the Near song tempo filter; when unset it reads 120. */
+    std::function<double()> songTempoProvider;
+    /** Where the list starts now: below the search, the chips, the open panel and the path bar. */
+    int getListTop() const { return listTop_; }
+    SoundFiltersButton& getFiltersButton() { return filtersButton_; }
+    SoundFilterPanel& getFilterPanel() { return filterPanel_; }
+    SoundFilterChipRow& getChipRow() { return chipRow_; }
+    bool isFilterMotionRunning() const { return panelAnim_.isRunning() || chipRow_.isMotionRunning(); }
+    void completeFilterMotionForTest();
+    void setAnimateOffscreenForTest(bool on);
+
+    // ---- Preview (SoundBrowserPreview.cpp) ------------------------------------------------------------------
+    /** The audio engine's preview player (may be null: the view then plays nothing). Applies the preview volume. */
+    void setPreviewPlayer(synth::soundbrowser::SoundPreviewPlayer* player);
+    /** Auto-play and the preview volume as persisted; does not call onPreviewSettingsChanged. */
+    void setPreviewSettings(bool autoPlay, float gainDb);
+    bool isAutoPlay() const { return footer_.isAutoPlay(); }
+    float getPreviewGainDb() const { return footer_.getGainDb(); }
+    /** Auto-play or the preview volume was changed by the user. */
+    std::function<void()> onPreviewSettingsChanged;
+    /** Plays the selected sound (a loop on the next bar when the song plays); false when none can play. */
+    bool playSelected();
+    void stopPreview();
+    /** Space: stops the preview when one sounds, else plays the selected sound. */
+    bool togglePreview();
+    SoundPreviewFooter& getPreviewFooter() { return footer_; }
 
     void focusSearchField();
     void focusList();
@@ -85,6 +128,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void lookAndFeelChanged() override;
+    void visibilityChanged() override;
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -124,6 +168,21 @@ private:
     bool setScrollOffset(int offset);
     void applySearchColours();
 
+    // Filters (SoundBrowserFilters.cpp)
+    void setupFilters();
+    void layoutTop();
+    void filtersChanged();
+    void refreshFilterButton();
+    void refreshPlaces();
+    int panelFullHeight() const;
+    bool showsFlatResults() const;
+    synth::soundbrowser::SoundFilter currentFilter();
+    void finishFilterClose();
+
+    // Preview (SoundBrowserPreview.cpp)
+    void setupPreview();
+    void syncFooterToSelection();
+
     // Input (SoundBrowserInput.cpp)
     bool handleSearchKey(const juce::KeyPress& key);
     bool moveSelection(int delta);
@@ -137,6 +196,19 @@ private:
     synth::soundbrowser::SoundLists& lists_;
 
     synth::ui::NavigationSearchField search_;
+    SoundFilterModel filters_;
+    SoundFiltersButton filtersButton_;
+    SoundFilterChipRow chipRow_;
+    juce::Component panelHost_;
+    SoundFilterPanel filterPanel_{filters_};
+    SoundPreviewFooter footer_;
+    synth::soundbrowser::SoundPreviewPlayer* previewPlayer_ = nullptr;
+    std::uint64_t lastRequestId_ = 0;
+    bool filtersOpen_ = false;
+    int listTop_ = kSearchHeight + kPathHeight;
+    bool animateOffscreenForTest_ = false;
+    PanelSlide panelSlide_;
+    synth::ui::AnimationDriver panelAnim_;
     juce::ScrollBar scrollBar_{true};
     juce::String query_;
     juce::String placeId_; // "" = Places

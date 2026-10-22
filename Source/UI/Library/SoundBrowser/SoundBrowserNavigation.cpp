@@ -94,9 +94,10 @@ void SoundBrowserComponent::rebuildPlaceRows(const synth::soundbrowser::SoundSna
 void SoundBrowserComponent::rebuildRows() {
     const auto key = selectionKey(selected_);
     const auto snap = index_.snapshot();
+    const auto filter = currentFilter();
     rows_.clear();
-    if (isSearchActive()) {
-        appendSoundRows(index_.search(query_));
+    if (showsFlatResults()) {
+        appendSoundRows(index_.search(query_, filter));
         if (rows_.empty())
             rows_.push_back({RowKind::Hint, "No matching sounds", {}, {}, {}, 0, std::nullopt});
     } else if (placeId_.isEmpty()) {
@@ -104,20 +105,22 @@ void SoundBrowserComponent::rebuildRows() {
     } else if (placeId_ == kFavouritesId || placeId_ == kRecentId) {
         std::vector<SoundEntry> entries;
         for (const auto& path : placeId_ == kFavouritesId ? lists_.favourites() : lists_.recent())
-            if (const auto entry = index_.find(path))
+            if (const auto entry = index_.find(path); entry && synth::soundbrowser::soundPassesFilter(*entry, filter))
                 entries.push_back(*entry);
         appendSoundRows(entries);
         if (rows_.empty())
-            rows_.push_back(
-                {RowKind::Hint,
-                 placeId_ == kFavouritesId ? "No favourites yet. Select a sound and press F." : "Nothing used yet.",
-                 {},
-                 {},
-                 {},
-                 0,
-                 std::nullopt});
+            rows_.push_back({RowKind::Hint,
+                             filter.isActive()
+                                 ? "No sounds match the filters"
+                                 : (placeId_ == kFavouritesId ? "No favourites yet. Select a sound and press F."
+                                                              : "Nothing used yet."),
+                             {},
+                             {},
+                             {},
+                             0,
+                             std::nullopt});
     } else {
-        const auto listing = index_.childrenOf(placeId_, folder_);
+        const auto listing = index_.childrenOf(placeId_, folder_, filter);
         for (const auto& f : listing.folders) {
             Row row;
             row.kind = RowKind::Folder;
@@ -131,7 +134,8 @@ void SoundBrowserComponent::rebuildRows() {
         appendSoundRows(listing.entries);
         if (rows_.empty())
             rows_.push_back({RowKind::Hint,
-                             snap->scanning ? "Looking for sounds..." : "Nothing here",
+                             snap->scanning ? "Looking for sounds..."
+                                            : (filter.isActive() ? "No sounds match the filters" : "Nothing here"),
                              {},
                              {},
                              {},

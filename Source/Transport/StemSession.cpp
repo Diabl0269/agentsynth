@@ -114,7 +114,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
     auto& transport = engine_.getTransport();
     auto& graph = engine_.getGraph();
 
-    metronomeGuard_ = std::make_unique<MetronomeForceOffGuard>(engine_.getMetronome());
+    metronomeGuard_ = std::make_unique<MetronomeForceOffGuard>(engine_.getMetronome(), engine_.getSoundPreview());
 
     // ---- Everything that has to go back afterwards, read before anything is disturbed ----
     const auto before = transport.getPositionSnapshot();

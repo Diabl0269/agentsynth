@@ -5,6 +5,7 @@
 #include "Mixer/MixerPanLaw.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ModuleBase.h"
+#include "SoundBrowser/SoundPreviewPlayer.h"
 #include "Timeline/AudioClipStreamer.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/EpochExchange.h"
@@ -249,6 +250,12 @@ public:
     // renderPass.
     synth::Metronome& getMetronome() noexcept { return metronome_; }
     const synth::Metronome& getMetronome() const noexcept { return metronome_; }
+
+    // The Sounds view's preview, summed after the master at the end of renderNextBlock (see the class comment
+    // there and docs/architecture/audio-engine.md#sound-preview). Message-thread callers use play/stop/setGainDb;
+    // the audio thread only ever calls process(), from renderNextBlock.
+    synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() noexcept { return soundPreview_; }
+    const synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() const noexcept { return soundPreview_; }
 
     // The timeline's message-thread -> audio-thread hand-off. The message thread publishes
     // snapshots here (and may reap on a timer); the engine opens exactly one audio block on it per
@@ -498,6 +505,9 @@ private:
     // into the caller's buffer), so its declaration order relative to the graph carries no lifetime
     // constraint — placed here because it is conceptually paired with the transport it clicks from.
     synth::Metronome metronome_;
+    // The sound preview and the first pass's transport position of the current callback, which it aligns loops to.
+    synth::soundbrowser::SoundPreviewPlayer soundPreview_;
+    synth::BlockTimeInfo previewBlockInfo_{};
     // Declared before the graph for the same reason as the transport: timeline modules read
     // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
     // first. Its own destructor reclaims everything published.

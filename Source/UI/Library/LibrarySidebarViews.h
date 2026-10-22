@@ -70,6 +70,7 @@ private:
     void notifyLayout();
     void ensureIndexStarted();
     void persistLists();
+    void persistPreviewSettings();
     void soundPacksChanged() override;
     void commitWidth();
 

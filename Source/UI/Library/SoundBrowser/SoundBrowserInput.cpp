@@ -12,7 +12,7 @@ constexpr const char* kDefaultTooltip =
 }
 
 juce::Rectangle<int> SoundBrowserComponent::getRowBounds(int index) const {
-    return {0, kListTop + index * kRowHeight - scrollOffset_, contentWidth(), kRowHeight};
+    return {0, getListTop() + index * kRowHeight - scrollOffset_, contentWidth(), kRowHeight};
 }
 
 juce::Rectangle<int> SoundBrowserComponent::getPathPartBounds(int partIndex) const {
@@ -24,7 +24,7 @@ juce::Rectangle<int> SoundBrowserComponent::getPathPartBounds(int partIndex) con
 int SoundBrowserComponent::getRowIndexAt(juce::Point<int> p) const {
     if (!listArea().contains(p) || p.x >= contentWidth())
         return -1;
-    const int index = (p.y - kListTop + scrollOffset_) / kRowHeight;
+    const int index = (p.y - getListTop() + scrollOffset_) / kRowHeight;
     return index >= 0 && index < (int)rows_.size() ? index : -1;
 }
 
@@ -94,9 +94,12 @@ void SoundBrowserComponent::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 void SoundBrowserComponent::notifySelected() {
-    if (selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Sound &&
-        onSoundSelected)
+    if (selected_ < 0 || selected_ >= (int)rows_.size() || rows_[(size_t)selected_].kind != RowKind::Sound)
+        return;
+    if (onSoundSelected)
         onSoundSelected(*rows_[(size_t)selected_].entry);
+    if (footer_.isAutoPlay())
+        playSelected();
 }
 
 void SoundBrowserComponent::selectRow(int index) {
@@ -173,6 +176,15 @@ bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
 }
 
 bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
+    // A key that bubbled up from a child (the Filters button, the chips, the panel): only Esc closes the panel.
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    if (focused != nullptr && focused != this && isParentOf(focused)) {
+        if (key.isKeyCode(juce::KeyPress::escapeKey) && !key.getModifiers().isAnyModifierKeyDown() && filtersOpen_) {
+            setFiltersOpen(false);
+            return true;
+        }
+        return false;
+    }
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0))
         return goUp();
     const auto mods = key.getModifiers();
@@ -215,7 +227,9 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         jumpToSearchWith(ch);
         return true;
     }
-    return false; // Space stays free for the preview player
+    if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Sound)
+        return togglePreview();
+    return false;
 }
 
 } // namespace synth::ui

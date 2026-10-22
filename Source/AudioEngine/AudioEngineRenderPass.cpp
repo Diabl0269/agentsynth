@@ -249,6 +249,12 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         buffer.clear();
     applyLoadGate(buffer);
 
+    // The Sounds view's preview, summed AFTER the master mute and the load gate so the song's volume, mute and master
+    // effects never reach it. A bounce suspends it (BounceGuards.h). Only the graph's output channels get it. Before
+    // the scrub below, which stays the one place a bad sample is caught.
+    soundPreview_.process(buffer, std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels()),
+                          previewBlockInfo_);
+
     // The LAST write to `buffer` before either caller hands it to hardware or the host --
     // audioDeviceIOCallbackWithContext's `buffer` aliases the device's own output pointers, and
     // processHostBlock's `buffer` IS the host's buffer, so nothing runs on this data after this
@@ -379,6 +385,12 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // return. That ordering is deliberate: master mute clears the WHOLE buffer, so it silences the
     // click along with everything else the engine produces, exactly as it silences the graph.
     metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
+
+    // The first pass of the callback fixes where a preview loop aligns to; later slices of the same callback keep it.
+    if (inputSampleOffset == 0) {
+        previewBlockInfo_ = transport.getCurrentBlockInfo();
+        previewBlockInfo_.playing = previewBlockInfo_.playing && transportEnabled_.load(std::memory_order_relaxed);
+    }
 
     // The feedback guard. Post-graph (so it sees exactly what would reach the speakers,
     // metronome click included) and pre-master-mute (renderNextBlock's zero-fill runs after this

@@ -23,6 +23,25 @@ inline void writeWav(const juce::File& file, double seconds = 0.5, const juce::S
     writer->writeFromAudioSampleBuffer(buffer, 0, n);
 }
 
+// Writes a 16-bit WAV of a sine (`hz` > 0) or a constant (`hz` <= 0) at `amplitude`, any rate and channel count.
+inline void writeSignal(const juce::File& file, double seconds, double rate, float amplitude, double hz = 0.0,
+                        int channels = 1) {
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    juce::WavAudioFormat wav;
+    auto* stream = new juce::FileOutputStream(file);
+    std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(stream, rate, (unsigned)channels, 16, {}, 0));
+    const int n = (int)(seconds * rate);
+    juce::AudioBuffer<float> buffer(channels, n);
+    for (int ch = 0; ch < channels; ++ch)
+        for (int i = 0; i < n; ++i)
+            buffer.setSample(ch, i,
+                             hz > 0.0
+                                 ? amplitude * (float)std::sin(2.0 * juce::MathConstants<double>::pi * hz * i / rate)
+                                 : amplitude);
+    writer->writeFromAudioSampleBuffer(buffer, 0, n);
+}
+
 inline void writePack(const juce::File& root, const juce::String& id, const juce::String& name) {
     root.getChildFile(id).createDirectory();
     root.getChildFile(id)
