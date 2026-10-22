@@ -30,8 +30,22 @@ void KeychainTokenStore::useInMemoryStoreForProcess(bool enable) { gInMemoryForP
 
 bool KeychainTokenStore::isMemoryOnly() const { return memoryOnly; }
 
+juce::String KeychainTokenStore::serviceNameFor(bool devBuild) {
+    return juce::String(synth::branding::kBundleIdentifier) + (devBuild ? ".dev.refreshtoken" : ".refreshtoken");
+}
+
+bool KeychainTokenStore::isDevKeychainBuild() {
+#ifdef AGENTSYNTH_DEV_KEYCHAIN
+    return true;
+#else
+    return false;
+#endif
+}
+
+juce::String KeychainTokenStore::defaultServiceName() { return serviceNameFor(isDevKeychainBuild()); }
+
 KeychainTokenStore::KeychainTokenStore()
-    : service(juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken")
+    : service(defaultServiceName())
     , memoryOnly(gInMemoryForProcess.load()) {}
 
 KeychainTokenStore::KeychainTokenStore(juce::String serviceName)

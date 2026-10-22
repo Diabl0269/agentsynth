@@ -21,6 +21,16 @@ namespace synth {
  */
 class KeychainTokenStore : public TokenStore {
 public:
+    /** The service name for a release build (`<bundle id>.refreshtoken`) or a local dev build
+        (`<bundle id>.dev.refreshtoken`). Pure, so both names are testable. */
+    static juce::String serviceNameFor(bool devBuild);
+
+    /** True when this binary was built locally (AGENTSYNTH_DEV_KEYCHAIN), not by CI. */
+    static bool isDevKeychainBuild();
+
+    /** The service name this build's default constructor uses: serviceNameFor(isDevKeychainBuild()). */
+    static juce::String defaultServiceName();
+
     /** Production use: derives the Keychain service string from Branding.h's bundle id. */
     KeychainTokenStore();
 

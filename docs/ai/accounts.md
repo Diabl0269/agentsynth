@@ -45,6 +45,16 @@ that ad-hoc and Apple Development builds do not have (`errSecMissingEntitlement`
 signing, `scripts/dev-sign-app.sh` locally and Developer ID for releases, is what stops the prompt
 after the first Always Allow.
 
+Local dev builds keep their own sign-in. A non-CI Apple build defines `AGENTSYNTH_DEV_KEYCHAIN` (root
+`CMakeLists.txt`, same condition as `cmake/DevSign.cmake`) and uses the service
+`<bundle id>.dev.refreshtoken` instead of the release app's `<bundle id>.refreshtoken`, so it never
+reads the item the installed app created (whose access list does not trust the dev signature, which
+raises the login-keychain password prompt at startup). The dev build asks you to sign in once of its
+own. `KeychainTokenStore::defaultServiceName()` makes the choice. A launch with `--no-audio-device`
+(or `AGENTSYNTH_NO_AUDIO_DEVICE`) or `--no-keychain` (or `AGENTSYNTH_NO_KEYCHAIN=1`) never touches
+the keychain at all: `Main.cpp` calls `applyKeychainPolicyForLaunch()` before any `AccountService`
+exists, which switches every store to memory (signed out on each such launch).
+
 The test binary never touches the real item: `Tests/TestMain.cpp` calls
 `KeychainTokenStore::useInMemoryStoreForProcess(true)`, so every default-constructed store (the one
 each `MainComponent`'s `AccountService` builds, whose `attemptSilentSignIn()` reads the token at
