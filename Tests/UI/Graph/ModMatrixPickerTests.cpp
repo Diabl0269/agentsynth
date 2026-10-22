@@ -323,3 +323,46 @@ TEST(ModMatrixPicker, QueryHighlightsTheBestMatchingRow) {
     ASSERT_EQ(picker.getVisibleItemTextsForTest().size(), 3u);
     EXPECT_EQ(picker.getHighlightedItemIndexForTest(), 2) << "'Rod Bank' starts with the word";
 }
+
+// End to end: searching a new source and pressing Return swaps the routing and rebuilds the macro inlet (the swept
+// inlet's node goes mid-change, the fresh one is minted and the macro laid out again).
+TEST(ModMatrixPicker, ReturnOnASearchedSourceThatRebuildsAMacroInletLaysOutWithoutTouchingTheDeadCard) {
+    PickerFixture f;
+    const auto second = addModuleAt(f.c.editor, f.c.engine, std::make_unique<LFOModule>(), "Second", 100, 400);
+    f.c.editor.setModuleDisplayName(second, "Sway");
+    f.source.reset();
+    f.dest.reset();
+    f.c.pickSource(f.c.lfo);
+    f.c.pickDest(f.c.filterIn);
+    ASSERT_EQ(f.c.nodesOf<MacroInletModule>().size(), 1u) << "the first routing enters the macro by an inlet";
+
+    auto source = openPicker(f.c, f.c.matrix().getRowSourceComboForTest(0));
+    ASSERT_NE(source, nullptr);
+    source->setSearchTextForTest("sway");
+    source->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    source.reset();
+    f.c.matrix().updateRowsFromGraph();
+
+    const auto inlets = f.c.nodesOf<MacroInletModule>();
+    ASSERT_EQ(inlets.size(), 1u) << "the old inlet went, a fresh one took its place";
+    EXPECT_TRUE(f.c.edge(second, f.c.nodesOf<AttenuverterModule>().front()) ||
+                f.c.edge(inlets[0], f.c.nodesOf<AttenuverterModule>().front()));
+    EXPECT_TRUE(f.c.edge(f.c.nodesOf<AttenuverterModule>().front(), f.c.filterIn, kCutoff));
+}
+
+// Regression test for FRO790: a node removed mid-change (a swept macro inlet) leaves its card on the canvas until
+// the next reconcile, and the layout pass must not read that card's freed processor.
+TEST(ModMatrixPicker, TheLayoutPassSkipsACardWhoseNodeIsAlreadyGone) {
+    MatrixCanvas c(Boxed::DestInside);
+    c.editor.updateComponents();
+    const auto key = "n:" + juce::String((juce::int64)c.lfo.uid);
+    const auto has = [&] {
+        const auto units = c.editor.getMacroController().buildLayoutUnits({});
+        return std::any_of(units.begin(), units.end(), [&](const auto& u) { return u.key == key; });
+    };
+    ASSERT_TRUE(has());
+
+    c.engine.getGraph().removeNode(c.lfo); // the card stays until updateComponents()
+
+    EXPECT_FALSE(has());
+}

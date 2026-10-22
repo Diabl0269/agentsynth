@@ -323,3 +323,12 @@ TEST(LogicalPortTests, DistortionCvJacksShiftWhenStereoCollapses) {
     drive = dist.mapInputChannel(2);
     EXPECT_EQ(drive.visibleJackIndex, 2);
 }
+
+// Regression test for FRO794: the Level jack's first head was the legacy alias raw 1, which is no modulation
+// target, so a source dropped on the Level knob wired a plain cable the card never showed.
+TEST(LogicalPortTests, NoiseCVJacksHeadOnTheirModulationTargetChannels) {
+    NoiseModule noise;
+    EXPECT_EQ(noise.getJackTargets(0, true).front().rawHeadChannel, 8);
+    EXPECT_EQ(noise.getJackTargets(1, true).front().rawHeadChannel, 9);
+    EXPECT_EQ(noise.getJackTargets(1, true).size(), 1u);
+}

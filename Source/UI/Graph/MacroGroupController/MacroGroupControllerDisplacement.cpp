@@ -43,7 +43,10 @@ MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
     const synth::MacroOwnerIndex owners(macros);
     std::vector<LayoutUnit> units;
     for (auto* comp : host_.modules()) {
-        if (comp == nullptr || comp->getModule() == nullptr || !comp->isVisible())
+        // A node removed inside the running change (a swept macro port) keeps its card until the next reconcile, and
+        // that card's processor is already freed: its node must still exist before anything reads the module.
+        if (comp == nullptr || !comp->isVisible() || host_.graph().getNodeForId(comp->getNodeId()) == nullptr ||
+            comp->getModule() == nullptr)
             continue;
         const auto uuid = nodeUuidFor(comp->getNodeId());
         const auto* owner = uuid.isEmpty() ? nullptr : owners.ownerOf(uuid);
