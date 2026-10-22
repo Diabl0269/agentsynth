@@ -117,6 +117,7 @@ public:
     void soloShowChannel(const juce::String& channelId);
 
     MixerZonesPane& getZonesPaneForTest() noexcept { return zonesPane_; }
+    int getColumnIndexContainingForTest(const juce::Component* focused) const { return columnIndexContaining(focused); }
     juce::Viewport& getLeftZoneViewportForTest() noexcept { return leftZone_.viewport; }
     juce::Viewport& getRightZoneViewportForTest() noexcept { return rightZone_.viewport; }
     /** The zone the Nth laid-out column (see getFocusedColumnIndexForTest) sits in. */
@@ -461,6 +462,7 @@ private:
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
+    int columnIndexContaining(const juce::Component* focused) const;
     bool renameFocusedColumn(); // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------

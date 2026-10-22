@@ -132,11 +132,22 @@ bool MixerPanelComponent::selectFocusedOnCanvas() {
     return true;
 }
 
+// The column holding keyboard focus: the one whose component contains the focused widget (a click lands focus on a
+// colour dot, fader or button inside a column, which never moves focusedColumnIndex_), else the arrow-key column.
+int MixerPanelComponent::columnIndexContaining(const juce::Component* focused) const {
+    for (auto* c = focused; c != nullptr && c != this; c = c->getParentComponent())
+        for (size_t i = 0; i < columnEntries_.size(); ++i)
+            if (columnEntries_[i].component == c)
+                return (int)i;
+    return focusedColumnIndex_;
+}
+
 // Direct and Master have no name to edit, so the key falls through there.
 bool MixerPanelComponent::renameFocusedColumn() {
-    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+    const int index = columnIndexContaining(juce::Component::getCurrentlyFocusedComponent());
+    if (index < 0 || index >= (int)columnEntries_.size())
         return false;
-    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    const auto& entry = columnEntries_[(size_t)index];
     return entry.kind == ColumnEntry::Kind::Strip &&
            static_cast<MixerColumnComponent*>(entry.component)->beginHeaderRename();
 }

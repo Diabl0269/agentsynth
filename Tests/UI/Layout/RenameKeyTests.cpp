@@ -2,6 +2,7 @@
 // header's name editor (Return commits, Escape cancels, a text editor keeps the key), a focused mixer column's header
 // editor (also inside a detached mixer window) and the selected module card.
 #include "../Mixer/MixerZonesTestRig.h"
+#include "MainComponent/KeyboardFocusRestore.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/RenameKey.h"
@@ -123,4 +124,29 @@ TEST(RenameKeyMixer, WorksInsideADetachedMixerWindow) {
     EXPECT_NE(r.panel->getStripColumnForTest(0)->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor(),
               nullptr);
     r.mc.getBottomDock().getMixerHost().setDetached(false);
+}
+
+// Regression test: a click lands focus on a widget INSIDE a column (its colour dot, a fader, a mute button), which
+// never moves the arrow-key column, so Option+R found no column to rename.
+TEST(RenameKeyMixer, TheColumnHoldingFocusIsFoundFromAnyWidgetInsideIt) {
+    MixerZonesRig r(2);
+    hideWelcome(r.mc);
+    auto* second = r.panel->getStripColumnForTest(1);
+    ASSERT_NE(second, nullptr);
+    auto& label = second->getHeaderForTest().getNameLabelForTest();
+    ASSERT_TRUE(second->isParentOf(&label));
+    EXPECT_EQ(r.panel->getColumnIndexContainingForTest(&label), 1) << "a widget deep in the column";
+    EXPECT_EQ(r.panel->getColumnIndexContainingForTest(second), 1) << "the column itself";
+    EXPECT_EQ(r.panel->getColumnIndexContainingForTest(&r.mc), r.panel->getFocusedColumnIndexForTest())
+        << "focus outside the panel falls back to the arrow-key column";
+    EXPECT_EQ(r.panel->getColumnIndexContainingForTest(nullptr), r.panel->getFocusedColumnIndexForTest());
+}
+
+// Regression test: with focus on nothing but the window (right after launch, or once an in-place editor closed),
+// keys died at the window and Cmd+2 did nothing.
+TEST(RenameKeyFocusRestore, FocusOnTheWindowOrNothingNeedsRestoring) {
+    juce::Component window, other;
+    EXPECT_TRUE(synth::keyboardFocusIsOnWindowOrNothing(nullptr, &window));
+    EXPECT_TRUE(synth::keyboardFocusIsOnWindowOrNothing(&window, &window));
+    EXPECT_FALSE(synth::keyboardFocusIsOnWindowOrNothing(&other, &window));
 }
