@@ -44,7 +44,25 @@ void SoundPreviewFooter::showSound(const std::optional<synth::soundbrowser::Soun
     wave_.setFile(entry.has_value() ? juce::File(entry->path) : juce::File());
 }
 
+void SoundPreviewFooter::setCompact(bool compact) {
+    if (compact_ == compact)
+        return;
+    compact_ = compact;
+    wave_.setVisible(!compact);
+    autoPlay_.setVisible(!compact);
+    resized();
+}
+
 void SoundPreviewFooter::resized() {
+    if (compact_) {
+        auto row = getLocalBounds().withTrimmedTop(1).reduced(12, 4);
+        stop_.setBounds(row.removeFromLeft(56));
+        const int volumeWidth = juce::jmax(64, juce::jmin(100, row.getWidth() - 60));
+        volume_.setBounds(row.removeFromRight(juce::jmin(volumeWidth, row.getWidth())));
+        compactName_ = row.reduced(6, 0);
+        return;
+    }
+    compactName_ = {};
     auto area = getLocalBounds().reduced(12, 6);
     wave_.setBounds(area.removeFromTop(40));
     area.removeFromTop(6);

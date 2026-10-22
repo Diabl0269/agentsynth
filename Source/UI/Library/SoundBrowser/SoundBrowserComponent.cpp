@@ -38,10 +38,12 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     setupFilters();
     setupPreview();
     index_.addListener(this);
+    juce::Desktop::getInstance().addFocusChangeListener(this);
     rebuildRows();
 }
 
 SoundBrowserComponent::~SoundBrowserComponent() {
+    juce::Desktop::getInstance().removeFocusChangeListener(this);
     index_.removeListener(this);
     if (vblank_.has_value()) {
         listAnim_.stop(*vblank_);
@@ -59,10 +61,7 @@ void SoundBrowserComponent::focusList() {
 
 void SoundBrowserComponent::soundIndexChanged() { rebuildRows(); }
 
-void SoundBrowserComponent::resized() {
-    layoutTop();
-    footer_.setBounds(0, getHeight() - SoundPreviewFooter::kHeight, getWidth(), SoundPreviewFooter::kHeight);
-}
+void SoundBrowserComponent::resized() { layoutTop(); }
 
 void SoundBrowserComponent::lookAndFeelChanged() {
     applySearchColours();
@@ -84,7 +83,7 @@ void SoundBrowserComponent::scrollBarMoved(juce::ScrollBar* bar, double newRange
 }
 
 juce::Rectangle<int> SoundBrowserComponent::listArea() const {
-    return {0, getListTop(), getWidth(), juce::jmax(0, getHeight() - getListTop() - kFooterHeight)};
+    return {0, getListTop(), getWidth(), juce::jmax(0, getHeight() - getListTop() - footerHeight())};
 }
 
 int SoundBrowserComponent::contentWidth() const {

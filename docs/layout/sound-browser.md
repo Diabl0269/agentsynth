@@ -28,11 +28,15 @@ The left column holds two views behind a **Modules / Sounds** switch at its top 
 - **Motion**: switching views slides 190 ms (a cross-fade under reduced motion); opening a folder slides the list in, going up slides it out.
 - **Lazy start**: the index starts its first scan when Sounds is first shown, and rescans when the installed packs change.
 
+## Short columns
+
+Nothing overlaps at any height, and the search row is always whole. The footer gives way first: with room for the search, path bar, two list rows and the whole footer it shows as described under Preview; with less, a **compact footer** (one 36 px row: Stop, the sound's name cut with an ellipsis, the volume; no waveform and no Auto-play, whose setting still holds); with less than that, no footer at all (invisible, so a screen reader skips it). The open Filters panel is capped to what the footer and two list rows leave, and scrolls inside itself. Once it is open it is guaranteed 64 px: room for it comes first from the footer (whole, compact, none), then from the list (two rows, one, none), and only then does the panel shrink below 64 px. The tall layout is unchanged.
+
 ## Filters
 
 A **Filters** button sits beside the search field and reads "Filters" or "Filters (2)". Space or Return opens or closes the panel, Esc closes it, and a screen reader hears "Filters, 2 on, collapsed" (or expanded). The tooltip is "Narrow by kind, sound, tempo, key, length or place".
 
-- **The panel opens inline** under the search and pushes the list down; it never covers it. It grows open over 190 ms with the list sliding (an 80 ms fade under Reduce Motion, instant with Animations off). If the view is short the panel takes at most what leaves 96 px of list.
+- **The panel opens inline** under the search and pushes the list down; it never covers it. It grows open over 190 ms with the list sliding (an 80 ms fade under Reduce Motion, instant with Animations off). If the view is short the panel takes at most what leaves two list rows above the footer, and scrolls inside itself (its own viewport and scroll bar; Tab scrolls a focused control into view) instead of being clipped.
 - **Groups** (`SoundFilterPanel`): Kind (One-shots, Loops, Instruments), Sound (Drums, Bass, Keys, Vocals, FX, Strings), Tempo (a two-handle range slider, 60 to 200 BPM, plus a "Near song tempo" chip), Key (a "Song key" chip when the project has a key, and a menu of the 24 keys), Length (Any, Under 1 s, 1-4 s, Over 4 s) and Place (any pack or folder). Tab moves group to group; Left and Right move across the chips of a group; Space toggles one. Within Kind, and within Sound, any one may match; the groups themselves all have to.
 - **Near song tempo** keeps sounds within 10 BPM of the transport's tempo, or of half or double it. A sound with an unknown tempo or key never passes an active tempo or key filter.
 - **Chips**: one row of small removable chips under the search ("Loops x", "90-100 BPM x"), then "Clear all" at the right. The row is one Tab stop (Left and Right move, Space, Delete or Backspace remove). A chip's tooltip is "Remove Loops filter". Removing a chip or Clear all switches the same filter off in the panel. A new chip grows in at the end; a removed one shrinks out and the rest slide along (190 ms; an 80 ms fade under Reduce Motion).

@@ -15,6 +15,8 @@ namespace synth::ui {
 class SoundFilterPanel : public juce::Component {
 public:
     static constexpr int kPad = 10;
+    /** The least the open panel shows before it may shrink further: two rows of its controls. */
+    static constexpr int kMinVisibleHeight = 64;
 
     explicit SoundFilterPanel(SoundFilterModel& model);
 

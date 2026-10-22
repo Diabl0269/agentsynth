@@ -13,6 +13,7 @@ namespace synth::ui {
 class SoundPreviewFooter : public juce::Component {
 public:
     static constexpr int kHeight = 108;
+    static constexpr int kCompactHeight = 36;
 
     SoundPreviewFooter();
 
@@ -36,9 +37,18 @@ public:
     juce::ToggleButton& getAutoPlay() { return autoPlay_; }
     juce::TextButton& getStopButton() { return stop_; }
 
+    /** Compact is one row: Stop, then room for the sound's name (drawn by the browser), then the volume. The waveform
+     *  and Auto-play are hidden, and keep their state. */
+    void setCompact(bool compact);
+    bool isCompact() const { return compact_; }
+    /** In the footer's own coordinates; empty unless compact. */
+    juce::Rectangle<int> getCompactNameBounds() const { return compactName_; }
+
     void resized() override;
 
 private:
+    bool compact_ = false;
+    juce::Rectangle<int> compactName_;
     SoundWaveformView wave_;
     juce::TextButton stop_{"Stop"};
     juce::ToggleButton autoPlay_{"Auto-play"};

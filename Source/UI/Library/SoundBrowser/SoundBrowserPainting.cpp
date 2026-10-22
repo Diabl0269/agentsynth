@@ -152,12 +152,19 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
 }
 
 void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
+    if (footerMode_ == FooterMode::Hidden)
+        return;
     const auto& c = synth::theme::themeOf(*this).colors;
-    const juce::Rectangle<int> whole(0, getHeight() - kFooterHeight, getWidth(), kFooterHeight);
+    const int height = footerHeight();
+    const juce::Rectangle<int> whole(0, getHeight() - height, getWidth(), height);
     g.setColour(c.surface);
     g.fillRect(whole);
     g.setColour(c.border);
     g.fillRect(whole.withHeight(1));
+    if (footerMode_ == FooterMode::Compact) {
+        paintCompactName(g);
+        return;
+    }
 
     const auto area = whole.withHeight(kFooterInfoHeight);
     const auto inner = area.reduced(kSideMargin, 8);
@@ -184,6 +191,17 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = juce::String(row.soundCount) + (row.soundCount == 1 ? " sound" : " sounds");
     }
     g.drawText(sub, subArea, juce::Justification::centredLeft, true);
+}
+
+// The compact footer has room for the name only, ellipsised, between the Stop button and the volume.
+void SoundBrowserComponent::paintCompactName(juce::Graphics& g) {
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const auto area = footer_.getCompactNameBounds().translated(footer_.getX(), footer_.getY());
+    const bool have = selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].navigable();
+    g.setColour(have ? c.textPrimary : c.textMuted);
+    g.setFont(juce::Font(juce::FontOptions(13.0f)));
+    g.drawText(have ? rows_[(size_t)selected_].text : juce::String("Select a sound"), area,
+               juce::Justification::centredLeft, true);
 }
 
 void SoundBrowserComponent::paint(juce::Graphics& g) {

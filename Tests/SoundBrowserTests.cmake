@@ -5,6 +5,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundListsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundNameGuessTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserViewTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewPlayerTests.cpp

@@ -24,6 +24,7 @@ class SoundBrowserComponent
     , public juce::DragAndDropContainer
     , public juce::SettableTooltipClient
     , private juce::ScrollBar::Listener
+    , private juce::FocusChangeListener
     , private synth::soundbrowser::SoundIndex::Listener {
 public:
     static constexpr int kSearchHeight = 32;
@@ -31,6 +32,8 @@ public:
     static constexpr int kRowHeight = 30;
     static constexpr int kFooterInfoHeight = 44; // the sound's name and place
     static constexpr int kFooterHeight = kFooterInfoHeight + SoundPreviewFooter::kHeight;
+    static constexpr int kCompactFooterHeight = SoundPreviewFooter::kCompactHeight;
+    static constexpr int kMinListRows = 2; // the list keeps this many rows before the footer or the panel give way
     static constexpr int kFiltersButtonWidth = 84;
 
     static constexpr const char* kFavouritesId = "@favourites";
@@ -76,6 +79,8 @@ public:
     int getListTop() const { return listTop_; }
     SoundFiltersButton& getFiltersButton() { return filtersButton_; }
     SoundFilterPanel& getFilterPanel() { return filterPanel_; }
+    /** The viewport the panel scrolls in when the column is too short to show all of it. */
+    juce::Viewport& getPanelViewport() { return panelHost_; }
     SoundFilterChipRow& getChipRow() { return chipRow_; }
     bool isFilterMotionRunning() const { return panelAnim_.isRunning() || chipRow_.isMotionRunning(); }
     void completeFilterMotionForTest();
@@ -96,6 +101,9 @@ public:
     /** Space: stops the preview when one sounds, else plays the selected sound. */
     bool togglePreview();
     SoundPreviewFooter& getPreviewFooter() { return footer_; }
+    /** What the footer shows at this height: the whole strip, the one-row strip, or nothing. */
+    enum class FooterMode { Full, Compact, Hidden };
+    FooterMode getFooterMode() const { return footerMode_; }
 
     void focusSearchField();
     void focusList();
@@ -116,6 +124,8 @@ public:
     void selectRow(int index);
     int getRowIndexAt(juce::Point<int> p) const;
     juce::Rectangle<int> getRowBounds(int index) const;
+    /** Where the rows are: under the search, chips, panel and path bar, above the footer. */
+    juce::Rectangle<int> listArea() const;
     juce::Rectangle<int> getPathPartBounds(int partIndex) const;
     bool openSelected();
     bool goUp();
@@ -142,6 +152,7 @@ public:
 private:
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void soundIndexChanged() override;
+    void globalFocusChanged(juce::Component* focused) override;
 
     // Rows (SoundBrowserNavigation.cpp)
     void rebuildRows();
@@ -160,7 +171,7 @@ private:
     void paintRow(juce::Graphics& g, const Row& row, int index, juce::Rectangle<int> area) const;
     void paintPathBar(juce::Graphics& g, juce::Colour muted, juce::Colour primary, juce::Colour accent);
     void paintFooter(juce::Graphics& g);
-    juce::Rectangle<int> listArea() const;
+    void paintCompactName(juce::Graphics& g);
     int contentWidth() const;
     void layoutPathParts();
     void updateScrollBar();
@@ -174,7 +185,17 @@ private:
     void filtersChanged();
     void refreshFilterButton();
     void refreshPlaces();
-    int panelFullHeight() const;
+    int chipRowHeight() const;
+    int footerHeight() const;
+    /** What gives way in a short column: the footer's mode and the height kept for the list. */
+    struct Stack {
+        FooterMode footer = FooterMode::Full;
+        int listReserve = 0;
+    };
+    Stack chooseStack(int heightAbove) const;
+    void layoutFooter();
+    void layoutPanel(int chipHeight);
+    void scrollFocusedControlIntoView(juce::Component* focused);
     bool showsFlatResults() const;
     synth::soundbrowser::SoundFilter currentFilter();
     void finishFilterClose();
@@ -199,12 +220,14 @@ private:
     SoundFilterModel filters_;
     SoundFiltersButton filtersButton_;
     SoundFilterChipRow chipRow_;
-    juce::Component panelHost_;
+    juce::Viewport panelHost_;
     SoundFilterPanel filterPanel_{filters_};
     SoundPreviewFooter footer_;
     synth::soundbrowser::SoundPreviewPlayer* previewPlayer_ = nullptr;
     std::uint64_t lastRequestId_ = 0;
     bool filtersOpen_ = false;
+    FooterMode footerMode_ = FooterMode::Full;
+    int listReserve_ = kMinListRows * kRowHeight; // list height kept before the open panel may take it
     int listTop_ = kSearchHeight + kPathHeight;
     bool animateOffscreenForTest_ = false;
     PanelSlide panelSlide_;

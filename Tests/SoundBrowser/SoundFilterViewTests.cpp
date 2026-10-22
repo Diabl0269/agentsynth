@@ -94,11 +94,11 @@ TEST(SoundFiltersViewTest, TheOpenPanelPushesTheListDownAndNeverCoversIt) {
     v.setFiltersOpen(true);
     EXPECT_TRUE(v.isFilterMotionRunning()) << "the panel grows open, it does not jump";
     f.settle();
-    const int panelHeight = v.getFilterPanel().getHeight();
+    const int panelHeight = v.getPanelViewport().getHeight();
     ASSERT_GT(panelHeight, 100);
     EXPECT_EQ(v.getListTop(), closedTop + panelHeight);
     // The panel ends where the path bar begins and the list begins one path bar later.
-    const auto host = v.getFilterPanel().getParentComponent()->getBounds();
+    const auto host = v.getPanelViewport().getBounds();
     EXPECT_EQ(host.getBottom() + SoundBrowserComponent::kPathHeight, v.getListTop());
     EXPECT_FALSE(host.intersects(v.getRowBounds(0)));
 
