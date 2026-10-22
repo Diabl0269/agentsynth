@@ -53,6 +53,9 @@ constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClic
 // same string, duplicated for the reason above). DEFAULT TRUE: removing the last thing an LFO moves deletes the
 // LFO and its settings, so the timeline asks first; the dialog's "Don't ask again" box turns this off too.
 constexpr const char* kTimelineAskBeforeRemovingLfoKey = "timelineAskBeforeRemovingLfo";
+// The answer the dialog's "Remember my choice" box stored ("keep" or "remove"; kRemoveLastSourceChoiceKey in
+// RemoveLfoConfirm.h is the same string). Turning the question back on forgets it.
+constexpr const char* kTimelineRemoveLastSourceChoiceKey = "timelineRemoveLastSourceChoice";
 
 // Read at use time by MainComponent::deleteTrackAfterConfirm (kAskBeforeDeletingTrackKey in DeleteTrackConfirm.h is
 // the same string). DEFAULT TRUE: Cmd+Backspace on a track row asks first; the dialog's "Don't ask again" box turns

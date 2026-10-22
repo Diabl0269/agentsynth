@@ -265,6 +265,10 @@ System (the design reference kept in step with this code); a look change updates
 new control kind gets a shared implementation and a design-system card first, then its call sites.
 Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
+**Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
+`textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
+of a window's custom components (the confirm window's checkbox) on every light theme.
+
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
 returns the active theme or a default-constructed `Theme`. Never write the colour as a literal in a

@@ -3,6 +3,9 @@
 # file-size cap.
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotGestureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotOnlyOwnPanelTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRemoveRoutingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotTooltipGeometryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/KnobModSourcesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotAddSourceTests.cpp
@@ -16,6 +19,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPickOnCanvasTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPanelGeometryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/MorphStripModTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/NoiseLevelModTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelAddConnectionTests.cpp

@@ -432,14 +432,10 @@ when the LFO stays to drive another jack. A row
 that triggers a removal is destroyed by the refresh before the host call returns, so it copies what it
 needs and makes the call its last statement.
 
-**Asking first.** A removal that would also delete the LFO (this routing is the last thing it moves) first
-shows "Remove LFO 1?": "Cutoff is the last thing LFO 1 moves, so removing it also deletes LFO 1 and its
-settings. Cmd+Z brings it back." (Ctrl+Z off macOS), a **Don't ask again** box, and **Remove LFO** (Return) /
-**Cancel** (Escape). Cancel changes nothing. Confirming removes as one undo step; with the box ticked it also
-turns the preference off. The question is `confirmRemoveLfo` (`Modulators/RemoveLfoConfirm.{h,cpp}`, on the shared `showConfirmDontAsk` window), asked by
-`MainComponent::removeModulator` before it calls `performRemoveModulator`; an LFO with another destination
-never asks. The preference is the user setting `timelineAskBeforeRemovingLfo` (default ON), toggled in
-Settings, Preferences, Timeline ("Ask before removing an LFO's last destination") and read at use time.
+**Asking first.** A removal that would also delete the LFO (this routing is the last thing it moves) first asks
+"Remove LFO 1?" with **Remove LFO**, **Keep module**, **Cancel** and a **Remember my choice** box, from every way of
+removing a modulation (`MainComponent::removeModulator`; the question is `confirmRemoveLfo`). An LFO with another
+destination never asks. Details, the stored preference and its reset: [remove-last-modulator](remove-last-modulator.md).
 Test hook: `synth::ui::test_hooks::removeLfoConfirmHookForTest`.
 
 **Layout**: a lane's block is its row plus its modulator rows (`TimelineAutomationLanes::laneBlockHeight`,

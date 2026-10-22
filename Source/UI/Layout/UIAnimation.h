@@ -132,6 +132,7 @@ public:
                std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
         // Stop / remove previous animation if any.
         stop(updater);
+        testClockStart.reset();
 
         // Animations: Off lands on the final frame at once; nothing is left running.
         if (animationsOff()) {
@@ -178,6 +179,19 @@ public:
         animator->update(now + animator->getDurationMs() + 1.0); // and the one past its end
     }
 
+    /** Test seam: advances a running animation to `ms` after its first frame, standing in for the VBlank frames that
+     *  never reach an off-screen component, so a test can read the values between the start and the end. The first
+     *  call starts the clock; later calls move it. A no-op when nothing runs. */
+    void stepForTest(double ms) {
+        if (!animator.has_value())
+            return;
+        if (!testClockStart.has_value()) {
+            testClockStart = juce::Time::getMillisecondCounterHiRes();
+            animator->update(*testClockStart); // the frame that starts it
+        }
+        animator->update(*testClockStart + ms);
+    }
+
     // -------------------------------------------------------------------------
     /** Linearly interpolate between two rectangles by normalised t ∈ [0,1].
      *
@@ -202,6 +216,7 @@ private:
     // The Animator is held as optional so we can cheaply test "is active".
     // The shared_ptr inside Animator keeps the underlying impl alive.
     std::optional<juce::Animator> animator;
+    std::optional<double> testClockStart; // stepForTest's clock; reset with each animation
 };
 
 // ============================================================================

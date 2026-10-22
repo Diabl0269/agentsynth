@@ -624,7 +624,7 @@ private:
     bool canMoveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane) override;
     bool moveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane, int destIndex) override;
     std::optional<ModulationRouting> findModulatorRouting(const synth::ui::ModulatorInfo& modulator);
-    void performRemoveModulator(const synth::ui::ModulatorInfo& modulator);
+    void performRemoveModulator(const synth::ui::ModulatorInfo& modulator, bool deleteLonelyLfo = true);
     /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
      *  modulator rows sit (the lane is made, as "Automate" does, when the parameter has none yet). */
     void revealModulatorInTimeline(const synth::ui::ModulatorInfo& modulator);

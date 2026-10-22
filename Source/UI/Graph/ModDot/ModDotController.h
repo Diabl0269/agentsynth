@@ -87,6 +87,10 @@ public:
     void popoverClosed(ModDotPopover* popover);
     void removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
                       juce::AudioProcessorGraph::NodeID attenuverterId);
+    /** The one way a modulation chain is removed by a person (the panel's remove button, a double-click on the dot or
+     * on the cable): the app window's `host.removeModulator`, so each asks the same first-time question; the
+     * editor-only fallback when the chain is unknown to it. */
+    void removeChain(juce::AudioProcessorGraph::NodeID attenuverterId);
     void revealSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
                       juce::AudioProcessorGraph::NodeID attenuverterId);
 

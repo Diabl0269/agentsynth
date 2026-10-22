@@ -129,6 +129,65 @@ TEST_F(GraphEditorTest, HoveringTheKnobItselfSetsAndClearsTheHoveredModTarget) {
     EXPECT_FALSE(knobCableHovered());
 }
 
+// Regression test for FRO791: hovering one of several cables into a knob lit every cable into that knob.
+TEST_F(GraphEditorTest, HoveringOneOfSeveralCablesIntoAKnobLightsOnlyThatCable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    auto f = wireLfoToFlangerRate(engine, editor);
+
+    // A second LFO, far below the first, onto the same knob.
+    auto lfo2Node = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    editor.updateComponents();
+    ModuleComponent* lfo2 = nullptr;
+    juce::Slider* rate = nullptr;
+    for (auto* mod : editor.getModuleComponents()) {
+        if (mod->getModule() == lfo2Node->getProcessor())
+            lfo2 = mod;
+    }
+    for (auto* c : f.flangerComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(c); s != nullptr && s->getComponentID() == "Rate (Hz)")
+            rate = s;
+    ASSERT_NE(lfo2, nullptr);
+    ASSERT_NE(rate, nullptr);
+    lfo2->setTopLeftPosition(0, 500);
+    const auto knobPoint = f.flangerComp->getBounds().getPosition() + rate->getBounds().getCentre();
+    editor.beginConnectionDrag(lfo2, 0, false, false, {0, 0});
+    editor.dragConnection(knobPoint);
+    editor.endConnectionDrag(knobPoint);
+    editor.timerCallback();
+
+    std::vector<GraphEditor::VisibleCable> onKnob;
+    for (const auto& c : editor.buildVisibleCables())
+        if (c.landsOnKnob && c.destNodeId == f.flangerId.uid)
+            onKnob.push_back(c);
+    ASSERT_EQ(onKnob.size(), 2u);
+    ASSERT_NE(onKnob[0].id, onKnob[1].id);
+
+    // The pointer on the first cable, well clear of the second.
+    const auto curve = GraphEditor::buildCablePath(onKnob[0].p1, onKnob[0].p2);
+    const auto onCable = curve.getPointAlongPath(curve.getLength() * 0.3f);
+    const auto inEditor = editor.getLocalPoint(editor.getChildComponent(0), onCable.toInt());
+    juce::MouseEvent e(juce::Desktop::getInstance().getMainMouseSource(), inEditor.toFloat(), juce::ModifierKeys(),
+                       0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &editor, &editor, juce::Time::getCurrentTime(), inEditor.toFloat(),
+                       juce::Time::getCurrentTime(), 0, false);
+    editor.mouseMove(e);
+
+    ASSERT_TRUE(editor.hasHoveredCable());
+    ASSERT_TRUE(editor.getHoveredModTarget().has_value()) << "the knob's ring still lights";
+    EXPECT_TRUE(editor.isCableHovered(onKnob[0]));
+    EXPECT_FALSE(editor.isCableHovered(onKnob[1])) << "a sibling cable into the same knob stays unlit";
+
+    // The other direction is unchanged: the knob under the pointer lights every cable into it.
+    editor.mouseExit(e);
+    rate->mouseEnter(juce::MouseEvent(
+        juce::Desktop::getInstance().getMainMouseSource(), rate->getLocalBounds().getCentre().toFloat(),
+        juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, rate, rate, juce::Time::getCurrentTime(),
+        rate->getLocalBounds().getCentre().toFloat(), juce::Time::getCurrentTime(), 0, false));
+    EXPECT_TRUE(editor.isCableHovered(onKnob[0]));
+    EXPECT_TRUE(editor.isCableHovered(onKnob[1]));
+}
+
 // Renders the LFO -> Flanger Rate patch (cable landing on the knob, depth band, hover chip)
 // headlessly so a human can eyeball it without driving the GUI app. The PNG is only written when
 // MOD_KNOB_PNG is set, so a normal CI run never touches the filesystem.

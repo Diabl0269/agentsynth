@@ -335,32 +335,37 @@ bool MainComponent::repointModulator(const synth::ui::ModulatorInfo& modulator,
 }
 
 // The row names its routing by uuids (node ids do not survive an undo restore), so it is looked up
-// again in the live graph, by the real modulator and parameter (ports looked through). Only an LFO source is
-// taken with the routing. When that would delete the LFO (this routing is its last destination) the person is
-// asked first, unless they switched the question off; the removal itself runs from the answer.
+// again in the live graph, by the real modulator and parameter (ports looked through). Every way a person removes a
+// modulation (a timeline row, the mod dot's menu, a double-click on a cable or on the dot) ends here. Only an LFO
+// source is taken with the routing. When that would delete the LFO (this routing is its last destination) the
+// person is asked first -- remove the LFO too, or keep it -- unless they asked to be remembered; the removal itself
+// runs from the answer.
 void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     auto* lfo = modulator.isLfo ? findNodeByUuid(modulator.sourceUuid) : nullptr;
-    const auto* settings = appProperties.getUserSettings();
-    const bool ask = settings == nullptr || settings->getBoolValue(synth::ui::kAskBeforeRemovingLfoKey, true);
-    if (target == nullptr || lfo == nullptr || !ask || lfoMovesMoreThanOneRouting(lfo->nodeID)) {
+    auto* settings = appProperties.getUserSettings();
+    if (target == nullptr || lfo == nullptr || lfoMovesMoreThanOneRouting(lfo->nodeID)) {
         performRemoveModulator(modulator);
+        return;
+    }
+    if (settings != nullptr && !settings->getBoolValue(synth::ui::kAskBeforeRemovingLfoKey, true)) {
+        performRemoveModulator(modulator, synth::ui::rememberedRemoveLfoChoice(*settings) ==
+                                              synth::ui::RemoveLfoChoice::removeModule);
         return;
     }
     auto* param = findParameterByID(target->getProcessor(), modulator.paramId);
     const auto targetName = param != nullptr ? param->getName(64) : modulator.paramId;
     juce::Component::SafePointer<MainComponent> safeThis(this);
     synth::ui::confirmRemoveLfo(synth::ui::removeLfoConfirmText(synth::moduleTitle(*lfo), targetName),
-                                [safeThis, modulator](bool confirmed, bool dontAskAgain) {
+                                [safeThis, modulator](synth::ui::RemoveLfoChoice choice, bool remember) {
                                     auto* self = safeThis.getComponent();
-                                    if (self == nullptr || !confirmed)
+                                    if (self == nullptr || choice == synth::ui::RemoveLfoChoice::cancel)
                                         return;
-                                    if (dontAskAgain)
-                                        if (auto* userSettings = self->appProperties.getUserSettings()) {
-                                            userSettings->setValue(synth::ui::kAskBeforeRemovingLfoKey, "0");
-                                            userSettings->saveIfNeeded();
-                                        }
-                                    self->performRemoveModulator(modulator);
+                                    if (remember)
+                                        if (auto* userSettings = self->appProperties.getUserSettings())
+                                            synth::ui::rememberRemoveLfoChoice(*userSettings, choice);
+                                    self->performRemoveModulator(modulator,
+                                                                 choice == synth::ui::RemoveLfoChoice::removeModule);
                                 });
 }
 
@@ -375,7 +380,8 @@ bool MainComponent::lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID
     return count > 1;
 }
 
-void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modulator) {
+// `deleteLonelyLfo` false takes only the cable, leaving an LFO that drives nothing else on the canvas.
+void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modulator, bool deleteLonelyLfo) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     if (target == nullptr)
         return;
@@ -384,14 +390,15 @@ void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modul
     // and the amount lane together. It belongs to the routing alone, so it goes even when the LFO stays to
     // drive another jack. A routing with no amount lane keeps the plain graph-only step.
     const bool hasAmountLane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid) != nullptr;
-    const auto remove = [this, hasAmountLane, &modulator](const AudioEngine::ModulationRouting& routing) {
+    const bool takeLfo = modulator.isLfo && deleteLonelyLfo;
+    const auto remove = [this, hasAmountLane, takeLfo, &modulator](const AudioEngine::ModulationRouting& routing) {
         if (!hasAmountLane) {
-            graphEditor.removeModulator(routing, modulator.isLfo);
+            graphEditor.removeModulator(routing, takeLfo);
             return;
         }
         undoManager.recordGraphTimelineAndMacroChange(
-            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &routing, &modulator] {
-                graphEditor.removeModulator(routing, modulator.isLfo, /*recordUndo=*/false);
+            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &routing, &modulator, takeLfo] {
+                graphEditor.removeModulator(routing, takeLfo, /*recordUndo=*/false);
                 if (const auto* lane = synth::ui::amountLaneFor(timelineDoc, modulator.attenuverterUuid))
                     timelineDoc.removeLane(lane->id);
             });

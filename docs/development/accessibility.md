@@ -58,7 +58,8 @@ A lane header's control chips, its "+" button and the "+" row's buttons are Tab 
 The track row's Cmd+Backspace question is an alert window: Delete is the default button (Return confirms; Cmd+Z undoes it),
 Escape cancels, Tab reaches the **Don't ask again** box (named, tooltipped, with the preference's way back) and **Delete**,
 and every button draws the shared focus ring. It appears and disappears with the popup motion
-([animation](../layout/animation.md#popup-windows)); the shared window is `showConfirmDontAsk` (`ConfirmDontAskDialog.h`).
+([animation](../layout/animation.md#popup-windows)); the shared window is `showConfirmDontAsk` (`ConfirmDontAskDialog.h`); the LFO-removal question adds a **Keep module** button between
+Remove LFO and Cancel (Tab order = the visual order) and calls its box **Remember my choice**, named and tooltipped the same way.
 
 ## Module cards
 

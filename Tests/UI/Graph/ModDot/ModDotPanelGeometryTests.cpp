@@ -5,8 +5,11 @@
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
 #include "UI/Graph/ModDot/ModDotPanelGeometry.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
 #include <functional>
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 
@@ -181,7 +184,7 @@ TEST(ModDotPanelFrameTest, MotionGrowsOutOfTheDotWithASoftOvershoot) {
     const auto style = frame.motionStyle();
     EXPECT_TRUE(style.overshoot);
     EXPECT_FLOAT_EQ(style.inStartScale, 0.4f);
-    EXPECT_FLOAT_EQ(style.outEndScale, 0.5f);
+    EXPECT_FLOAT_EQ(style.outEndScale, 0.04f) << "it leaves by shrinking into the dot, not to half size";
     EXPECT_DOUBLE_EQ(style.inMs, 200.0);
     EXPECT_DOUBLE_EQ(style.outMs, 140.0);
     EXPECT_FLOAT_EQ(style.inSlidePx, 0.0f) << "the scale moves the panel; the window itself stays put";
@@ -296,4 +299,36 @@ TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow)
     pumpUntil([] { return false; });
     EXPECT_EQ(m.closed, 1);
     m.frame->removeComponentListener(&watch);
+}
+
+// Regression test for FRO793: the panel grew out of its dot but on close it left at almost full size, fading, and
+// never reached the dot. Stepping the leaving tween shows it shrinking, steadily, down onto the dot while it fades.
+TEST(ModDotPanelFrameTest, ClosingShrinksThePanelFrameByFrameBackIntoItsDot) {
+    AnimateOffScreenGuard seam;
+    synth::ui::setReducedMotionForTest(false);
+    MotionFrame m;
+    ASSERT_TRUE(pumpUntil([&] { return m.frame->getAlpha() >= 0.999f && !m.frame->body().isTransformed(); }));
+
+    m.frame->close();
+    ASSERT_TRUE(m.frame->isClosing());
+    const double total = m.frame->motionStyle().outMs;
+    std::vector<float> scales, alphas;
+    for (const double fraction : {0.0, 0.25, 0.5, 0.75, 0.99}) {
+        synth::ui::PopupMotion::stepMotionForTest(*m.frame, total * fraction);
+        scales.push_back(m.frame->body().isTransformed() ? m.frame->body().getTransform().getScaleFactor() : 1.0f);
+        alphas.push_back(m.frame->getAlpha());
+    }
+    synth::ui::setReducedMotionForTest(std::nullopt);
+
+    for (size_t i = 1; i < scales.size(); ++i) {
+        EXPECT_LT(scales[i], scales[i - 1] + 1e-4f) << "it only gets smaller, frame " << i;
+        EXPECT_LT(alphas[i], alphas[i - 1] + 1e-4f) << "and only fainter, frame " << i;
+    }
+    EXPECT_FLOAT_EQ(scales.front(), 1.0f) << "it starts at full size";
+    EXPECT_GT(scales[2], 0.5f) << "halfway out it is strictly between full size and the dot";
+    EXPECT_LT(scales[2], 1.0f);
+    EXPECT_GT(alphas[2], 0.0f);
+    EXPECT_LT(alphas[2], 1.0f);
+    EXPECT_LT(scales.back(), 0.1f) << "on the last frame it is down on the dot, not at half size";
+    pumpUntil([&] { return m.closed >= 1; });
 }

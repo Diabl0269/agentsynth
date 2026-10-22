@@ -87,6 +87,8 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
 - [`docs/timeline/linked-clips.md`](timeline/linked-clips.md) — linked clips: Duplicate linked, Make unique, what a link shares and which edits end it
+- [`docs/timeline/remove-last-modulator.md`](timeline/remove-last-modulator.md) — Remove LFO / Keep module / Remember my choice when a removal would delete the LFO, and its reset
+- [`docs/layout/mod-ring-fade.md`](layout/mod-ring-fade.md) — a knob's modulation ring fading in and out
 - [`docs/timeline/automation.md`](timeline/automation.md) — automation lanes folded out under their tracks, the Unassigned section, the curve editor
 - [`docs/timeline/lane-motion.md`](timeline/lane-motion.md) — lane blocks and modulator rows growing in, shrinking away and gliding on undo and redo
 - [`docs/timeline/modulator-row-identity.md`](timeline/modulator-row-identity.md) — a modulator row replaced in place (Change source, Change parameter, their undo) keeps its row, slot and fold

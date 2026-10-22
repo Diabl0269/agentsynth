@@ -69,19 +69,15 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Noise; }
 
+    // Raw 8/9 are the Color/Level CV jacks (the declared modulation targets). Raw 0/1 are legacy aliases the
+    // mono path still reads: they sit on the same jacks but are never a head, or getJackTargets would hand a
+    // jack drop the alias first and a Level drop would land on a channel that is no modulation target.
     LogicalPort mapInputChannel(int raw) const override {
         LogicalPort p;
-        if (raw == 8 || raw == 0) {
-            p.visibleJackIndex = 0;
+        if (raw == 8 || raw == 0 || raw == 9 || raw == 1) {
+            p.visibleJackIndex = (raw == 8 || raw == 0) ? 0 : 1;
             p.role = PortRole::ModCV;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
-            return p;
-        }
-        if (raw == 9 || raw == 1) {
-            p.visibleJackIndex = 1;
-            p.role = PortRole::ModCV;
-            p.isPolyGroupHead = true;
+            p.isPolyGroupHead = raw >= 8;
             p.polyVoiceSpan = 1;
             return p;
         }

@@ -473,7 +473,9 @@ void ModuleComponent::timerCallback() {
     if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f)
         needsRepaint = true;
 
-    // 2. Active modulation targeting this module (Serum mod rings)
+    // 2. Active modulation targeting this module (Serum mod rings). A knob's ring fades in with its first modulation
+    //    and out with its last (ModRingFades), so the fades follow the routings on this same tick.
+    ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId);
     if (!needsRepaint) {
         const auto& modInfo = owner.getCachedModDisplayInfo();
         for (const auto& info : modInfo) {

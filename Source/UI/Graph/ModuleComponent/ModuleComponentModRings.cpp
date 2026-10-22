@@ -38,6 +38,27 @@ void paintFaderModulation(juce::Graphics& g, synth::ui::CardFader& fader, const 
                                     positive ? colours.modRingPositive : colours.modRingNegative, hovered);
 }
 
+// Everything drawn between construction and destruction is drawn at `alpha` (a ring fading in or out).
+class AlphaLayer {
+public:
+    AlphaLayer(juce::Graphics& g, float alpha)
+        : g_(g)
+        , on_(alpha < 1.0f) {
+        if (on_)
+            g_.beginTransparencyLayer(alpha);
+    }
+    ~AlphaLayer() {
+        if (on_)
+            g_.endTransparencyLayer();
+    }
+    AlphaLayer(const AlphaLayer&) = delete;
+    AlphaLayer& operator=(const AlphaLayer&) = delete;
+
+private:
+    juce::Graphics& g_;
+    bool on_;
+};
+
 } // namespace
 
 // The pending-drop-target ring (a released cable would land on this knob, or an outline round a
@@ -74,11 +95,10 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         return;
 
     auto targets = mod->getModulationTargets();
-    const auto& modInfo = owner.getCachedModDisplayInfo();
-
-    for (const auto& info : modInfo) {
-        if (info.destNodeID != nodeId || info.isBypassed)
-            continue;
+    // The live routings, plus the last-seen ones of a ring that is fading out after its modulation was removed.
+    for (const auto& ring : ringFades_.rings(owner.getCachedModDisplayInfo(), nodeId)) {
+        const auto& info = ring.info;
+        const AlphaLayer layer(g, ring.alpha);
 
         // The ring belongs on the knob of the parameter the routed jack DRIVES — resolved through
         // the target's bound parameter, not its jack label. "Rate" is the Flanger's jack label

@@ -6,6 +6,7 @@
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
+#include "UI/Graph/ModuleComponent/ModRingFades.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
@@ -241,8 +242,7 @@ public:
      *  only consulted when a cable is already in flight and no real jack was hit. */
     std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
 
-    /** Highlights a knob as the pending modulation drop target, or clears it with -1.
-     *  Returns true when the highlight changed, so the caller can repaint only on a change. */
+    /** Highlights a knob as the pending modulation drop target (-1 clears); true when the highlight changed. */
     bool setModDropTargetChannel(int channelIndex);
 
     /** A cable dragged over the card at `localPoint`: unfolds a folded More row under it. */
@@ -250,6 +250,7 @@ public:
     /** Null for a card whose widgets are not built by a card body. */
     synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
+    synth::ui::ModRingFades& getModRingFades() noexcept { return ringFades_; }
     synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
     /** A SamplerChrome or DrumKitChrome; null unless the module is a Sampler or a Drum Kit. */
     synth::ui::InstrumentChrome* getInstrumentChrome() const noexcept { return instrumentChrome_.get(); }
@@ -648,8 +649,8 @@ private:
     // Instrument chrome: the Sampler's waveform and picker (SamplerChrome), the Drum Kit's picker (DrumKitChrome).
     std::unique_ptr<synth::ui::InstrumentChrome> instrumentChrome_;
     bool fileDragHighlight = false;
-    // Channel index of the knob currently highlighted as a modulation drop target, or -1.
-    int modDropTargetChannel = -1;
+    int modDropTargetChannel = -1; // channel of the knob highlighted as the modulation drop target, or -1
+    synth::ui::ModRingFades ringFades_{*this};
 
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
@@ -769,8 +770,7 @@ private:
     juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
     bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 
-    // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
-    // paint() (which was at the function-size ratchet's ceiling) rather than grown further.
+    // The drop-target ring and the live modulation rings on knobs, split out of paint() (function-size ceiling).
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
     void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);

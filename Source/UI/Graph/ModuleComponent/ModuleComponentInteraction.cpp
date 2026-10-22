@@ -889,7 +889,9 @@ void ModuleComponent::showRealContextMenu(juce::PopupMenu& menu) {
 }
 
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
-    if (const auto port = getPortForPoint(e.getMouseDownPosition())) {
+    // A release heard as a control's listener is in that control's space, never a jack click.
+    const auto port = e.eventComponent == this ? getPortForPoint(e.getMouseDownPosition()) : std::nullopt;
+    if (port) {
         owner.endConnectionDrag(e.getScreenPosition());
         owner.getPortPanel().jackReleased(*this, *port, e); // a plain click on the jack opens its connections panel
         return;
@@ -904,17 +906,15 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     const bool collapseOnClick = plainClickCollapsePending && !moved;
     plainClickCollapsePending = false;
 
-    // Captured into a local BEFORE clearing the member below — mouseUp's own reparent-vs-plain-
-    // finalize choice further down still needs it, and this is the ONE gate for that choice (see
-    // reparentArmed's own comment on ModuleComponent.h for why it is NOT `ctrlTogglePending ||
-    // cmdReparentPending`).
+    // Captured into a local BEFORE clearing the member below — mouseUp's own reparent-vs-plain-finalize choice further
+    // down still needs it, and this is the ONE gate for that choice (see reparentArmed's own comment on
+    // ModuleComponent.h for why it is NOT `ctrlTogglePending || cmdReparentPending`).
     const bool wasReparentArmed = reparentArmed;
     reparentArmed = false;
 
-    // Ctrl/Cmd-press armed a drag AND a pending selection toggle at once; the press turning out to
-    // be a click is what decides it was really the toggle. Restore the selection the press
-    // collapsed and flip this module's membership. A Ctrl/Cmd+DRAG leaves the collapsed single
-    // selection alone, exactly like a plain drag does.
+    // Ctrl/Cmd-press armed a drag AND a pending selection toggle at once; the press turning out to be a click is what
+    // decides it was really the toggle. Restore the selection the press collapsed and flip this module's membership. A
+    // Ctrl/Cmd+DRAG leaves the collapsed single selection alone, exactly like a plain drag does.
     if (ctrlTogglePending) {
         if (!moved) {
             owner.setSelectedNodes(ctrlPressSelection);
