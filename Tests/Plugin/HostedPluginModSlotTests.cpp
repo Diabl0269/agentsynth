@@ -247,6 +247,7 @@ TEST(HostedPluginModSlotTest, RemovingTheLastCableFreesTheSlot) {
     auto owned = std::make_unique<HostedPluginModule>();
     auto* hosted = owned.get();
     auto& graph = engine.getGraph();
+    graph.clear();
     auto hostedNode = graph.addNode(std::move(owned));
     auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
     ASSERT_NE(lfoNode, nullptr);
