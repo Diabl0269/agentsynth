@@ -2,7 +2,7 @@
 // header's name editor (Return commits, Escape cancels, a text editor keeps the key), a focused mixer column's header
 // editor (also inside a detached mixer window) and the selected module card.
 #include "../Mixer/MixerZonesTestRig.h"
-#include "MainComponent/KeyboardFocusRestore.h"
+#include "MainComponent/WindowKeyForward.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/RenameKey.h"
@@ -143,10 +143,18 @@ TEST(RenameKeyMixer, TheColumnHoldingFocusIsFoundFromAnyWidgetInsideIt) {
 }
 
 // Regression test: with focus on nothing but the window (right after launch, or once an in-place editor closed),
-// keys died at the window and Cmd+2 did nothing.
-TEST(RenameKeyFocusRestore, FocusOnTheWindowOrNothingNeedsRestoring) {
-    juce::Component window, other;
-    EXPECT_TRUE(synth::keyboardFocusIsOnWindowOrNothing(nullptr, &window));
-    EXPECT_TRUE(synth::keyboardFocusIsOnWindowOrNothing(&window, &window));
-    EXPECT_FALSE(synth::keyboardFocusIsOnWindowOrNothing(&other, &window));
+// a key landed on the window and died, so Cmd+2 did nothing. The window forwards it to MainComponent.
+TEST(RenameKeyWindowForward, AKeyOnTheWindowRunsTheShortcutTable) {
+    MixerZonesRig r(1);
+    hideWelcome(r.mc);
+    auto& dock = r.mc.getBottomDock();
+    const auto second = dock.tabAtKeyPosition(2);
+    ASSERT_TRUE(second.has_value());
+    ASSERT_NE(dock.getActiveTab(), *second);
+    const juce::KeyPress cmd2('2', juce::ModifierKeys::commandModifier, '2');
+    EXPECT_TRUE(synth::forwardWindowKeyToMainComponent(&r.mc, cmd2));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(dock.getActiveTab(), *second);
+    juce::Component notMain;
+    EXPECT_FALSE(synth::forwardWindowKeyToMainComponent(&notMain, cmd2));
 }
