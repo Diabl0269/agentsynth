@@ -15,7 +15,12 @@ constexpr int kReapRetryDelayMs = 250;
 } // namespace
 
 HostedPluginModule::HostedPluginModule()
-    : ModuleBase("Hosted Plugin", kMaxPluginChannels, kMaxPluginChannels, StereoAudio::Declared) {
+    : ModuleBase("Hosted Plugin", kMaxPluginChannels + kMaxModSlots, kMaxPluginChannels, StereoAudio::Declared) {
+    // The inputs above the 16 audio channels are the modulation slots (see bindModSlot); they are never jacks.
+    for (int k = 0; k < kMaxModSlots; ++k) {
+        modSlotParamIndex_[(size_t)k].store(-1, std::memory_order_relaxed);
+        modSlotBase_[(size_t)k].store(-1.0f, std::memory_order_relaxed);
+    }
     // 16 in / 16 out, for the node's whole lifetime, whatever plugin (if any) it ends up hosting.
     // See the class comment: JUCE fixes the bus layout here and renegotiating it would drop every
     // connection the node has.
@@ -66,6 +71,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
     // saved from, and applying it to a DIFFERENT plugin hands third-party code someone else's bytes.
     pendingBlob_.reset();
     setCardLayoutOverride({}); // like the blob, a card layout belongs to the plugin it was made for
+    modSlotsFromVar({});       // and so do the parameters its cables modulate
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
@@ -102,6 +108,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPluginBackend& backend) {
     pendingBlob_.reset(); // see the description overload
     setCardLayoutOverride({});
+    modSlotsFromVar({});
     startIdentityLoad(identity, backend);
 }
 
@@ -145,6 +152,7 @@ void HostedPluginModule::unloadPlugin() {
     identity_ = {};
     pendingBlob_.reset();
     setCardLayoutOverride({});
+    modSlotsFromVar({});
     statusMessage_.clear();
     // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
@@ -283,6 +291,9 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
         identity_ = PluginIdentity::fromDescription(instance->getPluginDescription());
 
     retireActiveInstance();
+
+    // After the retire (the audio thread can no longer reach the old instance) and before the publish below.
+    resolveModSlots(*instance);
 
     auto* raw = instance.get();
     ownedInstance_ = std::move(instance);
@@ -498,6 +509,8 @@ void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     // A non-owning view over the first instanceChannels channels — no allocation, no copy.
     juce::AudioBuffer<float> view(buffer.getArrayOfWritePointers(), instanceChannels, numSamples);
 
+    applyModSlots(*instance, buffer);
+
     instance->setPlayHead(getPlayHead());
     instance->processBlock(view, midiMessages);
 
@@ -531,6 +544,17 @@ juce::String HostedPluginModule::getOutputPortLabel(int channelIndex) const {
 }
 
 LogicalPort HostedPluginModule::mapInputChannel(int rawChannel) const {
+    // A modulation slot is reached only through its knob; its "jack" index is the raw channel itself, past every
+    // audio jack, so it never shares a jack with audio and never draws one.
+    if (isModChannel(rawChannel)) {
+        LogicalPort port;
+        port.visibleJackIndex = rawChannel;
+        port.role = PortRole::ModCV;
+        port.isPolyGroupHead = true;
+        port.polyVoiceSpan = 1;
+        return port;
+    }
+
     // A collapsed stereo pair: one Audio jack owning raw ch0 + ch1 (the FX-pair map, no CV jacks).
     if (visibleInputs_.load(std::memory_order_relaxed) == 2 && !isDualIO())
         return mapStereoPairInput(rawChannel, 0);
@@ -647,6 +671,9 @@ juce::var HostedPluginModule::getExtraState() const {
     if (!cardLayoutOverride_.isVoid())
         object->setProperty("cardLayout", cardLayoutOverride_.clone());
 
+    if (auto slots = modSlotsToVar(); !slots.isVoid())
+        object->setProperty("modSlots", slots);
+
     // NOTE: no path is written here, ever — not the plugin binary's, not anything else. The identity
     // is format + uniqueId + name (see PluginIdentity). HostedPluginTests asserts it over the
     // serialized patch.
@@ -663,7 +690,11 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
 
     const PluginIdentity identity = PluginIdentity::fromVar(state);
 
+    if (applyStateInPlace(identity, *object))
+        return;
+
     pendingBlob_.reset();
+    modSlotsFromVar(object->getProperty("modSlots"));
     setCardLayoutOverride(object->getProperty("cardLayout"));
     const juce::String encoded = object->getProperty("pluginState").toString();
     if (encoded.isNotEmpty())

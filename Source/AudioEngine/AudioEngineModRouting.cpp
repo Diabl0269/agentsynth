@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <utility>
 
 // The cables are taken once (synth::ConnectionIndex): a scan of getConnections() per attenuverter made every caller --
 // the canvas tick, the timeline's modulator rows, each edit's track-ownership pass -- O(routings x cables log cables).
@@ -338,6 +339,27 @@ void AudioEngine::addEmptyModRouting() { mainProcessorGraph.addNode(std::make_un
 
 void AudioEngine::removeModRouting(juce::AudioProcessorGraph::NodeID attenuverterNodeID) {
     mainProcessorGraph.removeNode(attenuverterNodeID);
+    releaseUnconnectedHostedModSlots();
+}
+
+// A hosted plugin's modulation slot lives as long as a cable reaches its channel. Removing the last one frees the
+// slot and puts the parameter back at its resting value; this sweep is what notices, whichever path removed it.
+void AudioEngine::releaseUnconnectedHostedModSlots() {
+    std::vector<juce::AudioProcessorGraph::Connection> connections;
+    bool connectionsRead = false;
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        auto* module = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (module == nullptr || module->getModulationTargets().empty())
+            continue;
+        if (!std::exchange(connectionsRead, true))
+            connections = mainProcessorGraph.getConnections();
+        const auto id = node->nodeID;
+        module->releaseUnconnectedModSlots([&connections, id](int channel) {
+            return std::any_of(connections.begin(), connections.end(), [id, channel](const auto& c) {
+                return c.destination.nodeID == id && c.destination.channelIndex == channel;
+            });
+        });
+    }
 }
 
 void AudioEngine::toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID) {

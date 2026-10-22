@@ -452,6 +452,7 @@ add_library(Core STATIC
     Source/Plugin/Hosting/HostedPluginModule.cpp
     Source/Plugin/Hosting/HostedPluginModule.h
     Source/Plugin/Hosting/HostedPluginModuleCardLayout.cpp
+    Source/Plugin/Hosting/HostedPluginModuleModSlots.cpp
     Source/Plugin/Hosting/PluginScanService.cpp
     Source/Plugin/Hosting/PluginScanService.h
     Source/Plugin/Hosting/PluginScanCrashGuard.cpp

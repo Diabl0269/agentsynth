@@ -770,6 +770,10 @@ void GraphEditor::timerCallback() {
             if (card != nullptr)
                 card->syncModDotButtons();
     modDot_->tickPopover();
+    // A modulated plugin knob shows its resting value, which the audio thread moves without telling anyone.
+    for (auto* card : content.getModules())
+        if (card != nullptr)
+            card->reflectHostedRestingValues();
     content.connectionAnimPhase += 0.02f;
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;

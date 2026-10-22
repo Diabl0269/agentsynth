@@ -18,14 +18,14 @@
 void ModuleComponent::wireModDotGesture(juce::Slider& knob, synth::ui::CardControlGestures& gestures,
                                         juce::RangedAudioParameter* param) {
     gestures.wantsModDotGesture = [this, param, &knob](const juce::MouseEvent& e) {
-        if (e.mods.isCommandDown() || firstAttenuverterForParam(param).uid == 0)
+        const int destChannel = destChannelForKnob(param, knob);
+        if (e.mods.isCommandDown() || firstAttenuverterForChannel(destChannel).uid == 0)
             return false;
-        const int destChannel = destChannelForBoundParam(param);
         return destChannel >= 0 && getModTargetKnobAnchor(destChannel).has_value() &&
                pressIsOnLandingDot(param, knob, e);
     };
     gestures.onModDotGesture = [this, param, &knob](const juce::MouseEvent& e, int phase) {
-        const int destChannel = destChannelForBoundParam(param);
+        const int destChannel = destChannelForKnob(param, knob);
         owner.getModDot().routeGesture(nodeId, destChannel, knob, getModDotButton(destChannel), e, phase);
     };
     gestures.onModDotCancelled = [this] { owner.getModDot().cancel(); };

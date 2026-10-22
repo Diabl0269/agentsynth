@@ -107,11 +107,11 @@ void ModuleComponent::wireMorphStripGestures() {
             return map->stripAnchor(axis).getDistanceFrom(e.position) <= reach;
         };
         gestures.wantsModAmountGesture = [this, param, map, axis](const juce::MouseEvent& e) {
-            return firstAttenuverterForParam(param).uid != 0 &&
+            return firstAttenuverterForChannel(destChannelForBoundParam(param)).uid != 0 &&
                    (map->modBarAt(e.position) == axis || (e.mods.isAltDown() && map->stripAt(e.position) == axis));
         };
         gestures.wantsModDotGesture = [this, param, channel, onDot](const juce::MouseEvent& e) {
-            return !e.mods.isCommandDown() && firstAttenuverterForParam(param).uid != 0 &&
+            return !e.mods.isCommandDown() && firstAttenuverterForChannel(destChannelForBoundParam(param)).uid != 0 &&
                    getModDotButton(channel) != nullptr && onDot(e);
         };
         gestures.wantsCablePickupGesture = [this, channel, onDot](const juce::MouseEvent& e) {

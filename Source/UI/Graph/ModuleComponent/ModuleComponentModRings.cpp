@@ -5,6 +5,7 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "ModuleComponentModBand.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -67,6 +68,16 @@ private:
 void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
+    // A plugin knob with no slot yet (see getModTargetPortForPoint) is named by its slider index instead.
+    if (const int si = kUnboundHostedKnobChannelBase - modDropTargetChannel;
+        modDropTargetChannel <= kUnboundHostedKnobChannelBase && si < sliders.size() && sliders[si]->isVisible()) {
+        const auto b = sliders[si]->getBounds().toFloat();
+        const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
+        const auto c = modRingCentreFor(*sliders[si], b);
+        g.setColour(jackAccentColour);
+        g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+    }
+
     if (mod != nullptr && modDropTargetChannel >= 0) {
         for (const auto& t : mod->getModulationTargets()) {
             if (t.channelIndex != modDropTargetChannel)
@@ -121,7 +132,10 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         const auto* param = mod->parameterForModTarget(*target);
-        const float baseNorm = param != nullptr ? param->getValue() : 0.5f;
+        float baseNorm = param != nullptr ? param->getValue() : 0.5f;
+        // A plugin parameter's own value moves with the modulation; the ring starts from its resting value.
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(mod))
+            baseNorm = hosted->modSlotBase(target->paramId).value_or(baseNorm);
         const float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
 
         // This routing is correlated with a hover (either a cable hovered on the canvas that lands

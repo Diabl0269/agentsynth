@@ -514,6 +514,7 @@ private:
 
     void updateRoundTripLatencyReadout();
     void installHostedPluginObservers();
+    void removeUnresolvedHostedModCables(juce::AudioProcessorGraph::NodeID node, const juce::StringArray& paramIds);
     void commitMidiRecording();
 
     // ---- Audio recording ----

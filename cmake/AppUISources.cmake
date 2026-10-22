@@ -671,6 +671,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h
     Source/UI/Graph/PluginKnobPicker/HostedParameterCardMenu.cpp
+    Source/UI/Graph/PluginKnobPicker/HostedModTargetPicker.h
+    Source/UI/Graph/PluginKnobPicker/HostedModTargetPicker.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h

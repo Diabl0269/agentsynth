@@ -140,6 +140,9 @@ void GraphEditor::updateComponents() {
     // A cable edit can change which macro ports a routing is looked through without changing the routing itself,
     // so the next tick recounts every knob's sources (ModDotController::recountIfRoutingsChanged).
     modDot_->forgetRoutings();
+    // Every structural edit (undo and redo included) passes here: a plugin parameter whose last cable went frees its
+    // modulation slot.
+    audioEngine.releaseUnconnectedHostedModSlots();
     const juce::ScopedValueSetter<bool> reentrancyGuard(updatingComponents, true);
 
     auto& graph = audioEngine.getGraph();

@@ -500,9 +500,11 @@ when `wantsModAmountGestureFor()` says the click should adjust a routed Attenuve
 or a drag starting on its modulation bar); both route their mouse through `CardControlGestures` and are
 wired by one call, `ModuleComponent::wireCardControlGestures`. See
 [`modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob`](../modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob)
-for the gesture itself and the depth band it moves; hosted-plugin card knobs
-(`ModuleComponentHostedPluginCard.cpp`) stay plain `juce::Slider`s — they are never modulation
-targets.
+for the gesture itself and the depth band it moves. Hosted-plugin card knobs
+(`ModuleComponentHostedPluginCard.cpp`) are plain `juce::Slider`s wired through the same
+`wireCardControlGestures`, so a modulated plugin knob gets the same ring, mod dot and amount gesture
+as a built-in one; their channel is the parameter's modulation slot
+([`plugin-card-layout.md#modulating-plugin-parameters`](../control/plugin-card-layout.md#modulating-plugin-parameters)).
 
 ## Automated marker
 

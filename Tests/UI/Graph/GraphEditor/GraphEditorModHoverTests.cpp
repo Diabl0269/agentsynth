@@ -50,7 +50,7 @@ HoverFixture wireLfoToFlangerRate(AudioEngine& engine, GraphEditor& editor) {
     editor.beginConnectionDrag(f.lfoComp, 0, false, false, {0, 0});
     editor.dragConnection(knobPoint);
     editor.endConnectionDrag(knobPoint);
-    editor.timerCallback(); // refreshes cachedModDisplayInfo, which firstAttenuverterForParam reads
+    editor.timerCallback(); // refreshes cachedModDisplayInfo, which firstAttenuverterForChannel reads
     return f;
 }
 

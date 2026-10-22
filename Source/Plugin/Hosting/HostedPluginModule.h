@@ -2,11 +2,13 @@
 
 #include "../../Modules/ModuleBase.h"
 #include "HostedPluginBackend.h"
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth {
@@ -239,6 +241,50 @@ public:
     void buildParameterContextMenu(const juce::String& paramId, juce::PopupMenu& menu);
 
     //==============================================================================
+    // Modulation slots: mod cables onto the plugin's own parameters (message thread unless noted)
+    //==============================================================================
+
+    /** How many plugin parameters can be modulated at once. */
+    static constexpr int kMaxModSlots = 48;
+    /** Raw input channel of slot 0; slot k is kModChannelBase + k. */
+    static constexpr int kModChannelBase = kMaxPluginChannels;
+
+    static bool isModChannel(int rawChannel) noexcept {
+        return rawChannel >= kModChannelBase && rawChannel < kModChannelBase + kMaxModSlots;
+    }
+
+    /** The CV channel that modulates `paramId`, claiming a free slot when it has none. -1 when every
+     *  slot is taken or `paramId` is empty. Works before an instance exists (the base is then read
+     *  when it publishes). */
+    int bindModSlot(const juce::String& paramId);
+
+    /** Frees the slot on `rawChannel` and puts its parameter back at the resting value. */
+    void releaseModSlot(int rawChannel);
+
+    /** Frees every bound slot whose channel `isConnected` says has no cable. */
+    void releaseUnconnectedModSlots(const std::function<bool(int rawChannel)>& isConnected);
+
+    /** The slot channel already bound to `paramId`, or -1. Never claims one. */
+    int modChannelForParam(const juce::String& paramId) const;
+
+    /** True when `paramId` is modulated already, or the live instance has it and a slot is free. */
+    bool canModulateParam(const juce::String& paramId) const;
+
+    /** The parameter id bound to `rawChannel`, or empty. */
+    juce::String modSlotParamId(int rawChannel) const;
+
+    /** The resting value (0..1) of `paramId` while it is modulated: what the card knob shows and
+     *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */
+    std::optional<float> modSlotBase(const juce::String& paramId) const;
+
+    /** Message thread. Fired after a publish with the bound parameter ids the new instance does not
+     *  have; the owner removes their cables. */
+    std::function<void(const juce::StringArray& missingParamIds)> onModSlotsUnresolved;
+
+    /** One entry per bound slot, labelled with the parameter's name; every one is knob-only. */
+    std::vector<ModulationTarget> getModulationTargets() const override;
+
+    //==============================================================================
     // AudioProcessor
     //==============================================================================
 
@@ -339,6 +385,18 @@ private:
 
     void registerParameterContextMenu(juce::AudioPluginInstance& instance);
 
+    /** Message thread, before `instance` is published: points every slot at its parameter there. */
+    void resolveModSlots(juce::AudioPluginInstance& instance);
+
+    /** Audio thread: writes base + CV into each bound parameter. */
+    void applyModSlots(juce::AudioPluginInstance& instance, const juce::AudioBuffer<float>& buffer) noexcept;
+
+    juce::var modSlotsToVar() const;
+    void modSlotsFromVar(const juce::var& slots);
+
+    /** Message thread. A restore of the identity already live: applies it without reloading. */
+    bool applyStateInPlace(const PluginIdentity& identity, const juce::DynamicObject& object);
+
     /** Message thread. prepareToPlay/setPlayConfigDetails the instance to OUR rate and block. */
     void prepareInstance(juce::AudioPluginInstance& instance) const;
 
@@ -405,6 +463,15 @@ private:
     std::atomic<int> visibleInputs_{1};
     std::atomic<int> visibleOutputs_{1};
 
+    // Modulation slots. The parameter index is -1 while a slot is free or unresolved; the base can be
+    // moved by the audio thread when something else (the plugin's window, the card knob, automation)
+    // changed the parameter. modResync_ tells the audio thread its read-backs are stale.
+    std::array<std::atomic<int>, kMaxModSlots> modSlotParamIndex_;
+    std::array<std::atomic<float>, kMaxModSlots> modSlotBase_;
+    std::atomic<std::uint32_t> modResync_{0};
+    std::array<float, kMaxModSlots> modSlotReadBack_{}; // audio thread only
+    std::uint32_t modResyncSeen_ = 0;                   // audio thread only
+
     // --- Message-thread state --------------------------------------------------------------
     std::unique_ptr<juce::AudioPluginInstance> ownedInstance_; // owns whatever activeInstance_ points at
     std::vector<RetiredInstance> retired_;
@@ -421,6 +488,7 @@ private:
     juce::String statusMessage_;
     int instanceOrdinal_ = 1;
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
+    std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared

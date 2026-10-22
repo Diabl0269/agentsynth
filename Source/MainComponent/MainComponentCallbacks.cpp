@@ -439,7 +439,37 @@ void MainComponent::installHostedPluginObservers() {
             // are stale for exactly the same reason a runtime change leaves them stale.
             rebuildGraphForLatencyChange();
         };
+        hosted->onModSlotsUnresolved = [this, nodeId = node->nodeID](const juce::StringArray& paramIds) {
+            removeUnresolvedHostedModCables(nodeId, paramIds);
+        };
     }
+}
+
+// The plugin was replaced or updated and some modulated parameters no longer exist. Their cables would drive
+// nothing, so they go, as ONE undo step, and a toast says so with an Undo (putting the old plugin back first makes
+// the restored cables live again). Cables on parameters that still exist were kept by the module itself.
+void MainComponent::removeUnresolvedHostedModCables(juce::AudioProcessorGraph::NodeID nodeId,
+                                                    const juce::StringArray& paramIds) {
+    auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    auto* hosted = node != nullptr ? dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) : nullptr;
+    if (hosted == nullptr)
+        return;
+    std::vector<juce::AudioProcessorGraph::NodeID> doomed;
+    for (const auto& routing : audioEngine.getActiveModRoutings())
+        if (routing.destNodeID == nodeId && paramIds.contains(hosted->modSlotParamId(routing.destChannelIndex)))
+            doomed.push_back(routing.attenuverterNodeID);
+    if (doomed.empty())
+        return;
+
+    undoManager.recordGraphAndMacroChange(audioEngine.getGraph(), graphEditor.getMacros(), [this, &doomed] {
+        for (const auto atten : doomed)
+            audioEngine.removeModRouting(atten);
+    });
+    graphEditor.updateComponents();
+    const int count = (int)doomed.size();
+    toast_->show((count == 1 ? juce::String("Removed 1 mod cable") : "Removed " + juce::String(count) + " mod cables") +
+                     ": the plugin no longer has that parameter",
+                 "Undo", [this] { undoManager.undo(); }, "Put the mod cables back");
 }
 
 /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay

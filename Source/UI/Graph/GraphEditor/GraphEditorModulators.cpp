@@ -10,6 +10,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -67,6 +68,19 @@ NodeID settleNewRouting(AudioEngine& engine, NodeID lfoId, NodeID targetId, int 
     }
     return settled;
 }
+
+// The CV channel for (target, paramId), claiming a hosted plugin's modulation slot when the parameter has none yet.
+// Claimed before the caller's undo step opens, like a cable dropped on a plugin knob: a claim whose cable never lands
+// (or is undone) is freed by the sweep in updateComponents.
+int claimModulationChannel(juce::AudioProcessorGraph& graph, NodeID targetId, const juce::String& paramId) {
+    auto* module = moduleOf(graph, targetId);
+    if (module == nullptr)
+        return -1;
+    if (const int raw = module->modulationChannelForParam(paramId); raw >= 0)
+        return raw;
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
+    return hosted != nullptr && hosted->canModulateParam(paramId) ? hosted->bindModSlot(paramId) : -1;
+}
 } // namespace
 
 // The rule itself (paramId match, or the display-name fallback for a jack with no paramId) lives
@@ -87,7 +101,7 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
                                     NodeID* attenOut) {
     auto& graph = audioEngine.getGraph();
     auto* target = graph.getNodeForId(targetId);
-    const int raw = modulationChannelFor(targetId, paramId);
+    const int raw = claimModulationChannel(graph, targetId, paramId);
     if (target == nullptr || raw < 0)
         return {};
     const auto* macro = macros.findByMember(synth::AIStateMapper::ensureNodeUuid(target));
@@ -134,8 +148,10 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
 // the Mod Matrix do the same). Port creation, the cable and its depth are one undo step.
 bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, const juce::String& paramId) {
     auto* lfo = moduleOf(audioEngine.getGraph(), lfoId);
-    const int raw = modulationChannelFor(targetId, paramId);
-    if (lfo == nullptr || dynamic_cast<LFOModule*>(lfo) == nullptr || raw < 0)
+    if (lfo == nullptr || dynamic_cast<LFOModule*>(lfo) == nullptr)
+        return false;
+    const int raw = claimModulationChannel(audioEngine.getGraph(), targetId, paramId);
+    if (raw < 0)
         return false;
     return connectModulationSource(lfoId, /*sourceChannel=*/0, targetId, raw, kDefaultModulatorDepth).uid != 0;
 }
