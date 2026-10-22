@@ -224,13 +224,18 @@ the option on while `base_dir` is set. See [ci-pipeline.md](ci-pipeline.md#optim
 ## Dev-signing
 
 `scripts/dev-sign-app.sh` re-signs the built bundle with a stable **Apple Development** identity
-after every local build.
+after every local build: it runs as a `POST_BUILD` step of the `AgentSynth` target on macOS
+whenever the `CI` environment variable is unset (so a plain `cmake --build`, not only
+`ci-local.sh`, gets it), after Sparkle is embedded.
+
+A sandboxed agent shell cannot see the keychain, so the script finds no identity there and leaves
+the bundle ad-hoc signed: re-run it outside the sandbox before launching that build.
 
 **Why.** A local ad-hoc or linker-signed build's designated requirement pins to `cdhash H"..."`,
 which changes on every build — any changed byte mints a new hash. macOS TCC (the
 microphone/camera permission system) keys its grants on the designated requirement, so every fresh
 local build looks like a brand-new app to TCC: it re-prompts for microphone access, and that dialog
-is one automation cannot dismiss, stalling live app testing on a human click.
+is one automation cannot dismiss, stalling live app testing on a human click. The login keychain does the same for the saved sign-in token: an ad-hoc build asks for the keychain password on every launch, while a stable signature keeps the first Always Allow.
 
 ```bash
 bash scripts/dev-sign-app.sh "$APP_PATH"
