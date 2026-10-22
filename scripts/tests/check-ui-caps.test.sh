@@ -8,7 +8,8 @@
 #
 # The same script also rejects the default theme's accent/text colour written as a literal outside
 # Source/UI/Theme/ (a fallback must go through synth::theme::themeOf); `// not-fallback: <reason>`
-# marks a fixed product colour. Comments are exempt. Runs in the Lint job: no compiler, ~1 s.
+# marks a fixed product colour. A static juce::Font/FontOptions/Typeface::Ptr object is rejected too
+# (it aborts the process at exit); `// static-font-ok: <reason>` opts out. Comments are exempt. Runs in the Lint job: no compiler, ~1 s.
 #
 # Usage: bash scripts/tests/check-ui-caps.test.sh
 
@@ -88,6 +89,24 @@ printf '%s\n' 'juce::Colour accent{0xff00D1FF};' >"$WORK/Source/UI/Theme/Theme.h
 check "the Theme directory may hold the literals" "verdict" "$(flagged "$WORK/Source/UI/Theme/Theme.h")" "no"
 check "a longer hex number is not the literal" "verdict" \
     "$(flagged "$(fixture s.cpp 'auto c = 0xff00D1FF00;')")" "no"
+
+# --- static font objects (abort at exit) ----------------------------------------------------
+check "a function-local static const Font is flagged" "verdict" \
+    "$(flagged "$(fixture t.cpp 'void f() { static const juce::Font f(14.0f); }')")" "yes"
+check "a namespace-scope static FontOptions is flagged" "verdict" \
+    "$(flagged "$(fixture u.cpp 'static juce::FontOptions o;')")" "yes"
+check "a static Typeface::Ptr is flagged" "verdict" \
+    "$(flagged "$(fixture u2.cpp 'static juce::Typeface::Ptr face = load();')")" "yes"
+check "a static Font without the juce:: prefix is flagged" "verdict" \
+    "$(flagged "$(fixture u3.cpp 'static Font f{14.0f};')")" "yes"
+check "a static member function returning Font passes" "verdict" \
+    "$(flagged "$(fixture v.h $'static juce::Font uiFont(float height);\nstatic juce::Typeface::Ptr get() { return p; }')")" "no"
+check "the static-font-ok marker exempts" "verdict" \
+    "$(flagged "$(fixture w.cpp 'static const juce::Font f(14.0f); // static-font-ok: leaked on purpose')")" "no"
+check "a static-font-ok marker without a reason does not exempt" "verdict" \
+    "$(flagged "$(fixture w2.cpp 'static const juce::Font f(14.0f); // static-font-ok:')")" "yes"
+check "a commented-out static Font passes" "verdict" \
+    "$(flagged "$(fixture x.cpp $'// static const juce::Font f(14.0f);\n/* static juce::FontOptions o; */')")" "no"
 
 # --- the real thing: the repo's own Source/UI tree must be clean ---------------------------
 output="$(bash "$CHECK" "$REPO_ROOT/Source/UI" 2>&1)"

@@ -285,4 +285,4 @@ all"). Abbreviations that are capitals everywhere (MIDI, ADSR, JSON, NRPN) are f
 enforces it in the Lint job (`scripts/tests/check-ui-caps.test.sh`): under `Source/UI/` it rejects any
 `toUpperCase()` call and any string literal with a 4+ letter capitals word that is not in its
 abbreviation list. A line that is not UI text (a hex colour code) ends with `// not-ui-text: <reason>`.
-Comments are not checked.
+Comments are not checked. The same script also rejects a `static` `juce::Font`, `FontOptions` or `Typeface::Ptr` object (it aborts the process at exit; build it per call or use `AppLookAndFeel::uiFont()`); `// static-font-ok: <reason>` opts out.
