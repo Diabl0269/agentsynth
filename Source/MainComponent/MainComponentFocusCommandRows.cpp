@@ -32,7 +32,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          }},
         {AppCommands::focusLibrary,
          "Focus Library",
-         "Open (if needed) and focus the Module Library",
+         "Open (if needed) and focus the Library",
          "General",
          "focusLibrary",
          {},
@@ -42,18 +42,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          }},
         {AppCommands::focusLibrarySearch,
          "Focus Library Search",
-         "Open (if needed) and focus the Module Library's search field",
+         "Open (if needed) and focus the search field of the Library view that is showing",
          "General",
          "focusLibrarySearch",
          {},
          [](MainComponent& m) {
              // Deliberately NOT focusRegions_.focusRegionById("library") -- that grabs the region
-             // ROOT (moduleLibrary itself, per FocusRegion.h's contract), and this shortcut's whole
-             // point is to land on the search field specifically. Same "open if closed" behaviour
-             // as focusLibrary.
+             // ROOT (the sidebar column), and this shortcut's whole point is to land on the search field of
+             // the view showing. A closed column opens on the view it last showed.
              if (!m.isLibraryVisible)
                  m.setLibraryVisible(true);
-             m.moduleLibrary.focusSearchField();
+             m.librarySidebar_->focusShowingViewSearch();
              return true;
          }},
         // Same gate as the focus cycle: with the launch overlay up front the focused thing is

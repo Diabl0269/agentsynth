@@ -55,6 +55,7 @@
 #include "UI/Layout/MainViewHolder.h"
 #include "UI/Layout/MainViewSwapMotion.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -318,6 +319,7 @@ public:
     void setFocusedComponentOverrideForTest(juce::Component* focused) { focusedComponentOverrideForTest_ = focused; }
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
     bool isLibraryConfiguredVisible() const { return isLibraryVisible; }
+    synth::ui::LibrarySidebarViews& getLibrarySidebarForTest() { return *librarySidebar_; }
     bool isBottomDockConfiguredVisible() const { return isBottomDockVisible; }
     void simulateToggleAiPanelClick();
     void simulateToggleModMatrixClick();
@@ -753,6 +755,9 @@ private:
     void applyStoredDualIOPreferenceToPatch();
     juce::String computeOutputDeviceInfoText() const;
     void setLibraryVisible(bool v);
+    /** Cmd+B / Cmd+Opt+B: open on `view`, switch to it, or (already showing it) close the column. */
+    void toggleLibraryView(synth::ui::SidebarView view);
+    void refreshLibraryToggleTooltip();
 
     // ---- Welcome screen ----
     void hideWelcomeScreen();
@@ -815,6 +820,8 @@ private:
     synth::HostedPluginWindowManager pluginWindowManager; // declared after the engine + graphEditor so it dies first
 
     ModuleLibraryComponent moduleLibrary;
+    std::unique_ptr<synth::ui::LibrarySidebarViews>
+        librarySidebar_; // the left column: switch, Sounds, adopts moduleLibrary
 
     ToolbarComponent toolbar; // the strip; the buttons below stay direct children of MainComponent
 

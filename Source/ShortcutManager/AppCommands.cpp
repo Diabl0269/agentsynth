@@ -68,6 +68,9 @@ namespace AppCommands {
  *    the action id). toggleTimelinePanel, toggleMixerPanel and toggleMidiRemotePanel each just SHOW
  *    their tab, never close the dock; showCanvas is the fourth view's sibling (it focuses the canvas while
  *    the canvas is the main view).
+ *  - toggleLibrary / toggleSoundBrowser: the left column's Modules and Sounds views. Each shows its own view: a closed
+ *    column opens on it, the other view switches to it, and the one already showing closes the column
+ *    (docs/layout/sound-browser.md#shortcuts).
  *  - toggleSidePane: shows or hides the active bottom-panel tab's side pane
  *    (docs/layout/side-pane.md).
  *  - snapSet*: the grid division set outright (Ctrl+Shift+1..8). Eight commands rather than one
@@ -167,6 +170,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return foldAndPackMacros;
     if (actionId == "toggleLibrary")
         return toggleLibrary;
+    if (actionId == "toggleSoundBrowser")
+        return toggleSoundBrowser;
     if (actionId == "selectAllModules")
         return selectAllModules;
     if (actionId == "saveSnippet")

@@ -1,0 +1,162 @@
+#pragma once
+
+#include "SoundBrowser/SoundIndex.h"
+#include "SoundBrowser/SoundLists.h"
+#include "UI/Layout/NavigationSearchField.h"
+#include "UI/Layout/UIAnimation.h"
+#include <functional>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+#include <vector>
+
+namespace synth::ui {
+
+/** The Sounds view of the left sidebar: Places, folders, search results and a footer for the selected sound. The rows
+ *  are painted and one accessibility list speaks the selected one, the same pattern as the module library. */
+class SoundBrowserComponent
+    : public juce::Component
+    , public juce::DragAndDropContainer
+    , public juce::SettableTooltipClient
+    , private juce::ScrollBar::Listener
+    , private synth::soundbrowser::SoundIndex::Listener {
+public:
+    static constexpr int kSearchHeight = 32;
+    static constexpr int kPathHeight = 26;
+    static constexpr int kRowHeight = 30;
+    static constexpr int kFooterHeight = 72; // the sound's name and place; the waveform and volume will join it
+    static constexpr int kListTop = kSearchHeight + kPathHeight;
+
+    static constexpr const char* kFavouritesId = "@favourites";
+    static constexpr const char* kRecentId = "@recent";
+
+    enum class RowKind { Hint, Place, Folder, Sound };
+
+    struct Row {
+        RowKind kind = RowKind::Hint;
+        juce::String text;            ///< Name shown (and matched by the search).
+        juce::String detail;          ///< Right column.
+        juce::String placeId, folder; ///< Where a Place or Folder row leads.
+        int soundCount = 0;
+        std::optional<synth::soundbrowser::SoundEntry> entry; ///< Sound rows only.
+        bool navigable() const { return kind != RowKind::Hint; }
+    };
+
+    struct PathPart {
+        juce::String label, placeId, folder;
+        juce::Rectangle<int> bounds;
+    };
+
+    SoundBrowserComponent(synth::soundbrowser::SoundIndex& index, synth::soundbrowser::SoundLists& lists);
+    ~SoundBrowserComponent() override;
+
+    /** A sound row became the selection (arrow, click). */
+    std::function<void(const synth::soundbrowser::SoundEntry&)> onSoundSelected;
+    /** Return or a double-click on a sound row. */
+    std::function<void(const synth::soundbrowser::SoundEntry&)> onSoundActivated;
+
+    void focusSearchField();
+    void focusList();
+    bool isSearchActive() const { return query_.trim().isNotEmpty(); }
+    void setQuery(const juce::String& text);
+    synth::ui::NavigationSearchField& getSearchField() { return search_; }
+
+    /** Where the list is: a place id ("" = the Places screen, kFavouritesId, kRecentId, a pack id or "folder:...")
+     *  and a '/'-separated folder inside it. `animateDirection` slides the old list out: +1 in, -1 out, 0 fade. */
+    void showLocation(const juce::String& placeId, const juce::String& folder, int animateDirection = 0);
+    const juce::String& getPlaceId() const { return placeId_; }
+    const juce::String& getFolder() const { return folder_; }
+    std::vector<PathPart> getPathParts() const;
+    juce::String getPathText() const;
+
+    const std::vector<Row>& getRows() const { return rows_; }
+    int getSelectedIndex() const { return selected_; }
+    void selectRow(int index);
+    int getRowIndexAt(juce::Point<int> p) const;
+    juce::Rectangle<int> getRowBounds(int index) const;
+    juce::Rectangle<int> getPathPartBounds(int partIndex) const;
+    bool openSelected();
+    bool goUp();
+    int getScrollOffset() const { return scrollOffset_; }
+
+    juce::String getAccessibilityValueText() const;
+    bool isListAnimating() const { return listAnim_.isRunning(); }
+    void completeListAnimationForTest() { listAnim_.completeForTest(); }
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    void lookAndFeelChanged() override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+private:
+    void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
+    void soundIndexChanged() override;
+
+    // Rows (SoundBrowserNavigation.cpp)
+    void rebuildRows();
+    void rebuildPlaceRows(const synth::soundbrowser::SoundSnapshot& snap);
+    void appendSoundRows(const std::vector<synth::soundbrowser::SoundEntry>& entries);
+    juce::String selectionKey(int index) const;
+    void restoreSelection(const juce::String& key);
+    void navigateTo(const juce::String& placeId, const juce::String& folder, int direction,
+                    const juce::String& selectKey);
+    juce::String placeNameOf(const juce::String& placeId) const;
+    void capturePreviousList();
+    void playListMotion(int direction);
+
+    // Painting (SoundBrowserPainting.cpp)
+    void paintRows(juce::Graphics& g, int width) const;
+    void paintRow(juce::Graphics& g, const Row& row, int index, juce::Rectangle<int> area) const;
+    void paintPathBar(juce::Graphics& g, juce::Colour muted, juce::Colour primary, juce::Colour accent);
+    void paintFooter(juce::Graphics& g);
+    juce::Rectangle<int> listArea() const;
+    int contentWidth() const;
+    void layoutPathParts();
+    void updateScrollBar();
+    void scrollSelectionIntoView();
+    bool setScrollOffset(int offset);
+    void applySearchColours();
+
+    // Input (SoundBrowserInput.cpp)
+    bool handleSearchKey(const juce::KeyPress& key);
+    bool moveSelection(int delta);
+    void jumpToSearchWith(juce::juce_wchar character);
+    void toggleSelectedFavourite();
+    void refreshAccessibilityValue();
+    void notifySelected();
+    juce::String tooltipForRow(int index) const;
+
+    synth::soundbrowser::SoundIndex& index_;
+    synth::soundbrowser::SoundLists& lists_;
+
+    synth::ui::NavigationSearchField search_;
+    juce::ScrollBar scrollBar_{true};
+    juce::String query_;
+    juce::String placeId_; // "" = Places
+    juce::String folder_;
+    std::vector<Row> rows_;
+    std::vector<PathPart> pathParts_;
+    int selected_ = -1;
+    int hovered_ = -1;
+    int hoveredPart_ = -1;
+    int scrollOffset_ = 0;
+    juce::String announcedValueText_;
+
+    // The slide (or fade) between two lists: the old one as a picture, the new one live.
+    std::optional<juce::VBlankAnimatorUpdater> vblank_;
+    synth::ui::AnimationDriver listAnim_;
+    juce::Image previousList_;
+    float listMotion_ = 1.0f;
+    int motionDirection_ = 0;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundBrowserComponent)
+};
+
+} // namespace synth::ui

@@ -37,7 +37,6 @@ void spliceSnapRows(std::vector<Entry>& rows) {
 const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable() {
     static const std::vector<ActionEntry> table = [] {
         std::vector<ActionEntry> rows{
-            // General — app-wide, plus everything routed per focused surface.
             {"openSettings", ShortcutCategory::General},
             {"savePreset", ShortcutCategory::General},
             {"saveProjectAs", ShortcutCategory::General},
@@ -51,6 +50,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"toggleMinimap", ShortcutCategory::General},
             {"toggleAiPanel", ShortcutCategory::General},
             {"toggleLibrary", ShortcutCategory::General},
+            {"toggleSoundBrowser", ShortcutCategory::General},
             // The ONE bottom-dock open/close toggle (docs/layout/chrome.md); the rows below only SHOW or SWAP a view.
             {"toggleBottomPanel", ShortcutCategory::General},
             // Show a view: default Cmd+1/2/3/4, one fixed key per view (a tab reorder never re-keys them).

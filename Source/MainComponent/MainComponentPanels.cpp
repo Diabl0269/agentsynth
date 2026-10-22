@@ -428,6 +428,7 @@ void MainComponent::resized() {
         libOpenW = m.librarySidebarWidth;
         aiOpenW = m.aiPanelWidth;
     }
+    libOpenW = librarySidebar_->openWidth(libOpenW); // wider while Sounds shows, eased between the two views
     const int libW = librarySlide_.sizeBetween(libClosedW, libOpenW);
     const int aiW = aiPanelSlide_.sizeBetween(0, aiOpenW);
 
@@ -484,8 +485,8 @@ void MainComponent::resized() {
 
     if (aiW > 0 || aiChatComponent.isVisible())
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
-    if (libW > 0 || moduleLibrary.isVisible())
-        moduleLibrary.setBounds(bounds.removeFromLeft(libW));
+    if (libW > 0 || librarySidebar_->isVisible())
+        librarySidebar_->setBounds(bounds.removeFromLeft(libW));
 
     layoutMainView(bounds);
     if (toast_)
@@ -583,8 +584,7 @@ void MainComponent::applyToolbarIcons() {
         bottomDock.setSwapShortcutText(
             view, shortcutHintFor(&shortcutManager, Dock::swapActionIdForTab(view), juce::KeyPress()));
 
-    const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
-    toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
+    refreshLibraryToggleTooltip();
 }
 
 // ---- Timeline panel height (user-resizable, persisted) ----
@@ -650,7 +650,7 @@ void MainComponent::beginPanelSlide() {
     // stays visible for the whole slide and disappears only in finishPanelSlide(). Hiding it here
     // instead is what used to make "close" not an animation at all — it just vanished.
     if (isLibraryVisible)
-        moduleLibrary.setVisible(true);
+        librarySidebar_->setVisible(true);
     if (isAiPanelVisible)
         aiChatComponent.setVisible(true);
     if (isBottomDockVisible)
@@ -710,7 +710,7 @@ void MainComponent::finishPanelSlide() {
     // Closed at rest: hidden only once the slide is actually done, and BEFORE the final layout so
     // a fully-closed panel keeps its bounds out of the canvas carve entirely.
     if (!isLibraryVisible)
-        moduleLibrary.setVisible(false);
+        librarySidebar_->setVisible(false);
     if (!isAiPanelVisible)
         aiChatComponent.setVisible(false);
     if (!isBottomDockVisible)
@@ -793,9 +793,7 @@ void MainComponent::setLibraryVisible(bool v) {
     // Refresh the toggle button's wide-mode label, toggled-pill state and tooltip.
     applyToolbarLabels(toolbarNarrowMode_);
     toggleLibraryButton.setToggleState(v, juce::dontSendNotification);
-    toggleLibraryButton.setTooltip(synth::ui::formatShortcutHint(
-        v ? "Hide Library" : "Show Library",
-        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
+    refreshLibraryToggleTooltip();
 
     beginPanelSlide();
 }

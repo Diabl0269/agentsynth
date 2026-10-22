@@ -51,6 +51,11 @@ void ShortcutManager::addGeneralDefaultBindings() {
         isMac ? juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)
               : juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+Alt+B: the Sounds view's own toggle, paired with Cmd+B (Modules) on the same letter. Alt+letter alone
+    // types characters into the search field, Cmd+Shift+B is the side pane and L is taken by Auto-arrange and Loop,
+    // so the Cmd+Alt chord is the free pairing on every platform (Cmd is Ctrl off the Mac).
+    bindings["toggleSoundBrowser"] =
+        juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     // 'j' with plain Cmd is unused by any other binding (the bare J is the timeline's snap toggle, a
     // different modifier set) — the ONE bottom-dock open/close toggle. It was Cmd+T until the key was
     // released for the Mac's new-tab convention (see migrateBottomPanelToggleKeys() and

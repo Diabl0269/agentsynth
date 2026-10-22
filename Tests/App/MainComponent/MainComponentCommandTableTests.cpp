@@ -40,6 +40,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::renameSelectedModule,
     AppCommands::replaceSelectedModule,
     AppCommands::toggleLibrary,
+    AppCommands::toggleSoundBrowser,
     AppCommands::selectAllModules,
     AppCommands::saveSnippet,
     AppCommands::copySelection,

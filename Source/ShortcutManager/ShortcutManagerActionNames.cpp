@@ -317,6 +317,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return name;
     if (actionId == "toggleLibrary")
         return "Toggle Module Library";
+    if (actionId == "toggleSoundBrowser")
+        return "Toggle Sound Browser";
     // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
     // binding a user already persisted under that key keeps working — the label is what
     // widened when the command grew per-surface routing, not the identity.
