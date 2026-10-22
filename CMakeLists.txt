@@ -786,6 +786,7 @@ if(APPLE)
         COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
         COMMENT "Embedding Sparkle.framework"
     )
+    include(cmake/DevSign.cmake) # after Sparkle is embedded, so the signature covers it
 endif()
 
 if(WIN32)
