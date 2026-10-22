@@ -52,7 +52,12 @@ protected:
         mc_->resized();
     }
     // A key as the app receives it.
-    bool press(const juce::KeyPress& key) { return mc_->keyPressed(key); }
+    // The command manager runs the matched command asynchronously, so the queue is drained before the caller looks.
+    bool press(const juce::KeyPress& key) {
+        const bool used = mc_->keyPressed(key);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        return used;
+    }
     juce::String hintFor(Tab tab) {
         const auto& order = dock().getTabOrderForTest();
         const auto buttons = dock().getTabButtons(); // parallel to the order
@@ -147,10 +152,12 @@ TEST_F(BottomDockPositionalKeysTest, TheKeysReachTheActionsFromInsideADetachedPa
     const int raised = mc_->getMainWindowRaiseCountForTest();
 
     EXPECT_TRUE(window->keyPressed(cmd('3'))); // the real key path through the window's keyPressed
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_EQ(dock().getActiveTab(), Tab::MidiRemote);
     EXPECT_EQ(mc_->getMainWindowRaiseCountForTest(), raised + 1) << "the app window comes forward over the window";
 
     EXPECT_TRUE(window->keyPressed(cmd('0')));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_EQ(mc_->getMainWindowRaiseCountForTest(), raised + 2);
     EXPECT_TRUE(dock().getMixerHost().isDetached());
     dock().getMixerHost().setDetached(false);

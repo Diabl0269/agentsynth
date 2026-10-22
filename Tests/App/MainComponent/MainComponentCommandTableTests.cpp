@@ -128,10 +128,6 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::selectNextTrack,
     AppCommands::selectPreviousTrack,
     // buildViewSwapCommandRows(), appended last.
-    AppCommands::swapTimelineToMain,
-    AppCommands::swapMixerToMain,
-    AppCommands::swapMidiRemoteToMain,
-    AppCommands::swapCanvasToMain,
     AppCommands::showDockTab1,
     AppCommands::showDockTab2,
     AppCommands::showDockTab3,
@@ -139,6 +135,10 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::swapDockTab2ToMain,
     AppCommands::swapDockTab3ToMain,
     AppCommands::focusMainView,
+    AppCommands::swapTimelineToMain,
+    AppCommands::swapMixerToMain,
+    AppCommands::swapMidiRemoteToMain,
+    AppCommands::swapCanvasToMain,
 };
 
 } // namespace

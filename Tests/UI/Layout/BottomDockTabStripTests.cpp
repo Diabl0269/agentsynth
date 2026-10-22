@@ -211,11 +211,11 @@ TEST_F(DockShortcutFocusTest, CommandDigitsShowTheTabAndFocusTheStrip) {
     }
 }
 
-// The canvas is the main view, so its key has no tab to show: it focuses the canvas and leaves the dock alone.
-TEST_F(DockShortcutFocusTest, CommandFourFocusesTheCanvasInTheMainAreaAndLeavesTheDockAlone) {
+// The canvas is the main view, so it has no tab number: Cmd+0 focuses it and leaves the dock alone.
+TEST_F(DockShortcutFocusTest, CommandZeroFocusesTheCanvasInTheMainAreaAndLeavesTheDockAlone) {
     setDockOpen(false);
     focused_.clear();
-    EXPECT_TRUE(pressKey(mc(), cmd('4')));
+    EXPECT_TRUE(pressKey(mc(), cmd('0')));
     EXPECT_EQ(focused_.joinIntoString(","), "canvas");
     EXPECT_FALSE(mc().isBottomDockConfiguredVisible()) << "the dock does not open";
     EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);

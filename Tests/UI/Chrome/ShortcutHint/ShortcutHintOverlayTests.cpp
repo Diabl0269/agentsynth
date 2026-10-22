@@ -238,7 +238,7 @@ TEST_F(ShortcutHintOverlayTest, HiddenDockShowsARowOfPillsInTabOrderAlongTheBott
         info.toggle = &panelButton_;
         info.toggleActionId = "toggleBottomPanel";
         info.toggleLabel = "Show Panel";
-        info.tabs = {{&timelineTab, "toggleTimelinePanel", "Timeline"}, {&mixerTab, "toggleMixerPanel", "Mixer"}};
+        info.tabs = {{&timelineTab, "showDockTab1", "Timeline"}, {&mixerTab, "showDockTab2", "Mixer"}};
         return info;
     });
     holdCmdFor(500.0);
@@ -272,7 +272,7 @@ TEST_F(ShortcutHintOverlayTest, OpenDockPutsTheBubbleInsideEachTab) {
         synth::ui::DockHintInfo info;
         info.open = true;
         info.dock = &dock;
-        info.tabs = {{&tab, "toggleTimelinePanel", "Timeline"}};
+        info.tabs = {{&tab, "showDockTab1", "Timeline"}};
         return info;
     });
     holdCmdFor(500.0);
@@ -401,7 +401,7 @@ TEST_F(ShortcutHintOverlayTest, TabBubbleGrowsOutOfTheTabCentreAndFitsTheStripWi
         synth::ui::DockHintInfo info;
         info.open = true;
         info.dock = &dock;
-        info.tabs = {{&tab, "toggleTimelinePanel", "Timeline"}};
+        info.tabs = {{&tab, "showDockTab1", "Timeline"}};
         return info;
     });
     holdCmdFor(500.0);
