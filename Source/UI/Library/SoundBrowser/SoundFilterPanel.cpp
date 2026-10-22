@@ -178,7 +178,8 @@ void SoundFilterPanel::syncFromModel() {
 void SoundFilterPanel::layoutRows(int width, bool apply) {
     const int inner = juce::jmax(40, width - 2 * kPad);
     int y = kPad;
-    labels_.clear();
+    if (apply)
+        labels_.clear(); // measuring must not wipe the labels the last layout placed
     const auto label = [&](const juce::String& text) {
         if (apply)
             labels_.push_back({text, {kPad, y, inner, kLabelHeight}});

@@ -3,6 +3,8 @@
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace sound_browser_test;
@@ -246,4 +248,25 @@ TEST(SoundFiltersViewTest, NearSongTempoUsesTheTransportTempo) {
     v.applyFiltersChanged();
     f.settle();
     EXPECT_EQ(soundRows(v), 1);
+}
+
+TEST(SoundFiltersViewTest, TheGroupLabelsStayPaintedAfterThePanelIsMeasured) {
+    Fixture f;
+    auto& v = *f.view;
+    v.setFiltersOpen(true, false);
+    f.settle();
+    auto& panel = v.getFilterPanel();
+    // The browser measures the panel after laying it out; measuring must not wipe the labels it placed.
+    (void)panel.heightForWidth(panel.getWidth());
+    const int labelBottom = panel.kindGroup().getY();
+    ASSERT_GT(labelBottom, 4);
+    const auto image = panel.createComponentSnapshot({0, 0, 80, labelBottom}, true, 1.0f);
+    const auto surface = synth::theme::themeOf(panel).colors.surface;
+    int inked = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const auto p = image.getPixelAt(x, y);
+            inked += std::abs(p.getBrightness() - surface.getBrightness()) > 0.15f ? 1 : 0;
+        }
+    EXPECT_GT(inked, 10) << "the Kind label is not painted";
 }
