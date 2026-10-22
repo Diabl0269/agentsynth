@@ -11,6 +11,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 
 namespace synth::ui {
 
@@ -106,7 +107,7 @@ void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, 
         return;
     if (sources.size() == 1) {
         closePopover();
-        editor_.removeModulationChain(sources.front().attenuverterId);
+        removeChain(sources.front().attenuverterId);
         return;
     }
     auto* open = getPopover();
@@ -141,6 +142,27 @@ void ModDotController::removeSource(juce::AudioProcessorGraph::NodeID card, int 
             editor_.removeModulationChain(attenuverterId);
         return;
     }
+}
+
+// The chain is named by its attenuverter; the knob it lands on (macro ports looked through) is read from the live
+// routings, so a cable double-click needs no card or channel of its own.
+void ModDotController::removeChain(juce::AudioProcessorGraph::NodeID attenuverterId) {
+    const auto isPort = [this](juce::AudioProcessorGraph::NodeID id) {
+        return editor_.getMacroController().nodeIsMacroPort(id);
+    };
+    const auto routings = editor_.getAudioEngine().getModulationRoutings();
+    const ConnectionIndex cables(editor_.getAudioEngine().getGraph());
+    for (const auto& routing : routings) {
+        if (routing.kind != ModulationRoutingKind::AttenuverterChain || routing.attenuverterNodeID != attenuverterId ||
+            !routing.hasDest)
+            continue;
+        const auto real = resolveRouting(cables, routing, isPort);
+        if (host.removeModulator && knobModTarget(editor_, real.dest.node, real.dest.channel).valid()) {
+            removeSource(real.dest.node, real.dest.channel, attenuverterId);
+            return;
+        }
+    }
+    editor_.removeModulationChain(attenuverterId);
 }
 
 void ModDotController::revealSource(juce::AudioProcessorGraph::NodeID card, int destChannel,

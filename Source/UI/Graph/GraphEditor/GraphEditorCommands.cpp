@@ -327,7 +327,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
     auto attenId = getAttenuverterNodeAt(localPos.toFloat());
     if (attenId.uid != 0)
-        removeModulationChain(attenId);
+        modDot_->removeChain(attenId);
 }
 
 juce::AudioProcessorGraph::NodeID GraphEditor::getAttenuverterNodeAt(juce::Point<float> localPos) {

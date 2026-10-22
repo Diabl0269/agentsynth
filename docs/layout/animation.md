@@ -524,7 +524,7 @@ pointer inside it, or a dialog opened from the keyboard, slides down. Reduce mot
 
 The confirmations with a **Don't ask again** box (removing an LFO, deleting a track with Cmd+Backspace) are one
 window, `showConfirmDontAsk` (`Source/UI/Chrome/ConfirmDontAskDialog.{h,cpp}`), which attaches `PopupMotion`, so they fade
-in and out like any alert. The deleted track's row then shrinks away, like the menu's Delete Track.
+in and out like any alert (`showConfirmChoice`: a second button, own box label). The deleted track's row then shrinks away, like the menu's Delete Track.
 
 **Tooltips** are the exception to "popup windows": they are children of their app window, so they
 do not go through `PopupMotion`. See [Tooltips](#tooltips).
@@ -766,7 +766,7 @@ current opacity).
 Off), a reversal from the current amount, no animation off screen, and a `repaintArea` so a frame repaints only the
 painted thing. The empty-canvas first-run hint ("Drag modules here to build your patch") fades out when the first module
 lands and back in when the canvas is emptied (`GraphEditor::updateComponents` steers it; a new editor starts with it
-shown), repainting only a strip across the middle of the canvas.
+shown), repainting only a strip across the middle of the canvas. A knob's modulation ring fades the same way: [modulation rings](mod-ring-fade.md).
 
 ### Fold chevrons
 

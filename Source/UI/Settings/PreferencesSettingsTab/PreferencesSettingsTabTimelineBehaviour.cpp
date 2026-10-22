@@ -67,9 +67,10 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
         appProperties.getUserSettings()->getBoolValue(kTimelineAskBeforeRemovingLfoKey, true),
         juce::dontSendNotification);
     askBeforeRemovingLfoToggle.setTooltip(
-        "When on (the default), removing the last modulator an LFO has asks first, because it also deletes the LFO "
-        "and its settings. Turn it off to remove it straight away; Cmd+Z / Ctrl+Z still brings it back. An LFO that "
-        "moves other things never asks.");
+        "When on (the default), removing the last modulator an LFO has asks first: remove the LFO too, or keep the "
+        "module. Ticking Remember my choice in that window turns this off and keeps the answer; turn it back on here "
+        "to forget the answer and be asked again. Cmd+Z / Ctrl+Z always brings a removal back. An LFO that moves "
+        "other things never asks.");
     askBeforeRemovingLfoToggle.onClick = [this] {
         persistAskBeforeRemovingLfo(askBeforeRemovingLfoToggle.getToggleState());
     };
@@ -158,7 +159,10 @@ void PreferencesSettingsTab::persistAskBeforeDeletingTrack(bool enabled) {
 
 void PreferencesSettingsTab::persistAskBeforeRemovingLfo(bool enabled) {
     // Nothing live to push: MainComponent::removeModulator reads this key at use time (on the next removal).
+    // Asking again forgets the remembered answer, so turning the question off by hand starts from "remove".
     appProperties.getUserSettings()->setValue(kTimelineAskBeforeRemovingLfoKey, enabled ? "1" : "0");
+    if (enabled)
+        appProperties.getUserSettings()->removeValue(kTimelineRemoveLastSourceChoiceKey);
     appProperties.getUserSettings()->saveIfNeeded();
 }
 

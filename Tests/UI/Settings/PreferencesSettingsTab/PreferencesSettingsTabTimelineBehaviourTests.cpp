@@ -199,6 +199,18 @@ TEST_F(PreferencesSettingsTabTest, AskBeforeRemovingLfoDefaultsOnAndRoundTrips) 
     }
 }
 
+// Regression test for FRO792: the dialog's remembered "Keep module" answer had no way back. Turning the question on
+// forgets the answer, so the next removal asks again and a hand-made "off" starts from the plain remove.
+TEST_F(PreferencesSettingsTabTest, TurningTheLfoQuestionBackOnForgetsTheRememberedChoice) {
+    PreferencesSettingsTab tab(appProperties);
+    auto& settings = *appProperties.getUserSettings();
+    settings.setValue("timelineAskBeforeRemovingLfo", "0");
+    settings.setValue("timelineRemoveLastSourceChoice", "keep");
+    tab.setAskBeforeRemovingLfoEnabled(true);
+    EXPECT_EQ(settings.getValue("timelineAskBeforeRemovingLfo"), "1");
+    EXPECT_FALSE(settings.containsKey("timelineRemoveLastSourceChoice"));
+}
+
 // The real button, found by its words, writes the key; and a search for those words keeps it.
 TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeRemovingLfoToggleWritesTheSetting) {
     PreferencesSettingsTab tab(appProperties);

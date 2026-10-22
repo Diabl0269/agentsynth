@@ -209,7 +209,9 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
 - **Double-click.** With *Double-click port to disconnect* on, a jack with exactly one cable waits one double-click
   interval before opening, so the double-click that disconnects it never flashes the panel. A jack with none or several
   cables opens at once, and a double-click on one with several keeps the panel and disconnects nothing. The knob-bound
-  CV jack's double-click is the mod dot's and is unchanged.
+  CV jack's double-click is the mod dot's and is unchanged. A double-click on a modulation cable's middle removes that
+  chain through `ModDotController::removeChain`, the app window's one removal, so it asks what the mod dot's Remove asks
+  when it would delete an LFO. (Disconnect Cable and the port panel's row still cut the chain without asking.)
 - **Collapsed macro cards.** A plain click on a port dot of a collapsed macro card (`MacroCardComponent::mouseUp`) opens
   the same panel for that port's node, anchored on the dot, listing the cables drawn to the card: an inlet's outside
   cables (its input jack), an outlet's cables out of the card. The title is the port's own name. The card's port node has

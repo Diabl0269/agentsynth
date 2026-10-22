@@ -155,6 +155,21 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     // ModuleComponent::applyKeyboardThemeColours themes the on-screen keyboard instead.
 }
 
+// Regression test for FRO792: the "Don't ask again" box in a confirm window was dark text on the stock dark alert
+// surface on every light theme. An alert window takes its surface, outline and text from the theme. (No real
+// AlertWindow here: it needs a native window the headless runner does not have.)
+TEST(ThemeLookAndFeelTest, AlertWindowColoursAndItsCheckboxTextReadOnEveryBuiltInTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        const auto surface = lf.findColour(juce::AlertWindow::backgroundColourId);
+        EXPECT_EQ(surface, theme.colors.surface) << theme.name;
+        EXPECT_EQ(lf.findColour(juce::AlertWindow::textColourId), theme.colors.textPrimary) << theme.name;
+        EXPECT_EQ(lf.findColour(juce::AlertWindow::outlineColourId), theme.colors.border) << theme.name;
+        EXPECT_GE(wcagContrast(lf.findColour(juce::ToggleButton::textColourId), surface), 4.5) << theme.name;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 4. JsonRoundTrip
 // ---------------------------------------------------------------------------

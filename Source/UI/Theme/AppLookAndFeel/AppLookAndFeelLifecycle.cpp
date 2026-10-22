@@ -84,6 +84,12 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::ToggleButton::tickColourId, c.accent);
     setColour(juce::ToggleButton::tickDisabledColourId, c.border);
 
+    // An alert window (and the confirm window with its checkbox) keeps V4's stock dark surface otherwise, so the
+    // themed checkbox text vanished on it in every light theme.
+    setColour(juce::AlertWindow::backgroundColourId, c.surface);
+    setColour(juce::AlertWindow::textColourId, c.textPrimary);
+    setColour(juce::AlertWindow::outlineColourId, c.border);
+
     setColour(juce::ComboBox::backgroundColourId, c.surface);
     setColour(juce::ComboBox::textColourId, c.textPrimary);
     setColour(juce::ComboBox::outlineColourId, c.border);

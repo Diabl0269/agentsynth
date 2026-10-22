@@ -55,7 +55,10 @@ struct Scene {
         synth::ui::test_hooks::removeLfoConfirmHookForTest() = [this](const auto& text, auto done) {
             ++confirmAsked;
             lastConfirm = text;
-            done(confirmAnswer, confirmDontAsk);
+            done(!confirmAnswer ? synth::ui::RemoveLfoChoice::cancel
+                 : confirmKeep  ? synth::ui::RemoveLfoChoice::keepModule
+                                : synth::ui::RemoveLfoChoice::removeModule,
+                 confirmDontAsk);
         };
     }
 
@@ -66,11 +69,13 @@ struct Scene {
     int confirmAsked = 0;
     synth::ui::RemoveLfoConfirmText lastConfirm;
     bool confirmAnswer = true;
-    bool confirmDontAsk = false;
+    bool confirmDontAsk = false; // the "Remember my choice" box
+    bool confirmKeep = false;    // answer with "Keep module" instead of "Remove LFO"
 
     ~Scene() {
         synth::ui::test_hooks::removeLfoConfirmHookForTest() = nullptr;
         mc.getAppPropertiesForTest().getUserSettings()->removeValue(synth::ui::kAskBeforeRemovingLfoKey);
+        mc.getAppPropertiesForTest().getUserSettings()->removeValue(synth::ui::kRemoveLastSourceChoiceKey);
     }
 
     synth::TimelineDoc& doc() { return mc.getTimelineDoc(); }
