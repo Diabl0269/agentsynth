@@ -138,6 +138,8 @@ public:
     /** Plugin cards: shows each modulated knob's resting value. Called on the canvas' 30 Hz tick. */
     void reflectHostedRestingValues();
 
+    /** Drop channel of a plugin card's body: the whole card is outlined (a drop opens the parameter search). */
+    static constexpr int kHostedCardBodyDropChannel = -2;
     /** Drop channel of a plugin knob with no modulation slot yet: this minus its slider index. */
     static constexpr int kUnboundHostedKnobChannelBase = -1000;
     /** The plugin knob's parameter id a stand-in drop channel names, or empty for a real channel. */

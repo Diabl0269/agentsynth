@@ -14,6 +14,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/VCAModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <set>
 
 using namespace detail;
 
@@ -534,7 +535,14 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     //    No undo transaction is opened here: the parameter gesture that changed the count already
     //    snapshots the whole graph before and after, so this is part of that single undo step.
     if (auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule())) {
-        auto channelStillExposed = [mb](int rawChannel, bool isInput) {
+        // A knob-only target (a plugin parameter's modulation slot) has no jack at all: its cable lands on the knob.
+        std::set<int> knobOnlyChannels;
+        for (const auto& target : mb->getModulationTargets())
+            if (target.knobOnly)
+                knobOnlyChannels.insert(target.channelIndex);
+        auto channelStillExposed = [mb, &knobOnlyChannels](int rawChannel, bool isInput) {
+            if (isInput && knobOnlyChannels.count(rawChannel) > 0)
+                return true;
             const int visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
             for (int j = 0; j < visible; ++j) {
                 for (const auto& t : mb->getJackTargets(j, isInput))

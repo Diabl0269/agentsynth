@@ -6,6 +6,7 @@
 #include "ModuleComponentInternal.h"
 #include "ModuleComponentModBand.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -67,6 +68,13 @@ private:
 // `mod`/`jackAccentColour` are paint()'s own locals, computed once there.
 void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+
+    // A cable over a plugin card's body: a drop there searches all its parameters, so the whole card is the target.
+    if (modDropTargetChannel == kHostedCardBodyDropChannel) {
+        g.setColour(jackAccentColour);
+        g.drawRoundedRectangle(synth::ui::cardBodyRect(getLocalBounds().toFloat()),
+                               synth::theme::themeOf(*this).metrics.cornerRadius, 2.0f);
+    }
 
     // A plugin knob with no slot yet (see getModTargetPortForPoint) is named by its slider index instead.
     if (const int si = kUnboundHostedKnobChannelBase - modDropTargetChannel;

@@ -5,6 +5,7 @@
 #include "Modules/ModuleBase.h"
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -27,6 +28,21 @@ std::vector<ModSourceOutput> modSourceOutputs(const ModuleBase& module);
 /** The destinations a module offers the Mod Matrix: its modulation targets, plus channel 0 of a
  *  Macro In port spliced into an existing routing (display only, see the definition). */
 std::vector<ModulationTarget> modDestinationCandidates(ModuleBase* module);
+
+/** A plugin parameter the Mod Matrix offers as a destination before it has a modulation slot (picker rows only). */
+struct HostedDestination {
+    juce::AudioProcessorGraph::NodeID node;
+    juce::String paramId;
+    juce::String label; // "<card title> - <parameter name>"
+};
+/** Picker row ids for HostedDestination start here, clear of the (node uid << 8 | channel) ids of the rest. */
+constexpr int kHostedDestinationIdBase = 0x7F000000;
+
+/** Every parameter of every hosted plugin in `graph` that is not modulated yet, keyed by picker row id. */
+std::map<int, HostedDestination> hostedDestinations(juce::AudioProcessorGraph& graph);
+
+/** Claims `dest`'s modulation slot: its raw channel, or -1 when the plugin is gone or every slot is taken. */
+int claimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest);
 
 /** One end of a routing: a node and the channel the attenuverter's edge lands on or leaves from. */
 struct RoutingEndpoint {

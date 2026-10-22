@@ -7,6 +7,7 @@
 // Runs against Tests/StubPluginInstance.h, like every hosted-plugin test: there is no real plugin to load in CI.
 
 #include "../StubPluginInstance.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -263,4 +264,51 @@ TEST(HostedPluginModSlotTest, RemovingTheLastCableFreesTheSlot) {
 
     engine.removeModRouting(atten);
     EXPECT_EQ(hosted->modChannelForParam("cutoff"), -1);
+}
+
+// A project reopened through the real patch path: the cable is a "modulations" entry onto channel 16+k, which only
+// exists as a target once the node's saved slot table is back, and the parameter sits at its saved resting value.
+TEST(HostedPluginModSlotTest, AModulatedParameterSurvivesSaveAndReopen) {
+    StubBackend backend;
+    backend.setFactory(
+        [] { return std::make_unique<StubPluginInstance>(2, 2, "Stub Plugin", 0x5754424, "VST3", defaultParams()); });
+    const synth::HostedPluginBackend::ScopedDefault scope(&backend);
+
+    juce::var json;
+    int channel = -1;
+    {
+        AudioEngine engine;
+        engine.initialise();
+        auto& graph = engine.getGraph();
+        graph.clear();
+        auto owned = std::make_unique<HostedPluginModule>();
+        auto* hosted = owned.get();
+        auto hostedNode = graph.addNode(std::move(owned));
+        auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+        hosted->loadPlugin(stubDescription(), backend);
+        ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance(); }));
+        hosted->findInstanceParameter("reso")->setValue(0.35f);
+        channel = hosted->bindModSlot("reso");
+        ASSERT_NE(engine.addModRouting(lfoNode->nodeID, 0, hostedNode->nodeID, channel).uid, 0u);
+        json = synth::AIStateMapper::graphToJSON(graph);
+    }
+
+    AudioEngine reopened;
+    reopened.initialise();
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, reopened.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/true));
+    HostedPluginModule* hosted = nullptr;
+    for (auto* node : reopened.getGraph().getNodes())
+        if (auto* candidate = dynamic_cast<HostedPluginModule*>(node->getProcessor()))
+            hosted = candidate;
+    ASSERT_NE(hosted, nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance(); }));
+    reopened.releaseUnconnectedHostedModSlots(); // what the first canvas rebuild runs
+
+    EXPECT_EQ(hosted->modChannelForParam("reso"), channel);
+    EXPECT_NEAR(*hosted->modSlotBase("reso"), 0.35f, 1e-5f);
+    bool routed = false;
+    for (const auto& routing : reopened.getActiveModRoutings())
+        routed |= routing.destChannelIndex == channel;
+    EXPECT_TRUE(routed) << "the cable came back on the slot's channel";
 }

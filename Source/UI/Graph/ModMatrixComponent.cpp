@@ -837,13 +837,31 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
     if (open != nullptr)
         return;
 
+    // Destinations also list every plugin parameter without a slot yet; a pick claims one, then selects it like
+    // any other destination.
+    auto items = forSource ? sourceItems : destItems;
+    auto& graph = owner.audioEngine.getGraph();
+    const auto hosted =
+        forSource ? std::map<int, synth::ui::HostedDestination>{} : synth::ui::hostedDestinations(graph);
+    for (const auto& [id, dest] : hosted)
+        items.push_back({id, "Plugins", dest.label});
     juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
-    auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
-        forSource ? "source" : "destination", forSource ? sourceItems : destItems, combo.getSelectedId(),
-        [safeCombo](int id) {
-            if (safeCombo != nullptr)
-                safeCombo->setSelectedId(id, juce::sendNotificationSync);
-        });
+    auto picker =
+        std::make_unique<synth::ui::ModMatrixPicker>(forSource ? "source" : "destination", std::move(items),
+                                                     combo.getSelectedId(), [safeCombo, hosted, &graph](int id) {
+                                                         if (safeCombo == nullptr)
+                                                             return;
+                                                         if (const auto it = hosted.find(id); it != hosted.end()) {
+                                                             const int channel =
+                                                                 synth::ui::claimHostedDestination(graph, it->second);
+                                                             if (channel < 0)
+                                                                 return;
+                                                             id = (int)((it->second.node.uid << 8) | (uint32_t)channel);
+                                                             if (safeCombo->indexOfItemId(id) < 0)
+                                                                 safeCombo->addItem(it->second.label, id);
+                                                         }
+                                                         safeCombo->setSelectedId(id, juce::sendNotificationSync);
+                                                     });
     open = picker.get();
     if (owner.pickerLauncher)
         owner.pickerLauncher(std::move(picker), combo.getScreenBounds());

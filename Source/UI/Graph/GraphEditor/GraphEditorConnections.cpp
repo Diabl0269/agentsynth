@@ -189,9 +189,13 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
         if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             const auto localPos = comp->getLocalPoint(nullptr, screenPos);
             comp->unfoldMoreRowForCableDrag(localPos);
-            if (!comp->getPortForPoint(localPos))
+            if (!comp->getPortForPoint(localPos)) {
                 if (auto port = comp->getModTargetPortForPoint(localPos))
                     target = port->index;
+                else if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(comp->getModule());
+                         hosted != nullptr && hosted->hasInstance() && comp->getLocalBounds().contains(localPos))
+                    target = ModuleComponent::kHostedCardBodyDropChannel;
+            }
         }
         comp->setModDropTargetChannel(target);
     }

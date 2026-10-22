@@ -440,6 +440,11 @@ Any parameter of a hosted plugin can take a mod cable, up to 48 at once per plug
   (its own undo step, the "Add to card" write) and the cable lands on it. Escape or a click away changes nothing.
 - **Timeline.** "Add modulator..." on a plugin parameter's automation lane works for any parameter while a slot
   is free.
+- **Mod Matrix.** A row's destination picker lists every plugin parameter without a slot under "Plugins"
+  (`hostedDestinations`; picker only, never the flat combo, since a plugin can have hundreds). A pick claims the
+  slot and re-points the routing; this is also the keyboard path to a parameter that is not on the card.
+- **Replace with...** Another plugin: each cable follows its parameter id onto the new plugin's slot for it (a
+  parameter the new plugin lacks is removed with the toast once it loads). A built-in module: the cables go.
 - **The plugin's own window, the card knob and automation** set the **resting value**; the modulation moves the
   parameter around it. The card knob shows the resting value, never the moving one.
 - **Plugin replaced or updated.** Cables whose parameter still exists stay; the rest are removed in one undo step
@@ -464,9 +469,6 @@ resting value, not wherever the LFO happened to be. Undo and redo of a cable res
 live **in place** (`applyStateInPlace`: card layout, slot table, and the plugin's own state only when its bytes
 differ) instead of reloading the plugin. A restored parameter the new instance lacks fires `onModSlotsUnresolved`,
 which `MainComponent` turns into the cable removal and toast above.
-
-Left for later: unbound plugin parameters as Mod Matrix destinations (the matrix lists only parameters that already
-hold a slot).
 
 ### As built (FRO137)
 
