@@ -44,13 +44,12 @@ TEST(BottomDockSwapKeyDefaults, TheBottomPanelKeyIsCmdJAndCmdTIsFree) {
         EXPECT_NE(manager.getBinding(id), juce::KeyPress('t', kCmd, 0)) << id << " holds the released Cmd+T";
 }
 
-TEST(BottomDockSwapKeyDefaults, EachViewSwapKeyIsOptCmdAndTheDigitOfItsOwnShowKey) {
+TEST(BottomDockSwapKeyDefaults, EachViewSwapActionStaysRoutedAndDescribedWithoutADigit) {
     ShortcutManager manager;
     for (const auto& row : kRows) {
-        EXPECT_EQ(manager.getBinding(row.swapAction), juce::KeyPress(row.digit, kCmdAlt, 0)) << row.swapAction;
-        EXPECT_EQ(manager.getBinding(row.showAction), juce::KeyPress(row.digit, kCmd, 0)) << row.showAction;
+        EXPECT_FALSE(manager.getBinding(row.swapAction).isValid()) << "the digits belong to the positional actions";
+        EXPECT_FALSE(manager.getBinding(row.showAction).isValid()) << row.showAction;
         EXPECT_EQ(AppCommands::getCommandForAction(row.swapAction), row.command);
-        EXPECT_TRUE(manager.getConflictingAction(row.swapAction, manager.getBinding(row.swapAction)).isEmpty());
         EXPECT_NE(ShortcutManager::getActionDescription(row.swapAction), juce::String(row.swapAction));
     }
     EXPECT_EQ(ShortcutManager::getActionDescription("swapTimelineToMain"), "Show Timeline in the Main Area");
@@ -59,6 +58,7 @@ TEST(BottomDockSwapKeyDefaults, EachViewSwapKeyIsOptCmdAndTheDigitOfItsOwnShowKe
 TEST(BottomDockSwapKeyDefaults, TheNewCommandIdsComeAfterEveryExistingOne) {
     EXPECT_GT(AppCommands::swapTimelineToMain, AppCommands::showCanvas);
     EXPECT_EQ(AppCommands::swapCanvasToMain, AppCommands::swapTimelineToMain + 3);
+    EXPECT_GT(AppCommands::showDockTab1, AppCommands::swapCanvasToMain);
 }
 
 class BottomDockSwapKeysTest : public BottomDockMainAreaTest {
@@ -134,8 +134,8 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
     ASSERT_TRUE(run(AppCommands::swapTimelineToMain));
     auto& shortcuts = mc_->getShortcutManager();
     const auto tooltipFor = [&](Tab view, const char* name) {
-        const auto key = ShortcutManager::keyPressToDisplayString(
-            shortcuts.getBinding(BottomDockComponent::swapActionIdForTab(view)));
+        const auto key =
+            ShortcutManager::keyPressToDisplayString(shortcuts.getBinding(dock().swapActionIdForTab(view)));
         return synth::ui::formatShortcutHint(juce::String("Show ") + name + " in the main area", key);
     };
     for (const auto& [view, name] : {std::pair{Tab::Mixer, "Mixer"}, std::pair{Tab::MidiRemote, "Controllers"},
@@ -148,11 +148,12 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
     }
 
     const auto oldTip = dock().getSwapIcon(Tab::Mixer).getTooltip();
-    shortcuts.setBinding("swapMixerToMain", juce::KeyPress('9', kCmdAlt, 0));
+    ASSERT_EQ(dock().keyPositionOf(Tab::Mixer), 2);
+    shortcuts.setBinding("swapDockTab2ToMain", juce::KeyPress('9', kCmdAlt, 0));
     shortcuts.onBindingsChanged();
     EXPECT_NE(dock().getSwapIcon(Tab::Mixer).getTooltip(), oldTip);
     EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), tooltipFor(Tab::Mixer, "Mixer"));
-    shortcuts.setBinding("swapMixerToMain", juce::KeyPress());
+    shortcuts.setBinding("swapDockTab2ToMain", juce::KeyPress());
     shortcuts.onBindingsChanged();
     EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area")
         << "an unbound key is not named";
@@ -164,8 +165,9 @@ TEST_F(BottomDockSwapKeysTest, TheCmdHoldHintsSkipTheViewInMainAndShowTheCanvasT
     std::vector<juce::String> actions;
     for (const auto& tab : dock().getStripTabs())
         actions.push_back(tab.actionId);
-    EXPECT_EQ(actions, (std::vector<juce::String>{"showCanvas", "toggleMixerPanel", "toggleMidiRemotePanel"}));
-    EXPECT_TRUE(mc_->getShortcutManager().getBinding("showCanvas").isValid());
+    EXPECT_EQ(actions, (std::vector<juce::String>{"showDockTab1", "showDockTab2", "showDockTab3"}));
+    for (const auto& action : actions)
+        EXPECT_TRUE(mc_->getShortcutManager().getBinding(action).isValid()) << action;
 }
 
 TEST_F(BottomDockSwapKeysTest, TheTabOrderFollowsTheLayoutWithAnyViewInTheMainArea) {

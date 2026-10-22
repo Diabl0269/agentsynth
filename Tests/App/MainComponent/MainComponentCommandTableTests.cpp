@@ -132,6 +132,13 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::swapMixerToMain,
     AppCommands::swapMidiRemoteToMain,
     AppCommands::swapCanvasToMain,
+    AppCommands::showDockTab1,
+    AppCommands::showDockTab2,
+    AppCommands::showDockTab3,
+    AppCommands::swapDockTab1ToMain,
+    AppCommands::swapDockTab2ToMain,
+    AppCommands::swapDockTab3ToMain,
+    AppCommands::focusMainView,
 };
 
 } // namespace

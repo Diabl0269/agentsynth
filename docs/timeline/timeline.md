@@ -86,10 +86,10 @@ immediately before `ToggleTheme`) and the **Cmd+J** shortcut (action id `toggleB
 [`shortcuts.md`](../control/shortcuts.md)) flip `MainComponent::isBottomDockVisible` — show/hide the
 whole dock, reopening on whichever tab was last active. It replaced the former separate
 Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
-**Cmd+1/2/3** (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) now each only SHOW
-their own tab (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
-closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (each tab keeps its
-key when the strip is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
+**Cmd+1/2/3** (`showDockTab1`..`3`) now each only SHOW
+the tab at that place of the strip (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
+closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (the keys follow
+the strip order when it is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
 default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**

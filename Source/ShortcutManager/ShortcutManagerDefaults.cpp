@@ -61,11 +61,16 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // released for the Mac's new-tab convention (see migrateBottomPanelToggleKeys() and
     // migrateBottomPanelCmdJ() in ShortcutManager.h).
     bindings["toggleBottomPanel"] = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
-    // Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
-    // order (Timeline, Mixer, Controllers). Each key stays with its view: reordering the strip
-    // never re-keys them. Free chords: no other binding in this table uses a bare Cmd+digit.
-    bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
-    bindings["toggleMixerPanel"] = juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+1/2/3 -- "show the tab at this place of the dock's tab order" (never closes the dock): the key follows the
+    // position, not the view, so dragging a tab to a new place re-keys it (BottomDockComponent::tabAtKeyPosition).
+    // Cmd+0 focuses the view in the main area. Free chords: no other binding here uses a bare Cmd+digit.
+    // The per-view actions (toggleTimelinePanel ... showCanvas) stay rebindable and are unbound by default.
+    const char* const showDockTabIds[] = {"showDockTab1", "showDockTab2", "showDockTab3"};
+    for (int i = 0; i < 3; ++i)
+        bindings[showDockTabIds[i]] = juce::KeyPress('1' + i, juce::ModifierKeys::commandModifier, 0);
+    bindings["focusMainView"] = juce::KeyPress('0', juce::ModifierKeys::commandModifier, 0);
+    bindings["toggleTimelinePanel"] = juce::KeyPress();
+    bindings["toggleMixerPanel"] = juce::KeyPress();
     // The platform-standard Select All chord (Cubase, and every text field, read Cmd+A this
     // way); it routes per focused editor. The AI panel moved to Cmd+Shift+A to free it (above).
     bindings["selectAllModules"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
@@ -187,16 +192,18 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // unbound; a returning user's saved unbound value carries forward unchanged, same
     // as toggleMixerPanel's old Cmd+Alt+M -- only the panel toggle's and toggleTimelinePanel's old
     // Cmd+T are migrated (see migrateBottomPanelToggleKeys() and migrateBottomPanelCmdJ()).
-    bindings["toggleMidiRemotePanel"] = juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0);
-    // The fourth view's key, next to the three tabs': focuses the canvas while it is the main view.
-    bindings["showCanvas"] = juce::KeyPress('4', juce::ModifierKeys::commandModifier, 0);
-    // Opt+Cmd+1..4 swap that view into the main area, the same digit as its own Cmd+digit show key (Timeline 1,
-    // Mixer 2, Controllers 3, Canvas 4). Each key stays with its view. Free: no other binding is Alt+Cmd+digit.
+    bindings["toggleMidiRemotePanel"] = juce::KeyPress();
+    bindings["showCanvas"] = juce::KeyPress();
+    // Opt+Cmd+1..3 swap the tab at that place of the tab order into the main area, the same digit as its Cmd+digit
+    // show key. Free: no other binding is Alt+Cmd+digit. The per-view swap actions are unbound by default.
     const auto commandAlt = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
-    bindings["swapTimelineToMain"] = juce::KeyPress('1', commandAlt, 0);
-    bindings["swapMixerToMain"] = juce::KeyPress('2', commandAlt, 0);
-    bindings["swapMidiRemoteToMain"] = juce::KeyPress('3', commandAlt, 0);
-    bindings["swapCanvasToMain"] = juce::KeyPress('4', commandAlt, 0);
+    const char* const swapDockTabIds[] = {"swapDockTab1ToMain", "swapDockTab2ToMain", "swapDockTab3ToMain"};
+    for (int i = 0; i < 3; ++i)
+        bindings[swapDockTabIds[i]] = juce::KeyPress('1' + i, commandAlt, 0);
+    bindings["swapTimelineToMain"] = juce::KeyPress();
+    bindings["swapMixerToMain"] = juce::KeyPress();
+    bindings["swapMidiRemoteToMain"] = juce::KeyPress();
+    bindings["swapCanvasToMain"] = juce::KeyPress();
     // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =

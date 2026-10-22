@@ -16,8 +16,9 @@ const juce::KeyPress kCmd9('9', juce::ModifierKeys::commandModifier, 0);
 // same PersistedKeysGuard idiom TestSettingsHelpers.h documents for any test that reaches the real
 // on-disk settings file.
 const juce::StringArray kTouchedKeys{"shortcutMigration_bottomPanelCmdT", "shortcutMigration_bottomPanelCmdJ",
-                                     "shortcut_toggleTimelinePanel", "shortcut_toggleBottomPanel",
-                                     "shortcut_toggleMixerPanel"};
+                                     "shortcut_toggleTimelinePanel",      "shortcut_toggleBottomPanel",
+                                     "shortcut_toggleMixerPanel",         "shortcutMigration_dockDigitKeys",
+                                     "shortcut_swapMixerToMain",          "shortcut_toggleMidiRemotePanel"};
 
 } // namespace
 
@@ -30,6 +31,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, AnOldCmdTOnTimelineMovesToTheNewB
         ASSERT_NE(settings, nullptr);
         settings->removeValue("shortcutMigration_bottomPanelCmdT");
         settings->removeValue("shortcutMigration_bottomPanelCmdJ");
+        settings->removeValue("shortcutMigration_dockDigitKeys");
         settings->setValue("shortcut_toggleTimelinePanel", ShortcutManager::encodeKeyPress(kCmdT));
         settings->removeValue("shortcut_toggleBottomPanel"); // absent, like every legacy install
         settings->saveIfNeeded();
@@ -41,7 +43,37 @@ TEST(ShortcutManagerBottomPanelMigrationTests, AnOldCmdTOnTimelineMovesToTheNewB
     manager.loadFromProperties(props);
 
     EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdJ) << "claims the old Cmd+T, then moves on to Cmd+J";
-    EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), kCmd1) << "moved off Cmd+T onto its own new default";
+    EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), juce::KeyPress())
+        << "moved off Cmd+T onto Cmd+1, which the positional Show Tab 1 owns, so the view action is unbound";
+    EXPECT_EQ(manager.getBinding("showDockTab1"), kCmd1);
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, TheOldPerViewDigitsMoveToThePositionalActionsAndARebindStays) {
+    synth::test::PersistedKeysGuard guard(kTouchedKeys);
+    const juce::KeyPress cmdAlt2('2', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+    {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        ASSERT_NE(settings, nullptr);
+        settings->removeValue("shortcutMigration_dockDigitKeys");
+        settings->setValue("shortcut_toggleMixerPanel", ShortcutManager::encodeKeyPress(juce::KeyPress(
+                                                            '2', juce::ModifierKeys::commandModifier, 0)));
+        settings->setValue("shortcut_swapMixerToMain", ShortcutManager::encodeKeyPress(cmdAlt2));
+        settings->setValue("shortcut_toggleMidiRemotePanel", ShortcutManager::encodeKeyPress(kCmd9));
+        settings->saveIfNeeded();
+    }
+
+    ShortcutManager manager;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    manager.loadFromProperties(props);
+
+    EXPECT_FALSE(manager.getBinding("toggleMixerPanel").isValid());
+    EXPECT_FALSE(manager.getBinding("swapMixerToMain").isValid());
+    EXPECT_EQ(manager.getBinding("toggleMidiRemotePanel"), kCmd9) << "the user's own rebind survives";
+    EXPECT_EQ(manager.getBinding("showDockTab2"), juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_TRUE(manager.getConflictingAction("showDockTab2", manager.getBinding("showDockTab2")).isEmpty());
 }
 
 TEST(ShortcutManagerBottomPanelMigrationTests, ARebindAwayFromCmdTIsLeftAlone) {

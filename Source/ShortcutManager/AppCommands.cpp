@@ -67,7 +67,8 @@ namespace AppCommands {
  *  - toggleBottomPanel: the ONE bottom-dock open/close toggle (see ShortcutManager.h's comment on
  *    the action id). toggleTimelinePanel, toggleMixerPanel and toggleMidiRemotePanel each just SHOW
  *    their tab, never close the dock; showCanvas is the fourth view's sibling (it focuses the canvas while
- *    the canvas is the main view).
+ *    the canvas is the main view). showDockTab1..3 / swapDockTab1..3ToMain are the same by tab-order position
+ *    (Cmd+1..3, Opt+Cmd+1..3) and focusMainView is Cmd+0; the per-view ids stay for menus and rebinding.
  *  - toggleLibrary / toggleSoundBrowser: the left column's Modules and Sounds views. Each shows its own view: a closed
  *    column opens on it, the other view switches to it, and the one already showing closes the column
  *    (docs/layout/sound-browser.md#shortcuts).
@@ -206,6 +207,20 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return swapMidiRemoteToMain;
     if (actionId == "swapCanvasToMain")
         return swapCanvasToMain;
+    if (actionId == "showDockTab1")
+        return showDockTab1;
+    if (actionId == "showDockTab2")
+        return showDockTab2;
+    if (actionId == "showDockTab3")
+        return showDockTab3;
+    if (actionId == "swapDockTab1ToMain")
+        return swapDockTab1ToMain;
+    if (actionId == "swapDockTab2ToMain")
+        return swapDockTab2ToMain;
+    if (actionId == "swapDockTab3ToMain")
+        return swapDockTab3ToMain;
+    if (actionId == "focusMainView")
+        return focusMainView;
     if (actionId == "toggleSidePane")
         return toggleSidePane;
     if (actionId == "snapSetWhole")

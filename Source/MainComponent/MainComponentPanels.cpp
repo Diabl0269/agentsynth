@@ -579,10 +579,11 @@ void MainComponent::applyToolbarIcons() {
     bottomDock.getMixerPanel().getSidePaneButton().setShortcutText(sidePaneKey);
     bottomDock.getMixerPanel().refreshShortcutHints();
     timelinePanel.getSidePaneButton().setShortcutText(sidePaneKey);
-    using Dock = synth::ui::BottomDockComponent;
-    for (const auto view : {Dock::Tab::Timeline, Dock::Tab::Mixer, Dock::Tab::MidiRemote, Dock::Tab::Canvas})
-        bottomDock.setSwapShortcutText(
-            view, shortcutHintFor(&shortcutManager, Dock::swapActionIdForTab(view), juce::KeyPress()));
+    // The swap icons' keys are positional (they follow the tab order), so the dock asks for each binding itself.
+    bottomDock.setShortcutTextSource([this](const juce::String& actionId) {
+        return ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId));
+    });
+    bottomDock.refreshShortcutTexts();
 
     refreshLibraryToggleTooltip();
 }

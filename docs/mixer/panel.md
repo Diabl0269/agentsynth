@@ -94,8 +94,8 @@ room every section gets its full shared height and the fader takes the rest.
 the strip's `gain` parameter via `juce::SliderParameterAttachment` and brackets the gesture through
 `parameterGestureChanged` to `AppUndoManager::captureBeforeState`/`pushSnapshotFromCapture`.
 
-`Cmd+2` (`toggleMixerPanel`, FRO333) opens the bottom dock on the Mixer tab if it's hidden and
-switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
+The Mixer's tab key is its place in the tab strip (`Cmd+2` by default, `showDockTab2`): it opens the bottom dock on the
+Mixer tab if it's hidden and switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
 dock-wide toggle/show split, the tab order and detach behaviour.
 
 ### Reordering columns
@@ -162,9 +162,9 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
 
 - **One toggle, four shows.** `Cmd+J`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
-  active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
-  `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
-  was hidden, otherwise just switching — and never close it; Cmd+4 focuses the canvas in main. `Opt+Cmd+1`-`4` swap a view in (below).
+  active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`showDockTab1`..`3`, the tab at that place of the strip;
+  `MainComponent::showBottomDockTab`) each only show their tab — opening the dock first if it
+  was hidden, otherwise just switching — and never close it; Cmd+0 focuses the view in main. `Opt+Cmd+1`-`3` swap a tab in (below).
 - **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
   tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
   the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
@@ -172,12 +172,12 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row, in the shared
   `paintReorderLift` look (`surfaceHi` fill, 1 px `accent` outline, soft shadow, 95% opacity, easing in with the
   lift); the other tabs glide aside (160 ms) and the gap shows a 1 px dashed `border` outline (its swap icon hides). **The order does not change while dragging.** On release
-  it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); each view
-  keeps its own keys (Cmd+1-4 show, Opt+Cmd+1-4 swap), never re-keyed. Esc returns the tab and commits
+  it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); the keys
+  follow the places (Cmd+1-3 show, Opt+Cmd+1-3 swap), so the dragged tabs re-key. Esc returns the tab and commits
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
   tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
-  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`4` (`swap<View>ToMain`). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
+  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`3` (`swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
   ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has

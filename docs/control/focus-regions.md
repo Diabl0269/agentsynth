@@ -27,7 +27,7 @@ below for the Mixer region's own keyboard behaviour.
 - **The order follows the layout** — Toolbar, Library, the view in the main area, Dock tabs, then the views in the
   panel (Canvas, Timeline, Mixer, Controllers), AI Panel, Mod Matrix; the Timeline's two side panes stay right after
   the Timeline, and the Canvas toolbar stop sits right before the Canvas wherever the canvas is. A swap (icon or
-  Opt+Cmd+1-4, [shortcuts](shortcuts.md)) re-registers the regions, so with the Timeline in the main area Tab goes
+  Opt+Cmd+1-3, [shortcuts](shortcuts.md)) re-registers the regions, so with the Timeline in the main area Tab goes
   Library, Timeline, Dock tabs, Canvas toolbar, Canvas (both while the Canvas tab shows).
 - **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
   by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
