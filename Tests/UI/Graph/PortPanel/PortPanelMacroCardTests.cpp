@@ -249,20 +249,68 @@ TEST(PortPanelMacroCard, TheHoveredDotPaintsNoCrossOverIt) {
     f.card()->setLookAndFeel(nullptr);
 }
 
-TEST(PortPanelMacroCard, ADoubleClickOnTheOnlyCablesPortNeverFlashesThePanelAndStillExpands) {
+namespace {
+// The whole double-click as the card receives it: press and release of the first click, then the second click's press,
+// release and the double-click notification.
+void doubleClickPort(MacroCardPortFixture& f, juce::Point<int> jack) {
+    f.click(jack);
+    f.card()->mouseDown(portEvent(*f.card(), jack, jack, {}, 2));
+    f.card()->mouseUp(portEvent(*f.card(), jack, jack, {}, 2));
+    f.card()->mouseDoubleClick(portEvent(*f.card(), jack, jack, {}, 2));
+}
+} // namespace
+
+// Regression test for FRO791: a double-click on a macro port with one cable opened the macro instead of
+// disconnecting it.
+TEST(PortPanelMacroCard, ADoubleClickOnThePortOfOneCableDisconnectsItNeverFlashesThePanelAndKeepsTheCardClosed) {
     MacroCardPortFixture f;
+    ASSERT_TRUE(f.connected(f.extOsc, f.inlet));
     const auto jack = f.dot(true).jackPos;
     f.click(jack); // the first click of the double-click
     EXPECT_TRUE(f.controller().hasPendingOpenForTest());
     EXPECT_EQ(f.launches, 0);
+    f.card()->mouseDown(portEvent(*f.card(), jack, jack, {}, 2));
+    f.card()->mouseUp(portEvent(*f.card(), jack, jack, {}, 2));
     f.card()->mouseDoubleClick(portEvent(*f.card(), jack, jack, {}, 2));
     EXPECT_FALSE(f.controller().hasPendingOpenForTest()) << "the deferred open was dropped";
-    EXPECT_FALSE(f.editor->getMacros().find(f.macroId)->collapsed);
+    EXPECT_FALSE(f.connected(f.extOsc, f.inlet)) << "the only cable is gone";
+    EXPECT_TRUE(f.editor->getMacros().find(f.macroId)->collapsed) << "the macro stays closed";
     EXPECT_EQ(f.launches, 0);
+    EXPECT_TRUE(f.connected(f.outlet, f.extSink)) << "the other port is untouched";
+
+    f.editor->finishCableRetractForTest();
+    ASSERT_TRUE(f.undo.undo()) << "one Cmd+Z";
+    EXPECT_TRUE(f.connected(f.extOsc, f.inlet)) << "brings the cable back";
+}
+
+TEST(PortPanelMacroCard, ADoubleClickOnAPortOfOneCableLeavesTheCableWhenThePreferenceIsOff) {
+    MacroCardPortFixture f;
+    f.editor->setDoubleClickPortDisconnectEnabled(false);
+    doubleClickPort(f, f.dot(true).jackPos);
+    EXPECT_TRUE(f.connected(f.extOsc, f.inlet));
+    EXPECT_FALSE(f.editor->getMacros().find(f.macroId)->collapsed) << "the current behaviour: it opens";
+}
+
+TEST(PortPanelMacroCard, ADoubleClickOnAPortOfSeveralCablesDisconnectsNothingAndStillExpands) {
+    MacroCardPortFixture f(2);
+    doubleClickPort(f, f.dot(true).jackPos);
+    EXPECT_TRUE(f.connected(f.extOsc, f.inlet));
+    EXPECT_TRUE(f.connected(f.extOsc2, f.inlet));
+    EXPECT_FALSE(f.editor->getMacros().find(f.macroId)->collapsed);
+}
+
+TEST(PortPanelMacroCard, ADoubleClickOnTheCardBodyStillExpandsIt) {
+    MacroCardPortFixture f;
+    const auto centre = f.card()->getLocalBounds().getCentre();
+    f.card()->mouseDown(portEvent(*f.card(), centre, centre, {}, 2));
+    f.card()->mouseUp(portEvent(*f.card(), centre, centre, {}, 2));
+    f.card()->mouseDoubleClick(portEvent(*f.card(), centre, centre, {}, 2));
+    EXPECT_TRUE(f.connected(f.extOsc, f.inlet));
+    EXPECT_FALSE(f.editor->getMacros().find(f.macroId)->collapsed);
 }
 
 TEST(PortPanelMacroCard, ModifiedOrDoubleClicksDoNotOpenThePanel) {
-    MacroCardPortFixture f;
+    MacroCardPortFixture f(2); // several cables: the double-click keeps expanding the macro
     const auto jack = f.dot(true).jackPos;
     f.card()->mouseDown(portEvent(*f.card(), jack, jack, juce::ModifierKeys::shiftModifier));
     f.card()->mouseUp(portEvent(*f.card(), jack, jack, juce::ModifierKeys::shiftModifier));

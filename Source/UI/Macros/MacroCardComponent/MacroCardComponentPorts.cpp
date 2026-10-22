@@ -9,6 +9,7 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/PortPanel/PortConnectionList.h"
 #include "UI/Graph/PortPanel/PortConnectionsPanel.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -74,6 +75,26 @@ void MacroCardComponent::portReleased(const juce::MouseEvent& e) {
     constexpr int kDot = 10; // the painted dot (see the hover ring in paintPortStrips)
     const auto dot = juce::Rectangle<int>(kDot, kDot).withCentre(hit->jackPos);
     owner.getPortPanel().jackReleased(*this, dot, ref, e);
+}
+
+// The same rule as a module card's jack: one cable goes, none or several leave the double-click to the card.
+bool MacroCardComponent::disconnectOnlyCableAt(const juce::MouseEvent& e) {
+    if (!owner.getDoubleClickPortDisconnectEnabled())
+        return false;
+    auto& controller = owner.getMacroController();
+    const auto hit = controller.macroCardPortForPoint(macroId, e.getPosition());
+    if (!hit.has_value())
+        return false;
+    const auto node = controller.resolveMemberNodeId(hit->nodeUuid);
+    if (node.uid == 0)
+        return false;
+    const bool midi = hit->kind == synth::MacroPortKind::Midi;
+    const synth::ui::PortRef ref{
+        node, midi ? juce::AudioProcessorGraph::midiChannelIndex : juce::jmax(0, hit->visibleJack), hit->isInput, midi};
+    if (synth::ui::listPortConnections(owner, ref).size() != 1)
+        return false;
+    owner.getPortPanel().disconnectAll(ref);
+    return true;
 }
 
 void MacroCardComponent::closeOwnPortPanel() {

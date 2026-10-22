@@ -512,7 +512,9 @@ follow. A small tooltip, `"LFO 1 · +42%"` with a colour swatch (`modRingPositiv
 sign), sits above-right of the knob, outside the knob's cell, and fades out when you let go. The value
 stays; the whole drag is **one** undo step ("Change modulation amount", Cmd+Z). Esc during the drag
 puts the starting amount back and leaves no undo step. A press that moves under 3 px is a click, which
-opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::onModDotClicked`.
+opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::onModDotClicked`, and only that panel: the
+card hears the knob's release as a listener, in the knob's own space, and ignores it (`ModuleComponent::mouseUp` acts only
+on releases in its own space), so it can never also read it as a click on a jack and open the port panel.
 
 * **Last-chosen source.** Session-only, never saved in the project, per (card, destination channel).
   The default is the first attenuverter routing on the knob; `ModDotController::setLastChosen` changes

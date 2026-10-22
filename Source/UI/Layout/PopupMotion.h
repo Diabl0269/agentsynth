@@ -196,6 +196,10 @@ public:
      *  its watchdog timer, since no VBlank ever arrives). Default off. */
     static void setAnimateOffScreenForTest(bool animate);
 
+    /** Test seam: moves the tween `window` is running (in or out) to `ms` after its start, in place of the VBlank
+     *  frames an off-screen window never gets, so a test can read the in-between frames. */
+    static void stepMotionForTest(juce::Component& window, double ms);
+
     /** Open a DialogWindow from `options` and attach. Use instead of options.launchAsync(). */
     static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options) {
         auto* dialog = options.launchAsync();

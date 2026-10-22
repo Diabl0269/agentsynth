@@ -773,7 +773,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!cable.landsOnKnob || editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
             continue;
-        g.setColour(editor.colourForCable(cable));
+        const auto& focusedCable = editor.getPortPanel().highlightedCable();
+        const bool dimmed = focusedCable.has_value() && *focusedCable != cable.id; // as the wire itself is
+        g.setColour(editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f));
         // Shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the
         // anchor point and the dot drawn on it can never disagree on the dot's own size.
         g.fillEllipse(cable.p2.x - ModuleComponent::kKnobLandingDotDiameter * 0.5f,

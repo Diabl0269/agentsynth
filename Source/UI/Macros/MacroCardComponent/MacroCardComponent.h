@@ -172,6 +172,9 @@ private:
     void portReleased(const juce::MouseEvent& e);
     // Folds away this card's own port panel (and a deferred open) before the card expands or hides.
     void closeOwnPortPanel();
+    // A double-click on a port dot that has exactly one cable (with "double-click a port to disconnect" on)
+    // disconnects it; true when it did, so the card does not also expand.
+    bool disconnectOnlyCableAt(const juce::MouseEvent& e);
 
     // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;

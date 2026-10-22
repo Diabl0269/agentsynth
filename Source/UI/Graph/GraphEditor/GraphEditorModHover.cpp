@@ -92,8 +92,10 @@ void GraphEditor::setHoveredModTarget(std::optional<HoveredModTarget> target) {
 }
 
 bool GraphEditor::isCableHovered(const VisibleCable& cable) const {
-    if (hoveredCableId.has_value() && *hoveredCableId == cable.id)
-        return true;
+    // A cable under the pointer is the only one lit: its own hover also names its knob as the hovered target, which
+    // must not light the other cables landing on the same knob.
+    if (hoveredCableId.has_value())
+        return *hoveredCableId == cable.id;
     return cable.landsOnKnob && hoveredModTarget_.has_value() &&
            hoveredModTarget_->nodeId == juce::AudioProcessorGraph::NodeID{cable.destNodeId} &&
            hoveredModTarget_->channel == cable.destChannel;

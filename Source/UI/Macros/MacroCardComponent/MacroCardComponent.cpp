@@ -274,6 +274,8 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     }
 
     closeOwnPortPanel(); // the first click of this double-click may have opened (or queued) a port panel
+    if (disconnectOnlyCableAt(e))
+        return;
     owner.getMacroController().setMacroCollapsed(macroId, false);
 }
 

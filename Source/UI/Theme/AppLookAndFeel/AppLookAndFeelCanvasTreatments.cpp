@@ -163,14 +163,15 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
     const float normalisedActivity = juce::jlimit(0.0f, 1.0f, activity);
     const float coreWidth = m.wireCoreWidth * (1.0f + normalisedActivity * 0.4f);
 
-    // Casing (dark underlay).
-    g.setColour(theme.colors.bg0.withAlpha(0.6f));
+    // Casing (dark underlay). The wire's own alpha (a dimmed or fading cable) scales the casing and the glow too, so
+    // nothing of a faded cable stays at full strength.
+    g.setColour(theme.colors.bg0.withAlpha(0.6f * colour.getFloatAlpha()));
     g.strokePath(wire,
                  juce::PathStrokeType(m.wireCasingWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     // Neon glow behind the core (Glass only, cost-gated).
     if (tr.glow > 0.0f) {
-        g.setColour(colour.withAlpha(tr.glow * 0.5f));
+        g.setColour(colour.withMultipliedAlpha(tr.glow * 0.5f));
         g.strokePath(
             wire, juce::PathStrokeType(coreWidth * 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
