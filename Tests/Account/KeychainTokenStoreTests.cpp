@@ -194,6 +194,10 @@ TEST_F(WindowsCredentialStoreTest, AFreshStoreSeesWhatAnotherStoreSaved) {
 
 #endif // JUCE_WINDOWS
 
+// The service-name tests run on every platform, outside the guards above.
+#include "Auth/KeychainTokenStore.h"
+#include <gtest/gtest.h>
+
 TEST(KeychainTokenStoreServiceNameTest, DevBuildUsesItsOwnServiceName) {
     const auto release = synth::KeychainTokenStore::serviceNameFor(false);
     const auto dev = synth::KeychainTokenStore::serviceNameFor(true);
