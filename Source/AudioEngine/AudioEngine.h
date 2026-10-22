@@ -447,6 +447,8 @@ public:
                                                     juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex);
     void addEmptyModRouting();
     void removeModRouting(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
+    /** Frees every hosted plugin modulation slot that no longer has a cable. Message thread. */
+    void releaseUnconnectedHostedModSlots();
     void toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();

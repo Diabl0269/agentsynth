@@ -311,6 +311,7 @@ MainComponent::~MainComponent() {
         if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor())) {
             hosted->onLatencyChanged = nullptr;
             hosted->onInstancePublished = nullptr;
+            hosted->onModSlotsUnresolved = nullptr;
         }
     }
 

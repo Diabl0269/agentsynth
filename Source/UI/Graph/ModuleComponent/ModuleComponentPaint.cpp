@@ -8,6 +8,7 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -340,10 +341,46 @@ juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort*
     return (port != nullptr) ? port->colour.value_or(kindTint) : kindTint;
 }
 
+juce::String ModuleComponent::hostedParamForDropChannel(int channel) const {
+    const int si = kUnboundHostedKnobChannelBase - channel;
+    if (channel > kUnboundHostedKnobChannelBase || si >= sliders.size() || sliders[si] == nullptr)
+        return {};
+    const auto id = sliders[si]->getComponentID();
+    return id.startsWith("hostedKnob:") ? id.fromFirstOccurrenceOf(":", false, false) : juce::String();
+}
+
+int ModuleComponent::hostedKnobSliderIndex(const juce::String& paramId) const {
+    if (paramId.isEmpty())
+        return -1;
+    const auto id = "hostedKnob:" + paramId;
+    for (int si = 0; si < sliders.size(); ++si)
+        if (sliders[si] != nullptr && sliders[si]->getComponentID() == id)
+            return si;
+    return -1;
+}
+
 std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (mod == nullptr)
         return std::nullopt;
+
+    // Every knob on a plugin card takes a cable. One already modulated answers with its slot's channel; one that is
+    // not has no channel until the drop claims a slot, so it answers with a stand-in naming the knob
+    // (hostedKnobForDropChannel), and nothing is claimed by just hovering.
+    if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(mod)) {
+        for (int si = 0; si < sliders.size(); ++si) {
+            auto* knob = sliders[si];
+            if (knob == nullptr || !knob->isVisible() || !knob->getBounds().contains(localPoint) ||
+                !knob->getComponentID().startsWith("hostedKnob:"))
+                continue;
+            const int channel =
+                hosted->modChannelForParam(knob->getComponentID().fromFirstOccurrenceOf(":", false, false));
+            return Port{knob->getBounds(), channel >= 0 ? channel : kUnboundHostedKnobChannelBase - si,
+                        /*isInput*/ true,
+                        /*isMidi*/ false};
+        }
+        return std::nullopt;
+    }
 
     const auto targets = mod->getModulationTargets();
 
@@ -393,6 +430,11 @@ juce::String ModuleComponent::knobNameForModTarget(const ModuleBase* mod, const 
 // knob. A target with no bound parameter falls back to the knob named like the jack. The visibility rule
 // is getModRingSliderIndex's either way.
 int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) const {
+    // A hosted plugin knob is named by the parameter id the slot holds, not by a RangedAudioParameter.
+    if (dynamic_cast<const synth::HostedPluginModule*>(module) != nullptr) {
+        const int si = hostedKnobSliderIndex(target.paramId);
+        return si >= 0 ? shownRingSliderIndex(si) : -1;
+    }
     const auto* mb = dynamic_cast<const ModuleBase*>(module);
     if (const auto* param = mb != nullptr ? mb->parameterForModTarget(target) : nullptr) {
         const int si = sliderParams.indexOf(const_cast<juce::RangedAudioParameter*>(param));

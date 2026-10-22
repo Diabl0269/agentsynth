@@ -9,6 +9,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 namespace {
@@ -19,6 +20,44 @@ void handMacroMembershipToNewNode(synth::MacroSet& macros, const juce::String& o
                                   juce::AudioProcessorGraph::Node& newNode) {
     if (oldNodeUuid.isNotEmpty() && macros.findByMember(oldNodeUuid) != nullptr)
         macros.replaceMember(oldNodeUuid, synth::AIStateMapper::ensureNodeUuid(&newNode));
+}
+
+struct ModRoutingRewire {
+    juce::AudioProcessorGraph::NodeID attenuverterId;
+    int channelOnOldModule;
+    bool oldModuleIsSource;
+    juce::String hostedParamId; // the parameter a plugin's modulation slot drove, else empty
+};
+
+// A cable on a plugin's modulation slot follows its parameter, not the raw channel: a new plugin claims a slot for the
+// same parameter id (one it lacks is removed, with a toast, once it loads: onModSlotsUnresolved), and anything else
+// has no such input. -1 = drop the cable.
+int destChannelOnNewModule(juce::AudioProcessor& newModule, int oldChannel, const juce::String& hostedParamId) {
+    if (hostedParamId.isEmpty())
+        return oldChannel;
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&newModule);
+    return hosted != nullptr ? hosted->bindModSlot(hostedParamId) : -1;
+}
+
+// removeNode(oldNodeId) only removes connections TO/FROM the old node. For mod routings (source -> attenuverter ->
+// dest) the old node's leg is gone and the other survives, so only the destroyed leg is re-added.
+void rewireModRoutings(AudioEngine& engine, const std::vector<ModRoutingRewire>& routings,
+                       juce::AudioProcessorGraph::Node& newNode) {
+    auto& graph = engine.getGraph();
+    auto& processor = *newNode.getProcessor();
+    const auto newNodeId = newNode.nodeID;
+    for (const auto& rw : routings) {
+        if (rw.oldModuleIsSource) {
+            if (rw.channelOnOldModule < processor.getTotalNumOutputChannels())
+                graph.addConnection({{newNodeId, rw.channelOnOldModule}, {rw.attenuverterId, 0}});
+            continue;
+        }
+        const int channel = destChannelOnNewModule(processor, rw.channelOnOldModule, rw.hostedParamId);
+        if (channel >= 0 && channel < processor.getTotalNumInputChannels())
+            graph.addConnection({{rw.attenuverterId, 0}, {newNodeId, channel}});
+        else if (rw.hostedParamId.isNotEmpty())
+            engine.removeModRouting(rw.attenuverterId);
+    }
 }
 } // namespace
 
@@ -77,11 +116,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         };
         std::vector<ConnectionInfo> directConnections;
 
-        struct ModRoutingRewire {
-            juce::AudioProcessorGraph::NodeID attenuverterId;
-            int channelOnOldModule;
-            bool oldModuleIsSource;
-        };
+        auto* oldHosted = dynamic_cast<synth::HostedPluginModule*>(oldNode->getProcessor());
         std::vector<ModRoutingRewire> modRoutings;
 
         for (auto& conn : graph.getConnections()) {
@@ -109,6 +144,8 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
                     rw.attenuverterId = conn.source.nodeID;
                     rw.channelOnOldModule = conn.destination.channelIndex;
                     rw.oldModuleIsSource = false;
+                    if (oldHosted != nullptr)
+                        rw.hostedParamId = oldHosted->modSlotParamId(rw.channelOnOldModule);
                     modRoutings.push_back(rw);
                     continue;
                 }
@@ -184,22 +221,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         }
 
         // 8. Re-create compatible modulation routings
-        // removeNode(oldNodeId) only removes connections TO/FROM oldNodeId.
-        // For mod routings: source->attenuverter->dest
-        // If old was source: old->atten connection is removed, atten->dest survives
-        // If old was dest: atten->old connection is removed, source->atten survives
-        // We only need to re-add the destroyed leg.
-        for (auto& rw : modRoutings) {
-            if (rw.oldModuleIsSource) {
-                if (rw.channelOnOldModule < newNumOutputs) {
-                    graph.addConnection({{newNodeId, rw.channelOnOldModule}, {rw.attenuverterId, 0}});
-                }
-            } else {
-                if (rw.channelOnOldModule < newNumInputs) {
-                    graph.addConnection({{rw.attenuverterId, 0}, {newNodeId, rw.channelOnOldModule}});
-                }
-            }
-        }
+        rewireModRoutings(audioEngine, modRoutings, *newNode);
 
         // 9. Refresh UI
         updateComponents();

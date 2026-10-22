@@ -717,6 +717,9 @@ mechanism.
 
 ## Every continuous parameter is a target
 
+A hosted plugin's parameters are targets too, through modulation slots claimed on demand:
+[`plugin-card-layout.md#modulating-plugin-parameters`](../control/plugin-card-layout.md#modulating-plugin-parameters).
+
 The rule for a module's CV jacks: **every continuous (`AudioParameterFloat`/`Int`) parameter that
 shapes the sound gets a CV jack and a `ModulationTarget`.** Choice and toggle parameters do not
 (there is no meaningful "half a waveform"), nor does the shared output Level stage (see

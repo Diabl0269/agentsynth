@@ -9,6 +9,7 @@
 #include "MacroOwnerIndex.h"
 #include "MainComponent.h"
 #include "Modules/LFOModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
@@ -182,7 +183,12 @@ MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, j
 
 bool MainComponent::canModulate(const juce::String& nodeUuid, const juce::String& paramId) {
     auto* target = findNodeByUuid(nodeUuid);
-    return target != nullptr && graphEditor.modulationChannelFor(target->nodeID, paramId) >= 0;
+    if (target == nullptr)
+        return false;
+    // A plugin parameter has no CV input until a cable claims one; any parameter can, while a slot is free.
+    if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(target->getProcessor()))
+        return hosted->canModulateParam(paramId);
+    return graphEditor.modulationChannelFor(target->nodeID, paramId) >= 0;
 }
 
 juce::String MainComponent::addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) {

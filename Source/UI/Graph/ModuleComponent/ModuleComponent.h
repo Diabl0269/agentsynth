@@ -87,16 +87,8 @@ public:
     // Removes listeners, destroys attachments, stops timer, nulls module pointer.
     void detachFromProcessor();
 
-    /** The colour a docked macro-port widget paints its own jack dot with. A port user
-     *  colour (synth::MacroPort::colour, set from the Configure I/O modal's swatch) wins when it
-     *  is set; otherwise the kind tint passes through — audioWire for a MIDI jack, accent for an
-     *  Audio/CV jack — the EXACT fallback MacroCardComponent::paint already uses, so an expanded
-     *  docked widget and a collapsed card read a port's jack identically (a custom colour, or —
-     *  with none — the same tint). `port` is the boundary port the node fronts (from
-     *  owner.macroPortOwnerFor); null (a docked widget whose port entry has drifted away, which
-     *  by construction shouldn't happen) just means "unset", i.e. the kind tint. Side-effect-free
-     *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
-     *  is the only caller. */
+    /** A docked macro-port widget's jack colour: the port's own colour when set, else `kindTint` (same rule as
+     *  MacroCardComponent::paint). A null `port` counts as unset. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
@@ -142,6 +134,16 @@ public:
         bool isInput;
         bool isMidi = false;
     };
+
+    /** Plugin cards: shows each modulated knob's resting value. Called on the canvas' 30 Hz tick. */
+    void reflectHostedRestingValues();
+
+    /** Drop channel of a plugin card's body: the whole card is outlined (a drop opens the parameter search). */
+    static constexpr int kHostedCardBodyDropChannel = -2;
+    /** Drop channel of a plugin knob with no modulation slot yet: this minus its slider index. */
+    static constexpr int kUnboundHostedKnobChannelBase = -1000;
+    /** The plugin knob's parameter id a stand-in drop channel names, or empty for a real channel. */
+    juce::String hostedParamForDropChannel(int channel) const;
 
     /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
     static constexpr int kHeaderHeight = 24;
@@ -325,34 +327,16 @@ public:
      *  can assert the exact geometry painted without inspecting pixels. */
     static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
-    /** Builds the same right-click menu mouseDown() shows for a body right-click (Copy/Duplicate/
-     *  Replace with.../Delete Module and, when this module is a macro member, a "Macro: <name>"
-     *  submenu — founder-review item 4, docs/macros/menu-and-membership.md#the-macro-menus-entry-points). Split out of
-     * mouseDown() so a test can inspect the menu's actual content and invoke an item's action directly:
-     * juce::PopupMenu's own showMenuAsync() never displays anything headless, so driving a synthesised right-click
-     *  MouseEvent into mouseDown() alone has nothing observable to assert on. Public so a test can
-     *  call it after that same synthesised mouseDown() (the real gesture/hit-test/selection-
-     *  retargeting entry point) rather than skip straight to menu construction. */
+    /** The menu a body right-click shows (docs/macros/menu-and-membership.md#the-macro-menus-entry-points). Public
+     *  for tests, which cannot see a popup headless. */
     juce::PopupMenu buildModuleContextMenu();
 
-    /** The small context menu a macro port node's own body right-click shows instead of
-     *  buildModuleContextMenu() above (founder-review fix G7: "they cannot be removed" — a port
-     *  node previously had NO delete affordance once its macro was gone, and Configure I/O is
-     *  otherwise the only surface for it at all). Always offers "Delete Port". When the port still
-     *  resolves to a live macro (GraphEditor::macroPortOwnerFor) it also offers "Rename Port..."
-     *  and "Configure I/O..." — the two Configure I/O actions this node's own menu can reach
-     *  without the user hunting down a member module first. Split out exactly like
-     *  buildModuleContextMenu() is, for the same headless-test reason (that method's own comment). */
+    /** A macro port node's right-click menu: "Delete Port", plus "Rename Port..." and "Configure I/O..." while its
+     *  macro is live. Public for tests, like buildModuleContextMenu. */
     juce::PopupMenu buildMacroPortContextMenu();
 
-    /** Replaces what a real body right-click does with the menu buildModuleContextMenu() built --
-     *  in place of the real showMenuAsync() (which opens a real popup and, on a headless Linux CI
-     *  runner with no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow --
-     *  Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this). Mirrors
-     *  TimelineTrackHeaderComponent's setOpenMidiDestinationsPickerHookForTest(): defaults to the
-     *  real behaviour, and a null hook restores it rather than leaving the seam disarmed. A test
-     *  installs a capturing hook to inspect the menu the real mouseDown() gesture actually built,
-     *  without ever opening a popup. */
+    /** Tests: receives the menu a body right-click built instead of opening it (a headless popup crashes). A null
+     *  hook restores the real popup. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showContextMenuHook_ = hook ? std::move(hook) : [this](juce::PopupMenu& m) { showRealContextMenu(m); };
     }
@@ -468,8 +452,9 @@ private:
     // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
     juce::AudioProcessorGraph::NodeID modAmountGestureAttenuverterId_;
     juce::Point<int> modAmountGestureLastPos_;
-    juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
-    void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
+    juce::AudioProcessorGraph::NodeID firstAttenuverterForChannel(int destChannel) const;
+    void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::Slider& knob, const juce::MouseEvent& e,
+                                int phase);
     void wireCardControlGestures(juce::Slider& control, synth::ui::CardControlGestures& gestures,
                                  juce::RangedAudioParameter* param);
 
@@ -483,10 +468,15 @@ private:
     /** The shared hit zone of the landing dot (mod dot and cable pickup). */
     bool pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
                              const juce::MouseEvent& e) const;
-    void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
+    void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                  const juce::MouseEvent& e, int phase);
 
     /** The RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
+    /** The plugin card knob bound to `paramId`, or -1. */
+    int hostedKnobSliderIndex(const juce::String& paramId) const;
+    /** destChannelForBoundParam, or for a hosted plugin knob (null `param`) its parameter's modulation slot. */
+    int destChannelForKnob(juce::RangedAudioParameter* param, const juce::Component& knob) const;
 
     // The mod dot: ModuleComponentModDot.cpp. One transparent Tab-stop button per knob/fader with an
     // attenuverter routing; the pointer gesture itself lives in synth::ui::ModDotController.

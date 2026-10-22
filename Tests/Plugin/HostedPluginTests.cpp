@@ -130,7 +130,8 @@ TEST(HostedPluginTest, PassThroughUntilReady) {
 
 TEST(HostedPluginTest, BareModuleShowsOneJackASide) {
     HostedPluginModule module;
-    EXPECT_EQ(module.getTotalNumInputChannels(), HostedPluginModule::kMaxPluginChannels);
+    EXPECT_EQ(module.getTotalNumInputChannels(),
+              HostedPluginModule::kMaxPluginChannels + HostedPluginModule::kMaxModSlots); // audio + mod slots
     EXPECT_EQ(module.getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels);
     EXPECT_EQ(module.getVisibleInputPortCount(), 1);
     EXPECT_EQ(module.getVisibleOutputPortCount(), 1);
@@ -485,15 +486,13 @@ TEST(HostedPluginTest, ARestoredBlobNeverReachesTheNextPluginLoaded) {
     blob.append(payload.toRawUTF8(), payload.getNumBytesAsUTF8());
     object->setProperty("pluginState", blob.toBase64Encoding());
 
-    // The instance POINTER is what says the swap happened: hasInstance() is already true from the
-    // old one, and the identity is set synchronously.
-    auto* beforeRestore = module.getActiveInstanceForEditor();
+    // The same plugin is already live, so the blob goes into that instance in place (an undo step must not reload
+    // the plugin); either way the live instance ends up holding it.
     module.setExtraState(state);
-    ASSERT_TRUE(
-        pumpUntil([&] { return module.hasInstance() && module.getActiveInstanceForEditor() != beforeRestore; }));
-    auto* restored = dynamic_cast<StubPluginInstance*>(module.getActiveInstanceForEditor());
-    ASSERT_NE(restored, nullptr);
-    EXPECT_EQ(restored->payload, payload) << "the restore path must still apply its own blob";
+    ASSERT_TRUE(pumpUntil([&] {
+        auto* live = dynamic_cast<StubPluginInstance*>(module.getActiveInstanceForEditor());
+        return live != nullptr && live->payload == payload;
+    })) << "the restore path must still apply its own blob";
 
     // --- ...and the next ordinary load must start clean -------------------------------------------
     auto* beforeB = module.getActiveInstanceForEditor();
@@ -863,8 +862,9 @@ TEST(HostedPluginTest, RegisteredButInternalOnly) {
     ASSERT_NE(module, nullptr);
 
     EXPECT_EQ(module->getModuleType(), ModuleType::HostedPlugin);
-    // THE invariant: 16 in / 16 out at construction, whatever it ends up hosting.
-    EXPECT_EQ(module->getTotalNumInputChannels(), HostedPluginModule::kMaxPluginChannels);
+    // THE invariant: 16 audio in (+ the modulation slots) / 16 out at construction, whatever it ends up hosting.
+    EXPECT_EQ(module->getTotalNumInputChannels(),
+              HostedPluginModule::kMaxPluginChannels + HostedPluginModule::kMaxModSlots);
     EXPECT_EQ(module->getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels);
     EXPECT_EQ(HostedPluginModule::kMaxPluginChannels, 16);
     EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(module), "Hosted Plugin");

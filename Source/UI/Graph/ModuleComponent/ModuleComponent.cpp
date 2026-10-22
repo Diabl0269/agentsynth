@@ -640,7 +640,7 @@ void ModuleComponent::createControls() {
 // docs/modules/modulation.md#drag-to-knob-modulation). An invalid NodeID means either `param` isn't
 // a modulation target at all, or it is but nothing is currently routed to it through an
 // attenuverter (a DirectCV/PolyBus routing has none to adjust).
-// Shared by firstAttenuverterForParam and the knob-hover -> cable-hover wiring in
+// Shared by firstAttenuverterForChannel's callers and the knob-hover -> cable-hover wiring in
 // wireCardControlGestures, so the two can never resolve a different channel for the same
 // param.
 int ModuleComponent::destChannelForBoundParam(juce::RangedAudioParameter* param) const {
@@ -653,8 +653,19 @@ int ModuleComponent::destChannelForBoundParam(juce::RangedAudioParameter* param)
     return -1;
 }
 
-juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForParam(juce::RangedAudioParameter* param) const {
-    const int destChannel = destChannelForBoundParam(param);
+// A hosted plugin knob has no RangedAudioParameter (the card keeps a null one for it); it is bound by the parameter
+// id in its componentID, and its channel is the modulation slot that parameter holds, if any.
+int ModuleComponent::destChannelForKnob(juce::RangedAudioParameter* param, const juce::Component& knob) const {
+    if (param != nullptr)
+        return destChannelForBoundParam(param);
+    const auto id = knob.getComponentID();
+    if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
+        hosted != nullptr && id.startsWith("hostedKnob:"))
+        return hosted->modChannelForParam(id.fromFirstOccurrenceOf(":", false, false));
+    return -1;
+}
+
+juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForChannel(int destChannel) const {
     if (destChannel < 0)
         return {};
 
@@ -672,7 +683,7 @@ juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForParam(juc
 // the ring centre).
 bool ModuleComponent::wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                                const juce::MouseEvent& e) const {
-    if (firstAttenuverterForParam(param).uid == 0)
+    if (firstAttenuverterForChannel(destChannelForKnob(param, knob)).uid == 0)
         return false;
     if (e.mods.isAltDown())
         return true;
@@ -694,9 +705,10 @@ bool ModuleComponent::wantsModAmountGestureFor(juce::RangedAudioParameter* param
 // the cable midpoint knob has always used; phase 2 (up) commits the undo snapshot. The knob's own
 // juce::Slider value is never touched here -- CardKnobSlider only forwards to Slider when this
 // function is NOT what claimed the gesture.
-void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase) {
+void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                             const juce::MouseEvent& e, int phase) {
     if (phase == 0) {
-        modAmountGestureAttenuverterId_ = firstAttenuverterForParam(param);
+        modAmountGestureAttenuverterId_ = firstAttenuverterForChannel(destChannelForKnob(param, knob));
         modAmountGestureLastPos_ = e.getPosition();
         owner.beginModAmountGesture();
         return;
@@ -721,7 +733,7 @@ void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, 
 // pickup share this hit zone; which one a press starts is decided by the order they are asked in.
 bool ModuleComponent::pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                           const juce::MouseEvent& e) const {
-    if (destChannelForBoundParam(param) < 0)
+    if (destChannelForKnob(param, knob) < 0)
         return false;
     // The dot is only 7px across; a pixel-perfect target is unfriendly, more so on a zoomed-out canvas.
     const float scale = hitToleranceScale();
@@ -758,13 +770,13 @@ bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* par
 // jack index (mapInputChannel, matching what routing.destVisibleJack/getPortForPoint speak in
 // everywhere else). Whatever disconnect-and-redrag behaviour that machinery already gives a real
 // input jack, this knob now gets for free, unchanged.
-void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e,
-                                               int phase) {
+void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                               const juce::MouseEvent& e, int phase) {
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return;
     if (phase == 0) {
-        const int destChannel = destChannelForBoundParam(param);
+        const int destChannel = destChannelForKnob(param, knob);
         if (destChannel < 0)
             return;
         const int visibleJack = mb->mapInputChannel(destChannel).visibleJackIndex;
@@ -786,19 +798,19 @@ void ModuleComponent::wireCardControlGestures(juce::Slider& knob, synth::ui::Car
     gestures.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsModAmountGestureFor(param, knob, e);
     };
-    gestures.onModAmountGesture = [this, param](const juce::MouseEvent& e, int phase) {
-        handleModAmountGesture(param, e, phase);
+    gestures.onModAmountGesture = [this, param, &knob](const juce::MouseEvent& e, int phase) {
+        handleModAmountGesture(param, knob, e, phase);
     };
     // Knob-hover -> cable-hover, the reverse direction of the cable-hover -> ring-highlight
     // wiring in GraphEditorCanvas.cpp's mouseMove. Only correlates while a live AttenuverterChain
     // routing actually lands here (same gate wantsModAmountGestureFor uses) -- a DirectCV/PolyBus
     // target has no cable re-anchored onto it to highlight.
-    gestures.onHoverChanged = [this, param](bool entered) {
-        if (!entered || firstAttenuverterForParam(param).uid == 0) {
+    gestures.onHoverChanged = [this, param, &knob](bool entered) {
+        const int destChannel = destChannelForKnob(param, knob);
+        if (!entered || firstAttenuverterForChannel(destChannel).uid == 0) {
             owner.setHoveredModTarget(std::nullopt);
             return;
         }
-        const int destChannel = destChannelForBoundParam(param);
         if (destChannel < 0)
             return;
         owner.setHoveredModTarget(GraphEditor::HoveredModTarget{nodeId, destChannel});
@@ -813,8 +825,8 @@ void ModuleComponent::wireCardControlGestures(juce::Slider& knob, synth::ui::Car
     gestures.wantsCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsCablePickupGestureFor(param, knob, e);
     };
-    gestures.onCablePickupGesture = [this, param](const juce::MouseEvent& e, int phase) {
-        handleCablePickupGesture(param, e, phase);
+    gestures.onCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e, int phase) {
+        handleCablePickupGesture(param, knob, e, phase);
     };
 }
 

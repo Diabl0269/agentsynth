@@ -177,8 +177,15 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     label->setJustificationType(juce::Justification::centred);
     card_.addAndMakeVisible(label);
 
-    wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *slider)),
-                 *resolved.param);
+    auto& attachment = *card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *slider));
+    wireGestures(attachment, *resolved.param);
+    // Takes a mod cable like any card knob: drop target, ring, mod dot, ring drag and cable pickup.
+    card_.wireCardControlGestures(*slider, *slider, nullptr);
+    attachment.restingValue = [module = module_, paramId = resolved.slot.paramId]() -> std::optional<float> {
+        if (auto* hosted = module.get())
+            return hosted->modSlotBase(paramId);
+        return std::nullopt;
+    };
 }
 
 void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
@@ -438,4 +445,12 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
             addControlsSplit->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
     }
     return y + kRowHeight + 6;
+}
+
+void ModuleComponent::reflectHostedRestingValues() {
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
+    if (hosted == nullptr || hosted->getModulationTargets().empty())
+        return;
+    for (auto* attachment : hostedAttachments_)
+        attachment->reflectRestingValue();
 }

@@ -11,7 +11,9 @@
 #include "Modules/MacroMidiInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Graph/PortPanel/PortConnector.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -187,15 +189,54 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
         if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             const auto localPos = comp->getLocalPoint(nullptr, screenPos);
             comp->unfoldMoreRowForCableDrag(localPos);
-            if (!comp->getPortForPoint(localPos))
+            if (!comp->getPortForPoint(localPos)) {
                 if (auto port = comp->getModTargetPortForPoint(localPos))
                     target = port->index;
+                else if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(comp->getModule());
+                         hosted != nullptr && hosted->hasInstance() && comp->getLocalBounds().contains(localPos))
+                    target = ModuleComponent::kHostedCardBodyDropChannel;
+            }
         }
         comp->setModDropTargetChannel(target);
     }
 
     repaintCanvas();
 }
+
+namespace {
+// A drop on a plugin knob that is not modulated yet: claim a modulation slot for its parameter, so the cable has a
+// channel to land on. Claimed before the cable's undo step opens, so undo leaves the slot claimed with no cable;
+// AudioEngine::releaseUnconnectedHostedModSlots frees it on the next rebuild. Every slot taken: the drop is refused.
+std::optional<ModuleComponent::Port> claimHostedModSlot(ModuleComponent& card, ModuleComponent::Port port,
+                                                        const std::function<void(const juce::String&)>& status) {
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(card.getModule());
+    const int channel = hosted != nullptr ? hosted->bindModSlot(card.hostedParamForDropChannel(port.index)) : -1;
+    if (channel < 0) {
+        if (hosted != nullptr && status)
+            status(card.cardTitle() + " already has " + juce::String(synth::HostedPluginModule::kMaxModSlots) +
+                   " modulated parameters");
+        return std::nullopt;
+    }
+    port.index = channel;
+    return port;
+}
+
+// A cable from `source` released over a plugin card's body (the knobs were checked first): open the parameter search
+// there. True when a picker opened, so no other drop rule runs; the cable lands only if the person picks.
+bool offerHostedModTarget(GraphEditor& editor, ModuleComponent& source, int sourceJack, juce::Point<int> screenPos) {
+    for (auto* card : editor.getModuleComponents()) {
+        if (card == nullptr || !card->isVisible() || card == &source ||
+            !card->getLocalBounds().contains(card->getLocalPoint(nullptr, screenPos)))
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(card->getModule());
+        if (hosted == nullptr || !hosted->hasInstance())
+            return false;
+        synth::ui::showHostedModTargetPicker(editor, *card, source.getNodeId(), sourceJack, screenPos);
+        return true;
+    }
+    return false;
+}
+} // namespace
 
 // Drops the pending modulation drop-target highlight on every card.
 void GraphEditor::clearModDropTargets() {
@@ -279,6 +320,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         // for a cable coming from an output — a mod source drives a destination, not the reverse.
         if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             port = comp->getModTargetPortForPoint(localPos);
+            if (port && port->index <= ModuleComponent::kUnboundHostedKnobChannelBase)
+                port = claimHostedModSlot(*comp, *port, onStatusMessage);
             // A knob names its CV jack by RAW channel (the ModulationTarget's channelIndex), while
             // everything below speaks in VISIBLE jack indices. On a collapsed stereo pair the two
             // differ by one (raw ch0/ch1 are the single "Audio" jack), so without this mapping a
@@ -323,6 +366,10 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             }
         }
     }
+
+    // A modulation cable released on a plugin card's body, not on a knob: pick any of the plugin's parameters.
+    if (!connectedToAModule && dragSourceModule != nullptr && !dragSourceIsInput && !dragSourceIsMidi)
+        connectedToAModule = offerHostedModTarget(*this, *dragSourceModule, dragSourceChannel, screenPos);
 
     // Macro card drop (docs/macros/ports.md#how-a-port-is-drawn): nothing above matched (no module jack under the
     // cursor), so check whether the release point is over a COLLAPSED macro's card.

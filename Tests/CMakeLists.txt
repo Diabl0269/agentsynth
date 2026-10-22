@@ -209,9 +209,6 @@ add_executable(Tests
     Mixer/Sends/MixerKeySendDuckingTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
-    Plugin/HostedPluginTests.cpp
-    Plugin/HostedPluginDualIOTests.cpp
-    Plugin/HostedPluginTitleTests.cpp
     Plugin/PluginCardLayoutStoreTests.cpp
     Plugin/ModuleCardLayoutStoreTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp
@@ -222,9 +219,6 @@ add_executable(Tests
     Plugin/PluginScan/PluginScanLibraryTests.cpp
     Plugin/PluginScan/PluginScanPersistenceTests.cpp
     Plugin/PluginScan/PluginScanChildEnvironmentTests.cpp
-    Plugin/HostedPluginEditorWindowTests.cpp
-    Plugin/HostedPluginLaneTests.cpp
-    Plugin/HostedPluginLatencyTests.cpp
     AI/AIStateMapper/AIStateMapperSnapshotsTests.cpp
     AI/CardLayoutTrustTests.cpp
     AI/LfoCurveTrustTests.cpp
@@ -367,10 +361,6 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentModBandTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModAmountGestureTests.cpp
-    UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
-    UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
-    UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
-    UI/Graph/PluginKnobPicker/PluginKnobPickerTouchFallbackTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -994,6 +984,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption
+include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

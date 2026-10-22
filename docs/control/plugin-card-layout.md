@@ -428,6 +428,48 @@ Nothing special — that is the point of binding real hosted parameters rather t
 - A parameter removed from the layout keeps its lanes and assignments — the layout is
   presentation, never a binding.
 
+## Modulating plugin parameters
+
+Any parameter of a hosted plugin can take a mod cable, up to 48 at once per plugin.
+
+- **Drop on a knob.** A cable released on a plugin card knob modulates that parameter, exactly like a built-in
+  knob: the ring, the mod dot (same place, same code as every built-in card), Alt-drag on the ring and the Mod
+  Matrix row all work.
+- **Drop on the card's body.** A cable released on the card but not on a knob opens a search over every parameter
+  (`HostedModTargetPicker`): "On the card" first, then "All parameters". The pick is added to the card as a knob
+  (its own undo step, the "Add to card" write) and the cable lands on it. Escape or a click away changes nothing.
+- **Timeline.** "Add modulator..." on a plugin parameter's automation lane works for any parameter while a slot
+  is free.
+- **Mod Matrix.** A row's destination picker lists every plugin parameter without a slot under "Plugins"
+  (`hostedDestinations`; picker only, never the flat combo, since a plugin can have hundreds). A pick claims the
+  slot and re-points the routing; this is also the keyboard path to a parameter that is not on the card.
+- **Replace with...** Another plugin: each cable follows its parameter id onto the new plugin's slot for it (a
+  parameter the new plugin lacks is removed with the toast once it loads). A built-in module: the cables go.
+- **The plugin's own window, the card knob and automation** set the **resting value**; the modulation moves the
+  parameter around it. The card knob shows the resting value, never the moving one.
+- **Plugin replaced or updated.** Cables whose parameter still exists stay; the rest are removed in one undo step
+  and a toast says so with an Undo.
+
+### How it works
+
+A plugin parameter has no CV input, so `HostedPluginModule` carries `kMaxModSlots` (48) extra input channels above
+its 16 audio ones (`kModChannelBase` = 16; 64 in total, the graph's port limit). A slot is claimed for a parameter
+when a cable needs one (`bindModSlot`), and is an ordinary knob-only `ModulationTarget` from then on: the mod channel
+maps to a `ModCV` port whose visible jack index is the raw channel, so no gutter jack appears. A slot with no cable
+left is freed by `AudioEngine::releaseUnconnectedHostedModSlots`, run from `removeModRouting` and every
+`GraphEditor::updateComponents`, which puts the parameter back at its resting value.
+
+Every block, before the plugin renders, the audio thread (`applyModSlots`, no locks, no allocation) writes
+`clamp(base + blockCV)` into each bound parameter. A value different from what it read back after its own last
+write was set by something else, and becomes the new base. After any re-sync (a state restore, a new instance) the
+read-backs are unknown, so nothing is mistaken for the user turning the control.
+
+The slot table (`modSlots`: slot, paramId, base) is saved in the node's extra state, so a project reopens with the
+resting value, not wherever the LFO happened to be. Undo and redo of a cable restore a node whose plugin is already
+live **in place** (`applyStateInPlace`: card layout, slot table, and the plugin's own state only when its bytes
+differ) instead of reloading the plugin. A restored parameter the new instance lacks fires `onModSlotsUnresolved`,
+which `MainComponent` turns into the cable removal and toast above.
+
 ### As built (FRO137)
 
 - **`MidiLearnController::arm`/`assignControl`** (`Source/MidiRemote/MidiLearnController.cpp`,
