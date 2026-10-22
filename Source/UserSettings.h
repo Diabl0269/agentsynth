@@ -96,4 +96,19 @@ inline constexpr const char* kShareUsageStatsSettingKey = "shareUsageStats";
  *  while this and kShareUsageStatsSettingKey are both false, so it asks once. */
 inline constexpr const char* kUsageStatsAskedSettingKey = "usageStatsAsked";
 
+/** The folders of the user's own sounds the sound index scans besides the installed packs: absolute paths, one per
+ *  line. Written by whoever adds a folder, read by the Sounds view's owner (docs/layout/sound-browser.md). */
+inline constexpr const char* kSoundBrowserFoldersSettingKey = "soundBrowserFolders";
+
+/** The favourite sounds and the sounds used recently (the newest 50): file paths, one per line, newest first for
+ *  the recent list. */
+inline constexpr const char* kSoundBrowserFavouritesSettingKey = "soundBrowserFavourites";
+inline constexpr const char* kSoundBrowserRecentSettingKey = "soundBrowserRecent";
+
+/** Which view the left sidebar shows: "modules" (default) or "sounds". Persisted next to librarySidebarVisible. */
+inline constexpr const char* kLibrarySidebarViewSettingKey = "librarySidebarView";
+
+/** The sidebar's width while the Sounds view shows, in pixels (default 280, clamped 200 to 400). */
+inline constexpr const char* kSoundBrowserWidthSettingKey = "soundBrowserWidth";
+
 } // namespace synth
