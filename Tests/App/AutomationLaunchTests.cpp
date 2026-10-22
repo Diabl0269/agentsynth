@@ -11,6 +11,7 @@
 // below (no current device, no receiving callback) are the proof, not a side effect to tolerate.
 
 #include "AudioEngine/AudioEngine.h"
+#include "Auth/KeychainTokenStore.h"
 #include "AutomationLaunch.h"
 #include <gtest/gtest.h>
 
@@ -75,3 +76,63 @@ TEST(AudioEngineNoAudioDeviceTest, InitialiseNeverOpensADeviceWhenDisabled) {
 }
 
 } // namespace
+
+// --- Keychain policy -------------------------------------------------------------------------
+
+namespace {
+
+// Restores the suite-wide in-memory switch (TestMain turns it on) however a test leaves it.
+struct KeychainSwitchGuard {
+    ~KeychainSwitchGuard() { synth::KeychainTokenStore::useInMemoryStoreForProcess(true); }
+};
+
+} // namespace
+
+TEST(AutomationLaunchTest, NoKeychainFlagIsRequested) {
+    juce::StringArray args{"--no-keychain"};
+    EXPECT_TRUE(synth::isNoKeychainRequested(args, {}));
+}
+
+TEST(AutomationLaunchTest, NoKeychainEnvTruthyValuesAreRequested) {
+    EXPECT_TRUE(synth::isNoKeychainRequested({}, "1"));
+    EXPECT_TRUE(synth::isNoKeychainRequested({}, "TRUE"));
+    EXPECT_TRUE(synth::isNoKeychainRequested({}, " yes "));
+}
+
+TEST(AutomationLaunchTest, NoKeychainAbsentIsNotRequested) {
+    EXPECT_FALSE(synth::isNoKeychainRequested({}, {}));
+    EXPECT_FALSE(synth::isNoKeychainRequested({}, "0"));
+    EXPECT_FALSE(synth::isNoKeychainRequested(juce::StringArray{"--other"}, "no"));
+}
+
+TEST(AutomationLaunchTest, AutomationLaunchIsKeychainFree) {
+    EXPECT_TRUE(synth::isKeychainFreeLaunch(juce::StringArray{"--no-audio-device"}, {}, {}));
+    EXPECT_TRUE(synth::isKeychainFreeLaunch({}, {}, "1"));
+    EXPECT_TRUE(synth::isKeychainFreeLaunch(juce::StringArray{"--no-keychain"}, {}, {}));
+    EXPECT_FALSE(synth::isKeychainFreeLaunch({}, {}, {}));
+}
+
+TEST(AutomationLaunchTest, KeychainPolicyEnablesInMemoryStoreForAutomationLaunch) {
+    KeychainSwitchGuard guard;
+    synth::KeychainTokenStore::useInMemoryStoreForProcess(false);
+    EXPECT_FALSE(synth::KeychainTokenStore{}.isMemoryOnly());
+
+    EXPECT_TRUE(synth::applyKeychainPolicyForLaunch(juce::StringArray{"--no-audio-device"}, {}, {}));
+    EXPECT_TRUE(synth::KeychainTokenStore{}.isMemoryOnly());
+}
+
+TEST(AutomationLaunchTest, KeychainPolicyEnablesInMemoryStoreForNoKeychainFlag) {
+    KeychainSwitchGuard guard;
+    synth::KeychainTokenStore::useInMemoryStoreForProcess(false);
+
+    EXPECT_TRUE(synth::applyKeychainPolicyForLaunch(juce::StringArray{"--no-keychain"}, {}, {}));
+    EXPECT_TRUE(synth::KeychainTokenStore{}.isMemoryOnly());
+}
+
+TEST(AutomationLaunchTest, KeychainPolicyLeavesNormalLaunchOnThePlatformStore) {
+    KeychainSwitchGuard guard;
+    synth::KeychainTokenStore::useInMemoryStoreForProcess(false);
+
+    EXPECT_FALSE(synth::applyKeychainPolicyForLaunch({}, {}, {}));
+    EXPECT_FALSE(synth::KeychainTokenStore{}.isMemoryOnly());
+}

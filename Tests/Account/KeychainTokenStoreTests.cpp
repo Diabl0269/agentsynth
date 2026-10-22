@@ -193,3 +193,17 @@ TEST_F(WindowsCredentialStoreTest, AFreshStoreSeesWhatAnotherStoreSaved) {
 }
 
 #endif // JUCE_WINDOWS
+
+TEST(KeychainTokenStoreServiceNameTest, DevBuildUsesItsOwnServiceName) {
+    const auto release = synth::KeychainTokenStore::serviceNameFor(false);
+    const auto dev = synth::KeychainTokenStore::serviceNameFor(true);
+    EXPECT_TRUE(release.endsWith(".refreshtoken"));
+    EXPECT_FALSE(release.contains(".dev."));
+    EXPECT_TRUE(dev.endsWith(".dev.refreshtoken"));
+    EXPECT_NE(release, dev);
+}
+
+TEST(KeychainTokenStoreServiceNameTest, DefaultServiceNameFollowsTheBuildKind) {
+    EXPECT_EQ(synth::KeychainTokenStore::defaultServiceName(),
+              synth::KeychainTokenStore::serviceNameFor(synth::KeychainTokenStore::isDevKeychainBuild()));
+}

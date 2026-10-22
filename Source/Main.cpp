@@ -1,3 +1,4 @@
+#include "AutomationLaunch.h"
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
@@ -58,6 +59,12 @@ public:
             }
         }
 #endif
+
+        // Automation launches (--no-audio-device / --no-keychain) must never read the keychain, so
+        // this runs before anything builds an AccountService.
+        synth::applyKeychainPolicyForLaunch(getCommandLineParameterArray(),
+                                            juce::SystemStats::getEnvironmentVariable(synth::kNoKeychainEnvVar, {}),
+                                            juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
 
         // Hosted plugins write files relative to the working directory; keep that out of the
         // directory the app happened to be launched from.

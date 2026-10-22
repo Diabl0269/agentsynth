@@ -286,6 +286,13 @@ still see a prompt on such a launch, it's the combined-I/O-default-device case a
 [`docs/architecture/audio-engine.md#automation-launch-no-audio-device`](../architecture/audio-engine.md#automation-launch-no-audio-device)),
 skip the device entirely instead:
 
+**Keychain.** A local (non-CI) Apple build keeps its own sign-in item (`<bundle id>.dev.refreshtoken`,
+the `AGENTSYNTH_DEV_KEYCHAIN` define), apart from the release app's, so it never reads an item whose
+access list does not trust the dev signature: sign in once in the dev build. Automation launches
+(`--no-audio-device`) and `--no-keychain` / `AGENTSYNTH_NO_KEYCHAIN=1` skip the keychain entirely
+(in-memory sign-in), so no login-keychain prompt can block the launch. See
+[`docs/ai/accounts.md`](../ai/accounts.md#keychain-access-and-permission-prompts).
+
 ```bash
 open -n "<path>/Agent Synth.app" --args --no-audio-device
 # or, running the binary directly:
