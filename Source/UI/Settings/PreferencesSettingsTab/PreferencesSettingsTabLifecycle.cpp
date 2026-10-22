@@ -133,11 +133,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
 
-    contentHost.addAndMakeVisible(alignmentGuideToggle);
-    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
-                                        juce::dontSendNotification);
-    alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
-    alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
+    setupCanvasDisplayToggles();
 
     contentHost.addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
@@ -485,6 +481,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setReconnectChainOnDeleteEnabled(reconnectChainOnDeleteToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
+    graphEditor->cablesOnTop = cablesOnTopToggle.getToggleState();
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
     graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));

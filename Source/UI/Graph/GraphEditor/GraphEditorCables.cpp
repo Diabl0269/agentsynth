@@ -537,6 +537,95 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     retractCablesGoneSince(cablesBefore);
 }
 
+// The frosted previews of the cables a smart connection would make, drawn while a dragged card hovers a spot.
+static void paintSmartConnectionPreviewCables(juce::Graphics& g, GraphEditor& editor, juce::LookAndFeel& lookAndFeel) {
+    if (!editor.getDragDropController().isDragPreviewActive() ||
+        editor.getSmartConnections().getSmartSuggestions().empty())
+        return;
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&lookAndFeel);
+
+    // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
+    // cable-colour mode and any user override keep applying to a preview too.
+    // Every preview alpha is scaled by the fade-in that runs when the suggestion first appears.
+    const float reveal = editor.getSmartPreviewReveal();
+    auto previewColour = [&editor, reveal](synth::ui::CableSignal signal, synth::ui::ModuleCategory category,
+                                           float alpha) {
+        GraphEditor::VisibleCable preview;
+        preview.signal = signal;
+        preview.sourceCategory = category;
+        return editor.colourForCable(preview).withAlpha(alpha * reveal);
+    };
+
+    // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish
+    // edit the user should be able to tell apart from an ordinary suggestion at a glance. Its
+    // new legs are tinted toward the theme's warning colour — INTERPOLATED, not replaced, so the
+    // cable's own resolved identity (signal, category, user override) still reads through, and
+    // taken from a theme token rather than a literal.
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    auto insertTint = [&themeColors](juce::Colour base) {
+        return base.interpolatedWith(themeColors.warning.withAlpha(base.getFloatAlpha()), 0.65f);
+    };
+    auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
+                             synth::ui::CableSignal signal) {
+        auto path = GraphEditor::buildCablePath(p1, p2);
+        if (lf != nullptr)
+            lf->drawConnectionWire(g, p1, p2, path, colour,
+                                   /*isModulation*/ signal == synth::ui::CableSignal::ModCV,
+                                   /*activity*/ 0.0f, /*hovered*/ false);
+        else {
+            g.setColour(colour);
+            g.strokePath(path, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+    };
+
+    // An insert REPLACES cabling, so EVERY doomed cable is struck out underneath the frosted
+    // segments taking their place — otherwise the extra previews read as "and also", and the
+    // user expects the old wires to still be there after the drop. All of them, not just this
+    // leg's: a stereo upstream can have one doomed cable per leg.
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
+        if (!s.isInsert)
+            continue;
+        for (const auto& doomed : s.doomedLinks) {
+            const auto curve = GraphEditor::buildCablePath(doomed.p1, doomed.p2);
+            const float dashes[] = {5.0f, 5.0f};
+            juce::Path dashed;
+            juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
+                .createDashedStroke(dashed, curve, dashes, juce::numElementsInArray(dashes));
+            g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
+            g.fillPath(dashed);
+        }
+    }
+
+    // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
+    // terminal sink is one suggestion but two cables, and a preview that showed a single wire
+    // while the drop fanned both raws was lying about what was about to happen.
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
+        const auto legColour = [&](synth::ui::ModuleCategory category) {
+            const auto base = previewColour(s.signal, category, 0.40f);
+            return s.isInsert ? insertTint(base) : base;
+        };
+
+        // The ghost-side end of a leg rides the ghost while it slides to its spot.
+        const auto slide = editor.getDragDropController().getGhostSlide().offset();
+        for (const auto& leg : s.upstreamPreviewLegs)
+            strokePreview(leg.p1, leg.p2 + slide, legColour(s.upstreamCategory), s.signal);
+
+        const auto ghostSide = [&s, slide](juce::Point<float> p1, juce::Point<float> p2) {
+            return s.ghostIsSource ? std::pair{p1 + slide, p2} : std::pair{p1, p2 + slide};
+        };
+        if (s.mainPreviewLegs.empty()) {
+            const auto [a, b] = ghostSide(s.p1, s.p2);
+            strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+            continue;
+        }
+        for (const auto& leg : s.mainPreviewLegs) {
+            const auto [a, b] = ghostSide(leg.p1, leg.p2);
+            strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+        }
+    }
+}
+
 // Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
 // is already in canvas coordinates, so everything outside it is skipped.
 static void paintDragPreviewGrid(juce::Graphics& g, synth::theme::AppLookAndFeel* lf) {
@@ -592,6 +681,17 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     if (editor.getDragDropController().isDragPreviewActive())
         paintDragPreviewGrid(g, lf);
 
+    if (!editor.cablesOnTop)
+        paintCables(g);
+
+    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
+    // above, for what it draws and why it's a free function rather than inlined here) ----
+    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
+    paintExpandedMacroHulls(g, editor);
+}
+
+void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     // Theme color tokens (fall back to legacy literals when unthemed). Wire colours are NOT
     // read here — they come from GraphEditor::colourForCable so that mode + user overrides are
     // applied in exactly one place.
@@ -719,43 +819,6 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         strokeWire(half.p1, half.p2, editor.colourForCable(half), half.kind != GraphEditor::VisibleCable::Kind::Direct,
                    0.0f, 2.0f, false);
     // ---- End cables ----
-
-    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
-    // above, for what it draws and why it's a free function rather than inlined here) ----
-    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
-    paintExpandedMacroHulls(g, editor);
-
-    // Draw Line being dragged
-    if (editor.isDraggingConnection) {
-        if (editor.dragSourceModule) {
-            juce::Point<int> p;
-            if (editor.dragSourceIsMidi) {
-                p = editor.dragSourceModule->getMidiPortCenter(!editor.dragSourceIsInput);
-            } else {
-                p = editor.dragSourceModule->getPortCenter(editor.dragSourceChannel, editor.dragSourceIsInput);
-            }
-
-            auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
-            // dragCurrentPos is a screen position; the content component is transformed, so map it from the
-            // screen rather than from the editor.
-            auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
-
-            // In-progress drag wire: resolved through the same colour path as a real cable, so
-            // the preview already looks like the cable it is about to become (in By-source mode
-            // that means the dragged-from module's category colour, not a generic white).
-            GraphEditor::VisibleCable preview;
-            preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
-            if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
-                preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
-            // Cables run source -> destination: dragging from an input, the jack is the destination.
-            const auto jackPt = posInContent.toFloat();
-            const auto mousePt = mouseLocal.toFloat();
-            strokeWire(editor.dragSourceIsInput ? mousePt : jackPt, editor.dragSourceIsInput ? jackPt : mousePt,
-                       editor.colourForCable(preview),
-                       /*isModulation*/ false,
-                       /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
-        }
-    }
 }
 
 void GraphEditor::GraphContentComponent::resized() {}
@@ -765,11 +828,15 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     editor.cardGlide_.paint(g);
     editor.getLoadReveal().paintOutlines(g); // cards still waiting for their assets as a project opens
 
+    // Cables over the cards when the preference asks; the same pass paint() runs for the default (behind) layer.
+    if (editor.cablesOnTop)
+        paintCables(g);
+
     // ---- Knob-landing dots -------------
-    // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
+    // Cables are by default drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
     // re-anchored onto a knob (reanchorCablesToKnobTargets) therefore has its final stretch drawn
-    // UNDER the opaque module card. Painting a small dot here, on top of every child, is what
-    // actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
+    // UNDER the opaque module card (unless the cables-on-top preference moved them here). Painting a small dot here, on
+    // top of every child, is what actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
     for (const auto& cable : editor.buildVisibleCables()) {
         if (!cable.landsOnKnob || editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
             continue;
@@ -782,6 +849,53 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
                       cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       ModuleComponent::kKnobLandingDotDiameter, ModuleComponent::kKnobLandingDotDiameter);
     }
+
+    // The wire being dragged out of a jack is in front of every card, whatever the preference.
+    auto paintDragWire = [&] {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
+                              float activity, float fallbackWidth, bool hovered) {
+            juce::Path wire = GraphEditor::buildCablePath(p1, p2);
+            if (lf != nullptr) {
+                lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, hovered);
+            } else {
+                g.setColour(colour);
+                g.strokePath(wire, juce::PathStrokeType(fallbackWidth, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+            }
+        };
+        if (editor.isDraggingConnection) {
+            if (editor.dragSourceModule) {
+                juce::Point<int> p;
+                if (editor.dragSourceIsMidi) {
+                    p = editor.dragSourceModule->getMidiPortCenter(!editor.dragSourceIsInput);
+                } else {
+                    p = editor.dragSourceModule->getPortCenter(editor.dragSourceChannel, editor.dragSourceIsInput);
+                }
+
+                auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
+                // dragCurrentPos is a screen position; the content component is transformed, so map it from the
+                // screen rather than from the editor.
+                auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
+
+                // In-progress drag wire: resolved through the same colour path as a real cable, so
+                // the preview already looks like the cable it is about to become (in By-source mode
+                // that means the dragged-from module's category colour, not a generic white).
+                GraphEditor::VisibleCable preview;
+                preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+                if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
+                    preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
+                // Cables run source -> destination: dragging from an input, the jack is the destination.
+                const auto jackPt = posInContent.toFloat();
+                const auto mousePt = mouseLocal.toFloat();
+                strokeWire(editor.dragSourceIsInput ? mousePt : jackPt, editor.dragSourceIsInput ? jackPt : mousePt,
+                           editor.colourForCable(preview),
+                           /*isModulation*/ false,
+                           /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
+            }
+        }
+    };
+    paintDragWire();
 
     // ---- Mod-dot tooltip: above the cards, so no card's clip cuts it ----
     editor.getModDot().paintTooltip(g);
@@ -846,93 +960,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         g.drawRect(bandF, lineWidth);
     }
 
-    // ---- Smart-connection frosted preview cables ----
-    if (editor.getDragDropController().isDragPreviewActive() &&
-        !editor.getSmartConnections().getSmartSuggestions().empty()) {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-
-        // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
-        // cable-colour mode and any user override keep applying to a preview too.
-        // Every preview alpha is scaled by the fade-in that runs when the suggestion first appears.
-        const float reveal = editor.getSmartPreviewReveal();
-        auto previewColour = [this, reveal](synth::ui::CableSignal signal, synth::ui::ModuleCategory category,
-                                            float alpha) {
-            GraphEditor::VisibleCable preview;
-            preview.signal = signal;
-            preview.sourceCategory = category;
-            return editor.colourForCable(preview).withAlpha(alpha * reveal);
-        };
-
-        // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish
-        // edit the user should be able to tell apart from an ordinary suggestion at a glance. Its
-        // new legs are tinted toward the theme's warning colour — INTERPOLATED, not replaced, so the
-        // cable's own resolved identity (signal, category, user override) still reads through, and
-        // taken from a theme token rather than a literal.
-        static const synth::theme::Colors fallbackColors{};
-        const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-        auto insertTint = [&themeColors](juce::Colour base) {
-            return base.interpolatedWith(themeColors.warning.withAlpha(base.getFloatAlpha()), 0.65f);
-        };
-        auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
-                                 synth::ui::CableSignal signal) {
-            auto path = GraphEditor::buildCablePath(p1, p2);
-            if (lf != nullptr)
-                lf->drawConnectionWire(g, p1, p2, path, colour,
-                                       /*isModulation*/ signal == synth::ui::CableSignal::ModCV,
-                                       /*activity*/ 0.0f, /*hovered*/ false);
-            else {
-                g.setColour(colour);
-                g.strokePath(path,
-                             juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
-        };
-
-        // An insert REPLACES cabling, so EVERY doomed cable is struck out underneath the frosted
-        // segments taking their place — otherwise the extra previews read as "and also", and the
-        // user expects the old wires to still be there after the drop. All of them, not just this
-        // leg's: a stereo upstream can have one doomed cable per leg.
-        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
-            if (!s.isInsert)
-                continue;
-            for (const auto& doomed : s.doomedLinks) {
-                const auto curve = GraphEditor::buildCablePath(doomed.p1, doomed.p2);
-                const float dashes[] = {5.0f, 5.0f};
-                juce::Path dashed;
-                juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
-                    .createDashedStroke(dashed, curve, dashes, juce::numElementsInArray(dashes));
-                g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
-                g.fillPath(dashed);
-            }
-        }
-
-        // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
-        // terminal sink is one suggestion but two cables, and a preview that showed a single wire
-        // while the drop fanned both raws was lying about what was about to happen.
-        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
-            const auto legColour = [&](synth::ui::ModuleCategory category) {
-                const auto base = previewColour(s.signal, category, 0.40f);
-                return s.isInsert ? insertTint(base) : base;
-            };
-
-            // The ghost-side end of a leg rides the ghost while it slides to its spot.
-            const auto slide = editor.getDragDropController().getGhostSlide().offset();
-            for (const auto& leg : s.upstreamPreviewLegs)
-                strokePreview(leg.p1, leg.p2 + slide, legColour(s.upstreamCategory), s.signal);
-
-            const auto ghostSide = [&s, slide](juce::Point<float> p1, juce::Point<float> p2) {
-                return s.ghostIsSource ? std::pair{p1 + slide, p2} : std::pair{p1, p2 + slide};
-            };
-            if (s.mainPreviewLegs.empty()) {
-                const auto [a, b] = ghostSide(s.p1, s.p2);
-                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
-                continue;
-            }
-            for (const auto& leg : s.mainPreviewLegs) {
-                const auto [a, b] = ghostSide(leg.p1, leg.p2);
-                strokePreview(a, b, legColour(s.sourceCategory), s.signal);
-            }
-        }
-    }
+    paintSmartConnectionPreviewCables(g, editor, getLookAndFeel());
 
     editor.getPortPanel().paintPreview(g); // the cable a row of the port panel's Add connection page would make
 
