@@ -33,6 +33,8 @@ enum CommandIDs {
     // Toggles a macro between its collapsed card and expanded form.
     collapseMacro,
     toggleLibrary,
+    // The left column's Sounds view: open on it, switch to it from Modules, or close it.
+    toggleSoundBrowser,
     selectAllModules,
     saveSnippet,
     copySelection,

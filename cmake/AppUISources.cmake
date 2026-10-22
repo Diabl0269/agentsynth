@@ -997,3 +997,4 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
 include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES
+list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake

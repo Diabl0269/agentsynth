@@ -969,9 +969,8 @@ target_compile_definitions(Tests PRIVATE
     # A recorded song answer that names a core pack sound, replayed through the real app host.
     AI_PLAN_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-plans"
 )
-# JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers and
-# definitions only, with the module code taken from libJuceModules.a. Linking juce::juce_* here
-# would compile a second copy of those modules into this target.
+# JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers and definitions only, the
+# module code from libJuceModules.a. Linking juce::juce_* here would compile a second copy into this target.
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ClickAuditTests.cmake) # the headless click audit of module edges
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
@@ -985,6 +984,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant 
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption
 include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
+include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

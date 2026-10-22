@@ -15,7 +15,7 @@ void MainComponent::rebuildFocusRegions() {
     // The toolbar is chrome, always visible, with no closed state; no direct-focus shortcut targets it.
     focusRegions_.addRegion({"toolbar", &toolbar, nullptr, nullptr});
     focusRegions_.addRegion(
-        {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
+        {"library", librarySidebar_.get(), [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
 
     // Open while the canvas is on screen: in the main area, or in the dock only on its Canvas tab.
     const auto addCanvas = [this] {

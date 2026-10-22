@@ -22,7 +22,9 @@ void MainComponent::addCanvasAndPanels() {
     // Right above the canvas: the main area's other views sit under every panel and overlay, as it does.
     addChildComponent(mainViewHolder_);
     bottomDock.setMainAreaHolder(&mainViewHolder_);
-    addAndMakeVisible(moduleLibrary);
+    librarySidebar_ = std::make_unique<synth::ui::LibrarySidebarViews>(moduleLibrary, appProperties.getUserSettings());
+    librarySidebar_->onLayoutChanged = [this] { resized(); };
+    addAndMakeVisible(*librarySidebar_);
 
     // Grey out the singleton I/O rows once the patch already has one, and repaint the library
     // whenever the graph's module set changes so that state stays accurate.
@@ -73,7 +75,7 @@ void MainComponent::addCanvasAndPanels() {
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
-    moduleLibrary.setVisible(isLibraryVisible);
+    librarySidebar_->setVisible(isLibraryVisible);
     // Added unconditionally — isBottomDockVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.

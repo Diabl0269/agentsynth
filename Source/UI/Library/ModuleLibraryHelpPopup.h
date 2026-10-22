@@ -220,6 +220,8 @@ public:
             {"timelineJumpToLocator2", juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)},
             {"toggleBottomPanel", juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0)},
             {"toggleLibrary", juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0)},
+            {"toggleSoundBrowser",
+             juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0)},
 #if JUCE_MAC
             {"toggleAiPanel", juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)},
 #else

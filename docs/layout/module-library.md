@@ -1,5 +1,8 @@
 # Module Library Sidebar
 
+The library is the **Modules** view of the left column; `LibrarySidebarViews` adopts it beside the Sounds view and
+switches between them ([sound browser](sound-browser.md#the-sounds-view)).
+
 `Source/UI/Library/ModuleLibraryComponent/` — one class, declared in `ModuleLibraryComponent.h` and
 split across per-concern translation units, none over 1,000 lines:
 

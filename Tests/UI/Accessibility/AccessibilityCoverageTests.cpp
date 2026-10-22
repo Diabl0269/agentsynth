@@ -6,6 +6,7 @@
 //    AccessibilityBaseline.h: more gaps fails (a new control lacks a name or tooltip), fewer gaps
 //    fails too, so the baseline is lowered in the same change that fixed them.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
+#include "../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../TestSettingsHelpers.h"
 #include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
 #include "../MidiRemote/MidiRemotePanelTestFixture.h"
@@ -37,6 +38,7 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -533,6 +535,24 @@ TEST(AccessibilityCoverageTest, ModuleLibrary) {
     ModuleLibraryComponent library;
     library.setSize(260, 900);
     EXPECT_TRUE(matchesBaseline("ModuleLibrary", auditAccessibility(library)));
+}
+
+TEST(AccessibilityCoverageTest, SoundBrowser) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    synth::ui::SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    EXPECT_TRUE(matchesBaseline("SoundBrowser", auditAccessibility(view)));
+}
+
+TEST(AccessibilityCoverageTest, LibrarySidebar) {
+    ModuleLibraryComponent library;
+    synth::ui::LibrarySidebarViews sidebar(library, nullptr);
+    sidebar.setSize(300, 800);
+    EXPECT_TRUE(matchesBaseline("LibrarySidebar", auditAccessibility(sidebar)));
 }
 
 // A conversation with one message in it, so a bubble is audited too.

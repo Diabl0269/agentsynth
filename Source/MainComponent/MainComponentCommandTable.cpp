@@ -610,12 +610,22 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          [](MainComponent& m) { return m.replaceModuleFromShortcut(); }},
         {AppCommands::toggleLibrary,
          "Toggle Module Library",
-         "Toggle the module library sidebar",
+         "Show the Modules view of the sidebar, or hide the sidebar when it already shows",
          "View",
          "toggleLibrary",
          {},
          [](MainComponent& m) {
-             m.setLibraryVisible(!m.isLibraryVisible);
+             m.toggleLibraryView(synth::ui::SidebarView::Modules);
+             return true;
+         }},
+        {AppCommands::toggleSoundBrowser,
+         "Toggle Sound Browser",
+         "Show the Sounds view of the sidebar, or hide the sidebar when it already shows",
+         "View",
+         "toggleSoundBrowser",
+         {},
+         [](MainComponent& m) {
+             m.toggleLibraryView(synth::ui::SidebarView::Sounds);
              return true;
          }},
         // Still AppCommands::selectAllModules / actionId "selectAllModules" -- the NAME is frozen so

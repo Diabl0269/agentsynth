@@ -82,6 +82,9 @@ protected:
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
+            // default: the Modules view at the theme width; a test that shows Sounds persists both
+            s->removeValue("librarySidebarView");
+            s->removeValue("soundBrowserWidth");
             // default: dock closed. Any earlier test that opens the bottom dock persists "1", which
             // would steal canvas height from every layout-sensitive test that follows.
             s->setValue("bottomDockVisible", "0");
