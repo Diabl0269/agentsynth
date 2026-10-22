@@ -207,6 +207,20 @@ void moveOver(synth::ui::StepGridChordPicker& picker, juce::Point<int> p) {
 
 void settle(int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil(ms); }
 
+// Pumps the message loop until a rendered block starts notes, so the 60 ms audition wait is not raced by a loaded
+// runner (a fixed 150 ms pump missed it on macOS CI). Returns the first block that carries notes, or the last empty
+// one.
+Block renderOnceAuditioned(synth::SequencerModuleBase& module, int timeoutMs = 3000) {
+    Block block;
+    for (int waited = 0; waited < timeoutMs; waited += 20) {
+        settle(20);
+        block = renderBlock(module);
+        if (!block.ons.empty())
+            break;
+    }
+    return block;
+}
+
 std::vector<int> chordAt(SeqCard& c, SequencerChord chord, int step) {
     const auto notes = synth::sequencerChordNotes(chord, c.grid->playedPitchOf(step), synth::makeScale(0, 0),
                                                   c.module->getPattern().seed, step);
@@ -229,8 +243,7 @@ TEST(StepGridChordPicker, HoveringAChipPlaysItsChordAfterTheDebounceAndLeavingOr
     const auto seventh = picker.chipBounds(1, 0).getCentre();
     moveOver(picker, seventh);
     EXPECT_TRUE(renderBlock(*c.module).ons.empty()) << "nothing plays before the pointer has rested";
-    settle(150);
-    const auto played = renderBlock(*c.module);
+    const auto played = renderOnceAuditioned(*c.module);
     EXPECT_EQ(played.ons, chordAt(c, SequencerChord::ScaleSeventh, 2));
     EXPECT_FALSE(played.ons.empty());
 
@@ -240,8 +253,7 @@ TEST(StepGridChordPicker, HoveringAChipPlaysItsChordAfterTheDebounceAndLeavingOr
     EXPECT_TRUE(stopped.ons.empty());
 
     moveOver(picker, seventh);
-    settle(150);
-    EXPECT_EQ(renderBlock(*c.module).ons, played.ons);
+    EXPECT_EQ(renderOnceAuditioned(*c.module).ons, played.ons);
     open.reset(); // closing the picker ends the sound
     EXPECT_EQ(renderBlock(*c.module).offs, played.ons);
 }
@@ -258,12 +270,11 @@ TEST(StepGridChordPicker, OnlyTheChipThePointerRestsOnPlaysAndTheKeysAuditionToo
     moveOver(picker, picker.chipBounds(0, 0).getCentre());
     moveOver(picker, picker.chipBounds(1, 0).getCentre());
     moveOver(picker, picker.chipBounds(2, 1).getCentre()); // all within the wait
-    settle(150);
-    EXPECT_EQ(renderBlock(*c.module).ons, chordAt(c, SequencerChord::ScaleSus4, 0)) << "only the last chip plays";
+    EXPECT_EQ(renderOnceAuditioned(*c.module).ons, chordAt(c, SequencerChord::ScaleSus4, 0))
+        << "only the last chip plays";
 
     picker.keyPressed(juce::KeyPress(juce::KeyPress::upKey)); // keyboard focus moves up from the current chord's row
-    settle(150);
-    const auto next = renderBlock(*c.module);
+    const auto next = renderOnceAuditioned(*c.module);
     EXPECT_EQ(next.ons, chordAt(c, picker.getFocusedChord(), 0));
     EXPECT_NE(picker.getFocusedChord(), SequencerChord::ScaleSus4);
     EXPECT_FALSE(next.offs.empty()) << "the new chord replaces the old";
