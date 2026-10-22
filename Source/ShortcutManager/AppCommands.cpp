@@ -272,8 +272,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return openAddTrackMenu;
     if (actionId == "openFeedback")
         return openFeedback;
-    if (actionId == "renameSelectedModule")
-        return renameSelectedModule;
+    if (actionId == "renameSelectedModule" || actionId == "renameSelectedModuleAlt")
+        return renameSelectedModule; // the second key is an alias of the one command
     if (actionId == "replaceSelectedModule")
         return replaceSelectedModule;
     if (actionId == "transportPlay")

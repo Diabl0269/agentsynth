@@ -706,6 +706,7 @@ add_executable(Tests
     UI/Layout/BottomDockTabMotionTests.cpp
     UI/Layout/BottomDockSwapKeysTests.cpp
     UI/Layout/BottomDockPositionalKeysTests.cpp
+    UI/Layout/RenameKeyTests.cpp
     UI/Layout/BottomDockMainSuspendTests.cpp
     UI/Layout/BottomDockSwapMotionTests.cpp
     UI/Layout/BottomDockMainViewTests.cpp

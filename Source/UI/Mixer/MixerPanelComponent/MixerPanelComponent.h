@@ -458,6 +458,7 @@ private:
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
+    bool renameFocusedColumn(); // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */

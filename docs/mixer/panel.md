@@ -122,7 +122,7 @@ order. Direct and Master never move, and a dragged column is held inside its own
 
 ### Renaming a channel
 
-Double-click a column's header name to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
+Double-click a column's header name, or press F2 / Option+R on the focused column (`MixerPanelComponent::renameFocusedColumn`, also in a detached window), to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
 the exact `juce::Label(false, true, false)` + `onTextChange` pattern
 `TimelineTrackHeaderComponent::nameLabel_` already established for track renaming, so the app's two
 "double-click a name to rename it" surfaces behave alike. Direct and Master have no name to rename

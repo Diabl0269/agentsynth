@@ -75,3 +75,23 @@ TEST_F(MainComponentTest, RenameAndReplaceCommandsActOnTheOneSelectedModule) {
     EXPECT_TRUE(captured->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(graph.getNodeForId(oscId), nullptr);
 }
+
+// Option+R is the second Rename key: with a card selected and nothing else owning the name it opens the card's title
+// editor through the same command F2 does.
+TEST_F(MainComponentTest, OptionROpensTheSelectedCardsTitleEditorLikeF2) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto& editor = mc.getGraphEditor();
+    const auto oscId = editor.getAudioEngine().getGraph().addNode(std::make_unique<OscillatorModule>())->nodeID;
+    editor.updateComponents();
+    editor.selectModule(oscId, false);
+
+    EXPECT_TRUE(mc.keyPressed(juce::KeyPress('r', juce::ModifierKeys::altModifier, juce::juce_wchar(0xAE))));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    ModuleComponent* osc = nullptr;
+    for (auto* c : editor.getModuleComponents())
+        if (c != nullptr && c->getNodeId() == oscId)
+            osc = c;
+    ASSERT_NE(osc, nullptr);
+    EXPECT_TRUE(osc->isRenamingTitle());
+}

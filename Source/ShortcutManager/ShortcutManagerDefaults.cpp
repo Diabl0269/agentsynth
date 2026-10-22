@@ -248,6 +248,9 @@ void ShortcutManager::addGraphDefaultBindings() {
     // needs Fn unless "Use F1, F2, etc. keys as standard function keys" is on; rebindable). Cmd+R is Repeat on the
     // Mac and Ctrl+R is Record everywhere, so Replace takes Cmd+Alt+R (Ctrl+Alt+R off the Mac), free on both counts.
     bindings["renameSelectedModule"] = juce::KeyPress(juce::KeyPress::F2Key, juce::ModifierKeys::noModifiers, 0);
+    // Option+R is the second Rename key, one chord for whatever name has focus (a track header, a mixer column, a
+    // card). Bare Alt+R is free: Replace is Cmd+Alt+R, and the timeline's R (arm) carries no modifier.
+    bindings["renameSelectedModuleAlt"] = juce::KeyPress('r', juce::ModifierKeys::altModifier, 0);
     bindings["replaceSelectedModule"] =
         juce::KeyPress('r', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     // The canvas's card keys, exactly the defaults CanvasCardKeyboard falls back to with no manager.
