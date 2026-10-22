@@ -7,7 +7,10 @@
 
 namespace {
 constexpr const char* kDockTabsRegion = "dockTabs";
+int mainWindowRaiseCount = 0;
 } // namespace
+
+int MainComponent::getMainWindowRaiseCountForTest() noexcept { return mainWindowRaiseCount; }
 
 // Focus goes only to a strip that is on screen: the "dockTabs" region is open while the dock is showing
 // with at least one docked tab, so a detached tab (its window is raised instead) or a hidden pane is
@@ -47,7 +50,7 @@ void MainComponent::focusMainViewIfOpen() {
 
 // Raises the app window over any detached panel window, taking keyboard focus with it.
 void MainComponent::raiseMainWindow() {
-    ++mainWindowRaiseCount_;
+    ++mainWindowRaiseCount;
     if (auto* top = getTopLevelComponent())
         top->toFront(true);
 }

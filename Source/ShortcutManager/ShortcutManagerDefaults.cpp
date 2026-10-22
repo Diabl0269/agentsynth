@@ -187,11 +187,6 @@ void ShortcutManager::addGeneralDefaultBindings() {
         bindings[action.actionId] = juce::KeyPress();
     bindings["selectPreviousTrack"] = juce::KeyPress();
 
-    // "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
-    // comment above (the Cmd+1/2/3 family). Previously shipped
-    // unbound; a returning user's saved unbound value carries forward unchanged, same
-    // as toggleMixerPanel's old Cmd+Alt+M -- only the panel toggle's and toggleTimelinePanel's old
-    // Cmd+T are migrated (see migrateBottomPanelToggleKeys() and migrateBottomPanelCmdJ()).
     bindings["toggleMidiRemotePanel"] = juce::KeyPress();
     bindings["showCanvas"] = juce::KeyPress();
     // Opt+Cmd+1..3 swap the tab at that place of the tab order into the main area, the same digit as its Cmd+digit
@@ -200,10 +195,8 @@ void ShortcutManager::addGeneralDefaultBindings() {
     const char* const swapDockTabIds[] = {"swapDockTab1ToMain", "swapDockTab2ToMain", "swapDockTab3ToMain"};
     for (int i = 0; i < 3; ++i)
         bindings[swapDockTabIds[i]] = juce::KeyPress('1' + i, commandAlt, 0);
-    bindings["swapTimelineToMain"] = juce::KeyPress();
-    bindings["swapMixerToMain"] = juce::KeyPress();
-    bindings["swapMidiRemoteToMain"] = juce::KeyPress();
-    bindings["swapCanvasToMain"] = juce::KeyPress();
+    for (const char* id : {"swapTimelineToMain", "swapMixerToMain", "swapMidiRemoteToMain", "swapCanvasToMain"})
+        bindings[id] = juce::KeyPress();
     // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =

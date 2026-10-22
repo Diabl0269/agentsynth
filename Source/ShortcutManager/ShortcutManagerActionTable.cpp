@@ -65,7 +65,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"toggleAiPanel", ShortcutCategory::General},
             {"toggleLibrary", ShortcutCategory::General},
             {"toggleSoundBrowser", ShortcutCategory::General},
-            // The ONE bottom-dock open/close toggle (docs/layout/chrome.md); the rows below only SHOW or SWAP a view (spliceDockKeyRows).
+            // The ONE bottom-dock open/close toggle (docs/layout/chrome.md); the rows below only SHOW or SWAP a view.
             {"toggleBottomPanel", ShortcutCategory::General},
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},

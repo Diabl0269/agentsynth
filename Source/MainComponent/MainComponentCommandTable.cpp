@@ -15,6 +15,10 @@
 #include <iterator>
 
 namespace {
+// Option+R types a symbol in a text field, so a focused editor keeps the key.
+bool renameUnlessTyping(synth::ui::CanvasCardKeyboard& cards) {
+    return !synth::ui::isTextEditorFocused() && cards.renameSelectedModule();
+}
 
 // The current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
 // already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
@@ -604,10 +608,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
         {AppCommands::renameSelectedModule, "Rename", "Rename the focused name, else the selected module card", "Edit",
          "renameSelectedModule",
          [](const MainComponent& m) { return m.graphEditor.getCardKeyboard().canRenameSelectedModule(); },
-         [](MainComponent& m) {
-             // Option+R types a symbol in a text field, so a focused editor keeps the key.
-             return !synth::ui::isTextEditorFocused() && m.graphEditor.getCardKeyboard().renameSelectedModule();
-         }},
+         [](MainComponent& m) { return renameUnlessTyping(m.graphEditor.getCardKeyboard()); }},
         {AppCommands::replaceSelectedModule, "Replace Module With...",
          "Swap the selected module for another type or hosted plugin", "Edit", "replaceSelectedModule",
          [](const MainComponent& m) { return m.canReplaceModuleFromShortcut(); },
