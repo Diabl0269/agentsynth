@@ -16,7 +16,7 @@
 
 namespace {
 // Option+R types a symbol in a text field, so a focused editor keeps the key.
-bool renameUnlessTyping(synth::ui::CanvasCardKeyboard& cards) {
+bool renameUnlessTyping(CanvasCardKeyboard& cards) {
     return !synth::ui::isTextEditorFocused() && cards.renameSelectedModule();
 }
 
