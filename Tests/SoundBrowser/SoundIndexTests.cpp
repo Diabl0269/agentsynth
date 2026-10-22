@@ -299,3 +299,25 @@ TEST(SoundIndexTest, TwoPacksWithTheSameIdListOnlyTheFirst) {
     ASSERT_EQ(index.snapshot()->entries.size(), 1u);
     EXPECT_EQ(index.snapshot()->entries[0].name, "a");
 }
+
+TEST(SoundIndexTest, DestroyingTheIndexMidScanStopsTheScanPromptlyWithAListenerAttached) {
+    TempTree tree;
+    writePack(tree.packs, "p", "Pack");
+    for (int i = 0; i < 1500; ++i)
+        writeWav(tree.packs.getChildFile("p/d" + juce::String(i / 100) + "/s" + juce::String(i) + ".wav"), 0.01);
+    ThreadRecorder recorder;
+    auto index = makeIndex(tree);
+    recorder.index = index.get();
+    index->addListener(&recorder);
+    index->rescan();
+    while (!index->isScanning())
+        juce::Thread::yield();
+
+    const auto start = juce::Time::getMillisecondCounter();
+    index->removeListener(&recorder);
+    index.reset();
+    EXPECT_LT(juce::Time::getMillisecondCounter() - start, 2000u);
+
+    // A change notice the scan queued before it stopped must not reach anything once the index is gone.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+}
