@@ -109,8 +109,11 @@ TEST_F(DetachablePanelHostTest, SetDetachedTogglesTooltip) {
     EXPECT_EQ(host.getDetachButton().getTitle(), "Open in window");
 
     host.setDetached(true);
-    EXPECT_EQ(host.getButtonTooltipForTest(), "Dock back");
-    EXPECT_EQ(host.getDetachButton().getTitle(), "Dock back");
+    EXPECT_EQ(host.getButtonTooltipForTest(), "Open in window")
+        << "the detach button never turns into the dock-back one";
+    EXPECT_EQ(host.getDetachButton().getTitle(), "Open in window");
+    EXPECT_EQ(host.getDockBackButtonForTest().getTitle(), "Dock back");
+    EXPECT_EQ(host.getDockBackButtonForTest().getTooltip(), "Dock back  (Esc)");
 
     host.setDetached(false);
     EXPECT_EQ(host.getButtonTooltipForTest(), "Open in window");
@@ -149,9 +152,9 @@ TEST_F(DetachablePanelHostTest, EmbeddedHeaderHidesOwnButtonWhileDocked) {
     EXPECT_FALSE(host.isDetachButtonVisibleForTest())
         << "owner (e.g. BottomDockComponent's tab strip) supplies the control instead";
 
-    // Detaching always shows the REAL button inside the window, regardless of embeddedHeader_.
+    // The window carries no detach button (its toolbar has "Dock back"), so detaching changes nothing here.
     host.setDetached(true);
-    EXPECT_TRUE(host.isDetachButtonVisibleForTest());
+    EXPECT_FALSE(host.isDetachButtonVisibleForTest());
 }
 
 // ============================================================================
@@ -319,8 +322,7 @@ TEST_F(DetachablePanelHostTest, DetachingMidFadeLandsTheStripAtOnceAndRedockingR
     host.setEmbeddedHeader(true);
     host.setDetached(true);
     EXPECT_FALSE(host.getDetachButton().isVisible() && host.getDetachButton().getAlpha() < 1.0f)
-        << "the window never borrows a half-faded button";
-    EXPECT_FLOAT_EQ(host.getDetachButton().getAlpha(), 1.0f);
+        << "no half-faded button is left behind";
     host.setDetached(false);
     EXPECT_FALSE(host.isDetachButtonVisibleForTest()) << "docked again with an embedded header: hidden, no fade";
     EXPECT_EQ(host.getHeaderHeightForTest(), 0);

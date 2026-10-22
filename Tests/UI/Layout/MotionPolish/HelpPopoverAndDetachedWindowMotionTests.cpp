@@ -107,10 +107,9 @@ TEST(DetachedPanelWindowMotion, TheWindowFadesInAndOutLikeAnyPopupAndNeverSlides
     if (juce::Desktop::getInstance().getDisplays().displays.isEmpty())
         GTEST_SKIP() << "no display available";
     juce::Component panel;
-    juce::DrawableButton button{"detach", juce::DrawableButton::ImageFitted};
-    juce::Label title;
+    juce::String title{"Test"};
     ShortcutManager shortcuts;
-    DetachedPanelWindow window(panel, button, title, "motionPolishWindowBounds", nullptr, nullptr, &shortcuts);
+    DetachedPanelWindow window(panel, title, "motionPolishWindowBounds", nullptr, nullptr, &shortcuts);
     EXPECT_TRUE(window.getProperties().contains("synthPopupMotion")) << "the window is attached to PopupMotion";
 
     int closes = 0;

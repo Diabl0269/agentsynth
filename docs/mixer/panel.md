@@ -215,7 +215,13 @@ same code path for both. The reference is the hosted-plugin pattern, `Source/Plu
 including its `addToDesktop=false` path, **the headless-testable seam** that builds a window with no real desktop
 window.
 
-The detach control is **icon-only**: tooltip "Open in window" when docked, "Dock back" when detached.
+The detach control is **icon-only**, tooltip "Open in window". A detached window has **no header strip**: the panel fills it and
+the window title names it. The way back is the **Dock back** button (`DockBackButton`, `Icon::ActionDockBack`, an arrow into a
+window), handed to the panel only while detached through the `DockBackSlot` interface (`DetachablePanelHost::setDetached`) and
+shown at the right end of that panel's own toolbar: the Mixer toolbar, the Timeline transport row, the Controllers (MIDI Remote)
+toolbar. Docked toolbars lay out exactly as before, and no toolbar control overlaps the button at the panel's minimum width.
+Tooltip "Dock back  (Esc)", screen-reader title "Dock back", Tab-reachable with the shared focus ring; Esc and Cmd+W close
+the window the same way.
 
 **In the plugin build a detached window sets its OWN `LookAndFeel` instance, never `Desktop::setDefaultLookAndFeel`**
 (process-global inside the host; `Source/UI/CLAUDE.md`). Keyboard focus is scoped per window.
@@ -308,7 +314,7 @@ detach state.
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
 24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries each tab's own detach icon, and the header
-(its button reading "Dock back") appears only on the DETACHED window, not reparented through three parents.
+(a "Dock back" button) is gone: the DETACHED window shows the panel alone, and its toolbar carries "Dock back".
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
 dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 24 px; tab buttons are laid out below it, so a grab never lands on one) and
@@ -464,17 +470,10 @@ the grey has to come from somewhere the pointer it's handed is null or stale:
    the wrong surface colour. Fixed by `DetachablePanelHost::refreshDetachedWindowTheme()`, called on
    all three hosts from the same re-skin pass, right after the existing broadcast.
 
-**FRO228: the header's own redock/close button needs its icon re-applied by THIS window, not just
-by `DetachablePanelHost`.** `DetachablePanelHost::applyIcon()` sets the button's `Drawable` images
-from its OWN `lookAndFeelChanged()` — but that button (borrowed, see the class comment above) is
-reparented into `Content` the moment `setDetached(true)` runs, and nothing thereafter guarantees
-`DetachablePanelHost`'s own callback fires again for it. A `DrawableButton` with no image ever
-assigned to it paints nothing at all, not a placeholder — exactly the second half of the same manual
-pass's finding. `DetachedPanelWindow::applyHeaderButtonIcon()` re-applies the identical
-`Icon::ActionDetachWindow` icon from THIS window's own `lookAndFeelChanged()` instead, so the button
-is correct regardless of whether the host's own callback ran before or after the reparent; `content_`
-is now built before `setLookAndFeel()` so the synchronous `lookAndFeelChanged()` that call fires
-already has a real `content_->button` to apply it to.
+**FRO967: the detached window has no header, so there is no header button to re-tint.** `DockBackButton` re-applies its
+own icon (`Icon::ActionDockBack`, tinted `textMuted`, hover `textPrimary`) from its `lookAndFeelChanged()` and
+`parentHierarchyChanged()`, so it is correct on whichever toolbar adopts it. The Mixer's second window (`MixerMirrorController`)
+owns its own `DockBackButton` and hands it to the mirrored panel the same way.
 
 ## Unbinding before a graph change
 

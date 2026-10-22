@@ -19,8 +19,9 @@ class EditBlockOverlay;
 // building this (and every test below) never creates a native peer -- only a later
 // setVisible(true) does, for real use.
 //
-// Owned EXCLUSIVELY by the DetachablePanelHost that created it, which reclaims `panel` (and the
-// header button/title, borrowed the same way) on redock -- see DetachablePanelHost::setDetached().
+// Owned EXCLUSIVELY by the DetachablePanelHost that created it, which reclaims `panel` (borrowed the same way) on
+// redock -- see DetachablePanelHost::setDetached(). The window has no header strip: the panel fills it, and the
+// "Dock back" button sits on the panel's own toolbar (DockBackSlot).
 // Never touches Desktop::setDefaultLookAndFeel (Source/Plugin/CLAUDE.md /
 // docs/architecture/plugin-layer.md#who-owns-what's plugin-layer invariant, restated for this window in
 // docs/mixer/panel.md): it calls setLookAndFeel() on ITSELF with the AppLookAndFeel instance its owner hands it -- the
@@ -39,15 +40,15 @@ class DetachedPanelWindow
     : public juce::DocumentWindow
     , private juce::FocusChangeListener {
 public:
-    // `panel`, `headerButton` and `headerTitle` are all references to Components a
-    // DetachablePanelHost still owns -- this window borrows and reparents them into its own
-    // content for its life, and DetachablePanelHost reclaims them on redock (see its class
-    // comment on why this is not a literal single shared widget instance in every placement mode).
-    // `boundsKey` is the ApplicationProperties key this window's position/size persists under
+    // `panel` is a reference to a Component a DetachablePanelHost still owns -- this window borrows and
+    // reparents it into its own content for its life, and DetachablePanelHost reclaims it on redock (see its
+    // class comment on why this is not a literal single shared widget instance in every placement mode).
+    // `title` is the window's title. `boundsKey` is the ApplicationProperties key this window's position/size persists
+    // under
     // ("timelineWindowBounds" / "mixerWindowBounds" -- docs/mixer/panel.md).
-    DetachedPanelWindow(juce::Component& panel, juce::DrawableButton& headerButton, juce::Label& headerTitle,
-                        juce::String boundsKey, juce::ApplicationProperties* appProperties,
-                        synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager);
+    DetachedPanelWindow(juce::Component& panel, const juce::String& title, juce::String boundsKey,
+                        juce::ApplicationProperties* appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
+                        ShortcutManager* shortcutManager);
     ~DetachedPanelWindow() override;
 
     void closeButtonPressed() override;
@@ -87,8 +88,6 @@ public:
     void setEditsBlocked(bool blocked, std::function<void()> onRefused);
     bool areEditsBlocked() const noexcept;
 
-    static constexpr int kHeaderStripHeight = 24; // == DetachablePanelHost::kHeaderStripHeight
-
     // ---- Testing hooks (DetachedPanelWindowTests.cpp) ----
     synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }
     juce::Component* getContentForTest() const { return getContentComponent(); }
@@ -99,33 +98,15 @@ private:
     void persistBounds();
     void restoreBoundsOrDefault();
     void globalFocusChanged(juce::Component* focusedComponent) override; // juce::FocusChangeListener
-    /** Re-applies the header button's themed icon -- see this method's own comment
-     *  (DetachedPanelWindow.cpp) for why DetachablePanelHost::applyIcon() alone isn't enough once
-     *  the button is reparented in here. No-op before content_ exists. */
-    void applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf);
 
-    // The window's own content: a borrowed header strip (title + the detach button, now in "Dock
-    // back" state) above the borrowed panel -- symmetric with the docked header
-    // DetachablePanelHost itself draws when NOT embedded (see that class's comment).
+    // The window's own content: the borrowed panel, filling it (the window title already names it).
     struct Content : public juce::Component {
-        Content(juce::Component& panelIn, juce::DrawableButton& buttonIn, juce::Label& titleIn)
-            : panel(panelIn)
-            , button(buttonIn)
-            , title(titleIn) {
-            addAndMakeVisible(title);
-            addAndMakeVisible(button);
+        explicit Content(juce::Component& panelIn)
+            : panel(panelIn) {
             addAndMakeVisible(panel);
         }
-        void resized() override {
-            auto bounds = getLocalBounds();
-            auto header = bounds.removeFromTop(DetachedPanelWindow::kHeaderStripHeight);
-            button.setBounds(header.removeFromRight(DetachedPanelWindow::kHeaderStripHeight));
-            title.setBounds(header);
-            panel.setBounds(bounds);
-        }
+        void resized() override { panel.setBounds(getLocalBounds()); }
         juce::Component& panel;
-        juce::DrawableButton& button;
-        juce::Label& title;
     };
 
     juce::Component& panel_;

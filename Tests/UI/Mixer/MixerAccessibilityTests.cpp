@@ -363,9 +363,9 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
     EXPECT_EQ(window->getBackgroundColour(), colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface))
         << "the real setDetached(true) path must hand the window the app's OWN AppLookAndFeel, not "
            "a null one silently falling back to the stock ctor colour";
-    // The redock button VoiceOver lands on inside the window is the SAME borrowed
-    // DetachablePanelHost::detachButton_ -- it must not be unnamed just because it's icon-only.
-    EXPECT_TRUE(mixerHost.getDetachButton().getTitle() == "Dock back")
-        << "got: " << mixerHost.getDetachButton().getTitle();
+    // The dock-back button VoiceOver lands on sits on the mixer toolbar -- named although it is icon-only.
+    EXPECT_TRUE(mixerHost.getDockBackButtonForTest().getTitle() == "Dock back")
+        << "got: " << mixerHost.getDockBackButtonForTest().getTitle();
+    EXPECT_TRUE(mixerHost.getDockBackButtonForTest().isShowing() || mixerHost.getDockBackButtonForTest().isVisible());
     mixerHost.setDetached(false);
 }

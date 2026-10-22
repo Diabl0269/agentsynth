@@ -109,7 +109,7 @@ window (`Source/UI/Layout/DetachablePanelHost/`) leaves the strip entirely — i
 disappear from here — and if it was the active tab, `BottomDockComponent` falls back to the next tab
 still offered; only once every tab has been detached (or Mixer disabled by its own placement
 preference too) does `MainComponent` hide the whole dock, reopening it automatically the moment a
-tab redocks. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
+tab redocks. A detached Timeline has no header strip; its transport row ends with the "Dock back" button. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is

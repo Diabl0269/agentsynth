@@ -85,6 +85,10 @@ void MixerPanelToolbar::resized() {
         toggles_[i].setBounds(area.removeFromLeft(kToggleWidths[i]));
         area.removeFromLeft(kToggleGap);
     }
+    if (dockBack_ != nullptr) {
+        dockBack_->setBounds(area.removeFromRight(DockBackSlot::kButtonWidth).reduced(0, 1));
+        area.removeFromRight(kToggleGap * 2);
+    }
     addBusButton_.setBounds(area.removeFromRight(kAddBusWidth).reduced(0, 1));
     area.removeFromRight(kToggleGap);
     resetMetersButton_.setBounds(area.removeFromRight(kResetMetersWidth).reduced(0, 1));

@@ -317,12 +317,10 @@ TEST(KeyboardContextMenuClipLane, OpensTheSelectedClipsMenuAtTheClipsMiddle) {
 TEST(KeyboardContextMenuDetachedWindow, TheBoundKeyReachesTheFocusedSurfaceAndHonoursRebinds) {
     struct Panel : juce::Component {};
     Panel panel;
-    juce::DrawableButton button{"detach", juce::DrawableButton::ImageFitted};
-    juce::Label title;
+    juce::String title{"Test"};
     juce::ApplicationProperties appProperties;
     ShortcutManager shortcutManager;
-    synth::ui::DetachedPanelWindow window(panel, button, title, "kcmWindowBounds", &appProperties, nullptr,
-                                          &shortcutManager);
+    synth::ui::DetachedPanelWindow window(panel, title, "kcmWindowBounds", &appProperties, nullptr, &shortcutManager);
 
     CountingProvider provider(true);
     panel.addAndMakeVisible(provider);

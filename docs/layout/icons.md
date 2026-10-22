@@ -23,7 +23,7 @@ ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
 CatIO            ActionDetachWindow ToolRange        MixerSources
-TogglePanel
+TogglePanel      ActionDockBack
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
@@ -79,8 +79,10 @@ Notes on individual entries:
   `ModuleComponent::paint()` — see
   [module-card](module-card.md#audio-output-card-identity). Both previously fell back to
   `CatUtility`, which gave the graph's actual source and sink no visual identity of their own.
-- **`ActionDetachWindow`** (42) is the icon-only open-in-window / dock-back control
-  `DetachablePanelHost` uses for both the Timeline and Mixer panels.
+- **`ActionDetachWindow`** (42) is the icon-only open-in-window control
+  `DetachablePanelHost` uses for the Timeline, Mixer and Controllers panels.
+- **`ActionDockBack`** (47) is the "Dock back" button's glyph (`DockBackButton`): an arrow into a window, shown at the
+  right end of a detached panel's toolbar ([mixer/panel](../mixer/panel.md#placement-and-detachable-windows)).
 - **`ToolRange`** (43) is the Range edit tool's glyph (`EditTool::Range`, key 2): two vertical edge
   bars with a double-headed arrow between them — a span of time, not an object. Strip button and
   cursor use it exactly like the other `Tool*` glyphs above.
@@ -108,7 +110,7 @@ Notes on individual entries:
 | `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button highlight painted with the `toolActive` token, not a different icon tint; the glyph itself never changes colour |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, the same convention as the category icons |
 | `FollowPlayhead` | `textPrimary` |
-| `ActionDetachWindow`, `MixerSources` | `textMuted` |
+| `ActionDetachWindow`, `ActionDockBack`, `MixerSources` | `textMuted` |
 
 **A muted tint can be a base, not the drawn colour.** `MixerIconButton` clones the muted
 `MixerSources` base and re-tints it via `Drawable::replaceColour` into the hover (`textPrimary`) and

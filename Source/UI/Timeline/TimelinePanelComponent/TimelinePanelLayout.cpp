@@ -545,6 +545,8 @@ void TimelinePanelComponent::layoutTransportRow() {
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_;
     transportBar.removeFromLeft(SidePaneToggleButton::kWidth); // the side-pane button, laid out by layoutSidePane()
+    if (dockBack_ != nullptr)
+        dockBack_->setBounds(transportBar.removeFromRight(DockBackSlot::kButtonWidth).reduced(2));
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.

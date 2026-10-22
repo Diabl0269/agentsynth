@@ -3,6 +3,7 @@
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportNudge.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FadeOutPicture.h"
@@ -80,6 +81,7 @@ namespace synth::ui {
 
 class TimelinePanelComponent
     : public juce::Component
+    , public DockBackSlot
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
     // ONE shared timer for the header column's channel-chip meters -- see timerCallback()
@@ -392,8 +394,7 @@ public:
     /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
     FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
 
-    /** How many times updateFromTransport() has been called. Test hook: it is what proves the
-     *  10 Hz poll never reaches a hidden panel. */
+    /** How many times updateFromTransport() has run; proves the 10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
     // ---- Side pane: the selected track's routing (docs/timeline/tracks.md#routing-from-the-side-pane) ----

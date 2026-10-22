@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
 #include <array>
@@ -32,6 +33,12 @@ public:
     void bindSidePane(SidePane& pane);
     SidePaneToggleButton& getSidePaneButton() noexcept { return paneButton_; }
 
+    /** The "Dock back" button at the toolbar's right end while the panel is in its own window (see DockBackSlot). */
+    void setDockBackButton(juce::Button* button) {
+        DockBackSlot::adopt(*this, dockBack_, button);
+        resized();
+    }
+
     juce::Button& getSectionToggle(MixerSection section) noexcept { return toggles_[(size_t)section]; }
     juce::Button& getSectionToggleForTest(MixerSection section) noexcept { return getSectionToggle(section); }
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
@@ -43,6 +50,7 @@ public:
 private:
     MixerSectionLayout* layout_ = nullptr;
     SidePaneToggleButton paneButton_;
+    juce::Button* dockBack_ = nullptr; // borrowed; a child while set
     std::array<juce::DrawableButton, MixerSectionLayout::kSectionCount> toggles_{
         juce::DrawableButton("Inserts", juce::DrawableButton::ImageAboveTextLabel),
         juce::DrawableButton("Sends", juce::DrawableButton::ImageAboveTextLabel),

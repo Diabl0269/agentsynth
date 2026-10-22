@@ -89,6 +89,8 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/icons/toggle-panel.svg
     # The mixer insert list's split row (a line forking into two). BinaryData symbol: mixersplit_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-split.svg
+    # The detached panel's dock-back button (an arrow into a window). BinaryData symbol: actiondockback_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/action-dock-back.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

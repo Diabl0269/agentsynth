@@ -228,6 +228,7 @@ void AppLookAndFeel::retintIcons() {
     // convention as the toolbar action set above (DetachablePanelHost clones its own hover variant
     // the same way MainComponent::applyToolbarIcons does).
     iconLibrary_.setTintColour(Icon::ActionDetachWindow, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionDockBack, c.textMuted); // the same muted base; the button clones its hover
 
     // The mixer header's sources badge: a muted base the badge clones its hover and on variants from.
     iconLibrary_.setTintColour(Icon::MixerSources, c.textMuted);

@@ -2,6 +2,7 @@
 
 #include "MidiRemote/EncoderAutoDetect.h"
 #include "MidiRemote/PickTarget.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
@@ -43,9 +44,13 @@ namespace synth::ui {
 
 class MidiRemotePanelComponent
     : public juce::Component
+    , public DockBackSlot
     , public KeyboardContextMenuProvider {
 public:
     MidiRemotePanelComponent();
+
+    /** The toolbar's right end holds the "Dock back" button while the panel is in its own window. */
+    void setDockBackButton(juce::Button* button) override { toolbar_.setDockBackButton(button); }
 
     /** Opens the selected controller's right-click menu (Rename, Export, Delete, feedback output) at
      *  its row in the Controllers list. False when no controller is selected. */

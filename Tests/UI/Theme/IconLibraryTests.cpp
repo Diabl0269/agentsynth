@@ -303,8 +303,9 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
-    // ToolRange, MixerSources, TogglePanel and MixerSplit were appended after it later, so kCount is 47 now.
-    EXPECT_EQ((int)Icon::kCount, 47);
+    // ToolRange, MixerSources, TogglePanel, MixerSplit and ActionDockBack were appended after it later, so kCount is
+    // 48 now.
+    EXPECT_EQ((int)Icon::kCount, 48);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -376,6 +377,25 @@ TEST(IconLibraryTest, MixerSplitIconEnumOrdinalAndBinaryData) {
         EXPECT_NE(d, nullptr) << "MixerSplit icon returned null with assets present";
 #ifdef HAS_FONT_ASSETS
     EXPECT_GT(BinaryData::mixersplit_svgSize, 0);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// ActionDockBackIconEnumOrdinalAndBinaryData (the detached panel's dock-back button)
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, ActionDockBackIconEnumOrdinalAndBinaryData) {
+    // Appended immediately before kCount, after MixerSplit, so no existing ordinal moved.
+    EXPECT_EQ((int)Icon::ActionDockBack, 47);
+    EXPECT_EQ((int)Icon::MixerSplit, 46);
+    EXPECT_EQ((int)Icon::kCount, 48);
+    EXPECT_NE((int)Icon::ActionDockBack, (int)Icon::ActionDetachWindow);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::ActionDockBack);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "ActionDockBack icon returned null with assets present";
+#ifdef HAS_FONT_ASSETS
+    EXPECT_GT(BinaryData::actiondockback_svgSize, 0);
 #endif
 }
 

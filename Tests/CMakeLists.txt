@@ -767,6 +767,7 @@ add_executable(Tests
     UI/Layout/DetachablePanelHost/DetachedPanelWindowTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowCloseKeysTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowLayoutTests.cpp
+    UI/Layout/DetachablePanelHost/DockBackToolbarTests.cpp
     UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp
     UI/Mixer/MixerPanelKeyboardFocusTests.cpp
     UI/Mixer/MixerAccessibilityTests.cpp
