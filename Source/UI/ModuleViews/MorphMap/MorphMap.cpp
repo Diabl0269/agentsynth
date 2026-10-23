@@ -1,7 +1,9 @@
-// MorphMap.cpp -- the morph map's content, geometry and pointer handling. Painting is MorphMapPaint.cpp; the
-// keyboard stops, menu, rename and screen-reader names are MorphMapKeyboard.cpp.
+// MorphMap.cpp -- the morph map's content, geometry, pointer handling and dot motion. Painting is MorphMapPaint.cpp;
+// the keyboard stops, menu, rename and screen-reader names are MorphMapKeyboard.cpp.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/ControlMotion.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <algorithm>
 #include <cmath>
@@ -105,7 +107,9 @@ bool MorphMap::cursorAt(juce::Point<float> point) const {
 // ---------------------------------------------------------------------------------------------------------------
 
 void MorphMap::setDots(std::vector<Dot> dots) {
+    auto before = std::move(dots_);
     dots_ = std::move(dots);
+    startDotMotion(before);
     selected_ = dots_.empty() ? -1 : juce::jmin(selected_, (int)dots_.size() - 1);
     if (renameEditor_ != nullptr)
         endRename(false);
@@ -331,10 +335,12 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
         moveToStrip(strip, e.position);
     } else if (onCursor) {
         drag_ = Drag::Cursor;
+        grabOffset_ = getCursorCentre() - e.position;
         takeFocus(*cursorStop_);
     } else if (dot >= 0) {
         drag_ = Drag::Dot;
         dragIndex_ = dot;
+        grabOffset_ = getDotCentre(dot) - e.position;
         takeFocus(*dotStops_[(size_t)dot]);
         select(dot);
     } else {
@@ -354,7 +360,7 @@ void MorphMap::mouseDrag(const juce::MouseEvent& e) {
     }
     if (drag_ != Drag::Dot && drag_ != Drag::Cursor)
         return;
-    const auto to = toMap(e.position);
+    const auto to = toMap(e.position + grabOffset_);
     if (!dragMoved_) {
         dragMoved_ = true;
         gestureOpen_ = true;
@@ -381,16 +387,25 @@ void MorphMap::mouseUp(const juce::MouseEvent& e) {
             onGestureEnd(was == Drag::Dot ? Gesture::Dot : Gesture::Cursor);
         return;
     }
-    if (was == Drag::Empty && !dragMoved_ && !e.mods.isPopupMenu() && onAddAt) {
-        const auto at = toMap(e.position);
-        onAddAt(at.x, at.y);
-    }
 }
 
+/** Double-click on a dot deletes it (one always stays); on empty space it adds a dot there and focuses it so Delete
+    or Backspace removes it at once. A single click does neither. */
 void MorphMap::mouseDoubleClick(const juce::MouseEvent& e) {
-    const int dot = cursorAt(e.position) ? -1 : dotAt(e.position);
-    if (dot >= 0 && onEditDot)
-        onEditDot(dot);
+    if (e.mods.isPopupMenu() || pressClaimed_ || stripAt(e.position) != Axis::None || cursorAt(e.position))
+        return;
+    if (const int dot = dotAt(e.position); dot >= 0) {
+        if (!canDeleteDot || canDeleteDot())
+            deleteDotAndRefocus(dot);
+        return;
+    }
+    if (!onAddAt)
+        return;
+    const int before = (int)dots_.size();
+    const auto at = toMap(e.position);
+    onAddAt(at.x, at.y);
+    if ((int)dots_.size() > before && selected_ >= 0 && selected_ < (int)dotStops_.size())
+        takeFocus(*dotStops_[(size_t)selected_]);
 }
 
 void MorphMap::mouseMove(const juce::MouseEvent& e) {
@@ -436,5 +451,103 @@ void MorphMap::moveCursor(juce::Point<float> to) {
     if (onCursorMoved)
         onCursorMoved(to.x, to.y);
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Dot motion: a dot that is added (or restored by an undo) grows in with the 8% bounce and a removed one shrinks out
+// where it was (docs/layout/animation.md, "Motion rules"). Dots are keyed by name, which the shape list keeps unique,
+// so an undone delete is the same dot coming back. One AnimationDriver runs all of it for a finite time.
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace {
+constexpr double kGrowMs = control_motion::kGrowMs;
+constexpr double kShrinkOutMs = 180.0;
+constexpr double kRunMs = kGrowMs;
+
+bool& animateOffScreen() {
+    static bool value = false;
+    return value;
+}
+} // namespace
+
+void MorphMap::setAnimateOffScreenForTest(bool animate) { animateOffScreen() = animate; }
+
+const MorphMap::DotMotion* MorphMap::growingMotion(int index) const {
+    if (index < 0 || index >= (int)dots_.size())
+        return nullptr;
+    for (const auto& m : motions_)
+        if (!m.leaving && m.id == dots_[(size_t)index].name)
+            return &m;
+    return nullptr;
+}
+
+float MorphMap::getDotScale(int index) const {
+    const auto* m = growingMotion(index);
+    return m == nullptr || motionReduced_ ? 1.0f : control_motion::growScale(m->progress);
+}
+
+float MorphMap::getDotAlpha(int index) const {
+    const auto* m = growingMotion(index);
+    return m == nullptr || !motionReduced_ ? 1.0f : juce::jlimit(0.0f, 1.0f, easeOutCubic(m->progress));
+}
+
+int MorphMap::getNumLeavingDots() const noexcept {
+    return (int)std::count_if(motions_.begin(), motions_.end(), [](const auto& m) { return m.leaving; });
+}
+
+bool MorphMap::isMoving() const noexcept { return !motions_.empty(); }
+
+/** Called with the dots as they were just before `setDots`. Exactly one dot more or fewer is a motion; any other
+    change (a rename, a move, a whole new list, the first fill) lands at once. A running motion carries on from where
+    each dot is (an interrupted shrink does not restart). */
+void MorphMap::startDotMotion(const std::vector<Dot>& before) {
+    if (animationsOff() || (!isShowing() && !animateOffScreen()))
+        return endMotion();
+    const bool added = dots_.size() == before.size() + 1;
+    const bool removed = before.size() == dots_.size() + 1;
+    if (before.empty() || (!added && !removed))
+        return;
+    const auto& larger = added ? dots_ : before;
+    const auto& smaller = added ? before : dots_;
+    size_t at = 0;
+    while (at < smaller.size() && larger[at].name == smaller[at].name)
+        ++at;
+    for (size_t i = at; i < smaller.size(); ++i)
+        if (larger[i + 1].name != smaller[i].name)
+            return;
+
+    motionReduced_ = prefersReducedMotion();
+    const auto& dot = larger[at];
+    std::erase_if(motions_, [&](const auto& m) { return m.id == dot.name; });
+    DotMotion motion;
+    motion.id = dot.name;
+    motion.leaving = removed;
+    motion.dot = dot;
+    motion.colourIndex = (int)at;
+    motions_.push_back(std::move(motion));
+
+    motionLastMs_ = 0.0;
+    motionDriver_.start(
+        motionUpdater_, kRunMs, [](float t) { return t; }, [this](float t) { motionFrame((double)t * kRunMs); },
+        [this] { endMotion(); });
+}
+
+void MorphMap::motionFrame(double elapsedMs) {
+    const double dt = elapsedMs - motionLastMs_;
+    motionLastMs_ = elapsedMs;
+    for (auto& m : motions_) {
+        const double duration = motionReduced_ ? control_motion::kReducedMs : (m.leaving ? kShrinkOutMs : kGrowMs);
+        m.progress = juce::jmin(1.0f, m.progress + (float)(dt / duration));
+    }
+    std::erase_if(motions_, [](const auto& m) { return m.progress >= 1.0f; });
+    repaint();
+}
+
+void MorphMap::endMotion() {
+    motionDriver_.stop(motionUpdater_);
+    motions_.clear();
+    repaint();
+}
+
+void MorphMap::stepMotionForTest(double ms) { motionDriver_.stepForTest(ms); }
 
 } // namespace synth::ui

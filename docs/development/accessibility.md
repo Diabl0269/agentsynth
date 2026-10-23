@@ -163,7 +163,7 @@ them as the `MorphShapesCard` (both cards) and `ShapeEditorWindow` surfaces (no 
 outline, and each dot, the cursor and the two edge sliders is a transparent, mouse-inert stop over the painted thing
 (the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. Names carry
 values and are re-set on every change ("ah, X 0.20, Y 0.25", "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"); tooltips
-read "<name> - drag to move, double-click to edit", "Morph cursor - drag to blend shapes". Keys, all inside the
+read "<name> - drag to move, double-click to delete, Return to edit", "Morph cursor - drag to blend shapes". Keys, all inside the
 focused stop and therefore not rebindable actions (the native-control exception in [the rule](#the-rule)): the arrows
 move the focused dot, cursor or slider (Shift for a bigger step; held, they glide on, speeding up the longer they are
 held, and the whole hold is one undo step), Return on a dot edits it, Delete or Backspace removes it and focuses the

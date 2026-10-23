@@ -303,10 +303,10 @@ TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
                                             "Shape curve",
                                             "Add shape",
                                             "Duplicate",
-                                            "Delete",
                                             "Rename",
                                             "Start from",
                                             "Draw",
+                                            "Delete",
                                             "Notes move the cursor",
                                             "Smoothness",
                                             "Done"};
@@ -317,6 +317,21 @@ TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
         ASSERT_NE(tip, nullptr) << c->getTitle();
         EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
     }
+}
+
+TEST(ShapeEditor, DeleteSitsAtTheRightEndOfTheButtonRowAndIsRed) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& del = editor.getDeleteButton();
+    for (auto* other : {&editor.getAddButton(), &editor.getDuplicateButton(), &editor.getRenameButton(),
+                        &editor.getStartFromButton(), &editor.getDrawButton()}) {
+        EXPECT_EQ(other->getY(), del.getY());
+        EXPECT_LT(other->getRight(), del.getX()) << other->getTitle();
+    }
+    const auto text = del.findColour(juce::TextButton::textColourOffId);
+    EXPECT_GT(text.getRed(), text.getGreen() * 2);
+    EXPECT_GT(text.getRed(), text.getBlue() * 2);
+    EXPECT_NE(text, editor.getAddButton().findColour(juce::TextButton::textColourOffId));
 }
 
 // ---------------------------------------------------------------------------------------------------------------

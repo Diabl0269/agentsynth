@@ -2,6 +2,7 @@
 
 #include "MorphMapGlide.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -15,8 +16,9 @@ class ReorderFramePump;
  *  coordinates run 0..1 (x to the right, y downwards). It edits nothing itself; every change is reported
  *  through the callbacks, so the module card and the shape editor window drive it the same way.
  *
- *  Pointer: drag a dot to move it, drag the cursor to blend, click empty space to add a shape there,
- *  double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete.
+ *  Pointer: drag a dot to move it, drag the cursor to blend, double-click empty space to add a shape there,
+ *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete.
+ *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
  *  move diagonally, Shift is faster). Return on a dot edits it, Delete removes it and focuses the next dot, F2
@@ -85,7 +87,7 @@ public:
     std::function<void(Gesture)> onGestureEnd;
     std::function<void(float, float)> onCursorMoved;
     std::function<void(int, float, float)> onDotMoved;
-    /** A click on empty space, in map coordinates. */
+    /** A double-click on empty space, in map coordinates. The new dot's stop takes keyboard focus. */
     std::function<void(float, float)> onAddAt;
     /** The user chose this dot (click, focus). */
     std::function<void(int)> onSelect;
@@ -145,6 +147,18 @@ public:
     /** One hold frame: the frame pump calls it each VBlank, a test calls it with its own clock. */
     void glideTickForTest() { glideTick(); }
 
+    // ---------- motion ----------
+    /** The scale and opacity dot `index` is painted with now (1 and 1 at rest). */
+    float getDotScale(int index) const;
+    float getDotAlpha(int index) const;
+    /** Dots that have been removed and are still shrinking away. */
+    int getNumLeavingDots() const noexcept;
+    /** True while a grow or shrink runs (frames are requested only then). */
+    bool isMoving() const noexcept;
+    /** Test seam: lets an off-screen map animate, and steps a running motion to `ms` after its first frame. */
+    static void setAnimateOffScreenForTest(bool animate);
+    void stepMotionForTest(double ms);
+
     // ---------- inspection ----------
     /** The text a tooltip shows with the pointer at `point`. */
     juce::String tooltipAt(juce::Point<int> point) const;
@@ -202,9 +216,24 @@ private:
     void endRename(bool commit);
     void select(int index);
     void takeFocus(juce::Component& target);
+    void deleteDotAndRefocus(int index);
+    void startDotMotion(const std::vector<Dot>& before);
+    void motionFrame(double elapsedMs);
+    void endMotion();
+
+    /** A dot growing in (restored or added) or shrinking out (removed), by the dot's name. */
+    struct DotMotion {
+        juce::String id;
+        bool leaving = false;
+        float progress = 0.0f; ///< 0..1 of this dot's own duration
+        Dot dot;               ///< a leaving dot's last state
+        int colourIndex = 0;   ///< a leaving dot's colour slot
+    };
+    const DotMotion* growingMotion(int index) const;
 
     std::vector<Dot> dots_;
     juce::Point<float> cursor_{0.5f, 0.5f};
+    juce::Point<float> grabOffset_; ///< pixels from the pointer to the centre of the dot or cursor being dragged
     bool cursorVisible_ = true;
     bool showLabels_ = false;
     int selected_ = -1;
@@ -225,6 +254,12 @@ private:
     std::unique_ptr<Stop> stripStops_[2]; // X, Y
     std::unique_ptr<juce::TextEditor> renameEditor_;
     int renameIndex_ = -1;
+
+    std::vector<DotMotion> motions_;
+    juce::VBlankAnimatorUpdater motionUpdater_{this};
+    AnimationDriver motionDriver_;
+    double motionLastMs_ = 0.0;
+    bool motionReduced_ = false;
 
     MorphMapGlide glide_;
     GlideHost glideHost_;

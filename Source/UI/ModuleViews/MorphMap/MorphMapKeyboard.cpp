@@ -31,7 +31,7 @@ void MorphMap::refreshStopNames() {
         const juce::String name = dot.name.isEmpty() ? "Shape " + juce::String(i + 1) : dot.name;
         dotStops_[(size_t)i]->setTitle(name + ", " + coordinateText(dot.x, dot.y));
         dotStops_[(size_t)i]->setDescription("Shape on the morph map");
-        dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to edit");
+        dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return to edit");
     }
     cursorStop_->setTitle("Morph cursor, " + coordinateText(cursor_.x, cursor_.y));
     cursorStop_->setDescription("Where the shapes are blended");
@@ -55,7 +55,7 @@ juce::String MorphMap::tooltipAt(juce::Point<int> point) const {
         return stripStops_[strip == Axis::X ? 0 : 1]->getTooltip();
     if (const int dot = dotAt(p); dot >= 0)
         return dotStops_[(size_t)dot]->getTooltip();
-    return "Morph map: click empty space to add a shape that copies the current blend";
+    return "Morph map: double-click empty space to add a shape that copies the current blend";
 }
 
 juce::String MorphMap::getTooltip() { return tooltipAt(getMouseXYRelative()); }
@@ -94,6 +94,16 @@ bool MorphMap::stepStop(Stop& stop, float dx, float dy) {
     return true;
 }
 
+/** The owner refreshed the dots at once, so dot `index` is the one that followed (or the new last). */
+void MorphMap::deleteDotAndRefocus(int index) {
+    if (!onDeleteDot)
+        return;
+    juce::Component::SafePointer<MorphMap> safe(this);
+    onDeleteDot(index);
+    if (safe != nullptr && !safe->dotStops_.empty())
+        safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
+}
+
 bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
@@ -116,13 +126,8 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
         return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
-        if (onDeleteDot && (!canDeleteDot || canDeleteDot())) {
-            juce::Component::SafePointer<MorphMap> safe(this);
-            onDeleteDot(index);
-            // The owner refreshed the dots at once, so dot `index` is the one that followed (or the new last).
-            if (safe != nullptr && !safe->dotStops_.empty())
-                safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
-        }
+        if (!canDeleteDot || canDeleteDot())
+            deleteDotAndRefocus(index);
         return true;
     }
     if (code == juce::KeyPress::F2Key) {

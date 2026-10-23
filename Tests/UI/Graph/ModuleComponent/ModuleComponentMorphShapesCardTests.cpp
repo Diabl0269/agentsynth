@@ -195,11 +195,15 @@ TEST_F(ModuleComponentTest, TheCardsMapFollowsTheKnobsAndUndoOnTheNextTick) {
     EXPECT_EQ(rig.map().getNumDots(), 3) << "the generation poll follows an undo";
 }
 
-TEST_F(ModuleComponentTest, ClickingEmptyMapSpaceAddsAShapeFromTheCard) {
+TEST_F(ModuleComponentTest, DoubleClickingEmptyMapSpaceAddsAShapeFromTheCard) {
     CardRig rig;
     auto& map = rig.map();
     const auto at = map.toPixels(0.95f, 0.95f);
     map.mouseDown(mouseOn(map, at));
+    map.mouseUp(mouseOn(map, at));
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 3u) << "a single click adds nothing";
+    map.mouseDown(mouseOn(map, at));
+    map.mouseDoubleClick(mouseOn(map, at));
     map.mouseUp(mouseOn(map, at));
     EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 4u);
 }
@@ -221,9 +225,7 @@ TEST_F(ModuleComponentTest, EditButtonDoubleClickOnADotAndOnTheResponseViewOpenT
     };
 
     auto& map = rig.map();
-    map.mouseDoubleClick(makeCurveMouseEvent(map, map.getDotCentre(1),
-                                             juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), false,
-                                             map.getDotCentre(1)));
+    ASSERT_TRUE(map.getDotStop(1)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened.back()->getSelected(), 1);
     EXPECT_EQ(opened.back()->getWindowTitle(), "Filter shapes: " + rig.card->cardTitle());
