@@ -52,8 +52,8 @@ TEST(CustomFilterBlend, CurveFromGridClampsIntoTheCurveRange) {
         EXPECT_FLOAT_EQ(p.y, 0.0f);
 }
 
-TEST(CustomFilterShapesPresets, SixNamedCurvesAllDistinctAndNeverLoudAboveTwoDb) {
-    const char* names[] = {"ah", "ee", "oo", "wolf", "crow", "frog"};
+TEST(CustomFilterShapesPresets, EightNamedCurvesAllDistinctAndUnderTheirGainCeiling) {
+    const char* names[] = {"ah", "ee", "oo", "eh", "ih", "wolf", "crow", "frog"};
     for (int i = 0; i < CustomFilterShapes::kNumPresets; ++i) {
         const auto preset = static_cast<CustomFilterShapes::Preset>(i);
         EXPECT_STREQ(CustomFilterShapes::presetName(preset), names[i]);
@@ -61,7 +61,8 @@ TEST(CustomFilterShapesPresets, SixNamedCurvesAllDistinctAndNeverLoudAboveTwoDb)
         float peak = -100.0f;
         for (const auto& p : curve.points)
             peak = std::max(peak, CustomFilterShapes::yToDb(p.y));
-        EXPECT_LE(peak, 2.001f) << names[i];
+        // The vowels are loudness-matched and may reach the gain audit's +6 dB; the animal calls stay at +2 dB.
+        EXPECT_LE(peak, i <= (int)CustomFilterShapes::Preset::Ih ? 6.001f : 2.001f) << names[i];
         for (int j = i + 1; j < CustomFilterShapes::kNumPresets; ++j)
             EXPECT_FALSE(curve == CustomFilterShapes::presetCurve(static_cast<CustomFilterShapes::Preset>(j)));
     }
@@ -76,9 +77,9 @@ TEST(CustomFilterShapesPresets, DefaultShapesAreStillTheVowelsAtTheirCorners) {
     EXPECT_EQ(shapes.shapes[1].position, (std::vector<float>{0.8f, 0.25f}));
     EXPECT_EQ(shapes.shapes[2].position, (std::vector<float>{0.5f, 0.8f}));
     // The saved form is part of the project format: pin the first curve's size and first point.
-    EXPECT_EQ(shapes.shapes[0].curve.points.size(), 9u);
-    EXPECT_FLOAT_EQ(shapes.shapes[0].curve.points[0].y, CustomFilterShapes::dbToY(-30.0f));
-    EXPECT_FLOAT_EQ(shapes.shapes[2].curve.points[7].y, CustomFilterShapes::dbToY(-44.0f));
+    EXPECT_EQ(shapes.shapes[0].curve.points.size(), 16u);
+    EXPECT_FLOAT_EQ(shapes.shapes[0].curve.points[0].y, CustomFilterShapes::dbToY(-39.7f));
+    EXPECT_FLOAT_EQ(shapes.shapes[2].curve.points.back().y, CustomFilterShapes::dbToY(-47.0f));
     EXPECT_TRUE(shapes.isDefault());
 }
 
