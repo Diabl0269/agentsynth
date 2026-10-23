@@ -209,4 +209,7 @@ public:
     }
 };
 
+/** Deletes every dialog window that is open and modal; call it before the objects the dialogs use are destroyed. */
+void deleteOpenModalDialogs();
+
 } // namespace synth::ui

@@ -555,3 +555,22 @@ TEST(PopupMotionDismiss, AnAsynchronousCloseLeavesTheWindowFadedUntilItIsGone) {
     EXPECT_TRUE(pumpUntil([&] { return !PopupMotion::isDismissing(window); }));
     EXPECT_FLOAT_EQ(window.getAlpha(), 1.0f) << "whole again for the next time it is shown";
 }
+
+// Regression test for FRO1117: quitting with Settings open crashed in the dialog's destructor
+TEST(PopupMotionShutdown, DeleteOpenModalDialogsDeletesAnAsyncDialogBeforeJuceWould) {
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "needs a display";
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    auto* dialog = new juce::DialogWindow("Dialog", juce::Colours::grey, true, false);
+    dialog->setSize(100, 80);
+    dialog->setVisible(true);
+    dialog->enterModalState(true, nullptr, /*deleteWhenDismissed*/ true);
+    juce::Component::SafePointer<juce::Component> safe(dialog);
+    ASSERT_EQ(juce::ModalComponentManager::getInstance()->getNumModalComponents(), 1);
+
+    deleteOpenModalDialogs();
+
+    EXPECT_EQ(safe.getComponent(), nullptr);
+    EXPECT_EQ(juce::ModalComponentManager::getInstance()->getNumModalComponents(), 0);
+}

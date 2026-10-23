@@ -507,4 +507,21 @@ bool PopupMotion::isDismissing(const juce::Component& window) {
     return it != registry().end() && it->second->isDismissing();
 }
 
+// JUCE's modal manager owns a dialog launched asynchronously and deletes it only from DeletedAtShutdown, after the
+// application object and the main window are gone. A dialog destructor that touches either (the Settings window writes
+// the app properties and unregisters from the theme manager) then crashes on quit. Deleting here is safe: the
+// manager watches componentBeingDeleted, drops its own delete and cancels the modal item.
+void deleteOpenModalDialogs() {
+    auto* manager = juce::ModalComponentManager::getInstance();
+    if (manager == nullptr)
+        return;
+    std::vector<juce::Component::SafePointer<juce::DialogWindow>> dialogs;
+    for (int i = 0; i < manager->getNumModalComponents(); ++i)
+        if (auto* dialog = dynamic_cast<juce::DialogWindow*>(manager->getModalComponent(i)))
+            dialogs.emplace_back(dialog);
+    for (auto& dialog : dialogs)
+        if (dialog != nullptr)
+            delete dialog.getComponent();
+}
+
 } // namespace synth::ui
