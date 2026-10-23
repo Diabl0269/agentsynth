@@ -312,6 +312,7 @@ private:
     offeredPacks(const synth::soundbrowser::SoundSnapshot&) const;
     void appendOfferedPackRows(const synth::soundbrowser::SoundSnapshot& snap, bool places);
     void refreshPackRows();
+    void loadPackListIfNeeded();
     juce::String packSignature() const;
     juce::String packTooltip(const Row& row) const;
     bool packButtonHit(int index, juce::Point<int> p) const;

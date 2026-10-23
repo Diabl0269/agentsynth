@@ -60,6 +60,16 @@ void SoundBrowserComponent::setPackInstaller(Installer* installer) {
         installer_->addListener(this);
     packSignature_ = packSignature();
     rebuildRows();
+    if (isVisible())
+        loadPackListIfNeeded(); // the view may have turned visible before it had an installer to ask
+}
+
+// The list is fetched once, and again after a failed fetch; a load in flight or done is left alone.
+void SoundBrowserComponent::loadPackListIfNeeded() {
+    using Status = Installer::IndexStatus;
+    if (installer_ != nullptr &&
+        (installer_->indexStatus() == Status::NotLoaded || installer_->indexStatus() == Status::Failed))
+        installer_->refreshIndex();
 }
 
 // Packs the hosted list offers that are not on this device. The list must have loaded: before that the view cannot

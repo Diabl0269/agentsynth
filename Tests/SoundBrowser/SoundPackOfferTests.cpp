@@ -10,6 +10,7 @@ using namespace sound_browser_test;
 using namespace sound_pack_test;
 using synth::ui::SoundBrowserComponent;
 using Kind = SoundBrowserComponent::RowKind;
+using Installer = synth::soundpacks::SoundPackInstaller;
 
 namespace {
 
@@ -123,6 +124,40 @@ TEST(SoundPackOffer, SearchEndsWithThePacksWhoseNameOrInstrumentsMatch) {
     rig.view->setQuery("zzzz");
     EXPECT_EQ(rig.countOf(Kind::GetPack), 0);
     EXPECT_EQ(rig.view->getRows()[0].kind, Kind::Hint);
+}
+
+// Regression test: the Sounds view restored at startup turned visible while its window was still hidden, skipped the
+// fetch, and never got a second call, so Get more stayed empty until the view was switched away and back.
+TEST(SoundPackOffer, AViewThatTurnsVisibleBeforeItsWindowShowsStillLoadsThePackList) {
+    Rig rig;
+    const auto json = indexJson("core", "1.0.0", goodPackZip("core", "1.0.0"), {});
+    rig.server.bodies[kIndexUrl] = juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8());
+    synth::soundbrowser::SoundLists lists;
+    synth::soundbrowser::SoundIndex index({}, [&] { return std::vector<juce::File>{rig.dir.path()}; });
+    SoundBrowserComponent view(index, lists);
+    view.setSize(300, 700);
+    view.setPackInstaller(&rig.installer);
+    ASSERT_EQ(rig.installer.indexStatus(), Installer::IndexStatus::NotLoaded) << "a hidden view fetches nothing";
+    view.setVisible(true);
+    ASSERT_FALSE(view.isShowing()) << "no window: the startup case";
+    EXPECT_EQ(rig.installer.indexStatus(), Installer::IndexStatus::Loaded);
+    int packs = 0;
+    for (const auto& row : view.getRows())
+        packs += row.kind == Kind::GetPack ? 1 : 0;
+    EXPECT_EQ(packs, 1);
+}
+
+TEST(SoundPackOffer, AnInstallerGivenToAVisibleViewLoadsThePackList) {
+    Rig rig;
+    const auto json = indexJson("core", "1.0.0", goodPackZip("core", "1.0.0"), {});
+    rig.server.bodies[kIndexUrl] = juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8());
+    synth::soundbrowser::SoundLists lists;
+    synth::soundbrowser::SoundIndex index({}, [&] { return std::vector<juce::File>{rig.dir.path()}; });
+    SoundBrowserComponent view(index, lists);
+    view.setSize(300, 700);
+    view.setVisible(true);
+    view.setPackInstaller(&rig.installer);
+    EXPECT_EQ(rig.installer.indexStatus(), Installer::IndexStatus::Loaded);
 }
 
 TEST(SoundPackOffer, AGreyedRowRefusesToBeDragged) {
