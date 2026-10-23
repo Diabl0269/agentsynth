@@ -1,5 +1,6 @@
 // SamplerChromeLoad.cpp -- how the Sampler card loads: the Load Sample button and the card's file drop. The picker, its
 // choosers and the one-step undo around an instrument load are in InstrumentPickerRow.cpp.
+#include "AppUndoManager.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -38,9 +39,23 @@ void SamplerChrome::launchSampleChooser() {
         const auto file = fc.getResult();
         if (weak == nullptr || file == juce::File{})
             return;
-        weak->refreshSampleLabel(weak->sampler_.loadSampleFile(file) ? juce::String()
-                                                                     : "Could not read " + file.getFileName());
+        weak->loadSampleUndoably(file);
     });
+}
+
+// The capture/push pair brackets the load the way loadUndoably brackets an instrument load, so a Cmd+Z brings the
+// previous sample back whether the file came from the button or from a drop.
+bool SamplerChrome::loadSampleUndoably(const juce::File& file) {
+    const bool record = host_.undo != nullptr && host_.graph != nullptr;
+    if (record)
+        host_.undo->captureBeforeState(*host_.graph);
+    const bool ok = sampler_.loadSampleFile(file);
+    if (record)
+        host_.undo->pushSnapshotFromCapture(*host_.graph);
+    if (ok)
+        waveform_.playReplaceMotion();
+    refreshSampleLabel(ok ? juce::String() : "Could not read " + file.getFileName());
+    return ok;
 }
 
 // ---- One undo step ----

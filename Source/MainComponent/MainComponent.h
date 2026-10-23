@@ -663,6 +663,10 @@ private:
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
+    juce::String importAudioAsset(const juce::File& sourceFile);
+    void addAudioTrackWithClip(double startBeat, const juce::File& sourceFile);
+    synth::TrackId buildAudioTrackChannel(int index, juce::String& trackName);
+    void loadSoundFromBrowser(const juce::File& sound);
     double audioFileLengthInBeats(const juce::File& file) const;
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;

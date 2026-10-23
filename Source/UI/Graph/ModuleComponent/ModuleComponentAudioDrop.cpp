@@ -101,7 +101,11 @@ void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
         if (!SamplerModule::isSupportedAudioFile(file))
             continue;
 
-        if (sampler->loadSampleFile(file))
+        // One undo step, so a Cmd+Z puts the previous sample back; a drop from the OS and a dragged Sound both land
+        // here.
+        if (auto* chrome = dynamic_cast<synth::ui::SamplerChrome*>(instrumentChrome_.get()))
+            chrome->loadSampleUndoably(file);
+        else if (sampler->loadSampleFile(file))
             refreshSampleLabel();
         else
             refreshSampleLabel("Could not read " + file.getFileName());

@@ -96,6 +96,97 @@ std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::n
     };
 }
 
+// What addAudioTrack's ONE undo step does, and what the new-track-with-a-clip drop reuses: the track, its binding and
+// colour, and the whole mixer channel. Runs inside a recordGraphTimelineAndMacroChange. Returns the new track, or an
+// invalid id when none was added (the document is at its track limit).
+synth::TrackId MainComponent::buildAudioTrackChannel(int index, juce::String& trackName) {
+    const auto tracksBefore = timelineDoc.getTracks().size();
+    // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
+    // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
+    // (TimelinePanelTrackHeaders.cpp), independent of what's set here
+    // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
+    const juce::String defaultPresetName =
+        appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
+    if (defaultPresetName.isNotEmpty()) {
+        auto preset = synth::TrackPresetManager::loadTrackPreset(
+            synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
+        if (preset.isObject()) {
+            trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
+            if (trackName.isNotEmpty()) // inserted from the default preset - skip the factory chain below
+                return timelineDoc.getTracks().size() > tracksBefore ? timelineDoc.getTracks().back().id
+                                                                     : synth::TrackId{};
+        }
+        // else: the name resolves to nothing (deleted file) -> fall through to the
+        // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
+        // their default vanished" requirement for v1).
+    }
+
+    // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
+    // kMaxTracks refusal would be left orphaned in the graph.
+    trackName = "Audio " + juce::String(index + 1);
+    const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
+    if (!trackId.isValid())
+        return {}; // at kMaxTracks: nothing added, no node created, no macro
+
+    // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
+    // straight to the master bus.
+    const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
+    if (trackAudioUuid.isEmpty())
+        return trackId;
+    timelineDoc.setTrackBinding(trackId, trackAudioUuid);
+    timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+
+    auto* trackAudioNode = findNodeByUuid(trackAudioUuid);
+    if (trackAudioNode == nullptr)
+        return trackId;
+    const auto trackAudioPosition =
+        juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
+                         static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
+
+    // Lay every card of the expanded chain out left-to-right from the real card widths
+    // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
+    // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
+    // {Track Audio, Gate, EQ, Compressor, Strip} end up boxed into one collapsed macro below,
+    // so only their expanded-state positions matter for not overlapping each other; Master's
+    // position is only used the first time (it is a singleton afterwards) and sits right of
+    // where the collapsed macro card will be.
+    const int gateX = trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
+    const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
+    const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
+    const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
+    // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
+    const synth::DefaultChannelLayout layout{
+        /*gate=*/{gateX, trackAudioPosition.y},
+        /*eq=*/{eqX, trackAudioPosition.y},
+        /*compressor=*/{compressorX, trackAudioPosition.y},
+        /*strip=*/{stripX, trackAudioPosition.y},
+        /*master=*/{masterX, trackAudioPosition.y},
+        /*onNewModule=*/newModuleHook(),
+    };
+
+    const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
+    if (channel.stripUuid.isEmpty())
+        return trackId; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
+
+    // Master (and Audio Output) sit in the output dock, derived to the right of everything by
+    // GraphEditor::reflowOutputDock -- run by the updateComponents() / addMacroForMembers below.
+
+    // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
+    // the track. Master is deliberately NOT a member — see this method's own comment above — and the
+    // strip's Master-bound edges move behind the macro's output port right after.
+    graphEditor.getMacroController().addMacroForMembers(
+        {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid}, trackName,
+        trackAudioPosition);
+    graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
+
+    // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
+    // must see every node above still alive to keep the macro's membership.
+    graphEditor.updateComponents();
+    return trackId;
+}
+
 void MainComponent::addAudioTrack() {
     const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
@@ -113,91 +204,8 @@ void MainComponent::addAudioTrack() {
     // sound visibly leaves through its own card. Master's Mix/Direct classification looks backward through macro
     // ports (synth::resolveSourceThroughPorts), which is what keeps a strip behind an outlet on Mix.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
-        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
-            // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
-            // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
-            // (TimelinePanelTrackHeaders.cpp), independent of what's set here
-            // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
-            const juce::String defaultPresetName =
-                appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
-            if (defaultPresetName.isNotEmpty()) {
-                auto preset = synth::TrackPresetManager::loadTrackPreset(
-                    synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
-                if (preset.isObject()) {
-                    trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
-                    if (trackName.isNotEmpty())
-                        return; // inserted from the default preset - skip the factory chain below
-                }
-                // else: the name resolves to nothing (deleted file) -> fall through to the
-                // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
-                // their default vanished" requirement for v1).
-            }
-
-            // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
-            // kMaxTracks refusal would be left orphaned in the graph.
-            trackName = "Audio " + juce::String(index + 1);
-            const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
-            if (!trackId.isValid())
-                return; // at kMaxTracks: nothing added, no node created, no macro
-
-            // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
-            // straight to the master bus.
-            const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
-            if (trackAudioUuid.isEmpty())
-                return;
-            timelineDoc.setTrackBinding(trackId, trackAudioUuid);
-            timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
-
-            auto* trackAudioNode = findNodeByUuid(trackAudioUuid);
-            if (trackAudioNode == nullptr)
-                return;
-            const auto trackAudioPosition =
-                juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
-                                 static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
-
-            // Lay every card of the expanded chain out left-to-right from the real card widths
-            // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
-            // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
-            // {Track Audio, Gate, EQ, Compressor, Strip} end up boxed into one collapsed macro below,
-            // so only their expanded-state positions matter for not overlapping each other; Master's
-            // position is only used the first time (it is a singleton afterwards) and sits right of
-            // where the collapsed macro card will be.
-            const int gateX =
-                trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
-            const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
-            const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
-            const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-            // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
-            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
-                                synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
-            const synth::DefaultChannelLayout layout{
-                /*gate=*/{gateX, trackAudioPosition.y},
-                /*eq=*/{eqX, trackAudioPosition.y},
-                /*compressor=*/{compressorX, trackAudioPosition.y},
-                /*strip=*/{stripX, trackAudioPosition.y},
-                /*master=*/{masterX, trackAudioPosition.y},
-                /*onNewModule=*/newModuleHook(),
-            };
-
-            const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
-            if (channel.stripUuid.isEmpty())
-                return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
-
-            // Master (and Audio Output) sit in the output dock, derived to the right of everything by
-            // GraphEditor::reflowOutputDock -- run by the updateComponents() / addMacroForMembers below.
-
-            // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
-            // the track. Master is deliberately NOT a member — see this method's own comment above — and the
-            // strip's Master-bound edges move behind the macro's output port right after.
-            graphEditor.getMacroController().addMacroForMembers(
-                {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
-                trackName, trackAudioPosition);
-            graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
-
-            // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
-            // must see every node above still alive to keep the macro's membership.
-            graphEditor.updateComponents();
-        });
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+        [this, index, &trackName] { buildAudioTrackChannel(index, trackName); });
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");

@@ -288,6 +288,7 @@ add_executable(Tests
     App/MainComponent/MainComponentFreshUndoTests.cpp
     App/MainComponent/MainComponentDuplicateTrackTests.cpp
     App/MainComponent/MainComponentTrackPolySwitchTests.cpp
+    App/MainComponent/MainComponentSoundDropTests.cpp
     App/MainComponent/MainComponentShowTrackModuleTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp
@@ -331,6 +332,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorDeleteHealTests.cpp
     UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp
     UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
+    UI/Graph/GraphDragDropController/GraphDragDropControllerSoundTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
     UI/Layout/NonModalLabelTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
@@ -342,6 +344,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/DrumKitCardTests.cpp
     UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentSoundDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/CardMakeRoomTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp

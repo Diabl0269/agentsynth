@@ -26,6 +26,9 @@ void MainComponent::addCanvasAndPanels() {
     librarySidebar_->onLayoutChanged = [this] { resized(); };
     // The Sounds view previews through the engine, after the master; Near song tempo reads the transport's tempo.
     librarySidebar_->getSounds().setPreviewPlayer(&audioEngine.getSoundPreview());
+    librarySidebar_->getSounds().onSoundActivated = [this](const synth::soundbrowser::SoundEntry& sound) {
+        loadSoundFromBrowser(juce::File(sound.path));
+    };
     librarySidebar_->getSounds().songTempoProvider = [this] {
         return audioEngine.getTransport().getDocumentState().bpm;
     };

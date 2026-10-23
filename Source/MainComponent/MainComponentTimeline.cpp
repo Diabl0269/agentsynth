@@ -672,18 +672,9 @@ double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
     return seconds * bpm / 60.0;
 }
 
-// What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
-// on one) report through TimelineClipLaneArea::onAudioFileDropped. Imports `sourceFile` under
-// the SAME policy relinkClipAsset() uses (bundle Audio/, or the app-data Recordings/ convention
-// when the project has never been saved) and then adds ONE clip at `startBeat`, as long as the
-// file itself, bound to the new ref — the two doc calls batched into ONE undo step. A no-op with
-// a status-bar message when `track` is not an Audio-kind track or the import fails; a failed
-// import mutates nothing at all.
-void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
-    const auto* trackPtr = timelineDoc.getTrack(track);
-    if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
-        return;
-
+// The import half of importAudioFileToClip, also run first by the drop that makes a new track: copies `sourceFile`
+// into the project and returns the asset ref, or an empty ref after saying why on the status bar.
+juce::String MainComponent::importAudioAsset(const juce::File& sourceFile) {
     // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
     // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
     // into, which saveToFile() sweeps into the bundle via
@@ -698,12 +689,27 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
         if (name.isNotEmpty())
             newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;
     }
-
-    if (newRef.isEmpty()) {
-        // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
+    if (newRef.isEmpty())
         statusBar.showMessage("Import failed: " + error);
+    return newRef;
+}
+
+// What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
+// on one) report through TimelineClipLaneArea::onAudioFileDropped. Imports `sourceFile` under
+// the SAME policy relinkClipAsset() uses (bundle Audio/, or the app-data Recordings/ convention
+// when the project has never been saved) and then adds ONE clip at `startBeat`, as long as the
+// file itself, bound to the new ref — the two doc calls batched into ONE undo step. A no-op with
+// a status-bar message when `track` is not an Audio-kind track or the import fails; a failed
+// import mutates nothing at all.
+void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
+    const auto* trackPtr = timelineDoc.getTrack(track);
+    if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
         return;
-    }
+
+    // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
+    const juce::String newRef = importAudioAsset(sourceFile);
+    if (newRef.isEmpty())
+        return;
 
     // The clip is as long as the file (never as long as some default), floored at the same minimum
     // an audio take uses so a sub-frame file still produces a grabbable clip.
@@ -719,6 +725,33 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     });
 
     statusBar.showMessage("Imported " + newRef);
+}
+
+// A file dropped on the empty space under the last track: a new audio track holding a clip of the file at `startBeat`,
+// as ONE undo step. The file is imported first (a failed import changes nothing), then the track, its mixer channel and
+// the clip are one recorded change.
+void MainComponent::addAudioTrackWithClip(double startBeat, const juce::File& sourceFile) {
+    const juce::String newRef = importAudioAsset(sourceFile);
+    if (newRef.isEmpty())
+        return;
+    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+
+    const TrackGrowInScope growIn(*this);
+    const int index = (int)timelineDoc.getTracks().size();
+    juce::String trackName;
+    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
+            const auto track = buildAudioTrackChannel(index, trackName);
+            if (!track.isValid())
+                return;
+            const auto clip = timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats,
+                                                  sourceFile.getFileNameWithoutExtension());
+            if (clip.isValid())
+                timelineDoc.setClipAsset(clip, newRef, 0.0);
+        });
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Added " + trackName + " with " + sourceFile.getFileName()
+                                 : "Could not add a track");
 }
 
 // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0

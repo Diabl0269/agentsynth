@@ -287,6 +287,10 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
                                                                 juce::File file) {
         importAudioFileToClip(track, startBeat, file);
     };
+    // A file dropped under the last track makes a new audio track with the clip, in one undo step.
+    timelinePanel.getClipLaneArea().onAudioFileDroppedBelowTracks = [this](double startBeat, juce::File file) {
+        addAudioTrackWithClip(startBeat, file);
+    };
     // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
     // transport (same division as every other callback above). Whether P also ARMS looping is the
     // "timelineLoopSelectionArms" preference (default yes; off = place the locators, keep the

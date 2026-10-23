@@ -21,6 +21,7 @@ target_sources(Core PRIVATE
 # The Sounds view and the sidebar that switches between it and the module library (App UI).
 set(SOUND_BROWSER_UI_SOURCES
     Source/MainComponent/MainComponentLibraryViews.cpp
+    Source/MainComponent/MainComponentSoundLoad.cpp
     Source/UI/Library/LibrarySidebarSwitch.cpp
     Source/UI/Library/LibrarySidebarSwitch.h
     Source/UI/Library/LibrarySidebarViews.cpp
@@ -30,6 +31,7 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserAccessibility.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
+    Source/UI/Library/SoundBrowser/SoundBrowserDrag.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
@@ -38,6 +40,11 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.h
+    Source/UI/Library/SoundBrowser/SoundDragPayload.h
+    Source/UI/Library/SoundBrowser/SoundDragState.cpp
+    Source/UI/Library/SoundBrowser/SoundDragState.h
+    Source/UI/Library/SoundBrowser/SoundDropAdapter.cpp
+    Source/UI/Library/SoundBrowser/SoundDropAdapter.h
     Source/UI/Library/SoundBrowser/SoundFilterChipGroup.cpp
     Source/UI/Library/SoundBrowser/SoundFilterChipGroup.h
     Source/UI/Library/SoundBrowser/SoundFilterChipRow.cpp

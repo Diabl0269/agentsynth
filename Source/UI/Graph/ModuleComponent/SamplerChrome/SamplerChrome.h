@@ -53,6 +53,11 @@ public:
     void paintDropHint(juce::Graphics& g, juce::Rectangle<int> cardBounds) const override;
     int getDragFileCount() const noexcept { return dragFileCount_; }
 
+    // ---- Sample loading ----
+    /** Replaces the sample with `file` as ONE undo step, redraws the waveform with its replace motion and reports a
+     *  failure on the name label. False (the old sample stays) when the file cannot be read. */
+    bool loadSampleUndoably(const juce::File& file);
+
     // ---- Instrument loading ----
     /** Runs `load` as ONE undo step (the instrument and the mode come back together) and reports its messages. */
     bool loadUndoably(const std::function<bool(synth::sampler::InstrumentHost&)>& load);

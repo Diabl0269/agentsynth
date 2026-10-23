@@ -37,6 +37,7 @@ public:
     static constexpr int kCompactFooterHeight = SoundPreviewFooter::kCompactHeight;
     static constexpr int kMinListRows = 2; // the list keeps this many rows before the footer or the panel give way
     static constexpr int kFiltersButtonWidth = 84;
+    static constexpr int kDragStartThresholdPx = 4; // how far a pressed Sound row moves before it becomes a drag
 
     static constexpr const char* kFavouritesId = "@favourites";
     static constexpr const char* kRecentId = "@recent";
@@ -107,6 +108,11 @@ public:
     enum class FooterMode { Full, Compact, Hidden };
     FooterMode getFooterMode() const { return footerMode_; }
 
+    // ---- Dragging a sound (SoundBrowserDrag.cpp) ----------------------------------------------------------------
+    /** Starts dragging the Sound row `index` as the drag-and-drop payload `sound:<path>`; false for any other row. */
+    bool beginSoundDrag(int index);
+    bool isSoundDragging() const { return soundDragging_; }
+
     /** The control last asked to take focus by an Up or Down step (the list is this view); headless windows cannot
      *  hold real focus, so tests read it here. */
     juce::Component* lastFocusRequestForTest() const { return lastFocusRequest_; }
@@ -158,6 +164,8 @@ public:
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
@@ -231,6 +239,9 @@ private:
     void setupPreview();
     void syncFooterToSelection();
 
+    // Drag (SoundBrowserDrag.cpp)
+    juce::ScaledImage makeSoundDragImage(const juce::String& name) const;
+
     // Input (SoundBrowserInput.cpp)
     bool handleSearchKey(const juce::KeyPress& key);
     bool moveSelection(int delta);
@@ -270,6 +281,8 @@ private:
     std::vector<PathPart> pathParts_;
     int selected_ = -1;
     int hovered_ = -1;
+    int pressedSound_ = -1; // the Sound row under the press, until it becomes a drag or the button goes up
+    bool soundDragging_ = false;
     int hoveredPart_ = -1;
     int scrollOffset_ = 0;
     juce::String announcedValueText_;
