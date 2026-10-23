@@ -353,8 +353,11 @@ strip — muting the macro mutes the whole channel. See
 A mixer column lists its channel's modules **in signal order**, read off the chain between the source
 and the strip. When that chain is a straight line, the column supports adding, reordering and removing
 modules directly in the mixer. When it splits into parallel paths that meet again before the strip, the
-column lists them as a split row (see [Parallel paths](#parallel-paths)) and stays editable. Any other
-branch (a path that leaves the chain, a shared node feeding more than one channel, paths that meet at
+column lists them as a split row (see [Parallel paths](#parallel-paths)) and stays editable. A branch that
+never reaches the strip (a module wired in with no output, a cable to nowhere) is not a path: it is ignored, so
+it neither makes the list read-only nor ends the walk, and add, move and remove leave its cable alone
+(the edit primitives take the strip as `stripEnd` and skip any signal edge that has no route to it). Any other
+branch (a merge fed from outside the chain, a shared node feeding more than one channel, paths that meet at
 different places) shows the module list read-only (no "+ Insert" row), rather than presenting a branching chain as
 if it were a reorderable list. Every column's header carries an "Edit on canvas" button
 ([Edit on canvas](edit-on-canvas.md)), the way to edit such a chain.
@@ -366,7 +369,9 @@ as a VCA, or the strip itself). `buildInsertsForColumn` parses that series-paral
 (`SplitChainParser` in `MixerModelInserts.cpp`): each fork becomes one **Split row** followed by its paths'
 rows one level deeper, path by path, top to bottom as the paths' first cards sit on the canvas (then by node
 id), so the order stays put when a module moves within a path. A path wired straight from
-the fork to the merge is a **dry path** with no rows; a split inside a path nests one level deeper. Key
+the fork to the merge is a **dry path**: one `MixerInsertEntry::Kind::DryPath` row ("Dry (no effects)",
+one level deeper, its path index), so "2 paths" always has two path rows; a split inside a path nests one level
+deeper. Key
 (sidechain) cables are not signal and change nothing. Neither is the voice wiring in front of an
 instrument: a cable into a Pitch or Gate jack (a Poly MIDI driving its oscillator and envelope) plays the
 voice rather than carrying its sound, and a MIDI-only branch that never reaches the strip (Track In into an
@@ -383,7 +388,27 @@ agree. Hovering the row shows every path's modules ("Split into 2 paths / Path 1
 1"; a dry path reads "dry, no effects"). The split row's bypass bypasses every module under it (or turns
 them all back on when all are bypassed), as one undo step. Inside a path a module moves up or down only past
 its neighbour on the same path (`moveInsertBefore`/`moveInsertAfter`), and removing one bridges its path;
-the split row itself cannot be moved or removed.
+the split row itself cannot be moved or removed. The dry row is dimmed italic text with no bypass, "Show on canvas"
+or grab handle; Return or a click on it offers the same add as the split's "Add to path N", and its screen-reader
+name is "Path N: dry, no effects".
+
+### Reordering inserts
+
+A module row reorders three ways, all through `MixerInsertList::moveRowTo` and ONE undo step: drag it by its name
+(the grab cursor shows there), Move Up / Move Down in its right-click menu, or, with the row focused in the
+panel's row walk, **Alt+Up / Alt+Down** (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable, Mixer category;
+Tab, `mixerEnterRows`, enters a column's rows). The drag is the shared `Layout/ReorderDrag/` helper exactly as
+the send list uses it: siblings make room, Esc puts everything back, and the dropped row settles from where it was
+let go (`pendingInsertSettle_`, played on the rebuilt column; see [row motion](row-motion.md)). The commit holds
+the panel's rebuild (`rebuildHoldDepth_`) around the undo step and lets `onMutated()` do the one rebuild.
+
+A row moves only within its **run**: the whole chain, or one path of a split (never across a split row, a dry
+row, or into another path). The run is also trimmed to the places the graph accepts (`moveFeasible`), so the
+preview at the last drag event is always what the drop commits: on a straight chain every place except the front
+of a bus's own chain (no external predecessor to splice against, and `reorderInsert`'s second step has no
+rollback); on a split chain's path only beside a module with one signal neighbour on that side. A lone row on a
+path, a split row and a dry row have no grab handle. A keyboard move that cannot happen is swallowed. The focus
+follows the moved row; the "+ Insert" row is reached by Down from the last insert.
 
 ### Adding an insert
 
@@ -408,7 +433,7 @@ same strip input channels an insert's own output would and **is excluded from th
 strip is a source, never an insert, the same rule `findStripsFeedingStrip` applies walking the
 opposite direction. So an active send never marks a bus's own chain "branching" and is never mistaken
 for one of its inserts. `MixerColumn::sourceNodeId` therefore stays invalid for a bus, which is also
-why **`MixerInsertList::moveRow` refuses to move a row to the very front of a bus's chain** — there is
+why **`MixerInsertList` offers no move to the very front of a bus's chain** (`moveFeasible`) — there is
 no external predecessor to splice against, and `reorderInsert`'s second step has no rollback of its
 own.
 

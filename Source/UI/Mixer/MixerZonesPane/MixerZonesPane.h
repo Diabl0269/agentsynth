@@ -5,6 +5,7 @@
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/Layout/SidePane/SidePane.h"
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
 #include <array>
@@ -124,7 +125,7 @@ private:
     std::array<std::unique_ptr<MixerZonesGroupHeader>, 3> headers_;
 
     juce::TextEditor filter_;
-    std::array<juce::TextButton, 3> chips_;
+    std::array<SpaceClaimingButton<juce::TextButton>, 3> chips_;
     Chip chip_ = Chip::All;
     juce::Label hiddenLabel_;
     TextLinkButton showAll_{"Show all", juce::Justification::centredRight};

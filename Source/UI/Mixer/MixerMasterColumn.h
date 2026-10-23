@@ -63,6 +63,8 @@ public:
     std::function<float(int leg)> outputPeakProvider;
     /** Fires with Master's uuid when the header's "Edit on canvas" button is activated. */
     std::function<void(const juce::String&)> onEditOnCanvas;
+    /** An insert row's "Show on canvas" (or a double-click on it): the module's uuid; see MixerColumnComponent. */
+    std::function<void(const juce::String&)> onFocusModule;
     /** Forwarded from the insert list after a mutation. */
     std::function<void()> onMutated;
     /** Fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,

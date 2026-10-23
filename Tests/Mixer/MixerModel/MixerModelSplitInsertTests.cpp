@@ -101,7 +101,7 @@ TEST(MixerModelSplitInsertTests, PathsMeetingAtTheStripItselfAndASourceThatFansO
 }
 
 // The commonest parallel-FX patch: one path is wet, the other wired straight across (dry).
-TEST(MixerModelSplitInsertTests, ADryPathWiredStraightToTheMergeIsAPathWithNoRows) {
+TEST(MixerModelSplitInsertTests, ADryPathWiredStraightToTheMergeIsOneDryRow) {
     SplitRig rig;
     auto* reverb = rig.add("Reverb");
     auto* vca = rig.add("VCA");
@@ -112,10 +112,11 @@ TEST(MixerModelSplitInsertTests, ADryPathWiredStraightToTheMergeIsAPathWithNoRow
 
     const auto column = rig.column();
     EXPECT_TRUE(column.insertChainHasSplits);
-    ASSERT_EQ(column.inserts.size(), 3u);
+    ASSERT_EQ(column.inserts.size(), 4u);
     expectRow(column.inserts[0], Kind::Split, "2 paths", 0, -1);
     expectRow(column.inserts[1], Kind::Module, "Reverb", 1, 0);
-    expectRow(column.inserts[2], Kind::Module, "VCA", 0, -1);
+    expectRow(column.inserts[2], Kind::DryPath, "Dry (no effects)", 1, 1);
+    expectRow(column.inserts[3], Kind::Module, "VCA", 0, -1);
 }
 
 TEST(MixerModelSplitInsertTests, ASplitInsideAPathNestsOneLevelDeeper) {
@@ -150,16 +151,18 @@ TEST(MixerModelSplitInsertTests, ASplitInsideAPathNestsOneLevelDeeper) {
     expectRow(column.inserts[7], Kind::Module, "Compressor", 0, -1);
 }
 
-// A path that leaves the reach (feeds something other than the merge) is not a clean split: today's read-only list.
-TEST(MixerModelSplitInsertTests, APathThatLeavesTheChainFallsBackToTheReadOnlyBranchingList) {
+// A merge fed from outside the chain (a foreign module also cables into the strip) is not a clean split: today's
+// read-only list. A path that merely ends nowhere is no path at all (MixerModelDanglingBranchTests.cpp).
+TEST(MixerModelSplitInsertTests, AMergeFedFromOutsideTheChainFallsBackToTheReadOnlyBranchingList) {
     SplitRig rig;
     auto* delay = rig.add("Delay");
     auto* reverb = rig.add("Reverb");
-    auto* elsewhere = rig.add("Audio Output");
+    auto* foreign = rig.add("Chorus");
     connectStereoMMT(rig.graph, *rig.source, *delay);
     connectStereoMMT(rig.graph, *rig.source, *reverb);
     connectStereoMMT(rig.graph, *delay, *rig.strip);
-    rig.graph.addConnection({{reverb->nodeID, 0}, {elsewhere->nodeID, 0}});
+    connectStereoMMT(rig.graph, *reverb, *rig.strip);
+    connectStereoMMT(rig.graph, *foreign, *rig.strip);
 
     const auto column = rig.column();
     EXPECT_FALSE(column.insertChainHasSplits);

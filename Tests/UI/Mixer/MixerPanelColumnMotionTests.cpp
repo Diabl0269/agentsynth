@@ -3,6 +3,7 @@
 // (MixerPanelColumnMotion.cpp). Drives a real off-screen MainComponent: Duplicate Track from the timeline row's menu
 // makes a middle column that Cmd+Z removes and Cmd+Shift+Z brings back, and the panels' ExitEnterListMotion is
 // stepped by hand. Adding and duplicating a track grow the same column and row in.
+#include "../../TestSettingsHelpers.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
@@ -11,6 +12,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 
@@ -280,4 +282,148 @@ TEST(MixerPanelColumnMotion, ADeletedTracksChannelLeavesWithItsRow) {
     EXPECT_TRUE(rig.motion().isRunning()) << "its column shrinks away like the row";
     EXPECT_EQ(rig.motion().exitGhostCount(), 1);
     EXPECT_TRUE(rig.mc.getTimelinePanel().getTrackListMotionForTest().isRunning());
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Every route that adds or removes a channel animates its column by itself, in every mixer instance (the panel notices
+// the change in its own rebuild; no add path arms it).
+// ---------------------------------------------------------------------------------------------------------------------
+namespace {
+
+using Action = std::function<void(Rig&)>;
+struct NamedAction {
+    const char* name;
+    Action prepare; // runs first, its motion finished (may be empty)
+    Action act;     // the step that makes one new column
+};
+
+std::vector<NamedAction> addRoutes() {
+    using Panel = synth::ui::TimelinePanelComponent;
+    return {
+        {"Audio Track", nullptr, [](Rig& r) { r.mc.simulateAddAudioTrackClick(); }},
+        {"Instrument Track (Oscillator)", nullptr,
+         [](Rig& r) { r.mc.simulateAddInstrumentTrackClick(Panel::kAddInstrumentOscillatorMenuId); }},
+        {"Duplicate Track", nullptr, [](Rig& r) { r.duplicateFirstTrack(); }},
+        {"+ Bus", nullptr, [](Rig& r) { r.mixer().createBus(); }},
+    };
+}
+
+} // namespace
+
+TEST(MixerPanelColumnMotion, EveryRouteThatAddsAChannelGrowsItsColumnInAndUndoAndRedoPlayItBack) {
+    ReducedMotionGuard guard(false);
+    for (const auto& route : addRoutes()) {
+        SCOPED_TRACE(route.name);
+        Rig rig(true);
+        if (route.prepare)
+            route.prepare(rig);
+        rig.motion().finishNow();
+        const auto before = rig.columns().size();
+
+        route.act(rig);
+
+        ASSERT_EQ(rig.columns().size(), before + 1) << "the route adds one channel";
+        ASSERT_TRUE(rig.motion().isRunning()) << "its column grows in";
+        EXPECT_TRUE(rig.motion().timeline().hasEnter);
+        EXPECT_FALSE(rig.motion().timeline().hasExit);
+
+        rig.motion().finishNow();
+        ASSERT_TRUE(rig.mc.getUndoManager().undo());
+        ASSERT_EQ(rig.columns().size(), before);
+        ASSERT_TRUE(rig.motion().isRunning()) << "the undo shrinks it away";
+        EXPECT_TRUE(rig.motion().timeline().hasExit);
+
+        rig.motion().finishNow();
+        ASSERT_TRUE(rig.mc.getUndoManager().redo());
+        ASSERT_EQ(rig.columns().size(), before + 1);
+        ASSERT_TRUE(rig.motion().isRunning()) << "the redo grows it back";
+        EXPECT_TRUE(rig.motion().timeline().hasEnter);
+    }
+}
+
+TEST(MixerPanelColumnMotion, UndoingATrackDeleteGrowsItsColumnBackWithAnOutline) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.choose(1, synth::ui::TimelineTrackHeaderComponent::kDeleteTrackMenuId);
+    rig.motion().finishNow();
+    const auto count = rig.columns().size();
+
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+
+    ASSERT_EQ(rig.columns().size(), count + 1);
+    ASSERT_TRUE(rig.motion().isRunning());
+    EXPECT_TRUE(rig.motion().timeline().hasEnter);
+    EXPECT_TRUE(rig.motion().timeline().outline);
+}
+
+TEST(MixerPanelColumnMotion, ALoadAndTheCatchUpAfterBeingHiddenLandAtOnce) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.motion().finishNow();
+
+    // A column made while the panel is hidden is not animated when the panel is shown again.
+    rig.mixer().setVisible(false);
+    rig.mc.simulateAddAudioTrackClick();
+    rig.mixer().setVisible(true);
+    EXPECT_FALSE(rig.motion().isRunning()) << "a catch-up on becoming visible lands at once";
+
+    // A column that arrives with a replaced document (a project load) is not an add.
+    auto& doc = rig.mc.getTimelineDoc();
+    doc.fromVar(doc.toVar());
+    rig.mixer().createBus();
+    EXPECT_FALSE(rig.motion().isRunning()) << "a load lands at once";
+
+    rig.mixer().createBus();
+    EXPECT_TRUE(rig.motion().isRunning()) << "while the next add, with nothing replaced, animates";
+}
+
+TEST(MixerPanelColumnMotion, TheMirrorMixerAnimatesItsColumnsLikeTheDockedOne) {
+    synth::test::PersistedKeysGuard keys(
+        {"detachedPanelBothPlaces", "mixerMirrorWindowBounds", "bottomDockActiveTab", "bottomDockTabOrder"});
+    {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
+        props.getUserSettings()->setValue("detachedPanelBothPlaces", "both");
+        props.getUserSettings()->saveIfNeeded();
+    }
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    auto& dock = rig.mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+    dock.getDetachIcon(synth::ui::BottomDockComponent::Tab::Mixer)->onClick();
+    auto* mirror = dock.getMixerMirrorPanelForTest();
+    ASSERT_NE(mirror, nullptr);
+    mirror->setSize(1400, 360);
+    mirror->forceColumnMotionForTest(true);
+    mirror->rebuild();
+    mirror->getColumnMotionForTest().finishNow();
+    const int before = mirror->getColumnCount();
+
+    rig.mc.simulateAddAudioTrackClick();
+    ASSERT_GT(mirror->getColumnCount(), before);
+    EXPECT_TRUE(mirror->getColumnMotionForTest().isRunning()) << "the mirror grows the column in";
+    EXPECT_TRUE(mirror->getColumnMotionForTest().timeline().hasEnter);
+
+    mirror->getColumnMotionForTest().finishNow();
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    EXPECT_TRUE(mirror->getColumnMotionForTest().isRunning()) << "and shrinks it away on undo";
+    EXPECT_TRUE(mirror->getColumnMotionForTest().timeline().hasExit);
+}
+
+// Regression test for FRO901: a rebuild that follows an add (the graph catch-up lays the panel out again) ended the
+// grow-in at once, so the new column appeared with no motion.
+TEST(MixerPanelColumnMotion, ARebuildAfterTheStartLeavesTheMotionPlayingButAResizeEndsIt) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.mc.simulateAddAudioTrackClick();
+    ASSERT_TRUE(rig.motion().isRunning());
+
+    rig.mixer().rebuild();
+    rig.mixer().resized();
+    EXPECT_TRUE(rig.motion().isRunning()) << "the same geometry: the motion plays on";
+    rig.motion().applyAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs * 0.5);
+    EXPECT_TRUE(rig.motion().drawnRectFor(rig.columns().back()->getUuid()).has_value());
+
+    rig.mixer().setSize(1200, 360);
+    EXPECT_FALSE(rig.motion().isRunning()) << "its picture is of the old size";
 }

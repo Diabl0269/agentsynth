@@ -18,7 +18,10 @@ MixerRowsMotion::MixerRowsMotion(juce::Component& host)
     , sends_(host) {}
 
 juce::String MixerRowsMotion::insertKey(const synth::MixerInsertEntry& entry) {
-    return entry.kind == synth::MixerInsertEntry::Kind::Split ? "split:" + entry.uuid : entry.uuid;
+    using Kind = synth::MixerInsertEntry::Kind;
+    if (entry.kind == Kind::DryPath)
+        return "dry:" + entry.uuid + ":" + juce::String(entry.path);
+    return entry.kind == Kind::Split ? "split:" + entry.uuid : entry.uuid;
 }
 
 juce::String MixerRowsMotion::sendKey(const synth::MixerSendEntry& entry) { return juce::String(entry.slot); }

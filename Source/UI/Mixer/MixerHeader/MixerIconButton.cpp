@@ -9,13 +9,12 @@ namespace {
 constexpr int kIconEdgeIndent = 2;
 }
 
-// A Tab stop that acts on Return (a Button's own) and Space (registered here, since JUCE buttons ignore it), the
-// toolbar's convention. Keys the button does not use bubble up to the mixer panel, so the column keys keep working.
+// A Tab stop that acts on Return (a Button's own) and Space (SpaceClaimingButton, which also consumes it so the
+// key never reaches play/stop). Other keys bubble up to the mixer panel, so the column keys keep working.
 MixerIconButton::MixerIconButton(const juce::String& name)
-    : juce::DrawableButton(name, juce::DrawableButton::ImageFitted) {
+    : SpaceClaimingButton<juce::DrawableButton>(name, juce::DrawableButton::ImageFitted) {
     setClickingTogglesState(false);
     setWantsKeyboardFocus(true);
-    addShortcut(juce::KeyPress(juce::KeyPress::spaceKey));
     setEdgeIndent(kIconEdgeIndent);
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Theme/IconLibrary.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -11,7 +12,7 @@
 // ladder the toolbar's icons use) and keeps it current when the look and feel changes.
 namespace synth::ui {
 
-class MixerIconButton : public juce::DrawableButton {
+class MixerIconButton : public SpaceClaimingButton<juce::DrawableButton> {
 public:
     /** `name` is the component name only; give the button its screen-reader title with setTitle(). */
     explicit MixerIconButton(const juce::String& name);

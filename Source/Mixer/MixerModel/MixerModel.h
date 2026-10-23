@@ -16,13 +16,14 @@
 namespace synth {
 
 /** One row of a column's insert list, in signal order (docs/mixer/mixer.md#parallel-paths). A split chain lists
- *  each split as a Split row followed by its paths' rows, one level deeper, path by path. */
+ *  each split as a Split row followed by its paths' rows, one level deeper, path by path; a path wired straight to
+ *  the merge, with no module, is one DryPath row. */
 struct MixerInsertEntry {
-    enum class Kind { Module, Split };
+    enum class Kind { Module, Split, DryPath };
 
     /** Invalid for a Split row: it stands for the fork, not a node of its own. */
     juce::AudioProcessorGraph::NodeID nodeId;
-    /** A Split row carries the uuid of the node that fans out (the track source or an insert). */
+    /** A Split or DryPath row carries the uuid of the node that fans out (the track source or an insert). */
     juce::String uuid;
     juce::String name;
     bool bypassed = false;
@@ -162,12 +163,14 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
 // different module types (an ordinary FX module vs. e.g. ChannelStripModule's kRightBase) need not
 // agree on which channel is "right".
 
-/** Detaches `node` from its chain, bridging its single signal predecessor directly to its single
+/** Every primitive below takes `stripEnd` (the column's strip) to ignore dangling branches; invalid counts every edge.
+ *  Detaches `node` from its chain, bridging its single signal predecessor directly to its single
  *  signal successor. Does NOT remove `node` from the graph -- Remove calls
  *  `juce::AudioProcessorGraph::removeNode()` afterward; Reorder immediately re-splices `node`
  *  elsewhere with spliceInInsert. False (nothing changed) when `node` does not have exactly one
  *  signal predecessor and one signal successor. */
-bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node);
+bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                     juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 /** Splices `node` (already in the graph, not yet wired into this chain) between `predecessor` and
  *  `successor`'s existing direct signal connection(s), removing that connection and reconnecting
@@ -181,21 +184,23 @@ bool spliceInInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph:
  *  get the two-step sequence right itself. False if either step fails (graph left as spliceOutInsert
  *  found it in that case -- see spliceOutInsert's own contract). */
 bool reorderInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
-                   juce::AudioProcessorGraph::NodeID newPredecessor, juce::AudioProcessorGraph::NodeID newSuccessor);
+                   juce::AudioProcessorGraph::NodeID newPredecessor, juce::AudioProcessorGraph::NodeID newSuccessor,
+                   juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 /** `node`'s one signal neighbour upstream (`upstream`) or downstream, counting a stereo pair as one; an invalid id
  *  when it has none or several. */
 juce::AudioProcessorGraph::NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph,
-                                                      juce::AudioProcessorGraph::NodeID node, bool upstream);
+                                                      juce::AudioProcessorGraph::NodeID node, bool upstream,
+                                                      juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 /** On a path of a split chain (docs/mixer/mixer.md#parallel-paths): moves `node` to sit just before `before`, its
  *  neighbour on the same path, between `before` and `before`'s own single signal predecessor. False (nothing changed)
  *  when `before` has no single predecessor. */
 bool moveInsertBefore(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
-                      juce::AudioProcessorGraph::NodeID before);
+                      juce::AudioProcessorGraph::NodeID before, juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 /** The mirror of moveInsertBefore: moves `node` to sit just after `after`, between it and its single successor. */
 bool moveInsertAfter(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
-                     juce::AudioProcessorGraph::NodeID after);
+                     juce::AudioProcessorGraph::NodeID after, juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 } // namespace synth

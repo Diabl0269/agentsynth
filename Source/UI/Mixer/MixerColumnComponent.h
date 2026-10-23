@@ -157,6 +157,9 @@ public:
     /** Fires with the target to select on the canvas: the header's "Edit on canvas" button (the channel, or the macro
      *  of a branching chain) and the EQ thumbnail's click (the EQ's own uuid). */
     std::function<void(const juce::String&)> onEditOnCanvas;
+    /** An insert row's "Show on canvas" (or a double-click on it), or the send row menu's "Show <bus> on canvas": the
+     * module's uuid to select and bring into view, unlike onEditOnCanvas, which prefers the channel's macro. */
+    std::function<void(const juce::String&)> onFocusModule;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
     /** Fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,

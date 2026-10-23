@@ -984,6 +984,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and po
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
+include(${CMAKE_CURRENT_SOURCE_DIR}/MixerRowTests.cmake) # mixer insert/send rows and focusable controls
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption

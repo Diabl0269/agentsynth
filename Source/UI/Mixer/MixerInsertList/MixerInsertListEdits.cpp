@@ -10,6 +10,7 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/ReplaceWithPicker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/DragCursor.h"
 
 namespace synth::ui {
 namespace {
@@ -85,6 +86,8 @@ std::function<void(std::unique_ptr<ModMatrixPicker>)>& MixerInsertList::pickerHo
 // ---- Mouse and menus -------------------------------------------------------------------------------------------
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
+    pressedRow_ = -1;
+    rowDrag_.discard();
     if (!isEditable())
         return;
     if (const auto gap = gapTargetAt(event.getPosition()); gap && !event.mods.isPopupMenu()) {
@@ -99,6 +102,8 @@ void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     if (event.mods.isPopupMenu()) {
         if (isSplitRow(row))
             showSplitMenu(row);
+        else if (isDryRow(row))
+            activateDryRow(row);
         else if (row >= 0)
             showRowMenu(row);
         else if (canAddAtEnd())
@@ -107,9 +112,43 @@ void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     }
     if (isSplitRow(row))
         setSplitOpen(row, !isSplitOpen(row));
+    else if (isDryRow(row))
+        activateDryRow(row);
+    else if (isNameArea(event.getPosition())) {
+        // A press on a name could be a plain click or the start of a reorder drag: mouseDrag and mouseUp tell them
+        // apart by the animator's threshold, as the send list does.
+        pressedRow_ = row;
+        beginRowDrag(row, event);
+    }
+}
+
+bool MixerInsertList::isDryRow(int rowIndex) const noexcept {
+    const auto* entry = entryForRow(rowIndex);
+    return entry != nullptr && entry->kind == Kind::DryPath;
+}
+
+// A dry path has no module to act on; its one action is the same "Add to path N" the split's menu offers.
+void MixerInsertList::activateDryRow(int rowIndex) {
+    const auto* entry = entryForRow(rowIndex);
+    const int split = getParentSplitRow(rowIndex);
+    if (entry == nullptr || entry->kind != Kind::DryPath || split < 0 || !isEditable())
+        return;
+    if (const auto target = pathAddTarget(split, entry->path))
+        showAddPicker(*target, getRowBounds(rowIndex));
+}
+
+// A double-click on a module's name does what its "Show on canvas" button does. The first click of the pair armed a
+// reorder press that ended as a plain click, so nothing else has happened.
+void MixerInsertList::mouseDoubleClick(const juce::MouseEvent& event) {
+    if (event.mods.isPopupMenu() || !onFocusModule)
+        return;
+    const auto* entry = entryForRow(rowIndexAt(event.getPosition()));
+    if (entry != nullptr && entry->kind == Kind::Module && event.x < getWidth() - rowButtonsWidth(*entry))
+        onFocusModule(entry->uuid);
 }
 
 void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
+    updateHoverCursor(event.getPosition());
     int gap = -1;
     if (gapTargetAt(event.getPosition())) {
         // The boundary nearest the pointer: the top of the row it is closer to.
@@ -123,6 +162,8 @@ void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
 }
 
 void MixerInsertList::mouseExit(const juce::MouseEvent&) {
+    if (!rowDrag_.animator().isDragging())
+        endDragCursor(*this);
     if (hoverGap_ >= 0) {
         hoverGap_ = -1;
         repaint();
@@ -157,7 +198,7 @@ void MixerInsertList::showRowMenu(int rowIndex) {
     menu.addSeparator();
     // "Add after": right behind this module, before whatever it feeds (a fork module feeds several, so none).
     const auto node = entryForRow(rowIndex)->nodeId;
-    const bool canAddAfter = graph_ != nullptr && isSet(synth::soleSignalNeighbour(*graph_, node, false));
+    const bool canAddAfter = graph_ != nullptr && isSet(synth::soleSignalNeighbour(*graph_, node, false, stripNodeId_));
     menu.addItem(4, "Add after", canAddAfter);
     const auto area = getRowBounds(rowIndex);
     menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex, node, area](int result) {
@@ -174,73 +215,109 @@ void MixerInsertList::showRowMenu(int rowIndex) {
 
 // ---- Mutations -------------------------------------------------------------------------------------------------
 
-void MixerInsertList::mutateAndNotify(const std::function<bool()>& mutation) {
+// `holdPanelRebuild` brackets the undo step with holdRebuild(+1/-1): a move's step would wake the panel's catch-up
+// rebuild, which frees this list while a drag is still committing; onMutated() does the one rebuild afterwards.
+bool MixerInsertList::mutateAndNotify(const std::function<bool()>& mutation, bool holdPanelRebuild) {
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr)
-        return;
+        return false;
     bool changed = false;
     // The edit can rebuild the mixer and destroy this list before it returns: the editor is copied first and the
     // notification only runs while the list is still alive.
     auto* graphEditor = graphEditor_;
-    juce::Component::SafePointer<MixerInsertList> alive(this);
+    auto hold = holdPanelRebuild ? holdRebuild : std::function<void(int)>();
+    if (hold)
+        hold(1);
     undoManager_->recordGraphAndMacroChange(*graph_, *macros_, [&] {
         changed = mutation();
         graphEditor->updateComponents();
     });
+    if (hold)
+        hold(-1);
+    juce::Component::SafePointer<MixerInsertList> alive(this);
     if (changed && alive != nullptr && onMutated)
         onMutated();
+    return changed;
 }
 
-// On a split chain a module swaps only with the module right next to it on the same path: the row above or below
-// it at the same depth and path, with no split row between them.
-bool MixerInsertList::canMoveRow(int rowIndex, int delta) const {
-    const auto* entry = entryForRow(rowIndex);
-    if (entry == nullptr || entry->kind != Kind::Module || !isEditable())
+// Whether `row` and `other` are modules of one run: neighbours on screen and in the chain, at the same depth and on
+// the same path with no split row between them.
+bool MixerInsertList::inSameRun(int row, int other) const {
+    const auto* a = entryForRow(row);
+    const auto* b = entryForRow(other);
+    if (a == nullptr || b == nullptr || a->kind != Kind::Module || b->kind != Kind::Module)
         return false;
-    if (!hasSplits_) {
-        const int target = rowIndex + delta;
-        return target >= 0 && target < (int)entries_.size();
+    if (a->depth != b->depth || a->path != b->path)
+        return false;
+    const int lo = juce::jmin(row, other), hi = juce::jmax(row, other);
+    for (int r = lo; r < hi; ++r)
+        if (visible_[(size_t)r + 1] != visible_[(size_t)r] + 1)
+            return false;
+    for (int r = lo; r <= hi; ++r) {
+        const auto& e = entries_[(size_t)visible_[(size_t)r]];
+        if (e.kind != Kind::Module || e.depth != a->depth || e.path != a->path)
+            return false;
     }
-    const int neighbour = visible_[(size_t)rowIndex] + delta;
-    if (neighbour < 0 || neighbour >= (int)entries_.size())
-        return false;
-    const auto& other = entries_[(size_t)neighbour];
-    return other.kind == Kind::Module && other.depth == entry->depth && other.path == entry->path;
+    return true;
 }
 
-void MixerInsertList::moveRow(int rowIndex, int delta) {
-    if (!canMoveRow(rowIndex, delta))
-        return;
+// Whether moving the module at `from` to `to`'s place is a move the graph will take: on a straight chain any place
+// but the front of a bus's own chain (nothing feeds it, so there is nothing to splice against there); on a split
+// chain's run only where the module it lands beside has one signal neighbour on that side. The list shows only the
+// moves this allows, so a drag's preview is always what the drop commits.
+bool MixerInsertList::moveFeasible(int from, int to) const {
+    if (from == to || !isEditable() || animatingSplit_ >= 0 || !inSameRun(from, to))
+        return false;
+    if (!hasSplits_)
+        return isSet(sourceNodeId_) || (from != 0 && to != 0);
+    if (graph_ == nullptr)
+        return false;
+    const auto node = entryForRow(from)->nodeId;
+    const auto neighbour =
+        synth::soleSignalNeighbour(*graph_, entryForRow(to)->nodeId, /*upstream*/ to < from, stripNodeId_);
+    return isSet(neighbour) && neighbour != node;
+}
+
+bool MixerInsertList::canMoveRow(int rowIndex, int delta) const { return moveFeasible(rowIndex, rowIndex + delta); }
+
+// The rows a drag of `rowIndex` can land on: the run's rows reachable one feasible step at a time either way.
+std::pair<int, int> MixerInsertList::moveRunOf(int rowIndex) const {
+    int first = rowIndex, last = rowIndex;
+    while (moveFeasible(rowIndex, first - 1))
+        --first;
+    while (moveFeasible(rowIndex, last + 1))
+        ++last;
+    return first == last ? std::pair<int, int>{-1, -1} : std::pair<int, int>{first, last};
+}
+
+int MixerInsertList::keyboardMoveTarget(int rowIndex, int delta) const {
+    return canMoveRow(rowIndex, delta) ? rowIndex + delta : -1;
+}
+
+void MixerInsertList::moveRow(int rowIndex, int delta) { moveRowTo(rowIndex, rowIndex + delta); }
+
+bool MixerInsertList::moveRowTo(int fromRow, int toRow) {
+    if (!moveFeasible(fromRow, toRow))
+        return false;
+    const auto nodeId = entryForRow(fromRow)->nodeId;
     if (hasSplits_) {
-        const auto nodeId = entries_[(size_t)visible_[(size_t)rowIndex]].nodeId;
-        const auto neighbourId = entries_[(size_t)(visible_[(size_t)rowIndex] + delta)].nodeId;
-        mutateAndNotify([&] {
-            return delta < 0 ? synth::moveInsertBefore(*graph_, nodeId, neighbourId)
-                             : synth::moveInsertAfter(*graph_, nodeId, neighbourId);
-        });
-        return;
+        const auto targetId = entryForRow(toRow)->nodeId;
+        return mutateAndNotify(
+            [&] {
+                return toRow < fromRow ? synth::moveInsertBefore(*graph_, nodeId, targetId, stripNodeId_)
+                                       : synth::moveInsertAfter(*graph_, nodeId, targetId, stripNodeId_);
+            },
+            true);
     }
-    const int targetIndex = rowIndex + delta;
-    const auto nodeId = entries_[(size_t)rowIndex].nodeId;
 
-    // The new neighbours: remove `rowIndex` from the list, then read off whichever entries land
-    // either side of `targetIndex` in what remains -- the track source / the strip itself stand in
-    // for a missing neighbour at either end of the chain.
+    // The new neighbours: remove the row from the list, then read off whichever entries land either side of `toRow`
+    // in what remains -- the track source / the strip itself stand in for a missing neighbour at either end.
     std::vector<synth::MixerInsertEntry> without = entries_;
-    without.erase(without.begin() + rowIndex);
-    const int insertAt = juce::jlimit(0, (int)without.size(), targetIndex);
+    without.erase(without.begin() + fromRow);
+    const int insertAt = juce::jlimit(0, (int)without.size(), toRow);
     const auto predecessorId = insertAt == 0 ? sourceNodeId_ : without[(size_t)insertAt - 1].nodeId;
     const auto successorId = insertAt >= (int)without.size() ? stripNodeId_ : without[(size_t)insertAt].nodeId;
-
-    // A bus's own chain has no external source (sourceNodeId_ stays invalid -- nothing feeds
-    // its EQ from outside, docs/mixer/sends-and-buses.md), so moving a row to the very front would ask
-    // spliceInInsert to splice against a predecessor that doesn't exist. reorderInsert's second step
-    // (spliceInInsert) has no rollback of its own on failure, so refuse up front -- same "nothing
-    // changed" guard addModule already applies for its own empty-chain edge case -- rather than leave
-    // the node spliced out but not back in.
-    if (predecessorId == juce::AudioProcessorGraph::NodeID{})
-        return;
-
-    mutateAndNotify([&] { return synth::reorderInsert(*graph_, nodeId, predecessorId, successorId); });
+    return mutateAndNotify(
+        [&] { return synth::reorderInsert(*graph_, nodeId, predecessorId, successorId, stripNodeId_); }, true);
 }
 
 // spliceOutInsert bridges every predecessor to every successor, so a split's fork or merge module, or a module on a
@@ -252,7 +329,7 @@ void MixerInsertList::removeRow(int rowIndex) {
     const auto nodeId = row->nodeId;
     const auto uuid = row->uuid;
     mutateAndNotify([&] {
-        if (!synth::spliceOutInsert(*graph_, nodeId))
+        if (!synth::spliceOutInsert(*graph_, nodeId, stripNodeId_))
             return false;
         // Unbind any UI object holding a raw pointer into `nodeId` (the column's
         // own MixerEqThumbnail, if this is its bound EQ) BEFORE removeNode() frees the processor
@@ -400,8 +477,9 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr || !isEditable())
         return;
     const auto predecessor = target.predecessor;
-    const auto successor =
-        isSet(target.successor) ? target.successor : synth::soleSignalNeighbour(*graph_, predecessor, false);
+    const auto successor = isSet(target.successor)
+                               ? target.successor
+                               : synth::soleSignalNeighbour(*graph_, predecessor, false, stripNodeId_);
     if (!isSet(predecessor) || !isSet(successor) || !cablesInto(*graph_, predecessor, successor))
         return;
     const auto neighbourUuid = nodeUuid(*graph_, predecessor == sourceNodeId_ ? successor : predecessor);

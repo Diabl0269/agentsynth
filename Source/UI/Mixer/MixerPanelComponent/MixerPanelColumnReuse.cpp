@@ -97,6 +97,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
 
     widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
     widget->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
+    widget->onFocusModule = [this](const juce::String& uuid) { revealModuleOnCanvas(uuid); };
     widget->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
@@ -126,6 +127,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
         openColourPicker(uuid, dotScreenBounds);
     };
     widget->getInsertList().bypassShortcutText = [this] { return bypassShortcutText(); };
+    wireInsertReorder(widget->getInsertList(), column.nodeId);
     widget->getSendList().bypassShortcutText = [this] { return bypassShortcutText(); };
     content_.addAndMakeVisible(*widget);
     // Only the scrolling group reorders: a pinned column stays where the zone puts it.
@@ -133,6 +135,32 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
         wireColumnReorder(*widget, column.uuid);
     stripColumnState_[widget.get()] = state;
     return widget;
+}
+
+// A move's undo step would wake the structure-changed catch-up, which would rebuild the mixer and free the insert
+// list that is still committing it; the list's onMutated() does the one rebuild afterwards. A refused move names
+// row -1, which clears a settle that nothing will play. A null `columnNode` is Master's list, whose node is read when
+// the settle is queued.
+void MixerPanelComponent::wireInsertReorder(MixerInsertList& list, juce::AudioProcessorGraph::NodeID columnNode) {
+    list.holdRebuild = [this](int delta) { rebuildHoldDepth_ += delta; };
+    list.onSettlePending = [this, columnNode](int finalRow, float fromY) {
+        const auto node = columnNode != juce::AudioProcessorGraph::NodeID{} || masterColumn_ == nullptr
+                              ? columnNode
+                              : masterColumn_->getNodeId();
+        pendingInsertSettle_ = finalRow < 0 ? PendingSendSettle{} : PendingSendSettle{node, finalRow, fromY};
+    };
+}
+
+// A moved insert row glides into its slot on the rebuilt column (or Master) it belongs to.
+void MixerPanelComponent::playInsertSettle() {
+    const auto settle = std::exchange(pendingInsertSettle_, PendingSendSettle{});
+    if (settle.row < 0)
+        return;
+    for (auto& column : stripColumns_)
+        if (column != nullptr && column->getNodeId() == settle.strip)
+            column->getInsertList().startSettleFrom(settle.row, settle.fromY);
+    if (masterColumn_ != nullptr && masterColumn_->getNodeId() == settle.strip)
+        masterColumn_->getInsertList().startSettleFrom(settle.row, settle.fromY);
 }
 
 bool MixerPanelComponent::anyStripColumnUnbound() const {

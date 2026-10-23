@@ -13,7 +13,9 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/RecordTapModule.h"
 #include <algorithm>
+#include <functional>
 #include <optional>
+#include <set>
 
 namespace synth {
 
@@ -33,6 +35,44 @@ int signalSuccessorCount(const MixerGraphView& view, NodeID node) {
     std::vector<NodeID> destinations;
     for (const auto& c : view.cables.outOf(node))
         if (isSignalEdge(view.graph, view.cables, c))
+            if (std::find(destinations.begin(), destinations.end(), c.destination.nodeID) == destinations.end())
+                destinations.push_back(c.destination.nodeID);
+    return (int)destinations.size();
+}
+
+// Every node with a signal path to `end` (and `end` itself): a signal edge into any other node leads nowhere the
+// chain goes, so a dangling branch is told apart from a real one by where its edge lands. A path into ANOTHER
+// channel strip is not dangling (a shared module feeding two channels is a real fan-out), so `alsoEnds` seeds the
+// search with those strips too.
+std::set<NodeID> nodesReachingSignalEnd(const MixerGraphView& view, NodeID end,
+                                        const std::vector<NodeID>& alsoEnds = {}) {
+    std::set<NodeID> reach{end};
+    std::vector<NodeID> todo{end};
+    for (auto other : alsoEnds)
+        if (reach.insert(other).second)
+            todo.push_back(other);
+    while (!todo.empty()) {
+        const auto node = todo.back();
+        todo.pop_back();
+        for (const auto& c : view.cables.into(node))
+            if (isSignalEdge(view.graph, view.cables, c) && reach.insert(c.source.nodeID).second)
+                todo.push_back(c.source.nodeID);
+    }
+    return reach;
+}
+
+std::vector<NodeID> allStripNodes(const MixerGraphView& view) {
+    std::vector<NodeID> strips;
+    for (auto* node : view.graph.getNodes())
+        if (dynamic_cast<ChannelStripModule*>(node->getProcessor()) != nullptr)
+            strips.push_back(node->nodeID);
+    return strips;
+}
+
+int liveSignalSuccessorCount(const MixerGraphView& view, NodeID node, const std::set<NodeID>& reach) {
+    std::vector<NodeID> destinations;
+    for (const auto& c : view.cables.outOf(node))
+        if (reach.count(c.destination.nodeID) != 0 && isSignalEdge(view.graph, view.cables, c))
             if (std::find(destinations.begin(), destinations.end(), c.destination.nodeID) == destinations.end())
                 destinations.push_back(c.destination.nodeID);
     return (int)destinations.size();
@@ -279,22 +319,14 @@ private:
 
     bool isStop(NodeID node) const { return node == end_ || chainPredecessorCount(view_, node) > 1; }
 
-    // `node`'s signal successors, less the ones it only sends MIDI to that never reach the strip: an instrument
-    // track's Track In feeds its ADSR as well as its instrument, and that envelope ends in the VCA's Gain CV, which is
-    // modulation, not a second path of audio.
+    // `node`'s signal successors, less the ones that never reach the strip. An instrument track's Track In feeds
+    // its ADSR as well as its instrument, and that envelope ends in the VCA's Gain CV, which is modulation, not a
+    // second path of audio; a branch left dangling (a module wired in with no output) is no path either, so it
+    // neither forks the chain nor ends it.
     std::vector<NodeID> chainSuccessors(NodeID node) {
         auto next = chainLinkSuccessors(view_, node);
-        next.erase(std::remove_if(next.begin(), next.end(),
-                                  [&](NodeID to) { return onlyMidiTo(node, to) && !reachesEnd(to); }),
-                   next.end());
+        next.erase(std::remove_if(next.begin(), next.end(), [&](NodeID to) { return !reachesEnd(to); }), next.end());
         return next;
-    }
-
-    bool onlyMidiTo(NodeID from, NodeID to) const {
-        for (const auto& c : view_.cables.outOf(from))
-            if (c.destination.nodeID == to && !c.source.isMIDI() && isChainEdge(view_, c))
-                return false;
-        return true;
     }
 
     bool reachesEnd(NodeID from) {
@@ -303,7 +335,7 @@ private:
         while (!todo.empty()) {
             const auto node = todo.back();
             todo.pop_back();
-            if (node == end_)
+            if (node == end_ || dynamic_cast<ChannelStripModule*>(processorFor(view_.graph, node)) != nullptr)
                 return true;
             for (auto next : chainLinkSuccessors(view_, node))
                 if (std::find(seen.begin(), seen.end(), next) == seen.end()) {
@@ -368,8 +400,16 @@ private:
 
         for (int i = 0; i < (int)starts.size(); ++i) {
             const auto start = starts[(size_t)i];
-            NodeID stop = start; // a path wired straight to the merge is a dry path with no rows
-            if (!isStop(start)) {
+            NodeID stop = start; // a path wired straight to the merge is a dry path: one row, no module
+            if (isStop(start)) {
+                MixerInsertEntry dry;
+                dry.kind = MixerInsertEntry::Kind::DryPath;
+                dry.uuid = split.uuid;
+                dry.name = "Dry (no effects)";
+                dry.depth = depth + 1;
+                dry.path = i;
+                rows_.push_back(dry);
+            } else {
                 if (!pushModule(start, depth + 1, i) || !continueFrom(start, depth + 1, i, stop))
                     return false;
             }
@@ -426,14 +466,16 @@ void buildInsertsForColumn(const MixerGraphView& view, const TimelineDoc& doc, M
     std::vector<NodeID> visited{sourceId};
     NodeID current = sourceId;
 
+    const auto reachesStrip = nodesReachingSignalEnd(view, column.nodeId);
+    const auto reachesAnyStrip = nodesReachingSignalEnd(view, column.nodeId, allStripNodes(view));
     while (current != column.nodeId) {
-        if (signalSuccessorCount(view, current) > 1)
+        if (liveSignalSuccessorCount(view, current, reachesAnyStrip) > 1)
             branching = true;
 
         NodeID next;
         bool haveNext = false;
         for (const auto& c : view.cables.outOf(current)) {
-            if (isSignalEdge(graph, view.cables, c)) {
+            if (isSignalEdge(graph, view.cables, c) && reachesStrip.count(c.destination.nodeID) != 0) {
                 next = c.destination.nodeID;
                 haveNext = true;
                 break;
@@ -464,13 +506,31 @@ void buildInsertsForColumn(const MixerGraphView& view, const TimelineDoc& doc, M
     resolveEditOnCanvasTarget(view, chain, column);
 }
 
-bool spliceOutInsert(juce::AudioProcessorGraph& graph, NodeID node) {
+// Whether a signal edge lies on the way to `end`; every edge does when no end is given.
+std::function<bool(const Connection&)> liveEdgeTest(juce::AudioProcessorGraph& graph,
+                                                    const std::vector<Connection>& connections, NodeID end) {
+    if (end == NodeID{})
+        return [](const Connection&) { return true; };
+    std::set<NodeID> reach{end};
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const auto& c : connections)
+            if (reach.count(c.destination.nodeID) != 0 && isSignalEdge(graph, connections, c))
+                grew = reach.insert(c.source.nodeID).second || grew;
+    }
+    return [reach](const Connection& c) { return reach.count(c.destination.nodeID) != 0; };
+}
+
+bool spliceOutInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID stripEnd) {
     const auto connections = graph.getConnections();
+    const auto live = liveEdgeTest(graph, connections, stripEnd);
     std::vector<Connection> preds, succs;
     for (const auto& c : connections) {
-        if (c.destination.nodeID == node && isSignalEdge(graph, connections, c))
+        if (!isSignalEdge(graph, connections, c) || !live(c))
+            continue;
+        if (c.destination.nodeID == node)
             preds.push_back(c);
-        if (c.source.nodeID == node && isSignalEdge(graph, connections, c))
+        if (c.source.nodeID == node)
             succs.push_back(c);
     }
     if (preds.empty() || succs.empty())
@@ -517,20 +577,22 @@ bool spliceInInsert(juce::AudioProcessorGraph& graph, NodeID predecessor, NodeID
     return true;
 }
 
-bool reorderInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID newPredecessor, NodeID newSuccessor) {
-    if (!spliceOutInsert(graph, node))
+bool reorderInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID newPredecessor, NodeID newSuccessor,
+                   NodeID stripEnd) {
+    if (!spliceOutInsert(graph, node, stripEnd))
         return false;
     return spliceInInsert(graph, newPredecessor, newSuccessor, node);
 }
 
 // `node`'s one signal neighbour on the given side, or an invalid id when it has none or several.
-NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph, NodeID node, bool upstream) {
+NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph, NodeID node, bool upstream, NodeID stripEnd) {
     const auto connections = graph.getConnections();
+    const auto live = liveEdgeTest(graph, connections, stripEnd);
     NodeID found;
     for (const auto& c : connections) {
         const auto& self = upstream ? c.destination : c.source;
         const auto& other = upstream ? c.source : c.destination;
-        if (self.nodeID != node || !isSignalEdge(graph, connections, c) || other.nodeID == found)
+        if (self.nodeID != node || !isSignalEdge(graph, connections, c) || !live(c) || other.nodeID == found)
             continue;
         if (found != NodeID{})
             return {};
@@ -541,18 +603,18 @@ NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph, NodeID node, bool u
 
 // The neighbour is read before `node` comes out: removing `node` (which sits on the far side of `before`/`after`)
 // never changes it.
-bool moveInsertBefore(juce::AudioProcessorGraph& graph, NodeID node, NodeID before) {
-    const auto predecessor = soleSignalNeighbour(graph, before, true);
+bool moveInsertBefore(juce::AudioProcessorGraph& graph, NodeID node, NodeID before, NodeID stripEnd) {
+    const auto predecessor = soleSignalNeighbour(graph, before, true, stripEnd);
     if (predecessor == NodeID{} || predecessor == node)
         return false;
-    return reorderInsert(graph, node, predecessor, before);
+    return reorderInsert(graph, node, predecessor, before, stripEnd);
 }
 
-bool moveInsertAfter(juce::AudioProcessorGraph& graph, NodeID node, NodeID after) {
-    const auto successor = soleSignalNeighbour(graph, after, false);
+bool moveInsertAfter(juce::AudioProcessorGraph& graph, NodeID node, NodeID after, NodeID stripEnd) {
+    const auto successor = soleSignalNeighbour(graph, after, false, stripEnd);
     if (successor == NodeID{} || successor == node)
         return false;
-    return reorderInsert(graph, node, after, successor);
+    return reorderInsert(graph, node, after, successor, stripEnd);
 }
 
 } // namespace synth

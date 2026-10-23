@@ -10,6 +10,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <vector>
 
 // ============================================================================
 // easeOutCubic
@@ -298,4 +299,56 @@ TEST(AnimationDriverSmoke, StartAndCompleteNocrash) {
     // Either completeCalled is true (fast machine) or we at least got frames.
     // The key assertion is: no crash.
     SUCCEED();
+}
+
+// Regression test for FRO973: a message-thread stall right after an animation's first frame (a graph rebuild, a plugin
+// load) made the next frame land on the final value, so the motion was never seen.
+TEST(AnimationDriverStall, AFrameAfterAStallAdvancesByOneFrameAndTheRestStillPlays) {
+    juce::Component dummyComponent;
+    dummyComponent.setSize(1, 1);
+    juce::VBlankAnimatorUpdater updater{&dummyComponent};
+    synth::ui::AnimationDriver driver;
+
+    std::vector<float> values;
+    int completed = 0;
+    driver.start(
+        updater, 580.0, [](float t) { return t; }, [&](float t) { values.push_back(t); }, [&] { ++completed; });
+    driver.stallGuardForTest(true);
+
+    driver.stepForTest(0.0);   // the first frame
+    driver.stepForTest(16.0);  // a normal frame
+    driver.stepForTest(900.0); // 884 ms later: the stall, far past the end of the animation
+    ASSERT_GE(values.size(), 3u);
+    EXPECT_LT(values.back(), 0.15f) << "the frame after a stall must not jump to the end";
+    EXPECT_GT(values.back(), values[1]) << "it still moves";
+    EXPECT_EQ(completed, 0);
+    EXPECT_TRUE(driver.isRunning());
+
+    // The rest plays from there, one value per frame, rising to exactly 1, completing once.
+    float previous = values.back();
+    for (int frame = 1; frame <= 60 && completed == 0; ++frame) {
+        driver.stepForTest(16.0 * frame);
+        EXPECT_LE(values.back() - previous, 0.06f) << "no jump at frame " << frame;
+        EXPECT_GE(values.back(), previous);
+        previous = values.back();
+    }
+    EXPECT_EQ(completed, 1);
+    EXPECT_FLOAT_EQ(values.back(), 1.0f);
+}
+
+TEST(AnimationDriverStall, SteadyFramesAreLeftAlone) {
+    juce::Component dummyComponent;
+    dummyComponent.setSize(1, 1);
+    juce::VBlankAnimatorUpdater updater{&dummyComponent};
+    synth::ui::AnimationDriver driver;
+    std::vector<float> values;
+    int completed = 0;
+    driver.start(
+        updater, 200.0, [](float t) { return t; }, [&](float t) { values.push_back(t); }, [&] { ++completed; });
+    driver.stallGuardForTest(true);
+    for (int ms = 0; ms <= 216; ms += 16)
+        driver.stepForTest(ms);
+    EXPECT_EQ(completed, 1);
+    EXPECT_FLOAT_EQ(values.back(), 1.0f);
+    EXPECT_NEAR(values[6], 80.0f / 200.0f, 1e-3f); // the same clock as an unguarded run
 }

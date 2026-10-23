@@ -14,6 +14,7 @@
 #include "MixerPanelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -118,6 +119,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
         return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(meterReader_, leg) : 0.0f;
     };
     masterColumn_->onEditOnCanvas = [this](const juce::String& target) { revealOnCanvas(target); };
+    masterColumn_->onFocusModule = [this](const juce::String& uuid) { revealModuleOnCanvas(uuid); };
     masterColumn_->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
@@ -132,6 +134,8 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     };
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
     masterColumn_->getInsertList().bypassShortcutText = [this] { return bypassShortcutText(); };
+    // Master's chain node is only known once its column is set; the settle names it per call.
+    wireInsertReorder(masterColumn_->getInsertList(), {});
     wireHeaderMenus();
 }
 
@@ -207,6 +211,43 @@ void MixerPanelComponent::revealOnCanvas(const juce::String& targetId) {
     for (auto* comp : graphEditor_->getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == target->nodeId)
             graphEditor_->centreViewOn(comp->getBounds().toFloat().getCentre());
+}
+
+// Unlike revealOnCanvas, the target is the module itself even when a channel macro boxes it. A module inside a
+// collapsed macro has no visible card, so each collapsed ancestor (outermost first) unfolds through the undoable
+// setMacroCollapsed the card's own expand button uses; the view centres once the unfold has landed (at once when
+// nothing animates).
+void MixerPanelComponent::revealModuleOnCanvas(const juce::String& moduleUuid) {
+    if (graphEditor_ == nullptr || graph_ == nullptr || macros_ == nullptr || moduleUuid.isEmpty())
+        return;
+    juce::AudioProcessorGraph::NodeID nodeId;
+    for (auto* node : graph_->getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == moduleUuid)
+            nodeId = node->nodeID;
+    if (nodeId == juce::AudioProcessorGraph::NodeID{})
+        return;
+    if (onRevealCanvas)
+        onRevealCanvas();
+    std::vector<juce::String> collapsedAncestors;
+    for (const auto* macro = macros_->findByMember(moduleUuid); macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros_->find(macro->parentId))
+        if (macro->collapsed)
+            collapsedAncestors.insert(collapsedAncestors.begin(), macro->id);
+    for (const auto& id : collapsedAncestors)
+        graphEditor_->getMacroController().setMacroCollapsed(id, false);
+    graphEditor_->selectModule(nodeId, false);
+
+    auto centre = [safe = juce::Component::SafePointer<MixerPanelComponent>(this), nodeId] {
+        if (safe == nullptr || safe->graphEditor_ == nullptr)
+            return;
+        for (auto* comp : safe->graphEditor_->getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == nodeId)
+                safe->graphEditor_->centreViewOn(comp->getBounds().toFloat().getCentre());
+    };
+    if (graphEditor_->getCardGlide().fold().isLive())
+        graphEditor_->getCardGlide().fold().whenSettled(centre);
+    else
+        centre();
 }
 
 namespace {
@@ -285,6 +326,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
     // unbindAllColumns() or unbindColumnsFor() detached is live again once this returns.
     columnsUnbound_ = false;
     masterColumnUnbound_ = false;
+    noteColumnSetComing(snapshot);
     // A drag still held would be left waiting on a header that is about to be destroyed; a drop
     // settling in (or being committed by endColumnDrag) survives, its columns are re-found by uuid.
     if (!committingColumnDrag_ && (columnReorder_.isDragging() || columnReorder_.isPressed()))
@@ -389,6 +431,8 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
 
     resized();
     syncRowVisuals(); // again, now the columns have a height to scroll the focused row into
+    if (std::exchange(autoColumnFinish_, false))
+        finishColumnChange();
 
     // An insert or send row that came or went in a rebuilt column opens or closes where it was.
     const auto rowMotions = std::exchange(pendingRowMotions_, {});
@@ -404,6 +448,7 @@ void MixerPanelComponent::rebuildFrom(synth::MixerSnapshot snapshot) {
         for (auto& column : stripColumns_)
             if (column != nullptr && column->getNodeId() == settle.strip)
                 column->startSendSettle(settle.row, settle.fromY);
+    playInsertSettle();
 }
 
 juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
@@ -518,6 +563,7 @@ void MixerPanelComponent::unbindAllColumns() {
 void MixerPanelComponent::visibilityChanged() {
     if (!isVisible())
         return;
+    const juce::ScopedValueSetter<bool> catchingUp(catchingUp_, true);
     if (rebuildPending_)
         rebuild();
     else if (staleCheckPending_) {
@@ -665,7 +711,10 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 }
 
 void MixerPanelComponent::resized() {
-    columnMotion_.finishNow(); // its picture is of the old geometry
+    // The column motion's picture is of the viewport as it was: a layout that leaves the viewport where it was (the
+    // rebuild that follows an add, for one) lets it play on; one that moves or resizes it ends the motion.
+    const auto motionArea =
+        columnMotion_.isRunning() ? columnMotion_.overlayComponent()->getBounds() : juce::Rectangle<int>();
     // Same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
     // time this panel lays out, the same staleness window MixerColumnHeader accepts for its own
@@ -684,6 +733,8 @@ void MixerPanelComponent::resized() {
     // the whole column scroll vertically instead of squeezing the sections.
     const int columnHeight = layoutZones(area, contentScrollsVertically());
     placeColumns(columnHeight, /*relayout=*/true);
+    if (columnMotion_.isRunning() && viewport_.getBounds() != motionArea)
+        columnMotion_.finishNow();
 
     toolbar_.refresh();
 }

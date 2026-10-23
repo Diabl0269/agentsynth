@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Mixer/MixerRowsMotion.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -50,6 +51,7 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
                                  juce::AudioProcessorGraph::NodeID sourceNodeId,
                                  juce::AudioProcessorGraph::NodeID stripNodeId) {
     foldAnimation_.stop(vblank_);
+    rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
     animatingSplit_ = -1;
     entries_ = entries;
     linear_ = linear;
@@ -236,8 +238,26 @@ juce::Rectangle<int> MixerInsertList::splitIconBounds(int rowIndex) const {
 // key shows up without a rebuild.
 void MixerInsertList::rebuildBypassButtons() {
     bypassButtons_.clear();
+    showButtons_.clear();
     for (int i = 0; i < (int)visible_.size(); ++i) {
         const auto& entry = entries_[(size_t)visible_[(size_t)i]];
+        if (entry.kind == Kind::Module) {
+            auto show = std::make_unique<TrackShowModuleButton>();
+            show->setTexts("Show " + entry.name + " on canvas",
+                           "Show " + entry.name + " on the canvas: selects its card there and brings it into view");
+            show->onClick = [this, uuid = entry.uuid] {
+                if (onFocusModule)
+                    onFocusModule(uuid);
+            };
+            addAndMakeVisible(*show);
+            showButtons_.push_back(std::move(show));
+        } else {
+            showButtons_.push_back(nullptr);
+        }
+        if (entry.kind == Kind::DryPath) {
+            bypassButtons_.push_back(nullptr); // nothing to bypass: the slot keeps the buttons indexed by row
+            continue;
+        }
         const bool bypassed = entry.kind == Kind::Split ? isSplitBypassed(visible_[(size_t)i]) : entry.bypassed;
         auto button = std::make_unique<MixerIconButton>("mixerInsertBypass");
         button->setIcon(synth::theme::Icon::ModuleBypass);
@@ -311,7 +331,9 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
         // An overlay purely for accessibility -- mouseDown() above still owns every real
         // click via rowIndexAt()/hit-testing on `this`, unchanged.
         proxy->setInterceptsMouseClicks(false, false);
-        if (entry.kind == Kind::Split)
+        if (entry.kind == Kind::DryPath)
+            proxy->setTitle("Path " + juce::String(entry.path + 1) + ": dry, no effects");
+        else if (entry.kind == Kind::Split)
             proxy->setTitle("Split into " + juce::String(entry.pathCount) + " paths, " +
                             (isEntryOpen(entryIndex) ? "open" : "folded") +
                             (isSplitBypassed(entryIndex) ? ", bypassed" : ""));
@@ -370,6 +392,8 @@ juce::String MixerInsertList::describeRow(int rowIndex) const {
     if (entry == nullptr)
         return {};
     const auto prefix = "Insert " + juce::String(rowIndex + 1) + ", ";
+    if (entry->kind == Kind::DryPath)
+        return prefix + "path " + juce::String(entry->path + 1) + ": dry, no effects";
     if (entry->kind == Kind::Split) {
         const int entryIndex = visible_[(size_t)rowIndex];
         return prefix + "split into " + juce::String(entry->pathCount) + " paths, " +
@@ -391,10 +415,13 @@ juce::String MixerInsertList::tooltipAt(juce::Point<int> mouse) const {
     if (isAddRow(row))
         return "Add an effect at the end of this chain";
     if (const auto* entry = entryForRow(row)) {
+        if (entry->kind == Kind::DryPath)
+            return "Path " + juce::String(entry->path + 1) + " is wired straight through: click to add an effect to it";
         if (entry->kind == Kind::Split)
             return splitIconBounds(row).contains(mouse) ? juce::String("Split") : splitTooltip(visible_[(size_t)row]);
-        return entry->name + (isEditable() ? ": right-click to move, remove or add an insert"
-                                           : ": a branching chain, edit it on the canvas");
+        return entry->name + (isEditable()
+                                  ? ": drag to reorder, double-click to show it on the canvas, right-click for more"
+                                  : ": a branching chain, edit it on the canvas");
     }
     if (!isEditable())
         return "A branching chain: edit it on the canvas";
@@ -402,6 +429,10 @@ juce::String MixerInsertList::tooltipAt(juce::Point<int> mouse) const {
 }
 
 int MixerInsertList::getPreferredHeight() const noexcept { return contentHeight(); }
+
+int MixerInsertList::rowButtonsWidth(const synth::MixerInsertEntry& entry) const noexcept {
+    return entry.kind == Kind::Module ? kBypassWidth + kShowWidth : kBypassWidth;
+}
 
 int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
     if (position.y < 0)
@@ -419,57 +450,73 @@ int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
 
 // ---- Paint -----------------------------------------------------------------------------------------------------
 
-void MixerInsertList::paint(juce::Graphics& g) {
+// One row, drawn at its place in the drag (its static slot when nothing is being reordered).
+void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
     const auto& theme = synth::theme::themeOf(*this);
     const auto text = theme.colors.textPrimary;
     const auto muted = theme.colors.textMuted;
     const auto disabled = theme.colors.textDisabled;
-    const auto accent = theme.colors.accent;
+    const int entryIndex = visible_[(size_t)i];
+    const auto& entry = entries_[(size_t)entryIndex];
+    const auto row = drawBounds(i);
+    if (row.getHeight() <= 0)
+        return;
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(row);
+    // A growing row reveals from the top: lay it out at full height and let the clip show what fits.
+    auto full = row.withHeight(kRowHeight);
+    paintReorderLift(g, full.toFloat(), lift, theme.colors.surfaceHi, theme.colors.accent);
+    for (int level = 1; level <= entry.depth; ++level) {
+        // One rail per level, in the colour of the path this row sits on at that level.
+        int path = entry.path;
+        if (level < entry.depth)
+            for (int j = entryIndex - 1; j >= 0; --j)
+                if (entries_[(size_t)j].depth == level) {
+                    path = entries_[(size_t)j].path;
+                    break;
+                }
+        g.setColour(pathColour(theme, path).withAlpha(0.6f));
+        g.fillRect(2 + (level - 1) * kIndent + 4, full.getY(), 2, kRowHeight);
+    }
+    auto content = full.withTrimmedLeft(2 + entry.depth * kIndent).withTrimmedRight(rowButtonsWidth(entry));
+    if (entry.kind == Kind::Split) {
+        const float openness = entryIndex == animatingSplit_ ? animatingAmount_ : (isEntryOpen(entryIndex) ? 1.f : 0.f);
+        auto arrow = content.removeFromLeft(kArrowWidth).toFloat().withSizeKeepingCentre(7.0f, 7.0f);
+        synth::theme::paintDisclosureChevron(g, arrow, openness, theme, false);
+        auto iconArea = content.removeFromLeft(kSplitIconWidth).toFloat().reduced(1.0f, 2.0f);
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        if (const auto* icon = lf != nullptr ? lf->peekIcon(synth::theme::Icon::MixerSplit) : nullptr)
+            icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred, 1.0f);
+        g.setColour(isSplitBypassed(entryIndex) ? disabled : text);
+        g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+    } else if (entry.kind == Kind::DryPath) {
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
+        g.drawText(entry.name, content.withTrimmedLeft(kArrowWidth).reduced(2, 0), juce::Justification::centredLeft,
+                   true);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
+    } else {
+        g.setColour(entry.bypassed ? disabled : text);
+        g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+    }
+}
+
+void MixerInsertList::paint(juce::Graphics& g) {
+    const auto& theme = synth::theme::themeOf(*this);
 
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     if (visible_.empty() && !hasAddRow()) {
-        g.setColour(muted);
+        g.setColour(theme.colors.textMuted);
         g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft, true);
     }
-    for (int i = 0; i < (int)visible_.size(); ++i) {
-        const int entryIndex = visible_[(size_t)i];
-        const auto& entry = entries_[(size_t)entryIndex];
-        const auto row = getRowBounds(i);
-        if (row.getHeight() <= 0)
-            continue;
-        juce::Graphics::ScopedSaveState clip(g);
-        g.reduceClipRegion(row);
-        // A growing row reveals from the top: lay it out at full height and let the clip show what fits.
-        auto full = row.withHeight(kRowHeight);
-        for (int level = 1; level <= entry.depth; ++level) {
-            // One rail per level, in the colour of the path this row sits on at that level.
-            int path = entry.path;
-            if (level < entry.depth)
-                for (int j = entryIndex - 1; j >= 0; --j)
-                    if (entries_[(size_t)j].depth == level) {
-                        path = entries_[(size_t)j].path;
-                        break;
-                    }
-            g.setColour(pathColour(theme, path).withAlpha(0.6f));
-            g.fillRect(2 + (level - 1) * kIndent + 4, full.getY(), 2, kRowHeight);
-        }
-        auto content = full.withTrimmedLeft(2 + entry.depth * kIndent).withTrimmedRight(kBypassWidth);
-        if (entry.kind == Kind::Split) {
-            const float openness =
-                entryIndex == animatingSplit_ ? animatingAmount_ : (isEntryOpen(entryIndex) ? 1.f : 0.f);
-            auto arrow = content.removeFromLeft(kArrowWidth).toFloat().withSizeKeepingCentre(7.0f, 7.0f);
-            synth::theme::paintDisclosureChevron(g, arrow, openness, theme, false);
-            auto iconArea = content.removeFromLeft(kSplitIconWidth).toFloat().reduced(1.0f, 2.0f);
-            auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-            if (const auto* icon = lf != nullptr ? lf->peekIcon(synth::theme::Icon::MixerSplit) : nullptr)
-                icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred, 1.0f);
-            g.setColour(isSplitBypassed(entryIndex) ? disabled : text);
-            g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
-        } else {
-            g.setColour(entry.bypassed ? disabled : text);
-            g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
-        }
-    }
+    // The lifted row is drawn last, so it sits over the rows gliding past it.
+    const int lifted = liftedRow();
+    for (int i = 0; i < (int)visible_.size(); ++i)
+        if (i != lifted)
+            paintRow(g, i, 0.0f);
+    if (lifted >= 0)
+        paintRow(g, lifted, rowDrag_.animator().getLift());
+    const auto accent = theme.colors.accent;
     if (hasAddRow()) {
         g.setColour(accent);
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -489,14 +536,31 @@ void MixerInsertList::paint(juce::Graphics& g) {
     }
 }
 
-void MixerInsertList::resized() {
+void MixerInsertList::resized() { placeRows(); }
+
+// Every proxy and bypass button follows its row's drawn place, so a lifted row carries its controls along. Runs on
+// each frame of a drag: a setBounds to the same bounds is free.
+void MixerInsertList::placeRows() {
     for (int i = 0; i < (int)rowProxies_.size(); ++i)
-        rowProxies_[(size_t)i]->setBounds(getRowBounds(i)); // the last one is "+ Insert" when there is one
+        rowProxies_[(size_t)i]->setBounds(drawBounds(i)); // the last one is "+ Insert" when there is one
+    const int lifted = liftedRow();
     for (int i = 0; i < (int)bypassButtons_.size(); ++i) {
-        const auto row = getRowBounds(i);
+        if (bypassButtons_[(size_t)i] == nullptr)
+            continue;
+        const auto row = drawBounds(i);
         bypassButtons_[(size_t)i]->setBounds(row.withHeight(kRowHeight).removeFromRight(kBypassWidth).reduced(1));
         bypassButtons_[(size_t)i]->setVisible(row.getHeight() >= kRowHeight / 2);
+        if (i == lifted)
+            bypassButtons_[(size_t)i]->toFront(false);
+        if (auto* show = showButtons_[(size_t)i].get()) {
+            show->setBounds(
+                row.withHeight(kRowHeight).withTrimmedRight(kBypassWidth).removeFromRight(kShowWidth).reduced(0, 1));
+            show->setVisible(row.getHeight() >= kRowHeight / 2);
+            if (i == lifted)
+                show->toFront(false);
+        }
     }
+    repaint();
 }
 
 } // namespace synth::ui

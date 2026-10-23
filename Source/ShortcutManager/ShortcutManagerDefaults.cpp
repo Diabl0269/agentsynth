@@ -522,6 +522,10 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
     // Bare B bypasses the focused send or insert row; it is only read while a row holds the panel's row focus.
     bindings["mixerToggleRowBypass"] = juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0);
+    // Alt+Up / Alt+Down move the focused row one place within its list (the zones pane's own Alt+Up/Down is a
+    // different focus region, so the two never meet).
+    bindings["mixerMoveRowUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0);
+    bindings["mixerMoveRowDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0);
 }
 
 // The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it

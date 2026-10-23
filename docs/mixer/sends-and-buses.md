@@ -110,6 +110,10 @@ jack, its mixer row and its `sendNLevel` parameter always agree.
 
 ## Reordering sends
 
+A send row is reordered by dragging its name, or with the focused row's **Alt+Up / Alt+Down** (`mixerMoveRowUp` /
+`mixerMoveRowDown`, rebindable); focus follows the row. Each row's target menu (a click on its name) also has a "Show <bus> on canvas" item that centres the
+target bus's module ([edit on canvas](edit-on-canvas.md#insert-and-send-rows)).
+
 **FRO296: reordering swaps the REAL slots, not a display-only order on top of them** — the user wants
 "Send 1" to always be the TOP ROW everywhere (the knob's title, a lane's name, the target menu), so
 dragging a row to a new position is `synth::swapSends`/`synth::moveSendRow`

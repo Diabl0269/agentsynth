@@ -220,6 +220,14 @@ Settings window's strip both do):
 - **Tests** deliver the key through the listener-then-`keyPressed` walk with a text field as the starting
   point (`Tests/UI/Settings/SettingsWindowTabKeysTests.cpp`).
 
+## Space on a focused button
+
+`juce::Button` presses on Return only. Registering Space with `addShortcut` fires the click from `keyStateChanged` and
+leaves `keyPressed` unconsumed, so the key also bubbled to the window's Space command (play/stop). A focusable button
+that should answer Space derives from `SpaceClaimingButton<Base>` (`Layout/SpaceClaimingButton.h`): Space presses it
+once and is consumed, even on a disabled button. `Tests/UI/Mixer/MixerSpaceKeyTests.cpp` walks every focusable button
+of a real mixer panel, so a new one joins the check by existing.
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module

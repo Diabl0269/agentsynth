@@ -283,26 +283,24 @@ every surface that animates a delete:
   with it, so its column shrinks away in step with the row (exit 180 ms, then the gap), and Cmd+Z makes room, grows it
   back and fades the outline beside the row. Adding or duplicating a track (Cmd+D, the row menu, the strip menu's
   "Duplicate Track") runs it forward, no outline: rows and columns after make room, then the new ones grow out of
-  nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` / `armColumnInsertMotion`). A change that moves a
-  column without adding or removing one lands at once. A column's insert and send rows move the same way when one is added or removed ([row motion](../mixer/row-motion.md)).
-  The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`,
-  pure) and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in
-  its final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the
-  timeline ends, so the restored row or column keeps its focus and title. The picture of a list that loses a row is
-  taken BEFORE the change (`TimelinePanelComponent::noteTracksLeaving`, `MixerPanelComponent::noteColumnsLeaving`, called
-  by `MainComponent::deleteTrack` and, for an undo or redo that drops a track, by `AppUndoManager::setTrackListHooks`
-  from the timeline snapshot action); a list that regains a row is pictured after the change. `finishTrackListChange` /
-  `finishColumnChange` start the motion once the change and its rebuilds have landed. Only the scrolling group of the mixer
-  moves (a pinned column lands at once), and a change that adds and removes at once, or happens with the piano roll open,
-  lands at once. Deleting a track also takes its macro and the modules only it used off the canvas (`MainComponent::deleteTrack`
-  opens a `CardGlideAnimator::Scope` around the one undo step), so the row, the mixer column, the macro card and the cards
-  leave together by the same exit and gap phases, and Cmd+Z grows them all back together. Reduce Motion is the plain fade; Animations Off and an off-screen panel are instant. Tests force the
-  motion with `TimelinePanelComponent::forceTrackGlideForTest` / `MixerPanelComponent::forceColumnMotionForTest` and
-  step `applyAtMs`.
-- **Mod dot panel rows** use the same numbers on real rows: a removed source's row shrinks toward its centre (180 ms),
-  then the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that
-  appears after an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds
-  just grows in (160 ms, no outline). See the "Mod-dot panel" row below.
+  nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` for the rows). The mixer arms nothing: each panel sees a column come or go in
+  its own rebuild ([column motion](../mixer/row-motion.md#column-motion)), as do its insert and send rows.
+  The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`, pure)
+  and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in its
+  final state; the overlay takes no mouse, no keyboard focus and is hidden from accessibility, and goes when the timeline
+  ends, so the restored row or column keeps its focus and title. The picture of a list that loses a row is taken BEFORE the
+  change (`TimelinePanelComponent::noteTracksLeaving`, `MixerPanelComponent::noteColumnsLeaving`, called by
+  `MainComponent::deleteTrack`, by `AppUndoManager::setTrackListHooks` and, for the mixer, at the top of its rebuild); a
+  list that regains a row is pictured after the change. `finishTrackListChange` / `finishColumnChange` start the motion once
+  the change and its rebuilds have landed. A change with the piano roll open lands at once. Deleting a track also takes its
+  macro and the modules only it used off the canvas (`MainComponent::deleteTrack` opens a `CardGlideAnimator::Scope` around
+  the one undo step), so the row, the mixer column, the macro card and the cards leave together by the same exit and gap
+  phases, and Cmd+Z grows them all back together. Reduce Motion is the plain fade; Animations Off and an off-screen panel
+  are instant.
+- **Mod dot panel rows** use the same numbers on real rows: a removed source's row shrinks toward its centre (180 ms), then
+  the rows below close the gap (200 ms); an undo opens the gap, grows the row back and outlines it. A row that appears after
+  an undo or redo (`AppUndoManager::getRestoreSerial` moved) is the restored kind; a source the user adds just grows in (160
+  ms, no outline).
 - **Gap closing and neighbours returning** ([layout rule](layout.md#making-room-when-something-grows), "Deleting a
   card"): the cards that close the hole in an open macro, and the neighbours that return to where a deleted card had
   pushed them, move in the gap phase as ordinary `CardGlideAnimator` glides, after the exit. Cmd+Z reverses them in its
@@ -939,6 +937,8 @@ a duration:
 restarts on every zoom event — the restart-on-event IS the debounce — and its `onUpdate` is a no-op,
 so it fires zero repaints of its own. Only `onComplete` does one-time work, thawing the raster
 freeze.
+
+**A stalled frame does not skip the motion:** `AnimationDriver` moves a frame over 80 ms late by one frame and re-launches the rest.
 
 Never add:
 

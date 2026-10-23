@@ -2,6 +2,7 @@
 
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
 #include <array>
 #include <functional>
@@ -51,12 +52,12 @@ private:
     MixerSectionLayout* layout_ = nullptr;
     SidePaneToggleButton paneButton_;
     juce::Button* dockBack_ = nullptr; // borrowed; a child while set
-    std::array<juce::DrawableButton, MixerSectionLayout::kSectionCount> toggles_{
-        juce::DrawableButton("Inserts", juce::DrawableButton::ImageAboveTextLabel),
-        juce::DrawableButton("Sends", juce::DrawableButton::ImageAboveTextLabel),
-        juce::DrawableButton("EQ", juce::DrawableButton::ImageAboveTextLabel)};
-    juce::TextButton resetMetersButton_{"Reset Meters"};
-    juce::TextButton addBusButton_{"+ Bus"};
+    std::array<SpaceClaimingButton<juce::DrawableButton>, MixerSectionLayout::kSectionCount> toggles_{
+        SpaceClaimingButton<juce::DrawableButton>("Inserts", juce::DrawableButton::ImageAboveTextLabel),
+        SpaceClaimingButton<juce::DrawableButton>("Sends", juce::DrawableButton::ImageAboveTextLabel),
+        SpaceClaimingButton<juce::DrawableButton>("EQ", juce::DrawableButton::ImageAboveTextLabel)};
+    SpaceClaimingButton<juce::TextButton> resetMetersButton_{"Reset Meters"};
+    SpaceClaimingButton<juce::TextButton> addBusButton_{"+ Bus"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanelToolbar)
 };

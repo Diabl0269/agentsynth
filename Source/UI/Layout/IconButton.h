@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Theme/IconGlyphs.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -10,7 +11,7 @@ namespace synth::ui {
 // Hover, press, focus ring and colours are defined once, in AppLookAndFeel::drawIconButton; this
 // class only carries the state they read. Call sites keep their own title, tooltip, description,
 // component ID and focus policy: the button never sets any of them.
-class IconButton : public juce::Button {
+class IconButton : public SpaceClaimingButton<juce::Button> {
 public:
     // Framed: surface fill and border (a transport button). Bare: no background until hovered (a
     // toolbar or row icon). Round: circular hover wash (a popover header icon). Danger: red hover

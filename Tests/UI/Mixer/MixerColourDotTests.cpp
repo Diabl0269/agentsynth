@@ -58,10 +58,8 @@ TEST(MixerColourDotTest, TheDotIsANamedKeyboardReachableButtonWithATooltip) {
 }
 
 TEST(MixerColourDotTest, TheDotAlsoActsOnSpace) {
-    // juce::Button reacts to Space through keyStateChanged against the physical key state, which a test cannot press;
-    // the registered shortcut is what makes Space count.
     HeaderRig rig;
-    EXPECT_TRUE(rig.firstColumn().getHeaderForTest().getColourDotForTest().isRegisteredForShortcut(
+    EXPECT_TRUE(rig.firstColumn().getHeaderForTest().getColourDotForTest().keyPressed(
         juce::KeyPress(juce::KeyPress::spaceKey)));
 }
 
