@@ -103,6 +103,8 @@ int SamplerChrome::layout(int y, int contentX, int contentW, int narrowX, int na
 
 void SamplerChrome::poll() {
     row_.poll(); // follows an instrument that changed behind our back (undo, a project load, a restore that failed)
+    if (sampler_.getSampleGeneration() != shownSampleGeneration_)
+        refreshSampleLabel(); // an undo or redo swaps the sample in place, without a rebuild of the card
     if (strip_.isVisible())
         strip_.poll();
     if (mapView_ != nullptr)
@@ -116,6 +118,7 @@ void SamplerChrome::refreshLoaded() {
 
 void SamplerChrome::refreshSampleLabel(const juce::String& fallbackMessage) {
     const juce::String name = sampler_.getSampleName();
+    shownSampleGeneration_ = sampler_.getSampleGeneration();
     nameLabel_.setText(fallbackMessage.isNotEmpty() ? fallbackMessage
                                                     : (name.isEmpty() ? juce::String("(no sample)") : name),
                        juce::dontSendNotification);

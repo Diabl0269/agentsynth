@@ -67,6 +67,21 @@ TEST(ModuleComponentSoundDropTest, ADraggedSoundReplacesTheSampleTheSameWay) {
     EXPECT_FALSE(s.canvas.undo.undo()) << "exactly one step";
 }
 
+TEST(ModuleComponentSoundDropTest, TheSampleNameFollowsAnUndoAndARedo) {
+    SamplerScene s;
+    s.card().filesDropped({s.second.getFullPathName()}, 10, 10);
+    const auto label = [&s] {
+        auto* chrome = dynamic_cast<synth::ui::SamplerChrome*>(s.canvas.card(s.id)->getInstrumentChrome());
+        chrome->poll();
+        return chrome->getSampleNameLabel().getText();
+    };
+    EXPECT_EQ(label(), "second.wav");
+    ASSERT_TRUE(s.canvas.undo.undo());
+    EXPECT_EQ(label(), "first.wav") << "the card names the sample the undo put back";
+    ASSERT_TRUE(s.canvas.undo.redo());
+    EXPECT_EQ(label(), "second.wav");
+}
+
 TEST(ModuleComponentSoundDropTest, OnlyACardThatTakesTheFileTakesTheSound) {
     SamplerScene s;
     const auto osc = s.canvas.add(std::make_unique<OscillatorModule>(), 600, 0);

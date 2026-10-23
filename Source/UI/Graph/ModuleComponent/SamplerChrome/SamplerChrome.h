@@ -32,7 +32,7 @@ public:
 
     /** Places both sets of components from `y` (the card's content origin) and returns the y below the chrome. */
     int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) override;
-    /** The card's gated tick: follows the instrument and lights the sounding notes. */
+    /** The card's gated tick: follows the instrument and the sample name, and lights the sounding notes. */
     void poll() override;
     /** Re-reads the sample name and the instrument (after a project's deferred loads landed). */
     void refreshLoaded() override;
@@ -103,6 +103,7 @@ private:
     std::unique_ptr<juce::ParameterAttachment> modeAttachment_;
     std::unique_ptr<juce::FileChooser> chooser_;
     int dragFileCount_ = 0;
+    int shownSampleGeneration_ = -1;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerChrome)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerChrome)
