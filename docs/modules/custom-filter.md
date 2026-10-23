@@ -232,8 +232,8 @@ transport and panel shortcuts) is handed to the main window, which performs it a
 commands (copy, paste, select all, ...) are never handed over. Left a large
 [morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
 editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
-blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Delete** (one shape always
-stays), **Rename**, **Start from** and **Draw**. The bottom bar holds the [per-note settings](#per-note-cursors)
+blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Rename**, **Start from** and **Draw**,
+and, alone at the right end of the row and in the theme's error red, **Delete** (one shape always stays). The bottom bar holds the [per-note settings](#per-note-cursors)
 beside **Done** (`PerNoteBar`, shown when the adapter has them): **Notes move the cursor** (a segmented switch: Off,
 By hand, By pitch, Random), **Smoothness** (a slider from Hard to Smooth; its value reads "Hard" or "125 ms
 glide") and, under them, for By hand only, the key strip (`NoteKeyStrip`): an octave and a half of keys (C to F)
@@ -269,17 +269,22 @@ slider drag is one undo step (the settings are part of the module's extra state)
 ## Morph map
 
 One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
-drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), click
+drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), double-click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
-points), double-click a dot (or press Return on it) to open the editor on it, right-click a dot for Edit, Duplicate,
-Rename and Delete. Delete on a focused dot removes it and focuses the next dot; the last shape never goes. On a
+points; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),
+double-click a dot to delete it, press Return on a dot (or choose Edit in its right-click menu, which also has Duplicate,
+Rename and Delete) to open the editor on it. Delete on a focused dot removes it and focuses the next dot; the last shape
+never goes, by any of these routes. A dot that is added (or brought back by an undo) grows in with the 8% bounce over
+200 ms and a removed one shrinks out over 180 ms (`MorphMap.cpp`, dots keyed by name, one `AnimationDriver`); Reduce
+Motion makes both an 80 ms fade and Animations: Off lands at once. Pressing a dot or the cursor off its centre keeps the
+offset between pointer and centre, so it never jumps under the pointer. On a
 focused dot, the cursor or a slider an arrow moves it one step (Shift: a bigger one) and, held, glides it on:
 slowly at first (about 0.15 map units a second), faster the longer it is held (about 1.2 a second after two seconds),
 Shift faster still; two arrows held move it diagonally, a slider moves only along its own axis, and the whole hold is
 one gesture and one undo step. The curve is the timeline cursor's (`synth::CursorGlide`); the map's own model is
 `MorphMapGlide`, driven by a frame pump that runs only while an arrow is down. A refresh of the map (every key
 step causes one) keeps the dot stops it has, so the focused dot stays focused. Tooltips: "<name> - drag to move,
-double-click to edit", "Morph cursor - drag to blend shapes". Two sliders hugging the map set Morph X and Y alone. Keys and focus order are in
+double-click to delete, Return to edit", "Morph cursor - drag to blend shapes". Two sliders hugging the map set Morph X and Y alone. Keys and focus order are in
 [visualizers.md](../layout/visualizers.md#morphmap).
 
 ## Card

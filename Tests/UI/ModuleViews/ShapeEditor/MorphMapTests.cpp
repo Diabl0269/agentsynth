@@ -4,6 +4,7 @@
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/MorphMap/MorphMapGlide.h"
 #include "UI/ModuleViews/MorphMap/MorphMapPalette.h"
@@ -40,6 +41,28 @@ void click(MorphMap& map, juce::Point<float> at) {
     map.mouseDown(curveLeftClick(map, at));
     map.mouseUp(curveLeftClick(map, at));
 }
+
+void doubleClick(MorphMap& map, juce::Point<float> at) {
+    map.mouseDown(curveLeftClick(map, at));
+    map.mouseUp(curveLeftClick(map, at));
+    map.mouseDown(curveLeftClick(map, at));
+    map.mouseDoubleClick(curveDoubleClick(map, at));
+    map.mouseUp(curveLeftClick(map, at));
+}
+
+/** Runs a test body with the animation mode set, and restores it. */
+struct ModeScope {
+    explicit ModeScope(AnimationMode mode)
+        : saved(animationMode()) {
+        setAnimationMode(mode);
+        MorphMap::setAnimateOffScreenForTest(true);
+    }
+    ~ModeScope() {
+        MorphMap::setAnimateOffScreenForTest(false);
+        setAnimationMode(saved);
+    }
+    AnimationMode saved;
+};
 
 } // namespace
 
@@ -80,11 +103,18 @@ TEST(MorphMap, DraggingTheCursorSetsMorphXAndYInOneHostGestureAndOneUndoStep) {
     EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
 }
 
-TEST(MorphMap, ClickingEmptySpaceAddsAShapeThatCopiesTheCurrentBlend) {
+TEST(MorphMap, ASingleClickOnEmptySpaceAddsNothing) {
+    MapRig rig;
+    click(rig.map, rig.map.toPixels(0.9f, 0.9f));
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 3u);
+    EXPECT_EQ(rig.undo.getEditSerial(), 0);
+}
+
+TEST(MorphMap, DoubleClickingEmptySpaceAddsAShapeThatCopiesTheCurrentBlend) {
     MapRig rig;
     const auto at = rig.map.toPixels(0.9f, 0.9f);
 
-    click(rig.map, at);
+    doubleClick(rig.map, at);
 
     const auto& shapes = rig.filter->getCustomShapes().shapes;
     ASSERT_EQ(shapes.size(), 4u);
@@ -169,12 +199,13 @@ TEST(MorphMap, DeleteInTheMenuIsDisabledOnTheLastShape) {
     EXPECT_FALSE(rig.menu.isEnabled("Delete"));
 }
 
-TEST(MorphMap, DoubleClickOnADotAndReturnOnAFocusedDotAskToEditIt) {
+TEST(MorphMap, ReturnOnAFocusedDotAndTheMenusEditAskToEditIt) {
     MapRig rig;
     int edited = -1;
     rig.controller.onEdit = [&](int i) { edited = i; };
 
-    rig.map.mouseDoubleClick(curveDoubleClick(rig.map, rig.map.getDotCentre(2)));
+    rig.map.showDotMenu(2);
+    ASSERT_TRUE(rig.menu.run("Edit"));
     EXPECT_EQ(edited, 2);
 
     edited = -1;
@@ -236,7 +267,8 @@ TEST(MorphMap, StopsAreNamedWithTheirValuesAndTooltipped) {
     EXPECT_EQ(rig.map.getCursorStop()->getTitle(), "Morph cursor, X 0.52, Y 0.50");
 
     EXPECT_EQ(rig.map.tooltipAt(rig.map.getCursorCentre().roundToInt()), "Morph cursor - drag to blend shapes");
-    EXPECT_EQ(rig.map.tooltipAt(rig.map.getDotCentre(1).roundToInt()), "ee - drag to move, double-click to edit");
+    EXPECT_EQ(rig.map.tooltipAt(rig.map.getDotCentre(1).roundToInt()),
+              "ee - drag to move, double-click to delete, Return to edit");
     EXPECT_TRUE(rig.map.tooltipAt(rig.map.toPixels(0.95f, 0.05f).roundToInt()).startsWith("Morph map"));
     EXPECT_EQ(rig.map.getTitle(), "Morph map");
     for (auto* c : {rig.map.getDotStop(0), rig.map.getDotStop(1), rig.map.getCursorStop()}) {
@@ -704,4 +736,124 @@ TEST(MorphMapGlide, ALostKeyUpIsSeenByTheFramePoll) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_FALSE(map.isGliding());
     EXPECT_EQ(g.ends, 1);
+}
+
+TEST(MorphMap, DoubleClickingADotDeletesItAsOneUndoStep) {
+    MapRig rig;
+    const int serial = rig.undo.getEditSerial();
+
+    doubleClick(rig.map, rig.map.getDotCentre(1));
+
+    ASSERT_EQ(rig.filter->getCustomShapes().shapes.size(), 2u);
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[1].name, "oo");
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+    rig.undo.undo();
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 3u);
+}
+
+TEST(MorphMap, DoubleClickingTheLastRemainingDotDoesNothing) {
+    MapRig rig;
+    rig.controller.deleteShape(0);
+    rig.controller.deleteShape(0);
+    ASSERT_EQ(rig.map.getNumDots(), 1);
+    const int serial = rig.undo.getEditSerial();
+
+    doubleClick(rig.map, rig.map.getDotCentre(0));
+
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 1u);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial);
+}
+
+TEST(MorphMap, TheDotMenuStillOffersEdit) {
+    MapRig rig;
+    rig.map.showDotMenu(0);
+    ASSERT_FALSE(rig.menu.items.empty());
+    EXPECT_EQ(rig.menu.items.front(), "Edit");
+}
+
+// Regression test for FRO1057: Backspace right after adding a dot did nothing because focus stayed on the map.
+TEST(MorphMapKeyboard, BackspaceRightAfterDoubleClickAddingADotRemovesThatDot) {
+    ShownEditor shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    map.grabKeyboardFocus();
+
+    doubleClick(map, map.toPixels(0.9f, 0.9f));
+
+    ASSERT_EQ(map.getNumDots(), 4);
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    ASSERT_EQ(focused, map.getDotStop(3));
+    EXPECT_TRUE(focused->keyPressed(key(juce::KeyPress::backspaceKey)));
+    EXPECT_EQ(map.getNumDots(), 3);
+}
+
+// Regression test for FRO1057: dots appeared and vanished with no motion.
+TEST(MorphMapMotion, AnAddedDotGrowsInThroughIntermediateScalesAndSettlesAtOne) {
+    ModeScope mode(AnimationMode::full);
+    MapRig rig;
+    doubleClick(rig.map, rig.map.toPixels(0.9f, 0.9f));
+    ASSERT_EQ(rig.map.getNumDots(), 4);
+
+    rig.map.stepMotionForTest(0.0);
+    EXPECT_LT(rig.map.getDotScale(3), 0.1f);
+    rig.map.stepMotionForTest(60.0);
+    const float early = rig.map.getDotScale(3);
+    rig.map.stepMotionForTest(120.0);
+    const float later = rig.map.getDotScale(3);
+    EXPECT_GT(early, 0.0f);
+    EXPECT_NE(early, later);
+    EXPECT_FLOAT_EQ(rig.map.getDotScale(0), 1.0f) << "dots that were there stay at full size";
+    rig.map.stepMotionForTest(300.0);
+    EXPECT_FLOAT_EQ(rig.map.getDotScale(3), 1.0f);
+    EXPECT_FALSE(rig.map.isMoving());
+}
+
+TEST(MorphMapMotion, ARemovedDotShrinksOutOverTimeThenIsGone) {
+    ModeScope mode(AnimationMode::full);
+    MapRig rig;
+    rig.controller.deleteShape(1);
+    ASSERT_EQ(rig.map.getNumDots(), 2);
+    EXPECT_EQ(rig.map.getNumLeavingDots(), 1);
+
+    rig.map.stepMotionForTest(0.0);
+    rig.map.stepMotionForTest(90.0);
+    EXPECT_EQ(rig.map.getNumLeavingDots(), 1);
+    rig.map.stepMotionForTest(300.0);
+    EXPECT_EQ(rig.map.getNumLeavingDots(), 0);
+}
+
+TEST(MorphMapMotion, UndoingADeleteGrowsTheSameDotBack) {
+    ModeScope mode(AnimationMode::full);
+    MapRig rig;
+    rig.controller.deleteShape(1);
+    rig.map.stepMotionForTest(300.0);
+    rig.undo.undo();
+    rig.controller.refresh();
+    ASSERT_EQ(rig.map.getNumDots(), 3);
+    rig.map.stepMotionForTest(0.0);
+    rig.map.stepMotionForTest(40.0);
+    EXPECT_LT(rig.map.getDotScale(1), 1.0f);
+    EXPECT_GT(rig.map.getDotScale(1), 0.0f);
+}
+
+TEST(MorphMapMotion, ReduceMotionKeepsScalePlainAndFadesInstead) {
+    ModeScope mode(AnimationMode::reduced);
+    MapRig rig;
+    doubleClick(rig.map, rig.map.toPixels(0.9f, 0.9f));
+    rig.map.stepMotionForTest(0.0);
+    rig.map.stepMotionForTest(40.0);
+    EXPECT_FLOAT_EQ(rig.map.getDotScale(3), 1.0f);
+    EXPECT_GT(rig.map.getDotAlpha(3), 0.0f);
+    EXPECT_LT(rig.map.getDotAlpha(3), 1.0f);
+}
+
+TEST(MorphMapMotion, AnimationsOffLandsAtOnce) {
+    ModeScope mode(AnimationMode::off);
+    MapRig rig;
+    doubleClick(rig.map, rig.map.toPixels(0.9f, 0.9f));
+    EXPECT_FALSE(rig.map.isMoving());
+    EXPECT_FLOAT_EQ(rig.map.getDotScale(3), 1.0f);
+    rig.controller.deleteShape(3);
+    EXPECT_EQ(rig.map.getNumLeavingDots(), 0);
 }

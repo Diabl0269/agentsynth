@@ -3,6 +3,7 @@
 #include "MorphMap.h"
 #include "MorphMapPalette.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -34,20 +35,34 @@ void MorphMap::paint(juce::Graphics& g) {
     for (int i = 0; i < (int)dots_.size(); ++i) {
         const auto c = getDotCentre(i);
         const auto colour = morphShapeColour(colors, i);
+        const float scale = getDotScale(i);
+        const float alpha = getDotAlpha(i);
+        const float r = kDotRadius * scale;
         if (i == selected_) {
-            g.setColour(colors.textPrimary.withAlpha(0.9f));
-            g.drawEllipse(c.x - kDotRadius - 3.0f, c.y - kDotRadius - 3.0f, (kDotRadius + 3.0f) * 2.0f,
-                          (kDotRadius + 3.0f) * 2.0f, 1.5f);
+            g.setColour(colors.textPrimary.withAlpha(0.9f * alpha));
+            g.drawEllipse(c.x - (kDotRadius + 3.0f) * scale, c.y - (kDotRadius + 3.0f) * scale,
+                          (kDotRadius + 3.0f) * 2.0f * scale, (kDotRadius + 3.0f) * 2.0f * scale, 1.5f);
         }
-        g.setColour(colour);
-        g.fillEllipse(c.x - kDotRadius, c.y - kDotRadius, kDotRadius * 2.0f, kDotRadius * 2.0f);
+        g.setColour(colour.withMultipliedAlpha(alpha));
+        g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
         if (showLabels_ && dots_[(size_t)i].name.isNotEmpty()) {
-            g.setColour(colors.textMuted);
+            g.setColour(colors.textMuted.withMultipliedAlpha(alpha * juce::jlimit(0.0f, 1.0f, scale)));
             const bool leftSide = c.x > getWidth() * 0.65f;
             const auto textArea = juce::Rectangle<float>(72.0f, 14.0f).withCentre({c.x, c.y - 14.0f});
             g.drawText(dots_[(size_t)i].name, textArea.withX(leftSide ? c.x - 76.0f : c.x + 4.0f).toNearestInt(),
                        leftSide ? juce::Justification::centredRight : juce::Justification::centredLeft, true);
         }
+    }
+
+    for (const auto& m : motions_) {
+        if (!m.leaving)
+            continue;
+        const auto c = toPixels(m.dot.x, m.dot.y);
+        const float scale = motionReduced_ ? 1.0f : control_motion::shrinkScale(m.progress);
+        const float alpha = motionReduced_ ? 1.0f - easeInCubic(m.progress) : 1.0f;
+        const float r = kDotRadius * scale;
+        g.setColour(morphShapeColour(colors, m.colourIndex).withMultipliedAlpha(alpha));
+        g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
     }
 
     if (cursorVisible_) {
