@@ -198,10 +198,13 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     }
 
     // The panels below fade in and out and take their height in step (blockHeight), so what is under them slides.
-    // With a footer there is no toggle row above a panel, so a gap keeps it off the knob value labels above.
+    // With a footer there is no toggle row above a block, so a gap keeps it off the knob value labels above; a block
+    // under another block already has the gap that block leaves.
+    bool blockAbove = false;
+    const auto gapAfterControls = [&] { return footer && !blockAbove ? synth::cardbody::kPanelGap : 0; };
     if (freqResponseComponent && freqResponseComponent->isVisible()) {
-        if (footer)
-            y += blockHeight(responseFade_, synth::cardbody::kPanelGap);
+        y += blockHeight(responseFade_, gapAfterControls());
+        blockAbove = true;
         if (apply)
             freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
         y += blockHeight(responseFade_, 128);
@@ -214,7 +217,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     }
 
     if (morphCard_ != nullptr)
-        y = morphCard_->layout(y, contentX, contentW, apply);
+        y = morphCard_->layout(y, contentX, contentW, apply, gapAfterControls());
 
     if (scopeToggle && !footer) {
         if (apply)
@@ -223,8 +226,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     }
 
     if (scopeComponent && scopeComponent->isVisible()) {
-        if (footer)
-            y += blockHeight(scopeFade_, synth::cardbody::kPanelGap);
+        y += blockHeight(scopeFade_, gapAfterControls());
         if (apply)
             scopeComponent->setBounds(contentX, y, contentW, blockHeight(scopeFade_, 100));
         y += blockHeight(scopeFade_, 100);

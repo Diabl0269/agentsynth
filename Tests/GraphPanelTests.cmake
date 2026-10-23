@@ -25,4 +25,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelAddConnectionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelMacroCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDimTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardBody/CardBodyOverlapTests.cpp
 )

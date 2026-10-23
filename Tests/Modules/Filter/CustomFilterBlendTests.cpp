@@ -32,17 +32,43 @@ TEST(CustomFilterBlend, ResponseAppliesShiftAndDepthLikeTheKernelDesigner) {
     EXPECT_NEAR(shifted[(size_t)(600 + octave)], plain[600], 0.3f);
 }
 
-TEST(CustomFilterBlend, CurveFromGridSamplesBackToTheRequestedPointCount) {
+TEST(CustomFilterBlend, CurveFromGridKeepsAStraightSlopeToItsTwoEnds) {
     std::vector<float> grid((size_t)kGridSize);
     for (int i = 0; i < kGridSize; ++i)
         grid[(size_t)i] = -24.0f + 24.0f * (float)i / (kGridSize - 1);
     const auto curve = curveFromGridDb(grid, 16);
-    ASSERT_EQ(curve.points.size(), 16u);
+    ASSERT_EQ(curve.points.size(), 2u);
     EXPECT_FLOAT_EQ(curve.points.front().x, 0.0f);
     EXPECT_FLOAT_EQ(curve.points.back().x, 1.0f);
     EXPECT_NEAR(CustomFilterShapes::yToDb(curve.points.front().y), -24.0f, 0.01f);
     EXPECT_NEAR(CustomFilterShapes::yToDb(curve.points.back().y), 0.0f, 0.01f);
     EXPECT_NEAR(CustomFilterShapes::yToDb(curve.evaluate(0.5f)), -12.0f, 0.5f);
+}
+
+TEST(CustomFilterBlend, CurveFromGridKeepsAFlatResponseToItsTwoEnds) {
+    const std::vector<float> grid((size_t)kGridSize, 0.0f);
+    EXPECT_EQ(curveFromGridDb(grid, 16).points.size(), 2u);
+}
+
+TEST(CustomFilterBlend, CurveFromGridAddsPointsOnlyWhereTheStraightLinesMissTheGrid) {
+    std::vector<float> grid((size_t)kGridSize, -6.0f);
+    for (int i = 0; i < kGridSize; ++i) { // a smooth bump of 12 dB
+        const float t = ((float)i / (kGridSize - 1) - 0.5f) * 6.0f;
+        grid[(size_t)i] += 12.0f * std::exp(-t * t);
+    }
+    const auto curve = curveFromGridDb(grid, 16);
+    EXPECT_GT(curve.points.size(), 2u);
+    EXPECT_LT(curve.points.size(), 16u);
+    for (int i = 0; i < kGridSize; ++i)
+        EXPECT_NEAR(CustomFilterShapes::yToDb(curve.evaluate((float)i / (kGridSize - 1))), grid[(size_t)i], 0.6f)
+            << "bin " << i;
+}
+
+TEST(CustomFilterBlend, CurveFromGridNeverExceedsTheRequestedPointCount) {
+    std::vector<float> grid((size_t)kGridSize);
+    for (int i = 0; i < kGridSize; ++i)
+        grid[(size_t)i] = 10.0f * std::sin((float)i * 0.2f);
+    EXPECT_EQ(curveFromGridDb(grid, 8).points.size(), 8u);
 }
 
 TEST(CustomFilterBlend, CurveFromGridClampsIntoTheCurveRange) {

@@ -115,10 +115,11 @@ void MorphShapesCard::poll() {
         map_.setCursor(cursor.x, cursor.y);
 }
 
-int MorphShapesCard::layout(int y, int x, int width, bool apply) {
+int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
     if (!editButton_.isVisible())
         return y;
     const bool settling = *host_.settling;
+    y += blockHeight(editFade_, settling, topGap);
     if (apply) {
         const int w = juce::jmin(width, synth::cardbody::kNarrowContentWidth);
         editButton_.setBounds(x + (width - w) / 2, y, w, blockHeight(editFade_, settling, synth::cardbody::kRowHeight));

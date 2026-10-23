@@ -66,6 +66,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kSectionHeaderHeight` | 18 | a titled section's header row |
 | `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
+| `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
 
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
 out at full `contentX` / `contentW`, flush-left with the knob grid, rather than the centred
