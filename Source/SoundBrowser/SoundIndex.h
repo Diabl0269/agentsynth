@@ -7,6 +7,7 @@
 #include <atomic>
 #include <functional>
 #include <juce_events/juce_events.h>
+#include <map>
 #include <mutex>
 
 namespace synth::soundbrowser {
@@ -34,6 +35,12 @@ public:
     /** The folders searched besides packs; rescans when the list changed. */
     void setUserFolders(const std::vector<juce::File>& folders);
     std::vector<juce::File> userFolders() const;
+    /** The names the user gave folders (path to name; a folder without one keeps its own); shown at once, no scan. */
+    void setUserFolderNames(const std::map<juce::String, juce::String>& names);
+
+    /** Rescans only when a user folder has appeared or vanished since the last scan; true when it started one. A
+     *  no-op before the first scan. Message thread. */
+    bool rescanIfFoldersChanged();
 
     /** Starts (or queues) a background scan; the first one also loads the cache. Message thread. */
     void rescan();
@@ -50,6 +57,9 @@ public:
     /** Blocks until no scan is running or queued; false on timeout. Does not pump the message loop. */
     bool waitUntilIdleForTests(int timeoutMs);
     int headersReadForTests() const { return headersRead_.load(); }
+    /** Runs on the scan thread before each file is looked at, so a test can hold a scan half way. */
+    void setScanHoldForTests(std::function<void(const juce::File&)> hold) { scanHold_ = std::move(hold); }
+    void setProgressIntervalForTests(int ms) { progressIntervalMs_ = ms; }
 
 private:
     class Worker;
@@ -66,6 +76,9 @@ private:
     std::shared_ptr<const SoundSnapshot> snapshot_;
     std::vector<juce::File> userFolders_;
     size_t cap_ = kEntryCap;
+    std::map<juce::String, juce::String> folderNames_;
+    std::function<void(const juce::File&)> scanHold_;
+    int progressIntervalMs_ = 200;
 
     std::atomic<int> headersRead_{0};
     bool cacheLoaded_ = false;

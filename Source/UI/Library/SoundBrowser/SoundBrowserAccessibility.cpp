@@ -47,7 +47,13 @@ juce::String SoundBrowserComponent::getAccessibilityValueText() const {
     case RowKind::Folder:
         return describeFolderForAccessibility(row.text, row.soundCount, position, count);
     case RowKind::Place:
-        return describePlaceForAccessibility(row.text, row.soundCount, position, count);
+        return describePlaceForAccessibility(row.text, row.soundCount, position, count,
+                                             row.missing ? "Not found" : (row.scanning ? "Scanning" : juce::String()));
+    case RowKind::GetPack:
+        return describePackOfferForAccessibility(row.text, synth::soundpacks::formatPackSize(row.bytes), row.busy,
+                                                 position, count);
+    case RowKind::AddFolder:
+        return describeAddFolderForAccessibility(position, count);
     case RowKind::Hint:
         break;
     }

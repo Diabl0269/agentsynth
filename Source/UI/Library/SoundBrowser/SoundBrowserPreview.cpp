@@ -71,9 +71,17 @@ void SoundBrowserComponent::syncFooterToSelection() {
     footer_.showSound(entry);
 }
 
+// Showing the view loads the hosted pack list (for "Get more") when it is not loaded and looks again at the user's
+// folders; hiding it stops the preview. The list loads even before the window is on screen: a view restored at
+// startup turns visible while its window is still hidden and gets no second call when the window appears.
 void SoundBrowserComponent::visibilityChanged() {
-    if (!isVisible())
+    if (!isVisible()) {
         stopPreview();
+        return;
+    }
+    loadPackListIfNeeded();
+    if (isShowing())
+        checkFoldersOnReturn();
 }
 
 } // namespace synth::ui

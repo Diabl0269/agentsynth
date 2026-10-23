@@ -37,7 +37,13 @@ A download is restarted from the beginning after an interruption; HTTP Range res
 
 `SoundPacksSettingsTab` (`Source/UI/Settings/SoundPacks/`) is the last Settings tab. It fetches the list each time the tab is shown. One `SoundPackRow` per pack (hosted packs, then installed packs the list does not know): name, every instrument and the size on one line (elided with an ellipsis when the row is too narrow, and then the full list is that line's tooltip), state, and Download / Cancel (with a bar) / Update / Remove buttons that fade where they stand. Remove asks first. Offline, the line "Couldn't reach the pack list." and a Retry link show while installed packs stay listed. Below the rows, Credits lists every pack (including CC0 ones): credit text, licence, "View licence" and, for an installed pack with `LICENSES/SOURCES.md`, "Show sources".
 
+Under the packs, **Your folders** lists the folders added in the Sounds view (name, path, Remove; "not found" after the path while the drive is gone). Remove forgets the folder and leaves its files alone; the list is the same `SoundFolderBook` the Sounds view edits, so a change in either shows in both ([sound browser](../layout/sound-browser.md#your-folders)).
+
 Accessibility: every button and link is a Tab stop with a name and tooltip naming the pack; a row reads "<pack>, downloading, 42 percent"; the bar's name carries the percentage.
+
+## The Sounds view
+
+The Sounds view lists the packs you have not installed under Places ("Get more") and at the end of matching searches, with a Download button on each ([sound browser](../layout/sound-browser.md#packs-you-do-not-have)). It is one more listener on the same shared installer: its button calls `install` / `cancel`, and its row reads `Row::state` and `progress`, so a download started there shows in Settings > Sound packs with the same percentage, and the reverse. Showing the view calls `refreshIndex()` when the list is not loaded.
 
 ## Song builds and the core instruments
 

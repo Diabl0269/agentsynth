@@ -10,6 +10,9 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserKeyboardReachTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPackOfferTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFolderViewTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFolderBookTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewPlayerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentSoundDropTests.cpp

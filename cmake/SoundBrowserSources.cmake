@@ -2,6 +2,8 @@
 # Part of Core (no UI); their own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/SoundBrowser/SoundEntry.h
+    Source/SoundBrowser/SoundFolderBook.cpp
+    Source/SoundBrowser/SoundFolderBook.h
     Source/SoundBrowser/SoundIndex.cpp
     Source/SoundBrowser/SoundIndex.h
     Source/SoundBrowser/SoundIndexScan.cpp
@@ -33,9 +35,11 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
     Source/UI/Library/SoundBrowser/SoundBrowserDrag.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserFolders.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserNavigation.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserPacks.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPainting.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.cpp
@@ -58,4 +62,6 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundPreviewFooter.h
     Source/UI/Library/SoundBrowser/SoundWaveformView.cpp
     Source/UI/Library/SoundBrowser/SoundWaveformView.h
+    Source/UI/Settings/SoundPacks/SoundFolderRow.cpp
+    Source/UI/Settings/SoundPacks/SoundFolderRow.h
 )

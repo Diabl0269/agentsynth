@@ -66,9 +66,30 @@ juce::String describeFolderForAccessibility(const juce::String& name, int soundC
            juce::String(count);
 }
 
-juce::String describePlaceForAccessibility(const juce::String& name, int soundCount, int position, int count) {
-    return name + ", " + plural(soundCount, "sound", "sounds") + ", " + juce::String(position) + " of " +
-           juce::String(count);
+juce::String describePlaceForAccessibility(const juce::String& name, int soundCount, int position, int count,
+                                           const juce::String& status) {
+    return name + ", " + (status.isNotEmpty() ? status.toLowerCase() : plural(soundCount, "sound", "sounds")) + ", " +
+           juce::String(position) + " of " + juce::String(count);
+}
+
+juce::String describePackOfferForAccessibility(const juce::String& name, const juce::String& size, bool busy,
+                                               int position, int count) {
+    return name + (busy ? ", downloading" : ", not downloaded, " + size + ", press Return to download") + ", " +
+           juce::String(position) + " of " + juce::String(count);
+}
+
+juce::String describeAddFolderForAccessibility(int position, int count) {
+    return "Add folder, press Return to choose a folder, " + juce::String(position) + " of " + juce::String(count);
+}
+
+juce::String fileManagerName() {
+#if JUCE_MAC
+    return "Finder";
+#elif JUCE_WINDOWS
+    return "File Explorer";
+#else
+    return "the file manager";
+#endif
 }
 
 juce::String describePathForAccessibility(const juce::StringArray& parts) {
