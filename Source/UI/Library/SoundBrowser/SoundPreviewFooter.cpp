@@ -26,6 +26,7 @@ SoundPreviewFooter::SoundPreviewFooter() {
 
     using Player = synth::soundbrowser::SoundPreviewPlayer;
     volume_.setTitle("Preview volume");
+    volume_.setWantsKeyboardFocus(true); // juce::Slider turns it off; the volume is a keyboard stop
     volume_.setTooltip("Preview volume, only for previews");
     volume_.setRange(Player::kMinGainDb, Player::kMaxGainDb, 1.0);
     volume_.setValue(Player::kDefaultGainDb, juce::dontSendNotification);

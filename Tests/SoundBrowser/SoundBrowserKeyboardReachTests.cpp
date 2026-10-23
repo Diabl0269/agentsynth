@@ -8,6 +8,7 @@
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
+#include <typeinfo>
 
 using namespace sound_browser_test;
 using synth::ui::SoundBrowserComponent;
@@ -351,4 +352,14 @@ TEST(SoundBrowserKeyboardReachTest, ACompactFooterIsReachableAndAHiddenOneMakesD
     const auto* before = f.landed();
     dispatchKey(v, v, key(juce::KeyPress::downKey));
     EXPECT_EQ(f.landed(), before) << "no footer, no stop";
+}
+
+TEST(SoundBrowserKeyboardReachTest, TheFooterStopsAreItsControlsNotTheVolumeTextBox) {
+    Fixture f;
+    auto& footer = f.view->getPreviewFooter();
+    const auto stops = synth::ui::focusableDescendants(footer);
+    ASSERT_FALSE(stops.empty());
+    EXPECT_EQ(stops.back(), &footer.getVolume()) << "the volume slider itself is the last footer stop";
+    for (auto* stop : stops)
+        EXPECT_EQ(stop->getParentComponent(), &footer) << "a stop inside a control: " << typeid(*stop).name();
 }

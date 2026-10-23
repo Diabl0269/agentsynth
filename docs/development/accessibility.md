@@ -47,7 +47,10 @@ keys. A region whose root is a plain container (the Timeline's routing pane, the
 itself, enters its controls with Down, steps with Up/Down in on-screen order and returns with Escape
 (`Source/UI/Layout/FocusStepWithin.h`); its controls are Tab-reachable through the region cycle, not as stops of the region
 before it. The timeline's track column is one Up/Down walk of track rows and their open lanes. Arrows only navigate where the
-focused control does not use them itself (a combo box or text field keeps its Up/Down).
+focused control does not use them itself (a combo box or text field keeps its Up/Down). A stop is always the control
+itself, never one of its parts: a `juce::Slider` turns its own focus off and its text box can take it, so a slider that
+is a stop opts in with `setWantsKeyboardFocus(true)`, and the stepping never lands on its text box (VoiceOver would lose
+the slider).
 
 A track row also takes Cmd+D (rebindable `timelineDuplicateFocusedTrack`) to duplicate its track, named in the row's tooltip and
 beside "Duplicate Track" in its menu; focus follows the copy. It takes Ctrl+E (`timelineShowFocusedTrackModule`) to show its module on the canvas and Ctrl+Cmd+E (Ctrl+Alt+E off the Mac, `timelineToggleFocusedTrackPluginWindow`) to open or close a hosted plugin's window, both named in its tooltip; the row's target button does the same, is a Tab stop with the focus ring, and is named "Show <track> module" (the mixer column header has the same button, "Edit <channel> on canvas"). A row that has a menu (a track row, an automation lane header, a modulator row) has no "..." button: the menu is a

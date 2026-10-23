@@ -9,7 +9,7 @@
 namespace synth::ui {
 
 /** Every visible, enabled component under `root` that takes keyboard focus, in on-screen order (children in their own
- *  order, depth first). The root itself is not included. */
+ *  order, depth first). The root itself is not included, and a slider's own parts (its text box) never are. */
 inline std::vector<juce::Component*> focusableDescendants(juce::Component& root) {
     std::vector<juce::Component*> stops;
     for (auto* child : root.getChildren()) {
@@ -20,6 +20,9 @@ inline std::vector<juce::Component*> focusableDescendants(juce::Component& root)
             dynamic_cast<juce::Viewport*>(child) != nullptr || dynamic_cast<juce::ScrollBar*>(child) != nullptr;
         if (!chrome && child->isEnabled() && child->getWantsKeyboardFocus())
             stops.push_back(child);
+        // A slider's text box takes focus but is not the control: focus there hides the slider from a screen reader.
+        if (dynamic_cast<juce::Slider*>(child) != nullptr)
+            continue;
         for (auto* inner : focusableDescendants(*child))
             stops.push_back(inner);
     }
