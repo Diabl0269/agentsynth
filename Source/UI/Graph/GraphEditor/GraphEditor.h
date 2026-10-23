@@ -430,11 +430,9 @@ public:
 
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
-
     // Double-click a connected jack to disconnect. On by default.
     void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
     bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
-
     // Auto-create a macro port when a dragged cable crosses a macro boundary (docs/macros/auto-ports.md).
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
@@ -726,6 +724,7 @@ private:
         float connectionAnimPhase = 0.0f;
 
     private:
+        void paintCables(juce::Graphics& g);
         GraphEditor& editor;
         juce::OwnedArray<ModuleComponent> moduleComponents;
         juce::OwnedArray<MacroCardComponent> macroCardComponents;
@@ -995,6 +994,7 @@ private:
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
+    bool cablesOnTop = false;                     // cables paint over the cards (docs/layout/cables.md#cable-layer)
     synth::ui::FadeAmount emptyCanvasHint{*this}; // the first-run hint's fade, steered by updateComponents()
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

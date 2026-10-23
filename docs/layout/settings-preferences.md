@@ -41,7 +41,7 @@ the Settings window is.
 
 | Category | Rows |
 | --- | --- |
-| Graph | smart connections, double-click to disconnect, alignment guides, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
+| Graph | smart connections, double-click to disconnect, alignment guides, draw cables on top of modules, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
 | Timeline | loop-locator toggles, ask before removing an LFO's last destination, "Record also starts playback", "Follow playhead point", natural scrolling, zoom direction, piano roll key labels |
 | Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |

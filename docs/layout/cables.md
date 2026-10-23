@@ -105,6 +105,20 @@ growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`)
 New does not go through undo/redo and does not animate; a project opened on screen draws its cables out from their
 source jacks instead, each once both its ends have appeared ([project load reveal](animation.md#project-load-reveal)).
 
+## Cable layer
+
+By default every connected cable is painted in `GraphContentComponent::paint`, before the module cards (children), so
+a cable passes behind a card it crosses. Two things change that:
+
+- **The wire being dragged out of a jack** is stroked in `paintOverChildren`, so it is in front of every card for the
+  whole drag.
+- **Settings -> Preferences -> Graph -> "Draw cables on top of modules"** (`"cablesOnTop"`, OFF by default;
+  `GraphEditor::cablesOnTop`) moves the whole connected-cable pass to `paintOverChildren`, after the gliding card
+  snapshots and before the knob-landing dots.
+
+Both the default and the on-top layer run the one `GraphContentComponent::paintCables`, so they cannot drift. Hit-testing is geometric
+([Hit-testing](#hit-testing)) and does not depend on the layer; a click inside a card still goes to the card.
+
 ## Knob landing
 
 FRO312: a `ModCV` jack with a bound, VISIBLE knob (`ModuleComponent::sliderIndexForModTarget` /

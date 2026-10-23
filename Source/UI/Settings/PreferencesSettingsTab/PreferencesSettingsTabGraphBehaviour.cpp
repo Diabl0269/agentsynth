@@ -166,6 +166,13 @@ void PreferencesSettingsTab::setSmartConnectionMode(GraphEditor::SmartConnection
     persistSmartConnectionMode(mode);
 }
 
+bool PreferencesSettingsTab::isCablesOnTopEnabled() const { return cablesOnTopToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setCablesOnTopEnabled(bool enabled) {
+    cablesOnTopToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistCablesOnTop(enabled);
+}
+
 bool PreferencesSettingsTab::isDoubleClickPortDisconnectEnabled() const {
     return doubleClickDisconnectToggle.getToggleState();
 }
@@ -347,6 +354,31 @@ void PreferencesSettingsTab::persistReconnectChainOnDelete(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setReconnectChainOnDeleteEnabled(enabled);
+}
+
+// The two toggles for what the canvas draws, in tab order.
+void PreferencesSettingsTab::setupCanvasDisplayToggles() {
+    contentHost.addAndMakeVisible(alignmentGuideToggle);
+    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
+                                        juce::dontSendNotification);
+    alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
+    alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
+
+    contentHost.addAndMakeVisible(cablesOnTopToggle);
+    cablesOnTopToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("cablesOnTop", false),
+                                     juce::dontSendNotification);
+    cablesOnTopToggle.setTooltip("When on, connected cables are drawn in front of the module cards. When off (the "
+                                 "default) they pass behind the cards. A cable you are dragging is always in front.");
+    cablesOnTopToggle.onClick = [this] { persistCablesOnTop(cablesOnTopToggle.getToggleState()); };
+}
+
+void PreferencesSettingsTab::persistCablesOnTop(bool enabled) {
+    appProperties.getUserSettings()->setValue("cablesOnTop", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor) {
+        graphEditor->cablesOnTop = enabled;
+        graphEditor->repaint();
+    }
 }
 
 void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
@@ -692,6 +724,18 @@ void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& p
         beginGroup(visible);
         if (visible) {
             alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 3b: cables on top of the cards
+    {
+        const bool visible = groupMatches({&cablesOnTopToggle});
+        setGroupVisible({&cablesOnTopToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            cablesOnTopToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

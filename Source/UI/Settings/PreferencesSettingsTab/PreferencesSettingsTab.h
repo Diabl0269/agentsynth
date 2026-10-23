@@ -60,6 +60,8 @@ public:
     void setSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    bool isCablesOnTopEnabled() const;
+    void setCablesOnTopEnabled(bool enabled);
     // Plain on/off, ON by default
     // (see docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23).
     bool isReconnectChainOnDeleteEnabled() const;
@@ -336,6 +338,8 @@ private:
     void setupSmartConnectionControls();
     void persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistCablesOnTop(bool enabled);
+    void setupCanvasDisplayToggles();
     void persistReconnectChainOnDelete(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
@@ -551,6 +555,7 @@ private:
     // shows snap guides while dragging), the same family as the two toggles above it, not an
     // appearance/theme setting. Persistence key ("alignmentGuidesEnabled") is unchanged.
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
+    juce::ToggleButton cablesOnTopToggle{"Draw cables on top of modules"};
     // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
     // and read as a mode picker rather than the on/off it actually is. The per-module override
     // button below shares this row (see resized()) rather than stacking under it — the two are one

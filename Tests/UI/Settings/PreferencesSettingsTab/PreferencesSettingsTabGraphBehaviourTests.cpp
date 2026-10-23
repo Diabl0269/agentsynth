@@ -844,3 +844,29 @@ TEST_F(PreferencesSettingsTabTest, SideBySideDefaultsToAlwaysAndRoundTrips) {
                   SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     }
 }
+
+// OFF by default, persisted under its own key, reading the default must not write it, a fresh tab restores what was
+// written, and the editor reads it when the tab is wired to it.
+TEST_F(PreferencesSettingsTabTest, CablesOnTopToggleDefaultsOffRoundTripsAndReachesTheEditor) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isCablesOnTopEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("cablesOnTop"));
+
+        tab.setCablesOnTopEnabled(true);
+        EXPECT_TRUE(tab.isCablesOnTopEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("cablesOnTop"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isCablesOnTopEnabled());
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        EXPECT_FALSE(editor.cablesOnTop);
+        tab.setGraphEditor(&editor);
+        EXPECT_TRUE(editor.cablesOnTop);
+        tab.setCablesOnTopEnabled(false);
+        EXPECT_FALSE(editor.cablesOnTop);
+    }
+}
