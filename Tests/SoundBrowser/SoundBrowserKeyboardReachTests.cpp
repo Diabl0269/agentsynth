@@ -288,6 +288,9 @@ TEST(SoundBrowserKeyboardReachTest, AMenuStepsWithUpAndDownAndOpensWithReturnOrS
     EXPECT_EQ(f.landed(), &panel.keyBox());
     EXPECT_EQ(length.getSelectedId(), chosen) << "Up and Down no longer change a menu";
 
+    // A popup menu places itself on a display; a headless CI runner has none, and opening one there crashes.
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "no display to open a menu on";
     EXPECT_FALSE(length.isPopupActive());
     EXPECT_TRUE(dispatchKey(v, length, key(juce::KeyPress::returnKey)));
     EXPECT_TRUE(length.isPopupActive());
@@ -367,8 +370,8 @@ TEST(SoundBrowserKeyboardReachTest, TheFooterStopsAreItsControlsNotTheVolumeText
 
 // Regression test for FRO991: quitting with a footer control focused crashed in the view's own focusGained.
 TEST(SoundBrowserKeyboardReachTest, DestroyingTheViewWithAFooterControlFocusedNeverHandsItTheKeyboard) {
-    if (nativeWindowsAbortHere())
-        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    if (nativeWindowsAbortHere() || juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "needs a display for a native window";
     Fixture f;
     f.view->addToDesktop(juce::ComponentPeer::windowIsTemporary);
     f.view->setVisible(true);
