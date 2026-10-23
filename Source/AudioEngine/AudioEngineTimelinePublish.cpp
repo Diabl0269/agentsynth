@@ -30,6 +30,7 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     refreshSidechainKeys();
     refreshNormalling();
     refreshMidiWiring();
+    refreshAudioInputGate();
 
     // The bar length sizes a drum clip's swing steps (TimelineSnapshot::buildFrom). It comes from the requested time
     // signature, not the audio-side snapshot, which lags a tick and never moves without a device.

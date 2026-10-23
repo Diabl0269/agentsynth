@@ -8,7 +8,21 @@ target_sources(Core PRIVATE
     Source/AudioEngine/InputTakeRecorder.h
     Source/AudioEngine/DeviceInputEnable.cpp
     Source/AudioEngine/DeviceInputEnable.h
+    Source/AudioEngine/AudioEngineTrackMonitoring.cpp
+    Source/Timeline/TrackAudioInput.h
+    Source/Timeline/TrackInputMonitor.h
+    Source/Transport/MonitorGuardReports.h
 )
 target_sources(AppUI PRIVATE
     Source/MainComponent/MainComponentAudioTakes.cpp
+    Source/MainComponent/MainComponentAudioInputSurface.cpp
+    Source/MainComponent/MainComponentAudioInputSurface.h
+    Source/UI/Timeline/TrackAudioInputSurface.h
+    Source/UI/Timeline/TrackMonitorButton.cpp
+    Source/UI/Timeline/TrackMonitorButton.h
+    Source/UI/Timeline/TimelineRoutingPane/AudioInputMenu.cpp
+    Source/UI/Timeline/TimelineRoutingPane/AudioInputMenu.h
+    Source/UI/Timeline/TimelineRoutingPane/InputLevelMeter.cpp
+    Source/UI/Timeline/TimelineRoutingPane/InputLevelMeter.h
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneAudioInput.cpp
 )

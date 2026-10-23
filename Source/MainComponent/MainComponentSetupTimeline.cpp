@@ -332,9 +332,14 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         commitAudioRecording();
         commitMidiRecording();
         recordPendingPlay_ = false;
+        audioEngine.setRecordingEngaged(false);
         timelinePanel.getTransportBar().setRecordingState(false); // a waiting record has no take to do it
         return;
     }
+
+    // Raised before anything can start the transport, so an Auto-monitored track never drops its input for the
+    // first blocks of the take; the 10 Hz poll lowers it again if nothing ends up recording.
+    audioEngine.setRecordingEngaged(true);
 
     // Record does NOT require an armed track (see docs/timeline/transport.md#recording) —
     // pressing Record always rolls the transport with the record indicator lit,

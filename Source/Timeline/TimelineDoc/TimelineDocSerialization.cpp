@@ -246,6 +246,25 @@ void writeTrackAudioInput(juce::DynamicObject& t, const Track& track) {
     t.setProperty("audioInput", juce::var(obj.get()));
 }
 
+// An Audio track's monitor mode: absent = Auto; anything but "on"/"off" fails the load, like the input kind.
+bool readTrackMonitorMode(const juce::DynamicObject& tObj, Track& track) {
+    const juce::var v = tObj.getProperty("monitor");
+    if (v.isVoid() || track.kind != TrackKind::Audio)
+        return true;
+    juce::String mode;
+    if (!readString(v, mode))
+        return false;
+    if (mode == "on")
+        track.monitorMode = MonitorMode::On;
+    else if (mode == "off")
+        track.monitorMode = MonitorMode::Off;
+    else if (mode == "auto")
+        track.monitorMode = MonitorMode::Auto;
+    else
+        return false;
+    return true;
+}
+
 // A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
 // non-finite height is refused; a height outside its range is clamped, it is display data.
 bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
@@ -262,7 +281,7 @@ bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
         return false;
     track.colourArgb = static_cast<juce::uint32>(colourValue);
     track.heightScale = std::clamp(track.heightScale, Track::kMinHeightScale, Track::kMaxHeightScale);
-    return readTrackMidiInput(tObj, track) && readTrackAudioInput(tObj, track);
+    return readTrackMidiInput(tObj, track) && readTrackAudioInput(tObj, track) && readTrackMonitorMode(tObj, track);
 }
 
 } // namespace
@@ -300,6 +319,8 @@ juce::var TimelineDoc::toVar() const {
         if (track.midiInputChannel != 0)
             t->setProperty("midiInputChannel", track.midiInputChannel);
         writeTrackAudioInput(*t, track);
+        if (track.monitorMode != MonitorMode::Auto)
+            t->setProperty("monitor", track.monitorMode == MonitorMode::On ? "on" : "off");
 
         juce::Array<juce::var> clipVars;
         for (const auto& clip : track.clips) {

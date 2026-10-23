@@ -112,6 +112,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",
         "timelineArmFocusedTrack",
+        "timelineMonitorFocusedTrack",
         "timelineToggleTrackAutomation",
         "timelineDeleteFocusedTrack",
         "timelineIncreaseTrackHeight",

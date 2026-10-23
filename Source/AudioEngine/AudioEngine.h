@@ -11,6 +11,7 @@
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/EpochExchange.h"
 #include "Timeline/TimelineSnapshotExchange.h"
+#include "Timeline/TrackAudioInput.h"
 #include "Transport/Metronome.h"
 #include "Transport/TransportService.h"
 #include <array>
@@ -438,14 +439,9 @@ public:
     int getDeviceInputChannelCount() const noexcept { return deviceInputChannelCount_.load(std::memory_order_relaxed); }
 
     // ---- Recording from the input (AudioEngineInputRecording.cpp) ----
-    // What the UI needs to offer an input. `deviceName` is the input device (or the one enableDeviceInputs()
-    // would open while inputs are off); empty in Hosted mode, where the host's inputs are all there is.
-    struct AudioInputInfo {
-        juce::String deviceName;
-        int deviceInputs = 0; // inputs the device has
-        int activeInputs = 0; // inputs turned on and reaching the engine
-        bool hosted = false;
-    };
+    // What the UI needs to offer an input; `deviceName` is the one enableDeviceInputs() would open while inputs are
+    // off.
+    using AudioInputInfo = synth::AudioInputStatus;
     // MESSAGE THREAD.
     AudioInputInfo getAudioInputInfo();
     // Any thread. Whether 0-based input `channel` is turned on and reaches the engine's input snapshot.
@@ -457,6 +453,19 @@ public:
     void enableDeviceInputs();
     // Takes recorded straight from the input; their WAVs are finalised by shutdown().
     synth::InputTakeRecorder& getInputRecorder() noexcept { return inputRecorder_; }
+
+    // ---- Track input monitoring (AudioEngineTrackMonitoring.cpp) ----
+    // ANY THREAD. Record is on (a take rolling, or waiting for Play): an Auto-monitoring track keeps playing its input
+    // while the transport rolls. Set it before asking the transport to play, or the first blocks drop the input.
+    void setRecordingEngaged(bool engaged) noexcept { recordingEngaged_.store(engaged, std::memory_order_relaxed); }
+    // MESSAGE THREAD. Calls `onTrip(trackId)` once per track whose monitoring feedback guard tripped since the last
+    // call.
+    template <typename OnTrip>
+    void consumeMonitorGuardTrips(OnTrip&& onTrip) {
+        monitorGuardReports_.consume(onTrip);
+    }
+    // MESSAGE THREAD. Re-derives the Audio Input module's monitoring gate from the patch; publishTimeline calls it.
+    void refreshAudioInputGate();
 
     // Value types shared with the graph UI; defined in ModulationRoutingTypes.h so UI headers can
     // hold them without including this header.
@@ -724,6 +733,11 @@ private:
     std::array<const float*, synth::InputTakeRecorder::kMaxInputChannels> inputTakePointers_{};
     std::map<juce::String, int> deviceInputCountCache_; // message thread only
     void mapActiveInputs(const juce::BigInteger& activeInputs) noexcept;
+    std::atomic<bool> recordingEngaged_{false};
+    std::atomic<int> inputDeviceHash_{0}; // hashCode() of the open input device's name, 0 when Hosted
+    synth::MonitorGuardReports monitorGuardReports_;
+    std::atomic<bool> audioInputGuardLatched_{false}; // the guard tripped while Audio Input was wired
+    void publishInputMonitorContext() noexcept;
     void pushInputTakes(int sampleOffset, int numSamples) noexcept;
     void storeInputPeaks(int channels, int numSamples) noexcept;
     int countDeviceInputs(const juce::String& deviceName);

@@ -20,6 +20,13 @@ void RoutingComboButton::setWarning(bool warning) {
     repaint();
 }
 
+void RoutingComboButton::setMuted(bool muted) {
+    if (muted_ == muted)
+        return;
+    muted_ = muted;
+    repaint();
+}
+
 void RoutingComboButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
     const auto& theme = synth::theme::themeOf(*this);
     const auto& colors = theme.colors;
@@ -34,7 +41,7 @@ void RoutingComboButton::paintButton(juce::Graphics& g, bool highlighted, bool d
     synth::theme::paintComboChevron(g, chevron.getCentre(), colors.textMuted);
 
     area.removeFromRight(4);
-    g.setColour(warning_ ? colors.warning : colors.textPrimary);
+    g.setColour(warning_ ? colors.warning : (muted_ ? colors.textMuted : colors.textPrimary));
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText(getButtonText(), area, juce::Justification::centredLeft, true);
 }

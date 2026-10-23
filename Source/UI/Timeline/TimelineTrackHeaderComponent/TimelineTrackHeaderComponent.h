@@ -15,8 +15,10 @@
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/MidiDestinationPicker.h"
+#include "UI/Timeline/TrackAudioInputSurface.h"
 #include "UI/Timeline/TrackChannelLinkSurface.h"
 #include "UI/Timeline/TrackDrumMachineButton.h"
+#include "UI/Timeline/TrackMonitorButton.h"
 #include "UI/Timeline/TrackPolySwitch.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -27,11 +29,10 @@
 #include <vector>
 
 namespace juce {
-class ApplicationProperties; // forward declaration — only a pointer crosses this header
-} // namespace juce
+class ApplicationProperties; // only a pointer crosses this header
+}
 
-class ShortcutManager; // forward declaration (Source/ShortcutManager/ShortcutManager.h) — same non-owning,
-                       // may-stay-null pointer pattern as TimelinePanelComponent's own copy.
+class ShortcutManager; // non-owning, may-stay-null pointer, like TimelinePanelComponent's own copy
 
 // TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
 //
@@ -481,6 +482,8 @@ struct TrackHeaderHost {
      *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
      *  simply has no channel behaviour, and every existing implementer keeps compiling. */
     virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
+    /** The audio Input row's view of the app's inputs, same one-accessor shape; null for a host with none. */
+    virtual TrackAudioInputSurface* getAudioInputSurface() { return nullptr; }
 
     /** The Mono/Poly switch (docs/timeline/tracks.md#the-monopoly-switch): whether the voice graph that starts at
      *  `track`'s source is mono, poly or half and half; `none` (the default) when it has nothing poly-capable, which
@@ -556,10 +559,8 @@ public:
     // reports raw screen positions rather than trying to reorder anything itself).
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
-    // Re-derives every colour this component bakes via setColour (the binding chip, M/S/R active
-    // states) from the newly-installed LookAndFeel — see applyThemeDerivedColours(). Without this,
-    // a theme switch left the chip and the M/S/R active colours frozen on whatever theme was
-    // active at the last refreshFromDoc() call.
+    // Re-derives every colour baked via setColour (the binding chip, M/S/R active states) from the new LookAndFeel,
+    // so a theme switch does not leave them on the theme of the last refreshFromDoc() (applyThemeDerivedColours()).
     void lookAndFeelChanged() override;
 
     // ---- keyboard focus + M/S/R shortcuts -------------------------------
@@ -757,6 +758,7 @@ public:
     juce::Button& getMuteButton() noexcept { return muteButton_; }
     juce::Button& getSoloButton() noexcept { return soloButton_; }
     juce::Button& getArmButton() noexcept { return armButton_; }
+    TrackMonitorButton& getMonitorButton() noexcept { return monitorButton_; } // audio tracks only
     juce::Button& getColourSwatch() noexcept { return colourSwatch_; }
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
     ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
@@ -887,6 +889,7 @@ private:
     std::vector<synth::TrackId> bulkTargets() const;
     bool handleTrackClipboardKey(const juce::KeyPress& key);
     void toggleArmed();
+    void toggleMonitor(); // On <-> Auto (nextMonitorMode); a no-op off an audio track
     // Position of this track in the doc's track list — the index resolveTrackColour falls back to
     // for a track that has never been coloured. -1 when the track is gone.
     int trackIndex() const;
@@ -952,6 +955,7 @@ private:
     ContextMenuForwardingButton muteButton_{*this, "M"};
     ContextMenuForwardingButton soloButton_{*this, "S"};
     ContextMenuForwardingButton armButton_{*this, "R"};
+    TrackMonitorButton monitorButton_;
     TrackFoldArrow foldArrow_;
     TrackShowModuleButton showModuleButton_;
     TrackDrumMachineButton drumButton_;

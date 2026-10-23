@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockTimeInfo.h"
+#include "MonitorGuardReports.h"
 #include "TempoMap.h"
 #include "TransportDoc.h"
 #include <array>
@@ -138,6 +139,27 @@ public:
     /** How many samples of each channel above are valid — the current render pass's length. */
     int getNumDeviceInputSamples() const noexcept { return numDeviceInputSamples; }
 
+    // -- This pass's TRACK INPUT MONITORING context ----------------------------
+    // What an audio track's Track Audio node needs to play its own input live (TimelineAudioSourceModule): which
+    // packed channel above each device input landed in, whether a take is being recorded (Auto monitors while
+    // stopped or recording), which input device is open, and where the track's feedback guard reports a trip.
+    // Same audio-thread-only, set-before-the-graph contract as the device input above. The default is "no input
+    // mapped", what a bare TransportService in a unit test should give.
+    struct InputMonitorContext {
+        std::array<int, kMaxDeviceInputChannels> deviceToPacked{-1, -1, -1, -1, -1, -1, -1, -1}; // -1 = input off
+        bool recording = false;
+        int inputDeviceHash = 0; // juce::String::hashCode() of the open input device; 0 = unnamed, matches any choice
+        MonitorGuardReports* guardReports = nullptr; // engine-owned; null outside an engine
+    };
+    void setInputMonitorContextForBlock(const InputMonitorContext& context) noexcept { inputMonitorContext = context; }
+    const InputMonitorContext& getInputMonitorContext() const noexcept { return inputMonitorContext; }
+    /** This pass's samples for 0-based DEVICE input `channel` (not a packed index), or null when it is off. */
+    const float* getDeviceInputForDeviceChannel(int channel) const noexcept {
+        return channel >= 0 && channel < kMaxDeviceInputChannels
+                   ? getDeviceInputChannel(inputMonitorContext.deviceToPacked[(std::size_t)channel])
+                   : nullptr;
+    }
+
     // -- This block's INPUT MONITORING flag -------------------------------------
     // The same carrier idea as the device input above, for a different reason: AudioEngine decides,
     // once per render pass, whether AudioInputModule's graph output should be gated (recording taps
@@ -245,6 +267,7 @@ private:
 
     // Audio thread only; see setInputMonitoringEnabledForBlock.
     bool inputMonitoringEnabledForBlock = false;
+    InputMonitorContext inputMonitorContext; // audio thread only; see setInputMonitorContextForBlock
 
     // Audio thread only; see setMixerSoloActiveForBlock.
     bool mixerSoloActiveForBlock = false;

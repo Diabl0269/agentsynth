@@ -19,20 +19,6 @@ using TakeResult = synth::TakeCaptureWriter::TakeResult;
 // session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
 constexpr int kMaxTakeNumber = 10000;
 
-// Whether a Device choice can record now: every channel it names is turned on, and it was picked on the device
-// that is open (an empty name on either side is "whatever is open"; the host's inputs carry no name).
-bool isInputConnected(const synth::AudioInputChoice& input, const AudioEngine::AudioInputInfo& info,
-                      const AudioEngine& engine) {
-    const bool sameDevice =
-        info.hosted || input.deviceName.isEmpty() || info.deviceName.isEmpty() || input.deviceName == info.deviceName;
-    if (!sameDevice)
-        return false;
-    for (int channel = input.firstChannel; channel < input.firstChannel + input.numChannels; ++channel)
-        if (!engine.isInputChannelActive(channel))
-            return false;
-    return true;
-}
-
 // Stops one take's capture wherever it runs. A tap that vanished (an undo mid-take rebuilt the graph without it)
 // has nothing to stop, which loses that take rather than crashing.
 TakeResult stopTakeCapture(const AudioTake& take, RecordTapModule* tap, synth::InputTakeRecorder& recorder) {
@@ -164,7 +150,7 @@ bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::Strin
             take.numChannels = RecordTapModule::kNumChannels;
             wholeMixTaken = true;
         } else {
-            if (!isInputConnected(input, inputInfo, audioEngine)) {
+            if (!synth::isAudioInputConnected(input, inputInfo)) {
                 problems.add(track.name + ": its input is not connected");
                 continue;
             }

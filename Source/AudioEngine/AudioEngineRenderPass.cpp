@@ -348,6 +348,7 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
     // This pass's slice of the same snapshot goes to every input take, anchored where the tap anchors.
     pushInputTakes(inputSampleOffset, buffer.getNumSamples());
+    publishInputMonitorContext();
 
     // Deliberately OUTSIDE the timeline flag for the same reason as the device-input
     // publish above: whether Audio Input's graph output is gated is an input-path property, not a
@@ -444,6 +445,7 @@ void AudioEngine::runFeedbackGuard(juce::AudioBuffer<float>& buffer, bool monito
     // from some in-block sample: the peak was measured over the whole block, so there is no single
     // sample position to call "the" trip point.
     inputMonitoringEnabled_.store(false, std::memory_order_relaxed);
+    audioInputGuardLatched_.store(true, std::memory_order_relaxed);
     feedbackGuardTripped_.store(true, std::memory_order_relaxed);
     buffer.clear();
     feedbackGuardConsecutiveSamples_ = 0;

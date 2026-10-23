@@ -167,8 +167,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"timelineMuteFocusedTrack", ShortcutCategory::Timeline},
             {"timelineSoloFocusedTrack", ShortcutCategory::Timeline},
             {"timelineArmFocusedTrack", ShortcutCategory::Timeline},
-            // Folds the focused track header's automation lanes open/closed (bare A).
-            {"timelineToggleTrackAutomation", ShortcutCategory::Timeline},
+            {"timelineMonitorFocusedTrack", ShortcutCategory::Timeline},
+            {"timelineToggleTrackAutomation", ShortcutCategory::Timeline}, // folds the focused row's lanes (bare A)
             // The focused track header's own row height (Option+= / Option+- / Option+0).
             {"timelineIncreaseTrackHeight", ShortcutCategory::Timeline},
             {"timelineDecreaseTrackHeight", ShortcutCategory::Timeline},

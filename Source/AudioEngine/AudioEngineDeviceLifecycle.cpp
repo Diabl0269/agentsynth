@@ -170,6 +170,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
         refreshSidechainKeys();
         refreshNormalling();
         refreshMidiWiring();
+        refreshAudioInputGate();
         return;
     }
 
@@ -392,6 +393,8 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
         prepareDeviceInputSnapshot(numInputChannels, blockSize);
         mapActiveInputs(device->getActiveInputChannels());
+        inputDeviceHash_.store(deviceManager.getAudioDeviceSetup().inputDeviceName.hashCode(),
+                               std::memory_order_relaxed);
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
         deviceOutputLatencySamples_.store(device->getOutputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);

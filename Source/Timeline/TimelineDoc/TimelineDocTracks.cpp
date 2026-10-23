@@ -92,6 +92,7 @@ TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, ju
         copy.midiInputName = original->midiInputName;
         copy.midiInputChannel = original->midiInputChannel;
         copy.audioInput = original->audioInput;
+        copy.monitorMode = original->monitorMode;
         copy.bindingUuid = remap(original->bindingUuid);
         // Linked clips on the copy stay linked to each other, in fresh groups, never to the originals.
         std::map<std::int64_t, std::int64_t> groupRemap;
@@ -270,6 +271,18 @@ bool TimelineDoc::setTrackAudioInput(TrackId id, const AudioInputChoice& choice)
         return true;
     return applyMutation([&] {
         track->audioInput = stored;
+        return true;
+    });
+}
+
+bool TimelineDoc::setTrackMonitorMode(TrackId id, MonitorMode mode) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Audio)
+        return false;
+    if (track->monitorMode == mode)
+        return true;
+    return applyMutation([&] {
+        track->monitorMode = mode;
         return true;
     });
 }

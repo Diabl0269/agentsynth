@@ -8,6 +8,7 @@
 #include "AudioEngine/NodeUuidCache.h"
 #include "Branding.h"
 #include "MainComponent/CoreSoundSwapper.h"
+#include "MainComponent/MainComponentAudioInputSurface.h"
 #include "MainComponentCollectArchiveSeams.h"
 #include "MainComponentExportMidiSeams.h"
 #include "MainComponentRemoteActionInvoker.h"
@@ -655,6 +656,7 @@ private:
     void stopClipPreview(synth::TrackId track) override;
     double clipPreviewBeat(synth::TrackId track) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
+    synth::ui::TrackAudioInputSurface* getAudioInputSurface() override { return &audioInputSurface_; }
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
     void setTrackPoly(synth::TrackId track, bool poly) override;
     bool everyHeaderRefreshFollows() const override;
@@ -859,25 +861,22 @@ private:
     // The app-wide sound pack installer; the Sampler picker shares it, so a download shows in both places.
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> soundPackInstaller_;
     synth::AIChatComponent aiChatComponent;
-    bool isAiPanelVisible = false;
-    bool isLibraryVisible{true}, isAlignmentGuidesEnabled{true};
+    bool isAiPanelVisible{false}, isLibraryVisible{true}, isAlignmentGuidesEnabled{true};
 
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
-
+    synth::maincomponent::AudioInputSurface audioInputSurface_{audioEngine, [this] { launchSettingsWindow("Audio"); }};
     synth::ui::TimelinePanelComponent timelinePanel;
     synth::ui::MainViewHolder mainViewHolder_; // before bottomDock: outlives the host the dock may have moved into it
     synth::ui::BottomDockComponent bottomDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
                                               graphEditor,   appProperties, lookAndFeel, &shortcutManager};
     synth::ui::MixerPlacementController mixerPlacement_{bottomDock, appProperties}; // after bottomDock
-    bool isBottomDockVisible = false;
-    bool bottomDockAutoHiddenByEmptyTabs_ = false; // dock auto-hid because its last tab detached
-    bool fitMixerAfterDockSlide_ = false;          // set when the dock starts opening; see finishPanelSlide()
-    int timelinePanelHeight_ = 0;                  // 0 only before initialiseCommon() resolves it
-    bool recordPendingPlay_ = false;               // record is on, an audio take starts when the transport rolls
-    bool wasTransportPlaying_ = false;             // playing->stopped edge for the MIDI recorder's auto-commit
-    synth::TransportNudgeState transportNudge_;    // message-thread memory of the last cursor-move request
+    bool isBottomDockVisible = false, bottomDockAutoHiddenByEmptyTabs_ = false;     // the latter: its last tab detached
+    bool fitMixerAfterDockSlide_ = false;       // set when the dock starts opening; see finishPanelSlide()
+    int timelinePanelHeight_ = 0;               // 0 only before initialiseCommon() resolves it
+    bool recordPendingPlay_ = false;            // record is on, an audio take starts when the transport rolls
+    bool wasTransportPlaying_ = false;          // playing->stopped edge for the MIDI recorder's auto-commit
+    synth::TransportNudgeState transportNudge_; // message-thread memory of the last cursor-move request
 
-    bool feedbackGuardLatched_ = false, wasAnyAudioTrackArmed_ = false; // re-arm latch; cleared on none -> armed
     std::vector<AudioTake> audioTakes_; // every take rolling now, one per recording Audio track
     juce::File currentBundleDir_;       // invalid File = never saved; decides where a take is written
 

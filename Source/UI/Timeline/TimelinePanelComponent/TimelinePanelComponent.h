@@ -314,7 +314,7 @@ public:
     juce::Rectangle<int> getTrackHeaderBounds() const noexcept { return trackHeaderBounds_; }
 
     // ---- Track-header column width (drag the seam; remembered in the user settings) ----
-    static constexpr int kMinTrackHeaderWidth = 140;
+    static constexpr int kMinTrackHeaderWidth = 168; // room for M/S/R, the Monitor slot and the fold arrow
     static constexpr int kMaxTrackHeaderWidth = 420;
     static constexpr int kTrackHeaderWidthKeyStep = 16;
     /** Clamps, re-lays out; `persist` writes the user setting. */

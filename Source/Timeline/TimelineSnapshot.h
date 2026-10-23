@@ -69,6 +69,12 @@ struct TimelineSnapshot {
         int numLanes = 0;
         int firstAudioClip = 0; // range into audioClips[]
         int numAudioClips = 0;
+        // An Audio track's live input: its synth::MonitorMode and the device inputs it plays (0-based first, and a
+        // count of 0 when its input is not a device's -- no input or the whole mix -- so there is nothing to play).
+        int monitorMode = 0;
+        int inputFirstChannel = 0;
+        int inputNumChannels = 0;
+        int inputDeviceHash = 0; // hashCode() of the device the input was picked on; 0 = any device
     };
 
     struct NoteEvent {

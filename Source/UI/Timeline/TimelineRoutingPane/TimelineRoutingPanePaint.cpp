@@ -78,6 +78,15 @@ void TimelineRoutingPane::paint(juce::Graphics& g) {
     }
     if (!layout_.midiInputHeading.isEmpty())
         drawHeading(g, layout_.midiInputHeading, "Input", colours, layout_.inputAlpha);
+    if (!layout_.audioInputHeading.isEmpty()) {
+        drawHeading(g, layout_.audioInputHeading, "Input", colours, layout_.audioAlpha);
+        drawHeading(g, layout_.monitorHeading, "Monitor", colours, layout_.audioAlpha);
+    }
+    if (!layout_.audioInputNote.isEmpty()) {
+        g.setColour(colours.warning.withMultipliedAlpha(layout_.audioAlpha));
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawFittedText(view_.audioInput.note, layout_.audioInputNote, juce::Justification::topLeft, 3);
+    }
     if (!layout_.midiDestinationsHeading.isEmpty()) // present while its section is shown or fading
         drawHeading(g, layout_.midiDestinationsHeading, "MIDI destinations", colours, layout_.midiAlpha);
     drawHeading(g, layout_.mixerChannelHeading, "Mixer channel", colours);

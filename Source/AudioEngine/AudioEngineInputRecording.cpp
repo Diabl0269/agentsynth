@@ -88,6 +88,9 @@ AudioEngine::AudioInputInfo AudioEngine::getAudioInputInfo() {
     info.hosted = isHosted();
     info.activeInputs = std::min(deviceInputChannelCount_.load(std::memory_order_relaxed),
                                  synth::TransportService::kMaxDeviceInputChannels);
+    for (int channel = 0; channel < (int)inputChannelToSnapshot_.size(); ++channel)
+        if (isInputChannelActive(channel))
+            info.activeMask |= std::uint32_t{1} << channel;
     if (info.hosted) {
         info.deviceInputs = info.activeInputs;
         return info;

@@ -110,9 +110,12 @@ void TimelineTrackHeaderComponent::resized() {
     colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth));
     bounds.removeFromLeft(kRowPadding);
 
-    // Top row: (fold arrow) + kind badge + (folded lane badge) + name, then R/S/M right to left.
+    // Top row: (fold arrow) + kind badge + (folded lane badge) + name, then Monitor/R/S/M right to left.
     // Bottom row: the binding chip, full width.
     auto topRow = bounds.removeFromTop(bounds.getHeight() / 2);
+    // The Monitor slot is kept on every row (empty off an audio track) so M/S/R line up down the column.
+    monitorButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    topRow.removeFromRight(kToggleGap);
     armButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kToggleGap);
     soloButton_.setBounds(topRow.removeFromRight(kToggleWidth));
