@@ -119,10 +119,13 @@ TEST(RenameKeyMixer, OptionROpensTheFocusedColumnsNameEditorAndCommitsTheRename)
     editor->setText("Pad bus", false);
     header.getNameLabelForTest().hideEditor(false); // the commit the Return key ends in (Label's own contract)
     EXPECT_EQ(committed, "Pad bus") << "the typed name reaches the column's rename handler";
-    ASSERT_EQ(r.panel->getStripColumnForTest(1), column) << "the rename keeps the column";
+    // The renamed column is rebuilt (its shown name changed), so the old pointer is not used past this point.
+    ASSERT_EQ(r.panel->getFocusedColumnIndexForTest(), 1) << "the rename keeps the focus on the column";
+    auto* renamed = r.panel->getStripColumnForTest(1);
+    ASSERT_NE(renamed, nullptr);
 
     EXPECT_TRUE(r.panel->keyPressed(kF2));
-    EXPECT_NE(column->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor(), nullptr)
+    EXPECT_NE(renamed->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor(), nullptr)
         << "F2 does the same; " << renameState(*r.panel);
 }
 
