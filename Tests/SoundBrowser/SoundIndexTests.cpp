@@ -206,10 +206,10 @@ TEST(SoundIndexTest, SearchRanksNameMatchesBeforeFolderMatches) {
     EXPECT_EQ(hits[2].name, "rim");
 
     SoundFilter drums;
-    drums.tag = "Drums";
+    drums.tags.add("Drums");
     EXPECT_EQ(index->search("snare", drums).size(), 3u) << "the folder tag Drums is not set by 'Hits'; snare names are";
     SoundFilter loops;
-    loops.kind = SoundKind::Loop;
+    loops.kinds.insert(SoundKind::Loop);
     EXPECT_TRUE(index->search("snare", loops).empty());
     SoundFilter elsewhere;
     elsewhere.placeId = "nothing";

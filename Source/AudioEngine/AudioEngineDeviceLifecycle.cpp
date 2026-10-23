@@ -332,6 +332,7 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     //    Metronome::startClick) and would otherwise continue at the wrong pitch and the wrong
     //    length. See Metronome::resetVoices().
     metronome_.resetVoices();
+    soundPreview_.prepare(newRate, newBlockSize);
     onFormatChangeStepForTest(2);
 
     // 3. STREAMER: force every Track Audio ring to miss until the prefetch thread has refilled it at

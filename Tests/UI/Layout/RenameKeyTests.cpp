@@ -8,6 +8,7 @@
 #include "UI/Layout/RenameKey.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
+#include <typeinfo>
 
 namespace {
 
@@ -18,6 +19,19 @@ const juce::KeyPress kRight(juce::KeyPress::rightKey, juce::ModifierKeys::noModi
 void hideWelcome(MainComponent& mc) {
     if (auto* ws = mc.getWelcomeScreenForTest())
         ws->setVisible(false);
+}
+
+// For a failure message: which strip columns have their name editor open, and what holds the keyboard.
+juce::String renameState(synth::ui::MixerPanelComponent& panel) {
+    juce::String text = "editors open in columns:";
+    for (int i = 0; auto* column = panel.getStripColumnForTest(i); ++i)
+        if (column->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor() != nullptr)
+            text << " " << i;
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    text << "; focused: " << (focused == nullptr ? juce::String("nothing") : juce::String(typeid(*focused).name()));
+    if (focused != nullptr)
+        text << " '" << focused->getTitle() << "'";
+    return text;
 }
 
 // What a macOS Option+R really delivers: key code 'r' with the symbol as its text character.
@@ -105,9 +119,11 @@ TEST(RenameKeyMixer, OptionROpensTheFocusedColumnsNameEditorAndCommitsTheRename)
     editor->setText("Pad bus", false);
     header.getNameLabelForTest().hideEditor(false); // the commit the Return key ends in (Label's own contract)
     EXPECT_EQ(committed, "Pad bus") << "the typed name reaches the column's rename handler";
+    ASSERT_EQ(r.panel->getStripColumnForTest(1), column) << "the rename keeps the column";
 
     EXPECT_TRUE(r.panel->keyPressed(kF2));
-    EXPECT_NE(column->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor(), nullptr) << "F2 does the same";
+    EXPECT_NE(column->getHeaderForTest().getNameLabelForTest().getCurrentTextEditor(), nullptr)
+        << "F2 does the same; " << renameState(*r.panel);
 }
 
 TEST(RenameKeyMixer, WorksInsideADetachedMixerWindow) {

@@ -47,6 +47,14 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
         lists_.setRecent(
             synth::soundbrowser::SoundLists::fromSetting(settings_->getValue(kSoundBrowserRecentSettingKey)));
     }
+    if (settings_ != nullptr) {
+        using Player = synth::soundbrowser::SoundPreviewPlayer;
+        sounds_.setPreviewSettings(settings_->getBoolValue(kSoundBrowserAutoPlaySettingKey, true),
+                                   juce::jlimit(Player::kMinGainDb, Player::kMaxGainDb,
+                                                (float)settings_->getDoubleValue(kSoundBrowserPreviewGainDbSettingKey,
+                                                                                 Player::kDefaultGainDb)));
+    }
+    sounds_.onPreviewSettingsChanged = [this] { persistPreviewSettings(); };
     lists_.onChanged = [this] { persistLists(); };
     mix_.snapTo(view_ == SidebarView::Sounds ? 1.0f : 0.0f);
     switch_.setView(view_, false);
@@ -98,6 +106,14 @@ void LibrarySidebarViews::setUserFolders(const std::vector<juce::File>& folders)
     indexStarted_ = true;
     index_.setUserFolders(folders);
     index_.rescan();
+}
+
+void LibrarySidebarViews::persistPreviewSettings() {
+    if (settings_ == nullptr)
+        return;
+    settings_->setValue(kSoundBrowserAutoPlaySettingKey, sounds_.isAutoPlay());
+    settings_->setValue(kSoundBrowserPreviewGainDbSettingKey, (double)sounds_.getPreviewGainDb());
+    settings_->saveIfNeeded();
 }
 
 void LibrarySidebarViews::persistLists() {

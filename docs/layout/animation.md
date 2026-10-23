@@ -924,7 +924,7 @@ Reduce Motion the icons sit still in their running colour and the list opens wit
 **All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops
 at `t = 1.0`.
 
-There are exactly **three** permitted exceptions, and all are bounded by an *activity* rather than by
+There are exactly **four** permitted exceptions, and all are bounded by an *activity* rather than by
 a duration:
 
 | Exception | Runs while | Confined to | Stops |
@@ -932,11 +932,11 @@ a duration:
 | AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8x8 component | on completion or cancel |
 | A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
 | Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, or a drum machine Play clip loop runs | a strip a few px wide, spanning the panel's ruler and lanes | on stop or pause, with one final strip |
+| Sound preview playhead (`SoundWaveformView`) | the sound the Sounds view footer shows is playing and the view is on screen | a strip a few px wide in the footer's waveform, a 30 Hz timer repainting only the old and new line strips | when the preview ends or is stopped, with one final strip |
 
-`zoomSettleAnim` is **not** a third exception: it is a normal time-bounded `AnimationDriver` that
-restarts on every zoom event — the restart-on-event IS the debounce — and its `onUpdate` is a no-op,
-so it fires zero repaints of its own. Only `onComplete` does one-time work, thawing the raster
-freeze.
+`zoomSettleAnim` is **not** an extra exception: it is a normal time-bounded `AnimationDriver` that
+restarts on every zoom event (the restart IS the debounce) and its `onUpdate` is a no-op, so it fires
+zero repaints of its own. Only `onComplete` does one-time work, thawing the raster freeze.
 
 **A stalled frame does not skip the motion:** `AnimationDriver` moves a frame over 80 ms late by one frame and re-launches the rest.
 
@@ -951,7 +951,7 @@ Never add:
 
 ### The playhead's confinement contract
 
-A third exception is not granted just because the second was. The playhead earned it by satisfying
+A further exception is not granted just because the earlier ones were. The playhead earned it by satisfying
 three clauses, all enforced in code and asserted in `Tests/UI/Timeline/TimelinePlayheadTests.cpp`:
 
 1. **Playing only.** The 30 Hz `juce::Timer` starts on play and stops on stop or pause, so an idle app
@@ -990,7 +990,7 @@ struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
 **Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a
 repaint budget that will regress.
 
-`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception. The roll
+The sound preview's waveform is the second reuse (`SoundWaveformView::onStripRepaintForTest` is its seam): the playhead is a position, not decoration, so it moves under Reduce Motion and Animations off too. `PianoRollComponent` is the first reuse, and it is a *delegation*, not an extra exception. The roll
 maps beats through its own zoom and scroll, so while it is open the overlay confines itself to
 `getSharedRegion()` — empty while the roll is open, since the ruler rows follow the roll's mapping
 override too, see [piano-roll](../timeline/piano-roll.md#the-ruler-above-the-roll) — and hands the

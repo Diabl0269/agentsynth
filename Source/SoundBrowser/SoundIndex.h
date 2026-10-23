@@ -41,7 +41,8 @@ public:
 
     std::shared_ptr<const SoundSnapshot> snapshot() const;
     std::vector<SoundEntry> search(const juce::String& query, const SoundFilter& filter = {}) const;
-    SoundListing childrenOf(const juce::String& placeId, const juce::String& relativeFolder) const;
+    SoundListing childrenOf(const juce::String& placeId, const juce::String& relativeFolder,
+                            const SoundFilter& filter = {}) const;
     std::optional<SoundEntry> find(const juce::String& path) const;
 
     // ---- Test seams ----

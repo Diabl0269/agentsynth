@@ -83,8 +83,9 @@ std::vector<SoundEntry> SoundIndex::search(const juce::String& query, const Soun
     return searchSnapshot(*snapshot(), query, filter);
 }
 
-SoundListing SoundIndex::childrenOf(const juce::String& placeId, const juce::String& relativeFolder) const {
-    return listFolder(*snapshot(), placeId, relativeFolder);
+SoundListing SoundIndex::childrenOf(const juce::String& placeId, const juce::String& relativeFolder,
+                                    const SoundFilter& filter) const {
+    return listFolder(*snapshot(), placeId, relativeFolder, filter);
 }
 
 std::optional<SoundEntry> SoundIndex::find(const juce::String& path) const {

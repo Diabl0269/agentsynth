@@ -111,4 +111,9 @@ inline constexpr const char* kLibrarySidebarViewSettingKey = "librarySidebarView
 /** The sidebar's width while the Sounds view shows, in pixels (default 280, clamped 200 to 400). */
 inline constexpr const char* kSoundBrowserWidthSettingKey = "soundBrowserWidth";
 
+/** Whether selecting a sound in the Sounds view plays it ("1", the default, or "0"), and the preview's own level in dB
+ *  (default -6, clamped to -60..+6). */
+inline constexpr const char* kSoundBrowserAutoPlaySettingKey = "soundBrowserAutoPlay";
+inline constexpr const char* kSoundBrowserPreviewGainDbSettingKey = "soundBrowserPreviewGainDb";
+
 } // namespace synth

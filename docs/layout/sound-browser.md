@@ -1,6 +1,6 @@
 # The sound browser
 
-One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. Previewing, dragging a sound onto a module or track, filters and downloads arrive in later steps; this doc covers the index and the view as built.
+One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. Dragging a sound onto a module or track and downloads arrive in later steps; this doc covers the index, the view, its filters and the preview as built.
 
 ## The sound index
 
@@ -21,12 +21,38 @@ One place to find a recording: the **sound index** (Core, no UI) lists every sou
 The left column holds two views behind a **Modules / Sounds** switch at its top (`LibrarySidebarViews`, `Source/UI/Library/`). The switch is one Tab stop; Left and Right change view, and each segment's tooltip names its shortcut. The column is the "library" focus region's root.
 
 - **Screens**: Places (Favourites, Used recently, each installed pack, then "Your folders"), then folders inside a place, then the sounds. A path bar above the list shows where you are; every part but the last is a button that goes back there. A search field above it searches every place at once and shows sounds only.
-- **Keys** (list focused): Up, Down, PageUp, PageDown select; Right or Return opens a folder; Left or Cmd+Up goes up; Return on a sound activates it; F adds or removes it from Favourites; a printable key jumps to the search field. In the search field Down or Return moves into the list and Esc clears the text, then returns to the list.
+- **Keys** (list focused): Up, Down, PageUp, PageDown select; Right or Return opens a folder; Left or Cmd+Up goes up; Return on a sound activates it; Space plays or stops its preview; F adds or removes it from Favourites; a printable key jumps to the search field. In the search field Down or Return moves into the list and Esc clears the text, then returns to the list.
 - **Screen reader**: the rows are painted, and ONE list element speaks the selected row ("snare, one-shot, 0.8 seconds, 2 of 23"), the same pattern as the module library. The wording lives in `SoundBrowserText` and is unit-tested.
-- **Footer**: the selected sound's name and place.
+- **Footer**: the selected sound's name and place, then the preview strip (see [Preview](#preview)).
 - **Width**: while Sounds shows, the column is as wide as `soundBrowserWidth` (default 280, 200 to 400). Drag the right edge, double-click it to reset, or focus it and use Left and Right (16 px a step). The width eases between the Modules width and the Sounds width while the views slide.
 - **Motion**: switching views slides 190 ms (a cross-fade under reduced motion); opening a folder slides the list in, going up slides it out.
 - **Lazy start**: the index starts its first scan when Sounds is first shown, and rescans when the installed packs change.
+
+## Short columns
+
+Nothing overlaps at any height, and the search row is always whole. The footer gives way first: with room for the search, path bar, two list rows and the whole footer it shows as described under Preview; with less, a **compact footer** (one 36 px row: Stop, the sound's name cut with an ellipsis, the volume; no waveform and no Auto-play, whose setting still holds); with less than that, no footer at all (invisible, so a screen reader skips it). The open Filters panel is capped to what the footer and two list rows leave, and scrolls inside itself. Once it is open it is guaranteed 64 px: room for it comes first from the footer (whole, compact, none), then from the list (two rows, one, none), and only then does the panel shrink below 64 px. The tall layout is unchanged.
+
+## Filters
+
+Tab is the app's region cycle, so inside the Sounds view Up and Down always step focus (`SoundBrowserKeyboardReach.cpp`, the model of `FocusStepWithin.h`): from the search's neighbours through Filters, the chip row (while it shows) and the open panel's controls in on-screen order, then into the list; Up from the first sound climbs back to the last of them, and Up from Filters returns to the search. Down from the search still goes straight to the list. Down on the last sound enters the preview footer (Stop, Auto-play, volume; the compact footer has Stop and volume; a hidden footer has none), and Up from its first control returns to the list with the selection kept. Only a text field keeps its own Up and Down. A menu (Key, Length, Place) opens with Return or Space and no longer changes with Up or Down; a range handle and the preview volume move with Left and Right. A control that steps into view in a short panel scrolls the panel to show it.
+
+A **Filters** button sits beside the search field and reads "Filters" or "Filters (2)". Space or Return opens or closes the panel, Esc closes it, and a screen reader hears "Filters, 2 on, collapsed" (or expanded). The tooltip is "Narrow by kind, sound, tempo, key, length or place".
+
+- **The panel opens inline** under the search and pushes the list down; it never covers it. It grows open over 190 ms with the list sliding (an 80 ms fade under Reduce Motion, instant with Animations off). If the view is short the panel takes at most what leaves two list rows above the footer, and scrolls inside itself (its own viewport and scroll bar; a focused control scrolls into view) instead of being clipped.
+- **Groups** (`SoundFilterPanel`): Kind (One-shots, Loops, Instruments), Sound (Drums, Bass, Keys, Vocals, FX, Strings), Tempo (a two-handle range slider, 60 to 200 BPM, plus a "Near song tempo" chip), Key (a "Song key" chip when the project has a key, and a menu of the 24 keys), Length (Any, Under 1 s, 1-4 s, Over 4 s) and Place (any pack or folder). Left and Right move across the chips of a group; Space toggles one. A menu opens with Return or Space; Escape closes the panel from anywhere in it. Within Kind, and within Sound, any one may match; the groups themselves all have to.
+- **Near song tempo** keeps sounds within 10 BPM of the transport's tempo, or of half or double it. A sound with an unknown tempo or key never passes an active tempo or key filter.
+- **Chips**: one row of small removable chips under the search ("Loops x", "90-100 BPM x"), then "Clear all" at the right. The row is one stop (Left and Right move, Space, Delete or Backspace remove). A chip's tooltip is "Remove Loops filter". Removing a chip or Clear all switches the same filter off in the panel. A new chip grows in at the end; a removed one shrinks out and the rest slide along (190 ms; an 80 ms fade under Reduce Motion).
+- **What it filters**: search results, folder listings (a folder with no passing sound is left out and its count is of passing sounds), Favourites and Used recently. At the Places screen an active filter shows the matching sounds from every place as a flat list. When nothing passes, the list says so.
+- **Code**: the filter is Core (`SoundFilter` in `SoundEntry.h`, `soundPassesFilter` and `parseSoundKey` in `SoundSearch.h`, `SoundIndex::search` and `childrenOf` take it); `SoundFilterModel` holds the switches and makes the chips. The range slider is the reusable `Source/UI/Controls/RangeSlider`: each handle is its own stop ("Tempo, lower handle, 90 BPM"), Left and Right move it one step (Shift or Page keys ten, Home and End to the limit), the handles never cross, and a click on the track moves the nearer one.
+
+## Preview
+
+Selecting a sound plays it when **Auto-play** is on (the default). The next selection cuts the old sound with a 5 ms fade. Space on a sound plays it, or stops it when it sounds; with Auto-play off, selecting is silent and Space plays. A Loop starts on the next bar when the song plays and at once when it does not; loops are not time-stretched. Instruments, folders and files that are gone never play. Hiding the view stops the preview.
+
+- **Footer** (`SoundPreviewFooter`): the sound's waveform (drawn in left to right over 190 ms, an 80 ms fade under Reduce Motion) with a moving playhead while it plays, a Stop button ("Stop the preview (Space)"), a volume slider and the Auto-play switch (tooltip "Play a sound when you select it"). The waveform comes from a `juce::AudioThumbnail`, so decoding stays off the message thread.
+- **Volume**: -60 to +6 dB, default -6, arrows nudge 1 dB, spoken as "Preview volume, -6 dB", tooltip "Preview volume, only for previews". It sets the preview's own gain only.
+- **Playhead**: the moving line repaints a strip a few pixels wide at 30 Hz while the preview plays, and moves under Reduce Motion (it shows a position). It is a permitted exception in [animation](animation.md#the-time-bounded-animation-rule).
+- **Audio**: the preview is summed after the master and never goes through the graph, so the song's volume, mute and effects do not touch it, a bounce never contains it, and plugin mode mixes it into the plugin's output. See [audio-engine](../architecture/audio-engine.md#sound-preview).
 
 ## Shortcuts
 
@@ -47,3 +73,5 @@ The toolbar's library button opens or closes the column on the last-used view, a
 | `soundBrowserWidth` | the column's width while Sounds shows; default 280, clamped 200 to 400 |
 | `soundBrowserFolders` | the user's own sound folders, one absolute path per line |
 | `soundBrowserFavourites`, `soundBrowserRecent` | file paths, one per line |
+| `soundBrowserAutoPlay` | play a sound when it is selected; default on |
+| `soundBrowserPreviewGainDb` | the preview volume in dB; default -6, clamped -60 to +6 |

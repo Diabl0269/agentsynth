@@ -10,6 +10,10 @@ target_sources(Core PRIVATE
     Source/SoundBrowser/SoundLists.h
     Source/SoundBrowser/SoundNameGuess.cpp
     Source/SoundBrowser/SoundNameGuess.h
+    Source/SoundBrowser/SoundPreviewDecoder.cpp
+    Source/SoundBrowser/SoundPreviewPlayer.cpp
+    Source/SoundBrowser/SoundPreviewPlayer.h
+    Source/SoundBrowser/SoundPreviewShared.h
     Source/SoundBrowser/SoundSearch.cpp
     Source/SoundBrowser/SoundSearch.h
 )
@@ -21,12 +25,30 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/LibrarySidebarSwitch.h
     Source/UI/Library/LibrarySidebarViews.cpp
     Source/UI/Library/LibrarySidebarViews.h
+    Source/UI/Controls/RangeSlider/RangeSlider.cpp
+    Source/UI/Controls/RangeSlider/RangeSlider.h
     Source/UI/Library/SoundBrowser/SoundBrowserAccessibility.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
+    Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserNavigation.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPainting.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.h
+    Source/UI/Library/SoundBrowser/SoundFilterChipGroup.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterChipGroup.h
+    Source/UI/Library/SoundBrowser/SoundFilterChipRow.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterChipRow.h
+    Source/UI/Library/SoundBrowser/SoundFilterModel.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterModel.h
+    Source/UI/Library/SoundBrowser/SoundFilterPanel.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterPanel.h
+    Source/UI/Library/SoundBrowser/SoundFiltersButton.h
+    Source/UI/Library/SoundBrowser/SoundPreviewFooter.cpp
+    Source/UI/Library/SoundBrowser/SoundPreviewFooter.h
+    Source/UI/Library/SoundBrowser/SoundWaveformView.cpp
+    Source/UI/Library/SoundBrowser/SoundWaveformView.h
 )

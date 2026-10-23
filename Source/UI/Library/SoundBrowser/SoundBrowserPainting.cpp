@@ -28,7 +28,7 @@ void strokeChevron(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour 
 
 void SoundBrowserComponent::layoutPathParts() {
     pathParts_ = getPathParts();
-    if (isSearchActive())
+    if (showsFlatResults())
         return;
     const juce::Font font(juce::FontOptions(12.0f));
     const int available = juce::jmax(40, getWidth() - 2 * kSideMargin - kStatusWidth);
@@ -37,7 +37,7 @@ void SoundBrowserComponent::layoutPathParts() {
     int x = kSideMargin;
     for (auto& part : pathParts_) {
         const int w = juce::jmin(maxLabel, (int)std::ceil(font.getStringWidthFloat(part.label)) + 2);
-        part.bounds = {x, kSearchHeight, w, kPathHeight};
+        part.bounds = {x, getListTop() - kPathHeight, w, kPathHeight};
         x += w + kChevronGap;
     }
 }
@@ -47,11 +47,12 @@ void SoundBrowserComponent::paintPathBar(juce::Graphics& g, juce::Colour muted, 
     const juce::Font font(juce::FontOptions(12.0f));
     g.setFont(font);
     const auto snap = index_.snapshot();
-    if (isSearchActive()) {
+    const int pathTop = getListTop() - kPathHeight;
+    if (showsFlatResults()) {
         const int count = (int)rows_.size() - ((rows_.size() == 1 && rows_[0].kind == RowKind::Hint) ? 1 : 0);
         g.setColour(muted);
         g.drawText(juce::String(count) + (count == 1 ? " sound" : " sounds") + " in all places",
-                   juce::Rectangle<int>(kSideMargin, kSearchHeight, getWidth() - 2 * kSideMargin, kPathHeight),
+                   juce::Rectangle<int>(kSideMargin, pathTop, getWidth() - 2 * kSideMargin, kPathHeight),
                    juce::Justification::centredLeft, true);
     } else {
         for (int i = 0; i < (int)pathParts_.size(); ++i) {
@@ -74,7 +75,7 @@ void SoundBrowserComponent::paintPathBar(juce::Graphics& g, juce::Colour muted, 
     if (status.isNotEmpty()) {
         g.setColour(muted.withAlpha(0.8f));
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText(status, getWidth() - kStatusWidth - 6, kSearchHeight, kStatusWidth, kPathHeight,
+        g.drawText(status, getWidth() - kStatusWidth - 6, pathTop, kStatusWidth, kPathHeight,
                    juce::Justification::centredRight);
     }
 }
@@ -151,13 +152,21 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
 }
 
 void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
+    if (footerMode_ == FooterMode::Hidden)
+        return;
     const auto& c = synth::theme::themeOf(*this).colors;
-    const juce::Rectangle<int> area(0, getHeight() - kFooterHeight, getWidth(), kFooterHeight);
+    const int height = footerHeight();
+    const juce::Rectangle<int> whole(0, getHeight() - height, getWidth(), height);
     g.setColour(c.surface);
-    g.fillRect(area);
+    g.fillRect(whole);
     g.setColour(c.border);
-    g.fillRect(area.withHeight(1));
+    g.fillRect(whole.withHeight(1));
+    if (footerMode_ == FooterMode::Compact) {
+        paintCompactName(g);
+        return;
+    }
 
+    const auto area = whole.withHeight(kFooterInfoHeight);
     const auto inner = area.reduced(kSideMargin, 8);
     const auto nameArea = inner.withHeight(18);
     const auto subArea = inner.withTrimmedTop(20).withHeight(15);
@@ -182,6 +191,17 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = juce::String(row.soundCount) + (row.soundCount == 1 ? " sound" : " sounds");
     }
     g.drawText(sub, subArea, juce::Justification::centredLeft, true);
+}
+
+// The compact footer has room for the name only, ellipsised, between the Stop button and the volume.
+void SoundBrowserComponent::paintCompactName(juce::Graphics& g) {
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const auto area = footer_.getCompactNameBounds().translated(footer_.getX(), footer_.getY());
+    const bool have = selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].navigable();
+    g.setColour(have ? c.textPrimary : c.textMuted);
+    g.setFont(juce::Font(juce::FontOptions(13.0f)));
+    g.drawText(have ? rows_[(size_t)selected_].text : juce::String("Select a sound"), area,
+               juce::Justification::centredLeft, true);
 }
 
 void SoundBrowserComponent::paint(juce::Graphics& g) {

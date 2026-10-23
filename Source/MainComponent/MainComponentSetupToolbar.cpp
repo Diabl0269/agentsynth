@@ -24,6 +24,11 @@ void MainComponent::addCanvasAndPanels() {
     bottomDock.setMainAreaHolder(&mainViewHolder_);
     librarySidebar_ = std::make_unique<synth::ui::LibrarySidebarViews>(moduleLibrary, appProperties.getUserSettings());
     librarySidebar_->onLayoutChanged = [this] { resized(); };
+    // The Sounds view previews through the engine, after the master; Near song tempo reads the transport's tempo.
+    librarySidebar_->getSounds().setPreviewPlayer(&audioEngine.getSoundPreview());
+    librarySidebar_->getSounds().songTempoProvider = [this] {
+        return audioEngine.getTransport().getDocumentState().bpm;
+    };
     addAndMakeVisible(*librarySidebar_);
 
     // Grey out the singleton I/O rows once the patch already has one, and repaint the library

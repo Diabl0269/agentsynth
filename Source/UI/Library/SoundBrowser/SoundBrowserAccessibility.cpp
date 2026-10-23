@@ -38,7 +38,7 @@ juce::String SoundBrowserComponent::getAccessibilityValueText() const {
         for (const auto& p : getPathParts())
             labels.add(p.label);
         const auto items = count == 1 ? juce::String("1 item") : juce::String(count) + " items";
-        return isSearchActive() ? "Search results, " + items : describePathForAccessibility(labels) + ", " + items;
+        return showsFlatResults() ? "Search results, " + items : describePathForAccessibility(labels) + ", " + items;
     }
     const auto& row = rows_[(size_t)selected_];
     switch (row.kind) {
@@ -62,6 +62,7 @@ std::unique_ptr<juce::AccessibilityHandler> SoundBrowserComponent::createAccessi
 
 // A value-changed event goes out only when the text differs from the last one handed out.
 void SoundBrowserComponent::refreshAccessibilityValue() {
+    syncFooterToSelection();
     const auto text = getAccessibilityValueText();
     if (text == announcedValueText_)
         return;

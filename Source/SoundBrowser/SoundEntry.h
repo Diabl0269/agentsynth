@@ -7,6 +7,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
+#include <utility>
 #include <vector>
 
 namespace synth::soundbrowser {
@@ -45,10 +47,24 @@ struct SoundSnapshot {
     bool scanning = false;                 ///< A scan is still running behind this snapshot.
 };
 
+enum class SoundLength { Any, Under1, OneToFour, Over4 };
+
+/** What a search or a folder listing keeps. Within the kinds and within the tags any one may match; every other
+ *  field that is set must match as well. An unknown tempo (0) or key (empty) never passes an active tempo or key. */
 struct SoundFilter {
-    std::optional<SoundKind> kind;
-    juce::String tag;     ///< One of the tags; empty for any.
-    juce::String placeId; ///< Empty for every place.
+    std::set<SoundKind> kinds;
+    juce::StringArray tags;                         ///< Drums, Bass, Keys, Vocals, FX, Strings.
+    juce::String placeId;                           ///< Empty for every place.
+    std::optional<std::pair<double, double>> tempo; ///< Inclusive BPM range.
+    std::optional<double> nearTempo;                ///< The song's BPM: within 10 BPM of it, or of half or double it.
+    juce::String key;                               ///< "A minor", "C major", "Am"; empty for any.
+    SoundLength length = SoundLength::Any;
+
+    /** True when at least one field narrows the list. */
+    bool isActive() const {
+        return !kinds.empty() || !tags.isEmpty() || placeId.isNotEmpty() || tempo.has_value() ||
+               nearTempo.has_value() || key.isNotEmpty() || length != SoundLength::Any;
+    }
 };
 
 struct SoundFolder {

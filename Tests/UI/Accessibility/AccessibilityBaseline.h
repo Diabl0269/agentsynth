@@ -45,6 +45,8 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"ModuleLibraryHelpPopup", 0, 0},
     {"ModuleLibrary", 0, 0},
     {"SoundBrowser", 0, 0},
+    {"SoundBrowserFilters", 0, 0},
+    {"RangeSlider", 0, 0},
     {"LibrarySidebar", 0, 0},
     {"AIChat", 0, 0},
     {"MidiRemote", 0, 0},

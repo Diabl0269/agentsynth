@@ -33,6 +33,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Controls/RangeSlider/RangeSlider.h"
 #include "UI/Graph/ModDot/ModDotPopover.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
@@ -546,6 +547,33 @@ TEST(AccessibilityCoverageTest, SoundBrowser) {
     synth::ui::SoundBrowserComponent view(*index, lists);
     view.setSize(300, 700);
     EXPECT_TRUE(matchesBaseline("SoundBrowser", auditAccessibility(view)));
+}
+
+// The Filters panel open with several filters on (so the chip row, every group and the range slider's two handles
+// are on screen) and a sound selected (so the footer's controls are too).
+TEST(AccessibilityCoverageTest, SoundBrowserFilters) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    synth::ui::SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 900);
+    view.getFilters().setKind(synth::soundbrowser::SoundKind::Loop, true);
+    view.getFilters().setTempoRange(std::make_pair(90, 120));
+    view.applyFiltersChanged();
+    view.setFiltersOpen(true, false);
+    view.completeFilterMotionForTest();
+    EXPECT_TRUE(matchesBaseline("SoundBrowserFilters", auditAccessibility(view)));
+}
+
+TEST(AccessibilityCoverageTest, RangeSlider) {
+    synth::ui::RangeSlider slider;
+    slider.setBounds(0, 0, 240, synth::ui::RangeSlider::kPreferredHeight);
+    slider.setLabel("Tempo", "BPM");
+    slider.setLimits(60, 200, 1);
+    slider.setValues(90, 120);
+    EXPECT_TRUE(matchesBaseline("RangeSlider", auditAccessibility(slider)));
 }
 
 TEST(AccessibilityCoverageTest, LibrarySidebar) {
