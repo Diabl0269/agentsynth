@@ -58,8 +58,9 @@ bool hasNodeAt(const CurveEditorComponent& curve, double x, float y, double tole
 }
 
 struct GridKeysGuard {
-    synth::test::PersistedKeysGuard guard{
-        juce::StringArray{shapewindowprefs::gridKey("lfo"), shapewindowprefs::gridKey("filter")}};
+    synth::test::PersistedKeysGuard guard{juce::StringArray{shapewindowprefs::gridKey("lfo"),
+                                                            shapewindowprefs::gridKey("filter"),
+                                                            shapewindowprefs::spectrumKey("filter")}};
 };
 
 } // namespace

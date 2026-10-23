@@ -97,6 +97,11 @@ public:
      *  for unipolar. */
     void setFillBaselineLevel(float level);
 
+    /** Paints behind the grid and the curve (a live spectrum under a response). Unset (the default) paints nothing,
+     *  so the editor looks as it did. The caller repaints the editor when what it draws changes. */
+    using BackdropPainter = std::function<void(juce::Graphics&, const CurveEditorGeometry&)>;
+    void setBackdropPainter(BackdropPainter painter);
+
     /** `nullopt` hides the playhead marker. Repaints only if the value actually changed. */
     void setPlayhead(std::optional<CurvePlayhead> playhead);
     std::optional<CurvePlayhead> getPlayhead() const noexcept { return playhead_; }
@@ -279,6 +284,7 @@ private:
 
     std::optional<CurveGrid> grid_;
     std::optional<AxisGuides> guides_;
+    BackdropPainter backdrop_;
     bool snapToGrid_ = false;
     float fillBaselineLevel_ = 0.0f;
 

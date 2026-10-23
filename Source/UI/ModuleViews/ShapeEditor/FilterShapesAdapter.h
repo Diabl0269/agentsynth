@@ -5,6 +5,7 @@
 // share one.
 #include "ModuleShapesAdapter.h"
 #include "Modules/FilterModule.h"
+#include "UI/ModuleViews/FilterSpectrumAnalyser.h"
 #include <functional>
 
 namespace synth::ui {
@@ -32,6 +33,8 @@ public:
     std::optional<CurveEditorComponent::AxisGuides> getAxisGuides() const override;
     std::optional<ShapeGridOffer> getGridOffer() const override;
     juce::String getPreferenceKind() const override { return "filter"; }
+    bool hasSpectrum() const override { return true; }
+    const std::vector<float>* updateSpectrum() override;
     std::vector<ShapeStartFrom> getStartFrom() const override;
     ShapeDrawRange getDrawRange() const override;
     juce::String getWindowTitle() const override;
@@ -49,6 +52,7 @@ private:
     AppUndoManager* undo_;
     juce::AudioProcessorGraph& graph_;
     PitchHooks hooks_;
+    FilterSpectrumAnalyser spectrum_;
 };
 
 } // namespace synth::ui

@@ -24,10 +24,10 @@ namespace synth::ui {
  *  change goes to the adapter at once) and each gesture or button is one undo step.
  *
  *  A row above the curve holds what the adapter offers: a grid choice the curve snaps to (note lengths for the
- *  LFO, octaves for the Filter). The choice is remembered per kind of list in the adapter's
- *  settings.
+ *  LFO, octaves for the Filter) and, for the Filter, a "Show spectrum" toggle that draws the live spectrum behind
+ *  the curve. Both choices are remembered per kind of list in the adapter's settings.
  *
- *  Keyboard: Tab visits the map and its dots and cursor, the chips, the grid choice, the curve
+ *  Keyboard: Tab visits the map and its dots and cursor, the chips, the grid choice, the spectrum toggle, the curve
  *  editor, the buttons, the per-note controls and Done, in that order. Escape closes the window (`onDone`, else the
  * hosting window).
  */
@@ -86,17 +86,26 @@ public:
     juce::String getGridName() const;
     /** Picks a grid choice by name as a click would; an unknown name changes nothing. */
     void setGridName(const juce::String& name);
+    /** The Show spectrum toggle; null unless the adapter has a spectrum. */
+    juce::ToggleButton* getSpectrumToggle() noexcept { return spectrumToggle_.get(); }
+    /** Whether the spectrum timer is running: only while the toggle is on and the editor is visible. */
+    bool isSpectrumTimerRunning() const;
+    /** Reads the newest spectrum and repaints the curve; what the timer does each tick. */
+    void pollSpectrum();
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void visibilityChanged() override;
+    void parentHierarchyChanged() override;
     void lookAndFeelChanged() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
     class Chip;
     class ChipStrip;
+    class SpectrumTicker;
 
     void timerCallback() override;
     void loadSelectedCurve();
@@ -112,6 +121,9 @@ private:
     void buildToolbar(int& focusOrder);
     void layoutToolbar(juce::Rectangle<int> row);
     void applyGridChoice(const juce::String& name, bool remember);
+    void setSpectrumShown(bool shown);
+    void updateSpectrumTimer();
+    void paintSpectrum(juce::Graphics& g, const CurveEditorGeometry& geometry) const;
 
     std::shared_ptr<ShapeListAdapter> adapter_;
     std::vector<ShapeItem> shapes_;
@@ -134,6 +146,9 @@ private:
     std::optional<ShapeGridOffer> gridOffer_;
     std::unique_ptr<NoteLengthBox> gridBox_;
     std::unique_ptr<CardSegmentedSwitch> gridSwitch_;
+    std::unique_ptr<juce::ToggleButton> spectrumToggle_;
+    std::unique_ptr<SpectrumTicker> spectrumTicker_;
+    std::vector<float> spectrumDb_;
     juce::Rectangle<int> gridLabelArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeListEditor)

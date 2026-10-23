@@ -201,6 +201,8 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     g.fillAll(colours.background);
 
     const CurveEditorGeometry geometry = currentGeometry();
+    if (backdrop_)
+        backdrop_(g, geometry);
     paintGrid(g, geometry, colours);
     paintCurve(g, geometry, colours);
     paintHandles(g, geometry, colours);

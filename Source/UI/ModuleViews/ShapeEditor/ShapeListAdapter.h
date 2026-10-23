@@ -88,6 +88,11 @@ public:
     virtual juce::String getPreferenceKind() const { return {}; }
     /** Where those choices are kept; null remembers nothing. */
     virtual juce::ApplicationProperties* getApplicationProperties() const { return nullptr; }
+    /** Whether the window offers a live spectrum behind the curve (the Filter's). */
+    virtual bool hasSpectrum() const { return false; }
+    /** Reads the newest audio and returns the smoothed spectrum (FilterSpectrumAnalyser's points, dB, log frequency
+     *  from the curve's left edge to its right), or null when there is none. */
+    virtual const std::vector<float>* updateSpectrum() { return nullptr; }
     virtual std::vector<ShapeStartFrom> getStartFrom() const { return {}; }
     virtual ShapeDrawRange getDrawRange() const { return {}; }
     virtual juce::String getWindowTitle() const = 0;

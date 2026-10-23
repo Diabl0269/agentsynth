@@ -75,6 +75,11 @@ void CurveEditorComponent::setGrid(std::optional<CurveGrid> grid) {
     repaint();
 }
 
+void CurveEditorComponent::setBackdropPainter(BackdropPainter painter) {
+    backdrop_ = std::move(painter);
+    repaint();
+}
+
 void CurveEditorComponent::setAxisGuides(std::optional<AxisGuides> guides) {
     guides_ = std::move(guides);
     repaint();

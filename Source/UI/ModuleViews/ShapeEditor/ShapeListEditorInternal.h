@@ -8,6 +8,30 @@
 
 namespace synth::ui {
 
+/** The 30 Hz tick that reads the live spectrum. It exists apart from the editor's own poll so that it can stop: it
+    runs only while the Show spectrum toggle is on and the editor is visible. */
+class ShapeListEditor::SpectrumTicker : private juce::Timer {
+public:
+    static constexpr int kHz = 30;
+
+    explicit SpectrumTicker(std::function<void()> onTick)
+        : onTick_(std::move(onTick)) {}
+    ~SpectrumTicker() override { stopTimer(); }
+
+    void setRunning(bool run) {
+        if (run && !isTimerRunning())
+            startTimerHz(kHz);
+        else if (!run)
+            stopTimer();
+    }
+    bool isRunning() const { return isTimerRunning(); }
+
+private:
+    void timerCallback() override { onTick_(); }
+
+    std::function<void()> onTick_;
+};
+
 /** One chip: pressing it selects its shape. A radio button, so exactly one chip is lit. */
 class ShapeListEditor::Chip : public juce::Button {
 public:
