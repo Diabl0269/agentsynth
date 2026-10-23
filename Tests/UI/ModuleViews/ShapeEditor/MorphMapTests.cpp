@@ -3,6 +3,7 @@
 // the shape editor (stops that survive a refresh, the arrow-hold glide and its model).
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterBlend.h"
+#include "Modules/Filter/CustomFilterPeakMorph.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -123,13 +124,29 @@ TEST(MorphMap, DoubleClickingEmptySpaceAddsAShapeThatCopiesTheCurrentBlend) {
     EXPECT_GE(shapes[3].curve.points.size(), 12u);
     EXPECT_LE(shapes[3].curve.points.size(), 20u);
     // The copy is the blend at the cursor (0.5, 0.5) sampled at its points: each point sits on the module's own blend.
-    // (Between points the copy is straight, so a narrow formant of the blend can fall between two of them.)
     const auto blend = synth::customfilter::blendedGridDb(synth::CustomFilterShapes::defaultShapes(), 0.5f, 0.5f);
     for (const auto& point : shapes[3].curve.points) {
         const float pos = point.x * (float)(synth::customfilter::kGridSize - 1);
         const int i0 = std::min((int)pos, synth::customfilter::kGridSize - 2);
         const float expected = blend[(size_t)i0] + (blend[(size_t)i0 + 1] - blend[(size_t)i0]) * (pos - (float)i0);
         EXPECT_NEAR(synth::CustomFilterShapes::yToDb(point.y), expected, 0.5f) << "point at x " << point.x;
+    }
+    // Regression test for FRO1120: the copy of a moved-formant blend missed its peaks
+    const auto dbAt = [&](const std::vector<float>& grid, float x) {
+        const float pos = x * (float)(synth::customfilter::kGridSize - 1);
+        const int i0 = std::min((int)pos, synth::customfilter::kGridSize - 2);
+        return grid[(size_t)i0] + (grid[(size_t)i0 + 1] - grid[(size_t)i0]) * (pos - (float)i0);
+    };
+    const auto copyDbAt = [&](float x) { return synth::CustomFilterShapes::yToDb(shapes[3].curve.evaluate(x)); };
+    const float oneKhz = std::log(1000.0f / synth::CustomFilterShapes::kMinHz) /
+                         std::log(synth::CustomFilterShapes::kMaxHz / synth::CustomFilterShapes::kMinHz);
+    EXPECT_NEAR(copyDbAt(oneKhz), dbAt(blend, oneKhz), 2.0f);
+    float peaks[synth::CustomFilterEngine::ShapeTable::kMaxPeaks];
+    const int peakCount = synth::customfilter::findPeaks(blend.data(), (int)blend.size(), peaks);
+    EXPECT_GT(peakCount, 0);
+    for (int k = 0; k < peakCount; ++k) {
+        const float x = peaks[k] / (float)(synth::customfilter::kGridSize - 1);
+        EXPECT_NEAR(copyDbAt(x), dbAt(blend, x), 2.0f) << "peak at x " << x;
     }
     EXPECT_EQ(rig.undo.getEditSerial(), 1);
 }

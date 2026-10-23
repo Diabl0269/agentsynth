@@ -352,7 +352,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
 One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
 drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), double-click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into 16
-points; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),
+points placed on its shape: both ends, every prominent peak with its dip and flanks, the rest evenly spaced, so narrow formants survive; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),
 double-click a dot to delete it, press Return on a dot (or choose Edit in its right-click menu, which also has Duplicate,
 Rename and Delete) to open the editor on it. Delete on a focused dot removes it and focuses the next dot; the last shape
 never goes, by any of these routes. A dot that is added (or brought back by an undo) grows in with the 8% bounce over

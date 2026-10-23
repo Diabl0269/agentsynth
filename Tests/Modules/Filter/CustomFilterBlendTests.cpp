@@ -1,6 +1,7 @@
 // CustomFilterBlendTests.cpp -- the Custom blend as numbers (what the response view draws and "add a shape" copies),
 // the preset curves, the default list's identity and the shape-list generation counter.
 #include "Modules/Filter/CustomFilterBlend.h"
+#include "Modules/Filter/CustomFilterPeakMorph.h"
 #include "Modules/FilterModule.h"
 #include <gtest/gtest.h>
 
@@ -50,6 +51,35 @@ TEST(CustomFilterBlend, CurveFromGridClampsIntoTheCurveRange) {
         EXPECT_FLOAT_EQ(p.y, 1.0f);
     for (const auto& p : curveFromGridDb(quiet, 8).points)
         EXPECT_FLOAT_EQ(p.y, 0.0f);
+}
+
+TEST(CustomFilterBlend, CopyingAFactoryShapeKeepsEveryPeak) {
+    for (int i = 0; i < CustomFilterShapes::kNumPresets; ++i) {
+        const auto curve = CustomFilterShapes::presetCurve(static_cast<CustomFilterShapes::Preset>(i));
+        std::vector<float> grid((size_t)kGridSize);
+        for (int k = 0; k < kGridSize; ++k)
+            grid[(size_t)k] = CustomFilterShapes::yToDb(curve.evaluate((float)k / (kGridSize - 1)));
+
+        const auto copy = curveFromGridDb(grid, 16);
+        ASSERT_GE(copy.points.size(), (size_t)LfoCustomWave::kMinPoints) << "preset " << i;
+        ASSERT_LE(copy.points.size(), 16u) << "preset " << i;
+        for (size_t p = 1; p < copy.points.size(); ++p)
+            EXPECT_LT(copy.points[p - 1].x, copy.points[p].x) << "preset " << i;
+
+        std::vector<float> back((size_t)kGridSize);
+        for (int k = 0; k < kGridSize; ++k)
+            back[(size_t)k] = CustomFilterShapes::yToDb(copy.evaluate((float)k / (kGridSize - 1)));
+        float peaks[CustomFilterEngine::ShapeTable::kMaxPeaks];
+        const int count = findPeaks(grid.data(), kGridSize, peaks);
+        for (int k = 0; k < count; ++k) {
+            const int at = (int)std::round(peaks[k]);
+            float best = -1000.0f;
+            for (int j = std::max(0, at - 4); j <= std::min(kGridSize - 1, at + 4); ++j)
+                best = std::max(best, back[(size_t)j]);
+            EXPECT_NEAR(best, grid[(size_t)at], 2.0f) << "preset " << i << " peak at bin " << at;
+            EXPECT_NEAR(back[(size_t)at], grid[(size_t)at], 2.0f) << "preset " << i << " peak at bin " << at;
+        }
+    }
 }
 
 TEST(CustomFilterShapesPresets, EightNamedCurvesAllDistinctAndUnderTheirGainCeiling) {
