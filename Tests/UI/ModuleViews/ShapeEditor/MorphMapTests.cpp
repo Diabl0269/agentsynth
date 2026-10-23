@@ -122,11 +122,15 @@ TEST(MorphMap, DoubleClickingEmptySpaceAddsAShapeThatCopiesTheCurrentBlend) {
     EXPECT_NEAR(shapes[3].position[1], 0.9f, 0.02f);
     EXPECT_GE(shapes[3].curve.points.size(), 12u);
     EXPECT_LE(shapes[3].curve.points.size(), 20u);
-    // The copy is the blend at the cursor (0.5, 0.5): its dB at 1 kHz matches the module's own blend there.
+    // The copy is the blend at the cursor (0.5, 0.5) sampled at its points: each point sits on the module's own blend.
+    // (Between points the copy is straight, so a narrow formant of the blend can fall between two of them.)
     const auto blend = synth::customfilter::blendedGridDb(synth::CustomFilterShapes::defaultShapes(), 0.5f, 0.5f);
-    const float x = synth::CustomFilterShapes::hzToX(1000.0f);
-    const float copyDb = synth::CustomFilterShapes::yToDb(shapes[3].curve.evaluate(x));
-    EXPECT_NEAR(copyDb, blend[(size_t)(x * (synth::customfilter::kGridSize - 1))], 2.0f);
+    for (const auto& point : shapes[3].curve.points) {
+        const float pos = point.x * (float)(synth::customfilter::kGridSize - 1);
+        const int i0 = std::min((int)pos, synth::customfilter::kGridSize - 2);
+        const float expected = blend[(size_t)i0] + (blend[(size_t)i0 + 1] - blend[(size_t)i0]) * (pos - (float)i0);
+        EXPECT_NEAR(synth::CustomFilterShapes::yToDb(point.y), expected, 0.5f) << "point at x " << point.x;
+    }
     EXPECT_EQ(rig.undo.getEditSerial(), 1);
 }
 

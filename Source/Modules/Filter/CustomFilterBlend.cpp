@@ -1,11 +1,12 @@
 // CustomFilterBlend.cpp -- the blended Custom response as numbers, and its sampling back into a curve.
 #include "CustomFilterBlend.h"
 #include "CustomFilterCutoff.h"
+#include "CustomFilterPeakMorph.h"
 #include <cmath>
 
 namespace synth::customfilter {
 
-/** The engine's own table renderer and blend weights, so a copy made here sounds as the live blend
+/** The engine's own table renderer, blend weights and peak-moving blend, so a copy made here sounds as the live blend
     does at the same cursor (before shift and depth). */
 std::vector<float> blendedGridDb(const CustomFilterShapes& shapes, float x, float y) {
     CustomFilterShapes clean = shapes;
@@ -14,9 +15,7 @@ std::vector<float> blendedGridDb(const CustomFilterShapes& shapes, float x, floa
     std::vector<float> weights((size_t)table->count, 0.0f);
     CustomFilterEngine::blendWeights(*table, x, y, weights.data());
     std::vector<float> out((size_t)kGridSize, 0.0f);
-    for (int s = 0; s < table->count; ++s)
-        for (int i = 0; i < kGridSize; ++i)
-            out[(size_t)i] += weights[(size_t)s] * table->db[(size_t)(s * kGridSize + i)];
+    blendShapes(*table, weights.data(), out.data());
     return out;
 }
 

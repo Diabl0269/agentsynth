@@ -114,9 +114,11 @@ small epsilon or the shapes changed.
 
 1. **Weights**: inverse distance, `w_i = 1 / max(d_i, 0.02)^2.5`, normalised (`d_i` = 2D distance from
    the cursor to shape i).
-2. **Blend in dB**: each shape's dB curve, pre-rendered on a 1024-point log-frequency grid, summed with
-   those weights. Kernels are never blended: a sum of minimum-phase kernels is neither minimum phase nor
-   the blended magnitude.
+2. **Blend in dB, peaks moved together** (`CustomFilterPeakMorph`): each shape's dB curve is pre-rendered on a
+   1024-point log-frequency grid, then summed with those weights after its peaks are moved, so a morph from ah to oo
+   glides each formant from one frequency to the other (a "yah"/"wah") instead of fading one vowel's formants out
+   while the other's fade in. Kernels are never blended: a sum of minimum-phase kernels is neither minimum phase nor
+   the blended magnitude. [Peak morph](#peak-morph) has the rules.
 3. **Shift, cutoff, depth and resonance**: each FFT bin reads the blended curve at its shifted log-frequency position
    (Shift plus the semitones Cutoff adds; linear interpolation), the dB is multiplied by depth, and then the
    [resonant bell](#cutoff-and-resonance) is added.
@@ -130,6 +132,33 @@ small epsilon or the shapes changed.
 its buffers and its `juce::dsp::FFT` are allocated in `prepare()`; `design()` does no allocation, locks
 or system calls (on macOS JUCE's FFT is vDSP; elsewhere its fallback FFT takes an uncontended
 per-instance `SpinLock` and uses `alloca` scratch at these sizes).
+
+### Peak morph
+
+- **Peaks, found once per shape list** (`renderTable`, message thread): local maxima of a shape's grid away from its
+  two ends whose topographic prominence (height above the higher of the two lowest points met walking out to higher
+  ground) is at least `kMinPeakProminenceDb`; a ripple on a skirt is not a peak. At most 6 per shape, kept in
+  ascending frequency in the table. ah and oo have three, ee, eh and ih four, the animal calls fewer.
+- **Matching by order**: every shape's first peak goes with every other shape's first peak, and so on. Shape s's
+  k-th peak is moved to `p_s + sum(w_s' * (p_s' - p_s))` over the shapes s' that have a k-th peak, in log frequency.
+  When every shape has that peak, that is the weighted mean, the same for all, so the peaks meet.
+- **Fallback**: a peak only some shapes have is pulled only by them; the rest of the weight leaves it where it is,
+  so it fades in and out as the plain cross-fade did.
+- **Warp**: each shape's curve is stretched piecewise-linearly in log frequency (grid ends fixed, its peaks on their
+  targets) and read by linear interpolation, then the dB values are weighted and summed. Only frequencies move, so
+  the blend is never louder than the loudest shape (the gain rule).
+- **Continuity**: the targets have no participation threshold and no division by a weight sum, so they move
+  continuously with the cursor everywhere, including where a shape with fewer peaks joins. When order matching
+  folds (a heavy shape's only peak sits above another shape's second peak), the targets are pushed apart by a
+  running max and min, also continuous, that keeps every stretch of a shape at least `kMinStretch` (25%) of its own
+  width: squeezed into a single bin, a valley would sweep its whole depth past each grid point as the cursor moved.
+  One shape at full weight is copied exactly.
+- **One blend, three callers**: the shared kernel, every per-voice kernel (`designKernel`) and `blendedGridDb` (the
+  response view, "add a shape here") call `customfilter::blendShapes`, so what is drawn is what is heard.
+- The LFO's Custom wave (`LfoShapeBlender`) still cross-fades its shapes.
+- Tests: `CustomFilterPeakMorphTests.cpp` (detection, one F1 at the log-mean halfway, a monotone glide, continuity by
+  step halving, exact copy at full weight, no added gain, a saw swept ah to oo with no click, UI blend equal to the
+  engine's).
 
 ## Convolution
 
