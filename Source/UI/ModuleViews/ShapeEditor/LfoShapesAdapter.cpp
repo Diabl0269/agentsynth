@@ -1,27 +1,28 @@
 // LfoShapesAdapter.cpp -- the LFO's Custom shapes behind the generic shape list interface.
 #include "LfoShapesAdapter.h"
 #include "Modules/Lfo/LfoShapeBlender.h"
+#include "Modules/Shapes/CurveSimplify.h"
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
+#include <set>
 
 namespace synth::ui {
 
 namespace {
-constexpr int kNewShapePoints = LfoCustomWave::kMaxPoints;
+constexpr float kToleranceY = 0.01f; // of the 0..1 value range
 
 const char* const kPresetNames[] = {"Triangle",  "Ramp Up",   "Ramp Down", "Square",
                                     "Pulse 1/4", "Steps (4)", "Soft Sine"};
 static_assert(sizeof(kPresetNames) / sizeof(kPresetNames[0]) == 7, "one name per LfoCustomWave::Preset");
 
-/** A curve of `numPoints` evenly spaced samples of `table` (the first at x = 0, the last at x = 1). */
-LfoCustomWave curveFromTable(const LfoCustomWave::Table& table, int numPoints) {
+/** A curve through as few samples of `table` as keep it within kToleranceY of it: the ends, every corner and bend. */
+LfoCustomWave curveFromTable(const LfoCustomWave::Table& table) {
+    const std::vector<float> values(table.begin(), table.end());
+    std::set<int> chosen{0, LfoCustomWave::kTableSize};
+    synth::shapes::addPointsWhereLinesMiss(chosen, values, LfoCustomWave::kMaxPoints, kToleranceY);
     LfoCustomWave wave;
-    for (int p = 0; p < numPoints; ++p) {
-        const float x = (float)p / (float)(numPoints - 1);
-        const float pos = x * (float)LfoCustomWave::kTableSize;
-        const int i0 = juce::jmin((int)pos, LfoCustomWave::kTableSize - 1);
-        const float y = table[(size_t)i0] + (table[(size_t)i0 + 1] - table[(size_t)i0]) * (pos - (float)i0);
-        wave.points.push_back({x, juce::jlimit(0.0f, 1.0f, y), 0.0f});
-    }
+    for (const int k : chosen)
+        wave.points.push_back(
+            {(float)k / (float)LfoCustomWave::kTableSize, juce::jlimit(0.0f, 1.0f, values[(size_t)k]), 0.0f});
     wave.sanitise();
     return wave;
 }
@@ -57,12 +58,12 @@ int LfoShapesAdapter::getGeneration() const { return lfo_.getCustomWaveGeneratio
 
 int LfoShapesAdapter::getMaxShapes() const { return LfoCustomShapes::kMaxShapes; }
 
-/** A copy of the blend the cursor is on, sampled into 64 points, so the new shape plays as the LFO does now. */
+/** A copy of the blend the cursor is on, kept to the points it needs, so the new shape plays as the LFO does now. */
 ShapeItem LfoShapesAdapter::makeShapeAt(float x, float y) const {
     const auto table =
         LfoShapeBlender::blendedTable(lfo_.getCustomShapes(), lfo_.getCurrentMorphX(), lfo_.getCurrentMorphY());
     ShapeItem item;
-    item.curve = curveFromTable(table, kNewShapePoints);
+    item.curve = curveFromTable(table);
     item.position = {x, y};
     return item;
 }

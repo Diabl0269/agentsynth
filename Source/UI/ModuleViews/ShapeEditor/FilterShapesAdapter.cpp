@@ -40,7 +40,8 @@ int FilterShapesAdapter::getGeneration() const { return filter_.getCustomShapesG
 
 int FilterShapesAdapter::getMaxShapes() const { return CustomFilterShapes::kMaxShapes; }
 
-/** A copy of the blend the cursor is on, sampled into 16 points, so the new shape sounds as the filter does now. */
+/** A copy of the blend the cursor is on, kept to the points it needs (at most 16), so the new shape sounds as the
+ * filter does now. */
 ShapeItem FilterShapesAdapter::makeShapeAt(float x, float y) const {
     const auto blend =
         customfilter::blendedGridDb(filter_.getCustomShapes(), filter_.getCurrentMorphX(), filter_.getCurrentMorphY());

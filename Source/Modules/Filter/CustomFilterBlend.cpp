@@ -2,6 +2,7 @@
 #include "CustomFilterBlend.h"
 #include "CustomFilterCutoff.h"
 #include "CustomFilterPeakMorph.h"
+#include "Modules/Shapes/CurveSimplify.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -58,6 +59,9 @@ namespace {
 /** How far a peak must fall for the point on its side: far enough that the straight segments keep its width. */
 constexpr float kFlankDropDb = 6.0f;
 
+/** How far the curve drawn through the points may stray from the grid (the curve is linear in dB between points). */
+constexpr float kToleranceDb = 0.5f;
+
 /** The grid index of a peak position: of the two bins around a half-bin position, the higher one. */
 int peakIndex(const std::vector<float>& db, float pos) {
     const int lo = juce::jlimit(0, (int)db.size() - 1, (int)std::floor(pos));
@@ -109,26 +113,15 @@ LfoCustomWave curveFromGridDb(const std::vector<float>& gridDb, int numPoints) {
         return wave;
     }
 
-    // Pick grid bins: the shape's own points first (a duplicate or an out-of-range bin costs nothing), then evenly
-    // spaced points in the largest gaps, so a smooth curve is still sampled evenly.
+    // Pick grid bins: the shape's own points first (a duplicate or an out-of-range bin costs nothing), then a point
+    // wherever the straight segments still miss the grid by more than kToleranceDb.
     std::set<int> chosen;
     for (const int index : shapeIndices(gridDb)) {
         if ((int)chosen.size() >= numPoints)
             break;
         chosen.insert(juce::jlimit(0, last, index));
     }
-    while ((int)chosen.size() < numPoints && (int)chosen.size() < last + 1) {
-        int bestLow = 0, bestGap = 0;
-        for (auto it = chosen.begin(), next = std::next(it); next != chosen.end(); ++it, ++next) {
-            if (*next - *it > bestGap) {
-                bestLow = *it;
-                bestGap = *next - *it;
-            }
-        }
-        if (bestGap < 2)
-            break;
-        chosen.insert(bestLow + bestGap / 2);
-    }
+    shapes::addPointsWhereLinesMiss(chosen, gridDb, numPoints, kToleranceDb);
 
     for (const int index : chosen)
         wave.points.push_back({(float)index / (float)last,

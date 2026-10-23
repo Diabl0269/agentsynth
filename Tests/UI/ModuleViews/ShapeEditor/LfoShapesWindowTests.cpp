@@ -119,3 +119,15 @@ TEST_F(ModuleComponentTest, ANewShapeStartsAsACopyOfTheBlendAtTheCursor) {
     for (float x : {0.1f, 0.4f, 0.8f})
         EXPECT_NEAR(item.curve.evaluate(x), rig.lfo->getCustomWave().evaluate(x), 0.05f);
 }
+
+TEST_F(ModuleComponentTest, ACopiedBlendKeepsOnlyThePointsItNeeds) {
+    LfoWindowRig rig;
+    auto adapter = LfoShapesAdapter(*rig.lfo, &rig.undo, rig.engine.getGraph(), rig.node->nodeID, "LFO");
+    synth::LfoCustomShapes list;
+    list.shapes.push_back({"sine", synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::SoftSine), {0.5f, 0.5f}});
+    rig.lfo->setCustomShapes(list);
+    const auto item = adapter.makeShapeAt(0.2f, 0.3f);
+    EXPECT_LT(item.curve.points.size(), (size_t)synth::LfoCustomWave::kMaxPoints);
+    for (int i = 0; i <= 100; ++i)
+        EXPECT_NEAR(item.curve.evaluate((float)i / 100.0f), list.shapes[0].curve.evaluate((float)i / 100.0f), 0.03f);
+}
