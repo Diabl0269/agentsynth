@@ -11,6 +11,9 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyGlide/KeyHold.cpp
     Source/UI/Layout/KeyGlide/KeyedPointTween.h
     Source/UI/Layout/KeyGlide/KeyedPointTween.cpp
+    Source/UI/Layout/PointEditorDuplicate.h
+    Source/UI/Layout/PointEditorDuplicate.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabDuplicatePoints.cpp
     Source/UI/Timeline/AutomationLaneEditorKeyGlide.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorKeyGlide.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h

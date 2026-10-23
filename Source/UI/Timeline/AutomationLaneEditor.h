@@ -187,7 +187,7 @@ public:
     bool selectAllPoints();
     bool copySelectedPoints();
     bool cutSelectedPoints();
-    // Copies the selected points one grid step past the last one (one undo step) and selects the copies.
+    // Copies the selected points where the Duplicate points preference puts them (one undo step) and selects them.
     bool duplicateSelectedPoints();
     bool canPastePoints() const;
     // Pastes at the transport position (snapped), or at `beat` (snapped); the pasted points become the selection.

@@ -8,6 +8,7 @@
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -896,6 +897,9 @@ void MainComponent::applyTimelineTransportPreferences() {
         timelinePanel.setFollowPointPercent(
             settings->getIntValue(synth::ui::kFollowPointPercentKey, timelinePanel.getFollowPointPercent()));
         timelinePanel.refreshTransportTooltips();
+        // Where Cmd+D puts copies of points (Preferences > Timeline), applied at launch and on every change.
+        synth::ui::setDuplicatePlacement(synth::ui::duplicatePlacementFromString(
+            settings->getValue(synth::ui::kDuplicatePlacementKey, "afterLast")));
     }
 }
 

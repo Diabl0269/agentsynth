@@ -5,6 +5,8 @@
 
 #include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "CurveEditorTestHelpers.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <gtest/gtest.h>
 
@@ -469,3 +471,65 @@ TEST(CurveEditorKeyHold, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion)
 }
 
 //==============================================================================
+// Duplicate points preference: where Cmd+D puts the copies
+
+namespace {
+struct PlacementGuard {
+    explicit PlacementGuard(DuplicatePlacement placement) { setDuplicatePlacement(placement); }
+    ~PlacementGuard() { setDuplicatePlacement(DuplicatePlacement::afterLast); }
+};
+
+// freeModel(3) is 0.25, 0.5, 0.75; the first two are selected and duplicated. Returns the copies' x, one gesture.
+std::vector<double> duplicatedXs(DuplicatePlacement placement, bool snap) {
+    PlacementGuard guard(placement);
+    Rig rig(freeModel(3));
+    if (snap) {
+        rig.editor.setGrid(CurveEditorComponent::CurveGrid{8, 2, 0.0, 0.0});
+        rig.editor.setSnapToGrid(true);
+    }
+    rig.selectFirstTwoInterior();
+    rig.events.clear();
+    EXPECT_TRUE(rig.press('D', kCmd));
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"})) << "one gesture";
+    std::vector<double> xs;
+    for (const int i : rig.selected())
+        xs.push_back(rig.node(i).x);
+    return xs;
+}
+} // namespace
+
+TEST(CurveEditorDuplicatePlacement, RightAfterTheLastPointIsTheDefaultAndStartsOneTickPastIt) {
+    EXPECT_EQ(duplicatePlacement(), DuplicatePlacement::afterLast);
+    const auto xs = duplicatedXs(DuplicatePlacement::afterLast, false);
+    ASSERT_EQ(xs.size(), 2u);
+    EXPECT_NEAR(xs[0], 0.5 + tickBeats(), 1e-9);
+    EXPECT_NEAR(xs[1] - xs[0], 0.25, 1e-9) << "the spacing is kept";
+}
+
+TEST(CurveEditorDuplicatePlacement, OnePointSpacingAndTheNextGridLine) {
+    const auto spacing = duplicatedXs(DuplicatePlacement::onePointSpacing, false);
+    ASSERT_EQ(spacing.size(), 2u);
+    EXPECT_NEAR(spacing[0], 0.75, 1e-9) << "one gap (a quarter) past the last point";
+
+    const auto grid = duplicatedXs(DuplicatePlacement::nextGridLine, true);
+    ASSERT_EQ(grid.size(), 2u);
+    EXPECT_NEAR(grid[0], 0.625, 1e-9) << "whole eighths: 0.25 + 3 * 0.125";
+    EXPECT_NEAR(grid[1] - grid[0], 0.25, 1e-9);
+
+    const auto free = duplicatedXs(DuplicatePlacement::nextGridLine, false);
+    ASSERT_EQ(free.size(), 2u);
+    EXPECT_NEAR(free[0], 0.5 + tickBeats(), 1e-9) << "with snap off it is the default placement";
+}
+
+TEST(CurveEditorDuplicatePlacement, ASinglePointKeepsItsSmallExistingOffsetInEveryMode) {
+    for (const auto placement :
+         {DuplicatePlacement::afterLast, DuplicatePlacement::onePointSpacing, DuplicatePlacement::nextGridLine}) {
+        PlacementGuard guard(placement);
+        Rig rig(freeModel(3));
+        rig.press(juce::KeyPress::rightKey);
+        rig.press(juce::KeyPress::rightKey);
+        ASSERT_TRUE(rig.press('D', kCmd));
+        ASSERT_EQ(rig.selected().size(), 1u);
+        EXPECT_NEAR(rig.node(rig.selected()[0]).x, 0.27, 1e-9);
+    }
+}

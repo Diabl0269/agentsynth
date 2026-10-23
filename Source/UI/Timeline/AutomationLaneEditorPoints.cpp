@@ -3,6 +3,7 @@
 
 #include "AutomationLaneEditor.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/PointEditorKeys.h"
 #include "UI/PianoRoll/NoteAccessibilityText.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
@@ -13,10 +14,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr double kFineValueStep = 0.01;   // of the lane's range, per Up/Down press
-constexpr double kCoarseValueStep = 0.10; // with Shift
-constexpr double kFreeBeatStep = 0.25;    // a sixteenth, when snap is off
-constexpr double kFineBeatScale = 0.25;   // Alt+Shift: a quarter of the plain step, in time and in value
+constexpr double kFreeBeatStep = 0.25; // a sixteenth, when snap is off (duplicate and stretch steps)
 
 std::vector<double> beatsOf(const std::vector<LaneBreakpoint>& points) {
     std::vector<double> beats;
@@ -446,8 +444,8 @@ bool AutomationLaneEditor::copySelectedPoints() {
     return !clipboard_->isEmpty();
 }
 
-// Copies the selection one grid step past its last point as ONE undo step, leaving the clipboard alone; the copies
-// become the selection.
+// Copies the selection as ONE undo step, leaving the clipboard alone; the copies become the selection. Where they go
+// is the Duplicate points preference (PointEditorDuplicate.h); the copies keep their spacing.
 bool AutomationLaneEditor::duplicateSelectedPoints() {
     const auto* points = lanePoints();
     if (points == nullptr || selection_.isEmpty())
@@ -456,8 +454,9 @@ bool AutomationLaneEditor::duplicateSelectedPoints() {
     if (picked.empty())
         return false;
     const auto& range = doc_->getLane(laneId_)->range;
-    const auto copies =
-        pastedPoints(copyPoints(picked), picked.back().beat + gridStepBeats(), range.minValue, range.maxValue);
+    const DuplicateSteps steps{viewState_.divisionBeats(currentBeatsPerBar()), gridStepBeats(), tickBeats()};
+    const auto anchor = duplicateAnchor(duplicatePlacement(), beatsOf(picked), steps);
+    const auto copies = pastedPoints(copyPoints(picked), anchor, range.minValue, range.maxValue);
     if (!commitPointEdit(editTarget(), {}, copies))
         return false;
     selection_.setSelection(beatsOf(copies));

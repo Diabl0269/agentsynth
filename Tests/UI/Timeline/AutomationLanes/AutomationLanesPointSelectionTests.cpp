@@ -4,6 +4,7 @@
 
 #include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "AutomationLanesTestFixture.h"
+#include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -306,6 +307,86 @@ TEST(AutomationLanesPointSelectionTest, DuplicateCopiesTheSelectionPastItsLastPo
 
     f.undo.undo();
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0})) << "one undo takes both copies back";
+}
+
+//==============================================================================
+// Duplicate points preference: where Cmd+D puts the copies
+
+namespace {
+using synth::ui::DuplicatePlacement;
+
+struct PlacementGuard {
+    explicit PlacementGuard(DuplicatePlacement placement) { synth::ui::setDuplicatePlacement(placement); }
+    ~PlacementGuard() { synth::ui::setDuplicatePlacement(DuplicatePlacement::afterLast); }
+};
+
+// The three points of SelectLane, all selected (spaced one beat, 1..3), duplicated; the beats of the copies.
+Beats duplicatedBeats(SelectLane& f, DuplicatePlacement placement, bool snapOn,
+                      synth::ui::TimelineViewState::Snap snap = synth::ui::TimelineViewState::Snap::Quarter) {
+    PlacementGuard guard(placement);
+    f.panel.getViewState().snapEnabled = snapOn;
+    f.panel.getViewState().snap = snap;
+    f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});
+    const auto rev = f.doc.getRevision();
+    EXPECT_TRUE(f.editor->duplicateSelectedPoints());
+    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one undo step";
+    const auto all = f.beats();
+    EXPECT_EQ(all.size(), 6u);
+    EXPECT_EQ(f.selected(), Beats(all.begin() + 3, all.end())) << "the copies are the selection";
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
+    return Beats(all.begin() + 3, all.end());
+}
+} // namespace
+
+TEST(AutomationLanesDuplicatePlacement, RightAfterTheLastPointIsTheDefaultAndStartsOneTickPastIt) {
+    EXPECT_EQ(synth::ui::duplicatePlacement(), DuplicatePlacement::afterLast);
+    const double t = synth::ui::tickBeats();
+    SelectLane snapped, free;
+    EXPECT_EQ(duplicatedBeats(snapped, DuplicatePlacement::afterLast, true), Beats({3.0 + t, 4.0 + t, 5.0 + t}));
+    EXPECT_EQ(duplicatedBeats(free, DuplicatePlacement::afterLast, false), Beats({3.0 + t, 4.0 + t, 5.0 + t}))
+        << "snap does not change this one";
+}
+
+TEST(AutomationLanesDuplicatePlacement, OnePointSpacingStartsOneGapPastTheLastPointSoRepeatsRunEvenly) {
+    SelectLane f;
+    EXPECT_EQ(duplicatedBeats(f, DuplicatePlacement::onePointSpacing, true), Beats({4.0, 5.0, 6.0}));
+    SelectLane g;
+    g.doc.addBreakpoint(g.lane, 3.5, 10.0);
+    PlacementGuard guard(DuplicatePlacement::onePointSpacing);
+    g.editor->getPointSelection().setSelection({2.0, 3.0, 3.5});
+    ASSERT_TRUE(g.editor->duplicateSelectedPoints());
+    EXPECT_EQ(g.selected(), Beats({4.0, 5.0, 5.5})) << "the gap between the last two (half a beat) after the last";
+}
+
+TEST(AutomationLanesDuplicatePlacement, TheNextGridLineMovesTheCopiesByWholeGridStepsPastTheSelection) {
+    SelectLane quarter, eighth, free;
+    EXPECT_EQ(duplicatedBeats(quarter, DuplicatePlacement::nextGridLine, true), Beats({4.0, 5.0, 6.0}))
+        << "a span of two whole steps still clears the last point";
+    EXPECT_EQ(
+        duplicatedBeats(eighth, DuplicatePlacement::nextGridLine, true, synth::ui::TimelineViewState::Snap::Eighth),
+        Beats({3.5, 4.5, 5.5}));
+    const double t = synth::ui::tickBeats();
+    EXPECT_EQ(duplicatedBeats(free, DuplicatePlacement::nextGridLine, false), Beats({3.0 + t, 4.0 + t, 5.0 + t}))
+        << "with snap off it is the default placement";
+}
+
+TEST(AutomationLanesDuplicatePlacement, ASinglePointIsCopiedOneGridStepOnWhateverTheChoice) {
+    for (const auto placement :
+         {DuplicatePlacement::afterLast, DuplicatePlacement::onePointSpacing, DuplicatePlacement::nextGridLine}) {
+        PlacementGuard guard(placement);
+        SelectLane snapped;
+        snapped.editor->getPointSelection().setSelection({2.0});
+        ASSERT_TRUE(snapped.editor->duplicateSelectedPoints());
+        EXPECT_EQ(snapped.selected(), Beats({3.0})) << "a grid step (a beat here)";
+        EXPECT_EQ(snapped.beats(), Beats({1.0, 2.0, 3.0})) << "it landed on the point at beat 3 and replaced it";
+
+        SelectLane free;
+        free.panel.getViewState().snapEnabled = false;
+        free.editor->getPointSelection().setSelection({2.0});
+        ASSERT_TRUE(free.editor->duplicateSelectedPoints());
+        EXPECT_EQ(free.selected(), Beats({2.25})) << "a quarter of a beat with snap off";
+    }
 }
 
 TEST(AutomationLanesPointSelectionTest, ArrowKeysFallThroughOnALaneWithNoPoints) {

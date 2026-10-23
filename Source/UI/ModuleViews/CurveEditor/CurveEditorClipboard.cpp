@@ -5,6 +5,7 @@
 // pasted into another. A group is stored as spacing from its first point, so it lands anywhere.
 
 #include "CurveEditorComponent.h"
+#include "UI/Layout/PointEditorDuplicate.h"
 
 #include <algorithm>
 
@@ -95,8 +96,19 @@ bool CurveEditorComponent::duplicateSelection() {
     if (model_.getMode() != CurveMode::Free || selection_.empty())
         return false;
     const auto clip = selectionAsClip();
-    const double gap = (model_.getMaxX() - model_.getMinX()) * kPasteGapFraction;
-    return insertClip(clip, model_.getNode(selection_.back()).x + gap);
+    const double range = model_.getMaxX() - model_.getMinX();
+    std::vector<double> xs;
+    for (const int i : selection_)
+        if (i >= 0 && i < model_.getNumNodes())
+            xs.push_back(model_.getNode(i).x);
+    if (xs.empty())
+        return false;
+    DuplicateSteps steps;
+    steps.singleStep = range * kPasteGapFraction;
+    steps.tick = range * tickBeats();
+    if (snapToGrid_ && grid_.has_value())
+        steps.grid = grid_->xStep > 0.0 ? grid_->xStep : range / (double)juce::jmax(1, grid_->xDivisions);
+    return insertClip(clip, duplicateAnchor(duplicatePlacement(), xs, steps));
 }
 
 // Halfway between the cursor point and the next one (or the end of the range when it is the last), at the level
