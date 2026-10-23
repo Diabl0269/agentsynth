@@ -17,7 +17,8 @@ Every new or changed control:
    Cmd+1..9 (a fixed positional key; see Switching tabs and Tab strips), and a key inside a focused editor that a native control would also
    own (the arrows, Return and their modifiers in the EQ curve and the curve editor): that is the
    control's own behaviour, not a global shortcut, and is documented with the view
-   ([`visualizers.md`](../layout/visualizers.md)).
+   ([`visualizers.md`](../layout/visualizers.md)); every editor with ordered dots follows the one key map in
+   [`point-editing.md`](../control/point-editing.md).
 2. **Shows the accent focus ring** when it holds keyboard focus.
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
