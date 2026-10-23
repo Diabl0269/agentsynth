@@ -22,9 +22,22 @@ reach the module through its extra state (`setCustomShapes` / `setExtraState`) a
   20 Hz–20 kHz the curve holds its end values.
 - The position is a list of coordinates in 0..1 (two read today; more are kept and clamped, for a
   later 3D map).
-- No fixed shape count; at least one is always kept. A new Filter starts with three vowel-like shapes,
-  `ah` (0.2, 0.25), `ee` (0.8, 0.25) and `oo` (0.5, 0.8), whose peaks stay at or below +2 dB, so
-  switching to Custom sounds at once and adds no gain (the gain audit sweeps `filterType`).
+- No fixed shape count; at least one is always kept. A new Filter starts with three vowel shapes,
+  `ah` (0.2, 0.25), `ee` (0.8, 0.25) and `oo` (0.5, 0.8), whose peaks stay under the gain audit's
+  +6 dB ceiling (the gain audit sweeps `filterType`), so switching to Custom sounds at once at a level close to the
+  other types.
+- **Vowel shapes**: each vowel is a few formant peaks over deep valleys. The peak frequencies and relative levels come
+  from the Csound manual's tenor formant table (a, e, i, u); `ih` is not in that table and uses Peterson and Barney's
+  male F1-F3 (390, 1990, 2550 Hz). The bandwidths are filter-style, wider than the table's 40-130 Hz: those are for
+  a synthesiser that imposes formants whatever the pitch, but a filter's peak narrower than the harmonic spacing
+  falls between a low note's harmonics and the vowel vanishes. Here F1 is 110-160 Hz wide (about a third of an octave),
+  F2 100-190 Hz and F3/F4 about 250 Hz, all well under half an octave. Every formant is its -3 dB points and its peak,
+  with bent skirts into a deep valley (at least 20 dB below F1 between F1 and F2, at least 10 dB between F2 and F3
+  for ee and ih); ah and oo draw F3 and F4 as one shoulder. Each curve is 16-19 points. The five curves are
+  loudness-matched: each is lowered until a band-limited saw at 110 Hz and at 220 Hz comes out within about 2.5 dB of
+  the others (and of the old ah), so swapping or morphing vowels does not jump in level; the loudest peak is at most
+  +2.3 dB, under the +6 dB ceiling of the gain audit. Projects that stored shapes keep the curves they saved; only a
+  Filter still on the defaults gets the current ones.
 
 ## Shared with the LFO
 
@@ -291,7 +304,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Show
   spectrum, the curve, the buttons.
-- **Start from** stamps the vowel (ah, ee, oo) or animal (wolf, crow, frog) curve onto the selected shape. Its
+- **Start from** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves.
 - **Draw** opens the automation lane's own shape flyout (`DrawShapeFlyout`) and applies the pick to the curve through

@@ -154,7 +154,7 @@ TEST(ShapeEditor, StartFromListsTheVowelsAndAnimalsAndStampsTheCurveOnTheSelecte
 
     click(editor.getStartFromButton());
 
-    const std::vector<std::string> expected{"ah", "ee", "oo", "wolf", "crow", "frog"};
+    const std::vector<std::string> expected{"ah", "ee", "oo", "eh", "ih", "wolf", "crow", "frog"};
     EXPECT_EQ(captured.items, expected);
     const int serial = rig.undo.getEditSerial();
     ASSERT_TRUE(captured.run("wolf"));

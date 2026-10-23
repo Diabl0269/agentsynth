@@ -268,12 +268,14 @@ TEST(FilterCustomModuleText, ShiftAndDepthShowUnitsAndRoundTrip) {
 }
 
 TEST(FilterCustomShapePresets, NoTwoPointsNearlyOverlap) {
-    // x is log frequency over 10 octaves, so 0.02 is about a fifth of an octave.
+    // x is log frequency over 10 octaves: 0.02 is about a fifth of an octave. A vowel's formants are 100-250 Hz wide
+    // (about 0.01 of x at 1 kHz), so their points sit closer than the animal calls' broad humps.
     for (int i = 0; i < CustomFilterShapes::kNumPresets; ++i) {
         const auto preset = static_cast<CustomFilterShapes::Preset>(i);
         const auto curve = CustomFilterShapes::presetCurve(preset);
+        const float minGap = i <= (int)CustomFilterShapes::Preset::Ih ? 0.004f : 0.02f;
         for (size_t p = 1; p < curve.points.size(); ++p)
-            EXPECT_GE(curve.points[p].x - curve.points[p - 1].x, 0.02f)
+            EXPECT_GE(curve.points[p].x - curve.points[p - 1].x, minGap)
                 << CustomFilterShapes::presetName(preset) << " point " << p;
     }
 }

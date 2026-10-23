@@ -33,8 +33,8 @@ struct CustomFilterShapes {
     std::vector<CustomFilterShape> shapes;
 
     /** Named starting curves a shape can be stamped with (vowels, then animal calls). */
-    enum class Preset { Ah, Ee, Oo, Wolf, Crow, Frog };
-    static constexpr int kNumPresets = 6;
+    enum class Preset { Ah, Ee, Oo, Eh, Ih, Wolf, Crow, Frog };
+    static constexpr int kNumPresets = 8;
     static const char* presetName(Preset preset);
     static LfoCustomWave presetCurve(Preset preset);
 
