@@ -30,11 +30,6 @@ bool dispatchKey(SoundBrowserComponent& view, juce::Component& origin, const juc
     return false;
 }
 
-bool usesArrows(const juce::Component& c) {
-    return dynamic_cast<const juce::ComboBox*>(&c) != nullptr ||
-           dynamic_cast<const synth::ui::RangeSlider*>(c.getParentComponent()) != nullptr;
-}
-
 struct Fixture {
     TempTree tree;
     synth::soundbrowser::SoundLists lists;
@@ -118,36 +113,114 @@ TEST(SoundBrowserKeyboardReachTest, DownFromTheSearchStillGoesToTheList) {
     EXPECT_EQ(f.landed(), nullptr) << "no new stepping from the search box";
 }
 
-TEST(SoundBrowserKeyboardReachTest, EveryControlOfTheViewIsReachableAndTheWalkVisitsThemInOrder) {
+namespace {
+
+// Every focusable control of the view but the search box (the first stop, reached by Up from Filters).
+std::vector<juce::Component*> controlsBesideTheSearch(SoundBrowserComponent& v) {
+    auto all = synth::ui::focusableDescendants(v);
+    all.erase(std::remove(all.begin(), all.end(), &v.getSearchField()), all.end());
+    return all;
+}
+
+// A height at which the open panel's view shows the footer in `mode`, found by shrinking the view; 0 when none does.
+int heightShowing(SoundBrowserComponent& v, SoundBrowserComponent::FooterMode mode) {
+    for (int h = 900; h >= 120; h -= 5) {
+        v.setSize(300, h);
+        v.completeFilterMotionForTest();
+        if (v.getFooterMode() == mode)
+            return h;
+    }
+    return 0;
+}
+
+// Walks Down from Filters through the header, the list and the footer using only dispatched keys, then Up back to the
+// search, and checks that every control of the view was visited once each way.
+void walkTheWholeView(Fixture& f, const char* what) {
+    auto& v = *f.view;
+    SCOPED_TRACE(what);
+    const auto expected = controlsBesideTheSearch(v);
+    ASSERT_GE(expected.size(), 8u);
+    for (auto* control : expected)
+        EXPECT_TRUE(v.listensForStepKeysForTest(*control)) << "no stepping on: " << control->getTitle();
+
+    const auto press = [&](juce::Component& from, int code) {
+        EXPECT_TRUE(dispatchKey(v, from, key(code))) << from.getTitle();
+        return f.landed();
+    };
+    const auto isFooter = [&](juce::Component* c) { return c != nullptr && v.getPreviewFooter().isParentOf(c); };
+    const size_t listSteps = v.getRows().size() + 2;
+
+    std::vector<juce::Component*> down{&v.getFiltersButton()};
+    auto* current = down.front();
+    for (int guard = 0; guard < 50 && current != &v; ++guard) { // the header, then the list
+        current = press(*current, juce::KeyPress::downKey);
+        down.push_back(current);
+    }
+    ASSERT_EQ(current, &v) << "Down off the last header stop lands on the list";
+    for (size_t i = 0; i < listSteps && current == &v; ++i) { // rows, then the footer when there is one
+        dispatchKey(v, v, key(juce::KeyPress::downKey));
+        current = f.landed();
+    }
+    const bool hasFooter = current != &v;
+    for (int guard = 0; hasFooter && guard < 20; ++guard) {
+        down.push_back(current);
+        auto* next = press(*current, juce::KeyPress::downKey);
+        if (next == current)
+            break; // Down past the last footer stop is consumed and goes nowhere
+        current = next;
+    }
+    EXPECT_EQ(hasFooter, v.getPreviewFooter().isVisible());
+    for (auto* control : expected)
+        EXPECT_NE(std::find(down.begin(), down.end(), control), down.end())
+            << "Down never reached " << control->getTitle();
+
+    std::vector<juce::Component*> up;
+    for (int guard = 0; guard < 20 && isFooter(current); ++guard) { // back up the footer to the list
+        current = press(*current, juce::KeyPress::upKey);
+        up.push_back(current);
+    }
+    ASSERT_EQ(current, &v);
+    for (size_t i = 0; i < listSteps && current == &v; ++i) { // up the rows to the first, then off it
+        dispatchKey(v, v, key(juce::KeyPress::upKey));
+        current = f.landed();
+    }
+    for (int guard = 0; guard < 50 && current != &v.getSearchField(); ++guard) {
+        up.push_back(current);
+        current = press(*current, juce::KeyPress::upKey);
+    }
+    EXPECT_EQ(current, &v.getSearchField()) << "Up from Filters returns to the search";
+    for (auto* control : expected)
+        if (!isFooter(control))
+            EXPECT_NE(std::find(up.begin(), up.end(), control), up.end()) << "Up never reached " << control->getTitle();
+}
+
+} // namespace
+
+TEST(SoundBrowserKeyboardReachTest, DownAndUpVisitEveryControlOfTheViewAtEveryFooterSize) {
     Fixture f;
     auto& v = *f.view;
+    v.setSongKey("D minor");
     f.switchOneFilterOn();
     ASSERT_TRUE(v.areFiltersOpen());
     ASSERT_TRUE(v.getChipRow().isVisible());
+    const auto panelStops = synth::ui::focusableDescendants(v.getFilterPanel());
+    ASSERT_NE(std::find(panelStops.begin(), panelStops.end(), &v.getFilterPanel().songKeyGroup()), panelStops.end())
+        << "the Song key chip shows";
 
-    std::vector<juce::Component*> expected{&v.getFiltersButton(), &v.getChipRow()};
-    for (auto* control : synth::ui::focusableDescendants(v.getFilterPanel()))
-        expected.push_back(control);
-
-    for (auto* control : synth::ui::focusableDescendants(v)) {
-        if (control == &v.getSearchField() || v.getPreviewFooter().isParentOf(control))
-            continue; // the search box is the first stop; the footer is not part of the header
-        EXPECT_NE(std::find(expected.begin(), expected.end(), control), expected.end())
-            << "unreachable by Up and Down: " << control->getTitle();
-        EXPECT_TRUE(v.listensForStepKeysForTest(*control)) << "no stepping on: " << control->getTitle();
-    }
-
-    ASSERT_GE(expected.size(), 6u);
-    for (size_t i = 0; i < expected.size(); ++i) {
-        auto& current = *expected[i];
-        if (usesArrows(current)) {
-            EXPECT_FALSE(v.offerStepKeyForTest(key(juce::KeyPress::downKey), current))
-                << current.getTitle() << " keeps its own arrows";
-            EXPECT_FALSE(v.offerStepKeyForTest(key(juce::KeyPress::upKey), current));
+    using Mode = SoundBrowserComponent::FooterMode;
+    const int tall = heightShowing(v, Mode::Full);
+    const int compact = heightShowing(v, Mode::Compact);
+    const int hidden = heightShowing(v, Mode::Hidden);
+    ASSERT_GT(tall, 0);
+    ASSERT_GT(compact, 0);
+    for (const auto& [h, name] :
+         {std::pair{tall, "full footer"}, std::pair{compact, "compact footer"}, std::pair{hidden, "no footer"}}) {
+        if (h == 0)
             continue;
-        }
-        EXPECT_TRUE(dispatchKey(v, current, key(juce::KeyPress::downKey))) << current.getTitle();
-        EXPECT_EQ(f.landed(), i + 1 < expected.size() ? expected[i + 1] : &v) << "from " << current.getTitle();
+        v.setSize(300, h);
+        f.settle();
+        v.selectRow(0);
+        walkTheWholeView(f, name);
     }
 }
 
@@ -175,7 +248,7 @@ TEST(SoundBrowserKeyboardReachTest, ASteppedToControlBelowTheCappedPanelScrollsI
     };
     size_t target = 0;
     for (size_t i = 1; i < stops.size() && target == 0; ++i)
-        if (hidden(*stops[i]) && !usesArrows(*stops[i - 1]))
+        if (hidden(*stops[i]))
             target = i;
     ASSERT_GT(target, 0u) << "a short column hides a control that a Down step reaches";
 
@@ -195,4 +268,87 @@ TEST(SoundBrowserKeyboardReachTest, EscFromAMenuInThePanelStillClosesIt) {
     EXPECT_TRUE(dispatchKey(v, combo, key(juce::KeyPress::escapeKey)));
     f.settle();
     EXPECT_FALSE(v.areFiltersOpen());
+}
+
+TEST(SoundBrowserKeyboardReachTest, AMenuStepsWithUpAndDownAndOpensWithReturnOrSpace) {
+    Fixture f;
+    auto& v = *f.view;
+    v.setFiltersOpen(true, false);
+    f.settle();
+    auto& panel = v.getFilterPanel();
+    auto& length = panel.lengthBox();
+    length.setSelectedId(2, juce::dontSendNotification);
+    const int chosen = length.getSelectedId();
+
+    EXPECT_TRUE(dispatchKey(v, length, key(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.landed(), &panel.placeBox());
+    EXPECT_TRUE(dispatchKey(v, length, key(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.landed(), &panel.keyBox());
+    EXPECT_EQ(length.getSelectedId(), chosen) << "Up and Down no longer change a menu";
+
+    EXPECT_FALSE(length.isPopupActive());
+    EXPECT_TRUE(dispatchKey(v, length, key(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(length.isPopupActive());
+    length.hidePopup();
+    EXPECT_FALSE(length.isPopupActive());
+    EXPECT_TRUE(dispatchKey(v, length, space()));
+    EXPECT_TRUE(length.isPopupActive());
+    length.hidePopup();
+}
+
+TEST(SoundBrowserKeyboardReachTest, LeftAndRightStillMoveATempoHandleAndTheVolume) {
+    Fixture f;
+    auto& v = *f.view;
+    v.setFiltersOpen(true, false);
+    f.settle();
+    auto& tempo = v.getFilterPanel().tempoSlider();
+    tempo.setValues(100.0, 140.0);
+    auto& lower = tempo.getHandle(synth::ui::RangeSlider::Handle::Lower);
+    EXPECT_TRUE(dispatchKey(v, lower, key(juce::KeyPress::rightKey)));
+    EXPECT_GT(tempo.getLower(), 100.0);
+    EXPECT_TRUE(dispatchKey(v, lower, key(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(tempo.getLower(), 100.0);
+    EXPECT_TRUE(dispatchKey(v, lower, key(juce::KeyPress::downKey)));
+    EXPECT_DOUBLE_EQ(tempo.getLower(), 100.0) << "Down steps focus, it does not move the handle";
+
+    auto& volume = v.getPreviewFooter().getVolume();
+    const double before = volume.getValue();
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::rightKey)));
+    EXPECT_GT(volume.getValue(), before);
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(volume.getValue(), before);
+}
+
+TEST(SoundBrowserKeyboardReachTest, DownFromTheLastRowEntersTheFooterAndUpFromItsFirstControlReturns) {
+    Fixture f;
+    auto& v = *f.view;
+    ASSERT_EQ(v.getFooterMode(), SoundBrowserComponent::FooterMode::Full);
+    int last = -1;
+    for (int i = 0; i < (int)v.getRows().size(); ++i)
+        last = v.getRows()[(size_t)i].navigable() ? i : last;
+    v.selectRow(last);
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getStopButton());
+    EXPECT_EQ(v.getSelectedIndex(), last) << "the selection is kept";
+    EXPECT_TRUE(dispatchKey(v, v.getPreviewFooter().getStopButton(), key(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.landed(), &v);
+    EXPECT_EQ(v.getSelectedIndex(), last);
+}
+
+TEST(SoundBrowserKeyboardReachTest, ACompactFooterIsReachableAndAHiddenOneMakesDownOnTheLastRowANoOp) {
+    Fixture f;
+    auto& v = *f.view;
+    using Mode = SoundBrowserComponent::FooterMode;
+    ASSERT_GT(heightShowing(v, Mode::Compact), 0);
+    v.selectRow((int)v.getRows().size() - 1);
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getStopButton());
+
+    const int hiddenHeight = heightShowing(v, Mode::Hidden);
+    ASSERT_GT(hiddenHeight, 0);
+    ASSERT_FALSE(v.getPreviewFooter().isVisible());
+    v.selectRow((int)v.getRows().size() - 1);
+    const auto* before = f.landed();
+    dispatchKey(v, v, key(juce::KeyPress::downKey));
+    EXPECT_EQ(f.landed(), before) << "no footer, no stop";
 }

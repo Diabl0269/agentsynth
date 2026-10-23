@@ -191,12 +191,15 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
     if (key.isKeyCode(juce::KeyPress::upKey)) {
-        if (!mods.isAnyModifierKeyDown() && atFirstListRow())
+        if (!mods.isAnyModifierKeyDown() && atListEnd(-1))
             return climbToHeader();
         return moveSelection(-1);
     }
-    if (key.isKeyCode(juce::KeyPress::downKey))
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        if (!mods.isAnyModifierKeyDown() && atListEnd(+1) && enterFooter())
+            return true;
         return moveSelection(+1);
+    }
     if (key.isKeyCode(juce::KeyPress::pageUpKey) || key.isKeyCode(juce::KeyPress::pageDownKey)) {
         const int step = juce::jmax(1, listArea().getHeight() / kRowHeight - 1);
         const int dir = key.isKeyCode(juce::KeyPress::pageUpKey) ? -1 : +1;

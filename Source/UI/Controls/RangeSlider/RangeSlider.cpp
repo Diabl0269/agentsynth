@@ -342,7 +342,7 @@ void RangeSlider::mouseDown(const juce::MouseEvent& e) {
     setHandle(which, valueAt(x), true, true);
 }
 
-juce::String RangeSlider::getTooltip() { return label_ + ": drag a handle, or focus it and use the arrow keys"; }
+juce::String RangeSlider::getTooltip() { return label_ + ": drag a handle, or focus it and use Left and Right"; }
 
 std::unique_ptr<juce::AccessibilityHandler> RangeSlider::createAccessibilityHandler() {
     return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::group);

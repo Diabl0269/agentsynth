@@ -220,7 +220,10 @@ private:
     void attachReachListeners();
     void focusStop(juce::Component& stop);
     bool climbToHeader();
-    bool atFirstListRow() const;
+    bool atListEnd(int direction) const;
+    bool enterFooter();
+    void focusListStop(bool selectFirst);
+    std::vector<juce::Component*> footerStops();
 
     // Preview (SoundBrowserPreview.cpp)
     void setupPreview();
