@@ -9,7 +9,7 @@ FIR kernel designed from user-drawn magnitude shapes. The rest of the Filter is 
 Code: `Source/Modules/Filter/` — `CustomFilterShapes` (data model), `CustomFilterKernelDesigner`
 (minimum-phase design), `PartitionedConvolver` (convolution), `CustomFilterEngine` (handoff, blend,
 redesign policy; its per-voice path in `CustomFilterEngineVoices.cpp`), `CustomFilterBlend` (the blend as
-numbers), `CustomFilterPerNote` (per-note settings) and `CustomFilterVoiceCursors` (per-voice note spotting and
+numbers), `CustomFilterCutoff` (what Cutoff and Resonance mean, as pure functions), `CustomFilterPerNote` (per-note settings) and `CustomFilterVoiceCursors` (per-voice note spotting and
 glide). `FilterModule::processCustomMode` wires it in. Shapes
 reach the module through its extra state (`setCustomShapes` / `setExtraState`) and are edited in the
 [shape editor window](#shape-editor-window).
@@ -49,11 +49,35 @@ What stays per module: the Filter's dB/Hz curve meaning, presets, defaults and f
 | `morphX`, `morphY` | 0–1 | 0.5 | The morph cursor on the shape map |
 | `shift` | −48..+48 st | 0 | Moves the whole response along frequency: bin f reads the curve at f / 2^(shift/12) |
 | `depth` | 0–2 | 1 | Multiplies every dB value; 0 is flat (0 dB), 2 doubles every boost and cut |
+| `cutoff` | 20–20000 Hz | 440 | Moves the whole drawn response along frequency, on top of Shift: a further `12 × log2(cutoff / 440)` semitones, so 440 Hz (the default) moves nothing and 1760 Hz moves it up two octaves |
+| `resonance` | 0–1 | 0.1 | Adds a resonant bell at the cutoff frequency, after Depth: see [Cutoff and Resonance](#cutoff-and-resonance) |
 
-All four are added after Key Track (Level and Mute stay last) and each has a CV jack. Cutoff and Resonance are
-ignored in Custom; the [card](#card) swaps them in place for Shift and Depth. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
+The four Custom parameters are added after Key Track (Level and Mute stay last) and each has a CV jack; Cutoff and
+Resonance keep their old jacks. Drive is ignored in Custom. A patch saved with Custom and a Cutoff other than 440 Hz
+(or a Resonance above 0.1) sounds different from before Cutoff and Resonance were used: the response is moved and gets
+its bell. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
 in poly the voices share one kernel unless a [per-note mode](#per-note-cursors) is on, and Key Track does not
 follow a voice's pitch there either.
+
+## Cutoff and Resonance
+
+Both are read once per block like Shift and Depth (the knob plus its CV: Cutoff's CV sweeps exponentially as in the
+other types, +1 reaching 20 kHz and -1 20 Hz; Resonance's CV adds to the knob, held to 0..1) and are shared by every poly
+voice, per-note mode included. They are not Key Track targets.
+
+- **Cutoff** adds `12 × log2(cutoff / 440)` semitones to Shift (and Key Track). The designer applies it, so
+  `CustomFilterKernelDesigner::design(grid, shift, depth, resonance, cutoffHz, out)` is the whole recipe.
+- **Resonance** adds, after Depth, `18 × resonance²` dB at the cutoff frequency itself (the bell is not moved by the
+  shift Cutoff causes): a Gaussian in log frequency whose standard deviation falls from one octave at resonance 0 to a
+  sixth of an octave at 1. The default 0.1 adds 0.18 dB, which is nothing audible; Depth 0 with resonance up still
+  gives a peak on a flat response, like a resonant filter.
+- **One definition.** `customfilter::cutoffShiftSemitones`, `cutoffX` and `resonanceBellDb`
+  (`CustomFilterCutoff.h`) are the only definitions; the designer and `customfilter::responseGridDb(shapes, x, y, shift,
+  depth, cutoffHz, resonance)` (the card's response view) both call them, so the curve drawn is the curve designed. At
+  cutoff 440 Hz and resonance 0 the grid equals the older `responseGridDb(shapes, x, y, shift, depth)` exactly.
+- **Redesign.** The engine redesigns when the cutoff's shift moves by more than 0.001 semitone or the resonance by more
+  than 0.0001, like Shift and Depth, in the shared and the per-voice path alike; the new kernel crossfades in over the
+  block, so a fast cutoff LFO makes no click. `design()` allocates nothing, as before.
 
 ## CV jacks
 
@@ -71,7 +95,7 @@ precedent of one appended shared channel. CV moves the knob in its normalised ra
 
 ## Blend and kernel design
 
-Once per block, morph, shift and depth (knob plus CV, read at the block's first sample) are compared
+Once per block, morph, shift, depth, cutoff and resonance (knob plus CV, read at the block's first sample) are compared
 with the values the live kernel was designed for; a redesign happens only when one moved by more than a
 small epsilon or the shapes changed.
 
@@ -80,8 +104,9 @@ small epsilon or the shapes changed.
 2. **Blend in dB**: each shape's dB curve, pre-rendered on a 1024-point log-frequency grid, summed with
    those weights. Kernels are never blended: a sum of minimum-phase kernels is neither minimum phase nor
    the blended magnitude.
-3. **Shift and depth**: each FFT bin reads the blended curve at its shifted log-frequency position
-   (linear interpolation), and the dB is multiplied by depth.
+3. **Shift, cutoff, depth and resonance**: each FFT bin reads the blended curve at its shifted log-frequency position
+   (Shift plus the semitones Cutoff adds; linear interpolation), the dB is multiplied by depth, and then the
+   [resonant bell](#cutoff-and-resonance) is added.
 4. **Minimum phase by the real cepstrum**: FFT size N = 4L = 8192, kernel length L = 2048. ln|H| →
    inverse FFT (real cepstrum) → fold onto positive quefrencies → FFT → complex exp → inverse FFT;
    the first L samples, with a half-Hann fade over the last 256, are the kernel. The magnitude matches
@@ -303,14 +328,15 @@ double-click to delete, Return to edit", "Morph cursor - drag to blend shapes". 
 
 ## Card
 
-With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`, revision 3; the logic is
+With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`, revision 5; the logic is
 `MorphShapesCard`, `Source/UI/Graph/ModuleComponent/MorphShapesCard/`, which the LFO card reuses for its Custom shape). It is a collaborator, not `ModuleComponent` members: it owns the morph map, the Edit shapes button and the Show Morph Map pill, gets the card's hooks through its `Host`, and `ModuleComponent` holds one pointer to it (`getMorphCard()`):
 
-- **Tone row.** Cutoff and Resonance (ignored here) swap in place for Shift and Depth, the same cells, with the
-  swap-in-place motion of any condition; Drive stays. Every other type has exactly its old card.
-- **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift and Depth
-  applied (`customfilter::responseGridDb`, the numbers the kernel is designed from) and follows the cursor, the shapes
-  and the knobs; no cutoff marker. Double-clicking it opens the shape editor on the shape nearest the cursor.
+- **Tone row and Shift/Depth.** The tone row (Cutoff, Resonance, Drive) is the same in every type. A section of its
+  own, Shift and Depth, shows only in Custom (a `visibleWhen` section, so the card grows and gives the height back);
+  a cable dropped on a knob lands on its ring. Every other type has exactly its old card.
+- **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift, Cutoff,
+  Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the
+  cursor, the shapes and the knobs, and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
 - **Morph map** (252 x 159, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
@@ -334,7 +360,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   Alt-press on the slider drags the amount; each is one undo step and never moves the cursor. A plain press on the
   slider itself still sets the cursor.
 - **Motion.** The map and the Edit shapes row fade and take their height with the shared `CardBlockFade`; the Morph
-  knobs fade through the card body's conditional-section fade and the Cutoff / Resonance swap through its swap motion;
+  knobs fade through the card body's conditional-section fade and the Shift / Depth section through the same fade;
   the card's height eases and the neighbours make room once per direction. Reduce Motion is the short plain fade and
   Animations: Off lands at once ([animation](../layout/animation.md#fading-things-in-and-out)).
 - **Keys.** Tab visits the map, each dot, the cursor, then the X and Y sliders; keys are in

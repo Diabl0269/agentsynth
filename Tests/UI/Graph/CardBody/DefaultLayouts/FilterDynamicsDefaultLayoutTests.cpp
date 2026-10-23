@@ -67,16 +67,16 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultWithNoDimRules) {
     for (const char* type : {"Filter", "Compressor", "Limiter", "Gate"}) {
         const auto* entry = defaults.find(type);
         ASSERT_NE(entry, nullptr) << type;
-        // The Filter is at revision 4: its Custom section came after the first design, Shift and Depth then
-        // moved into the tone row, and Mix and Pan got a row of their own.
-        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 4 : 1) << type;
+        // The Filter is at revision 5: its Custom section came after the first design, Mix and Pan got a row of
+        // their own, and Shift and Depth took a Custom-only section beside the tone row.
+        EXPECT_EQ(entry->defaultRevision, juce::String(type) == "Filter" ? 5 : 1) << type;
         EXPECT_TRUE(entry->dimRules.empty()) << type << ": nothing in this family dims";
         for (const auto& section : entry->layout.sections)
             if (section.title.has_value())
                 EXPECT_FALSE(section.title->containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZ ")) << "sentence case";
     }
     EXPECT_EQ(sectionOrder(*defaults.find("Filter")),
-              (std::vector<juce::String>{"type", "tone", "modulation", "output", "custom", "footer"}));
+              (std::vector<juce::String>{"type", "tone", "customShape", "modulation", "output", "custom", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Compressor")),
               (std::vector<juce::String>{"meter", "levels", "dynamics", "footer"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Limiter")), (std::vector<juce::String>{"meter", "levels", "timing"}));
@@ -93,7 +93,7 @@ TEST(FilterDynamicsDefaultLayout, TheFilterHasTypeLargeCutoffModulationAndAFoote
 
     const auto& plan = built.body->getPlan();
     EXPECT_EQ(plan.items[(size_t)plan.findParam("cutoff")].kind, synth::CardBodyItem::Kind::KnobLarge);
-    const auto& modulation = plan.sections[2];
+    const auto& modulation = plan.sections[3];
     ASSERT_TRUE(modulation.hasHeader());
     EXPECT_EQ(*modulation.title, "Modulation");
     EXPECT_EQ(modulation.items.size(), 2u);
@@ -243,7 +243,7 @@ TEST(FilterDynamicsDefaultLayout, TheEstimateEqualsTheRealCardForEveryTypeInTheF
 TEST(FilterDynamicsDefaultLayout, TheFilterCustomKnobsShowOnlyWhileCustomIsTheType) {
     const auto* entry = synth::DefaultCardLayouts::builtIn().find("Filter");
     ASSERT_NE(entry, nullptr);
-    const auto& custom = entry->layout.sections[4];
+    const auto& custom = entry->layout.sections[5];
     ASSERT_EQ(custom.id, "custom");
     ASSERT_TRUE(custom.visibleWhen.has_value());
     EXPECT_EQ(custom.visibleWhen->param, "filterType");
@@ -252,28 +252,27 @@ TEST(FilterDynamicsDefaultLayout, TheFilterCustomKnobsShowOnlyWhileCustomIsTheTy
     EXPECT_EQ(custom.items.size(), 2u) << "Morph X and Morph Y; the card hides them while the morph map shows";
 }
 
-TEST(FilterDynamicsDefaultLayout, CustomSwapsCutoffAndResonanceForShiftAndDepthInPlaceAndDriveStays) {
+// Regression test for FRO964: Custom uses Cutoff and Resonance, so they no longer swap out for Shift and Depth.
+TEST(FilterDynamicsDefaultLayout, CustomKeepsCutoffResonanceAndDriveAndAddsShiftAndDepthInTheirOwnSection) {
     const auto* entry = synth::DefaultCardLayouts::builtIn().find("Filter");
     ASSERT_NE(entry, nullptr);
     const auto& tone = entry->layout.sections[1];
     ASSERT_EQ(tone.id, "tone");
-    ASSERT_EQ(tone.items.size(), 5u);
-    auto param = [&](size_t i) -> const synth::CardParamItem& { return std::get<synth::CardParamItem>(tone.items[i]); };
-    EXPECT_EQ(param(0).paramId, "cutoff");
-    EXPECT_EQ(param(1).paramId, "shift");
-    EXPECT_EQ(param(2).paramId, "resonance");
-    EXPECT_EQ(param(3).paramId, "depth");
-    EXPECT_EQ(param(4).paramId, "drive");
-    EXPECT_FALSE(param(4).when.has_value()) << "Drive shows in every type";
-    for (size_t i : {0u, 2u}) {
-        ASSERT_TRUE(param(i).when.has_value());
-        EXPECT_EQ(param(i).when->effect, synth::CardConditionEffect::Show);
-        EXPECT_FALSE(param(i).when->is.contains("Custom")) << "hidden in Custom";
-        EXPECT_TRUE(param(i).when->is.contains("LPF24"));
-        EXPECT_TRUE(param(i).when->is.contains("Notch"));
-    }
-    for (size_t i : {1u, 3u}) {
-        ASSERT_TRUE(param(i).when.has_value());
-        EXPECT_EQ(param(i).when->is, juce::StringArray({"Custom"}));
-    }
+    ASSERT_EQ(tone.items.size(), 3u);
+    auto param = [&](const synth::CardSection& sec, size_t i) -> const synth::CardParamItem& {
+        return std::get<synth::CardParamItem>(sec.items[i]);
+    };
+    EXPECT_EQ(param(tone, 0).paramId, "cutoff");
+    EXPECT_EQ(param(tone, 1).paramId, "resonance");
+    EXPECT_EQ(param(tone, 2).paramId, "drive");
+    for (size_t i = 0; i < 3; ++i)
+        EXPECT_FALSE(param(tone, i).when.has_value()) << "shown in every type, Custom included";
+
+    const auto& shape = entry->layout.sections[2];
+    ASSERT_EQ(shape.id, "customShape");
+    ASSERT_TRUE(shape.visibleWhen.has_value());
+    EXPECT_EQ(shape.visibleWhen->is, juce::StringArray({"Custom"}));
+    ASSERT_EQ(shape.items.size(), 2u);
+    EXPECT_EQ(param(shape, 0).paramId, "shift");
+    EXPECT_EQ(param(shape, 1).paramId, "depth");
 }

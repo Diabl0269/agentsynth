@@ -602,9 +602,10 @@ private:
 
     /** Custom type: every audio channel of both legs through one shared kernel, or in poly with a per-note mode
         on, one kernel per voice (both legs of a voice share it). Morph X/Y, Shift and Depth (and their CV) are
-        read once per block; Key Track adds a shift by the Pitch input in mono only. Cutoff, Resonance and Drive
-        are ignored. History is cleared on entering the mode or changing the voice count, so a stale tail from an
-        earlier stint never plays. */
+        read once per block; Key Track adds a shift by the Pitch input in mono only. Cutoff (with its CV, as the
+        other types sweep it) moves the drawn response along frequency and Resonance adds a bell at the cutoff;
+        both are shared by every voice. Drive is ignored. History is cleared on entering the mode or changing the voice
+       count, so a stale tail from an earlier stint never plays. */
     void processCustomMode(juce::AudioBuffer<float>& buffer, int numSamples) {
         const bool poly = polyParam->get();
         if (!customWasActive || poly != customWasPoly)
@@ -617,6 +618,14 @@ private:
         c.morphY = modulateNormalised(*morphYParam, morphYParam->get(), blockCV(buffer, kMorphYCVChannel));
         c.shiftSemitones = modulateNormalised(*shiftParam, shiftParam->get(), blockCV(buffer, kShiftCVChannel));
         c.depth = modulateNormalised(*depthParam, depthParam->get(), blockCV(buffer, kDepthCVChannel));
+        const float cutoffCV = juce::jlimit(-1.0f, 1.0f, blockCV(buffer, cvChannelFor(0, poly)));
+        const float resonanceCV = blockCV(buffer, cvChannelFor(1, poly));
+        c.cutoffHz = sweepCutoff(smoothedCutoff.getCurrentValue(), cutoffCV);
+        c.resonance = juce::jlimit(0.0f, 1.0f, smoothedResonance.getCurrentValue() + resonanceCV);
+        smoothedCutoff.skip(numSamples);
+        smoothedResonance.skip(numSamples);
+        modulatedCutoff.store(c.cutoffHz, std::memory_order_relaxed);
+        modulatedResonance.store(c.resonance, std::memory_order_relaxed);
         const float keyTrack =
             0.01f * modulateNormalised(*keyTrackParam, keyTrackParam->get(), blockCV(buffer, kKeyTrackCVChannel));
         const float pitch = blockEndPitch(buffer, 0);
@@ -649,6 +658,16 @@ private:
                 if (const int ch = legBaseChannel(leg) + v; ch < buffer.getNumChannels())
                     in.audible = buffer.getMagnitude(ch, 0, numSamples) > kVoiceAudibleLevel;
         }
+    }
+
+    /** `base` swept by a Cutoff CV in -1..1: +1 reaches 20 kHz, -1 reaches 20 Hz, exponentially. */
+    static float sweepCutoff(float base, float cv) {
+        base = juce::jlimit(20.0f, 20000.0f, base);
+        if (cv > 0.0f)
+            return base * std::pow(20000.0f / base, cv);
+        if (cv < 0.0f)
+            return base * std::pow(20.0f / base, -cv);
+        return base;
     }
 
     /** Cutoff after Key Track: `f` times (pitch / middle C) ^ keyTrack, i.e. `keyTrack` octaves of

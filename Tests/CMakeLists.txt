@@ -38,6 +38,7 @@ add_executable(Tests
     Modules/Filter/PartitionedConvolverTests.cpp
     Modules/Filter/CustomFilterEngineTests.cpp
     Modules/Filter/CustomFilterBlendTests.cpp
+    Modules/Filter/CustomFilterCutoffTests.cpp
     Modules/Filter/FilterCustomModuleTests.cpp
     Modules/Filter/FilterPerNoteTests.cpp
     Modules/CardViewStateTests.cpp

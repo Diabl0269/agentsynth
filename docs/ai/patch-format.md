@@ -113,8 +113,9 @@ Per shape only these are read: `curve.points` (x, y in 0..1, bend in -1..1, at m
 frequency from 20 Hz to 20 kHz, y maps linearly from -48 dB to +12 dB so 0.8 is 0 dB), `position` (at
 most 3 values, each clamped to 0..1) and `name`, reduced to at most 24 characters of letters, digits,
 space and `-` (anything else is dropped). At most 16 shapes are read. Any other key is ignored, and a
-state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift and
-Depth through ordinary `params` (`morphX`, `morphY`, `shift`, `depth`) with `filterType` set to Custom.
+state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift,
+Depth, Cutoff (moves the response) and Resonance (a peak at the cutoff) through ordinary `params` (`morphX`, `morphY`,
+`shift`, `depth`, `cutoff`, `resonance`) with `filterType` set to Custom.
 
 The same `state` may carry the per-note settings, which make each note of a poly Filter sit at its own place on
 the map ([custom-filter.md](../modules/custom-filter.md#per-note-cursors)):

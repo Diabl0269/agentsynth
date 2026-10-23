@@ -87,8 +87,12 @@ public:
         int filterType = filterModule.getCurrentFilterType();
 
         const bool custom = filterType == FilterModule::kCustomTypeIndex;
-        const CustomState customNow{filterModule.getCurrentMorphX(), filterModule.getCurrentMorphY(),
-                                    filterModule.getCurrentShift(), filterModule.getCurrentDepth(),
+        const CustomState customNow{filterModule.getCurrentMorphX(),
+                                    filterModule.getCurrentMorphY(),
+                                    filterModule.getCurrentShift(),
+                                    filterModule.getCurrentDepth(),
+                                    cutoff,
+                                    filterModule.getModulatedResonance(),
                                     filterModule.getCustomShapesGeneration()};
         if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType ||
             (custom && !(customNow == lastCustom))) {
@@ -283,12 +287,10 @@ public:
             g.strokePath(specPath, juce::PathStrokeType(1.0f));
         }
 
-        // Cutoff frequency marker (the Custom type ignores the cutoff)
-        if (lastFilterType != FilterModule::kCustomTypeIndex) {
-            float cutoffX = freqToX(lastCutoff, w);
-            g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
-            g.drawVerticalLine((int)cutoffX, 0.0f, h);
-        }
+        // Cutoff frequency marker (in Custom, where the resonant bell sits)
+        float cutoffX = freqToX(lastCutoff, w);
+        g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
+        g.drawVerticalLine((int)cutoffX, 0.0f, h);
     }
 
 private:
@@ -301,7 +303,7 @@ private:
     float lastDrive = 0.0f;
     int lastFilterType = -1;
     struct CustomState {
-        float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f;
+        float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f, cutoff = 0.0f, resonance = 0.0f;
         int generation = -1;
         bool operator==(const CustomState&) const = default;
     } lastCustom;
@@ -323,9 +325,11 @@ private:
         int filterType = lastFilterType;
 
         if (filterType == FilterModule::kCustomTypeIndex) {
-            // The drawn shapes blended at the morph cursor, then shifted and scaled: what the kernel is designed from.
+            // The drawn shapes blended at the morph cursor, shifted (Shift and Cutoff), scaled, then given the
+            // resonant bell: what the kernel is designed from.
             const auto db = synth::customfilter::responseGridDb(filterModule.getCustomShapes(), lastCustom.morphX,
-                                                                lastCustom.morphY, lastCustom.shift, lastCustom.depth);
+                                                                lastCustom.morphY, lastCustom.shift, lastCustom.depth,
+                                                                lastCustom.cutoff, lastCustom.resonance);
             for (int i = 0; i < numPoints; ++i)
                 magnitudes[(size_t)i] = plotDb(db[(size_t)i]);
             return;

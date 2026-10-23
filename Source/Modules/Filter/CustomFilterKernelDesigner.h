@@ -25,9 +25,15 @@ public:
      *  moves the curve along frequency, `depth` scales its dB. Writes kKernelLength taps to `out`.
      *  No allocation, locks or system calls. Precondition: isPrepared(). */
     void design(const float* gridDb, float shiftSemitones, float depth, float* out) noexcept;
+    /** As above with the Custom filter's Cutoff and Resonance: the response also moves by
+     *  customfilter::cutoffShiftSemitones(cutoffHz), and after Depth a resonant bell
+     *  (customfilter::resonanceBellDb) is added in dB at `cutoffHz`. */
+    void design(const float* gridDb, float shiftSemitones, float depth, float resonance, float cutoffHz,
+                float* out) noexcept;
 
 private:
-    void fillLogMagnitude(const float* gridDb, float shiftSemitones, float depth) noexcept;
+    void fillLogMagnitude(const float* gridDb, float shiftSemitones, float depth, float resonance,
+                          float cutoffHz) noexcept;
 
     std::unique_ptr<juce::dsp::FFT> fft_;
     std::vector<float> binX_;  // kNumBins: each bin's curve x before shift (may lie outside [0, 1])

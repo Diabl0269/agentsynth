@@ -5,6 +5,8 @@ target_sources(Core PRIVATE
     Source/Modules/FilterModule.h
     Source/Modules/Filter/CustomFilterShapes.h
     Source/Modules/Filter/CustomFilterShapes.cpp
+    Source/Modules/Filter/CustomFilterCutoff.h
+    Source/Modules/Filter/CustomFilterCutoff.cpp
     Source/Modules/Filter/CustomFilterKernelDesigner.h
     Source/Modules/Filter/CustomFilterKernelDesigner.cpp
     Source/Modules/Filter/PartitionedConvolver.h
