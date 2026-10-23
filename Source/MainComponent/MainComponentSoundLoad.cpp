@@ -58,6 +58,6 @@ bool MainComponentAudioImport::stampShapeFromBrowser(MainComponent& mc, const sy
     if (card.isEmpty())
         return false;
     if (mc.toast_)
-        mc.toast_->show("Stamped " + shape.name + " onto the selected " + card);
+        mc.toast_->show("Stamped " + shape.name + " on " + card);
     return true;
 }

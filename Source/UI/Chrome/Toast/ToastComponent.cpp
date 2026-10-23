@@ -10,6 +10,7 @@ constexpr int kPadX = 14;
 constexpr int kGap = 12;
 constexpr int kActionW = 56;
 constexpr float kFontSize = 12.0f;
+constexpr int kTextSlack = 2;
 } // namespace
 
 ToastComponent::ToastComponent() {
@@ -37,7 +38,9 @@ ToastComponent::~ToastComponent() {
 int ToastComponent::preferredWidth() const {
     juce::GlyphArrangement glyphs;
     glyphs.addLineOfText(juce::Font(juce::FontOptions(kFontSize)), message_, 0.0f, 0.0f);
-    const int textW = juce::roundToInt(glyphs.getBoundingBox(0, -1, true).getWidth());
+    // Rounded up with a pixel of slack: drawText curtails a line that is even a fraction wider than its box, so a width
+    // rounded down cut the end of the message to an ellipsis in a window with plenty of room.
+    const int textW = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + kTextSlack;
     return kPadX * 2 + textW + (action_.getButtonText().isNotEmpty() && action_.isVisible() ? kGap + kActionW : 0);
 }
 
